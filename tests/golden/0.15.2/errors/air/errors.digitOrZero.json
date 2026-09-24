@@ -1,0 +1,165 @@
+{
+ "schema": 2,
+ "zig_version": "0.15.2",
+ "name": "errors.digitOrZero",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 3,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2
+    },
+    {
+     "id": 4,
+     "tag": "call",
+     "ty": 2,
+     "callee": {
+      "ty": 3,
+      "func": "errors.parseDigit",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 5,
+     "tag": "is_non_err",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 4
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "cond_br",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 5
+      }
+     ],
+     "then": [
+      {
+       "id": 6,
+       "tag": "unwrap_errunion_payload",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 4
+        }
+       ]
+      },
+      {
+       "id": 7,
+       "tag": "br",
+       "ty": 5,
+       "target": 2,
+       "args": [
+        {
+         "inst": 6
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 8,
+       "tag": "unwrap_errunion_err",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 4
+        }
+       ]
+      },
+      {
+       "id": 9,
+       "tag": "br",
+       "ty": 5,
+       "target": 2,
+       "args": [
+        {
+         "ty": 0,
+         "val": "0"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 12,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "error_union",
+   "error": 6,
+   "payload": 0
+  },
+  {
+   "k": "other",
+   "name": "fn (u8) error{NotDigit}!u8"
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "NotDigit"
+   ]
+  }
+ ]
+}

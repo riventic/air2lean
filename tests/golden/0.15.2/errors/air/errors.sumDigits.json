@@ -1,0 +1,496 @@
+{
+ "schema": 2,
+ "zig_version": "0.15.2",
+ "name": "errors.sumDigits",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 4,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "total"
+  },
+  {
+   "id": 5,
+   "tag": "alloc",
+   "ty": 5
+  },
+  {
+   "id": 6,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 5
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 8,
+   "tag": "slice_len",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 10,
+     "tag": "loop",
+     "ty": 7,
+     "body": [
+      {
+       "id": 11,
+       "tag": "load",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 5
+        }
+       ]
+      },
+      {
+       "id": 12,
+       "tag": "block",
+       "ty": 2,
+       "body": [
+        {
+         "id": 13,
+         "tag": "bitcast",
+         "ty": 8,
+         "args": [
+          {
+           "inst": 11
+          }
+         ]
+        },
+        {
+         "id": 14,
+         "tag": "bitcast",
+         "ty": 8,
+         "args": [
+          {
+           "inst": 8
+          }
+         ]
+        },
+        {
+         "id": 15,
+         "tag": "cmp_lt",
+         "ty": 9,
+         "args": [
+          {
+           "inst": 13
+          },
+          {
+           "inst": 14
+          }
+         ]
+        },
+        {
+         "id": 35,
+         "tag": "cond_br",
+         "ty": 7,
+         "args": [
+          {
+           "inst": 15
+          }
+         ],
+         "then": [
+          {
+           "id": 16,
+           "tag": "slice_elem_val",
+           "ty": 10,
+           "args": [
+            {
+             "inst": 0
+            },
+            {
+             "inst": 11
+            }
+           ]
+          },
+          {
+           "id": 17,
+           "tag": "dbg_var_val",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 16
+            }
+           ],
+           "name": "c"
+          },
+          {
+           "id": 18,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 4
+          },
+          {
+           "id": 19,
+           "tag": "load",
+           "ty": 4,
+           "args": [
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 20,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 4
+          },
+          {
+           "id": 21,
+           "tag": "call",
+           "ty": 11,
+           "callee": {
+            "ty": 12,
+            "func": "errors.parseDigit",
+            "noreturn": false
+           },
+           "args": [
+            {
+             "inst": 16
+            }
+           ]
+          },
+          {
+           "id": 26,
+           "tag": "try",
+           "ty": 10,
+           "args": [
+            {
+             "inst": 21
+            }
+           ],
+           "body": [
+            {
+             "id": 22,
+             "tag": "unwrap_errunion_err",
+             "ty": 13,
+             "args": [
+              {
+               "inst": 21
+              }
+             ]
+            },
+            {
+             "id": 23,
+             "tag": "dbg_stmt",
+             "ty": 2,
+             "line": 4
+            },
+            {
+             "id": 24,
+             "tag": "wrap_errunion_err",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 22
+              }
+             ]
+            },
+            {
+             "id": 25,
+             "tag": "ret_safe",
+             "ty": 7,
+             "args": [
+              {
+               "inst": 24
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": 27,
+           "tag": "intcast",
+           "ty": 4,
+           "args": [
+            {
+             "inst": 26
+            }
+           ]
+          },
+          {
+           "id": 28,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 4
+          },
+          {
+           "id": 29,
+           "tag": "add_safe",
+           "ty": 4,
+           "args": [
+            {
+             "inst": 19
+            },
+            {
+             "inst": 27
+            }
+           ]
+          },
+          {
+           "id": 30,
+           "tag": "store_safe",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 2
+            },
+            {
+             "inst": 29
+            }
+           ]
+          },
+          {
+           "id": 31,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 5
+          },
+          {
+           "id": 32,
+           "tag": "dbg_empty_stmt",
+           "ty": 2
+          },
+          {
+           "id": 33,
+           "tag": "br",
+           "ty": 7,
+           "target": 12,
+           "args": [
+            {
+             "ty": 2,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 34,
+           "tag": "br",
+           "ty": 7,
+           "target": 9,
+           "args": [
+            {
+             "ty": 2,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 36,
+       "tag": "add",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 11
+        },
+        {
+         "ty": 6,
+         "val": "1"
+        }
+       ]
+      },
+      {
+       "id": 37,
+       "tag": "store_safe",
+       "ty": 2,
+       "args": [
+        {
+         "inst": 5
+        },
+        {
+         "inst": 36
+        }
+       ]
+      },
+      {
+       "id": 38,
+       "tag": "repeat",
+       "ty": 7,
+       "target": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 40,
+   "tag": "load",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 42,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "tag": "ret_safe",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 42
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 10
+  },
+  {
+   "k": "error_union",
+   "error": 13,
+   "payload": 4
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8
+  },
+  {
+   "k": "error_union",
+   "error": 13,
+   "payload": 10
+  },
+  {
+   "k": "other",
+   "name": "fn (u8) error{NotDigit}!u8"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "NotDigit"
+   ]
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 //! Differential-test input generator (docs/generated-code.md names the 8 functions).
 //! Run from the repo root: `zig run tests/diff/gen_inputs.zig`.
 //!
-//! Writes `tests/diff/inputs/<fn>.jsonl`: one JSON array of args per line, N = 300 lines
+//! Writes `tests/diff/basic/inputs/<fn>.jsonl`: one JSON array of args per line, N = 300 lines
 //! per function. Each file starts with a fixed set of edge-value lines (0, 1, max, min for
 //! signed, max-1, empty slice, 1-element slice, and — where an accumulator can overflow —
 //! slices crafted to overflow it), then fills up to 300 with values from a seeded PRNG, so
@@ -28,7 +28,7 @@ const seed: u64 = 0xA17_1EA0_5EED_0001;
 const Job = struct { duration: u32, due: u32, weight: u8 };
 
 pub fn main() !void {
-    try std.fs.cwd().makePath("tests/diff/inputs");
+    try std.fs.cwd().makePath("tests/diff/basic/inputs");
     try std.fs.cwd().makePath("tests/diff/recursion/inputs");
     try std.fs.cwd().makePath("tests/diff/options/inputs");
     try std.fs.cwd().makePath("tests/diff/errors/inputs");
@@ -60,7 +60,7 @@ pub fn main() !void {
 }
 
 fn openOut(comptime name: []const u8) !std.fs.File {
-    return std.fs.cwd().createFile("tests/diff/inputs/" ++ name ++ ".jsonl", .{});
+    return std.fs.cwd().createFile("tests/diff/basic/inputs/" ++ name ++ ".jsonl", .{});
 }
 
 fn edgesU(comptime T: type) [4]T {
