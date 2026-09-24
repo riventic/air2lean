@@ -79,6 +79,12 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
   | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a
   | "optional_payload" => let a ← arg1 fnName raw; return .optPayload a
   | "wrap_optional" => let a ← arg1 fnName raw; return .wrapOptional a
+  | "is_err" => let a ← arg1 fnName raw; return .isErr a
+  | "is_non_err" => let a ← arg1 fnName raw; return .isNonErr a
+  | "unwrap_errunion_payload" => let a ← arg1 fnName raw; return .errPayload a
+  | "unwrap_errunion_err" => let a ← arg1 fnName raw; return .errCode a
+  | "wrap_errunion_payload" => let a ← arg1 fnName raw; return .wrapErrPayload a
+  | "wrap_errunion_err" => let a ← arg1 fnName raw; return .wrapErr a
   | "alloc" => return .alloc
   | "load" => let a ← arg1 fnName raw; return .load a
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b
@@ -115,6 +121,10 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
     let cases ← raw.cases.mapM (normalizeCase_0_15_2 fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst_0_15_2 fnName)
     return .switchBr v cases elseBody
+  | "try" | "try_cold" =>
+    let v ← arg1 fnName raw
+    let errBody ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+    return .«try» v errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
   | "trap" => return .trap
