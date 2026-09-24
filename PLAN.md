@@ -16,7 +16,7 @@
 | M9 | Recursion: call groups → `mutual` + `partial_fixpoint` | done |
 | M10 | Optionals and error unions (`?T`, `E!T`, `try`, `catch`, `orelse`, `.?`); JSON schema 2 | done |
 | M11 | Zig 0.14.1: export patch, translator, CI job | done (Linux only) |
-| M12 | Proofs for `recursion`, `options`, `errors` | next |
+| M12 | Proofs for `recursion`, `options`, `errors` | done: 19 theorems over 18 functions, incl. mutual recursion, early-exit loops, `try` in a loop |
 
 Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches. So the tester sees a changed result and a changed panic kind.
 
@@ -24,9 +24,8 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 | Item | Estimate |
 |---|---|
-| Proofs for `recursion` (`isEven_spec`, `fact_ok`), `options` (`find_spec`), `errors` (`parseDigit_spec`, `sumDigits`) | 1 day |
 | Error-union export for 0.14.1 (the `errors` example) | 0.5 day |
-| 0.16 port (when it is released) | 1 day |
+| Port to 0.16.0 (released): patch, tag table, goldens, CI job (steps in "To add a Zig version") | 1 day |
 
 ## Decisions
 
@@ -63,7 +62,7 @@ Support matrix:
 |---|---|
 | 0.15.2 | supported |
 | 0.14.1 | supported for `basic`, `recursion`, `options` (no error-union export yet). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
-| 0.16.x | planned (when released) |
+| 0.16.0 | released; port planned |
 
 **To add a Zig version:**
 1. Add its URL and sha256 to `zig-patch/versions.toml`.

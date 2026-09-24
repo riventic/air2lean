@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** v0 works for Zig 0.15.2 and 0.14.1. 18 functions in 4 examples (`basic`, `recursion`, `options`, `errors`) translate and match the compiled Zig on 5,400 differential tests, including the panic kind. The 8 `basic` functions have machine-checked proofs, including two loops (`sum`, `totalWeightedTardiness`). See [PLAN.md](PLAN.md).
+**Status:** v0 works for Zig 0.15.2 and 0.14.1. 18 functions in 4 examples (`basic`, `recursion`, `options`, `errors`) translate and match the compiled Zig on 5,400 differential tests, including the panic kind. All 18 have machine-checked proofs (19 theorems, `Proofs/`), including loops, mutual recursion, optionals and `try`. See [PLAN.md](PLAN.md).
 
 ## How it works
 
