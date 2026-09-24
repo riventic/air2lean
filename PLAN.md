@@ -46,7 +46,7 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 ## Zig version support
 
-v0 supports **0.15.2**. The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
+Supported: **0.15.2** and **0.14.1** (matrix below). The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
 
 | Layer | Version-specific? | Where |
 |---|---|---|
@@ -81,7 +81,8 @@ Support matrix:
 | local `var` whose address does not escape | `@ptrCast`, packed layout |
 | read-only slices `[]const T` | inline asm, threads, atomics |
 | structs by value | SIMD vectors, `async` |
-| calls, recursion | optionals, error unions (later) |
+| calls, recursion | optional pointers `?*T` |
+| optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 
 ## Risks
 
@@ -94,8 +95,9 @@ Support matrix:
 
 ## Later
 
-- Optionals and error unions (`?T`, `E!T`).
 - Immutable pointers `*const T`, then mutable pointers with a separation-logic memory model.
 - Floats (IEEE-754 model or uninterpreted).
-- Port to 0.16.x.
+- Port to 0.16.x. One shared `json.zig` with small per-version branches (review, pass 5: the
+  0.14.1 and 0.15.2 exporters differ in only 4 API points), so each port is a small change.
+- Error-union export for 0.14.1: its AIR has the same tags, so this is a copy of the 0.15.2 code.
 - Upstream the export as a compiler debug feature.

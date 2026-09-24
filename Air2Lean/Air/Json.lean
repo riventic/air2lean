@@ -115,7 +115,8 @@ def parseTy (j : Json) : Except String Ty := do
     let payload ← (← j.getObjVal? "payload").getNat?
     return .errorUnion set payload
   | "error_set" =>
-    if optField j "any" |>.isSome then return .errorSet none
+    -- `inferred`: an inferred set not yet resolved; like `anyerror`, its names are unknown.
+    if (optField j "any").isSome || (optField j "inferred").isSome then return .errorSet none
     else
       let errsJ ← (← j.getObjVal? "errors").getArr?
       let errs ← errsJ.mapM Json.getStr?

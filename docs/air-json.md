@@ -35,7 +35,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `array` | `len: int`, `child: id` |
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
-| `error_set` | `errors: [string]` (sorted error names), or `any: true` for `anyerror` |
+| `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
 | `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id}]` |
 | `tuple` | `fields: [{ty: id}]` |
 | `other` | `name: string` (printed type; not in the subset) |
@@ -72,7 +72,7 @@ One of:
 | Shape | Meaning |
 |---|---|
 | `{"inst": 7}` | result of instruction 7 |
-| `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false` |
+| `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false`. An optional prints `null` or its payload's text. For a payload other than an integer, `bool` or `void` (e.g. `?(E!T)` in the error state prints `error.Bad`), the text is `fmtValue`'s own and the translator rejects the constant. |
 | `{"ty": 3, "undef": true}` | `undefined` |
 | `{"ty": 9, "func": "basic.tardiness", "noreturn": false}` | function. `noreturn: true` when the return type is `noreturn` (panic handlers). |
 | `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
