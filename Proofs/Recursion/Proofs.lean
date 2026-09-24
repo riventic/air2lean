@@ -117,3 +117,44 @@ theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
   have hval : natFact 12 = 479001600 := by decide
   rw [fact.eq_1]
   simp [zig_unfold, h12, hval]
+
+/-! ## `gcd` -/
+
+theorem rem_unsigned (a b : BitVec 32) :
+    Zig.rem false a b = if b = 0 then throw .divByZero else pure (a % b) := rfl
+
+/-- The Euclidean step, phrased via core's own `gcd` recursion (on the *first* argument) and
+`gcd`'s commutativity, to match `gcd`'s recursion here (on the *second* argument). -/
+theorem gcd_step (a b : Nat) : Nat.gcd a b = Nat.gcd b (a % b) := by
+  rw [Nat.gcd_comm a b, Nat.gcd_rec b a, Nat.gcd_comm (a % b) b]
+
+/-- `gcd`, proved by strong induction on the recursion depth `b = bb.toNat` (the second argument
+decreases via `a % bb < bb`, not by one, so plain induction does not apply here). The generated
+code's `p1 != 0` / `Zig.rem`'s own `b = 0` guard (`.divByZero`) are both discharged by `hb0`: the
+divisor is never zero on the recursive branch. -/
+theorem gcd_spec_aux :
+    ∀ b : Nat, ∀ a bb : BitVec 32, bb.toNat = b →
+      gcd a bb = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b)) := by
+  intro b
+  induction b using Nat.strongRecOn with
+  | ind b ih =>
+    intro a bb hbb
+    by_cases hb0 : bb = 0#32
+    · subst hb0
+      simp only [BitVec.toNat_ofNat] at hbb
+      subst hbb
+      rw [gcd.eq_1]
+      simp [zig_unfold, Nat.gcd_zero_right, BitVec.ofNat_toNat]
+    · have hbne : bb.toNat ≠ 0 := by
+        intro h0; apply hb0; apply BitVec.eq_of_toNat_eq; simpa using h0
+      have hmodlt : (a % bb).toNat < b := by
+        rw [BitVec.toNat_umod, ← hbb]; exact Nat.mod_lt _ (by omega)
+      have hres := ih (a % bb).toNat hmodlt bb (a % bb) rfl
+      have hgcdval : Nat.gcd bb.toNat (a % bb).toNat = Nat.gcd a.toNat b := by
+        rw [BitVec.toNat_umod, ← hbb, ← gcd_step]
+      rw [hgcdval] at hres
+      rw [gcd.eq_1]
+      simp [zig_unfold, hb0, rem_unsigned, hres]
+
+theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
+  gcd_spec_aux b.toNat a b rfl
