@@ -17,9 +17,6 @@ prefix=${2:-"./zig-air-${version}"}
 optimize=${AIR2LEAN_OPTIMIZE:-ReleaseFast}
 cache_dir=${AIR2LEAN_CACHE:-"$HOME/.cache/air2lean"}
 
-versions_file="$script_dir/versions.toml"
-[ -f "$versions_file" ] || { echo "error: $versions_file not found" >&2; exit 1; }
-
 # Building this version's compiler needs a same-version host zig to bootstrap.
 command -v zig >/dev/null 2>&1 || {
   echo "error: no 'zig' on PATH; build.sh needs a host zig ${version} to bootstrap the build" >&2
@@ -31,21 +28,9 @@ host_version=$(zig version)
   exit 1
 }
 
-# Simple grep/sed TOML read: pull the lines between `["<version>"]` and the next `[`.
-section=$(awk -v ver="[\"${version}\"]" '
-  $0 == ver { found = 1; next }
-  found && /^\[/ { exit }
-  found { print }
-' "$versions_file")
-[ -n "$section" ] || { echo "error: no entry for version '$version' in versions.toml" >&2; exit 1; }
-
-url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
-sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
-patch_rel=$(printf '%s\n' "$section" | sed -n 's/^patch *= *"\(.*\)"/\1/p')
-if [ -z "$url" ] || [ -z "$sha256" ] || [ -z "$patch_rel" ]; then
-  echo "error: incomplete entry for version '$version' in versions.toml" >&2
-  exit 1
-fi
+url=$("$script_dir/toml-get.sh" "[\"$version\"]" url)
+sha256=$("$script_dir/toml-get.sh" "[\"$version\"]" sha256)
+patch_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" patch)
 patch_file="$script_dir/$patch_rel"
 [ -f "$patch_file" ] || { echo "error: patch file not found: $patch_file" >&2; exit 1; }
 

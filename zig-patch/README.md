@@ -31,5 +31,6 @@ See PLAN.md §Zig version support.
 Besides one `["<version>"]` table per supported Zig version, `versions.toml` has two
 CI-only tables, `[ci.host-zig."<version>"]` and `[ci.elan]`: URL + sha256 for the tools `.github/workflows/ci.yml`
 downloads to build and run the checks (host zig to bootstrap `build.sh`, elan to install Lean).
-They use a dotted header, never a bare `["<version>"]` string, so `build.sh`'s awk reader (which
-matches a version by the exact line `["<version>"]`) never mistakes one for a version section.
+`toml-get.sh <table-header> <key>` is the one reader for this file (`build.sh` and `ci.yml`
+call it). It matches a table by its exact header line, so a dotted CI header never matches a
+bare `["<version>"]` table.

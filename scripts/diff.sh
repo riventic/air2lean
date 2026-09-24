@@ -20,9 +20,6 @@
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/.
-#                       The Lean side (tests/diff/Diff.lean) only wires up basic and recursion
-#                       today (the translator doesn't support options/errors yet), so including
-#                       those two examples here fails once it gets to comparing their output.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -130,6 +127,7 @@ for ex in $examples; do
     # Line counts first, then one tab-joined line per input (JSON lines have no raw tabs).
     # No `readarray`: it needs bash 4, and macOS ships bash 3.2.
     n=$(wc -l <"$in_file" | tr -d ' ')
+    [ "$n" -gt 0 ] || { echo "error: $in_file has no inputs" >&2; exit 1; }
     for f in "$zig_file" "$lean_file"; do
       m=$(wc -l <"$f" | tr -d ' ')
       [ "$m" -eq "$n" ] || { echo "error: $f has $m lines, expected $n" >&2; exit 1; }
