@@ -99,14 +99,12 @@ theorem sumDigits_loop_step (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32)
       have hple : digitSum s (l.local5.toNat + 1) ≤ (l.local5.toNat + 1) * 9 :=
         digitSum_le s (l.local5.toNat + 1) (by omega) hallsucc
       have hinc : ¬ 18446744073709551615 ≤ l.local5.toNat := by omega
+      have hc1 : ¬ (4294967296 ≤
+          l.total.toNat + (208 + s[l.local5.toNat].toNat) % 256 % 4294967296) := by omega
       refine ⟨.rep10,
         { total := l.total + (s[l.local5.toNat] - 48).setWidth 32, local5 := l.local5 + 1 },
         ?_, ?_⟩
-      · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hpd, StateT.lift]
-        split_ifs with hif1 hif2
-        · exfalso; omega
-        · exfalso; omega
-        · rfl
+      · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hpd, StateT.lift, hc1, hinc]
       · have h5 : (l.local5 + 1).toNat = l.local5.toNat + 1 := by
           rw [BitVec.toNat_add]; simp [zig_unfold]; omega
         have htot2 : (l.total + (s[l.local5.toNat] - 48).setWidth 32).toNat
