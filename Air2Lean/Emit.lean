@@ -575,21 +575,23 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
       ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
     let initEnv := caps.map fun (id, name, _) => (id, name)
     let bodyStr := emitStmts fc initEnv body.toList
-    -- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
-    -- so a proof could not restate it and `rw` with a `Zig.loop_spec` result would not match.
     String.intercalate "\n"
-      [s!"def {fc.fnName}.again{loopInst.id} : {fc.exitName} → Bool",
-       s!"  | .rep{loopInst.id} => true",
-       "  | _ => false",
-       "",
-       s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do",
+      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do",
        indent 2 bodyStr]
   | _ => "" -- unreachable: `emitOneFunction` only calls this with a `.loop` instruction
+
+-- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
+-- so a proof could not restate it and `rw` with a `Zig.loop_spec` result would not match.
+def emitAgainDef (fc : FCtx) (loopInst : Inst) : String :=
+  String.intercalate "\n"
+    [s!"def {fc.fnName}.again{loopInst.id} : {fc.exitName} → Bool",
+     s!"  | .rep{loopInst.id} => true",
+     "  | _ => false"]
 
 /-! ## Per-function emission -/
 
 def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
-    (retTy : TyId) (body : Array Inst) (isSelfRecursive hasNonRetExit : Bool) : String :=
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
   let paramsStr := String.intercalate " "
     ((paramTys.mapIdx fun i pt => s!"(p{i} : {fc.emitTyOf pt})").toList)
   let retStr := fc.emitTyOf retTy
@@ -605,14 +607,22 @@ def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTy
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
-  let wrapper := String.intercalate "\n"
+  String.intercalate "\n"
     ([s!"def {leanName} {paramsStr} : Zig.Result ({retStr}) := do",
       s!"  let e ← {indentTail 2 ascribedBody}.run' (default : {localsName})",
       "  match e with"] ++ matchLines)
-  if isSelfRecursive then s!"{wrapper}\npartial_fixpoint" else wrapper
+
+/-- One function's output in four parts: the `Locals`/`Exit` types, the `again<k>` defs, the
+`loop<k>` defs (inner loop first), and the function def. `emit` joins them, and puts a
+recursive group's loop and function defs into one `mutual` block. -/
+structure FuncParts where
+  types : List String
+  agains : List String
+  loops : List String
+  defn : String
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
-    (funcNames : Array (String × String)) : String :=
+    (funcNames : Array (String × String)) : FuncParts :=
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   let allocs := collectAllocs f.types allInsts
@@ -632,14 +642,11 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   -- flips that to child-before-parent, which is what "the inner loop's def is emitted before
   -- the outer one" needs (`docs/generated-code.md` §Loops).
   let loops := (allInsts.filter fun i => match i.op with | .loop _ => true | _ => false).reverse
-  let loopDefs := (loops.map (emitLoopDef fc)).toList
-  let selfRec := allInsts.any fun i => match i.op with
-    | .call (.func nm _) _ => nm == f.name
-    | _ => false
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty
-  let defStr :=
-    emitFunctionDef fc leanName localsName exitName f.params f.ret f.body selfRec hasNonRetExit
-  String.intercalate "\n\n" ([localsStr, exitStr] ++ loopDefs ++ [defStr])
+  { types := [localsStr, exitStr]
+    agains := (loops.map (emitAgainDef fc)).toList
+    loops := (loops.map (emitLoopDef fc)).toList
+    defn := emitFunctionDef fc leanName localsName exitName f.params f.ret f.body hasNonRetExit }
 
 /-! ## Call graph / emission order -/
 
@@ -651,9 +658,7 @@ def calleesOf (allNames : Array String) (f : Func) : Array String :=
     | .call (.func nm _) _ => if allNames.contains nm then some nm else none
     | _ => none)
 
-/-- DFS post-order over the call graph: every callee (among `funcs`) before its caller. Assumes
-no cross-function recursion cycle (`docs/generated-code.md`'s "mutual block" case is not
-implemented — see the handback report). -/
+/-- DFS post-order over the call graph: a callee before its caller, except inside a cycle. -/
 partial def topoVisit (funcs : Array Func) (allNames : Array String)
     (vo : Array String × Array Func) (name : String) : Array String × Array Func :=
   let (visited, order) := vo
@@ -671,6 +676,39 @@ def topoOrder (funcs : Array Func) : Array Func :=
   let allNames := funcs.map (·.name)
   (allNames.foldl (topoVisit funcs allNames) (#[], #[])).2
 
+/-- Every function name reachable from `name` by one or more calls. -/
+partial def reachable (funcs : Array Func) (allNames : Array String) (name : String) :
+    Array String :=
+  let rec go (seen : Array String) (todo : List String) : Array String :=
+    match todo with
+    | [] => seen
+    | n :: rest =>
+      let next := match funcs.find? (·.name == n) with
+        | some f => (calleesOf allNames f).toList.filter (!seen.contains ·)
+        | none => []
+      go (seen ++ next.toArray) (rest ++ next)
+  go #[] [name]
+
+/-- The call-graph groups in emission order: a group is a set of functions that call each other
+(a strongly connected component), and it comes after every group that it calls. The second
+component is `true` if the group is recursive (more than one function, or a self-call). -/
+def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
+  let allNames := funcs.map (·.name)
+  let reach := allNames.map fun n => (n, reachable funcs allNames n)
+  let reaches (a b : String) : Bool :=
+    ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
+  let order := topoOrder funcs
+  -- A group is complete at its last member in DFS post-order (the member where the DFS entered
+  -- the group), and everything that the group calls is finished before that point.
+  let (_, groups) := order.foldl (init := ((#[] : Array String), (#[] : Array (Array Func × Bool))))
+    fun (done, groups) f =>
+      let done := done.push f.name
+      let members := order.filter fun g => g.name == f.name || (reaches f.name g.name && reaches g.name f.name)
+      if members.all (done.contains ·.name) && !groups.any (·.1.any (·.name == f.name)) then
+        (done, groups.push (members, members.size > 1 || reaches f.name f.name))
+      else (done, groups)
+  groups
+
 /-! ## Top level -/
 
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
@@ -679,9 +717,18 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String) : String :=
   let structs := collectStructs funcs prefix_
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
-  let order := topoOrder funcs
   let structsStr := (structs.map (emitStruct structNames)).toList
-  let funcsStr := (order.map fun f => emitOneFunction f structNames funcNames).toList
+  let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
+    let parts := members.toList.map fun f => emitOneFunction f structNames funcNames
+    if recursive then
+      -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
+      -- call a group member. Types and `again` defs do not recurse, so they come first.
+      let fix (d : String) := s!"{d}\npartial_fixpoint"
+      let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
+      String.intercalate "\n\n"
+        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
+    else
+      String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   String.intercalate "\n\n"
     (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ funcsStr ++ [s!"end {ns}"])
 

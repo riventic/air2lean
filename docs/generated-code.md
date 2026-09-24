@@ -32,7 +32,8 @@ def scale (a : BitVec 32) (b : BitVec 8) : Zig.Result (BitVec 32) := ...
 - Parameters keep the Zig order. Their names are `p0`, `p1`, … unless a `dbg_arg_inline` gives the source name.
 - A function that panics (overflow, bounds, `unreachable`) returns `throw e`; for the error values see `Zig.Error`.
 - A function that does not terminate returns `none` (the `Option` layer of `Zig.Result`).
-- Functions come in dependency order. A function that calls itself, or a group that calls each other, becomes a `mutual` block with `partial_fixpoint`.
+- Functions come in dependency order: a callee before its caller.
+- A recursive group (a function that calls itself, or functions that call each other) becomes one `mutual` block. The group's `Locals`/`Exit` types and `again<k>` defs come before the block. In the block, every function def and every `loop<k>` def has `partial_fixpoint`: a loop body can call a group member. The monotonicity lemmas in `ZigLean/Basic.lean` (`Zig.call`, `run'`, `Zig.loop`) let Lean accept these defs.
 
 ## Loops
 
