@@ -88,9 +88,12 @@ echo "applying $patch_file" >&2
 
 # No -Dno-lib: the build installs lib/ into the prefix alongside the binary, so the
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.
+# -Dcpu=baseline: the default is the build machine's CPU, and CI restores a cached build on
+# other runners; a newer CPU's instructions then crash it ("Illegal instruction").
 echo "building zig $version ($optimize) -> $abs_prefix" >&2
 (cd "$src_dir" && zig build \
   -Doptimize="$optimize" \
+  -Dcpu=baseline \
   -Ddebug-extensions=true \
   -Denable-llvm=false \
   --prefix "$abs_prefix")
