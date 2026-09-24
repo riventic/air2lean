@@ -161,26 +161,22 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     return .func name noreturn
   else
     let tyId ← (← j.getObjVal? "ty").getNat?
+    let some ty := types[tyId]?
+      | throw s!"{fnName}: unknown type id {tyId} in constant ref"
     if optField j "undef" |>.isSome then
       return .undef tyId
     else if let some errJ := optField j "err" then
       let name ← errJ.getStr?
-      let some ty := types[tyId]?
-        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
       | .errorSet _ => return .err tyId name
       | .errorUnion .. => return .errUnionErr tyId name
       | other => throw s!"{fnName}: 'err' constant of unexpected type {repr other}"
     else if let some payloadJ := optField j "payload" then
-      let some ty := types[tyId]?
-        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
       | .errorUnion .. => return .errUnionOk tyId (← parseVal fnName types payloadJ)
       | other => throw s!"{fnName}: 'payload' constant of unexpected type {repr other}"
     else
       let s ← (← j.getObjVal? "val").getStr?
-      let some ty := types[tyId]?
-        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
       | .optional child =>
         if s == "null" then return .optNull tyId

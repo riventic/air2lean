@@ -152,12 +152,8 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .int tid _ => fc.tyOfId tid
   | .bool _ => .bool
   | .void => .void
-  | .undef tid => fc.tyOfId tid
   | .func .. => .void
-  | .optNull tid => fc.tyOfId tid
-  | .optSome tid _ => fc.tyOfId tid
-  | .err tid _ => fc.tyOfId tid
-  | .errUnionErr tid _ => fc.tyOfId tid
+  | .undef tid | .optNull tid | .optSome tid _ | .err tid _ | .errUnionErr tid _
   | .errUnionOk tid _ => fc.tyOfId tid
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
