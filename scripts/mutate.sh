@@ -16,11 +16,19 @@
 #     under this mutation (a real, expected proof failure, not a bug); `ZigLean.lean` imports
 #     `ZigLean.Lemmas` unconditionally, and `Proofs/Basic/Gen.lean` imports `ZigLean`, so this
 #     mutation also drops that one theorem for the duration of the rebuild.
+# (c) Zig-source mutation, options: `findOr`'s `orelse xs.len` becomes `orelse 0` in a temp copy
+#     of examples/options/options.zig, re-translated to Lean — same shape as (a), but for the
+#     optional-result protocol (a not-found search now returns 0 instead of xs.len). Runs only
+#     when AIR2LEAN_EXAMPLES includes "options"; the translator doesn't support options yet, so
+#     the translate step below is expected to fail today (docs/generated-code.md).
 #
 # Usage: mutate.sh
 # Env:
-#   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a).
+#   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
 #   AIR2LEAN_ZIG_VERSION  Zig version: golden dir suffix. Default: 0.15.2 (same as check.sh).
+#   AIR2LEAN_EXAMPLES     Space-separated example dirs to run scripts/diff.sh over (forwarded via
+#                         the environment) and to gate mutation (c). Default: every dir in
+#                         examples/.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -34,6 +42,15 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   exit 1
 }
 
+examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+has_example() {
+  local needle=$1 e
+  for e in $examples; do
+    [ "$e" = "$needle" ] && return 0
+  done
+  return 1
+}
+
 gen_file="Proofs/Basic/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
@@ -44,6 +61,17 @@ cp "$gen_file" "$gen_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 
+# Proofs/Options/Gen.lean doesn't exist today (the translator doesn't support options yet), so
+# there's nothing to back up — only restore it on cleanup if mutation (c) actually created it.
+options_gen="Proofs/Options/Gen.lean"
+options_existed=0
+options_backup=""
+if [ -f "$options_gen" ]; then
+  options_existed=1
+  options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
+  cp "$options_gen" "$options_backup"
+fi
+
 mutate_tmp=""
 cleanup() {
   # Capture the exit status that triggered this trap first — cleanup's own commands would
@@ -53,6 +81,12 @@ cleanup() {
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   rm -f "$gen_backup" "$basic_backup" "$lemmas_backup"
+  if [ "$options_existed" -eq 1 ]; then
+    cp "$options_backup" "$options_gen"
+    rm -f "$options_backup"
+  else
+    rm -f "$options_gen"
+  fi
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   exit "$ec"
 }
@@ -135,5 +169,34 @@ grep -q 'theorem add_unsigned' "$lemmas_lean" && {
 
 run_and_report "mutation (b)"
 [ "$detected" -eq 1 ] || all_detected=0
+
+# Restore Gen.lean/ZigLean before mutation (c) so the three mutations don't compound.
+cp "$gen_backup" "$gen_file"
+cp "$basic_backup" "$basic_lean"
+cp "$lemmas_backup" "$lemmas_lean"
+
+echo "== mutation (c): findOr orelse xs.len -> orelse 0 (Zig source) ==" >&2
+if ! has_example options; then
+  echo "mutation (c): skipped (AIR2LEAN_EXAMPLES excludes options)"
+else
+  mutate_tmp=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-src.XXXXXX")
+  cp examples/options/options.zig "$mutate_tmp/options.zig"
+  sed -i.bak 's/orelse xs\.len/orelse 0/' "$mutate_tmp/options.zig"
+  rm -f "$mutate_tmp/options.zig.bak"
+  grep -q 'orelse 0' "$mutate_tmp/options.zig" || {
+    echo "error: mutation (c): sed did not change findOr's body" >&2
+    exit 1
+  }
+
+  air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-air.XXXXXX")
+  ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER=options. "$zig_air" \
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "$mutate_tmp/options.zig"
+  lake exe air2lean "$air_dir" -o "$options_gen" --namespace Options --prefix options.
+  rm -rf "$air_dir" "$mutate_tmp"
+  mutate_tmp=""
+
+  run_and_report "mutation (c)"
+  [ "$detected" -eq 1 ] || all_detected=0
+fi
 
 [ "$all_detected" -eq 1 ]
