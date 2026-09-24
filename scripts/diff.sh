@@ -70,21 +70,24 @@ for fn in "${functions[@]}"; do
   zig_file="tests/diff/out/zig/${fn}.jsonl"
   lean_file="tests/diff/out/lean/${fn}.jsonl"
 
-  readarray -t in_lines <"$in_file"
-  readarray -t zig_lines <"$zig_file"
-  readarray -t lean_lines <"$lean_file"
-  n=${#in_lines[@]}
-  [ "${#zig_lines[@]}" -eq "$n" ] || { echo "error: $zig_file has ${#zig_lines[@]} lines, expected $n" >&2; exit 1; }
-  [ "${#lean_lines[@]}" -eq "$n" ] || { echo "error: $lean_file has ${#lean_lines[@]} lines, expected $n" >&2; exit 1; }
+  # Line counts first, then one tab-joined line per input (JSON lines have no raw tabs).
+  # No `readarray`: it needs bash 4, and macOS ships bash 3.2.
+  n=$(wc -l <"$in_file" | tr -d ' ')
+  for f in "$zig_file" "$lean_file"; do
+    m=$(wc -l <"$f" | tr -d ' ')
+    [ "$m" -eq "$n" ] || { echo "error: $f has $m lines, expected $n" >&2; exit 1; }
+  done
 
   fn_ok=0
   fn_fail_match=0
   fn_mismatch=0
-  for ((i = 0; i < n; i++)); do
-    classify_line "${zig_lines[$i]}"
+  i=0
+  while IFS=$'\t' read -r in_line zig_line lean_line; do
+    i=$((i + 1))
+    classify_line "$zig_line"
     zkind=$kind
     zval=${val:-}
-    classify_line "${lean_lines[$i]}"
+    classify_line "$lean_line"
     lkind=$kind
     lval=${val:-}
 
@@ -95,11 +98,11 @@ for fn in "${functions[@]}"; do
     else
       fn_mismatch=$((fn_mismatch + 1))
       mismatch_found=1
-      echo "MISMATCH $fn input#$((i + 1)): ${in_lines[$i]}" >&2
-      echo "  zig:  ${zig_lines[$i]}" >&2
-      echo "  lean: ${lean_lines[$i]}" >&2
+      echo "MISMATCH $fn input#$i: $in_line" >&2
+      echo "  zig:  $zig_line" >&2
+      echo "  lean: $lean_line" >&2
     fi
-  done
+  done < <(paste "$in_file" "$zig_file" "$lean_file")
 
   echo "$fn: ok=$fn_ok fail_match=$fn_fail_match mismatch=$fn_mismatch (of $n)"
   total_ok=$((total_ok + fn_ok))
