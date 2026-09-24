@@ -97,6 +97,10 @@ inductive sumExit where
   | br9
   | rep10
 
+def sum.again10 : sumExit → Bool
+  | .rep10 => true
+  | _ => false
+
 def sum.loop10 (p0 : Array (BitVec 32)) (i8 : BitVec 64) : Zig.M sumLocals sumExit := do
   let i11 ← pure ((← get).local5)
   match ← ((do
@@ -124,7 +128,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
     modify (fun s => { s with local5 := (0 : BitVec 64) })
     let i8 ← pure (Zig.len p0)
     match ← ((do
-      Zig.loop (sum.loop10 p0 i8) (fun e => match e with | .rep10 => true | _ => false)) : Zig.M sumLocals sumExit) with
+      Zig.loop (sum.loop10 p0 i8) sum.again10) : Zig.M sumLocals sumExit) with
     | .br9 => (do
       let i33 ← pure ((← get).total)
       pure (.ret i33))
@@ -189,6 +193,10 @@ inductive totalWeightedTardinessExit where
   | br13
   | rep14
 
+def totalWeightedTardiness.again14 : totalWeightedTardinessExit → Bool
+  | .rep14 => true
+  | _ => false
+
 def totalWeightedTardiness.loop14 (p0 : Array (Job)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit := do
   match ← ((do
     let i17 ← pure ((← get).i)
@@ -245,7 +253,7 @@ def totalWeightedTardiness (p0 : Array (Job)) : Zig.Result (BitVec 64) := do
     modify (fun s => { s with cost := (0 : BitVec 64) })
     modify (fun s => { s with i := (0 : BitVec 64) })
     match ← ((do
-      Zig.loop (totalWeightedTardiness.loop14 p0) (fun e => match e with | .rep14 => true | _ => false)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
+      Zig.loop (totalWeightedTardiness.loop14 p0) totalWeightedTardiness.again14) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
     | .br13 => (do
       let i74 ← pure ((← get).cost)
       pure (.ret i74))

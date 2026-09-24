@@ -2,7 +2,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. Four of them have machine-checked proofs. See [PLAN.md](PLAN.md).
+**Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. Five of them have machine-checked proofs, including a loop (`sum`). See [PLAN.md](PLAN.md).
 
 ## How it works
 

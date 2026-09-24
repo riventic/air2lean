@@ -498,8 +498,7 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         -- proof can name it. Call it with its captures instead.
         let caps := fc.loopCaptures body
         let args := String.intercalate " " ((caps.map fun (_, name, _) => name).toList)
-        s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) \
-          (fun e => match e with | .rep{inst.id} => true | _ => false)"
+        s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
@@ -558,8 +557,15 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
       ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
     let initEnv := caps.map fun (id, name, _) => (id, name)
     let bodyStr := emitStmts fc initEnv body.toList
-    s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do\n\
-      {indent 2 bodyStr}"
+    -- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
+    -- so a proof could not restate it and `rw` with a `Zig.loop_spec` result would not match.
+    String.intercalate "\n"
+      [s!"def {fc.fnName}.again{loopInst.id} : {fc.exitName} → Bool",
+       s!"  | .rep{loopInst.id} => true",
+       "  | _ => false",
+       "",
+       s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do",
+       indent 2 bodyStr]
   | _ => "" -- unreachable: `emitOneFunction` only calls this with a `.loop` instruction
 
 /-! ## Per-function emission -/

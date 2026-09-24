@@ -77,3 +77,84 @@ theorem weightedTardiness_ok (j : Job) (start : BitVec 32)
     · simp [tardiness_spec, hadd, hsum, hlt, hwm]
     · have hz : start.toNat + j.duration.toNat - j.due.toNat = 0 := by omega
       simp [hz]
+
+/-- Sum of the first `k` elements, as a natural number. -/
+def psum (xs : Array (BitVec 32)) (k : Nat) : Nat := ((xs.toList.take k).map BitVec.toNat).sum
+
+theorem list_sum_le (l : List (BitVec 32)) : (l.map BitVec.toNat).sum ≤ l.length * 2 ^ 32 := by
+  induction l with
+  | nil => simp
+  | cons x l ih =>
+    have := x.isLt
+    simp only [List.map_cons, List.sum_cons, List.length_cons]
+    rw [Nat.succ_mul]; omega
+
+theorem psum_le (xs : Array (BitVec 32)) (k : Nat) : psum xs k ≤ k * 2 ^ 32 := by
+  unfold psum
+  have h := list_sum_le (xs.toList.take k)
+  have : (xs.toList.take k).length ≤ k := by simp [Nat.min_le_left]
+  exact Nat.le_trans h (Nat.mul_le_mul_right _ this)
+
+theorem psum_succ (xs : Array (BitVec 32)) (k : Nat) (hk : k < xs.size) :
+    psum xs (k + 1) = psum xs k + xs[k].toNat := by
+  unfold psum
+  rw [List.take_add_one, List.getElem?_eq_getElem (by simpa using hk)]
+  simp
+
+theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumLocals)
+    (hk : s.local5.toNat ≤ xs.size) (ht : s.total.toNat = psum xs s.local5.toNat) :
+    ∃ e s', (sum.loop10 xs (Zig.len xs)).run s = pure (e, s') ∧
+      (if sum.again10 e then
+          (s'.local5.toNat ≤ xs.size ∧ s'.total.toNat = psum xs s'.local5.toNat) ∧
+            xs.size - s'.local5.toNat < xs.size - s.local5.toNat
+        else e = .br9 ∧ s'.total.toNat = psum xs xs.size) := by
+  unfold sum.loop10
+  have hm : xs.size % 18446744073709551616 = xs.size := Nat.mod_eq_of_lt (by omega)
+  by_cases hlt : s.local5.toNat < xs.size
+  · have hx := xs[s.local5.toNat].isLt
+    have hx' : xs[s.local5.toNat].toNat % 18446744073709551616 = xs[s.local5.toNat].toNat :=
+      Nat.mod_eq_of_lt (by omega)
+    have hp := psum_le xs s.local5.toNat
+    have hadd : ¬ 18446744073709551616 ≤ s.total.toNat + xs[s.local5.toNat].toNat := by
+      have : s.local5.toNat * 2 ^ 32 + 2 ^ 32 ≤ 2 ^ 64 := by omega
+      omega
+    have hinc : ¬ 18446744073709551615 ≤ s.local5.toNat := by omega
+    refine ⟨.rep10, { total := s.total + xs[s.local5.toNat].setWidth 64, local5 := s.local5 + 1 },
+      ?_, ?_⟩
+    · simp [Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
+    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 := by
+        rw [BitVec.toNat_add]; simp; omega
+      have htot : (s.total + xs[s.local5.toNat].setWidth 64).toNat
+          = s.total.toNat + xs[s.local5.toNat].toNat := by
+        rw [BitVec.toNat_add, BitVec.toNat_setWidth, hx']; omega
+      refine ⟨⟨?_, ?_⟩, ?_⟩
+      · rw [h5]; omega
+      · rw [h5, htot, psum_succ xs _ hlt, ht]
+      · rw [h5]; omega
+  · have heq : s.local5.toNat = xs.size := by omega
+    refine ⟨.br9, s, ?_, ?_⟩
+    · simp [Zig.len, Zig.index, hlt, hm]
+    · simp only [sum.again10, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨trivial, heq ▸ ht⟩
+
+/-- `sum` never panics for fewer than 2^32 elements, and returns the exact sum. -/
+theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
+    ∃ r, sum xs = pure r ∧ r.toNat = (xs.toList.map BitVec.toNat).sum := by
+  obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (sum.loop10 xs (Zig.len xs))
+    sum.again10
+    (fun s => s.local5.toNat ≤ xs.size ∧ s.total.toNat = psum xs s.local5.toNat)
+    (fun s => xs.size - s.local5.toNat)
+    (fun r => r.1 = .br9 ∧ r.2.total.toNat = psum xs xs.size)
+    (fun s hs' => sum_loop_step xs hs s hs'.1 hs'.2)
+    { total := 0, local5 := 0 } (by simp [psum])
+  subst he
+  refine ⟨s'.total, ?_, ?_⟩
+  · unfold sum
+    change Zig.loop (sum.loop10 xs (Zig.len xs)) sum.again10 { total := 0, local5 := 0 }
+      = some (Except.ok (sumExit.br9, s')) at hrun
+    simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
+      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
+      modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+    rw [hrun]
+    simp
+  · rw [hpost, psum, List.take_of_length_le (by simp)]
