@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. Five of them have machine-checked proofs, including a loop (`sum`). See [PLAN.md](PLAN.md).
+**Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. All eight have machine-checked proofs, including two loops (`sum`, `totalWeightedTardiness`). See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -81,7 +81,7 @@ scripts/mutate.sh      # a changed function must fail a test
 | local `var` whose address does not escape | `@ptrCast`, `packed` layout |
 | read-only slices `[]const T` | inline asm, threads, atomics |
 | structs passed by value | optionals, error unions (planned) |
-| calls to other translated functions | mutual recursion (planned) |
+| calls, recursion, mutual recursion | |
 
 Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs.
 
