@@ -1,0 +1,7 @@
+# Supported Zig versions for the air2lean AIR-JSON exporter patch.
+# One table per version. `patch` is relative to this file's directory.
+
+["0.15.2"]
+url = "https://ziglang.org/download/0.15.2/zig-0.15.2.tar.xz"
+sha256 = "d9b30c7aa983fcff5eed2084d54ae83eaafe7ff3a84d8fb754d854165a6e521c"
+patch = "0.15.2/air-json.patch"

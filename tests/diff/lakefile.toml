@@ -1,0 +1,12 @@
+# Separate Lake package: the parent lakefile.toml (../..) is off-limits to this tool, so the
+# differential-test executable lives in its own package that requires the parent by path.
+name = "difftest"
+defaultTargets = ["difftest"]
+
+[[require]]
+name = "air2lean"
+path = "../.."
+
+[[lean_exe]]
+name = "difftest"
+root = "Diff"

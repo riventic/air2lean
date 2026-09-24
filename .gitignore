@@ -1,1 +1,12 @@
+# From github/gitignore@356fd7baab4c05e092194a41f64dbd5afc8817e4: Zig.gitignore
+.zig-cache/
+zig-out/
+*.o
+
+# From github/gitignore@356fd7baab4c05e092194a41f64dbd5afc8817e4: Lean.gitignore
+# cache and other artifacts produced by Lean's Lake build tool
 .lake/
+
+# air2lean
+tests/diff/out/
+zig-air-*/

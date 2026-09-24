@@ -9,8 +9,8 @@ name = "ZigLean"
 name = "Air2Lean"
 
 [[lean_lib]]
-name = "Examples"
-globs = ["Examples.+"]
+name = "Proofs"
+globs = ["Proofs.+"]
 
 [[lean_exe]]
 name = "air2lean"

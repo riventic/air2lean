@@ -1,0 +1,13 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "air2lean",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../..",
+   "configFile": "lakefile.toml"}],
+ "name": "difftest",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
