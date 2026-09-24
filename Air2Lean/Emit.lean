@@ -32,6 +32,7 @@ partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
   | .switchBr _ cases e =>
     let acc := cases.foldl (fun acc c => c.body.foldl flattenInst acc) acc
     e.foldl flattenInst acc
+  | .«try» _ errBody => errBody.foldl flattenInst acc
   | _ => acc
 end
 
@@ -80,6 +81,8 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .ptr _ _ child => emitTy structNames types types[child]!
   | .array _ child => s!"Array ({emitTy structNames types types[child]!})"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
+  | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
+  | .errorSet _ => "Zig.ErrName"
   | .struct name _ _ => (structNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .tuple fields =>
     let parts := (fields.map (fun fid => emitTy structNames types types[fid]!)).toList
@@ -153,6 +156,8 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .func .. => .void
   | .optNull tid => fc.tyOfId tid
   | .optSome tid _ => fc.tyOfId tid
+  | .err tid _ => fc.tyOfId tid
+  | .errUnion tid .. => fc.tyOfId tid
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
 
@@ -177,6 +182,13 @@ def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : Str
   | .func name _ => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
   | .optSome _ v => s!"(some {fc.resolveVal env v})"
+  | .err _ name => s!"\"{name}\""
+  | .errUnion tid err payload =>
+    let ety := fc.emitTyOf tid
+    match err, payload with
+    | some name, _ => s!"(.error \"{name}\" : {ety})"
+    | _, some p => s!"(.ok {fc.resolveVal env p} : {ety})"
+    | none, none => "(panic! \"air2lean: malformed error-union constant\")"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -297,6 +309,12 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .isNonNull a => #[a]
   | .optPayload a => #[a]
   | .wrapOptional a => #[a]
+  | .isErr a => #[a]
+  | .isNonErr a => #[a]
+  | .errPayload a => #[a]
+  | .errCode a => #[a]
+  | .wrapErrPayload a => #[a]
+  | .wrapErr a => #[a]
   | .alloc => #[]
   | .load _ => #[]
   | .store _ v => #[v]
@@ -314,6 +332,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
+  | .«try» v _ => #[v]
   | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
   | .unreach => #[]
   | .trap => #[]
@@ -456,6 +475,18 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .isNonNull a => let (env, l) := bindLet env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
   | .optPayload a => let (env, l) := bindLet env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
   | .wrapOptional a => let (env, l) := bindLet env inst.id s!"pure (some {rv a})"; (env, some l)
+  | .isErr a => let (env, l) := bindLet env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
+  | .isNonErr a => let (env, l) := bindLet env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
+  | .errPayload a =>
+    let (env, l) := bindLet env inst.id s!"Zig.call (Zig.unwrapPayload {rv a})"; (env, some l)
+  | .errCode a =>
+    let (env, l) := bindLet env inst.id s!"Zig.call (Zig.unwrapErr {rv a})"; (env, some l)
+  | .wrapErrPayload a =>
+    let ety := fc.emitTyOf inst.ty
+    let (env, l) := bindLet env inst.id s!"pure ((.ok {rv a}) : {ety})"; (env, some l)
+  | .wrapErr a =>
+    let ety := fc.emitTyOf inst.ty
+    let (env, l) := bindLet env inst.id s!"pure ((.error {rv a}) : {ety})"; (env, some l)
   | .alloc => (env, none)
   | .load ptr =>
     let field : String := match ptr with
@@ -527,6 +558,13 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let caps := fc.loopCaptures body
         let args := String.intercalate " " ((caps.map fun (_, name, _) => name).toList)
         s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
+      | .«try» v errBody =>
+        let errStr := emitStmts fc env errBody.toList
+        let vname := s!"v{inst.id}"
+        let restStr := emitStmts fc (env.push (inst.id, vname)) rest
+        s!"match {fc.resolveVal env v} with\n\
+          | .error _ => {doBlock errStr}\n\
+          | .ok {vname} => {doBlock restStr}"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
