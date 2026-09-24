@@ -9,14 +9,15 @@
 //!
 //! Reads `tests/diff/inputs/<fn>.jsonl` (tests/diff/gen_inputs.zig), calls the real function
 //! for each input, and writes `tests/diff/out/zig/<fn>.jsonl`: one line per input, either
-//! `{"ok": <result>}` or `{"fail": true}`. A safety panic aborts the child process (each call
-//! runs in its own fork, so one panic never crashes the run); `sum` and `totalWeightedTardiness`
-//! return u64, quoted as a decimal string for JS-safety — same convention as gen_inputs.zig.
+//! `{"ok": <result>}` or `{"fail": "<kind>"}`. A safety panic exits the child process (each call
+//! runs in its own fork, so one panic never crashes the run) after it writes which check tripped
+//! (see `panic` below); `sum` and `totalWeightedTardiness` return u64, quoted as a decimal
+//! string for JS-safety — same convention as gen_inputs.zig.
 //!
-//! Each call's stderr (the panic trace macOS/Linux print on the aborting child) is redirected
-//! to /dev/null: the input corpus deliberately contains many overflow cases, and letting every
-//! one print a full stack trace would flood the terminal without adding information beyond the
-//! {"fail": true} line already recorded.
+//! `<kind>` is a `std.builtin.panic` member name — `outOfBounds`, `integerOverflow`, … (see
+//! `panic` below, docs/generated-code.md §Panics) — or `unknown` if the child died without
+//! reporting one (a signal, not a checked safety panic). scripts/diff.sh maps each kind to the
+//! `Zig.Error` constructor the Lean side is expected to throw for the same check.
 
 const std = @import("std");
 // Named module "basic", wired up on the command line (see scripts/diff.sh):
@@ -33,26 +34,58 @@ extern fn scale(a: u32, b: u8) u32;
 extern fn clampAdd(a: u16, b: u16) u16;
 extern fn absDiff(a: i32, b: i32) u32;
 
-const Outcome = union(enum) { ok: u64, fail };
+/// Longest name in `panic` below (`integerPartOutOfBounds` / `exactDivisionRemainder`, 22
+/// bytes) plus headroom; also doubles as the parent's read buffer size, which must fit a u64
+/// decimal string (20 digits) too.
+const max_kind_len = 32;
+
+const Outcome = union(enum) {
+    ok: u64,
+    fail: struct { buf: [max_kind_len]u8, len: usize },
+};
+
+fn failOutcome(kind: []const u8) Outcome {
+    var f: Outcome = .{ .fail = .{ .buf = undefined, .len = kind.len } };
+    @memcpy(f.fail.buf[0..kind.len], kind);
+    return f;
+}
+
+/// Set to the write end of the result pipe by the child right after `fork()`, so `panic` below
+/// can report which safety check tripped without threading state through `@call`.
+var panic_fd: std.posix.fd_t = -1;
+
+/// Installed as this binary's `std.builtin.panic` (see `panic` below): reports `kind` to the
+/// parent and exits nonzero, so a safety panic in the child becomes a normal `waitpid` exit
+/// status instead of a signal. Best-effort write — a failed write is no worse than the
+/// zero-bytes case the parent already treats as `unknown`.
+fn reportPanic(kind: []const u8) noreturn {
+    _ = std.posix.write(panic_fd, kind) catch {};
+    std.posix.exit(1);
+}
 
 /// Runs `func(args)` in a forked child; the child never returns to this function on the parent
-/// side. `Args` must be `std.meta.ArgsTuple(@TypeOf(func))`. The child writes its result as a
-/// decimal string to a pipe and exits 0; if the child instead panics (safety check trip) it is
-/// killed/aborted by the runtime, and the parent reports `.fail` once `waitpid` shows a
-/// non-zero exit or a signal.
+/// side. `Args` must be `std.meta.ArgsTuple(@TypeOf(func))`. On success the child writes its
+/// result as a decimal string to a pipe and exits 0; on a safety panic, `panic` below writes
+/// the tripped check's name to the same pipe and exits 1. The parent reports `.ok` only for a
+/// clean exit with bytes; a nonzero exit with a reported name becomes `.fail` with that name;
+/// anything else (a signal, or no bytes at all) becomes `.fail("unknown")`.
 fn forkCall(comptime Args: type, args: Args, comptime func: anytype) !Outcome {
     const fds = try std.posix.pipe();
     const pid = try std.posix.fork();
     if (pid == 0) {
-        // Child: silence the panic trace, compute, report, exit. Never returns.
+        // Child: never returns. `panic_fd` lets `panic` below report a safety-check trip;
+        // the stderr redirect below covers the unlikely case something still writes there
+        // (e.g. the generic `panic.call` path) since that noise adds nothing over the
+        // `{"fail":...}` line already recorded.
         std.posix.close(fds[0]);
+        panic_fd = fds[1];
         if (std.fs.openFileAbsolute("/dev/null", .{ .mode = .write_only })) |devnull| {
             std.posix.dup2(devnull.handle, std.posix.STDERR_FILENO) catch {};
         } else |_| {}
 
         const raw = @call(.auto, func, args);
         const result: u64 = @intCast(raw);
-        var buf: [24]u8 = undefined;
+        var buf: [max_kind_len]u8 = undefined;
         const text = std.fmt.bufPrint(&buf, "{d}", .{result}) catch unreachable;
         _ = std.posix.write(fds[1], text) catch {};
         std.posix.exit(0);
@@ -61,7 +94,7 @@ fn forkCall(comptime Args: type, args: Args, comptime func: anytype) !Outcome {
     // Parent.
     std.posix.close(fds[1]);
     defer std.posix.close(fds[0]);
-    var buf: [24]u8 = undefined;
+    var buf: [max_kind_len]u8 = undefined;
     var total: usize = 0;
     while (total < buf.len) {
         const n = std.posix.read(fds[0], buf[total..]) catch break;
@@ -69,12 +102,102 @@ fn forkCall(comptime Args: type, args: Args, comptime func: anytype) !Outcome {
         total += n;
     }
     const wr = std.posix.waitpid(pid, 0);
-    if (std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0 and total > 0) {
+    const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
+    const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
+    if (exited_ok and total > 0) {
         const val = std.fmt.parseInt(u64, buf[0..total], 10) catch return error.BadChildOutput;
         return .{ .ok = val };
     }
-    return .fail;
+    if (exited_fail and total > 0) return failOutcome(buf[0..total]);
+    return failOutcome("unknown");
 }
+
+/// Overrides Zig's default panic handler for this whole binary — this is the compilation's
+/// root module (see the module doc comment above), so this governs `basic.zig` too. Member
+/// names/signatures must match `std.debug.FullPanic` / `std.debug.no_panic` exactly (Zig
+/// recognizes this as `std.builtin.panic` by shape, not by an interface); each one reports its
+/// own name via `reportPanic` instead of printing a trace. docs/generated-code.md §Panics maps
+/// each name to the `Zig.Error` constructor `Air2Lean/Emit.lean` emits for the matching check.
+pub const panic = struct {
+    pub fn call(_: []const u8, _: ?usize) noreturn {
+        reportPanic("panic");
+    }
+    pub fn sentinelMismatch(_: anytype, _: anytype) noreturn {
+        reportPanic("sentinelMismatch");
+    }
+    pub fn unwrapError(_: anyerror) noreturn {
+        reportPanic("unwrapError");
+    }
+    pub fn outOfBounds(_: usize, _: usize) noreturn {
+        reportPanic("outOfBounds");
+    }
+    pub fn startGreaterThanEnd(_: usize, _: usize) noreturn {
+        reportPanic("startGreaterThanEnd");
+    }
+    pub fn inactiveUnionField(_: anytype, _: anytype) noreturn {
+        reportPanic("inactiveUnionField");
+    }
+    pub fn sliceCastLenRemainder(_: usize) noreturn {
+        reportPanic("sliceCastLenRemainder");
+    }
+    pub fn reachedUnreachable() noreturn {
+        reportPanic("reachedUnreachable");
+    }
+    pub fn unwrapNull() noreturn {
+        reportPanic("unwrapNull");
+    }
+    pub fn castToNull() noreturn {
+        reportPanic("castToNull");
+    }
+    pub fn incorrectAlignment() noreturn {
+        reportPanic("incorrectAlignment");
+    }
+    pub fn invalidErrorCode() noreturn {
+        reportPanic("invalidErrorCode");
+    }
+    pub fn integerOutOfBounds() noreturn {
+        reportPanic("integerOutOfBounds");
+    }
+    pub fn integerOverflow() noreturn {
+        reportPanic("integerOverflow");
+    }
+    pub fn shlOverflow() noreturn {
+        reportPanic("shlOverflow");
+    }
+    pub fn shrOverflow() noreturn {
+        reportPanic("shrOverflow");
+    }
+    pub fn divideByZero() noreturn {
+        reportPanic("divideByZero");
+    }
+    pub fn exactDivisionRemainder() noreturn {
+        reportPanic("exactDivisionRemainder");
+    }
+    pub fn integerPartOutOfBounds() noreturn {
+        reportPanic("integerPartOutOfBounds");
+    }
+    pub fn corruptSwitch() noreturn {
+        reportPanic("corruptSwitch");
+    }
+    pub fn shiftRhsTooBig() noreturn {
+        reportPanic("shiftRhsTooBig");
+    }
+    pub fn invalidEnumValue() noreturn {
+        reportPanic("invalidEnumValue");
+    }
+    pub fn forLenMismatch() noreturn {
+        reportPanic("forLenMismatch");
+    }
+    pub fn copyLenMismatch() noreturn {
+        reportPanic("copyLenMismatch");
+    }
+    pub fn memcpyAlias() noreturn {
+        reportPanic("memcpyAlias");
+    }
+    pub fn noreturnReturned() noreturn {
+        reportPanic("noreturnReturned");
+    }
+};
 
 fn writeResult(writer: anytype, outcome: Outcome, quote_wide: bool) !void {
     switch (outcome) {
@@ -82,7 +205,7 @@ fn writeResult(writer: anytype, outcome: Outcome, quote_wide: bool) !void {
             try writer.print("{{\"ok\":\"{d}\"}}\n", .{v})
         else
             try writer.print("{{\"ok\":{d}}}\n", .{v}),
-        .fail => try writer.writeAll("{\"fail\":true}\n"),
+        .fail => |f| try writer.print("{{\"fail\":\"{s}\"}}\n", .{f.buf[0..f.len]}),
     }
 }
 

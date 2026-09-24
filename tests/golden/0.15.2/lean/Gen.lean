@@ -213,7 +213,7 @@ def totalWeightedTardiness.loop14 (p0 : Array (Job)) : Zig.M totalWeightedTardin
         if i30 then (do
           pure .br33)
         else (do
-          throw .panic)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
+          throw .outOfBounds)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
       | .br33 => (do
         let i36 ← Zig.call (Zig.index p0 i27)
         let i37 ← pure ((← get).t)
@@ -229,7 +229,7 @@ def totalWeightedTardiness.loop14 (p0 : Array (Job)) : Zig.M totalWeightedTardin
           if i49 then (do
             pure .br52)
           else (do
-            throw .panic)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
+            throw .outOfBounds)) : Zig.M totalWeightedTardinessLocals totalWeightedTardinessExit) with
         | .br52 => (do
           let i55 ← Zig.call (Zig.index p0 i46)
           let i57 ← pure ((i55).duration)

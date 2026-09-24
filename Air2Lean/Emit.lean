@@ -180,6 +180,22 @@ def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
     (noreturn, (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name)
   | _ => (false, "panic! \"air2lean: indirect calls are outside the subset\"")
 
+/-- A noreturn call's callee (docs/air-json.md's `func` field), e.g.
+`debug.FullPanic((function 'defaultPanic')).outOfBounds`, names the panic-handler function by
+its Zig std lib member name — the segment after the last `.` (docs/generated-code.md §Panics).
+Maps a known member name to the matching `Zig.Error` constructor; an unrecognized name (a check
+outside v0's scope, or an indirect-call fallback) keeps the generic `.panic`. -/
+def panicErrorFor (calleeName : String) : String :=
+  let suffix := match (calleeName.splitOn ".").getLast? with
+    | some seg => seg
+    | none => calleeName
+  match suffix with
+  | "integerOverflow" | "integerOutOfBounds" | "shlOverflow" | "shrOverflow" => ".overflow"
+  | "outOfBounds" => ".outOfBounds"
+  | "divideByZero" => ".divByZero"
+  | "reachedUnreachable" => ".unreachable"
+  | _ => ".panic"
+
 /-- The field name to project for `struct_field_val s index`: `s`'s own field name if `s` is a
 struct, else a positional `1`/`2` (for example the pair `@addWithOverflow` returns). -/
 def FCtx.structFieldName (fc : FCtx) (s : Val) (index : Nat) : String :=
@@ -526,7 +542,9 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     s!"if {rv c} then {doBlock (emitStmts fc env thenBody.toList)}\nelse \
       {doBlock (emitStmts fc env elseBody.toList)}"
   | .switchBr v cases elseBody => emitSwitchChain fc env v cases.toList elseBody
-  | .call .. => "throw .panic"
+  | .call callee _ =>
+    let (_, calleeName) := fc.resolveCallee callee
+    s!"throw {panicErrorFor calleeName}"
   | _ => "pure default"
 
 /-- `switch_br` as a chain of `if`/`else if` (a `BitVec` value has no numeral match pattern). -/
