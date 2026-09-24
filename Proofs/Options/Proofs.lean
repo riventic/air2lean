@@ -75,10 +75,7 @@ theorem find_spec (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^ 6
     · unfold find
       change Zig.loop (find.loop7 xs x (Zig.len xs)) find.again7 { local2 := 0 }
         = some (Except.ok (findExit.ret (some i), s')) at hrun
-      simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-        ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-        modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
-        Option.bind]
+      simp only [zig_unfold]
       rw [hrun]
       simp [zig_unfold]
     · intro i2 hi2
@@ -91,10 +88,7 @@ theorem find_spec (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^ 6
     · unfold find
       change Zig.loop (find.loop7 xs x (Zig.len xs)) find.again7 { local2 := 0 }
         = some (Except.ok (findExit.br6, s')) at hrun
-      simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-        ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-        modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
-        Option.bind]
+      simp only [zig_unfold]
       rw [hrun]
       simp [zig_unfold]
     · simp
@@ -108,18 +102,16 @@ theorem findOr_spec (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^
   obtain ⟨r, hr, -, -⟩ := find_spec xs x hs
   refine ⟨r, hr, ?_⟩
   unfold findOr
-  simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-    ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-    Option.bind]
+  simp only [zig_unfold]
   rw [hr]
   cases r with
   | some i => simp [zig_unfold, Zig.optPayload]
   | none => simp [zig_unfold, Zig.len]
 
-/-- `firstIndexPlusOne` panics when `x` is absent from `xs`. -/
+/-- `firstIndexPlusOne` panics (`.?` on `null`: `unwrapNull`) when `x` is absent from `xs`. -/
 theorem firstIndexPlusOne_absent (xs : Array (BitVec 32)) (x : BitVec 32)
     (hs : xs.size < 2 ^ 64) (h : ∀ j < xs.size, xs[j]! ≠ x) :
-    ∃ e, firstIndexPlusOne xs x = throw e := by
+    firstIndexPlusOne xs x = throw .panic := by
   obtain ⟨r, hr, hsome, -⟩ := find_spec xs x hs
   have hrn : r = none := by
     cases r with
@@ -129,10 +121,7 @@ theorem firstIndexPlusOne_absent (xs : Array (BitVec 32)) (x : BitVec 32)
       obtain ⟨hib, hxi, -⟩ := hsome i rfl
       exact h i.toNat hib hxi
   subst hrn
-  refine ⟨.panic, ?_⟩
   unfold firstIndexPlusOne
-  simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-    ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-    Option.bind]
+  simp only [zig_unfold]
   rw [hr]
   simp [zig_unfold]

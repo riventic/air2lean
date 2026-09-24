@@ -134,8 +134,9 @@ theorem sumDigits_loop_step (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32)
       · rw [← heq]; exact ht
       · rw [← heq]; exact hall
 
-/-- `sumDigits` never panics: it returns the digit sum when every byte is a digit, and
-`error.NotDigit` on the first non-digit byte. -/
+/-- For `s.size * 9 < 2^32`, `sumDigits` never panics: it returns the digit sum when every byte
+is a digit, and `error.NotDigit` on the first non-digit byte. The bound covers the whole array
+because a long run of digits before the first non-digit byte overflows the `u32` total. -/
 theorem sumDigits_spec (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32) :
     sumDigits s = pure (if ∀ i < s.size, isDigit s[i]! then
         (.ok (BitVec.ofNat 32 (digitSum s s.size)) : Except Zig.ErrName (BitVec 32))
@@ -150,9 +151,7 @@ theorem sumDigits_spec (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32) :
     (fun l hl => sumDigits_loop_step s hs l hl.1 hl.2.1 hl.2.2)
     { total := 0, local5 := 0 } (by simp [digitSum])
   unfold sumDigits
-  simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-    ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-    modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+  simp only [zig_unfold]
   rcases hpost with ⟨he1, he2, hall⟩ | ⟨he1, hall⟩
   · subst he1
     have hlebound : digitSum s s.size < 2 ^ 32 := by

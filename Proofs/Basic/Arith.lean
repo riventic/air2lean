@@ -1,4 +1,4 @@
-import Proofs.Basic.Common
+import Proofs.Basic.Gen
 
 /-!
 # Proofs about `clampAdd` and `absDiff` from `examples/basic/basic.zig`

@@ -122,9 +122,7 @@ theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
   · unfold sum
     change Zig.loop (sum.loop10 xs (Zig.len xs)) sum.again10 { total := 0, local5 := 0 }
       = some (Except.ok (sumExit.br9, s')) at hrun
-    simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-      modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+    simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]
   · rw [hpost, psum, List.take_of_length_le (by simp)]

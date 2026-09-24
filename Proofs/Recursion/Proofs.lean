@@ -6,8 +6,9 @@ import Proofs.Recursion.Gen
 Each theorem is about the generated code in `Gen.lean`, so it holds for the Zig function to the
 extent the translation is faithful (see the differential tests in `tests/diff/`).
 
-`isEven`/`isOdd`/`fact` are `partial_fixpoint`; their unfold equation is `<fn>.eq_1`. Each proof
-below does induction on the recursion depth (`n.toNat`, decreasing by one each call).
+`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`; their unfold equation is `<fn>.eq_1`. The
+`isEven`/`isOdd`/`fact` proofs do induction on `n.toNat` (one less each call); the `gcd` proof
+does strong induction on the second argument (`a % b < b`).
 -/
 
 open Recursion

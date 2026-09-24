@@ -153,9 +153,7 @@ theorem totalWeightedTardiness_spec (jobs : Array Job)
   · unfold totalWeightedTardiness
     change Zig.loop (totalWeightedTardiness.loop14 jobs) totalWeightedTardiness.again14
       { t := 0, cost := 0, i := 0 } = some (Except.ok (totalWeightedTardinessExit.br13, s')) at hrun
-    simp only [StateT.run', bind, pure, StateT.bind,
-      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-      modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+    simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]
   · exact hpost
