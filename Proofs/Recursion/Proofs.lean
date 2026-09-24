@@ -39,8 +39,7 @@ theorem isEven_isOdd_aux :
     intro n h
     have hn0 : n ≠ 0#32 := by intro h0; rw [h0] at h; simp at h
     -- `n - 1` (a checked sub) does not overflow: `n.toNat = k + 1 ≥ 1`.
-    have hn1 : (n - 1#32).toNat = k := by
-      rw [BitVec.toNat_sub]; simp; omega
+    have hn1 : (n - 1#32).toNat = k := by rw [Zig.toNat_sub_one n hn0]; omega
     have hres := ih (n - 1#32) hn1
     refine ⟨?_, ?_⟩
     · rw [isEven.eq_1]
@@ -84,8 +83,7 @@ theorem fact_ok_aux :
   | succ k ih =>
     intro n h hb
     have hn0 : n ≠ 0#32 := by intro h0; rw [h0] at h; simp at h
-    have hn1 : (n - 1#32).toNat = k := by
-      rw [BitVec.toNat_sub]; simp; omega
+    have hn1 : (n - 1#32).toNat = k := by rw [Zig.toNat_sub_one n hn0]; omega
     have hk12 : k ≤ 12 := by omega
     have hres := ih (n - 1#32) hn1 hk12
     have h12 : natFact 12 = 479001600 := by decide

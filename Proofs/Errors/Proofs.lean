@@ -21,8 +21,7 @@ def digitSum (s : Array (BitVec 8)) (k : Nat) : Nat :=
 theorem digitSum_succ (s : Array (BitVec 8)) (k : Nat) (hk : k < s.size) :
     digitSum s (k + 1) = digitSum s k + (s[k].toNat - 48) := by
   unfold digitSum
-  rw [List.take_add_one, List.getElem?_eq_getElem (by simpa using hk)]
-  simp
+  rw [Zig.sum_take_succ _ _ _ (by simpa using hk)]; simp
 
 theorem digitSum_le (s : Array (BitVec 8)) (k : Nat) (hk : k ≤ s.size)
     (h : ∀ i < k, isDigit s[i]!) : digitSum s k ≤ k * 9 := by
@@ -105,8 +104,8 @@ theorem sumDigits_loop_step (s : Array (BitVec 8)) (hs : s.size * 9 < 2 ^ 32)
         { total := l.total + (s[l.local5.toNat] - 48).setWidth 32, local5 := l.local5 + 1 },
         ?_, ?_⟩
       · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hpd, StateT.lift, hc1, hinc]
-      · have h5 : (l.local5 + 1).toNat = l.local5.toNat + 1 := by
-          rw [BitVec.toNat_add]; simp [zig_unfold]; omega
+      · have h5 : (l.local5 + 1).toNat = l.local5.toNat + 1 :=
+          Zig.toNat_add_one _ (by omega)
         have htot2 : (l.total + (s[l.local5.toNat] - 48).setWidth 32).toNat
             = l.total.toNat + ((s[l.local5.toNat] - 48).setWidth 32).toNat := by
           rw [BitVec.toNat_add]; omega

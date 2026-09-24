@@ -92,8 +92,8 @@ theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumL
     refine ⟨.rep10, { total := s.total + xs[s.local5.toNat].setWidth 64, local5 := s.local5 + 1 },
       ?_, ?_⟩
     · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
-    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 := by
-        rw [BitVec.toNat_add]; simp [zig_unfold]; omega
+    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 :=
+        Zig.toNat_add_one _ (by omega)
       have htot : (s.total + xs[s.local5.toNat].setWidth 64).toNat
           = s.total.toNat + xs[s.local5.toNat].toNat := by
         rw [BitVec.toNat_add, BitVec.toNat_setWidth, hx']; omega

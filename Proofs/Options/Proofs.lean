@@ -33,8 +33,8 @@ theorem find_loop_step (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 
       have hinc : ¬ 18446744073709551615 ≤ s.local2.toNat := by omega
       refine ⟨.rep7, { local2 := s.local2 + 1 }, ?_, ?_⟩
       · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hne', hinc]
-      · have h2 : (s.local2 + 1).toNat = s.local2.toNat + 1 := by
-          rw [BitVec.toNat_add]; simp [zig_unfold]; omega
+      · have h2 : (s.local2 + 1).toNat = s.local2.toNat + 1 :=
+          Zig.toNat_add_one _ (by omega)
         refine ⟨⟨?_, ?_⟩, ?_⟩
         · rw [h2]; omega
         · rw [h2]
