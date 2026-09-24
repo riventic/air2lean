@@ -154,6 +154,16 @@ end Arith
 
 @[inline] def len {α : Type} (a : Array α) : usize := BitVec.ofNat 64 a.size
 
+/-! ## Optionals -/
+
+/-- Unwrap an optional's payload (`optional_payload`). Sema emits this only after an
+`is_non_null` check, so the `none` case is statically unreachable; still total, so it panics
+instead of diverging. -/
+@[inline] def optPayload {α : Type} (a : Option α) : Result α :=
+  match a with
+  | some v => pure v
+  | none => throw .panic
+
 /-! ## Control flow -/
 
 /-- An AIR `loop`: run `body` until it returns an exit that is not `repeat` for this loop. -/

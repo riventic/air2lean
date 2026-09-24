@@ -151,6 +151,8 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .void => .void
   | .undef tid => fc.tyOfId tid
   | .func .. => .void
+  | .optNull tid => fc.tyOfId tid
+  | .optSome tid _ => fc.tyOfId tid
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
 
@@ -173,6 +175,8 @@ def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : Str
     | .bool => "false"
     | _ => "default"
   | .func name _ => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
+  | .optNull _ => "none"
+  | .optSome _ v => s!"(some {fc.resolveVal env v})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -289,6 +293,10 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .intCast a => #[a]
   | .trunc a => #[a]
   | .bitcast a => #[a]
+  | .isNull a => #[a]
+  | .isNonNull a => #[a]
+  | .optPayload a => #[a]
+  | .wrapOptional a => #[a]
   | .alloc => #[]
   | .load _ => #[]
   | .store _ v => #[v]
@@ -444,6 +452,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
     (env, some l)
   | .bitcast a => let (env, l) := bindLet env inst.id s!"pure ({rv a})"; (env, some l)
+  | .isNull a => let (env, l) := bindLet env inst.id s!"pure (({rv a}).isNone)"; (env, some l)
+  | .isNonNull a => let (env, l) := bindLet env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
+  | .optPayload a => let (env, l) := bindLet env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
+  | .wrapOptional a => let (env, l) := bindLet env inst.id s!"pure (some {rv a})"; (env, some l)
   | .alloc => (env, none)
   | .load ptr =>
     let field : String := match ptr with

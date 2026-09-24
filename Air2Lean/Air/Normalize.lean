@@ -75,6 +75,10 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
   | "intcast" | "intcast_safe" => let a ← arg1 fnName raw; return .intCast a
   | "trunc" => let a ← arg1 fnName raw; return .trunc a
   | "bitcast" => let a ← arg1 fnName raw; return .bitcast a
+  | "is_null" => let a ← arg1 fnName raw; return .isNull a
+  | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a
+  | "optional_payload" => let a ← arg1 fnName raw; return .optPayload a
+  | "wrap_optional" => let a ← arg1 fnName raw; return .wrapOptional a
   | "alloc" => return .alloc
   | "load" => let a ← arg1 fnName raw; return .load a
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b

@@ -39,7 +39,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
       throw s!"{fnName}: near line {line}: pointer type (size={size}, const={isConst}) is \
         outside the subset (only an `alloc` local or a read-only slice `[]const T`)"
   | .array _ child => checkTy fnName types line child
-  | .optional child => checkTy fnName types line child
+  | .optional child =>
+    if let some (.ptr ..) := types[child]? then
+      throw s!"{fnName}: near line {line}: optional pointer type is outside the subset (only \
+        `?T` for a non-pointer T)"
+    else checkTy fnName types line child
   | .struct _ _ fields => fields.forM fun (_, fty) => checkTy fnName types line fty
   | .tuple fields => fields.forM (checkTy fnName types line)
   | .int .. | .bool | .void | .noreturn => pure ()
@@ -83,6 +87,10 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   | .intCast a => chk1 a; pure st
   | .trunc a => chk1 a; pure st
   | .bitcast a => chk1 a; pure st
+  | .isNull a => chk1 a; pure st
+  | .isNonNull a => chk1 a; pure st
+  | .optPayload a => chk1 a; pure st
+  | .wrapOptional a => chk1 a; pure st
   | .alloc => pure { st with allocs := st.allocs.push id }
   | .load _ptr => pure st
   | .store _ptr v => chk1 v; pure st

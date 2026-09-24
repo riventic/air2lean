@@ -19,6 +19,7 @@
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[]const T` | `Array T'` |
+| `?T` (`T` not a pointer) | `Option T'` |
 | `struct` (layout `auto` or `extern`) | `structure … deriving Repr, Inhabited, DecidableEq` |
 
 ## Signature

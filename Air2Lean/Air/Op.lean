@@ -37,6 +37,12 @@ inductive Val where
   | void
   | undef (ty : TyId)
   | func (name : String) (noreturn : Bool)
+  /-- A `null` constant of an optional type. `ty` is the `optional` type. -/
+  | optNull (ty : TyId)
+  /-- An optional constant holding a payload (`docs/air-json.md`'s `Ref` reuses the plain `val`
+  string, disambiguated by `ty`: the exporter's `fmtValue` prints a non-null optional as just its
+  payload's own text). `ty` is the `optional` type; `v` is the payload, recursively. -/
+  | optSome (ty : TyId) (v : Val)
   deriving Repr, Inhabited, BEq
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
@@ -88,6 +94,16 @@ inductive Op where
   | trunc (a : Val)
   /-- Same bits, other type with the same representation (for example `usize` → `u64`). -/
   | bitcast (a : Val)
+  /-- `is_null`: true iff the optional `a` is `null`. -/
+  | isNull (a : Val)
+  /-- `is_non_null`: true iff the optional `a` holds a value. -/
+  | isNonNull (a : Val)
+  /-- Unwrap an optional's payload. Sema emits this only after an `is_non_null` check, so the
+  `null` case is statically unreachable — `Zig.optPayload` (`ZigLean/Basic.lean`) panics on it
+  anyway. -/
+  | optPayload (a : Val)
+  /-- Wrap a value into `some`. -/
+  | wrapOptional (a : Val)
   | alloc
   | load (ptr : Val)
   | store (ptr : Val) (v : Val)
