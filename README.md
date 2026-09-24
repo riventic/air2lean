@@ -80,10 +80,10 @@ scripts/mutate.sh      # a changed function must fail a test
 | `if`, `switch`, `while`, `for` | allocators, heap memory |
 | local `var` whose address does not escape | `@ptrCast`, `packed` layout |
 | read-only slices `[]const T` | inline asm, threads, atomics |
-| structs passed by value | optionals, error unions (planned) |
-| calls, recursion, mutual recursion | |
+| structs passed by value | optionals (planned) |
+| calls, recursion, mutual recursion, error unions (`E!T`) | |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 

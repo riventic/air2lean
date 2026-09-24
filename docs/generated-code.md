@@ -21,6 +21,8 @@
 | `[]const T` | `Array T'` |
 | `?T` (`T` not a pointer) | `Option T'` |
 | `struct` (layout `auto` or `extern`) | `structure … deriving Repr, Inhabited, DecidableEq` |
+| `E!T` (error union) | `Except Zig.ErrName T'` |
+| error set (`error{A, B}`, `anyerror`) | `Zig.ErrName` (`abbrev ErrName := String`; an error's identity is its name) |
 
 ## Signature
 
@@ -102,3 +104,17 @@ One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true
 | `E!T` | `{"err": "<Name>"}` (the bare error name, e.g. `@errorName` on the Zig side), or `T`'s `v` |
 
 A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or `T`'s `v`, all three at the same JSON depth as a plain `?T`.
+
+## Error unions
+
+A Zig error (`error.Name`) is a return value, not a panic — a distinct type from `Zig.Error` above. `error.Name` becomes the string literal `"Name"`; an `E!T` constant becomes `.ok v` or `.error "Name"`.
+
+`try v` (sugar for "return the error if `v` holds one, otherwise use its payload") becomes a `match` on `v`: the error arm runs the AIR `try`'s error body (itself ending in an exit, e.g. `ret`), and the ok arm binds the payload under a fresh name and continues with the rest of the instruction sequence:
+
+```lean
+match {v} with
+| .error _ => (do ...)   -- the `try`'s error body; ends in an exit
+| .ok v16 => (do ...)    -- the rest of the sequence, payload bound as `v16`
+```
+
+`catch` does not use `try`: it lowers to `is_err`/`is_non_err` plus a `cond_br`, so it becomes a plain `if`/`else` on `Zig.isNonErr`/`Zig.isErr`, unwrapping with `Zig.unwrapPayload`/`Zig.unwrapErr` (`ZigLean/Basic.lean`) in each arm.
