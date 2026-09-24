@@ -6,6 +6,11 @@ url = "https://ziglang.org/download/0.15.2/zig-0.15.2.tar.xz"
 sha256 = "d9b30c7aa983fcff5eed2084d54ae83eaafe7ff3a84d8fb754d854165a6e521c"
 patch = "0.15.2/air-json.patch"
 
+["0.14.1"]
+url = "https://ziglang.org/download/0.14.1/zig-0.14.1.tar.xz"
+sha256 = "237f8abcc8c3fd68c70c66cdbf63dce4fb5ad4a2e6225ac925e3d5b4c388f203"
+patch = "0.14.1/air-json.patch"
+
 # CI-only tooling below. These use a dotted `[ci.<name>]` header, never a bare `["<version>"]`
 # string, so build.sh's awk reader (which matches a version by exact line `["<version>"]`) never
 # picks one up when scanning for a Zig version section. See zig-patch/README.md.

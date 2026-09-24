@@ -1,0 +1,138 @@
+{
+ "schema": 1,
+ "zig_version": "0.14.1",
+ "name": "basic.tardiness",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 4,
+     "tag": "cmp_gt",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 0
+      },
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "tag": "cond_br",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 4
+      }
+     ],
+     "then": [
+      {
+       "id": 5,
+       "tag": "dbg_stmt",
+       "ty": 1,
+       "line": 2
+      },
+      {
+       "id": 6,
+       "tag": "sub_safe",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 0
+        },
+        {
+         "inst": 1
+        }
+       ]
+      },
+      {
+       "id": 7,
+       "tag": "br",
+       "ty": 3,
+       "target": 3,
+       "args": [
+        {
+         "inst": 6
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 8,
+       "tag": "br",
+       "ty": 3,
+       "target": 3,
+       "args": [
+        {
+         "ty": 0,
+         "val": "0"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 11,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}
