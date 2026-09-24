@@ -29,6 +29,11 @@ abbrev M (σ α : Type) := StateT σ Result α
 abbrev usize := BitVec 64
 abbrev isize := BitVec 64
 
+/-- A Zig error's identity is its name, from one global namespace: `E!T` becomes
+`Except ErrName T'`. Distinct from `Zig.Error` (panics): a Zig error is a return value, not a
+panic. -/
+abbrev ErrName := String
+
 /-! ## Arithmetic -/
 
 section Arith
@@ -163,6 +168,30 @@ instead of diverging. -/
   match a with
   | some v => pure v
   | none => throw .panic
+
+/-! ## Error unions -/
+
+/-- `is_err`. -/
+@[inline] def isErr {α : Type} : Except ErrName α → Bool
+  | .error _ => true
+  | .ok _ => false
+
+/-- `is_non_err`. -/
+@[inline] def isNonErr {α : Type} (e : Except ErrName α) : Bool := !isErr e
+
+/-- `unwrap_errunion_payload`: Sema always checks the union first (`is_err`/`is_non_err` or a
+`try`), so the `.error` case here is statically impossible. -/
+@[inline] def unwrapPayload {α : Type} (e : Except ErrName α) : Result α :=
+  match e with
+  | .ok v => pure v
+  | .error _ => throw .panic
+
+/-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
+statically impossible. -/
+@[inline] def unwrapErr {α : Type} (e : Except ErrName α) : Result ErrName :=
+  match e with
+  | .error name => pure name
+  | .ok _ => throw .panic
 
 /-! ## Control flow -/
 
