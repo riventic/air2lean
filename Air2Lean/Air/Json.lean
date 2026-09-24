@@ -4,7 +4,7 @@ import Air2Lean.Air.Op
 /-!
 # AIR JSON parser
 
-Parses one exported function file (`docs/air-json.md`, schema 1) into `RawFunc`: a literal,
+Parses one exported function file (`docs/air-json.md`, schema 1 or 2) into `RawFunc`: a literal,
 tag-agnostic mirror of the JSON. `Normalize.lean` turns a `RawFunc` into a version-independent
 `Func` (`Air2Lean/Air/Op.lean`).
 
@@ -110,6 +110,10 @@ def parseTy (j : Json) : Except String Ty := do
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
     return .other name
+  -- Schema 2. Not yet in the subset: no `Ty` constructor carries their fields, so map to
+  -- `.other` (sanctioned by the schema-2 task: unknown new type kinds may use the existing form).
+  | "error_union" => return .other "error_union"
+  | "error_set" => return .other "error_set"
   | other => throw s!"unknown type kind: {other}"
 
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
@@ -123,8 +127,9 @@ def parseIntLit (fnName : String) (s : String) : Except String Int :=
     | some n => return (n : Int)
     | none => throw s!"{fnName}: not an integer literal: {s}"
 
-/-- A `Ref`: `{"inst": id}`, `{"ty", "val"}`, `{"ty", "undef": true}`, or `{"ty", "func",
-"noreturn"}` (`docs/air-json.md`). -/
+/-- A `Ref`: `{"inst": id}`, `{"ty", "val"}`, `{"ty", "undef": true}`, `{"ty", "func",
+"noreturn"}`, or (schema 2) `{"ty", "err"}` / `{"ty", "payload"}` — recognized but rejected: no
+`Val` constructor for error values yet (`docs/air-json.md`). -/
 def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
@@ -138,6 +143,10 @@ def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val
     let tyId ← (← j.getObjVal? "ty").getNat?
     if optField j "undef" |>.isSome then
       return .undef tyId
+    else if optField j "err" |>.isSome then
+      throw s!"{fnName}: error value constants are not yet supported"
+    else if optField j "payload" |>.isSome then
+      throw s!"{fnName}: error union payload constants are not yet supported"
     else
       let s ← (← j.getObjVal? "val").getStr?
       let some ty := types[tyId]?

@@ -1,4 +1,4 @@
-# AIR JSON format (schema 1)
+# AIR JSON format (schema 2)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -34,9 +34,13 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id` |
 | `array` | `len: int`, `child: id` |
 | `optional` | `child: id` |
+| `error_union` | `error: id` (the error set type), `payload: id` |
+| `error_set` | `errors: [string]` (sorted error names), or `any: true` for `anyerror` |
 | `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id}]` |
 | `tuple` | `fields: [{ty: id}]` |
 | `other` | `name: string` (printed type; not in the subset) |
+
+Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}`, with type 5 being `{"k": "error_set", "errors": ["NotDigit"]}`.
 
 ## Inst
 
@@ -51,7 +55,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `ty` | result type ID. Missing only for `inferred_alloc*`. |
 | `args` | operands, in AIR order |
 | `param` | `arg`: ZIR parameter index |
-| `body` | `block`, `loop`, `dbg_inline_block` |
+| `body` | `block`, `loop`, `dbg_inline_block`, `try`, `try_cold` (the error body) |
 | `then`, `else` | `cond_br` (both are bodies) |
 | `cases`, `else` | `switch_br`, `loop_switch_br`: `cases: [{items: [Ref], ranges: [[Ref, Ref]], body}]`, `else: body` |
 | `target` | `br`, `switch_dispatch`: the block `id`; `repeat`: the loop `id` |
@@ -71,3 +75,7 @@ One of:
 | `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false` |
 | `{"ty": 3, "undef": true}` | `undefined` |
 | `{"ty": 9, "func": "basic.tardiness", "noreturn": false}` | function. `noreturn: true` when the return type is `noreturn` (panic handlers). |
+| `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
+| `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
+
+`try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.
