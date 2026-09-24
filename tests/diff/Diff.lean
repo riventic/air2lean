@@ -1,6 +1,8 @@
 import Lean.Data.Json
 import Proofs.Basic.Gen
 import Proofs.Recursion.Gen
+import Proofs.Options.Gen
+import Proofs.Errors.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -71,6 +73,27 @@ def renderBool (r : Zig.Result Bool) : String :=
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok v) => if v then "{\"ok\":1}" else "{\"ok\":0}"
+
+/-- The `ok` payload of an optional or error-union result, as common.zig's `renderPayload`
+writes it: `null`, `{"err":"Name"}`, or the plain value. -/
+def renderOk {α : Type} (r : Zig.Result α) (payload : α → String) : String :=
+  match r.run with
+  | none => "{\"diverge\":true}"
+  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
+  | some (.ok v) => "{\"ok\":" ++ payload v ++ "}"
+
+def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
+  if wide then "\"" ++ toString v.toNat ++ "\"" else toString v.toNat
+
+def optStr {n : Nat} (v : Option (BitVec n)) (wide : Bool) : String :=
+  match v with
+  | none => "null"
+  | some x => natStr x wide
+
+def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) : String :=
+  match v with
+  | .error name => "{\"err\":\"" ++ name ++ "\"}"
+  | .ok x => natStr x false
 
 /-- Read `tests/diff/<ex>/inputs/<name>.jsonl`, write `tests/diff/out/lean/<ex>/<name>.jsonl`:
 `step` runs once per non-empty input line and returns the already-rendered output line. -/
@@ -165,6 +188,45 @@ def runFact : IO Unit :=
     let n ← getInt items[0]!
     pure (render (Recursion.fact (bv 32 n)) false)
 
+/-- `(xs, x)` inputs of the options functions. -/
+def xsAndX (j : Json) : IO (Array (BitVec 32) × BitVec 32) := do
+  let items ← getArr j
+  let xs ← (← getArr items[0]!).mapM fun v => return bv 32 (← getInt v)
+  pure (xs, bv 32 (← getInt items[1]!))
+
+def runFind : IO Unit :=
+  processFile "options" "find" fun j => do
+    let (xs, x) ← xsAndX j
+    pure (renderOk (Options.find xs x) (optStr · true))
+
+def runFindOr : IO Unit :=
+  processFile "options" "findOr" fun j => do
+    let (xs, x) ← xsAndX j
+    pure (render (Options.findOr xs x) true)
+
+def runFirstIndexPlusOne : IO Unit :=
+  processFile "options" "firstIndexPlusOne" fun j => do
+    let (xs, x) ← xsAndX j
+    pure (render (Options.firstIndexPlusOne xs x) true)
+
+def runParseDigit : IO Unit :=
+  processFile "errors" "parseDigit" fun j => do
+    let items ← getArr j
+    let c ← getInt items[0]!
+    pure (renderOk (Errors.parseDigit (bv 8 c)) errStr)
+
+def runSumDigits : IO Unit :=
+  processFile "errors" "sumDigits" fun j => do
+    let items ← getArr j
+    let s ← (← getArr items[0]!).mapM fun v => return bv 8 (← getInt v)
+    pure (renderOk (Errors.sumDigits s) errStr)
+
+def runDigitOrZero : IO Unit :=
+  processFile "errors" "digitOrZero" fun j => do
+    let items ← getArr j
+    let c ← getInt items[0]!
+    pure (render (Errors.digitOrZero (bv 8 c)) false)
+
 end DiffTest
 
 def main : IO Unit := do
@@ -183,3 +245,13 @@ def main : IO Unit := do
   DiffTest.runIsEven
   DiffTest.runIsOdd
   DiffTest.runFact
+
+  IO.FS.createDirAll "tests/diff/out/lean/options"
+  DiffTest.runFind
+  DiffTest.runFindOr
+  DiffTest.runFirstIndexPlusOne
+
+  IO.FS.createDirAll "tests/diff/out/lean/errors"
+  DiffTest.runParseDigit
+  DiffTest.runSumDigits
+  DiffTest.runDigitOrZero

@@ -106,7 +106,7 @@ expected_ctor_for_zig_kind() {
     outOfBounds) echo outOfBounds ;;
     divideByZero) echo divByZero ;;
     reachedUnreachable) echo unreachable ;;
-    exactDivisionRemainder | panic) echo panic ;;
+    exactDivisionRemainder | unwrapNull | unwrapError | panic) echo panic ;;
     *) echo "" ;;
   esac
 }

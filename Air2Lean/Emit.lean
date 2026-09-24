@@ -350,6 +350,10 @@ def FCtx.freeVarIds (fc : FCtx) (body : Array Inst) : Array InstId :=
     #[])
   used.filter (fun id => !defined.contains id)
 
+/-- Some instruction of the function reads `id`. -/
+def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
+  fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
+
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
   match fc.allInsts.find? (·.id == id) with
@@ -568,6 +572,13 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
+        -- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code).
+        -- The effect stays; the `_` prefix stops Lean's unused-variable warning.
+        let unusedLet := s!"let i{inst.id} ←"
+        let lineOpt := lineOpt.map fun line =>
+          if line.startsWith unusedLet && !fc.isReferenced inst.id then
+            s!"let _i{inst.id} ←" ++ (line.drop unusedLet.length).toString
+          else line
         match lineOpt with
         | some line => s!"{line}\n{restStr}"
         | none => restStr
