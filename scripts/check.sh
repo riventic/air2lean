@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full air2lean pipeline for examples/basic/basic.zig:
+# Full air2lean pipeline for each examples/<ex>/<ex>.zig:
 #   1. dump AIR-JSON with the patched compiler (zig-patch/) and check it against the golden files
 #   2. translate that AIR to Lean (`lake exe air2lean`)
 #   3. build the generated Lean
@@ -9,7 +9,13 @@
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the golden dir and the default patched zig. Default: 0.15.2
 #   AIR2LEAN_ZIG_AIR      Patched zig (zig-patch/build.sh output). Default: zig-air-$AIR2LEAN_ZIG_VERSION/bin/zig
-#   AIR2LEAN_CI           If 1: fail when the committed Gen.lean differs from the new translator output.
+#   AIR2LEAN_CI           If 1: fail when a committed Proofs/<Ex>/Gen.lean differs from the new
+#                         translator output.
+#   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/.
+#                         Also forwarded (via the environment) to scripts/diff.sh at the end. The
+#                         translator doesn't support options/errors yet (docs/generated-code.md),
+#                         so the default fails at step 2 for those two — pass
+#                         AIR2LEAN_EXAMPLES="basic recursion" to check only what translates today.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -23,30 +29,40 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   exit 1
 }
 
-golden_dir="tests/golden/$zig_version/air"
-air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
-trap 'rm -rf "$air_dir"' EXIT
+examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
 
-echo "== dumping AIR ==" >&2
-ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER=basic. "$zig_air" \
-  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing examples/basic/basic.zig
+for ex in $examples; do
+  # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
+  # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
+  Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
+  golden_dir="tests/golden/$zig_version/$ex/air"
+  air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
+  trap 'rm -rf "$air_dir"' EXIT
 
-echo "== checking against golden ($golden_dir) ==" >&2
-diff_output=$(diff -r "$golden_dir" "$air_dir" || true)
-if [ -n "$diff_output" ]; then
-  echo "error: AIR output does not match $golden_dir" >&2
-  echo "$diff_output" >&2
-  echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
-  exit 1
-fi
+  echo "== $ex: dumping AIR ==" >&2
+  ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$ex." "$zig_air" \
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
-echo "== translating to Lean ==" >&2
-lake exe air2lean "$air_dir" -o Proofs/Basic/Gen.lean --namespace Basic --prefix basic.
+  echo "== $ex: checking against golden ($golden_dir) ==" >&2
+  diff_output=$(diff -r "$golden_dir" "$air_dir" || true)
+  if [ -n "$diff_output" ]; then
+    echo "error: AIR output for $ex does not match $golden_dir" >&2
+    echo "$diff_output" >&2
+    echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
+    exit 1
+  fi
 
-if [ "${AIR2LEAN_CI:-0}" = 1 ] && ! git diff --exit-code -- Proofs/Basic/Gen.lean; then
-  echo "error: committed Proofs/Basic/Gen.lean differs from the translator output; commit the new file" >&2
-  exit 1
-fi
+  echo "== $ex: translating to Lean ==" >&2
+  lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex."
+
+  if [ "${AIR2LEAN_CI:-0}" = 1 ] && ! git diff --exit-code -- "Proofs/$Ex/Gen.lean"; then
+    echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
+    exit 1
+  fi
+
+  rm -rf "$air_dir"
+  trap - EXIT
+done
 
 echo "== building Lean ==" >&2
 lake build
