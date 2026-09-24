@@ -1,0 +1,164 @@
+{
+ "schema": 1,
+ "zig_version": "0.14.1",
+ "name": "recursion.isEven",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 3,
+     "tag": "cmp_eq",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 0
+      },
+      {
+       "ty": 0,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "tag": "cond_br",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 3
+      }
+     ],
+     "then": [
+      {
+       "id": 4,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 2
+      },
+      {
+       "id": 5,
+       "tag": "ret_safe",
+       "ty": 3,
+       "args": [
+        {
+         "ty": 1,
+         "val": "true"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 6,
+       "tag": "br",
+       "ty": 3,
+       "target": 2,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 9,
+   "tag": "sub_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 11,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 4,
+    "func": "recursion.isOdd",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 9
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 13,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 11
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) callconv(.c) bool"
+  }
+ ]
+}

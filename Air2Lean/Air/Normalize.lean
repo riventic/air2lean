@@ -155,12 +155,14 @@ partial def normalizeCase_0_15_2 (fnName : String) (raw : Raw.RawCase) :
 
 end
 
-def supportedVersions : List String := ["0.15.2"]
+def supportedVersions : List String := ["0.15.2", "0.14.1"]
 
 /-- `RawFunc → Func`, dispatching on `zig_version`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   match raw.zigVersion with
-  | "0.15.2" =>
+  -- 0.14.1 has no subset tag that differs from 0.15.2 (`zig-patch/0.14.1/TAGS.md`), so it
+  -- uses the same table.
+  | "0.15.2" | "0.14.1" =>
     let body ← raw.body.mapM (normalizeInst_0_15_2 raw.name)
     return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
              body, types := raw.types }

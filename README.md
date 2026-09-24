@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. All eight have machine-checked proofs, including two loops (`sum`, `totalWeightedTardiness`). See [PLAN.md](PLAN.md).
+**Status:** v0 works for Zig 0.15.2 and 0.14.1. 18 functions in 4 examples (`basic`, `recursion`, `options`, `errors`) translate and match the compiled Zig on 5,400 differential tests, including the panic kind. The 8 `basic` functions have machine-checked proofs, including two loops (`sum`, `totalWeightedTardiness`). See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -91,7 +91,7 @@ The trusted base is: Zig `Sema`, the AIR export patch, the translator, and the L
 
 ## Zig versions
 
-v0 supports Zig **0.15.2**. The design supports every Zig release: version-specific code is limited to the compiler patch and the normalizer table. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
+Supported: Zig **0.15.2**, and **0.14.1** (Linux only; no error unions yet). The design supports every Zig release: version-specific code is limited to the compiler patch and the normalizer table. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
 
 ## License
 

@@ -1,0 +1,198 @@
+{
+ "schema": 1,
+ "zig_version": "0.14.1",
+ "name": "options.firstIndexPlusOne",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "call",
+   "ty": 4,
+   "callee": {
+    "ty": 5,
+    "func": "options.find",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 5,
+   "tag": "is_non_null",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 9,
+     "tag": "cond_br",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 5
+      }
+     ],
+     "then": [
+      {
+       "id": 10,
+       "tag": "br",
+       "ty": 7,
+       "target": 8,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 6,
+       "tag": "call",
+       "ty": 7,
+       "callee": {
+        "ty": 8,
+        "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 7,
+       "tag": "unreach",
+       "ty": 7
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "optional_payload",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 13,
+   "tag": "add_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "ty": 2,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 13
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "optional",
+   "child": 2
+  },
+  {
+   "k": "other",
+   "name": "fn ([]const u32, u32) ?usize"
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  }
+ ]
+}

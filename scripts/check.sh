@@ -12,10 +12,10 @@
 #   AIR2LEAN_CI           If 1: fail when a committed Proofs/<Ex>/Gen.lean differs from the new
 #                         translator output.
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/.
-#                         Also forwarded (via the environment) to scripts/diff.sh at the end. The
-#                         translator doesn't support options/errors yet (docs/generated-code.md),
-#                         so the default fails at step 2 for those two — pass
-#                         AIR2LEAN_EXAMPLES="basic recursion" to check only what translates today.
+#                         Also forwarded (via the environment) to scripts/diff.sh at the end.
+#   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
+#                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
+#                         translation equals the one that the diff test checks.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -66,6 +66,11 @@ done
 
 echo "== building Lean ==" >&2
 lake build
+
+if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
+  echo "== differential testing: skipped (AIR2LEAN_DIFF=0) ==" >&2
+  exit 0
+fi
 
 echo "== differential testing ==" >&2
 exec scripts/diff.sh
