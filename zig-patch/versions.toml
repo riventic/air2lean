@@ -5,3 +5,25 @@
 url = "https://ziglang.org/download/0.15.2/zig-0.15.2.tar.xz"
 sha256 = "d9b30c7aa983fcff5eed2084d54ae83eaafe7ff3a84d8fb754d854165a6e521c"
 patch = "0.15.2/air-json.patch"
+
+# CI-only tooling below. These use a dotted `[ci.<name>]` header, never a bare `["<version>"]`
+# string, so build.sh's awk reader (which matches a version by exact line `["<version>"]`) never
+# picks one up when scanning for a Zig version section. See zig-patch/README.md.
+
+# Host zig for GitHub Actions CI: linux x86_64 build of the same 0.15.2 release, to bootstrap
+# zig-patch/build.sh (which needs a host zig of the exact target version on PATH).
+# sha256 from https://ziglang.org/download/index.json ("0.15.2" -> "x86_64-linux".shasum),
+# confirmed by downloading the tarball and hashing it.
+[ci.host-zig]
+version = "0.15.2"
+url = "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz"
+sha256 = "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+
+# elan (Lean toolchain installer) for GitHub Actions CI: linux x86_64 build of the latest
+# stable release. The Lean toolchain itself comes from lean-toolchain, not this pin.
+# sha256 from downloading the release asset and hashing it (the release publishes no checksum
+# file to cross-check against).
+[ci.elan]
+version = "v4.2.4"
+url = "https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63"

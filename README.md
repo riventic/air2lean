@@ -1,5 +1,7 @@
 # air2lean
 
+[![CI](https://github.com/riventic/air2lean/actions/workflows/ci.yml/badge.svg)](https://github.com/riventic/air2lean/actions/workflows/ci.yml)
+
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
 **Status:** v0 works for Zig 0.15.2. Eight example functions translate and match the compiled Zig on 2,400 differential tests. Five of them have machine-checked proofs, including a loop (`sum`). See [PLAN.md](PLAN.md).
@@ -59,6 +61,15 @@ lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.
 ```
 
 The Zig compiler only analyzes functions that something references. Use `export fn`, or reference each function in a `comptime { _ = &f; }` block.
+
+### Before a PR
+
+```sh
+scripts/check.sh       # goldens, translate, build, differential test
+lake build Proofs      # check the proofs
+scripts/no-sorry.sh    # no sorry/admit/native_decide
+scripts/mutate.sh      # a changed function must fail a test
+```
 
 ## Scope
 
