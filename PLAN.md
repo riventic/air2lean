@@ -5,15 +5,25 @@
 | # | Milestone | State |
 |---|---|---|
 | M0 | Toolchain: patched Zig 0.15.2, Lean 4.34.0 | done |
-| M1 | AIR JSON export (`zig-patch/`) | in progress |
-| M2 | Semantics library (`ZigLean/`) | in progress |
-| M3 | Parser + per-version normalizer | in progress |
-| M4 | Translator: straight-line code, branches, calls | open |
-| M5 | Translator: locals, loops, slices, structs | open |
-| M6 | Differential tests | open |
-| M7 | Case study proofs (`examples/basic`) | open |
+| M1 | AIR JSON export (`zig-patch/`) | done |
+| M2 | Semantics library (`ZigLean/`), incl. `loop_spec` | done |
+| M3 | Parser + per-version normalizer | done |
+| M4 | Translator: straight-line code, branches, calls | done |
+| M5 | Translator: locals, loops, slices, structs | done |
+| M6 | Differential tests: 8 functions × 300 inputs, 0 mismatches | done |
+| M7 | Case study proofs (`Proofs/Basic/Proofs.lean`) | 4 of 8 functions; loop proofs in progress |
 
-Estimate for M1–M7: 1–2 days, with parallel agents.
+Mutation check: a `*` changed to `*%` in `scale` gives 279 mismatches, so the tester sees a changed function.
+
+## Next
+
+| Item | Estimate |
+|---|---|
+| Loop proofs (`sum`, `totalWeightedTardiness`) | 0.5 day |
+| CI (GitHub Actions: build patched Zig, `scripts/check.sh`, `lake build Proofs`) | 0.5 day |
+| Mutual recursion (`mutual … partial_fixpoint`) | 0.5 day |
+| Optionals, error unions | 1–2 days |
+| Port to 0.14.x | 1 day |
 
 ## Decisions
 
@@ -29,6 +39,8 @@ Estimate for M1–M7: 1–2 days, with parallel agents.
 | Locals | One generated `Locals` structure per function, held in the state. `load`/`store` = `get`/`modify`. | No SSA pass. It is sound because the checker rejects an `alloc` whose address escapes. |
 | Control flow | One generated `Exit` type per function (`ret`, `br_k`, `rep_k`). A block is a `match` on the exit, and a loop is `Zig.loop`. | This maps AIR's structured `block`/`br`/`loop`/`repeat` directly. |
 | Panics | A call to a `noreturn` function, `unreach` or `trap` becomes `throw`. | This is how Sema lowers safety checks. |
+| Loop bodies | Each loop body is a named definition `f.loop<k>` that takes the values it reads as parameters. | A proof can then name the body and apply `Zig.loop_spec`. |
+| Host compiler | `build.sh` requires a host `zig` of exactly the target version. | The Zig compiler source normally builds with the same release. Bootstrapping from source (`bootstrap.c`, CMake + LLVM) is out of scope. |
 
 ## Zig version support
 

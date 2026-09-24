@@ -125,6 +125,9 @@ structure FCtx where
   blockTys : Array (InstId × TyId)
   allInsts : Array Inst
   retTy : TyId
+  /-- This function's own generated (mangled) name, for naming its extracted loop-body defs
+  (`<fnName>.loop<k>`, see `emitLoopDef`). -/
+  fnName : String
   /-- This function's generated `<Fn>Locals`/`<Fn>Exit` names, for ascribing nested do-blocks
   (see `FCtx.ascribedDo`). -/
   localsName : String
@@ -240,6 +243,89 @@ def emitExitInductive (structNames : Array (String × String)) (types : Array Ty
     | t => s!"  | br{k} (v : {emitTy structNames types t})").toList
   let repLines := (repT.map fun k => s!"  | rep{k}").toList
   String.intercalate "\n" ([s!"inductive {exitName} where", retLine] ++ brLines ++ repLines)
+
+/-! ## Loop-body capture analysis
+
+Every `loop` body becomes its own top-level def (`docs/generated-code.md` §Loops), so it needs
+an explicit parameter for every SSA value it reads that is bound outside it. -/
+
+/-- Every `Val` `op` resolves through `rv` at emission time (`emitSimple` / `emitTerminator` /
+`emitSwitchChain` below) — i.e. every value referenced by name in the generated text. Does not
+look inside a nested `block`/`loop`/`condBr`/`switchBr`'s own body: those instructions are
+visited separately (`Func.allInsts` already flattens them in, see `FCtx.freeVarIds`). A
+`load`/`store`'s pointer is excluded: it resolves to a `Locals` field name via `allocFields`,
+never a captured identifier. A noreturn call's args are excluded: `emitSimple` drops the whole
+call. -/
+def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
+  match op with
+  | .arg _ => #[]
+  | .arith _ _ a b => #[a, b]
+  | .div _ a b => #[a, b]
+  | .minMax _ a b => #[a, b]
+  | .withOverflow _ a b => #[a, b]
+  | .bit _ a b => #[a, b]
+  | .not a => #[a]
+  | .neg a => #[a]
+  | .shift _ a b => #[a, b]
+  | .cmp _ a b => #[a, b]
+  | .boolAnd a b => #[a, b]
+  | .boolOr a b => #[a, b]
+  | .intCast a => #[a]
+  | .trunc a => #[a]
+  | .bitcast a => #[a]
+  | .alloc => #[]
+  | .load _ => #[]
+  | .store _ v => #[v]
+  | .sliceLen s => #[s]
+  | .sliceElemVal s i => #[s, i]
+  | .structFieldVal s _ => #[s]
+  | .aggregateInit elems => elems
+  | .call callee args => match callee with | .func _ true => #[] | _ => args
+  | .block _ => #[]
+  | .loop _ => #[]
+  | .br target v => match fc.targetTy target with | .void => #[] | _ => #[v]
+  | .«repeat» _ => #[]
+  | .condBr c _ _ => #[c]
+  | .switchBr v cases _ =>
+    #[v] ++ cases.foldl (fun acc c =>
+      let acc := c.items.foldl Array.push acc
+      c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
+  | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
+  | .unreach => #[]
+  | .trap => #[]
+  | .line _ => #[]
+  | .dbg _ _ => #[]
+
+/-- Ids referenced inside `body` (recursively) that are defined outside it: the free variables
+of a loop body, i.e. what its extracted top-level def must take as parameters. -/
+def FCtx.freeVarIds (fc : FCtx) (body : Array Inst) : Array InstId :=
+  let bodyInsts := body.foldl flattenInst #[]
+  let defined := bodyInsts.map (·.id)
+  let used := dedupIds (bodyInsts.foldl (fun acc i =>
+    (fc.directVals i.op).foldl
+      (fun acc v => match v with | .inst id => acc.push id | _ => acc) acc)
+    #[])
+  used.filter (fun id => !defined.contains id)
+
+/-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
+def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
+  match fc.allInsts.find? (·.id == id) with
+  | some i => match i.op with | .arg idx => some idx | _ => none
+  | none => none
+
+/-- The captured values a loop body needs from outside itself, as `(id, name, leanType)`,
+ordered params first (by parameter index) then by id (`docs/generated-code.md` §Loops). The
+name matches exactly what the body text already uses (`p<i>`/`i<id>`), so the extracted def's
+parameter list needs no renaming of the body. -/
+def FCtx.loopCaptures (fc : FCtx) (body : Array Inst) : Array (InstId × String × String) :=
+  let free := fc.freeVarIds body
+  let params := (free.filterMap fun id => (fc.argIndexOf id).map fun idx => (idx, id))
+    |>.qsort (fun a b => decide (a.1 < b.1)) |>.map (·.2)
+  let rest := (free.filter fun id => (fc.argIndexOf id).isNone)
+    |>.qsort (fun a b => decide (a < b))
+  (params ++ rest).map fun id =>
+    let name := match fc.argIndexOf id with | some idx => s!"p{idx}" | none => s!"i{id}"
+    (id, name, fc.emitTyOf (fc.instTyId id))
 
 /-! ## Expression / statement emission -/
 
@@ -406,8 +492,14 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         -- block, so `rest` (anything after it in this same instruction array) is unreachable
         -- and dropped. The loop's own result (whatever exit its body converged to once
         -- `again` says stop) propagates as-is to whatever wraps this loop.
-        let inner := fc.ascribedDo (emitStmts fc env body.toList)
-        s!"Zig.loop {inner} (fun e => match e with | .rep{inst.id} => true | _ => false)"
+        --
+        -- The body itself is not inlined: it was already emitted as its own top-level def
+        -- (`emitLoopDef`, called from `emitOneFunction` before this function's own def), so a
+        -- proof can name it. Call it with its captures instead.
+        let caps := fc.loopCaptures body
+        let args := String.intercalate " " ((caps.map fun (_, name, _) => name).toList)
+        s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) \
+          (fun e => match e with | .rep{inst.id} => true | _ => false)"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
@@ -455,6 +547,21 @@ partial def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Va
 
 end
 
+/-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
+proof can refer to it — the point of extracting it at all), taking its captured values
+(`FCtx.loopCaptures`) as explicit parameters with the same names the body text already uses. -/
+def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
+  match loopInst.op with
+  | .loop body =>
+    let caps := fc.loopCaptures body
+    let paramsStr := String.intercalate " "
+      ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
+    let initEnv := caps.map fun (id, name, _) => (id, name)
+    let bodyStr := emitStmts fc initEnv body.toList
+    s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do\n\
+      {indent 2 bodyStr}"
+  | _ => "" -- unreachable: `emitOneFunction` only calls this with a `.loop` instruction
+
 /-! ## Per-function emission -/
 
 def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
@@ -493,16 +600,22 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blTys, allInsts,
-      retTy := f.ret, localsName, exitName }
+      retTy := f.ret, fnName := leanName, localsName, exitName }
   let localsStr := emitLocalsStruct structNames f.types localsName allocs
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT
+  -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
+  -- before its children (pre-order), so a parent loop always precedes a nested one; reversing
+  -- flips that to child-before-parent, which is what "the inner loop's def is emitted before
+  -- the outer one" needs (`docs/generated-code.md` §Loops).
+  let loops := (allInsts.filter fun i => match i.op with | .loop _ => true | _ => false).reverse
+  let loopDefs := (loops.map (emitLoopDef fc)).toList
   let selfRec := allInsts.any fun i => match i.op with
     | .call (.func nm _) _ => nm == f.name
     | _ => false
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty
   let defStr :=
     emitFunctionDef fc leanName localsName exitName f.params f.ret f.body selfRec hasNonRetExit
-  String.intercalate "\n\n" [localsStr, exitStr, defStr]
+  String.intercalate "\n\n" ([localsStr, exitStr] ++ loopDefs ++ [defStr])
 
 /-! ## Call graph / emission order -/
 
