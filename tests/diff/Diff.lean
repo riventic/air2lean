@@ -13,14 +13,10 @@ example). Reads the same `tests/diff/<ex>/inputs/<fn>.jsonl` files
 `tests/diff/out/lean/<ex>/<fn>.jsonl`: one line per input, one of `{"ok": v}` /
 `{"fail": "<error>"}` / `{"diverge": true}` (the `none` case of `Zig.Result` — non-termination).
 
-`sum` and `totalWeightedTardiness` (basic) return `BitVec 64`; their `ok` value is quoted as a
-decimal string for JS-safety, matching gen_inputs.zig / harness.zig's convention for wide
-results. `isEven`/`isOdd` (recursion) return `Bool`, rendered as `0`/`1` — `renderBool` below,
-matching common.zig's `renderPayload` on the Zig side.
-
-Only basic and recursion are wired up here: the translator does not yet support options
-(optionals) or errors (error unions), so `Proofs.Options.Gen`/`Proofs.Errors.Gen` don't exist —
-see docs/generated-code.md's diff-test section.
+A `u64`/`usize` `ok` value (`sum`, `totalWeightedTardiness`, the options functions) is quoted
+as a decimal string for JS-safety, matching common.zig's `renderPayload`. `isEven`/`isOdd`
+return `Bool`, rendered as `0`/`1`. An optional renders as `null` or its value, an error union
+as `{"err":"Name"}` or its value.
 
 This tool has no external user, only its own generator and this file as producer/consumer — a
 parse failure here is a bug in one of the two, not bad data, so it fails loudly (`IO.userError`)
@@ -58,42 +54,34 @@ def jobOf (j : Json) : IO Basic.Job := do
   let weight ← getField j "weight"
   pure { duration := bv 32 duration, due := bv 32 due, weight := bv 8 weight }
 
-/-- Render a `Zig.Result` outcome as one JSONL line. `wide`: quote the value (u64 results). -/
-def render {n : Nat} (r : Zig.Result (BitVec n)) (wide : Bool) : String :=
-  match r.run with
-  | none => "{\"diverge\":true}"
-  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
-  | some (.ok v) =>
-    if wide then "{\"ok\":\"" ++ toString v.toNat ++ "\"}" else "{\"ok\":" ++ toString v.toNat ++ "}"
-
-/-- `Bool`-result variant of `render` (recursion's isEven/isOdd), matching common.zig's
-`renderPayload`'s `0`/`1` encoding for `bool` on the Zig side. -/
-def renderBool (r : Zig.Result Bool) : String :=
-  match r.run with
-  | none => "{\"diverge\":true}"
-  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
-  | some (.ok v) => if v then "{\"ok\":1}" else "{\"ok\":0}"
-
-/-- The `ok` payload of an optional or error-union result, as common.zig's `renderPayload`
-writes it: `null`, `{"err":"Name"}`, or the plain value. -/
+/-- Render a `Zig.Result` outcome as one JSONL line; `payload` renders the `ok` value as
+common.zig's `renderPayload` writes it. -/
 def renderOk {α : Type} (r : Zig.Result α) (payload : α → String) : String :=
   match r.run with
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok v) => "{\"ok\":" ++ payload v ++ "}"
 
+/-- An integer value; `wide`: quoted (u64 results). -/
 def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
   if wide then "\"" ++ toString v.toNat ++ "\"" else toString v.toNat
+
+def render {n : Nat} (r : Zig.Result (BitVec n)) (wide : Bool) : String :=
+  renderOk r (natStr · wide)
+
+/-- A `bool` as `0`/`1`. -/
+def renderBool (r : Zig.Result Bool) : String :=
+  renderOk r fun v => if v then "1" else "0"
 
 def optStr {n : Nat} (v : Option (BitVec n)) (wide : Bool) : String :=
   match v with
   | none => "null"
   | some x => natStr x wide
 
-def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) : String :=
+def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) (wide : Bool) : String :=
   match v with
   | .error name => "{\"err\":\"" ++ name ++ "\"}"
-  | .ok x => natStr x false
+  | .ok x => natStr x wide
 
 /-- Read `tests/diff/<ex>/inputs/<name>.jsonl`, write `tests/diff/out/lean/<ex>/<name>.jsonl`:
 `step` runs once per non-empty input line and returns the already-rendered output line. -/
@@ -213,13 +201,13 @@ def runParseDigit : IO Unit :=
   processFile "errors" "parseDigit" fun j => do
     let items ← getArr j
     let c ← getInt items[0]!
-    pure (renderOk (Errors.parseDigit (bv 8 c)) errStr)
+    pure (renderOk (Errors.parseDigit (bv 8 c)) (errStr · false))
 
 def runSumDigits : IO Unit :=
   processFile "errors" "sumDigits" fun j => do
     let items ← getArr j
     let s ← (← getArr items[0]!).mapM fun v => return bv 8 (← getInt v)
-    pure (renderOk (Errors.sumDigits s) errStr)
+    pure (renderOk (Errors.sumDigits s) (errStr · false))
 
 def runDigitOrZero : IO Unit :=
   processFile "errors" "digitOrZero" fun j => do
