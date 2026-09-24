@@ -44,6 +44,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
       throw s!"{fnName}: near line {line}: optional pointer type is outside the subset (only \
         `?T` for a non-pointer T)"
     else checkTy fnName types line child
+  | .errorUnion set payload => do
+    checkTy fnName types line set
+    checkTy fnName types line payload
+  | .errorSet _ => pure ()
   | .struct _ _ fields => fields.forM fun (_, fty) => checkTy fnName types line fty
   | .tuple fields => fields.forM (checkTy fnName types line)
   | .int .. | .bool | .void | .noreturn => pure ()
@@ -91,6 +95,12 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   | .isNonNull a => chk1 a; pure st
   | .optPayload a => chk1 a; pure st
   | .wrapOptional a => chk1 a; pure st
+  | .isErr a => chk1 a; pure st
+  | .isNonErr a => chk1 a; pure st
+  | .errPayload a => chk1 a; pure st
+  | .errCode a => chk1 a; pure st
+  | .wrapErrPayload a => chk1 a; pure st
+  | .wrapErr a => chk1 a; pure st
   | .alloc => pure { st with allocs := st.allocs.push id }
   | .load _ptr => pure st
   | .store _ptr v => chk1 v; pure st
@@ -113,6 +123,10 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
     for c in cases do
       let _ ← checkInsts fnName types st c.body
     let _ ← checkInsts fnName types st elseBody
+    pure st
+  | .«try» v errBody => do
+    chk1 v
+    let _ ← checkInsts fnName types st errBody
     pure st
   | .ret v => chk1 v; pure st
   | .unreach => pure st
