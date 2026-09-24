@@ -63,7 +63,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 5 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`. Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Emit.lean`'s `panicErrorFor` maps that segment to a constructor:
+`Zig.Error` has 5 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`. Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|
@@ -71,7 +71,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 | `outOfBounds` | `.outOfBounds` |
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
-| anything else (outside v0's scope) | `.panic` |
+| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `call` (`@panic`) | `.panic` |
 
 `tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch.
 

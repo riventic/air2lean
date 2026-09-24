@@ -157,7 +157,8 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .optNull tid => fc.tyOfId tid
   | .optSome tid _ => fc.tyOfId tid
   | .err tid _ => fc.tyOfId tid
-  | .errUnion tid .. => fc.tyOfId tid
+  | .errUnionErr tid _ => fc.tyOfId tid
+  | .errUnionOk tid _ => fc.tyOfId tid
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
 
@@ -182,13 +183,9 @@ def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : Str
   | .func name _ => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
   | .optSome _ v => s!"(some {fc.resolveVal env v})"
-  | .err _ name => s!"\"{name}\""
-  | .errUnion tid err payload =>
-    let ety := fc.emitTyOf tid
-    match err, payload with
-    | some name, _ => s!"(.error \"{name}\" : {ety})"
-    | _, some p => s!"(.ok {fc.resolveVal env p} : {ety})"
-    | none, none => "(panic! \"air2lean: malformed error-union constant\")"
+  | .err _ name => name.quote
+  | .errUnionErr tid name => s!"(.error {name.quote} : {fc.emitTyOf tid})"
+  | .errUnionOk tid p => s!"(.ok {fc.resolveVal env p} : {fc.emitTyOf tid})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -196,21 +193,6 @@ def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
     (noreturn, (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name)
   | _ => (false, "panic! \"air2lean: indirect calls are outside the subset\"")
 
-/-- A noreturn call's callee (docs/air-json.md's `func` field), e.g.
-`debug.FullPanic((function 'defaultPanic')).outOfBounds`, names the panic-handler function by
-its Zig std lib member name — the segment after the last `.` (docs/generated-code.md §Panics).
-Maps a known member name to the matching `Zig.Error` constructor; an unrecognized name (a check
-outside v0's scope, or an indirect-call fallback) keeps the generic `.panic`. -/
-def panicErrorFor (calleeName : String) : String :=
-  let suffix := match (calleeName.splitOn ".").getLast? with
-    | some seg => seg
-    | none => calleeName
-  match suffix with
-  | "integerOverflow" | "integerOutOfBounds" | "shlOverflow" | "shrOverflow" => ".overflow"
-  | "outOfBounds" => ".outOfBounds"
-  | "divideByZero" => ".divByZero"
-  | "reachedUnreachable" => ".unreachable"
-  | _ => ".panic"
 
 /-- The field name to project for `struct_field_val s index`: `s`'s own field name if `s` is a
 struct, else a positional `1`/`2` (for example the pair `@addWithOverflow` returns). -/
@@ -399,9 +381,12 @@ its own. -/
 def FCtx.ascribedDo (fc : FCtx) (body : String) : String :=
   s!"({doBlock body} : Zig.M {fc.localsName} {fc.exitName})"
 
-def bindLet (env : Array (InstId × String)) (id : InstId) (expr : String) :
+/-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
+effect stays; the `_` prefix stops Lean's unused-variable warning. -/
+def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : String) :
     Array (InstId × String) × String :=
-  (env.push (id, s!"i{id}"), s!"let i{id} ← {expr}")
+  let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
+  (env.push (id, name), s!"let {name} ← {expr}")
 
 /-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
 def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
@@ -421,32 +406,32 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
       | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
       | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
-    let (env, l) := bindLet env inst.id expr; (env, some l)
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .div op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let f := match op with
       | .divTrunc => "Zig.divTrunc" | .divFloor => "Zig.divFloor" | .divExact => "Zig.divExact"
       | .rem => "Zig.rem" | .mod => "Zig.mod"
-    let (env, l) := bindLet env inst.id s!"{f} {sgn} {rv a} {rv b}"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"{f} {sgn} {rv a} {rv b}"; (env, some l)
   | .minMax isMax a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let f := if isMax then "Zig.max" else "Zig.min"
-    let (env, l) := bindLet env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
   | .withOverflow op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
-    let (env, l) := bindLet env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
   | .bit op a b =>
     let f := match op with | .and => "&&&" | .or => "|||" | .xor => "^^^"
-    let (env, l) := bindLet env inst.id s!"pure ({rv a} {f} {rv b})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ({rv a} {f} {rv b})"; (env, some l)
   | .not a =>
     let expr := match fc.valTy a with
       | .bool => s!"!{rv a}"
       | _ => s!"~~~{rv a}"
-    let (env, l) := bindLet env inst.id s!"pure ({expr})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ({expr})"; (env, some l)
   | .neg a =>
-    let (env, l) := bindLet env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
+    let (env, l) := bindLet fc env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
     (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
@@ -456,71 +441,71 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .shlSat => s!"pure (Zig.shlSat {sgn} {rv a} {rv b})"
       | .shlExact => s!"Zig.shlExact {sgn} {rv a} {rv b}"
       | .shrExact => s!"Zig.shrExact {sgn} {rv a} {rv b}"
-    let (env, l) := bindLet env inst.id expr; (env, some l)
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmp op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let expr := match op with
       | .lt => s!"Zig.lt {sgn} {rv a} {rv b}" | .le => s!"Zig.le {sgn} {rv a} {rv b}"
       | .gt => s!"Zig.gt {sgn} {rv a} {rv b}" | .ge => s!"Zig.ge {sgn} {rv a} {rv b}"
       | .eq => s!"{rv a} == {rv b}" | .ne => s!"{rv a} != {rv b}"
-    let (env, l) := bindLet env inst.id s!"pure ({expr})"; (env, some l)
-  | .boolAnd a b => let (env, l) := bindLet env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
-  | .boolOr a b => let (env, l) := bindLet env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ({expr})"; (env, some l)
+  | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
+  | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
   | .intCast a =>
     let s1 := if fc.valSigned a then "true" else "false"
     let s2 := if fc.tySigned inst.ty then "true" else "false"
     let m := fc.tyBits inst.ty
-    let (env, l) := bindLet env inst.id s!"Zig.intCast {s1} {s2} {m} {rv a}"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"Zig.intCast {s1} {s2} {m} {rv a}"; (env, some l)
   | .trunc a =>
-    let (env, l) := bindLet env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
     (env, some l)
-  | .bitcast a => let (env, l) := bindLet env inst.id s!"pure ({rv a})"; (env, some l)
-  | .isNull a => let (env, l) := bindLet env inst.id s!"pure (({rv a}).isNone)"; (env, some l)
-  | .isNonNull a => let (env, l) := bindLet env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
-  | .optPayload a => let (env, l) := bindLet env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
-  | .wrapOptional a => let (env, l) := bindLet env inst.id s!"pure (some {rv a})"; (env, some l)
-  | .isErr a => let (env, l) := bindLet env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
-  | .isNonErr a => let (env, l) := bindLet env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
+  | .bitcast a => let (env, l) := bindLet fc env inst.id s!"pure ({rv a})"; (env, some l)
+  | .isNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isNone)"; (env, some l)
+  | .isNonNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
+  | .optPayload a => let (env, l) := bindLet fc env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
+  | .wrapOptional a => let (env, l) := bindLet fc env inst.id s!"pure (some {rv a})"; (env, some l)
+  | .isErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
+  | .isNonErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
   | .errPayload a =>
-    let (env, l) := bindLet env inst.id s!"Zig.call (Zig.unwrapPayload {rv a})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.unwrapPayload {rv a})"; (env, some l)
   | .errCode a =>
-    let (env, l) := bindLet env inst.id s!"Zig.call (Zig.unwrapErr {rv a})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.unwrapErr {rv a})"; (env, some l)
   | .wrapErrPayload a =>
     let ety := fc.emitTyOf inst.ty
-    let (env, l) := bindLet env inst.id s!"pure ((.ok {rv a}) : {ety})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ((.ok {rv a}) : {ety})"; (env, some l)
   | .wrapErr a =>
     let ety := fc.emitTyOf inst.ty
-    let (env, l) := bindLet env inst.id s!"pure ((.error {rv a}) : {ety})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ((.error {rv a}) : {ety})"; (env, some l)
   | .alloc => (env, none)
   | .load ptr =>
     let field : String := match ptr with
       | .inst pid => (fc.allocFields.find? (·.1 == pid)).map (·.2) |>.getD "?"
       | _ => "?"
-    let (env, l) := bindLet env inst.id s!"pure ((← get).{field})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure ((← get).{field})"; (env, some l)
   | .store ptr v =>
     let field : String := match ptr with
       | .inst pid => (fc.allocFields.find? (·.1 == pid)).map (·.2) |>.getD "?"
       | _ => "?"
     (env, some s!"modify (fun s => \{ s with {field} := {rv v} })")
-  | .sliceLen s => let (env, l) := bindLet env inst.id s!"pure (Zig.len {rv s})"; (env, some l)
+  | .sliceLen s => let (env, l) := bindLet fc env inst.id s!"pure (Zig.len {rv s})"; (env, some l)
   | .sliceElemVal s i =>
-    let (env, l) := bindLet env inst.id s!"Zig.call (Zig.index {rv s} {rv i})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.index {rv s} {rv i})"; (env, some l)
   | .structFieldVal s index =>
     let fname := fc.structFieldName s index
-    let (env, l) := bindLet env inst.id s!"pure (({rv s}).{fname})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure (({rv s}).{fname})"; (env, some l)
   | .aggregateInit elems =>
     let sname := fc.emitTyOf inst.ty
     let fnames := fc.structFieldNamesFor (fc.tyOfId inst.ty)
     let assigns := ((fnames.zip elems).map fun (fn, e) => s!"{fn} := {rv e}").toList
     let (env, l) :=
-      bindLet env inst.id s!"pure \{ {String.intercalate ", " assigns} : {sname} }"
+      bindLet fc env inst.id s!"pure \{ {String.intercalate ", " assigns} : {sname} }"
     (env, some l)
   | .call callee args =>
     let (isNoreturn, cexpr) := fc.resolveCallee callee
     if isNoreturn then (env, none)
     else
       let argStrs := (args.map rv).toList
-      let (env, l) := bindLet env inst.id s!"Zig.call ({cexpr} {String.intercalate " " argStrs})"
+      let (env, l) := bindLet fc env inst.id s!"Zig.call ({cexpr} {String.intercalate " " argStrs})"
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
@@ -572,13 +557,6 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
-        -- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code).
-        -- The effect stays; the `_` prefix stops Lean's unused-variable warning.
-        let unusedLet := s!"let i{inst.id} ←"
-        let lineOpt := lineOpt.map fun line =>
-          if line.startsWith unusedLet && !fc.isReferenced inst.id then
-            s!"let _i{inst.id} ←" ++ (line.drop unusedLet.length).toString
-          else line
         match lineOpt with
         | some line => s!"{line}\n{restStr}"
         | none => restStr
@@ -605,7 +583,9 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
   | .switchBr v cases elseBody => emitSwitchChain fc env v cases.toList elseBody
   | .call callee _ =>
     let (_, calleeName) := fc.resolveCallee callee
-    s!"throw {panicErrorFor calleeName}"
+    match panicErrorFor? calleeName with
+    | some ctor => s!"throw {ctor}"
+    | none => s!"(panic! \"air2lean: unchecked noreturn callee {calleeName}\")"
   | _ => "pure default"
 
 /-- `switch_br` as a chain of `if`/`else if` (a `BitVec` value has no numeral match pattern). -/
