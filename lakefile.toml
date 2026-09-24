@@ -1,0 +1,17 @@
+name = "air2lean"
+version = "0.1.0"
+defaultTargets = ["ZigLean", "Air2Lean", "air2lean"]
+
+[[lean_lib]]
+name = "ZigLean"
+
+[[lean_lib]]
+name = "Air2Lean"
+
+[[lean_lib]]
+name = "Examples"
+globs = ["Examples.+"]
+
+[[lean_exe]]
+name = "air2lean"
+root = "Air2Lean.Main"

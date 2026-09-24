@@ -1,0 +1,398 @@
+diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/json.zig zig-0.15.2/src/Air/json.zig
+--- zig-0.15.2-pristine/src/Air/json.zig	1970-01-01 01:00:00
++++ zig-0.15.2/src/Air/json.zig	2026-09-24 08:58:01
+@@ -0,0 +1,383 @@
++//! air2lean: write the AIR of one function as JSON.
++//! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
++//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to
++//! functions whose fully qualified name starts with the prefix. Instructions outside the
++//! air2lean subset are written with their tag and `"unsupported": true`, so the reader can
++//! reject them. Types are interned into a `types` table; everywhere a type appears in the
++//! body it is written as an integer ID (an index into that table).
++
++const std = @import("std");
++const build_options = @import("build_options");
++const Allocator = std.mem.Allocator;
++const Zcu = @import("../Zcu.zig");
++const Value = @import("../Value.zig");
++const Type = @import("../Type.zig");
++const Air = @import("../Air.zig");
++const InternPool = @import("../InternPool.zig");
++
++const Error = std.io.Writer.Error || Allocator.Error;
++
++pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
++    const dir_path = std.posix.getenv("ZIG_AIR_JSON_DIR") orelse return;
++    const zcu = pt.zcu;
++    const ip = &zcu.intern_pool;
++    const func = zcu.funcInfo(func_index);
++    const fqn = ip.getNav(func.owner_nav).fqn.toSlice(ip);
++
++    if (std.posix.getenv("ZIG_AIR_JSON_FILTER")) |prefix| {
++        if (!std.mem.startsWith(u8, fqn, prefix)) return;
++    }
++
++    var dir = std.fs.cwd().makeOpenPath(dir_path, .{}) catch return;
++    defer dir.close();
++    var name_buf: [std.fs.max_name_bytes]u8 = undefined;
++    const file_name = std.fmt.bufPrint(&name_buf, "{s}.json", .{fqn}) catch return;
++    const file = dir.createFile(file_name, .{}) catch return;
++    defer file.close();
++    var buf: [64 * 1024]u8 = undefined;
++    var fw = file.writer(&buf);
++
++    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
++    defer arena.deinit();
++
++    var j: std.json.Stringify = .{ .writer = &fw.interface, .options = .{ .whitespace = .indent_1 } };
++    var w: W = .{ .pt = pt, .air = air, .j = &j, .gpa = arena.allocator() };
++    w.writeFunc(fqn, Type.fromInterned(func.ty)) catch return;
++    fw.interface.flush() catch return;
++}
++
++const W = struct {
++    pt: Zcu.PerThread,
++    air: *const Air,
++    j: *std.json.Stringify,
++    gpa: Allocator,
++    /// Maps an interned type to its ID (its index in `queue`, and thus in the emitted
++    /// `types` array).
++    ids: std.AutoHashMapUnmanaged(InternPool.Index, u32) = .{},
++    /// Types in first-encounter order. Grows while draining it in `writeFunc`: writing a
++    /// type entry can discover further types, which get appended and drained in turn.
++    queue: std.ArrayListUnmanaged(InternPool.Index) = .{},
++
++    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type) Error!void {
++        const zcu = w.pt.zcu;
++        const ip = &zcu.intern_pool;
++        try w.j.beginObject();
++        try w.field("schema");
++        try w.j.write(1);
++        try w.field("zig_version");
++        try w.j.write(build_options.version);
++        try w.field("name");
++        try w.j.write(fqn);
++        try w.field("params");
++        try w.j.beginArray();
++        const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
++        for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
++        try w.j.endArray();
++        try w.field("ret");
++        try w.writeTypeRef(fn_ty.fnReturnType(zcu));
++        try w.field("body");
++        try w.writeBody(w.air.getMainBody());
++        try w.field("types");
++        try w.j.beginArray();
++        var i: usize = 0;
++        while (i < w.queue.items.len) : (i += 1) {
++            try w.writeTypeEntry(Type.fromInterned(w.queue.items[i]));
++        }
++        try w.j.endArray();
++        try w.j.endObject();
++    }
++
++    fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
++        return w.air.instructions.items(.data)[@intFromEnum(inst)];
++    }
++
++    fn writeBody(w: *W, body: []const Air.Inst.Index) Error!void {
++        try w.j.beginArray();
++        for (body) |inst| try w.writeInst(inst);
++        try w.j.endArray();
++    }
++
++    fn field(w: *W, name: []const u8) Error!void {
++        try w.j.objectField(name);
++    }
++
++    fn writeInst(w: *W, inst: Air.Inst.Index) Error!void {
++        const zcu = w.pt.zcu;
++        const ip = &zcu.intern_pool;
++        const tag = w.air.instructions.items(.tag)[@intFromEnum(inst)];
++        try w.j.beginObject();
++        try w.field("id");
++        try w.j.write(@intFromEnum(inst));
++        try w.field("tag");
++        try w.j.write(@tagName(tag));
++        switch (tag) {
++            .inferred_alloc, .inferred_alloc_comptime => {},
++            else => {
++                try w.field("ty");
++                try w.writeTypeRef(w.air.typeOfIndex(inst, ip));
++            },
++        }
++        switch (tag) {
++            .add, .add_safe, .add_wrap, .add_sat, .sub, .sub_safe, .sub_wrap, .sub_sat,
++            .mul, .mul_safe, .mul_wrap, .mul_sat, .div_trunc, .div_floor, .div_exact,
++            .rem, .mod, .bit_and, .bit_or, .xor, .cmp_lt, .cmp_lte, .cmp_eq, .cmp_gte,
++            .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
++            .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
++            .min, .max,
++            => {
++                const b = w.data(inst).bin_op;
++                try w.writeArgs(&.{ b.lhs, b.rhs });
++            },
++            .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg => {
++                try w.writeArgs(&.{w.data(inst).un_op});
++            },
++            .not, .bitcast, .load, .intcast, .intcast_safe, .trunc, .slice_ptr, .slice_len,
++            .array_to_slice, .clz, .ctz, .popcount, .abs, .optional_payload, .wrap_optional,
++            .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
++            .struct_field_ptr_index_3,
++            => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
++            .arg => {
++                try w.field("param");
++                try w.j.write(w.data(inst).arg.zir_param_index);
++            },
++            .block, .loop => {
++                const extra = w.air.extraData(Air.Block, w.data(inst).ty_pl.payload);
++                try w.field("body");
++                try w.writeBody(@ptrCast(w.air.extra.items[extra.end..][0..extra.data.body_len]));
++            },
++            .dbg_inline_block => {
++                const extra = w.air.extraData(Air.DbgInlineBlock, w.data(inst).ty_pl.payload);
++                try w.field("body");
++                try w.writeBody(@ptrCast(w.air.extra.items[extra.end..][0..extra.data.body_len]));
++            },
++            .add_with_overflow, .sub_with_overflow, .mul_with_overflow, .shl_with_overflow,
++            .slice_elem_ptr, .ptr_elem_ptr, .ptr_add, .ptr_sub, .slice,
++            => {
++                const b = w.air.extraData(Air.Bin, w.data(inst).ty_pl.payload).data;
++                try w.writeArgs(&.{ b.lhs, b.rhs });
++            },
++            .call, .call_always_tail, .call_never_tail, .call_never_inline => {
++                const pl_op = w.data(inst).pl_op;
++                const extra = w.air.extraData(Air.Call, pl_op.payload);
++                try w.field("callee");
++                try w.writeRef(pl_op.operand);
++                try w.writeArgs(@ptrCast(w.air.extra.items[extra.end..][0..extra.data.args_len]));
++            },
++            .dbg_var_ptr, .dbg_var_val, .dbg_arg_inline => {
++                const pl_op = w.data(inst).pl_op;
++                const name: Air.NullTerminatedString = @enumFromInt(pl_op.payload);
++                try w.writeArgs(&.{pl_op.operand});
++                try w.field("name");
++                try w.j.write(name.toSlice(w.air.*));
++            },
++            .struct_field_ptr, .struct_field_val => {
++                const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
++                try w.writeArgs(&.{extra.struct_operand});
++                try w.field("index");
++                try w.j.write(extra.field_index);
++            },
++            .aggregate_init => {
++                const ty_pl = w.data(inst).ty_pl;
++                const ty = ty_pl.ty.toType();
++                const len: usize = switch (ty.zigTypeTag(zcu)) {
++                    .@"struct" => ty.structFieldCount(zcu),
++                    else => @intCast(ty.arrayLen(zcu)),
++                };
++                try w.writeArgs(@ptrCast(w.air.extra.items[ty_pl.payload..][0..len]));
++            },
++            .br, .switch_dispatch => {
++                const br = w.data(inst).br;
++                try w.field("target");
++                try w.j.write(@intFromEnum(br.block_inst));
++                try w.writeArgs(&.{br.operand});
++            },
++            .repeat => {
++                try w.field("target");
++                try w.j.write(@intFromEnum(w.data(inst).repeat.loop_inst));
++            },
++            .cond_br => {
++                const pl_op = w.data(inst).pl_op;
++                const extra = w.air.extraData(Air.CondBr, pl_op.payload);
++                const then_body: []const Air.Inst.Index = @ptrCast(w.air.extra.items[extra.end..][0..extra.data.then_body_len]);
++                const else_body: []const Air.Inst.Index = @ptrCast(w.air.extra.items[extra.end + then_body.len ..][0..extra.data.else_body_len]);
++                try w.writeArgs(&.{pl_op.operand});
++                try w.field("then");
++                try w.writeBody(then_body);
++                try w.field("else");
++                try w.writeBody(else_body);
++            },
++            .switch_br, .loop_switch_br => {
++                const sw = w.air.unwrapSwitch(inst);
++                try w.writeArgs(&.{sw.operand});
++                try w.field("cases");
++                try w.j.beginArray();
++                var it = sw.iterateCases();
++                while (it.next()) |case| {
++                    try w.j.beginObject();
++                    try w.field("items");
++                    try w.j.beginArray();
++                    for (case.items) |item| try w.writeRef(item);
++                    try w.j.endArray();
++                    try w.field("ranges");
++                    try w.j.beginArray();
++                    for (case.ranges) |range| {
++                        try w.j.beginArray();
++                        try w.writeRef(range[0]);
++                        try w.writeRef(range[1]);
++                        try w.j.endArray();
++                    }
++                    try w.j.endArray();
++                    try w.field("body");
++                    try w.writeBody(case.body);
++                    try w.j.endObject();
++                }
++                try w.j.endArray();
++                try w.field("else");
++                try w.writeBody(it.elseBody());
++            },
++            .dbg_stmt => {
++                const d = w.data(inst).dbg_stmt;
++                try w.field("line");
++                try w.j.write(d.line + 1);
++            },
++            .alloc, .ret_ptr, .unreach, .trap, .dbg_empty_stmt => {},
++            else => {
++                try w.field("unsupported");
++                try w.j.write(true);
++            },
++        }
++        try w.j.endObject();
++    }
++
++    /// Format into a string, then write it as an escaped JSON string.
++    fn writeFmt(w: *W, v: anytype) Error!void {
++        const text = std.fmt.allocPrint(w.pt.zcu.gpa, "{f}", .{v}) catch return error.WriteFailed;
++        defer w.pt.zcu.gpa.free(text);
++        try w.j.write(text);
++    }
++
++    fn writeArgs(w: *W, refs: []const Air.Inst.Ref) Error!void {
++        try w.field("args");
++        try w.j.beginArray();
++        for (refs) |r| try w.writeRef(r);
++        try w.j.endArray();
++    }
++
++    fn writeRef(w: *W, ref: Air.Inst.Ref) Error!void {
++        const zcu = w.pt.zcu;
++        const ip = &zcu.intern_pool;
++        try w.j.beginObject();
++        if (ref.toIndex()) |idx| {
++            try w.field("inst");
++            try w.j.write(@intFromEnum(idx));
++        } else {
++            const ip_index = ref.toInterned().?;
++            const val = Value.fromInterned(ip_index);
++            try w.field("ty");
++            try w.writeTypeRef(val.typeOf(zcu));
++            switch (ip.indexToKey(ip_index)) {
++                .func => |f| {
++                    try w.field("func");
++                    try w.j.write(ip.getNav(f.owner_nav).fqn.toSlice(ip));
++                    try w.field("noreturn");
++                    try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
++                },
++                else => if (val.isUndef(zcu)) {
++                    try w.field("undef");
++                    try w.j.write(true);
++                } else {
++                    try w.field("val");
++                    try w.writeFmt(val.fmtValue(w.pt));
++                },
++            }
++        }
++        try w.j.endObject();
++    }
++
++    /// Get (or assign) `ty`'s ID and write it as a JSON integer. `ty` is enqueued for a
++    /// full `writeTypeEntry` the first time it is seen; see the drain loop in `writeFunc`.
++    fn writeTypeRef(w: *W, ty: Type) Error!void {
++        try w.j.write(try w.typeId(ty));
++    }
++
++    fn typeId(w: *W, ty: Type) Error!u32 {
++        const gop = try w.ids.getOrPut(w.gpa, ty.toIntern());
++        if (!gop.found_existing) {
++            gop.value_ptr.* = @intCast(w.queue.items.len);
++            try w.queue.append(w.gpa, ty.toIntern());
++        }
++        return gop.value_ptr.*;
++    }
++
++    /// Write one full type entry (this type's array element in `types`). Child types are
++    /// written via `writeTypeRef`, i.e. as IDs, never nested inline.
++    fn writeTypeEntry(w: *W, ty: Type) Error!void {
++        const zcu = w.pt.zcu;
++        const ip = &zcu.intern_pool;
++        try w.j.beginObject();
++        try w.field("k");
++        switch (ty.zigTypeTag(zcu)) {
++            .int => {
++                const info = ty.intInfo(zcu);
++                try w.j.write("int");
++                try w.field("signed");
++                try w.j.write(info.signedness == .signed);
++                try w.field("bits");
++                try w.j.write(info.bits);
++            },
++            .bool => try w.j.write("bool"),
++            .void => try w.j.write("void"),
++            .noreturn => try w.j.write("noreturn"),
++            .pointer => {
++                try w.j.write("ptr");
++                try w.field("size");
++                try w.j.write(@tagName(ty.ptrSize(zcu)));
++                try w.field("const");
++                try w.j.write(ty.isConstPtr(zcu));
++                try w.field("child");
++                try w.writeTypeRef(ty.childType(zcu));
++            },
++            .array => {
++                try w.j.write("array");
++                try w.field("len");
++                try w.j.write(ty.arrayLen(zcu));
++                try w.field("child");
++                try w.writeTypeRef(ty.childType(zcu));
++            },
++            .optional => {
++                try w.j.write("optional");
++                try w.field("child");
++                try w.writeTypeRef(ty.optionalChild(zcu));
++            },
++            .@"struct" => {
++                const is_tuple = ty.isTuple(zcu);
++                try w.j.write(if (is_tuple) "tuple" else "struct");
++                if (!is_tuple) {
++                    try w.field("name");
++                    try w.j.write(ty.containerTypeName(ip).toSlice(ip));
++                    try w.field("layout");
++                    try w.j.write(@tagName(ty.containerLayout(zcu)));
++                }
++                try w.field("fields");
++                try w.j.beginArray();
++                for (0..ty.structFieldCount(zcu)) |i| {
++                    try w.j.beginObject();
++                    if (ty.structFieldName(i, zcu).toSlice(ip)) |name| {
++                        try w.field("name");
++                        try w.j.write(name);
++                    }
++                    try w.field("ty");
++                    try w.writeTypeRef(ty.fieldType(i, zcu));
++                    try w.j.endObject();
++                }
++                try w.j.endArray();
++            },
++            else => {
++                try w.j.write("other");
++                try w.field("name");
++                try w.writeFmt(ty.fmt(w.pt));
++            },
++        }
++        try w.j.endObject();
++    }
++};
+diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Zcu/PerThread.zig zig-0.15.2/src/Zcu/PerThread.zig
+--- zig-0.15.2-pristine/src/Zcu/PerThread.zig	2025-10-11 05:53:18
++++ zig-0.15.2/src/Zcu/PerThread.zig	2026-09-23 14:31:27
+@@ -1725,6 +1725,7 @@
+ 
+     var air = try pt.analyzeFnBodyInner(func_index);
+     errdefer air.deinit(gpa);
++    @import("../Air/json.zig").dumpToDir(&air, pt, func_index);
+ 
+     const ies_outdated = !func.analysisUnordered(ip).inferred_error_set or
+         func.resolvedErrorSetUnordered(ip) != old_resolved_ies;

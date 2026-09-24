@@ -1,69 +1,87 @@
 # Plan
 
-Estimate: **5–7 months, one person**. Each milestone ends with a tagged release and green CI.
+## Status
+
+| # | Milestone | State |
+|---|---|---|
+| M0 | Toolchain: patched Zig 0.15.2, Lean 4.34.0 | done |
+| M1 | AIR JSON export (`zig-patch/`) | in progress |
+| M2 | Semantics library (`ZigLean/`) | in progress |
+| M3 | Parser + per-version normalizer | in progress |
+| M4 | Translator: straight-line code, branches, calls | open |
+| M5 | Translator: locals, loops, slices, structs | open |
+| M6 | Differential tests | open |
+| M7 | Case study proofs (`examples/basic`) | open |
+
+Estimate for M1–M7: 1–2 days, with parallel agents.
 
 ## Decisions
 
 | Topic | Decision | Reason |
 |---|---|---|
-| Zig version | Pin **0.15.2**. Upgrade on purpose, one release at a time. | AIR is internal and changes each release. |
-| AIR source | Small patch on the 0.15.2 tag that adds `--emit-air-json <path>`. | A release build prints no AIR: `zig build-obj --verbose-air` on Homebrew 0.15.2 exits 0 with no output (checked 2026-09-23). The text dump also has no stable grammar. |
-| Translator language | Lean 4 | One toolchain. `Lean.Json` parses the input; the translator can be tested in the same repo as the proofs. |
-| Integers | `BitVec n`, wrapped as `UInt'` types (`U8`, `U32`, `I64`, …) | `bv_decide` (SAT-backed) proves many bit-level goals automatically. |
-| Effects | `Result α := ok α \| fail Error \| div` | Same shape as Aeneas. `fail` covers overflow, bounds, `unreachable`, `@panic`. `div` allows loops before a termination proof exists. |
-| Loops | Translate to a fixpoint combinator in `Result`. Termination is a separate theorem. | Translation stays total and mechanical. Partial correctness first, total correctness when needed. |
-| Build mode | Translate `Debug`/`ReleaseSafe` AIR. | Safety checks are explicit in AIR there. They map to `fail`. |
+| AIR source | A compiler patch writes one JSON file per function (`ZIG_AIR_JSON_DIR`). | A release build prints no AIR: `--verbose-air` on stock 0.15.2 exits 0 with no output. The text dump has no stable grammar. |
+| JSON types | Type table: each type is written once, and uses refer to it by ID. | Inline types repeat deeply nested std types. One file grew too big to parse, and a run took 2.5 min. |
+| Function filter | `ZIG_AIR_JSON_FILTER=<prefix>` | Skip std functions. |
+| Build mode | `-OReleaseSafe -fno-error-tracing` | Safety checks stay explicit in AIR. `Debug` adds error-return-trace code to every function. |
+| Translator language | Lean 4, no dependencies | One toolchain. Fast builds. |
+| Integers | `BitVec n` + a signedness flag per operation | `bv_decide` and `BitVec` lemmas do the bit-level work. |
+| Effects | `Zig.M σ α := StateT σ (ExceptT Error Option) α` | `throw` = safety panic. `none` = does not terminate. Lean core has `partial_fixpoint` support for this stack. |
+| Locals | One generated `Locals` structure per function, held in the state. `load`/`store` = `get`/`modify`. | No SSA pass. It is sound because the checker rejects an `alloc` whose address escapes. |
+| Control flow | One generated `Exit` type per function (`ret`, `br_k`, `rep_k`). A block is a `match` on the exit, and a loop is `Zig.loop`. | This maps AIR's structured `block`/`br`/`loop`/`repeat` directly. |
+| Panics | A call to a `noreturn` function, `unreach` or `trap` becomes `throw`. | This is how Sema lowers safety checks. |
 
-## Architecture
+## Zig version support
 
-```
-zig-patch/          patch + build script for zig 0.15.2 with --emit-air-json
-Air2Lean/
-  Air/Json.lean     AIR JSON schema → Lean data types
-  Air/Check.lean    subset checker: reject unsupported instructions with a source location
-  Promote.lean      local `alloc`/`load`/`store` → SSA values (escape check)
-  Emit.lean         AIR → Lean source
-ZigLean/            runtime semantics library (what generated code imports)
-  Result.lean  Int.lean  Slice.lean  Struct.lean  Loop.lean
-tests/
-  golden/           .zig → expected .lean
-  diff/             differential tests: Zig binary vs `#eval`
-examples/           case studies with proofs
-```
+v0 supports **0.15.2**. The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
 
-## Milestones
+| Layer | Version-specific? | Where |
+|---|---|---|
+| Compiler patch | yes | `zig-patch/<version>/air-json.patch`; URL + sha256 in `zig-patch/versions.toml` |
+| JSON format | no | `docs/air-json.md`. Each file has `schema` and `zig_version`. AIR tags are written verbatim. |
+| Normalizer | yes | `Air2Lean/Air/Normalize.lean`: one tag table per Zig version → internal `Op` |
+| Checker, emitter, `ZigLean` | no | They work only on `Op`. |
+| Tests | yes | `tests/golden/<version>/`. The CI matrix runs one job per version. |
 
-| # | Name | Weeks | Done when |
-|---|---|---|---|
-| M0 | Setup | 1–2 | CI builds patched Zig 0.15.2 (cached), Lean toolchain pinned via `lean-toolchain`, empty pipeline runs. |
-| M1 | AIR export | 3–4 | `--emit-air-json` writes every function in the subset. Golden JSON tests for 20+ small functions. |
-| M2 | Semantics library | 3–4 | `ZigLean` has checked / wrapping / saturating ops for all widths, casts (`@intCast`, `@truncate`), comparisons, `bool`. Each op has a lemma set tied to `BitVec`. |
-| M3 | Straight-line code | 4–6 | Translate blocks, `cond_br`, `switch_br`, calls, safety-check branches → `fail`. Subset checker rejects the rest with a clear message. |
-| M4 | Locals + loops | 3–4 | `var` locals promoted to SSA when the address does not escape. `loop`/`repeat`/`br` → fixpoint combinator. |
-| M5 | Slices + structs | 3–4 | `[]const T` as `Array T` with bounds-checked index; `.len`; `for` over slices. Structs as Lean `structure`, field access, by-value copy. |
-| M6 | Differential tests | 2–3 | Random-input harness: build Zig to a shared lib, call it and `#eval` the Lean definition, compare `ok`/`fail` and values. Runs in CI. |
-| M7 | Case study | 2–4 | One realistic scoring function with proofs: no overflow in a stated input range, monotonicity in one argument, result equals a clean spec function. Write-up in `examples/`. |
+Support matrix:
+
+| Zig | State |
+|---|---|
+| 0.15.2 | supported |
+| 0.14.x | planned |
+| 0.16.x | planned (when released) |
+
+**To add a Zig version:**
+1. Add its URL and sha256 to `zig-patch/versions.toml`.
+2. Port the patch: `src/Air/json.zig` + the hook after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`. Check the AIR tag list in `src/Air.zig` for new, renamed and removed tags.
+3. Add a normalizer table. Start from the nearest version and change only the tags that differ.
+4. Build with `zig-patch/build.sh <version>`, then dump `examples/` into `tests/golden/<version>/`.
+5. Run the differential tests and proofs against that version. Add it to the CI matrix and the table above.
+
+## Subset (v0)
+
+| In | Out |
+|---|---|
+| integers of any width, `bool` | floats |
+| checked, wrapping, saturating arithmetic | mutable pointers, aliasing |
+| `if`, `switch`, `while`, `for` | allocators, heap |
+| local `var` whose address does not escape | `@ptrCast`, packed layout |
+| read-only slices `[]const T` | inline asm, threads, atomics |
+| structs by value | SIMD vectors, `async` |
+| calls, recursion | optionals, error unions (later) |
 
 ## Risks
 
-| Risk | Effect | Mitigation |
-|---|---|---|
-| AIR changes between Zig releases | Patch and translator break on upgrade. | Pin one version. Keep the patch small. Golden tests show exactly what changed. |
-| Patch is rejected upstream / never upstreamed | Carry the patch for each version. | Keep it one file plus flag wiring. Offer it upstream as a debug feature. |
-| Safety checks lowered in ways that are hard to recognize | Missed `fail` cases ⇒ model too optimistic. | Differential tests on inputs near limits (max int, empty slice, len-1). |
-| Stack locals with escaping addresses | Promotion unsound. | Conservative escape check; reject on any doubt. |
-| Proofs about loops are slow to write | Case study stalls. | Loop invariant helpers in `ZigLean/Loop.lean`; prefer `for` over slices, which maps to `List.foldl`-style lemmas. |
+| Risk | Mitigation |
+|---|---|
+| AIR changes each Zig release | Version-specific code only in the patch and the normalizer. Golden files show the exact change. |
+| A safety check is lowered in a form the translator does not recognize, so the model is too optimistic | Differential tests on edge inputs (0, max, min, empty slice). |
+| An escaping `alloc` makes the `Locals` model unsound | Conservative escape check that rejects on any doubt. |
+| Loop proofs are slow to write | Unfolding lemmas for `Zig.loop`. Prefer `for` over slices. |
 
-## Later (not v0)
+## Later
 
 - Optionals and error unions (`?T`, `E!T`).
-- Floats, as an IEEE-754 model or as an uninterpreted type.
-- Immutable pointers `*const T` that do not alias writes.
-- Mutable pointers via a separation-logic memory model.
-- Upgrade path to Zig 0.16+.
-
-## Open questions
-
-1. Termination: keep `div` in `Result`, or require a `decreasing_by` measure at translation time?
-2. Should `@panic` messages be kept in `Error` for diagnostics?
-3. Upstream route for the AIR JSON export: debug flag, or a compiler plugin once Zig has one?
+- Immutable pointers `*const T`, then mutable pointers with a separation-logic memory model.
+- Floats (IEEE-754 model or uninterpreted).
+- Ports to 0.14.x and 0.16.x.
+- Upstream the export as a compiler debug feature.
