@@ -119,6 +119,11 @@ def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
 def render {n : Nat} (r : Zig.Result (BitVec n)) (wide : Bool) : String :=
   renderOk r (natStr · wide)
 
+/-- A signed integer value (a Zig `iN` result, e.g. `toI32`'s `i32`): two's-complement decoding
+of the `BitVec`, matching `renderPayload`'s `{d}` on a signed Zig int. -/
+def renderSigned {n : Nat} (r : Zig.Result (BitVec n)) : String :=
+  renderOk r fun v => toString v.toInt
+
 /-- A `bool` as `0`/`1`. -/
 def renderBool (r : Zig.Result Bool) : String :=
   renderOk r fun v => if v then "1" else "0"
@@ -313,7 +318,7 @@ def runToI32 : IO Unit :=
   processFile "floatconv" "toI32" fun j => do
     let items ← getArr j
     let x ← getFloat .f64 items[0]!
-    pure (render (Floatconv.toI32 x) false)
+    pure (renderSigned (Floatconv.toI32 x))
 
 def runToU64 : IO Unit :=
   processFile "floatconv" "toU64" fun j => do
