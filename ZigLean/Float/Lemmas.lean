@@ -278,4 +278,155 @@ theorem ofInt_eq_roundRat {n : Nat} (s : Bool) (x : BitVec n) :
   unfold Float.ofInt
   simp
 
+/-! ## `truncRat`
+
+Truncation toward zero of an exact `Rat`, shared by `Float.trunc`/`Float.rem` and (via
+`toInt_of_toRat` below) by `@floatToInt`. -/
+
+/-- The `Nat` floor of `m / 2^k` (as a `Rat`) is the `Nat` division `m / 2^k`. -/
+theorem floor_natCast_div_pow (m k : Nat) :
+    ((m : Rat) / (2 : Rat) ^ k).floor = ((m / 2 ^ k : Nat) : Int) := by
+  have h2 : (0:Rat) < (2:Rat)^k := by
+    have : (0:Nat) < 2^k := Nat.two_pow_pos k
+    exact_mod_cast this
+  have hlow : (m / 2^k) * 2 ^ k ≤ m := Nat.div_mul_le_self m (2 ^ k)
+  have hmod : m % 2 ^ k < 2 ^ k := Nat.mod_lt m (Nat.two_pow_pos k)
+  have haddmod : (m / 2^k) * 2 ^ k + m % 2 ^ k = m := by
+    rw [Nat.mul_comm]; exact Nat.div_add_mod m (2 ^ k)
+  have hhigh : m < (m / 2^k + 1) * 2 ^ k := by
+    rw [Nat.succ_mul]; omega
+  have e1 : ((m/2^k : Nat) : Int) ≤ ((m:Rat)/(2:Rat)^k).floor := by
+    rw [Rat.le_floor_iff, ← Rat.not_lt, Rat.div_lt_iff h2]
+    intro hc
+    have hc' : m < (m/2^k) * 2^k := by exact_mod_cast hc
+    omega
+  have e2 : ((m:Rat)/(2:Rat)^k).floor < ((m/2^k : Nat):Int) + 1 := by
+    rw [Rat.floor_lt_iff, Rat.div_lt_iff h2]
+    exact_mod_cast hhigh
+  omega
+
+/-- The magnitude Nat that `Float.toInt`/`finiteToRat` compute (`if e ≥ 0 then m*2^e.toNat else
+m/2^(-e).toNat`) is `⌊mag_rat⌋`, where `mag_rat` is that same value computed exactly in `Rat`. -/
+theorem floor_magRat (m : Nat) (e : Int) :
+    ((if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)).floor =
+      ((if e ≥ 0 then m * 2^e.toNat else m / 2^(-e).toNat : Nat) : Int) := by
+  split
+  · rw [show ((m:Rat)*(2:Rat)^e.toNat) = (((m*2^e.toNat:Nat):Int):Rat) by push_cast; rfl]
+    exact Rat.floor_intCast _
+  · exact floor_natCast_div_pow m (-e).toNat
+
+/-- `truncRat` of a negated nonneg value: truncation toward zero of `-r` (`r ≥ 0`) is `-⌊r⌋`. -/
+theorem truncRat_neg_of_nonneg {r : Rat} (hr : 0 ≤ r) : truncRat (-r) = -r.floor := by
+  unfold truncRat
+  split
+  · rename_i h
+    have h' : (-(0:Rat)) ≤ -r := by simpa using h
+    have hr0 : r ≤ 0 := (Rat.neg_le_neg_iff).mp h'
+    have : r = 0 := Rat.le_antisymm hr0 hr
+    subst this
+    norm_cast
+  · rename_i h
+    rw [Rat.ceil_eq_neg_floor_neg]
+    simp
+
+/-- `truncRat` (truncation toward zero) of the exact value a `finite` float denotes, expressed
+via the same `mag` Nat that `Float.toInt` computes. -/
+theorem truncRat_finiteToRat (neg : Bool) (m : Nat) (e : Int) :
+    truncRat (finiteToRat neg m e) =
+      if neg then -((if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat : Nat) : Int)
+      else ((if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat : Nat) : Int) := by
+  have hfloor := floor_magRat m e
+  have hnn : (0:Rat) ≤
+      (if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat) := by
+    have h1 : (0:Rat) ≤
+        (((if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)).floor
+          : Rat) := by
+      rw [hfloor]; exact_mod_cast Nat.zero_le _
+    exact Rat.le_trans h1 (Rat.floor_le _)
+  show truncRat
+      (if neg then -(if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)
+        else (if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)) = _
+  cases neg with
+  | false =>
+    show truncRat (if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat) = _
+    unfold truncRat
+    rw [ite_eq_left hnn]
+    exact hfloor
+  | true =>
+    show truncRat (-(if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat))
+      = _
+    rw [truncRat_neg_of_nonneg hnn]
+    exact congrArg Neg.neg hfloor
+
+/-- `@intFromFloat`, restated for the exact value `x` denotes: truncate `q = x.toRat?.get!`
+toward zero, then range-check the same way `toInt_of_finite` does. -/
+theorem toInt_of_toRat {s : Bool} {n : Nat} {safe : Bool} {x : Float fmt} {q : Rat}
+    (hx : x.toRat? = some q) :
+    Float.toInt s n safe x =
+      let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
+      let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
+      if truncRat q < lo || truncRat q > hi then
+        if safe then throw .overflow else throw .unspecified
+      else pure (BitVec.ofInt n (truncRat q)) := by
+  obtain ⟨sn, m, e, hclass, hq⟩ := exists_finite_of_toRat? hx
+  have htv : (if sn then -((if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat : Nat) : Int)
+        else ((if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat : Nat) : Int))
+      = truncRat q := by
+    rw [← hq]; exact (truncRat_finiteToRat sn m e).symm
+  rw [toInt_of_finite hclass]
+  dsimp only
+  rw [htv]
+
+/-- `truncRat q` is negative iff `q ≤ -1` (truncation toward zero only crosses zero into the
+negatives once the magnitude reaches a whole `1`). -/
+theorem truncRat_lt_zero_iff {q : Rat} : truncRat q < 0 ↔ q ≤ -1 := by
+  unfold truncRat
+  split
+  · rename_i h
+    have hfl : (0:Int) ≤ q.floor := Rat.le_floor_iff.mpr (by exact_mod_cast h)
+    constructor
+    · intro hc; omega
+    · intro hc; exact absurd (Rat.le_trans h hc) (by decide)
+  · rename_i h
+    have hnn : q < 0 := Rat.not_le.mp h
+    constructor
+    · intro hc
+      have hc' : q.ceil ≤ (-1:Int) := by omega
+      exact (Rat.ceil_le_iff.mp hc' : q ≤ ((-1:Int):Rat))
+    · intro hc
+      have : q.ceil ≤ (-1:Int) := Rat.ceil_le_iff.mpr (by exact_mod_cast hc)
+      omega
+
+/-- `truncRat q` exceeds a nonneg `n` iff `q ≥ n + 1` (the symmetric fact to
+`truncRat_lt_zero_iff`, on the positive side). -/
+theorem truncRat_gt_iff {q : Rat} {n : Int} (hn : 0 ≤ n) :
+    truncRat q > n ↔ ((n:Rat) + 1) ≤ q := by
+  unfold truncRat
+  split
+  · rename_i h
+    constructor
+    · intro hc
+      have hstep : (n+1:Int) ≤ q.floor := by omega
+      have := Rat.le_floor_iff.mp hstep
+      push_cast at this
+      exact this
+    · intro hc
+      have hc' : ((n+1:Int):Rat) ≤ q := by push_cast; exact hc
+      have := Rat.le_floor_iff.mpr hc'
+      omega
+  · rename_i h
+    have hnn : q < 0 := Rat.not_le.mp h
+    have hceil0 : q.ceil ≤ (0:Int) := Rat.ceil_le_iff.mpr (by exact_mod_cast Rat.le_of_lt hnn)
+    constructor
+    · intro hc; omega
+    · intro hc
+      exfalso
+      have h1 : (n:Rat) + 1 ≤ 0 := Rat.le_trans hc (Rat.le_of_lt hnn)
+      have hn' : (0:Rat) ≤ (n:Rat) := by exact_mod_cast hn
+      have h2 : (0:Rat) + 1 ≤ (n:Rat) + 1 := (Rat.add_le_add_right).mpr hn'
+      have h3 : (1:Rat) ≤ 0 := by
+        have h4 := Rat.le_trans h2 h1
+        rwa [Rat.zero_add] at h4
+      exact absurd h3 (by decide)
+
 end Zig
