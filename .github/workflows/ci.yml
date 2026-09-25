@@ -55,7 +55,6 @@ jobs:
       # target still gives the results it depends on (docs/floats.md).
       - name: Float target probe
         if: matrix.full
-        continue-on-error: true  # TEMPORARY: first run captures expected.txt
         run: scripts/floatprobe.sh
 
       # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when

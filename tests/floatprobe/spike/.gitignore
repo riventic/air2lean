@@ -1,7 +1,9 @@
 crt/
 .lake/
-liblibm.a*
-zigside*
+liblibm.a
+liblibm.a.o
+zigside
+zigside.o
 zig.out
 lean.out
 spike.diff
