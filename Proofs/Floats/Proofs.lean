@@ -143,7 +143,7 @@ end Zig
 /-- `isNan` is exactly `Float.isNaN` (`docs/floats.md` NaN semantics: `x != x`). -/
 theorem isNan_spec (x : Zig.F64) : isNan x = pure (Zig.Float.isNaN x) := by
   unfold isNan
-  simp [zig_unfold, Zig.Float.ne_self_eq_isNaN]
+  simp [zig_unfold, Zig.eq_self]
 
 /-- `clamp`'s monadic scaffolding reduces to a plain nested `if` on `x < lo` / `x > hi`. -/
 theorem clamp_body (x lo hi : Zig.F32) : clamp x lo hi =
