@@ -35,3 +35,15 @@ safety check does not catch it). -/
 theorem toByte_nan (x : Zig.F32) (h : x.isNaN) : toByte x = throw .unspecified := by
   unfold toByte
   simp [zig_unfold, Zig.Float.toInt_of_isNaN _ _ _ _ h]
+
+/-- `@bitCast` of a NaN to an integer throws `.unspecified` (`docs/floats.md`: NaN has no
+defined bit pattern to bit-cast). -/
+theorem bits32_nan (x : Zig.F32) (h : x.isNaN) : bits32 x = throw .unspecified := by
+  unfold bits32 Zig.Float.toBits?
+  simp [zig_unfold, h]
+
+/-- `@bitCast` of a non-NaN float to an integer is exactly its bits. -/
+theorem bits32_ok (x : Zig.F32) (h : ¬ x.isNaN) : bits32 x = pure x.bits := by
+  unfold bits32 Zig.Float.toBits?
+  simp [zig_unfold, h]
+  rfl
