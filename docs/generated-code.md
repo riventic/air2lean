@@ -16,6 +16,7 @@
 | Zig | Lean |
 |---|---|
 | `uN`, `iN`, `usize`, `isize` | `BitVec N` (`usize`/`isize` = `BitVec 64`) |
+| `f16`, `f32`, `f64`, `f80`, `f128` | `Zig.F16`, `Zig.F32`, `Zig.F64`, `Zig.F80`, `Zig.F128` (`Zig.Float .f16` … `.f128`; docs/floats.md) |
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[]const T` | `Array T'` |
