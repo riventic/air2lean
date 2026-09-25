@@ -1,5 +1,5 @@
 {
- "schema": 2,
+ "schema": 3,
  "zig_version": "0.15.2",
  "name": "options.find",
  "params": [
@@ -327,7 +327,7 @@
    "args": [
     {
      "ty": 2,
-     "val": "null"
+     "null": true
     }
    ]
   }
