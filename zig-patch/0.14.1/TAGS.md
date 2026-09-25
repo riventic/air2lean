@@ -13,7 +13,9 @@
 
 ## Exporter port
 
-- `src/Air/json.zig`: ported from 0.15.2. Writes schema 1 (the 0.15.2 exporter writes schema 2 with error unions; that part is not ported yet).
+- `src/Air/json.zig`: ported from 0.15.2. Writes schema 3 (floats and the current optional
+  encoding are ported; error unions are not — the 0.15.2 exporter's `errors` support is not
+  ported yet).
 - Hook: the same place as in 0.15.2, after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`.
 
 ## Build
