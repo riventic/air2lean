@@ -51,6 +51,13 @@ jobs:
           tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
           echo "$PWD/host-zig" >> "$GITHUB_PATH"
 
+      # The float model follows the reference target (x86_64-linux); this checks that the
+      # target still gives the results it depends on (docs/floats.md).
+      - name: Float target probe
+        if: matrix.full
+        continue-on-error: true  # TEMPORARY: first run captures expected.txt
+        run: scripts/floatprobe.sh
+
       # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when
       # the patch, the version pin, or the build script itself changes.
       - name: Cache patched zig
@@ -80,6 +87,11 @@ jobs:
           chmod +x elan-init
           ./elan-init --default-toolchain none -y
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: libm spike (TEMPORARY)
+        if: matrix.full
+        continue-on-error: true
+        run: tests/floatprobe/spike/run.sh
 
       - name: Cache Lake build (root package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

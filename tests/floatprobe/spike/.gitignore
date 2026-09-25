@@ -1,0 +1,8 @@
+crt/
+.lake/
+liblibm.a*
+zigside*
+zig.out
+lean.out
+spike.diff
+lake-manifest.json
