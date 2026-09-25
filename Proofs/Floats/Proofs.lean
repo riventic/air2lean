@@ -47,12 +47,132 @@ theorem pure_some_ne_none {α : Type} (x : α) :
   show some (Except.ok (some x)) ≠ some (Except.ok none)
   simp
 
+/-- A non-NaN value equals itself (`Float.eq`'s `.nan` case is the only one that isn't
+reflexive). -/
+theorem Float.eq_refl {fmt : FloatFmt} (a : Float fmt) (ha : ¬a.isNaN) : Float.eq a a = true := by
+  unfold Float.eq
+  unfold Float.isNaN at ha
+  cases hca : a.classify with
+  | nan => simp [hca] at ha
+  | inf s => simp
+  | finite s m e => simp
+
+/-- A non-NaN value is `≤` itself (`Float.le`'s `eq` disjunct, via `Float.eq_refl`). -/
+theorem Float.le_refl {fmt : FloatFmt} (a : Float fmt) (ha : ¬a.isNaN) : Float.le a a = true := by
+  unfold Float.le
+  rw [Float.eq_refl a ha]
+  simp
+
+/-- For non-NaN operands, `¬(a < b)` gives `b ≤ a` (the missing half of `Float.lt`/`Float.le`'s
+totality: NaN is the only case where neither direction holds). -/
+theorem Float.le_of_not_lt {fmt : FloatFmt} {a b : Float fmt} (ha : ¬a.isNaN) (hb : ¬b.isNaN)
+    (h : Float.lt a b = false) : Float.le b a = true := by
+  unfold Float.isNaN at ha hb
+  unfold Float.lt at h
+  unfold Float.le Float.lt Float.eq
+  cases hca : a.classify with
+  | nan => simp [hca] at ha
+  | inf sa =>
+    cases hcb : b.classify with
+    | nan => simp [hcb] at hb
+    | inf sb =>
+      rw [hca, hcb] at h
+      cases sa <;> cases sb <;> simp_all
+    | finite sb mb eb =>
+      rw [hca, hcb] at h
+      simp_all
+  | finite sa ma ea =>
+    cases hcb : b.classify with
+    | nan => simp [hcb] at hb
+    | inf sb =>
+      rw [hca, hcb] at h
+      simp_all
+    | finite sb mb eb =>
+      rw [hca, hcb] at h
+      have h' : ¬ (finiteToRat sa ma ea < finiteToRat sb mb eb) := of_decide_eq_false h
+      have h'' : finiteToRat sb mb eb ≤ finiteToRat sa ma ea := Rat.not_lt.mp h'
+      cases Rat.le_iff_lt_or_eq.mp h'' with
+      | inl hlt => simp [hlt]
+      | inr heq => simp [heq]
+
+/-- For non-NaN operands, `a ≤ b` gives `¬(b < a)` (the converse of `Float.le_of_not_lt`: `≤`
+and the reverse strict order are mutually exclusive). -/
+theorem Float.lt_eq_false_of_le {fmt : FloatFmt} {a b : Float fmt} (ha : ¬a.isNaN) (hb : ¬b.isNaN)
+    (h : Float.le a b = true) : Float.lt b a = false := by
+  unfold Float.isNaN at ha hb
+  unfold Float.le at h
+  unfold Float.lt at *
+  cases hca : a.classify with
+  | nan => simp [hca] at ha
+  | inf sa =>
+    cases hcb : b.classify with
+    | nan => simp [hcb] at hb
+    | inf sb =>
+      rw [hca, hcb] at h
+      unfold Float.eq at h
+      rw [hca, hcb] at h
+      cases sa <;> cases sb <;> simp_all
+    | finite sb mb eb =>
+      rw [hca, hcb] at h
+      unfold Float.eq at h
+      rw [hca, hcb] at h
+      simp_all
+  | finite sa ma ea =>
+    cases hcb : b.classify with
+    | nan => simp [hcb] at hb
+    | inf sb =>
+      rw [hca, hcb] at h
+      unfold Float.eq at h
+      rw [hca, hcb] at h
+      simp_all
+    | finite sb mb eb =>
+      rw [hca, hcb] at h
+      unfold Float.eq at h
+      rw [hca, hcb] at h
+      have hor : finiteToRat sa ma ea < finiteToRat sb mb eb ∨
+          finiteToRat sa ma ea = finiteToRat sb mb eb := by
+        match Bool.or_eq_true_iff.mp h with
+        | .inl h1 => exact Or.inl (of_decide_eq_true h1)
+        | .inr h1 => exact Or.inr (eq_of_beq h1)
+      have hle2 : finiteToRat sa ma ea ≤ finiteToRat sb mb eb :=
+        Rat.le_iff_lt_or_eq.mpr hor
+      exact decide_eq_false (Rat.not_lt.mpr hle2)
+
 end Zig
 
 /-- `isNan` is exactly `Float.isNaN` (`docs/floats.md` NaN semantics: `x != x`). -/
 theorem isNan_spec (x : Zig.F64) : isNan x = pure (Zig.Float.isNaN x) := by
   unfold isNan
   simp [zig_unfold, Zig.Float.ne_self_eq_isNaN]
+
+/-- `clamp`'s monadic scaffolding reduces to a plain nested `if` on `x < lo` / `x > hi`. -/
+theorem clamp_body (x lo hi : Zig.F32) : clamp x lo hi =
+    pure (if Zig.Float.lt x lo then lo else if Zig.Float.gt x hi then hi else x) := by
+  unfold clamp
+  cases h1 : Zig.Float.lt x lo <;> cases h2 : Zig.Float.gt x hi <;> rfl
+
+/-- `clamp x lo hi` always lands in `[lo, hi]`, for non-NaN operands with `lo ≤ hi`. -/
+theorem clamp_spec (x lo hi : Zig.F32) (hxn : ¬x.isNaN) (hlon : ¬lo.isNaN) (hhin : ¬hi.isNaN)
+    (hle : Zig.Float.le lo hi) :
+    ∃ r, clamp x lo hi = pure r ∧ Zig.Float.le lo r ∧ Zig.Float.le r hi := by
+  rw [clamp_body]
+  cases h1 : Zig.Float.lt x lo with
+  | true => exact ⟨lo, rfl, Zig.Float.le_refl lo hlon, hle⟩
+  | false =>
+    cases h2 : Zig.Float.gt x hi with
+    | true => exact ⟨hi, rfl, hle, Zig.Float.le_refl hi hhin⟩
+    | false =>
+      refine ⟨x, rfl, Zig.Float.le_of_not_lt hxn hlon h1, ?_⟩
+      exact Zig.Float.le_of_not_lt hhin hxn h2
+
+/-- `clamp x lo hi = x` when `x` is already in `[lo, hi]` (non-NaN operands). -/
+theorem clamp_id (x lo hi : Zig.F32) (hxn : ¬x.isNaN) (hlon : ¬lo.isNaN) (hhin : ¬hi.isNaN)
+    (hlex : Zig.Float.le lo x) (hxhi : Zig.Float.le x hi) : clamp x lo hi = pure x := by
+  rw [clamp_body]
+  have h1 : Zig.Float.lt x lo = false := Zig.Float.lt_eq_false_of_le hlon hxn hlex
+  have h2 : Zig.Float.gt x hi = false := Zig.Float.lt_eq_false_of_le hxn hhin hxhi
+  rw [h1, h2]
+  rfl
 
 /-- `dot` of two empty slices is `+0` (the model's zero result, no addends). -/
 theorem dot_nil : dot (#[] : Array Zig.F64) (#[] : Array Zig.F64) =
