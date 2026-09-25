@@ -62,8 +62,8 @@ inductive Val where
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
   match (calleeName.splitOn ".").getLast? with
-  | some "integerOverflow" | some "integerOutOfBounds" | some "shlOverflow"
-  | some "shrOverflow" => some ".overflow"
+  | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
+  | some "shlOverflow" | some "shrOverflow" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"
