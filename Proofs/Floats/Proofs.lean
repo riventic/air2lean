@@ -189,6 +189,18 @@ theorem dot_nil : dot (#[] : Array Zig.F64) (#[] : Array Zig.F64) =
   unfold dot
   simp [zig_unfold, Zig.len, hloop]
 
+/-- `dot` of two slices with different lengths panics (the length check before the loop). -/
+theorem dot_len_mismatch (xs ys : Array Zig.F64) (hxs : xs.size < 2 ^ 64) (hys : ys.size < 2 ^ 64)
+    (h : xs.size ≠ ys.size) : dot xs ys = throw .panic := by
+  unfold dot
+  have hne : Zig.len xs ≠ Zig.len ys := by
+    unfold Zig.len
+    intro hc
+    apply h
+    have := congrArg BitVec.toNat hc
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hxs, Nat.mod_eq_of_lt hys] at this
+  simp [zig_unfold, hne]
+
 /-- `celsius`'s monadic scaffolding reduces to a plain `if` on `k < 0`, regardless of which
 branch is taken (the surrounding `StateT`/`ExceptT` plumbing is the same shape either way). -/
 theorem celsius_body (k : Zig.F32) : celsius k =
