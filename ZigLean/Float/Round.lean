@@ -133,6 +133,95 @@ private def roundQuot (N D : Nat) : Int :=
   else if D < 2 * r then (m : Int) + 1
   else if m % 2 = 0 then (m : Int) else (m : Int) + 1
 
+private theorem expBits_le_width_pred (fmt : FloatFmt) : fmt.expBits ≤ fmt.width - 1 := by
+  cases fmt <;> decide
+
+private theorem width_pos (fmt : FloatFmt) : 1 ≤ fmt.width := by
+  cases fmt <;> decide
+
+/-- Bit-level content of `Float.pack`: the packed value stays in range, its top bit is the
+sign, the exponent field is recovered exactly by shifting past the low
+`fmt.width - 1 - fmt.expBits` bits, and those low bits are exactly `rest`. -/
+private theorem pack_bits_spec (fmt : FloatFmt) (sign : Bool) {exp rest : Nat}
+    (hexp : exp < 2 ^ fmt.expBits) (hrest : rest < 2 ^ (fmt.width - 1 - fmt.expBits)) :
+    (Float.pack fmt sign exp rest).bits.toNat < 2 ^ fmt.width ∧
+    (Float.pack fmt sign exp rest).bits.msb = sign ∧
+    ((Float.pack fmt sign exp rest).bits.toNat >>> (fmt.width - 1 - fmt.expBits)) % 2 ^ fmt.expBits
+      = exp ∧
+    (Float.pack fmt sign exp rest).bits.toNat % 2 ^ (fmt.width - 1 - fmt.expBits) = rest := by
+  have hER : fmt.expBits + (fmt.width - 1 - fmt.expBits) = fmt.width - 1 := by
+    have := expBits_le_width_pred fmt; omega
+  have h1 : exp <<< (fmt.width - 1 - fmt.expBits) ||| rest
+      = exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest := by
+    rw [← Nat.shiftLeft_add_eq_or_of_lt hrest exp, Nat.shiftLeft_eq]
+  have hb : exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest < 2 ^ (fmt.width - 1) := by
+    have hstep : exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest
+        < (exp + 1) * 2 ^ (fmt.width - 1 - fmt.expBits) := by
+      rw [Nat.add_mul, Nat.one_mul]; omega
+    have hstep2 : (exp + 1) * 2 ^ (fmt.width - 1 - fmt.expBits)
+        ≤ 2 ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits) := Nat.mul_le_mul_right _ hexp
+    have hlt : exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest
+        < 2 ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits) := Nat.lt_of_lt_of_le hstep hstep2
+    rwa [← Nat.pow_add, hER] at hlt
+  have hvraw : (Float.pack fmt sign exp rest).bits.toNat
+      = ((if sign then 1 else 0 : Nat) <<< (fmt.width - 1) |||
+          exp <<< (fmt.width - 1 - fmt.expBits) ||| rest) % 2 ^ fmt.width := by
+    unfold Float.pack; rw [BitVec.toNat_ofNat]
+  have hmsb : (Float.pack fmt sign exp rest).bits.msb
+      = decide (2 ^ (fmt.width - 1) ≤ (Float.pack fmt sign exp rest).bits.toNat) :=
+    BitVec.msb_eq_decide _
+  cases sign with
+  | false =>
+    have hveq : (Float.pack fmt false exp rest).bits.toNat
+        = exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest := by
+      rw [hvraw]
+      simp only [Bool.false_eq_true, ite_false, Nat.zero_shiftLeft, Nat.zero_or, h1]
+      have h2pow : (2:Nat) ^ (fmt.width - 1) ≤ 2 ^ fmt.width :=
+        Nat.pow_le_pow_right (by omega) (by omega)
+      exact Nat.mod_eq_of_lt (by omega)
+    refine ⟨by omega, ?_, ?_, ?_⟩
+    · rw [hmsb, hveq]; simp only [decide_eq_false_iff_not]; omega
+    · rw [hveq, Nat.shiftRight_eq_div_pow, Nat.mul_comm exp (2 ^ (fmt.width - 1 - fmt.expBits)),
+        Nat.mul_add_div (Nat.two_pow_pos _), Nat.div_eq_of_lt hrest, Nat.add_zero,
+        Nat.mod_eq_of_lt hexp]
+    · rw [hveq, Nat.mul_comm exp (2 ^ (fmt.width - 1 - fmt.expBits)), Nat.mul_add_mod,
+        Nat.mod_eq_of_lt hrest]
+  | true =>
+    have hb' : exp <<< (fmt.width - 1 - fmt.expBits) ||| rest < 2 ^ (fmt.width - 1) := by
+      rw [h1]; exact hb
+    have hassoc : (if true then 1 else 0 : Nat) <<< (fmt.width - 1) |||
+        exp <<< (fmt.width - 1 - fmt.expBits) ||| rest
+        = 1 <<< (fmt.width - 1) ||| (exp <<< (fmt.width - 1 - fmt.expBits) ||| rest) := by
+      simp only [ite_true]; rw [Nat.or_assoc]
+    have hone : (1 : Nat) <<< (fmt.width - 1) ||| (exp <<< (fmt.width - 1 - fmt.expBits) ||| rest)
+        = 1 <<< (fmt.width - 1) + (exp <<< (fmt.width - 1 - fmt.expBits) ||| rest) :=
+      (Nat.shiftLeft_add_eq_or_of_lt hb' 1).symm
+    have heq : (2:Nat) ^ (fmt.width - 1) = 2 ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits) := by
+      rw [← Nat.pow_add, hER]
+    have hveq : (Float.pack fmt true exp rest).bits.toNat
+        = 2 ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits)
+          + (exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest) := by
+      rw [hvraw, hassoc, hone, h1, Nat.one_shiftLeft, heq]
+      have hw1 := width_pos fmt
+      have h2pow : (2:Nat) * (2 ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits)) = 2 ^ fmt.width := by
+        rw [← heq]
+        have hsucc : (2:Nat) * 2 ^ (fmt.width - 1) = 2 ^ fmt.width := by
+          rw [← Nat.pow_succ']; congr 1; omega
+        exact hsucc
+      exact Nat.mod_eq_of_lt (by omega)
+    have hE2 : (2:Nat) ^ fmt.expBits * 2 ^ (fmt.width - 1 - fmt.expBits)
+        + (exp * 2 ^ (fmt.width - 1 - fmt.expBits) + rest)
+        = (2 ^ fmt.expBits + exp) * 2 ^ (fmt.width - 1 - fmt.expBits) + rest := by
+      rw [Nat.add_mul]; omega
+    refine ⟨by omega, ?_, ?_, ?_⟩
+    · rw [hmsb, hveq]; simp only [decide_eq_true_eq]; omega
+    · rw [hveq, hE2, Nat.shiftRight_eq_div_pow,
+        Nat.mul_comm (2 ^ fmt.expBits + exp) (2 ^ (fmt.width - 1 - fmt.expBits)),
+        Nat.mul_add_div (Nat.two_pow_pos _), Nat.div_eq_of_lt hrest, Nat.add_zero,
+        Nat.add_mod_left, Nat.mod_eq_of_lt hexp]
+    · rw [hveq, hE2, Nat.mul_comm (2 ^ fmt.expBits + exp) (2 ^ (fmt.width - 1 - fmt.expBits)),
+        Nat.mul_add_mod, Nat.mod_eq_of_lt hrest]
+
 /-- Encode an already-rounded magnitude `m * 2^e` (`m < 2 ^ fmt.prec`, `e` in range).
 `m = 0` is a zero; `m < 2 ^ fmt.fracBits` is subnormal. For `f80`, `m` already carries the
 explicit integer bit (it is `2 ^ fmt.fracBits + fraction` in the normal case), so the low
