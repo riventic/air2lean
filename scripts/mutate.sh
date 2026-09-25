@@ -21,14 +21,23 @@
 # (c) Zig-source mutation, options: `findOr`'s `orelse xs.len` becomes `orelse 0` in a temp copy
 #     of examples/options/options.zig, re-translated to Lean — same shape as (a), but for the
 #     optional-result protocol (a not-found search now returns 0 instead of xs.len).
+# (d) Lean-runtime mutation: `roundTiesEven` (ZigLean/Float/Round.lean) rounds ties away from
+#     zero instead of to even. `Float.roundRat`'s domain is already `q.abs` (nonnegative), so
+#     "away from zero" on that domain is just "always round up" — the tie branch's
+#     `if fl % 2 = 0 then fl else fl + 1` becomes `fl + 1`. Every float op that rounds
+#     (`+ - * /`, `@sqrt`, `@floatFromInt`, …) routes through this one function, so a tie input
+#     changes result across all of them; `scripts/diff.sh` must catch it via mismatches, not a
+#     build failure. `ZigLean/Float/Lemmas.lean` never unfolds into `roundTiesEven`/`floorLog2`
+#     (its arithmetic lemmas restate ops via the opaque `Float.roundRat`, not its internals), so
+#     no lemma needs stubbing for this mutation.
 #
 # Usage: mutate.sh
 # Env:
 #   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
 #   AIR2LEAN_ZIG_VERSION  Zig version: golden dir suffix. Default: 0.15.2 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
-#                         (basic for (a)/(b), options for (c)) is in the list. Default: every dir
-#                         in examples/.
+#                         (basic for (a)/(b), options for (c), floatops for (d)) is in the list.
+#                         Default: every dir in examples/.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -55,14 +64,17 @@ gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
+round_lean="ZigLean/Float/Round.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
+round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
+cp "$round_lean" "$round_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -74,7 +86,8 @@ cleanup() {
   cp "$options_backup" "$options_gen"
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
-  rm -f "$gen_backup" "$options_backup" "$basic_backup" "$lemmas_backup"
+  cp "$round_backup" "$round_lean"
+  rm -f "$gen_backup" "$options_backup" "$basic_backup" "$lemmas_backup" "$round_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -186,6 +199,22 @@ else
   translate_mutated options 's/orelse xs\.len/orelse 0/' 'orelse 0'
   run_and_report "mutation (c)" options
   [ "$detected" -eq 1 ] || all_detected=0
+fi
+
+echo "== mutation (d): roundTiesEven ties away from zero (Lean runtime) ==" >&2
+if ! has_example floatops; then
+  echo "mutation (d): skipped (AIR2LEAN_EXAMPLES excludes floatops)"
+else
+  sed -i.bak 's/if fl % 2 = 0 then fl else fl + 1/fl + 1/' "$round_lean"
+  rm -f "$round_lean.bak"
+  grep -q 'else fl + 1$' "$round_lean" && ! grep -q 'if fl % 2 = 0' "$round_lean" || {
+    echo "error: mutation (d): sed did not change roundTiesEven" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (d)" floatops
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$round_backup" "$round_lean"
 fi
 
 [ "$all_detected" -eq 1 ]
