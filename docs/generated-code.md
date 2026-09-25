@@ -1,6 +1,8 @@
 # Generated Lean code
 
-`lake exe air2lean <air-dir> -o <File.lean> --namespace <Ns> [--prefix <p>]` writes one Lean file for all JSON files in `<air-dir>`.
+`lake exe air2lean <air-dir> -o <File.lean> --namespace <Ns> [--prefix <p>] [--float-semantics ieee|compiler-rt]` writes one Lean file for all JSON files in `<air-dir>`.
+
+`--float-semantics` (default `ieee`) picks the model behind `@divExact`/`/`/`@divTrunc`/`@divFloor`/`@mulAdd` on a float operand: `ieee` (what a proof assumes) or `compiler-rt` (bit-exact port of the compiler_rt routines the reference target, `x86_64-linux -mcpu=baseline`, actually calls; `docs/floats.md` §Semantics). `scripts/check.sh` reads one example's opt-in from `examples/<ex>/translate.args` (one line of extra CLI args) if present, so most examples stay on the default with no translator invocation to update.
 
 ## Names
 

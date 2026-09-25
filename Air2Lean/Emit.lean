@@ -124,6 +124,20 @@ def emitStruct (structNames : Array (String × String)) (s : StructInfo) : Strin
   String.intercalate "\n"
     ([s!"structure {s.leanName} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"])
 
+/-! ## Float semantics mode (`--float-semantics`, `docs/floats.md` §Semantics) -/
+
+/-- `ieee`: every float op is the model's own IEEE-correct result (`ZigLean/Float/Ops.lean`;
+what a proof assumes). `compilerRt`: `f128` division and `@mulAdd` instead match the compiler_rt
+routines the reference target (`x86_64-linux -mcpu=baseline`) actually calls, bit-exact
+(`ZigLean/Float/CompilerRt.lean`) — opt-in per example (`examples/<ex>/translate.args`), since
+most examples never reach the divergence and a proof should not have to know it exists. Groups C
+(f80 invalid encodings) and D (f32/f64 mixed-sign-zero `@min`/`@max`) throw `.unspecified` in
+both modes, unconditionally: `docs/floats.md` §f80 invalid encodings, §+0 and −0 in @min/@max. -/
+inductive FloatSemantics where
+  | ieee
+  | compilerRt
+  deriving DecidableEq, Repr
+
 /-! ## Per-function static context -/
 
 structure FCtx where
@@ -143,6 +157,8 @@ structure FCtx where
   (see `FCtx.ascribedDo`). -/
   localsName : String
   exitName : String
+  /-- `--float-semantics` (default `ieee`), for `.div`/`.divFloat`/`.mulAdd` on a float operand. -/
+  floatSemantics : FloatSemantics
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -447,10 +463,19 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .div op a b =>
     let expr :=
       if fc.isFloat a then
-        let f := match op with
-          | .divTrunc => "Zig.Float.divTrunc" | .divFloor => "Zig.Float.divFloor"
-          | .divExact => "Zig.Float.div" | .rem => "Zig.Float.rem" | .mod => "Zig.Float.mod"
-        s!"pure ({f} {rv a} {rv b})"
+        match op with
+        | .divTrunc =>
+          let f := match fc.floatSemantics with | .ieee => "Zig.Float.divTrunc" | .compilerRt => "Zig.Float.divTruncRt"
+          s!"pure ({f} {rv a} {rv b})"
+        | .divFloor =>
+          let f := match fc.floatSemantics with | .ieee => "Zig.Float.divFloor" | .compilerRt => "Zig.Float.divFloorRt"
+          s!"pure ({f} {rv a} {rv b})"
+        | .divExact =>
+          let f := match fc.floatSemantics with | .ieee => "Zig.Float.div" | .compilerRt => "Zig.Float.divRt"
+          s!"pure ({f} {rv a} {rv b})"
+        -- Group C's guard applies in both modes, so `rem`/`mod` never switch on `floatSemantics`.
+        | .rem => s!"Zig.Float.remChk {rv a} {rv b}"
+        | .mod => s!"Zig.Float.modChk {rv a} {rv b}"
       else
         let sgn := if fc.valSigned a then "true" else "false"
         let f := match op with
@@ -459,12 +484,15 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         s!"{f} {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
-    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.div {rv a} {rv b})"; (env, some l)
+    -- `div_float` (plain `/` on floats): group A's guard, same mode dispatch as `.divExact`.
+    let f := match fc.floatSemantics with | .ieee => "Zig.Float.div" | .compilerRt => "Zig.Float.divRt"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
     let expr :=
       if fc.isFloat a then
-        let f := if isMax then "Zig.Float.max" else "Zig.Float.min"
-        s!"pure ({f} {rv a} {rv b})"
+        -- Group D's guard applies in both modes, so `min`/`max` never switch on `floatSemantics`.
+        let f := if isMax then "Zig.Float.maxChk" else "Zig.Float.minChk"
+        s!"{f} {rv a} {rv b}"
       else
         let sgn := if fc.valSigned a then "true" else "false"
         let f := if isMax then "Zig.max" else "Zig.min"
@@ -532,10 +560,11 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
+    -- Group C's guard applies in both modes, so these never switch on `floatSemantics`.
     let f := match op with
-      | .floor => "Zig.Float.floor" | .ceil => "Zig.Float.ceil"
-      | .trunc => "Zig.Float.trunc" | .round => "Zig.Float.round"
-    let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"; (env, some l)
+      | .floor => "Zig.Float.floorChk" | .ceil => "Zig.Float.ceilChk"
+      | .trunc => "Zig.Float.truncChk" | .round => "Zig.Float.roundChk"
+    let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
   | .sqrt a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.sqrt {rv a})"; (env, some l)
   | .libm op a =>
     let opName := match op with
@@ -543,7 +572,9 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .exp2 => ".exp2" | .log => ".log" | .log2 => ".log2" | .log10 => ".log10"
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.libm {opName} {rv a})"; (env, some l)
   | .mulAdd a b c =>
-    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.fma {rv a} {rv b} {rv c})"; (env, some l)
+    -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
+    let f := match fc.floatSemantics with | .ieee => "Zig.Float.fmaChk" | .compilerRt => "Zig.Float.fmaRtChk"
+    let (env, l) := bindLet fc env inst.id s!"{f} {rv a} {rv b} {rv c}"; (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.conv {fmt} {rv a})"; (env, some l)
@@ -760,7 +791,7 @@ structure FuncParts where
   defn : String
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
-    (funcNames : Array (String × String)) : FuncParts :=
+    (funcNames : Array (String × String)) (floatSemantics : FloatSemantics) : FuncParts :=
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   let allocs := collectAllocs f.types allInsts
@@ -772,7 +803,7 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blTys, allInsts,
-      retTy := f.ret, fnName := leanName, localsName, exitName }
+      retTy := f.ret, fnName := leanName, localsName, exitName, floatSemantics }
   let localsStr := emitLocalsStruct structNames f.types localsName allocs
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
@@ -850,14 +881,16 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 /-! ## Top level -/
 
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
-stripped from every Zig name (function or struct) before mangling. -/
-def emit (funcs : Array Func) (ns : String) (prefix_ : String) : String :=
+stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
+`--float-semantics` (default `ieee`). -/
+def emit (funcs : Array Func) (ns : String) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) : String :=
   let structs := collectStructs funcs prefix_
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
   let structsStr := (structs.map (emitStruct structNames)).toList
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
-    let parts := members.toList.map fun f => emitOneFunction f structNames funcNames
+    let parts := members.toList.map fun f => emitOneFunction f structNames funcNames floatSemantics
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
