@@ -162,6 +162,14 @@ private theorem expBits_le_width_pred (fmt : FloatFmt) : fmt.expBits ≤ fmt.wid
 @[simp] theorem isNaN_inf (neg : Bool) : (Float.inf (fmt := fmt) neg).isNaN = false := by
   cases fmt <;> cases neg <;> decide
 
+/-- `roundRat`'s result with a `false` sign is never NaN and never negative-zero: `q = 0` reduces
+to `Float.zero false` (`roundRat_zero`); `q ≠ 0` is `roundRat_ne_zero_spec`. -/
+theorem roundRat_nonneg (fmt : FloatFmt) (q : Rat) :
+    (Float.roundRat fmt false q).isNaN = false ∧ (Float.roundRat fmt false q).signBit = false := by
+  by_cases hq : q = 0
+  · subst hq; simp
+  · exact roundRat_ne_zero_spec fmt false hq
+
 /-- Packing preserves the sign bit, given the exponent field and low bits fit their width (so
 the OR never spills into the sign bit at position `width - 1`). -/
 theorem signBit_pack {sign : Bool} {exp rest : Nat} (hexp : exp < 2 ^ fmt.expBits)
