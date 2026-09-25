@@ -13,23 +13,34 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
-        zig: ["0.15.2"]
+        include:
+          # Full job: every example, the diff test, the proofs and the mutation test.
+          - zig: "0.15.2"
+            examples: ""
+            full: true
+          # The 0.14.1 exporter has no error unions, so no `errors` example. Its std cannot
+          # build the diff harness; the stale-Gen.lean check shows the translation is the one
+          # that the 0.15.2 job tests (zig-patch/0.14.1/TAGS.md).
+          - zig: "0.14.1"
+            examples: "basic recursion options"
+            full: false
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
-      # zig-patch/versions.toml's [ci.host-zig] table, read the same way build.sh reads a
-      # version table: exact-match the section header, then grab up to the next `[`.
+      # zig-patch/versions.toml's [ci.host-zig."<version>"] table, read the same way build.sh
+      # reads a version table: exact-match the section header, then grab up to the next `[`.
       - name: Install host zig
         run: |
           set -euo pipefail
-          section=$(awk '/^\[ci\.host-zig\]/ { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
+          section=$(awk -v hdr='[ci.host-zig."${{ matrix.zig }}"]' '$0 == hdr { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
           url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
           sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
-          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.host-zig] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
+          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.host-zig.\"${{ matrix.zig }}\"] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
           curl -fL --output host-zig.tar.xz "$url"
           echo "$sha256  host-zig.tar.xz" | sha256sum -c -
           mkdir -p host-zig
@@ -45,9 +56,11 @@ jobs:
           path: zig-air-${{ matrix.zig }}/
           key: zig-air-${{ matrix.zig }}-${{ hashFiles(format('zig-patch/{0}/air-json.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh') }}
 
+      # One retry: the compile step can go over the memory bound that build.zig declares
+      # ("memory usage peaked at …"); the peak varies from run to run.
       - name: Build patched zig
         if: steps.cache-zig-air.outputs.cache-hit != 'true'
-        run: zig-patch/build.sh ${{ matrix.zig }}
+        run: zig-patch/build.sh ${{ matrix.zig }} || zig-patch/build.sh ${{ matrix.zig }}
 
       # elan installs `lake`/`lean` shims that read a package's lean-toolchain file (here:
       # leanprover/lean4:v4.34.0) and fetch that exact toolchain on first use. Installer
@@ -85,15 +98,20 @@ jobs:
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
+          AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
         run: scripts/check.sh
 
       - name: Build proofs
+        if: matrix.full
         run: lake build Proofs
 
       - name: Check for sorry/admit/native_decide
+        if: matrix.full
         run: scripts/no-sorry.sh
 
       - name: Mutation check
+        if: matrix.full
         env:
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
         run: scripts/mutate.sh

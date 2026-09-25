@@ -10,24 +10,23 @@
 | M3 | Parser + per-version normalizer | done |
 | M4 | Translator: straight-line code, branches, calls | done |
 | M5 | Translator: locals, loops, slices, structs | done |
-| M6 | Differential tests: 8 functions × 300 inputs, 0 mismatches | done |
+| M6 | Differential tests: 4 examples, 18 functions × 300 inputs, 0 mismatches | done |
 | M7 | Case study proofs (`Proofs/Basic/`) | 8 of 8 functions, incl. the loops `sum` and `totalWeightedTardiness` |
 | M8 | CI, panic kinds in the diff test, `mutate.sh`, `no-sorry.sh` | done |
 | M9 | Recursion: call groups → `mutual` + `partial_fixpoint` | done |
-| M10 | AIR export of error unions (JSON schema 2) | done (translator support: next) |
-| M11 | AIR export for Zig 0.14.1 | done (translator support: next) |
+| M10 | Optionals and error unions (`?T`, `E!T`, `try`, `catch`, `orelse`, `.?`); JSON schema 2 | done |
+| M11 | Zig 0.14.1: export patch, translator, CI job | done (Linux only) |
+| M12 | Proofs for `recursion`, `options`, `errors` | next |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches. So the tester sees a changed result and a changed panic kind.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches. So the tester sees a changed result and a changed panic kind.
 
 ## Next
 
 | Item | Estimate |
 |---|---|
-| Several examples: `examples/<ex>/` layout, scripts loop over all examples | 0.5 day |
-| Optionals in the translator (the export exists) | 0.5 day |
-| Error unions in the translator (`try`, error values) | 1 day |
-| 0.14.1 in the translator and the CI matrix (Linux only, see `zig-patch/0.14.1/TAGS.md`) | 0.5 day |
-| Proofs for `recursion`, `options`, `errors` | 1 day |
+| Proofs for `recursion` (`isEven_spec`, `fact_ok`), `options` (`find_spec`), `errors` (`parseDigit_spec`, `sumDigits`) | 1 day |
+| Error-union export for 0.14.1 (the `errors` example) | 0.5 day |
+| 0.16 port (when it is released) | 1 day |
 
 ## Decisions
 
@@ -63,7 +62,7 @@ Support matrix:
 | Zig | State |
 |---|---|
 | 0.15.2 | supported |
-| 0.14.1 | export patch done; translator and CI: next. Builds on Linux only (it cannot link on macOS 26). |
+| 0.14.1 | supported for `basic`, `recursion`, `options` (no error-union export yet). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
 | 0.16.x | planned (when released) |
 
 **To add a Zig version:**
@@ -99,5 +98,5 @@ Support matrix:
 - Optionals and error unions (`?T`, `E!T`).
 - Immutable pointers `*const T`, then mutable pointers with a separation-logic memory model.
 - Floats (IEEE-754 model or uninterpreted).
-- Ports to 0.14.x and 0.16.x.
+- Port to 0.16.x.
 - Upstream the export as a compiler debug feature.

@@ -1,0 +1,239 @@
+{
+ "schema": 1,
+ "zig_version": "0.14.1",
+ "name": "recursion.gcd",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 4,
+     "tag": "cmp_eq",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 1
+      },
+      {
+       "ty": 0,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "cond_br",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 4
+      }
+     ],
+     "then": [
+      {
+       "id": 5,
+       "tag": "dbg_stmt",
+       "ty": 1,
+       "line": 2
+      },
+      {
+       "id": 6,
+       "tag": "ret_safe",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 0
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 7,
+       "tag": "br",
+       "ty": 3,
+       "target": 3,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 10,
+   "tag": "cmp_neq",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 14,
+     "tag": "cond_br",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 10
+      }
+     ],
+     "then": [
+      {
+       "id": 15,
+       "tag": "br",
+       "ty": 3,
+       "target": 13,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 11,
+       "tag": "call",
+       "ty": 3,
+       "callee": {
+        "ty": 4,
+        "func": "debug.FullPanic((function 'defaultPanic')).divideByZero",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 12,
+       "tag": "unreach",
+       "ty": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "rem",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 18,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 5,
+    "func": "recursion.gcd",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 16
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 20,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 18
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (u32, u32) callconv(.c) u32"
+  }
+ ]
+}

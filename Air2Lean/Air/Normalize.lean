@@ -75,6 +75,16 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
   | "intcast" | "intcast_safe" => let a ← arg1 fnName raw; return .intCast a
   | "trunc" => let a ← arg1 fnName raw; return .trunc a
   | "bitcast" => let a ← arg1 fnName raw; return .bitcast a
+  | "is_null" => let a ← arg1 fnName raw; return .isNull a
+  | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a
+  | "optional_payload" => let a ← arg1 fnName raw; return .optPayload a
+  | "wrap_optional" => let a ← arg1 fnName raw; return .wrapOptional a
+  | "is_err" => let a ← arg1 fnName raw; return .isErr a
+  | "is_non_err" => let a ← arg1 fnName raw; return .isNonErr a
+  | "unwrap_errunion_payload" => let a ← arg1 fnName raw; return .errPayload a
+  | "unwrap_errunion_err" => let a ← arg1 fnName raw; return .errCode a
+  | "wrap_errunion_payload" => let a ← arg1 fnName raw; return .wrapErrPayload a
+  | "wrap_errunion_err" => let a ← arg1 fnName raw; return .wrapErr a
   | "alloc" => return .alloc
   | "load" => let a ← arg1 fnName raw; return .load a
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b
@@ -111,6 +121,10 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
     let cases ← raw.cases.mapM (normalizeCase_0_15_2 fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst_0_15_2 fnName)
     return .switchBr v cases elseBody
+  | "try" | "try_cold" =>
+    let v ← arg1 fnName raw
+    let errBody ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+    return .«try» v errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
   | "trap" => return .trap
@@ -141,12 +155,14 @@ partial def normalizeCase_0_15_2 (fnName : String) (raw : Raw.RawCase) :
 
 end
 
-def supportedVersions : List String := ["0.15.2"]
+def supportedVersions : List String := ["0.15.2", "0.14.1"]
 
 /-- `RawFunc → Func`, dispatching on `zig_version`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   match raw.zigVersion with
-  | "0.15.2" =>
+  -- 0.14.1 has no subset tag that differs from 0.15.2 (`zig-patch/0.14.1/TAGS.md`), so it
+  -- uses the same table.
+  | "0.15.2" | "0.14.1" =>
     let body ← raw.body.mapM (normalizeInst_0_15_2 raw.name)
     return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
              body, types := raw.types }

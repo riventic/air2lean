@@ -110,10 +110,16 @@ def parseTy (j : Json) : Except String Ty := do
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
     return .other name
-  -- Schema 2. Not yet in the subset: no `Ty` constructor carries their fields, so map to
-  -- `.other` (sanctioned by the schema-2 task: unknown new type kinds may use the existing form).
-  | "error_union" => return .other "error_union"
-  | "error_set" => return .other "error_set"
+  | "error_union" =>
+    let set ← (← j.getObjVal? "error").getNat?
+    let payload ← (← j.getObjVal? "payload").getNat?
+    return .errorUnion set payload
+  | "error_set" =>
+    if optField j "any" |>.isSome then return .errorSet none
+    else
+      let errsJ ← (← j.getObjVal? "errors").getArr?
+      let errs ← errsJ.mapM Json.getStr?
+      return .errorSet (some errs)
   | other => throw s!"unknown type kind: {other}"
 
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
@@ -127,10 +133,24 @@ def parseIntLit (fnName : String) (s : String) : Except String Int :=
     | some n => return (n : Int)
     | none => throw s!"{fnName}: not an integer literal: {s}"
 
+/-- A constant's `val` string, given its already-resolved type: decimal integer, `true`/`false`,
+or `{}`. Shared between a top-level constant and an optional's payload (below): the exporter's
+`fmtValue` reuses this same string format for the payload, disambiguated only by `ty`. -/
+def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except String Val := do
+  match ty with
+  | .int .. => return .int tyId (← parseIntLit fnName s)
+  | .bool => return .bool (s == "true")
+  | .void => return .void
+  | other => throw s!"{fnName}: constant of unsupported type {repr other}"
+
 /-- A `Ref`: `{"inst": id}`, `{"ty", "val"}`, `{"ty", "undef": true}`, `{"ty", "func",
-"noreturn"}`, or (schema 2) `{"ty", "err"}` / `{"ty", "payload"}` — recognized but rejected: no
-`Val` constructor for error values yet (`docs/air-json.md`). -/
-def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
+"noreturn"}`, or (schema 2) `{"ty", "err"}` (an error value, or an error-union constant in the
+error state — `ty`'s `k` disambiguates) / `{"ty", "payload"}` (an error-union constant in the ok
+state; `payload` is itself a `Ref`, recursively) (`docs/air-json.md`). An optional constant is a
+`{"ty", "val"}`: the exporter's `fmtValue` prints `null` for `null`, or (recursively) the
+payload's own text for a non-null value — `parseVal` tells the two apart by comparing `s` to
+`"null"` once `ty`'s kind is `optional`. -/
+partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
   else if let some funcJ := optField j "func" then
@@ -143,19 +163,29 @@ def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val
     let tyId ← (← j.getObjVal? "ty").getNat?
     if optField j "undef" |>.isSome then
       return .undef tyId
-    else if optField j "err" |>.isSome then
-      throw s!"{fnName}: error value constants are not yet supported"
-    else if optField j "payload" |>.isSome then
-      throw s!"{fnName}: error union payload constants are not yet supported"
+    else if let some errJ := optField j "err" then
+      let name ← errJ.getStr?
+      let some ty := types[tyId]?
+        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
+      match ty with
+      | .errorSet _ => return .err tyId name
+      | .errorUnion .. => return .errUnion tyId (some name) none
+      | other => throw s!"{fnName}: 'err' constant of unexpected type {repr other}"
+    else if let some payloadJ := optField j "payload" then
+      let payload ← parseVal fnName types payloadJ
+      return .errUnion tyId none (some payload)
     else
       let s ← (← j.getObjVal? "val").getStr?
       let some ty := types[tyId]?
         | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
-      | .int .. => return .int tyId (← parseIntLit fnName s)
-      | .bool => return .bool (s == "true")
-      | .void => return .void
-      | other => throw s!"{fnName}: constant of unsupported type {repr other}"
+      | .optional child =>
+        if s == "null" then return .optNull tyId
+        else
+          let some childTy := types[child]?
+            | throw s!"{fnName}: unknown type id {child} in optional constant"
+          return .optSome tyId (← parseLeafVal fnName child childTy s)
+      | _ => parseLeafVal fnName tyId ty s
 
 mutual
 

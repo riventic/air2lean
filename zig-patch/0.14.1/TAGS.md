@@ -26,6 +26,6 @@ docker run --rm -v "$PWD":/w -w /w debian:bookworm-slim zig-patch/build.sh 0.14.
 
 (with a host zig 0.14.1 for Linux on `PATH`). The build can go over the declared 7.8 GB memory bound of the compile step ("memory usage peaked at …"); a second run then succeeds with the build cache.
 
-## Observed differences on examples/basic
+## Observed differences on the examples
 
-The 8 dumps in `tests/golden/0.14.1/air/` are equal to the 0.15.2 schema-1 dumps, except for `zig_version`.
+`tests/golden/0.14.1/{basic,recursion,options}/air/` are equal to the 0.15.2 dumps, except for `zig_version` and `schema` (1 vs 2). The translation of each is byte-identical to the 0.15.2 one; CI checks this. `errors` is not supported: the 0.14.1 exporter writes the error-union instructions as `unsupported`.

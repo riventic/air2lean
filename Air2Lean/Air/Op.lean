@@ -23,6 +23,10 @@ inductive Ty where
   | ptr (size : String) (isConst : Bool) (child : TyId)
   | array (len : Nat) (child : TyId)
   | optional (child : TyId)
+  /-- `E!T`: `set` is the error set type, `payload` is `T`. -/
+  | errorUnion (set payload : TyId)
+  /-- An error set. `none` = `anyerror` (every error name, `docs/air-json.md`). -/
+  | errorSet (names : Option (Array String))
   | struct (name : String) (layout : String) (fields : Array (String × TyId))
   | tuple (fields : Array TyId)
   | other (name : String)
@@ -37,6 +41,17 @@ inductive Val where
   | void
   | undef (ty : TyId)
   | func (name : String) (noreturn : Bool)
+  /-- A `null` constant of an optional type. `ty` is the `optional` type. -/
+  | optNull (ty : TyId)
+  /-- An optional constant holding a payload (`docs/air-json.md`'s `Ref` reuses the plain `val`
+  string, disambiguated by `ty`: the exporter's `fmtValue` prints a non-null optional as just its
+  payload's own text). `ty` is the `optional` type; `v` is the payload, recursively. -/
+  | optSome (ty : TyId) (v : Val)
+  /-- An error value: `error.Name`. `ty`'s `k` is `error_set` (`docs/air-json.md`). -/
+  | err (ty : TyId) (name : String)
+  /-- An error-union constant (schema 2): the error state (`err`) or the payload state
+  (`payload`) — exactly one is `some`. `ty`'s `k` is `error_union`. -/
+  | errUnion (ty : TyId) (err : Option String) (payload : Option Val)
   deriving Repr, Inhabited, BEq
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
@@ -88,6 +103,30 @@ inductive Op where
   | trunc (a : Val)
   /-- Same bits, other type with the same representation (for example `usize` → `u64`). -/
   | bitcast (a : Val)
+  /-- `is_null`: true iff the optional `a` is `null`. -/
+  | isNull (a : Val)
+  /-- `is_non_null`: true iff the optional `a` holds a value. -/
+  | isNonNull (a : Val)
+  /-- Unwrap an optional's payload. Sema emits this only after an `is_non_null` check, so the
+  `null` case is statically unreachable — `Zig.optPayload` (`ZigLean/Basic.lean`) panics on it
+  anyway. -/
+  | optPayload (a : Val)
+  /-- Wrap a value into `some`. -/
+  | wrapOptional (a : Val)
+  /-- `is_err`: does an error union hold an error? -/
+  | isErr (a : Val)
+  /-- `is_non_err`. -/
+  | isNonErr (a : Val)
+  /-- `unwrap_errunion_payload`. Sema always checks the union first (`is_err`/`is_non_err` or a
+  `try`), so the error case is statically impossible here. -/
+  | errPayload (a : Val)
+  /-- `unwrap_errunion_err`. Sema always checks the union first, so the ok case is statically
+  impossible here. -/
+  | errCode (a : Val)
+  /-- `wrap_errunion_payload`: build an error union in the ok state. -/
+  | wrapErrPayload (a : Val)
+  /-- `wrap_errunion_err`: build an error union in the error state. -/
+  | wrapErr (a : Val)
   | alloc
   | load (ptr : Val)
   | store (ptr : Val) (v : Val)
@@ -102,6 +141,9 @@ inductive Op where
   | «repeat» (target : InstId)
   | condBr (c : Val) (thenBody elseBody : Array Inst)
   | switchBr (v : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- `try`/`try_cold`: `v` is an error union; `errBody` runs when it holds an error (it ends in
+  an exit, like a `cond_br` branch). Otherwise the `try` instruction's value is the payload. -/
+  | «try» (v : Val) (errBody : Array Inst)
   | ret (v : Val)
   | unreach
   | trap
