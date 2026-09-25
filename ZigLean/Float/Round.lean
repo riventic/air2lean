@@ -375,6 +375,40 @@ def Float.finalizeRounded (fmt : FloatFmt) (neg : Bool) (m0 : Int) (e0 : Int) : 
     if m0 = (2 : Int) ^ fmt.prec then (2 ^ (fmt.prec - 1), e0 + 1) else (m0.toNat, e0)
   if e + (fmt.prec - 1 : Int) > fmt.emax then Float.inf neg else Float.encodeFinite fmt neg m e
 
+/-- `Float.finalizeRounded`'s result is never NaN and carries the given sign, given the
+pre-renormalization mantissa fits `2 ^ fmt.prec` (`m0 = 2 ^ fmt.prec` is the carry-out case,
+renormalized to `2 ^ (fmt.prec - 1)` at `e0 + 1`). No hypothesis on `e0`: either overflow check
+outcome keeps the sign and rules out NaN, via `Float.inf` or `encodeFinite_spec`. -/
+private theorem finalizeRounded_spec (fmt : FloatFmt) (neg : Bool) (m0 e0 : Int)
+    (hm0 : m0 ≤ 2 ^ fmt.prec) :
+    (Float.finalizeRounded fmt neg m0 e0).isNaN = false ∧
+    (Float.finalizeRounded fmt neg m0 e0).signBit = neg := by
+  have hcast : ((2 : Nat) ^ fmt.prec : Int) = (2 : Int) ^ fmt.prec := by exact_mod_cast rfl
+  unfold Float.finalizeRounded
+  split
+  rename_i x m e heq
+  by_cases hEq : m0 = (2 : Int) ^ fmt.prec
+  · rw [ite_eq_left hEq] at heq
+    injection heq with hm he
+    subst hm; subst he
+    split
+    · exact ⟨by cases fmt <;> cases neg <;> decide, by cases fmt <;> cases neg <;> decide⟩
+    · rename_i hoverflow
+      apply encodeFinite_spec
+      · have hp1 : 1 ≤ fmt.prec := by cases fmt <;> decide
+        exact Nat.pow_lt_pow_right (by omega) (by omega)
+      · omega
+  · rw [ite_eq_right hEq] at heq
+    injection heq with hm he
+    subst hm; subst he
+    split
+    · exact ⟨by cases fmt <;> cases neg <;> decide, by cases fmt <;> cases neg <;> decide⟩
+    · rename_i hoverflow
+      apply encodeFinite_spec
+      · have := Nat.two_pow_pos fmt.prec
+        rw [← hcast] at hm0 hEq; omega
+      · omega
+
 /-- Round `|q|` to `fmt`, to nearest, ties to even; `neg` gives the sign, also of a zero
 result. Subnormals and overflow (→ `inf`) follow from the exponent clamp and range check
 in `finalizeRounded`; no case is special beyond them. Exact: works on `Rat`
