@@ -536,4 +536,38 @@ def Float.roundRat (fmt : FloatFmt) (neg : Bool) (q : Rat) : Float fmt :=
     let m0 := roundQuot N D
     Float.finalizeRounded fmt neg m0 e0
 
+/-- A nonzero rounding result is never NaN and carries the caller's sign. The zero case
+(`roundRat_zero` downstream in `Lemmas.lean`) needs no such spec: it reduces to `Float.zero neg`
+directly. -/
+theorem roundRat_ne_zero_spec (fmt : FloatFmt) (neg : Bool) {q : Rat} (hq : q ≠ 0) :
+    (Float.roundRat fmt neg q).isNaN = false ∧ (Float.roundRat fmt neg q).signBit = neg := by
+  have hden : q.abs.den = q.den := by
+    unfold Rat.abs; split
+    · rfl
+    · exact Rat.neg_den q
+  have hnum_nonneg : 0 ≤ q.abs.num := by
+    unfold Rat.abs; split
+    · next h => exact Rat.num_nonneg.mpr h
+    · next h =>
+      rw [Rat.neg_num]
+      have hn : ¬ 0 ≤ q.num := fun hpos => h (Rat.num_nonneg.mp hpos)
+      omega
+  have hnum_ne : q.abs.num ≠ 0 := by
+    intro hc
+    apply hq
+    apply Rat.num_eq_zero.mp
+    unfold Rat.abs at hc
+    split at hc
+    · exact hc
+    · rw [Rat.neg_num] at hc; omega
+  have habs_ne : q.abs ≠ 0 := fun heq => hnum_ne (Rat.num_eq_zero.mpr heq)
+  have hn : 0 < q.abs.num.toNat := by omega
+  have hd : 0 < q.abs.den := hden ▸ q.den_pos
+  unfold Float.roundRat
+  rw [ite_eq_right habs_ne]
+  simp only []
+  apply finalizeRounded_spec
+  apply roundRat_m0_le hn hd fmt.prec
+  omega
+
 end Zig
