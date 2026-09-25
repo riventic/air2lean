@@ -12,33 +12,14 @@ open Floats
 
 namespace Zig
 
-/-- `x != x` iff `x` is NaN: `Float.eq`'s `.nan` cases short-circuit before either operand's
-value is inspected, and every other class compares equal to itself. -/
-theorem Float.ne_self_eq_isNaN {fmt : FloatFmt} (x : Float fmt) : Float.ne x x = x.isNaN := by
-  unfold Float.ne Float.eq Float.isNaN
-  cases x.classify <;> simp
-
-/-- A NaN's `classify` is `.nan` (unfolds the `isNaN` predicate back to the class it tests). -/
-theorem Float.classify_eq_nan_of_isNaN {fmt : FloatFmt} (x : Float fmt) (h : x.isNaN) :
-    x.classify = .nan := by
-  unfold Float.isNaN at h
-  cases hc : x.classify with
-  | nan => rfl
-  | inf s => simp [hc] at h
-  | finite s m e => simp [hc] at h
-
-/-- The canonical quiet NaN classifies as NaN, in every format. -/
-theorem Float.isNaN_nan {fmt : FloatFmt} : (Float.nan : Float fmt).isNaN = true := by
-  cases fmt <;> decide
-
 /-- `a - b` is NaN whenever `a` is (`Float.sub`/`Float.add`'s `.nan` case short-circuits before
 `b` is inspected). -/
 theorem Float.isNaN_sub_left {fmt : FloatFmt} (a b : Float fmt) (h : a.isNaN) :
     (Float.sub a b).isNaN := by
-  have ha := Float.classify_eq_nan_of_isNaN a h
+  have ha := (Zig.isNaN_iff a).mp h
   unfold Float.sub Float.add
   rw [ha]
-  exact Float.isNaN_nan
+  exact Zig.isNaN_nan
 
 /-- `pure (some x)` is never `pure none` in the `Zig.Result` monad (the `Option` constructors
 stay distinct once wrapped in `Except.ok`). -/
@@ -225,7 +206,7 @@ NaN) and subtracts, propagating the NaN. -/
 theorem celsius_nan (k : Zig.F32) (h : k.isNaN) :
     ∃ r, celsius k = pure (some r) ∧ r.isNaN := by
   have hlt : Zig.Float.lt k (Zig.Float.ofBits (0 : BitVec 32) : Zig.F32) = false := by
-    have hc := Zig.Float.classify_eq_nan_of_isNaN k h
+    have hc := (Zig.isNaN_iff k).mp h
     unfold Zig.Float.lt
     rw [hc]
   refine ⟨Zig.Float.sub k (Zig.Float.ofBits (1133024051 : BitVec 32) : Zig.F32), ?_, ?_⟩
