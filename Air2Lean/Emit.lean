@@ -69,11 +69,19 @@ def mangleField (raw : String) : String :=
 
 /-! ## Types (`docs/generated-code.md` §Types) -/
 
+/-- The `Zig.FN` format term for an `n`-bit float type (`ZigLean/Float/Format.lean`). `n` is
+always one of `16 32 64 80 128` (`Check.lean`). -/
+def floatFmtName (n : Nat) : String :=
+  match n with
+  | 16 => "Zig.F16" | 32 => "Zig.F32" | 64 => "Zig.F64" | 80 => "Zig.F80" | 128 => "Zig.F128"
+  | _ => s!"Zig.Float .f{n}" -- unreachable: Check.lean restricts `n`
+
 /-- `TyId → Lean type` as source text. `structNames` maps a Zig struct name to its Lean name. -/
 partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :
     String :=
   match ty with
   | .int _ bits => s!"BitVec {bits}"
+  | .float bits => floatFmtName bits
   | .bool => "Bool"
   | .void => "Unit"
   | .noreturn => "Unit"
@@ -150,6 +158,7 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   match v with
   | .inst id => fc.tyOfId (fc.instTyId id)
   | .int tid _ => fc.tyOfId tid
+  | .float tid _ => fc.tyOfId tid
   | .bool _ => .bool
   | .void => .void
   | .func .. => .void
@@ -157,6 +166,19 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .errUnionOk tid _ => fc.tyOfId tid
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
+
+/-- Is `v`'s type a float? Dispatches the shared ops (`add`/`div`/`min`/`max`/`cmp`/`neg`/…)
+between the int and float `ZigLean` functions. -/
+def FCtx.isFloat (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .float _ => true | _ => false
+
+/-- The `FloatFmt` term (`.f16` … `.f128`) for the type at `tid`, for the ops whose target format
+is not otherwise inferable (`Zig.Float.conv`/`Zig.Float.ofInt`'s explicit `fmt` argument). -/
+def FCtx.floatFmtTerm (fc : FCtx) (tid : TyId) : String :=
+  match fc.tyOfId tid with
+  | .float n => match n with
+    | 16 => ".f16" | 32 => ".f32" | 64 => ".f64" | 80 => ".f80" | 128 => ".f128"
+    | _ => ".f64" -- unreachable: Check.lean restricts `n`
+  | _ => ".f64" -- unreachable: only called on a float-typed instruction result
 
 def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
   match fc.blockTys.find? (·.1 == target) with
@@ -169,6 +191,9 @@ def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : Str
   | .int tid n =>
     let bits := fc.tyBits tid
     if n < 0 then s!"(-({(-n).toNat} : BitVec {bits}))" else s!"({n.toNat} : BitVec {bits})"
+  | .float tid bits =>
+    let n := match fc.tyOfId tid with | .float b => b | _ => 0
+    s!"(Zig.Float.ofBits ({bits} : BitVec {n}) : {fc.emitTyOf tid})"
   | .bool b => if b then "true" else "false"
   | .void => "()"
   | .undef tid =>
@@ -271,11 +296,13 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .arg _ => #[]
   | .arith _ _ a b => #[a, b]
   | .div _ a b => #[a, b]
+  | .divFloat a b => #[a, b]
   | .minMax _ a b => #[a, b]
   | .withOverflow _ a b => #[a, b]
   | .bit _ a b => #[a, b]
   | .not a => #[a]
   | .neg a => #[a]
+  | .abs a => #[a]
   | .shift _ a b => #[a, b]
   | .cmp _ a b => #[a, b]
   | .boolAnd a b => #[a, b]
@@ -283,6 +310,13 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .intCast a => #[a]
   | .trunc a => #[a]
   | .bitcast a => #[a]
+  | .floatRound _ a => #[a]
+  | .sqrt a => #[a]
+  | .libm _ a => #[a]
+  | .mulAdd a b c => #[a, b, c]
+  | .floatConv a => #[a]
+  | .floatFromInt a => #[a]
+  | .intFromFloat _ a => #[a]
   | .isNull a => #[a]
   | .isNonNull a => #[a]
   | .optPayload a => #[a]
@@ -391,28 +425,51 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   match inst.op with
   | .arg index => (env.push (inst.id, s!"p{index}"), none)
   | .arith op mode a b =>
-    let sgn := if fc.valSigned a then "true" else "false"
-    let expr := match op, mode with
-      | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
-      | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
-      | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
-      | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
-      | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
-      | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
-      | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
-      | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
-      | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
+    -- AIR has no wrapping/saturating float arithmetic, so `mode` is always `.checked` for a
+    -- float operand.
+    let expr :=
+      if fc.isFloat a then
+        let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+        s!"pure ({f} {rv a} {rv b})"
+      else
+        let sgn := if fc.valSigned a then "true" else "false"
+        match op, mode with
+        | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
+        | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
+        | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
+        | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
+        | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
+        | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
+        | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
+        | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
+        | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .div op a b =>
-    let sgn := if fc.valSigned a then "true" else "false"
-    let f := match op with
-      | .divTrunc => "Zig.divTrunc" | .divFloor => "Zig.divFloor" | .divExact => "Zig.divExact"
-      | .rem => "Zig.rem" | .mod => "Zig.mod"
-    let (env, l) := bindLet fc env inst.id s!"{f} {sgn} {rv a} {rv b}"; (env, some l)
+    let expr :=
+      if fc.isFloat a then
+        let f := match op with
+          | .divTrunc => "Zig.Float.divTrunc" | .divFloor => "Zig.Float.divFloor"
+          | .divExact => "Zig.Float.div" | .rem => "Zig.Float.rem" | .mod => "Zig.Float.mod"
+        s!"pure ({f} {rv a} {rv b})"
+      else
+        let sgn := if fc.valSigned a then "true" else "false"
+        let f := match op with
+          | .divTrunc => "Zig.divTrunc" | .divFloor => "Zig.divFloor" | .divExact => "Zig.divExact"
+          | .rem => "Zig.rem" | .mod => "Zig.mod"
+        s!"{f} {sgn} {rv a} {rv b}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .divFloat a b =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.div {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
-    let sgn := if fc.valSigned a then "true" else "false"
-    let f := if isMax then "Zig.max" else "Zig.min"
-    let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+    let expr :=
+      if fc.isFloat a then
+        let f := if isMax then "Zig.Float.max" else "Zig.Float.min"
+        s!"pure ({f} {rv a} {rv b})"
+      else
+        let sgn := if fc.valSigned a then "true" else "false"
+        let f := if isMax then "Zig.max" else "Zig.min"
+        s!"pure ({f} {sgn} {rv a} {rv b})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .withOverflow op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let f := match op with
@@ -427,8 +484,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _ => s!"~~~{rv a}"
     let (env, l) := bindLet fc env inst.id s!"pure ({expr})"; (env, some l)
   | .neg a =>
-    let (env, l) := bindLet fc env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
-    (env, some l)
+    if fc.isFloat a then
+      let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.neg {rv a})"; (env, some l)
+    else
+      let (env, l) := bindLet fc env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
+      (env, some l)
+  | .abs a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.abs {rv a})"; (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let expr := match op with
@@ -439,11 +500,18 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .shrExact => s!"Zig.shrExact {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmp op a b =>
-    let sgn := if fc.valSigned a then "true" else "false"
-    let expr := match op with
-      | .lt => s!"Zig.lt {sgn} {rv a} {rv b}" | .le => s!"Zig.le {sgn} {rv a} {rv b}"
-      | .gt => s!"Zig.gt {sgn} {rv a} {rv b}" | .ge => s!"Zig.ge {sgn} {rv a} {rv b}"
-      | .eq => s!"{rv a} == {rv b}" | .ne => s!"{rv a} != {rv b}"
+    let expr :=
+      if fc.isFloat a then
+        match op with
+        | .lt => s!"Zig.Float.lt {rv a} {rv b}" | .le => s!"Zig.Float.le {rv a} {rv b}"
+        | .gt => s!"Zig.Float.gt {rv a} {rv b}" | .ge => s!"Zig.Float.ge {rv a} {rv b}"
+        | .eq => s!"Zig.Float.eq {rv a} {rv b}" | .ne => s!"Zig.Float.ne {rv a} {rv b}"
+      else
+        let sgn := if fc.valSigned a then "true" else "false"
+        match op with
+        | .lt => s!"Zig.lt {sgn} {rv a} {rv b}" | .le => s!"Zig.le {sgn} {rv a} {rv b}"
+        | .gt => s!"Zig.gt {sgn} {rv a} {rv b}" | .ge => s!"Zig.ge {sgn} {rv a} {rv b}"
+        | .eq => s!"{rv a} == {rv b}" | .ne => s!"{rv a} != {rv b}"
     let (env, l) := bindLet fc env inst.id s!"pure ({expr})"; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
   | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
@@ -455,7 +523,40 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .trunc a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
     (env, some l)
-  | .bitcast a => let (env, l) := bindLet fc env inst.id s!"pure ({rv a})"; (env, some l)
+  | .bitcast a =>
+    let srcFloat := fc.isFloat a
+    let dstFloat := match fc.tyOfId inst.ty with | .float _ => true | _ => false
+    let expr :=
+      if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
+      else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
+      else s!"pure ({rv a})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .floatRound op a =>
+    let f := match op with
+      | .floor => "Zig.Float.floor" | .ceil => "Zig.Float.ceil"
+      | .trunc => "Zig.Float.trunc" | .round => "Zig.Float.round"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"; (env, some l)
+  | .sqrt a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.sqrt {rv a})"; (env, some l)
+  | .libm op a =>
+    let opName := match op with
+      | .sin => ".sin" | .cos => ".cos" | .tan => ".tan" | .exp => ".exp"
+      | .exp2 => ".exp2" | .log => ".log" | .log2 => ".log2" | .log10 => ".log10"
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.libm {opName} {rv a})"; (env, some l)
+  | .mulAdd a b c =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.fma {rv a} {rv b} {rv c})"; (env, some l)
+  | .floatConv a =>
+    let fmt := fc.floatFmtTerm inst.ty
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.conv {fmt} {rv a})"; (env, some l)
+  | .floatFromInt a =>
+    let fmt := fc.floatFmtTerm inst.ty
+    let sgn := if fc.valSigned a then "true" else "false"
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.ofInt {fmt} {sgn} {rv a})"; (env, some l)
+  | .intFromFloat safe a =>
+    let sgn := if fc.tySigned inst.ty then "true" else "false"
+    let n := fc.tyBits inst.ty
+    let safeStr := if safe then "true" else "false"
+    let (env, l) := bindLet fc env inst.id s!"Zig.Float.toInt {sgn} {n} {safeStr} {rv a}"
+    (env, some l)
   | .isNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isNone)"; (env, some l)
   | .isNonNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
   | .optPayload a => let (env, l) := bindLet fc env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
