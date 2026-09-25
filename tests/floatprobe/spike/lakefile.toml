@@ -1,7 +1,0 @@
-name = "spike"
-defaultTargets = ["spike"]
-moreLinkArgs = ["./liblibm.a"]
-
-[[lean_exe]]
-name = "spike"
-root = "Main"
