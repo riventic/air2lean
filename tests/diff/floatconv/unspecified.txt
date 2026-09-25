@@ -1,0 +1,4 @@
+bits32 2
+toByte 3
+toI32 2
+toU64 2
