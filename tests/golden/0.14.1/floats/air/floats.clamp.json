@@ -1,0 +1,186 @@
+{
+ "schema": 3,
+ "zig_version": "0.14.1",
+ "name": "floats.clamp",
+ "params": [
+  0,
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 4,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 5,
+     "tag": "cmp_lt",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 0
+      },
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "tag": "cond_br",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 5
+      }
+     ],
+     "then": [
+      {
+       "id": 6,
+       "tag": "br",
+       "ty": 3,
+       "target": 4,
+       "args": [
+        {
+         "inst": 1
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 7,
+       "tag": "block",
+       "ty": 0,
+       "body": [
+        {
+         "id": 8,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 1
+        },
+        {
+         "id": 9,
+         "tag": "cmp_gt",
+         "ty": 2,
+         "args": [
+          {
+           "inst": 0
+          },
+          {
+           "inst": 2
+          }
+         ]
+        },
+        {
+         "id": 12,
+         "tag": "cond_br",
+         "ty": 3,
+         "args": [
+          {
+           "inst": 9
+          }
+         ],
+         "then": [
+          {
+           "id": 10,
+           "tag": "br",
+           "ty": 3,
+           "target": 7,
+           "args": [
+            {
+             "inst": 2
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 11,
+           "tag": "br",
+           "ty": 3,
+           "target": 7,
+           "args": [
+            {
+             "inst": 0
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 13,
+       "tag": "br",
+       "ty": 3,
+       "target": 4,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 16,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 32
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "bool"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

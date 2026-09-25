@@ -103,27 +103,6 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
-      # TEMPORARY (floats F2): write this version's goldens with the new exporter and upload
-      # them; the 0.14.1 compiler does not link on macOS, so they cannot be made locally.
-      - name: Dump goldens (TEMPORARY)
-        if: ${{ !matrix.full }}
-        run: |
-          set -euo pipefail
-          for ex in $AIR2LEAN_EXAMPLES; do
-            rm -rf "tests/golden/${{ matrix.zig }}/$ex/air"
-            mkdir -p "tests/golden/${{ matrix.zig }}/$ex/air"
-            ZIG_AIR_JSON_DIR="tests/golden/${{ matrix.zig }}/$ex/air" ZIG_AIR_JSON_FILTER="$ex." \
-              zig-air-${{ matrix.zig }}/bin/zig build-obj -fno-emit-bin -OReleaseSafe \
-              -fno-error-tracing "examples/$ex/$ex.zig"
-          done
-
-      - name: Upload goldens (TEMPORARY)
-        if: ${{ !matrix.full }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: golden-${{ matrix.zig }}
-          path: tests/golden/${{ matrix.zig }}/
-
       - name: Golden AIR, translate, build, differential test
         env:
           AIR2LEAN_CI: "1"

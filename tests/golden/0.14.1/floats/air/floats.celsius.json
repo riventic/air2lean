@@ -1,12 +1,11 @@
 {
  "schema": 3,
  "zig_version": "0.14.1",
- "name": "basic.tardiness",
+ "name": "floats.celsius",
  "params": [
-  0,
   0
  ],
- "ret": 0,
+ "ret": 1,
  "body": [
   {
    "id": 0,
@@ -16,85 +15,91 @@
   },
   {
    "id": 1,
-   "tag": "arg",
-   "ty": 0,
-   "param": 1
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 1
   },
   {
    "id": 2,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 2
-  },
-  {
-   "id": 3,
    "tag": "block",
-   "ty": 0,
+   "ty": 1,
    "body": [
     {
-     "id": 4,
-     "tag": "cmp_gt",
-     "ty": 2,
+     "id": 3,
+     "tag": "cmp_lt",
+     "ty": 3,
      "args": [
       {
        "inst": 0
       },
       {
-       "inst": 1
+       "ty": 0,
+       "fbits": "0x00000000"
       }
      ]
     },
     {
      "id": 9,
      "tag": "cond_br",
-     "ty": 3,
+     "ty": 4,
      "args": [
       {
-       "inst": 4
+       "inst": 3
       }
      ],
      "then": [
       {
-       "id": 5,
-       "tag": "dbg_stmt",
-       "ty": 1,
-       "line": 2
-      },
-      {
-       "id": 6,
-       "tag": "sub_safe",
-       "ty": 0,
-       "args": [
-        {
-         "inst": 0
-        },
-        {
-         "inst": 1
-        }
-       ]
-      },
-      {
-       "id": 7,
+       "id": 4,
        "tag": "br",
-       "ty": 3,
-       "target": 3,
+       "ty": 4,
+       "target": 2,
        "args": [
         {
-         "inst": 6
+         "ty": 1,
+         "null": true
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 8,
-       "tag": "br",
-       "ty": 3,
-       "target": 3,
+       "id": 5,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 1
+      },
+      {
+       "id": 6,
+       "tag": "sub",
+       "ty": 0,
        "args": [
         {
+         "inst": 0
+        },
+        {
          "ty": 0,
-         "val": "0"
+         "fbits": "0x43889333"
+        }
+       ]
+      },
+      {
+       "id": 7,
+       "tag": "wrap_optional",
+       "ty": 1,
+       "args": [
+        {
+         "inst": 6
+        }
+       ]
+      },
+      {
+       "id": 8,
+       "tag": "br",
+       "ty": 4,
+       "target": 2,
+       "args": [
+        {
+         "inst": 7
         }
        ]
       }
@@ -105,25 +110,28 @@
   {
    "id": 10,
    "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 2
+   "ty": 2,
+   "line": 1
   },
   {
    "id": 11,
    "tag": "ret_safe",
-   "ty": 3,
+   "ty": 4,
    "args": [
     {
-     "inst": 3
+     "inst": 2
     }
    ]
   }
  ],
  "types": [
   {
-   "k": "int",
-   "signed": false,
+   "k": "float",
    "bits": 32
+  },
+  {
+   "k": "optional",
+   "child": 0
   },
   {
    "k": "void"
