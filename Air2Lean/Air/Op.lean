@@ -73,7 +73,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
-  | some "call" => some ".panic"
+  | some "forLenMismatch" | some "call" => some ".panic"
   | _ => none
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
