@@ -76,6 +76,46 @@ private theorem shiftLe_of_nonpos {n d : Nat} {e : Int} (he : e ≤ 0)
   have h0 : e.toNat = 0 := by omega
   rw [h0] at h; simpa [Nat.shiftLeft_eq] using h
 
+/-- Converse of `shiftLt_of_nonneg`/`shiftLt_of_nonpos`: build the shift-form comparison from
+the concrete one, given the sign of `e` matching. -/
+private theorem shiftLt_of_nonneg' {n d : Nat} {e : Int} (he : 0 ≤ e)
+    (h : n < d * 2 ^ e.toNat) : n <<< (-e).toNat < d <<< e.toNat := by
+  have h0 : (-e).toNat = 0 := by omega
+  rw [h0]; simpa [Nat.shiftLeft_eq] using h
+
+private theorem shiftLt_of_nonpos' {n d : Nat} {e : Int} (he : e ≤ 0)
+    (h : n * 2 ^ (-e).toNat < d) : n <<< (-e).toNat < d <<< e.toNat := by
+  have h0 : e.toNat = 0 := by omega
+  rw [h0]; simpa [Nat.shiftLeft_eq] using h
+
+/-- The shift-form comparison (`n / d < 2 ^ e`, see `up_bound`) is monotone in `e`: raising the
+threshold keeps a true "less than". Used to widen `ilog2 n d`'s successor bound up to `e0 + prec`
+for `roundRat`'s clamped exponent `e0`. -/
+private theorem shiftLt_mono {n d : Nat} {e1 e2 : Int} (hle : e1 ≤ e2)
+    (h : n <<< (-e1).toNat < d <<< e1.toNat) : n <<< (-e2).toNat < d <<< e2.toNat := by
+  by_cases he1 : 0 ≤ e1
+  · have he2 : 0 ≤ e2 := by omega
+    have hc : n < d * 2 ^ e1.toNat := shiftLt_of_nonneg he1 h
+    apply shiftLt_of_nonneg' he2
+    have hmono : (2:Nat) ^ e1.toNat ≤ 2 ^ e2.toNat := Nat.pow_le_pow_right (by omega) (by omega)
+    calc n < d * 2 ^ e1.toNat := hc
+      _ ≤ d * 2 ^ e2.toNat := Nat.mul_le_mul_left d hmono
+  · have he1' : e1 ≤ 0 := by omega
+    by_cases he2 : 0 ≤ e2
+    · have hc : n * 2 ^ (-e1).toNat < d := shiftLt_of_nonpos he1' h
+      apply shiftLt_of_nonneg' he2
+      have hp : 0 < 2 ^ (-e1).toNat := Nat.two_pow_pos _
+      have hp2 : 0 < 2 ^ e2.toNat := Nat.two_pow_pos _
+      calc n ≤ n * 2 ^ (-e1).toNat := Nat.le_mul_of_pos_right n hp
+        _ < d := hc
+        _ ≤ d * 2 ^ e2.toNat := Nat.le_mul_of_pos_right d hp2
+    · have he2' : e2 ≤ 0 := by omega
+      have hc : n * 2 ^ (-e1).toNat < d := shiftLt_of_nonpos he1' h
+      apply shiftLt_of_nonpos' he2'
+      have hmono : (2:Nat) ^ (-e2).toNat ≤ 2 ^ (-e1).toNat := Nat.pow_le_pow_right (by omega) (by omega)
+      calc n * 2 ^ (-e2).toNat ≤ n * 2 ^ (-e1).toNat := Nat.mul_le_mul_left n hmono
+        _ < d := hc
+
 /-- `⌊log₂(n/d)⌋` for `n d : Nat`, both positive: a `Nat.log2` guess, corrected by one
 comparison (`ilog2_spec`) — all in `Nat`/`Int`, so no `zpow` (`Rat^Int`) monotonicity is
 ever needed, unlike the `Rat`-based `floorLog2` this replaces. -/
@@ -125,6 +165,24 @@ theorem ilog2_spec {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
       rw [hexp, Nat.pow_succ, ← Nat.mul_assoc, Nat.mul_comm 2 d]
       exact (Nat.mul_lt_mul_right (by omega)).mpr hstep
 
+/-- The shift-form fact one exponent step above `ilog2 n d`: `n / d < 2 ^ (ilog2 n d + 1)`, in
+`up_bound`/`low_bound`'s shift encoding. Directly from `ilog2_spec`'s two branches (`.1` gives it
+outright; `.2` gives the doubled form at `-ilog2 n d`, halved back down here). The base case
+`shiftLt_mono` widens to reach `roundRat`'s clamped `e0 + prec`. -/
+private theorem ilog2_succ_bound {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
+    n <<< (-(ilog2 n d + 1)).toNat < d <<< (ilog2 n d + 1).toNat := by
+  have hspec := ilog2_spec hn hd
+  by_cases hk : 0 ≤ ilog2 n d
+  · exact shiftLt_of_nonneg' (by omega) (hspec.1 hk).2
+  · have hk' : ilog2 n d < 0 := by omega
+    have h2 := (hspec.2 hk').2
+    apply shiftLt_of_nonpos' (e := ilog2 n d + 1) (by omega)
+    have heq : (-(ilog2 n d + 1)).toNat + 1 = (-ilog2 n d).toNat := by omega
+    have hpoweq : (2:Nat) ^ (-ilog2 n d).toNat = 2 ^ (-(ilog2 n d + 1)).toNat * 2 := by
+      rw [← heq, Nat.pow_succ]
+    rw [hpoweq, ← Nat.mul_assoc] at h2
+    omega
+
 /-- Round-half-to-even of the (unreduced) fraction `N / D`, `D > 0`. -/
 private def roundQuot (N D : Nat) : Int :=
   let m := N / D
@@ -132,6 +190,22 @@ private def roundQuot (N D : Nat) : Int :=
   if 2 * r < D then (m : Int)
   else if D < 2 * r then (m : Int) + 1
   else if m % 2 = 0 then (m : Int) else (m : Int) + 1
+
+/-- `roundQuot` never overshoots `2 ^ prec` given `N / D < 2 ^ prec` (`D > 0` implicit: `D = 0`
+gives `N / D = 0` and the bound holds trivially). Ties round up to `m + 1`, which reaches
+`2 ^ prec` only at the boundary `N / D = 2 ^ prec - 1` — the carry-out case `finalizeRounded_spec`
+already allows via `m0 ≤ 2 ^ fmt.prec`. -/
+private theorem roundQuot_le {N D : Nat} (prec : Nat) (h : N < D * 2 ^ prec) :
+    roundQuot N D ≤ (2:Int) ^ prec := by
+  have hm : N / D < 2 ^ prec := Nat.div_lt_of_lt_mul (Nat.mul_comm D (2 ^ prec) ▸ h)
+  have hcast : ((2 ^ prec : Nat) : Int) = (2:Int) ^ prec := by exact_mod_cast rfl
+  unfold roundQuot
+  simp only []
+  split
+  · omega
+  · split
+    · omega
+    · split <;> omega
 
 private theorem expBits_le_width_pred (fmt : FloatFmt) : fmt.expBits ≤ fmt.width - 1 := by
   cases fmt <;> decide
@@ -408,6 +482,40 @@ private theorem finalizeRounded_spec (fmt : FloatFmt) (neg : Bool) (m0 e0 : Int)
       · have := Nat.two_pow_pos fmt.prec
         rw [← hcast] at hm0 hEq; omega
       · omega
+
+/-- `roundRat`'s pre-renormalization mantissa `roundQuot N D` never exceeds `2 ^ prec`, given the
+clamp `e0 ≥ ilog2 n d - (prec - 1)` (always true of `roundRat`'s `e0`, a `Max.max` against a
+floor). Widens `ilog2_succ_bound` up to `e0 + prec` via `shiftLt_mono`, splits on `e0`'s sign to
+match `N`/`D`'s own split, then hands the resulting `N < D * 2 ^ prec` to `roundQuot_le`. -/
+private theorem roundRat_m0_le {n d : Nat} (hn : 0 < n) (hd : 0 < d) (prec : Nat) (e0 : Int)
+    (he0 : ilog2 n d - ((prec : Int) - 1) ≤ e0) :
+    roundQuot (if e0 ≥ 0 then n else n <<< (-e0).toNat)
+        (if e0 ≥ 0 then d <<< e0.toNat else d) ≤ (2:Int) ^ prec := by
+  have hmono : n <<< (-(e0 + (prec:Int))).toNat < d <<< (e0 + (prec:Int)).toNat :=
+    shiftLt_mono (by omega) (ilog2_succ_bound hn hd)
+  apply roundQuot_le prec
+  split
+  · rename_i he0'
+    have hc : n < d * 2 ^ (e0 + (prec:Int)).toNat := shiftLt_of_nonneg (by omega) hmono
+    rw [show (e0 + (prec:Int)).toNat = e0.toNat + prec from by omega, Nat.pow_add,
+      ← Nat.mul_assoc] at hc
+    rwa [Nat.shiftLeft_eq]
+  · rename_i he0'
+    have he0'' : e0 < 0 := by omega
+    by_cases he' : 0 ≤ e0 + (prec:Int)
+    · have hc : n < d * 2 ^ (e0 + (prec:Int)).toNat := shiftLt_of_nonneg he' hmono
+      have hsplit : (e0 + (prec:Int)).toNat + (-e0).toNat = prec := by omega
+      rw [Nat.shiftLeft_eq]
+      calc n * 2 ^ (-e0).toNat < d * 2 ^ (e0 + (prec:Int)).toNat * 2 ^ (-e0).toNat :=
+            (Nat.mul_lt_mul_right (Nat.two_pow_pos _)).mpr hc
+        _ = d * 2 ^ prec := by rw [Nat.mul_assoc, ← Nat.pow_add, hsplit]
+    · have he'' : e0 + (prec:Int) ≤ 0 := by omega
+      have hc : n * 2 ^ (-(e0 + (prec:Int))).toNat < d := shiftLt_of_nonpos he'' hmono
+      have hsplit : (-(e0 + (prec:Int))).toNat + prec = (-e0).toNat := by omega
+      rw [Nat.shiftLeft_eq]
+      calc n * 2 ^ (-e0).toNat = n * 2 ^ (-(e0 + (prec:Int))).toNat * 2 ^ prec := by
+            rw [Nat.mul_assoc, ← Nat.pow_add, hsplit]
+        _ < d * 2 ^ prec := (Nat.mul_lt_mul_right (Nat.two_pow_pos _)).mpr hc
 
 /-- Round `|q|` to `fmt`, to nearest, ties to even; `neg` gives the sign, also of a zero
 result. Subnormals and overflow (→ `inf`) follow from the exponent clamp and range check
