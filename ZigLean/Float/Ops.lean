@@ -241,14 +241,12 @@ rounding direction exactly, and a tie (`Real.sqrt shiftedM = root + 1/2`) is pro
 impossible (`4 * shiftedM = (2 * root + 1) ^ 2` would need a perfect square that is both a
 multiple of 4 and odd). -/
 
-/-- `f80` via `f128` (full precision), `f128` via `f64` (compiler_rt's `sqrtq` truncates to
-`f64`, calls `f64`'s `sqrt`, then extends back — `docs/floats.md` §Semantics: `@sqrt` |
-`f128: fpext(sqrt(fptrunc x to f64))`, so `f128`'s `@sqrt` is deliberately *not*
-correctly-rounded at full precision) — otherwise as `sqrtCore`. -/
+/-- Correctly rounded (`sqrtCore`; `f80` too: x87 `fsqrt`), except `f128`: compiler_rt's
+`sqrtq` rounds to `f64`, takes the `f64` root and extends back (`docs/floats.md` §Semantics).
+Not `f80` via `f128`: `sqrt` rounded twice is exact only if the inner format has at least
+`2 * 64 + 2` bits of precision, and `f128` has 113. -/
 def Float.sqrt {fmt : FloatFmt} (x : Float fmt) : Float fmt :=
-  if h : fmt = .f80 then
-    h ▸ Float.conv .f80 (sqrtCore .f128 (Float.conv .f128 x))
-  else if h : fmt = .f128 then
+  if h : fmt = .f128 then
     h ▸ Float.conv .f128 (sqrtCore .f64 (Float.conv .f64 x))
   else
     sqrtCore fmt x
