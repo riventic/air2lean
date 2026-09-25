@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        zig: ["0.15.2"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
+      # version on PATH (the Zig compiler source builds with its own release). Pinned in
+      # zig-patch/versions.toml's [ci.host-zig] table, read the same way build.sh reads a
+      # version table: exact-match the section header, then grab up to the next `[`.
+      - name: Install host zig
+        run: |
+          set -euo pipefail
+          section=$(awk '/^\[ci\.host-zig\]/ { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
+          url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
+          sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
+          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.host-zig] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
+          curl -fL --output host-zig.tar.xz "$url"
+          echo "$sha256  host-zig.tar.xz" | sha256sum -c -
+          mkdir -p host-zig
+          tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
+          echo "$PWD/host-zig" >> "$GITHUB_PATH"
+
+      # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when
+      # the patch, the version pin, or the build script itself changes.
+      - name: Cache patched zig
+        id: cache-zig-air
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: zig-air-${{ matrix.zig }}-${{ hashFiles(format('zig-patch/{0}/air-json.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh') }}
+
+      - name: Build patched zig
+        if: steps.cache-zig-air.outputs.cache-hit != 'true'
+        run: zig-patch/build.sh ${{ matrix.zig }}
+
+      # elan installs `lake`/`lean` shims that read a package's lean-toolchain file (here:
+      # leanprover/lean4:v4.34.0) and fetch that exact toolchain on first use. Installer
+      # pinned in zig-patch/versions.toml's [ci.elan] table.
+      - name: Install elan
+        run: |
+          set -euo pipefail
+          section=$(awk '/^\[ci\.elan\]/ { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
+          url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
+          sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
+          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.elan] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Build runtime library + translator
+        run: lake build
+
+      - name: Golden AIR, translate, build, differential test
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
+        run: scripts/check.sh
+
+      - name: Build proofs
+        run: lake build Proofs
+
+      - name: Check for sorry/admit/native_decide
+        run: scripts/no-sorry.sh
+
+      - name: Mutation check
+        env:
+          AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
+        run: scripts/mutate.sh

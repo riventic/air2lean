@@ -1,7 +1,6 @@
-diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/json.zig zig-0.15.2/src/Air/json.zig
 --- zig-0.15.2-pristine/src/Air/json.zig	1970-01-01 01:00:00
-+++ zig-0.15.2/src/Air/json.zig	2026-09-24 08:58:01
-@@ -0,0 +1,383 @@
++++ zig-0.15.2/src/Air/json.zig	2026-09-24 15:29:07
+@@ -0,0 +1,432 @@
 +//! air2lean: write the AIR of one function as JSON.
 +//! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
 +//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to
@@ -67,7 +66,7 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +        const ip = &zcu.intern_pool;
 +        try w.j.beginObject();
 +        try w.field("schema");
-+        try w.j.write(1);
++        try w.j.write(2);
 +        try w.field("zig_version");
 +        try w.j.write(build_options.version);
 +        try w.field("name");
@@ -137,6 +136,8 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +            },
 +            .not, .bitcast, .load, .intcast, .intcast_safe, .trunc, .slice_ptr, .slice_len,
 +            .array_to_slice, .clz, .ctz, .popcount, .abs, .optional_payload, .wrap_optional,
++            .unwrap_errunion_payload, .unwrap_errunion_err, .wrap_errunion_payload,
++            .wrap_errunion_err,
 +            .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
 +            .struct_field_ptr_index_3,
 +            => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
@@ -209,6 +210,13 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +                try w.writeBody(then_body);
 +                try w.field("else");
 +                try w.writeBody(else_body);
++            },
++            .@"try", .try_cold => {
++                const pl_op = w.data(inst).pl_op;
++                const extra = w.air.extraData(Air.Try, pl_op.payload);
++                try w.writeArgs(&.{pl_op.operand});
++                try w.field("body");
++                try w.writeBody(@ptrCast(w.air.extra.items[extra.end..][0..extra.data.body_len]));
 +            },
 +            .switch_br, .loop_switch_br => {
 +                const sw = w.air.unwrapSwitch(inst);
@@ -286,6 +294,20 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +                    try w.field("noreturn");
 +                    try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
 +                },
++                .err => |e| {
++                    try w.field("err");
++                    try w.j.write(e.name.toSlice(ip));
++                },
++                .error_union => |eu| switch (eu.val) {
++                    .err_name => |name| {
++                        try w.field("err");
++                        try w.j.write(name.toSlice(ip));
++                    },
++                    .payload => |payload_index| {
++                        try w.field("payload");
++                        try w.writeRef(Air.internedToRef(payload_index));
++                    },
++                },
 +                else => if (val.isUndef(zcu)) {
 +                    try w.field("undef");
 +                    try w.j.write(true);
@@ -353,6 +375,32 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +                try w.field("child");
 +                try w.writeTypeRef(ty.optionalChild(zcu));
 +            },
++            .error_union => {
++                try w.j.write("error_union");
++                try w.field("error");
++                try w.writeTypeRef(ty.errorUnionSet(zcu));
++                try w.field("payload");
++                try w.writeTypeRef(ty.errorUnionPayload(zcu));
++            },
++            .error_set => {
++                try w.j.write("error_set");
++                if (ty.isAnyError(zcu)) {
++                    try w.field("any");
++                    try w.j.write(true);
++                } else {
++                    const NullTerminatedString = InternPool.NullTerminatedString;
++                    const sorted = try w.gpa.dupe(NullTerminatedString, ty.errorSetNames(zcu).get(ip));
++                    std.mem.sortUnstable(NullTerminatedString, sorted, ip, struct {
++                        fn lessThan(ip_: *InternPool, a: NullTerminatedString, b: NullTerminatedString) bool {
++                            return std.mem.lessThan(u8, a.toSlice(ip_), b.toSlice(ip_));
++                        }
++                    }.lessThan);
++                    try w.field("errors");
++                    try w.j.beginArray();
++                    for (sorted) |name| try w.j.write(name.toSlice(ip));
++                    try w.j.endArray();
++                }
++            },
 +            .@"struct" => {
 +                const is_tuple = ty.isTuple(zcu);
 +                try w.j.write(if (is_tuple) "tuple" else "struct");
@@ -385,7 +433,6 @@ diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Air/jso
 +        try w.j.endObject();
 +    }
 +};
-diff -ruN --exclude=.zig-cache --exclude=zig-out zig-0.15.2-pristine/src/Zcu/PerThread.zig zig-0.15.2/src/Zcu/PerThread.zig
 --- zig-0.15.2-pristine/src/Zcu/PerThread.zig	2025-10-11 05:53:18
 +++ zig-0.15.2/src/Zcu/PerThread.zig	2026-09-23 14:31:27
 @@ -1725,6 +1725,7 @@

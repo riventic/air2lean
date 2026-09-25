@@ -3,10 +3,14 @@
 # (tests/diff/Diff.lean), then compare their output line by line against the same inputs
 # (tests/diff/inputs/*.jsonl, from tests/diff/gen_inputs.zig).
 #
-# A line counts as a match if both sides say "ok" with the same value, or both say "fail"
-# (the specific Zig.Error kind is not compared). Anything else — a value mismatch, one side ok
-# and the other fail, or a Lean "diverge" (none of these 8 functions should ever not terminate)
-# — is a mismatch: printed immediately, and makes the whole run exit 1.
+# A line counts as a match if both sides say "ok" with the same value, or both say "fail" with
+# matching kinds: harness.zig's panic-kind name (e.g. "outOfBounds") maps, via the fixed table in
+# expected_ctor_for_zig_kind() below, to the `Zig.Error` constructor Diff.lean is expected to
+# throw for the same check (e.g. "outOfBounds"; docs/generated-code.md §Panics). Anything else —
+# a value mismatch, a kind mismatch, a Zig kind with no table entry (including "unknown" — the
+# child died without reporting a kind), one side ok and the other fail, or a Lean "diverge" (none
+# of these 8 functions should ever not terminate) — is a mismatch: printed immediately, and makes
+# the whole run exit 1.
 #
 # Usage: diff.sh
 # Env:
@@ -31,8 +35,11 @@ echo "== building + running lean side ==" >&2
 (cd tests/diff && lake build difftest)
 tests/diff/.lake/build/bin/difftest
 
-# Classifies one JSONL output line into $kind (ok|fail|diverge) and, for ok, $val (decimal
-# string, quotes stripped). Both sides only ever emit these three shapes (harness.zig / Diff.lean).
+# Classifies one JSONL output line into $kind (ok|fail|diverge) and $val: for ok, the decimal
+# string (quotes stripped); for fail, the raw kind string — harness.zig's panic-name (e.g.
+# "outOfBounds") or Diff.lean's fully-qualified constructor (e.g. "Zig.Error.overflow"), still
+# with its "Zig.Error." prefix at this point. Both sides only ever emit these three shapes
+# (harness.zig / Diff.lean).
 classify_line() {
   local line=$1
   case "$line" in
@@ -46,8 +53,10 @@ classify_line() {
       val=${line#'{"ok":'}
       val=${val%'}'}
       ;;
-    '{"fail"'*)
+    '{"fail":"'*'"}')
       kind=fail
+      val=${line#'{"fail":"'}
+      val=${val%'"}'}
       ;;
     '{"diverge":true}')
       kind=diverge
@@ -56,6 +65,22 @@ classify_line() {
       echo "error: unrecognized output line: $line" >&2
       exit 1
       ;;
+  esac
+}
+
+# Maps a Zig panic kind (a member name of harness.zig's `panic`) to the `Zig.Error` constructor
+# (bare name, no "Zig.Error." prefix) the Lean side is expected to throw for the same check.
+# Echoes nothing for a kind with no expected constructor — including "unknown" — which the
+# caller then treats as a mismatch: v0's scope (README.md) never reaches an unlisted kind, so
+# seeing one at all is itself a bug. bash 3.2 has no associative arrays, hence the `case`.
+expected_ctor_for_zig_kind() {
+  case "$1" in
+    integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds) echo overflow ;;
+    outOfBounds) echo outOfBounds ;;
+    divideByZero) echo divByZero ;;
+    reachedUnreachable) echo unreachable ;;
+    exactDivisionRemainder | panic) echo panic ;;
+    *) echo "" ;;
   esac
 }
 
@@ -70,36 +95,41 @@ for fn in "${functions[@]}"; do
   zig_file="tests/diff/out/zig/${fn}.jsonl"
   lean_file="tests/diff/out/lean/${fn}.jsonl"
 
-  readarray -t in_lines <"$in_file"
-  readarray -t zig_lines <"$zig_file"
-  readarray -t lean_lines <"$lean_file"
-  n=${#in_lines[@]}
-  [ "${#zig_lines[@]}" -eq "$n" ] || { echo "error: $zig_file has ${#zig_lines[@]} lines, expected $n" >&2; exit 1; }
-  [ "${#lean_lines[@]}" -eq "$n" ] || { echo "error: $lean_file has ${#lean_lines[@]} lines, expected $n" >&2; exit 1; }
+  # Line counts first, then one tab-joined line per input (JSON lines have no raw tabs).
+  # No `readarray`: it needs bash 4, and macOS ships bash 3.2.
+  n=$(wc -l <"$in_file" | tr -d ' ')
+  for f in "$zig_file" "$lean_file"; do
+    m=$(wc -l <"$f" | tr -d ' ')
+    [ "$m" -eq "$n" ] || { echo "error: $f has $m lines, expected $n" >&2; exit 1; }
+  done
 
   fn_ok=0
   fn_fail_match=0
   fn_mismatch=0
-  for ((i = 0; i < n; i++)); do
-    classify_line "${zig_lines[$i]}"
+  i=0
+  while IFS=$'\t' read -r in_line zig_line lean_line; do
+    i=$((i + 1))
+    classify_line "$zig_line"
     zkind=$kind
     zval=${val:-}
-    classify_line "${lean_lines[$i]}"
+    classify_line "$lean_line"
     lkind=$kind
     lval=${val:-}
 
     if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ]; then
       fn_ok=$((fn_ok + 1))
-    elif [ "$zkind" = fail ] && [ "$lkind" = fail ]; then
+    elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
+      [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
+      [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
       fn_fail_match=$((fn_fail_match + 1))
     else
       fn_mismatch=$((fn_mismatch + 1))
       mismatch_found=1
-      echo "MISMATCH $fn input#$((i + 1)): ${in_lines[$i]}" >&2
-      echo "  zig:  ${zig_lines[$i]}" >&2
-      echo "  lean: ${lean_lines[$i]}" >&2
+      echo "MISMATCH $fn input#$i: $in_line" >&2
+      echo "  zig:  $zig_line" >&2
+      echo "  lean: $lean_line" >&2
     fi
-  done
+  done < <(paste "$in_file" "$zig_file" "$lean_file")
 
   echo "$fn: ok=$fn_ok fail_match=$fn_fail_match mismatch=$fn_mismatch (of $n)"
   total_ok=$((total_ok + fn_ok))

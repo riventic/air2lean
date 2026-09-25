@@ -1,4 +1,4 @@
-import Proofs.Basic.Gen
+import Proofs.Basic.Common
 
 /-!
 # Proofs about `examples/basic/basic.zig`
@@ -9,20 +9,13 @@ extent the translation is faithful (see the differential tests in `tests/diff/`)
 
 open Basic
 
--- Unfold the `StateT`/`ExceptT`/`Option` layers of generated code down to plain values.
-attribute [local simp] StateT.run' StateT.run bind pure StateT.bind StateT.pure StateT.map
-  ExceptT.bind ExceptT.pure ExceptT.mk ExceptT.bindCont ExceptT.map Functor.map liftM monadLift
-  MonadLift.monadLift StateT.lift throw throwThe MonadExcept.throw MonadExceptOf.throw ExceptT.lift
-  Option.bind get getThe MonadState.get MonadStateOf.get StateT.get modify modifyGet
-  MonadState.modifyGet MonadStateOf.modifyGet StateT.modifyGet Zig.call
-
 theorem tardiness_spec (a b : BitVec 32) :
     tardiness a b = pure (if b.toNat < a.toNat then a - b else 0) := by
   unfold tardiness
   by_cases h : b.toNat < a.toNat
   · have : ¬ a.toNat < b.toNat := by omega
-    simp [h, this]
-  · simp [h]
+    simp [zig_unfold, h, this]
+  · simp [zig_unfold, h]
 
 theorem scale_spec (a : BitVec 32) (b : BitVec 8) :
     scale a b = if a.toNat * b.toNat ≥ 2 ^ 32 then throw .overflow
@@ -31,23 +24,23 @@ theorem scale_spec (a : BitVec 32) (b : BitVec 8) :
   have hb : b.toNat % 4294967296 = b.toNat := Nat.mod_eq_of_lt (by have := b.isLt; omega)
   by_cases h : a.toNat * b.toNat ≥ 2 ^ 32
   · have h' : 4294967296 ≤ a.toNat * b.toNat := h
-    simp [hb, h']
+    simp [zig_unfold, hb, h']
   · have h' : ¬ 4294967296 ≤ a.toNat * b.toNat := h
-    simp [hb, h']
+    simp [zig_unfold, hb, h']
 
 theorem classify_le_two (x : BitVec 8) : ∃ r, classify x = pure r ∧ r.toNat ≤ 2 := by
   unfold classify
   by_cases h0 : x = 0
-  · exact ⟨0, by simp [h0], by decide⟩
+  · exact ⟨0, by simp [zig_unfold, h0], by decide⟩
   · have h0' : ¬ x = 0#8 := h0
     by_cases h9 : x.toNat ≤ 9
     · refine ⟨1, ?_, by decide⟩
       have h1 : 1 ≤ x.toNat := by
         have : x.toNat ≠ 0 := fun h => h0 (BitVec.eq_of_toNat_eq (by simpa using h))
         omega
-      simp [h0', Zig.le, BitVec.ule, h1, h9]
+      simp [zig_unfold, h0', Zig.le, BitVec.ule, h1, h9]
     · refine ⟨2, ?_, by decide⟩
-      simp [h0', Zig.le, BitVec.ule, h9]
+      simp [zig_unfold, h0', Zig.le, BitVec.ule, h9]
 
 theorem weightedTardiness_ok (j : Job) (start : BitVec 32)
     (h1 : start.toNat + j.duration.toNat < 2 ^ 32)
@@ -70,36 +63,13 @@ theorem weightedTardiness_ok (j : Job) (start : BitVec 32)
           = start.toNat + j.duration.toNat - j.due.toNat := by omega
       have hm : ¬ 4294967296 ≤ (4294967296 - j.due.toNat + (start.toNat + j.duration.toNat)) % 4294967296
           * j.weight.toNat := by rw [hmod]; omega
-      simp [tardiness_spec, hadd, hsum, hlt, hwm, hm]
+      simp [zig_unfold, tardiness_spec, hadd, hsum, hlt, hwm, hm]
     · rw [BitVec.toNat_mul, BitVec.toNat_setWidth, hsub, Nat.mod_eq_of_lt (a := j.weight.toNat) (by omega)]
       exact Nat.mod_eq_of_lt h2
   · refine ⟨0, ?_, ?_⟩
-    · simp [tardiness_spec, hadd, hsum, hlt, hwm]
+    · simp [zig_unfold, tardiness_spec, hadd, hsum, hlt, hwm]
     · have hz : start.toNat + j.duration.toNat - j.due.toNat = 0 := by omega
-      simp [hz]
-
-/-- Sum of the first `k` elements, as a natural number. -/
-def psum (xs : Array (BitVec 32)) (k : Nat) : Nat := ((xs.toList.take k).map BitVec.toNat).sum
-
-theorem list_sum_le (l : List (BitVec 32)) : (l.map BitVec.toNat).sum ≤ l.length * 2 ^ 32 := by
-  induction l with
-  | nil => simp
-  | cons x l ih =>
-    have := x.isLt
-    simp only [List.map_cons, List.sum_cons, List.length_cons]
-    rw [Nat.succ_mul]; omega
-
-theorem psum_le (xs : Array (BitVec 32)) (k : Nat) : psum xs k ≤ k * 2 ^ 32 := by
-  unfold psum
-  have h := list_sum_le (xs.toList.take k)
-  have : (xs.toList.take k).length ≤ k := by simp [Nat.min_le_left]
-  exact Nat.le_trans h (Nat.mul_le_mul_right _ this)
-
-theorem psum_succ (xs : Array (BitVec 32)) (k : Nat) (hk : k < xs.size) :
-    psum xs (k + 1) = psum xs k + xs[k].toNat := by
-  unfold psum
-  rw [List.take_add_one, List.getElem?_eq_getElem (by simpa using hk)]
-  simp
+      simp [zig_unfold, hz]
 
 theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumLocals)
     (hk : s.local5.toNat ≤ xs.size) (ht : s.total.toNat = psum xs s.local5.toNat) :
@@ -121,9 +91,9 @@ theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumL
     have hinc : ¬ 18446744073709551615 ≤ s.local5.toNat := by omega
     refine ⟨.rep10, { total := s.total + xs[s.local5.toNat].setWidth 64, local5 := s.local5 + 1 },
       ?_, ?_⟩
-    · simp [Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
+    · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
     · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 := by
-        rw [BitVec.toNat_add]; simp; omega
+        rw [BitVec.toNat_add]; simp [zig_unfold]; omega
       have htot : (s.total + xs[s.local5.toNat].setWidth 64).toNat
           = s.total.toNat + xs[s.local5.toNat].toNat := by
         rw [BitVec.toNat_add, BitVec.toNat_setWidth, hx']; omega
@@ -133,7 +103,7 @@ theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumL
       · rw [h5]; omega
   · have heq : s.local5.toNat = xs.size := by omega
     refine ⟨.br9, s, ?_, ?_⟩
-    · simp [Zig.len, Zig.index, hlt, hm]
+    · simp [zig_unfold, Zig.len, Zig.index, hlt, hm]
     · simp only [sum.again10, Bool.false_eq_true, ↓reduceIte]
       exact ⟨trivial, heq ▸ ht⟩
 
@@ -146,7 +116,7 @@ theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
     (fun s => xs.size - s.local5.toNat)
     (fun r => r.1 = .br9 ∧ r.2.total.toNat = psum xs xs.size)
     (fun s hs' => sum_loop_step xs hs s hs'.1 hs'.2)
-    { total := 0, local5 := 0 } (by simp [psum])
+    { total := 0, local5 := 0 } (by simp [zig_unfold, psum])
   subst he
   refine ⟨s'.total, ?_, ?_⟩
   · unfold sum
@@ -156,5 +126,5 @@ theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
       ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
       modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
     rw [hrun]
-    simp
+    simp [zig_unfold]
   · rw [hpost, psum, List.take_of_length_le (by simp)]

@@ -11,19 +11,23 @@
 | M4 | Translator: straight-line code, branches, calls | done |
 | M5 | Translator: locals, loops, slices, structs | done |
 | M6 | Differential tests: 8 functions × 300 inputs, 0 mismatches | done |
-| M7 | Case study proofs (`Proofs/Basic/Proofs.lean`) | 5 of 8 functions, incl. the `sum` loop |
+| M7 | Case study proofs (`Proofs/Basic/`) | 8 of 8 functions, incl. the loops `sum` and `totalWeightedTardiness` |
+| M8 | CI, panic kinds in the diff test, `mutate.sh`, `no-sorry.sh` | done |
+| M9 | Recursion: call groups → `mutual` + `partial_fixpoint` | done |
+| M10 | AIR export of error unions (JSON schema 2) | done (translator support: next) |
+| M11 | AIR export for Zig 0.14.1 | done (translator support: next) |
 
-Mutation check: a `*` changed to `*%` in `scale` gives 279 mismatches, so the tester sees a changed function.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches. So the tester sees a changed result and a changed panic kind.
 
 ## Next
 
 | Item | Estimate |
 |---|---|
-| Loop proof for `totalWeightedTardiness` (nested blocks, a call) | 0.5 day |
-| CI (GitHub Actions: build patched Zig, `scripts/check.sh`, `lake build Proofs`) | 0.5 day |
-| Mutual recursion (`mutual … partial_fixpoint`) | 0.5 day |
-| Optionals, error unions | 1–2 days |
-| Port to 0.14.x | 1 day |
+| Several examples: `examples/<ex>/` layout, scripts loop over all examples | 0.5 day |
+| Optionals in the translator (the export exists) | 0.5 day |
+| Error unions in the translator (`try`, error values) | 1 day |
+| 0.14.1 in the translator and the CI matrix (Linux only, see `zig-patch/0.14.1/TAGS.md`) | 0.5 day |
+| Proofs for `recursion`, `options`, `errors` | 1 day |
 
 ## Decisions
 
@@ -59,7 +63,7 @@ Support matrix:
 | Zig | State |
 |---|---|
 | 0.15.2 | supported |
-| 0.14.x | planned |
+| 0.14.1 | export patch done; translator and CI: next. Builds on Linux only (it cannot link on macOS 26). |
 | 0.16.x | planned (when released) |
 
 **To add a Zig version:**

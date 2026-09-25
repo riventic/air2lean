@@ -165,4 +165,50 @@ partial_fixpoint
 /-- Lift a call to another translated function into the caller's monad. -/
 @[inline] def call {σ α : Type} (r : Result α) : M σ α := StateT.lift r
 
+open Lean.Order in
+/-- A recursive call goes through `Zig.call` (a translated function always returns `Result`,
+never `M`). `@[inline]` does not make `partial_fixpoint`'s monotonicity search see through it,
+so a self- or mutually-recursive function needs this lemma to accept the call. -/
+@[partial_fixpoint_monotone]
+theorem monotone_call {σ α γ : Type} [PartialOrder γ]
+    (f : γ → Result α) (hmono : monotone f) :
+    monotone (fun (x : γ) => (call (f x) : M σ α)) := by
+  apply monotone_of_monotone_apply
+  intro s
+  show monotone (fun x => (f x) >>= fun a => pure (a, s))
+  exact monotone_bind _ _ _ hmono (monotone_const _)
+
+open Lean.Order in
+/-- A self- or mutually-recursive generated function's outer wrapper runs its `M`-typed body
+with `.run'` (`Emit.lean`'s `emitFunctionDef`). Core registers a `partial_fixpoint_monotone`
+lemma for `StateT.run` but not `StateT.run'`, so `partial_fixpoint` cannot see through the
+wrapper without this one. -/
+@[partial_fixpoint_monotone]
+theorem monotone_run' {σ α γ : Type} [PartialOrder γ]
+    (f : γ → M σ α) (hmono : monotone f) (s : σ) :
+    monotone (fun (x : γ) => (f x).run' s) := by
+  have h := Functor.monotone_map (fun x => StateT.run (f x) s) (·.1) (monotone_stateTRun f hmono s)
+  simpa [StateT.run', StateT.run] using h
+
+open Lean.Order in
+/-- A generated `while`-loop body that calls into its own `mutual`/`partial_fixpoint` clique
+(`Emit.lean`'s call-graph analysis puts such a loop def in the clique) is itself called through
+`Zig.loop`. Core has no `partial_fixpoint_monotone` lemma for `loop`, so the recursive call
+needs this one: `loop` is monotone in `body`, proved by fixpoint induction on `loop` itself. -/
+@[partial_fixpoint_monotone]
+theorem monotone_loop {σ ε γ : Type} [PartialOrder γ] (f : γ → M σ ε) (again : ε → Bool)
+    (hmono : monotone f) : monotone (fun (x : γ) => loop (f x) again) := by
+  intro x1 x2 hx
+  have hle : f x1 ⊑ f x2 := hmono x1 x2 hx
+  apply loop.fixpoint_induct (f x1) again (motive := fun v => v ⊑ loop (f x2) again)
+  · exact fun _ hc h => csup_le hc h
+  · intro l hl
+    rw [loop.eq_1 (f x2) again]
+    apply PartialOrder.rel_trans (MonoBind.bind_mono_left hle)
+    apply MonoBind.bind_mono_right
+    intro e
+    split
+    · exact hl
+    · exact PartialOrder.rel_refl
+
 end Zig
