@@ -77,6 +77,9 @@ def parseTy (j : Json) : Except String Ty := do
     let signed ← (← j.getObjVal? "signed").getBool?
     let bits ← (← j.getObjVal? "bits").getNat?
     return .int signed bits
+  | "float" =>
+    let bits ← (← j.getObjVal? "bits").getNat?
+    return .float bits
   | "bool" => return .bool
   | "void" => return .void
   | "noreturn" => return .noreturn
@@ -134,6 +137,21 @@ def parseIntLit (fnName : String) (s : String) : Except String Int :=
     | some n => return (n : Int)
     | none => throw s!"{fnName}: not an integer literal: {s}"
 
+/-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
+def hexDigitVal (c : Char) : Option Nat :=
+  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat)
+  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
+  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
+  else none
+
+/-- A float constant's `fbits`: `"0x"` followed by lowercase hex (`docs/air-json.md`). -/
+def parseHexNat (fnName : String) (s : String) : Except String Nat := do
+  if !s.startsWith "0x" then throw s!"{fnName}: not a hex literal: {s}"
+  (s.drop 2).toString.toList.foldlM (fun acc c => do
+    let some d := hexDigitVal c
+      | throw s!"{fnName}: invalid hex digit '{c}' in {s}"
+    return acc * 16 + d) 0
+
 /-- A constant's `val` string, given its already-resolved type: decimal integer, `true`/`false`,
 or `{}`. Shared between a top-level constant and an optional's payload (below): the exporter's
 `fmtValue` reuses this same string format for the payload, disambiguated only by `ty`. -/
@@ -145,12 +163,11 @@ def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except
   | other => throw s!"{fnName}: constant of unsupported type {repr other}"
 
 /-- A `Ref`: `{"inst": id}`, `{"ty", "val"}`, `{"ty", "undef": true}`, `{"ty", "func",
-"noreturn"}`, or (schema 2) `{"ty", "err"}` (an error value, or an error-union constant in the
-error state — `ty`'s `k` disambiguates) / `{"ty", "payload"}` (an error-union constant in the ok
-state; `payload` is itself a `Ref`, recursively) (`docs/air-json.md`). An optional constant is a
-`{"ty", "val"}`: the exporter's `fmtValue` prints `null` for `null`, or (recursively) the
-payload's own text for a non-null value — `parseVal` tells the two apart by comparing `s` to
-`"null"` once `ty`'s kind is `optional`. -/
+"noreturn"}`, `{"ty", "err"}` (an error value, or an error-union constant in the error state —
+`ty`'s `k` disambiguates) / `{"ty", "payload"}` (an error-union constant in the ok state; nested
+`Ref`, recursively), `{"ty", "fbits"}` (a float constant, schema 3), or `{"ty", "some"}` (an
+optional constant holding a payload; nested `Ref`, recursively) / `{"ty", "null": true}` (an
+optional constant, `null`) (`docs/air-json.md`). -/
 partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
@@ -176,16 +193,22 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       match ty with
       | .errorUnion .. => return .errUnionOk tyId (← parseVal fnName types payloadJ)
       | other => throw s!"{fnName}: 'payload' constant of unexpected type {repr other}"
+    else if let some someJ := optField j "some" then
+      match ty with
+      | .optional .. => return .optSome tyId (← parseVal fnName types someJ)
+      | other => throw s!"{fnName}: 'some' constant of unexpected type {repr other}"
+    else if (optField j "null").isSome then
+      match ty with
+      | .optional .. => return .optNull tyId
+      | other => throw s!"{fnName}: 'null' constant of unexpected type {repr other}"
+    else if let some fbitsJ := optField j "fbits" then
+      let s ← fbitsJ.getStr?
+      match ty with
+      | .float _ => return .float tyId (← parseHexNat fnName s)
+      | other => throw s!"{fnName}: 'fbits' constant of unexpected type {repr other}"
     else
       let s ← (← j.getObjVal? "val").getStr?
-      match ty with
-      | .optional child =>
-        if s == "null" then return .optNull tyId
-        else
-          let some childTy := types[child]?
-            | throw s!"{fnName}: unknown type id {child} in optional constant"
-          return .optSome tyId (← parseLeafVal fnName child childTy s)
-      | _ => parseLeafVal fnName tyId ty s
+      parseLeafVal fnName tyId ty s
 
 mutual
 

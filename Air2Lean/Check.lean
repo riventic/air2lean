@@ -3,10 +3,10 @@ import Air2Lean.Air.Op
 /-!
 # Subset checker
 
-`check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate:
-floats/`other` types, pointer types that are not an `alloc` local or a read-only slice, and
-an `alloc` result whose address escapes past `load`/`store`/`dbg`. Errors name the function
-and the nearest `dbg_stmt` line.
+`check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
+types, a float type outside `16 32 64 80 128` bits, an integer `@abs`, pointer types that are
+not an `alloc` local or a read-only slice, and an `alloc` result whose address escapes past
+`load`/`store`/`dbg`. Errors name the function and the nearest `dbg_stmt` line.
 -/
 
 namespace Air2Lean
@@ -23,16 +23,21 @@ slice (`slice`, const). -/
 def ptrInSubset (size : String) (isConst : Bool) : Bool :=
   (size == "one" && !isConst) || (size == "slice" && isConst)
 
-/-- Reject floats/`other` and non-alloc/non-const-slice pointers, recursively through struct
-fields, array/optional children, and tuple fields. -/
+/-- Reject `other` types, an out-of-subset float width, and non-alloc/non-const-slice
+pointers, recursively through struct fields, array/optional children, and tuple fields. -/
 partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId) :
     Except String Unit := do
   let some ty := types[id]?
     | throw s!"{fnName}: near line {line}: unknown type id {id}"
   match ty with
   | .other name =>
-    throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (float or \
-      otherwise unsupported)"
+    throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
+      unsupported)"
+  | .float bits =>
+    if bits == 16 || bits == 32 || bits == 64 || bits == 80 || bits == 128 then pure ()
+    else
+      throw s!"{fnName}: near line {line}: float type of {bits} bits is outside the subset \
+        (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     if ptrInSubset size isConst then checkTy fnName types line child
     else
@@ -69,21 +74,34 @@ mutual
 partial def checkInst (fnName : String) (types : Array Ty) (st : CheckState) (inst : Inst) :
     Except String CheckState := do
   checkTy fnName types st.line inst.ty
-  checkOp fnName types st inst.id inst.op
+  checkOp fnName types st inst.id inst.ty inst.op
 
 partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id : InstId)
-    (op : Op) : Except String CheckState := do
+    (ty : TyId) (op : Op) : Except String CheckState := do
   let chk1 (v : Val) : Except String Unit := checkNotEscaping fnName st id v
   let chk (vs : Array Val) : Except String Unit := vs.forM chk1
   match op with
   | .arg _ => pure st
   | .arith _ _ a b => chk #[a, b]; pure st
   | .div _ a b => chk #[a, b]; pure st
+  | .divFloat a b => chk #[a, b]; pure st
   | .minMax _ a b => chk #[a, b]; pure st
   | .withOverflow _ a b => chk #[a, b]; pure st
   | .bit _ a b => chk #[a, b]; pure st
   | .not a => chk1 a; pure st
   | .neg a => chk1 a; pure st
+  | .abs a =>
+    chk1 a
+    match types[ty]? with
+    | some (.int ..) => throw s!"{fnName}: near line {st.line}: integer @abs is outside the subset"
+    | _ => pure st
+  | .floatRound _ a => chk1 a; pure st
+  | .sqrt a => chk1 a; pure st
+  | .libm _ a => chk1 a; pure st
+  | .mulAdd a b c => chk #[a, b, c]; pure st
+  | .floatConv a => chk1 a; pure st
+  | .floatFromInt a => chk1 a; pure st
+  | .intFromFloat _ a => chk1 a; pure st
   | .shift _ a b => chk #[a, b]; pure st
   | .cmp _ a b => chk #[a, b]; pure st
   | .boolAnd a b => chk #[a, b]; pure st
