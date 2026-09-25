@@ -1,6 +1,6 @@
 --- zig-0.14.1-pristine/src/Air/json.zig	1970-01-01 01:00:00
-+++ zig-0.14.1/src/Air/json.zig	2026-09-24 15:56:03
-@@ -0,0 +1,399 @@
++++ zig-0.14.1/src/Air/json.zig	2026-09-25 01:24:12
+@@ -0,0 +1,409 @@
 +//! air2lean: write the AIR of one function as JSON.
 +//! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
 +//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to
@@ -46,11 +46,21 @@
 +        if (!std.mem.startsWith(u8, fqn, prefix)) return;
 +    }
 +
-+    var dir = std.fs.cwd().makeOpenPath(dir_path, .{}) catch return;
++    // A function without a file must not pass silently: warn on every failure.
++    var dir = std.fs.cwd().makeOpenPath(dir_path, .{}) catch |err| {
++        std.log.warn("air2lean: cannot open {s}: {s}", .{ dir_path, @errorName(err) });
++        return;
++    };
 +    defer dir.close();
 +    var name_buf: [std.fs.max_name_bytes]u8 = undefined;
-+    const file_name = std.fmt.bufPrint(&name_buf, "{s}.json", .{fqn}) catch return;
-+    const file = dir.createFile(file_name, .{}) catch return;
++    const file_name = std.fmt.bufPrint(&name_buf, "{s}.json", .{fqn}) catch {
++        std.log.warn("air2lean: name too long for a file, no JSON for {s}", .{fqn});
++        return;
++    };
++    const file = dir.createFile(file_name, .{}) catch |err| {
++        std.log.warn("air2lean: no JSON for {s}: {s}", .{ fqn, @errorName(err) });
++        return;
++    };
 +    defer file.close();
 +
 +    var arena = std.heap.ArenaAllocator.init(zcu.gpa);

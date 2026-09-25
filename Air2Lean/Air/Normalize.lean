@@ -140,7 +140,7 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
         | throw s!"{fnName}: inst {raw.id}: '{tag}' needs 'callee'"
       return .call callee raw.args
     else
-      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' for zig 0.15.2"
+      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (0.15.2 tag table)"
 
 partial def normalizeInst_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
   let some ty := raw.ty

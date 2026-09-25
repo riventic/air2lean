@@ -6,10 +6,6 @@
 //! decimal value (docs/generated-code.md's optional-result rule). firstIndexPlusOne panics
 //! (`unwrapNull`) when `x` is absent — that's the ordinary panic path, no special code needed
 //! here.
-//!
-//! The Lean side cannot translate options.zig yet (`find`'s `?usize` return hits an unsupported
-//! type in the translator), so this harness builds and runs standalone; scripts/diff.sh only
-//! compares its output once `AIR2LEAN_EXAMPLES` includes `options` and the Lean side catches up.
 
 const std = @import("std");
 // Named modules, wired up on the command line (see scripts/diff.sh):

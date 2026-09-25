@@ -46,17 +46,17 @@ pub fn main() !void {
     try genClassify(rng);
 
     try genGcd(rng);
-    try genIsEven(rng);
-    try genIsOdd(rng);
+    try genParity(rng, "isEven");
+    try genParity(rng, "isOdd");
     try genFact(rng);
 
     try genFind(rng);
     try genFindOr(rng);
     try genFirstIndexPlusOne(rng);
 
-    try genParseDigit(rng);
+    try genDigitByte(rng, "parseDigit");
     try genSumDigits(rng);
-    try genDigitOrZero(rng);
+    try genDigitByte(rng, "digitOrZero");
 }
 
 fn openOut(comptime name: []const u8) !std.fs.File {
@@ -329,26 +329,10 @@ fn genGcd(rng: std.Random) !void {
     }
 }
 
-/// isEven(n: u32) -> bool. n is capped at max_recursion_n (see doc comment above). Edges:
+/// isEven/isOdd(n: u32) -> bool. n is capped at max_recursion_n (see doc comment above). Edges:
 /// 0, 1, 2, max_recursion_n - 1, max_recursion_n, then random fill in [0, max_recursion_n].
-fn genIsEven(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/recursion/inputs", "isEven");
-    defer file.close();
-    const writer = file.deprecatedWriter();
-
-    var n: usize = 0;
-    for ([_]u32{ 0, 1, 2, max_recursion_n - 1, max_recursion_n }) |v| {
-        try writer.print("[{d}]\n", .{v});
-        n += 1;
-    }
-    while (n < N) : (n += 1) {
-        try writer.print("[{d}]\n", .{rng.intRangeAtMost(u32, 0, max_recursion_n)});
-    }
-}
-
-/// isOdd(n: u32) -> bool. Same shape as genIsEven.
-fn genIsOdd(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/recursion/inputs", "isOdd");
+fn genParity(rng: std.Random, comptime name: []const u8) !void {
+    const file = try openOutIn("tests/diff/recursion/inputs", name);
     defer file.close();
     const writer = file.deprecatedWriter();
 
@@ -468,26 +452,10 @@ fn genFirstIndexPlusOne(rng: std.Random) !void {
 /// The ASCII digit-range boundary bytes ('/' = '0' - 1, ':' = '9' + 1) plus 0, 1, 254, 255.
 const digit_byte_edges = [_]u8{ 0, 1, '/', '0', '9', ':', 254, 255 };
 
-/// parseDigit(c: u8) -> error{NotDigit}!u8. Edges: digit_byte_edges, then random fill over the
-/// full byte range.
-fn genParseDigit(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/errors/inputs", "parseDigit");
-    defer file.close();
-    const writer = file.deprecatedWriter();
-
-    var n: usize = 0;
-    for (digit_byte_edges) |c| {
-        try writer.print("[{d}]\n", .{c});
-        n += 1;
-    }
-    while (n < N) : (n += 1) {
-        try writer.print("[{d}]\n", .{rng.int(u8)});
-    }
-}
-
-/// digitOrZero(c: u8) -> u8. Same edges as genParseDigit.
-fn genDigitOrZero(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/errors/inputs", "digitOrZero");
+/// parseDigit(c: u8) -> error{NotDigit}!u8 and digitOrZero(c: u8) -> u8. Edges:
+/// digit_byte_edges, then random fill over the full byte range.
+fn genDigitByte(rng: std.Random, comptime name: []const u8) !void {
+    const file = try openOutIn("tests/diff/errors/inputs", name);
     defer file.close();
     const writer = file.deprecatedWriter();
 

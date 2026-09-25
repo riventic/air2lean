@@ -49,10 +49,27 @@ inductive Val where
   | optSome (ty : TyId) (v : Val)
   /-- An error value: `error.Name`. `ty`'s `k` is `error_set` (`docs/air-json.md`). -/
   | err (ty : TyId) (name : String)
-  /-- An error-union constant (schema 2): the error state (`err`) or the payload state
-  (`payload`) — exactly one is `some`. `ty`'s `k` is `error_union`. -/
-  | errUnion (ty : TyId) (err : Option String) (payload : Option Val)
+  /-- An error-union constant in the error state (schema 2). `ty`'s `k` is `error_union`. -/
+  | errUnionErr (ty : TyId) (name : String)
+  /-- An error-union constant in the payload state (schema 2). `ty`'s `k` is `error_union`. -/
+  | errUnionOk (ty : TyId) (payload : Val)
   deriving Repr, Inhabited, BEq
+
+/-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
+`debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`
+(docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
+`expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
+as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
+def panicErrorFor? (calleeName : String) : Option String :=
+  match (calleeName.splitOn ".").getLast? with
+  | some "integerOverflow" | some "integerOutOfBounds" | some "shlOverflow"
+  | some "shrOverflow" => some ".overflow"
+  | some "outOfBounds" => some ".outOfBounds"
+  | some "divideByZero" => some ".divByZero"
+  | some "reachedUnreachable" => some ".unreachable"
+  | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
+  | some "call" => some ".panic"
+  | _ => none
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
 inductive Mode where

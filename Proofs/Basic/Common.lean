@@ -26,5 +26,4 @@ theorem psum_le (xs : Array (BitVec 32)) (k : Nat) : psum xs k ≤ k * 2 ^ 32 :=
 theorem psum_succ (xs : Array (BitVec 32)) (k : Nat) (hk : k < xs.size) :
     psum xs (k + 1) = psum xs k + xs[k].toNat := by
   unfold psum
-  rw [List.take_add_one, List.getElem?_eq_getElem (by simpa using hk)]
-  simp
+  rw [Zig.sum_take_succ _ _ _ (by simpa using hk)]; simp

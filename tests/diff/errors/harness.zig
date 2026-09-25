@@ -6,11 +6,6 @@
 //! `{"ok":{"err":"NotDigit"}}` or the plain value (docs/generated-code.md's error-union rule).
 //! None of the three ever panics (parseDigit's own bounds check guards the one subtraction that
 //! could otherwise misbehave; digitOrZero and sumDigits both funnel through it).
-//!
-//! The Lean side cannot translate errors.zig yet (`is_non_err`/error-union handling is an
-//! unsupported AIR tag in the translator, hit even by digitOrZero's plain `u8` signature since
-//! it uses `catch` internally), so this harness builds and runs standalone; scripts/diff.sh only
-//! compares its output once `AIR2LEAN_EXAMPLES` includes `errors` and the Lean side catches up.
 
 const std = @import("std");
 // Named modules, wired up on the command line (see scripts/diff.sh):

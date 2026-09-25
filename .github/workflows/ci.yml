@@ -8,10 +8,17 @@ on:
 permissions:
   contents: read
 
+# A new push to the same PR cancels the run of the older commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,15 +39,12 @@ jobs:
 
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
-      # zig-patch/versions.toml's [ci.host-zig."<version>"] table, read the same way build.sh
-      # reads a version table: exact-match the section header, then grab up to the next `[`.
+      # zig-patch/versions.toml's [ci.host-zig."<version>"] table.
       - name: Install host zig
         run: |
           set -euo pipefail
-          section=$(awk -v hdr='[ci.host-zig."${{ matrix.zig }}"]' '$0 == hdr { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
-          url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
-          sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
-          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.host-zig.\"${{ matrix.zig }}\"] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
+          url=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.host-zig."${{ matrix.zig }}"]' sha256)
           curl -fL --output host-zig.tar.xz "$url"
           echo "$sha256  host-zig.tar.xz" | sha256sum -c -
           mkdir -p host-zig
@@ -68,10 +72,8 @@ jobs:
       - name: Install elan
         run: |
           set -euo pipefail
-          section=$(awk '/^\[ci\.elan\]/ { f = 1; next } f && /^\[/ { exit } f' zig-patch/versions.toml)
-          url=$(printf '%s\n' "$section" | sed -n 's/^url *= *"\(.*\)"/\1/p')
-          sha256=$(printf '%s\n' "$section" | sed -n 's/^sha256 *= *"\(.*\)"/\1/p')
-          [ -n "$url" ] && [ -n "$sha256" ] || { echo "error: [ci.elan] missing url/sha256 in zig-patch/versions.toml" >&2; exit 1; }
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
           curl -fL --output elan.tar.gz "$url"
           echo "$sha256  elan.tar.gz" | sha256sum -c -
           tar -xzf elan.tar.gz
@@ -98,7 +100,6 @@ jobs:
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
-          AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
         run: scripts/check.sh
 

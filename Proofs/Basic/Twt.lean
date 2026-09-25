@@ -31,8 +31,7 @@ theorem tPre_le (jobs : Array Job) (k : Nat) : tPre jobs k ≤ k * 2 ^ 32 := by
 theorem tPre_succ (jobs : Array Job) (k : Nat) (hk : k < jobs.size) :
     tPre jobs (k + 1) = tPre jobs k + jobs[k].duration.toNat := by
   unfold tPre
-  rw [List.take_add_one, List.getElem?_eq_getElem (by simpa using hk)]
-  simp
+  rw [List.map_map, Zig.sum_take_succ _ _ _ (by simpa using hk)]; simp
 
 theorem tPre_mono (jobs : Array Job) {k k' : Nat} (h : k ≤ k') :
     tPre jobs k ≤ tPre jobs k' := by
@@ -110,8 +109,8 @@ theorem twt_loop_step (jobs : Array Job) (hs : jobs.size < 2 ^ 32)
       ?_, ?_⟩
     · unfold totalWeightedTardiness.loop14
       simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hwtr_eq, hwtrmod, hTadd, hCadd, hIinc]
-    · have hi' : (s.i + 1).toNat = s.i.toNat + 1 := by
-        rw [BitVec.toNat_add]; simp [zig_unfold]; omega
+    · have hi' : (s.i + 1).toNat = s.i.toNat + 1 :=
+        Zig.toNat_add_one _ (by omega)
       have ht' : (s.t + jobs[s.i.toNat].duration).toNat =
           s.t.toNat + jobs[s.i.toNat].duration.toNat := by
         rw [BitVec.toNat_add]; omega
@@ -153,9 +152,7 @@ theorem totalWeightedTardiness_spec (jobs : Array Job)
   · unfold totalWeightedTardiness
     change Zig.loop (totalWeightedTardiness.loop14 jobs) totalWeightedTardiness.again14
       { t := 0, cost := 0, i := 0 } = some (Except.ok (totalWeightedTardinessExit.br13, s')) at hrun
-    simp only [StateT.run', bind, pure, StateT.bind,
-      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-      modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+    simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]
   · exact hpost

@@ -44,8 +44,8 @@ for ex in $examples; do
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
   echo "== $ex: checking against golden ($golden_dir) ==" >&2
-  diff_output=$(diff -r "$golden_dir" "$air_dir" || true)
-  if [ -n "$diff_output" ]; then
+  # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
+  if ! diff_output=$(diff -r "$golden_dir" "$air_dir" 2>&1); then
     echo "error: AIR output for $ex does not match $golden_dir" >&2
     echo "$diff_output" >&2
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
@@ -55,7 +55,10 @@ for ex in $examples; do
   echo "== $ex: translating to Lean ==" >&2
   lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex."
 
-  if [ "${AIR2LEAN_CI:-0}" = 1 ] && ! git diff --exit-code -- "Proofs/$Ex/Gen.lean"; then
+  # `git status` against HEAD: also catches a Gen.lean that is only staged or never added.
+  if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then
+    git status --short -- "Proofs/$Ex/Gen.lean" >&2
+    git diff HEAD -- "Proofs/$Ex/Gen.lean" >&2 || true
     echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
     exit 1
   fi

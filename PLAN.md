@@ -16,7 +16,7 @@
 | M9 | Recursion: call groups → `mutual` + `partial_fixpoint` | done |
 | M10 | Optionals and error unions (`?T`, `E!T`, `try`, `catch`, `orelse`, `.?`); JSON schema 2 | done |
 | M11 | Zig 0.14.1: export patch, translator, CI job | done (Linux only) |
-| M12 | Proofs for `recursion`, `options`, `errors` | next |
+| M12 | Proofs for `recursion`, `options`, `errors` | done: 19 theorems over 18 functions, incl. mutual recursion, early-exit loops, `try` in a loop |
 
 Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches. So the tester sees a changed result and a changed panic kind.
 
@@ -24,9 +24,8 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 | Item | Estimate |
 |---|---|
-| Proofs for `recursion` (`isEven_spec`, `fact_ok`), `options` (`find_spec`), `errors` (`parseDigit_spec`, `sumDigits`) | 1 day |
 | Error-union export for 0.14.1 (the `errors` example) | 0.5 day |
-| 0.16 port (when it is released) | 1 day |
+| Port to 0.16.0 (released): patch, tag table, goldens, CI job (steps in "To add a Zig version") | 1 day |
 
 ## Decisions
 
@@ -47,7 +46,7 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 ## Zig version support
 
-v0 supports **0.15.2**. The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
+Supported: **0.15.2** and **0.14.1** (matrix below). The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
 
 | Layer | Version-specific? | Where |
 |---|---|---|
@@ -63,7 +62,7 @@ Support matrix:
 |---|---|
 | 0.15.2 | supported |
 | 0.14.1 | supported for `basic`, `recursion`, `options` (no error-union export yet). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
-| 0.16.x | planned (when released) |
+| 0.16.0 | released; port planned |
 
 **To add a Zig version:**
 1. Add its URL and sha256 to `zig-patch/versions.toml`.
@@ -82,7 +81,8 @@ Support matrix:
 | local `var` whose address does not escape | `@ptrCast`, packed layout |
 | read-only slices `[]const T` | inline asm, threads, atomics |
 | structs by value | SIMD vectors, `async` |
-| calls, recursion | optionals, error unions (later) |
+| calls, recursion | optional pointers `?*T` |
+| optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 
 ## Risks
 
@@ -95,8 +95,9 @@ Support matrix:
 
 ## Later
 
-- Optionals and error unions (`?T`, `E!T`).
 - Immutable pointers `*const T`, then mutable pointers with a separation-logic memory model.
 - Floats (IEEE-754 model or uninterpreted).
-- Port to 0.16.x.
+- Port to 0.16.x. One shared `json.zig` with small per-version branches (review, pass 5: the
+  0.14.1 and 0.15.2 exporters differ in only 4 API points), so each port is a small change.
+- Error-union export for 0.14.1: its AIR has the same tags, so this is a copy of the 0.15.2 code.
 - Upstream the export as a compiler debug feature.

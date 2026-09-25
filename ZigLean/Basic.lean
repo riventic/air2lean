@@ -204,7 +204,9 @@ partial_fixpoint
 /-- Lift a call to another translated function into the caller's monad. -/
 @[inline] def call {σ α : Type} (r : Result α) : M σ α := StateT.lift r
 
-open Lean.Order in
+section Monotone
+open Lean.Order
+
 /-- A recursive call goes through `Zig.call` (a translated function always returns `Result`,
 never `M`). `@[inline]` does not make `partial_fixpoint`'s monotonicity search see through it,
 so a self- or mutually-recursive function needs this lemma to accept the call. -/
@@ -217,7 +219,6 @@ theorem monotone_call {σ α γ : Type} [PartialOrder γ]
   show monotone (fun x => (f x) >>= fun a => pure (a, s))
   exact monotone_bind _ _ _ hmono (monotone_const _)
 
-open Lean.Order in
 /-- A self- or mutually-recursive generated function's outer wrapper runs its `M`-typed body
 with `.run'` (`Emit.lean`'s `emitFunctionDef`). Core registers a `partial_fixpoint_monotone`
 lemma for `StateT.run` but not `StateT.run'`, so `partial_fixpoint` cannot see through the
@@ -229,7 +230,6 @@ theorem monotone_run' {σ α γ : Type} [PartialOrder γ]
   have h := Functor.monotone_map (fun x => StateT.run (f x) s) (·.1) (monotone_stateTRun f hmono s)
   simpa [StateT.run', StateT.run] using h
 
-open Lean.Order in
 /-- A generated `while`-loop body that calls into its own `mutual`/`partial_fixpoint` clique
 (`Emit.lean`'s call-graph analysis puts such a loop def in the clique) is itself called through
 `Zig.loop`. Core has no `partial_fixpoint_monotone` lemma for `loop`, so the recursive call
@@ -249,5 +249,7 @@ theorem monotone_loop {σ ε γ : Type} [PartialOrder γ] (f : γ → M σ ε) (
     split
     · exact hl
     · exact PartialOrder.rel_refl
+
+end Monotone
 
 end Zig

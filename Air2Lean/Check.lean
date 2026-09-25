@@ -108,7 +108,13 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   | .sliceElemVal s i => chk #[s, i]; pure st
   | .structFieldVal s _ => chk1 s; pure st
   | .aggregateInit elems => chk elems; pure st
-  | .call callee args => chk1 callee; chk args; pure st
+  | .call callee args =>
+    chk1 callee; chk args
+    if let .func name true := callee then
+      if (panicErrorFor? name).isNone then
+        throw s!"{fnName}: near line {st.line}: noreturn callee '{name}' is not a known \
+          panic-handler function (docs/generated-code.md §Panics)"
+    pure st
   | .block body => checkInsts fnName types st body
   | .loop body => checkInsts fnName types st body
   | .br _target v => chk1 v; pure st

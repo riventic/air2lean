@@ -57,6 +57,12 @@ var panic_fd: std.posix.fd_t = -1;
 /// status instead of a signal. Best-effort write — a failed write is no worse than the
 /// zero-bytes case the parent already treats as `unknown`.
 fn reportPanic(kind: []const u8) noreturn {
+    // The parent (not a forked child) panicked: a harness bug, not a tested outcome. Say so.
+    // Not `std.debug.panic`: that calls this override again.
+    if (panic_fd < 0) {
+        std.debug.print("harness panic outside a child: {s}\n", .{kind});
+        std.posix.abort();
+    }
     _ = std.posix.write(panic_fd, kind) catch {};
     std.posix.exit(1);
 }

@@ -115,7 +115,8 @@ def parseTy (j : Json) : Except String Ty := do
     let payload ← (← j.getObjVal? "payload").getNat?
     return .errorUnion set payload
   | "error_set" =>
-    if optField j "any" |>.isSome then return .errorSet none
+    -- `inferred`: an inferred set not yet resolved; like `anyerror`, its names are unknown.
+    if (optField j "any").isSome || (optField j "inferred").isSome then return .errorSet none
     else
       let errsJ ← (← j.getObjVal? "errors").getArr?
       let errs ← errsJ.mapM Json.getStr?
@@ -161,23 +162,22 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     return .func name noreturn
   else
     let tyId ← (← j.getObjVal? "ty").getNat?
+    let some ty := types[tyId]?
+      | throw s!"{fnName}: unknown type id {tyId} in constant ref"
     if optField j "undef" |>.isSome then
       return .undef tyId
     else if let some errJ := optField j "err" then
       let name ← errJ.getStr?
-      let some ty := types[tyId]?
-        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
       | .errorSet _ => return .err tyId name
-      | .errorUnion .. => return .errUnion tyId (some name) none
+      | .errorUnion .. => return .errUnionErr tyId name
       | other => throw s!"{fnName}: 'err' constant of unexpected type {repr other}"
     else if let some payloadJ := optField j "payload" then
-      let payload ← parseVal fnName types payloadJ
-      return .errUnion tyId none (some payload)
+      match ty with
+      | .errorUnion .. => return .errUnionOk tyId (← parseVal fnName types payloadJ)
+      | other => throw s!"{fnName}: 'payload' constant of unexpected type {repr other}"
     else
       let s ← (← j.getObjVal? "val").getStr?
-      let some ty := types[tyId]?
-        | throw s!"{fnName}: unknown type id {tyId} in constant ref"
       match ty with
       | .optional child =>
         if s == "null" then return .optNull tyId

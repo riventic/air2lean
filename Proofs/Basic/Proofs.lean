@@ -92,8 +92,8 @@ theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumL
     refine ⟨.rep10, { total := s.total + xs[s.local5.toNat].setWidth 64, local5 := s.local5 + 1 },
       ?_, ?_⟩
     · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
-    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 := by
-        rw [BitVec.toNat_add]; simp [zig_unfold]; omega
+    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 :=
+        Zig.toNat_add_one _ (by omega)
       have htot : (s.total + xs[s.local5.toNat].setWidth 64).toNat
           = s.total.toNat + xs[s.local5.toNat].toNat := by
         rw [BitVec.toNat_add, BitVec.toNat_setWidth, hx']; omega
@@ -122,9 +122,7 @@ theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
   · unfold sum
     change Zig.loop (sum.loop10 xs (Zig.len xs)) sum.again10 { total := 0, local5 := 0 }
       = some (Except.ok (sumExit.br9, s')) at hrun
-    simp only [StateT.run', bind, pure, StateT.bind, StateT.pure,
-      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map, Functor.map,
-      modify, modifyGet, MonadState.modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, Option.bind]
+    simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]
   · rw [hpost, psum, List.take_of_length_le (by simp)]
