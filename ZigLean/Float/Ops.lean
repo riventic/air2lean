@@ -56,8 +56,9 @@ def Float.gt {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.lt b a
 def Float.ge {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.le b a
 
 /-- `@min`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign: `f32`/`f64` (SSE `minss`) give `+0`; `f16`/`f80`/`f128` (compiler_rt
-`fmin`) give `-0` (`docs/floats.md` §+0 and −0 in `@min`/`@max`). -/
+of different sign: `f16`/`f80`/`f128` (compiler_rt `fmin`) give `-0`. For `f32`/`f64` the target
+result depends on the operand order, so generated code calls `Float.minChk`, which throws
+`.unspecified`; the `+0` here is only a total-function default (`docs/floats.md` §+0 and −0). -/
 def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan
@@ -70,7 +71,8 @@ def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   | _, _ => if Float.le a b then a else b
 
 /-- `@max`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign, the result is `+0` (docs: `@max(+0,-0) = @max(-0,+0) = +0`). -/
+of different sign: `+0` for `f16`/`f80`/`f128` (compiler_rt `fmax`). For `f32`/`f64` generated
+code calls `Float.maxChk`, which throws `.unspecified` (`docs/floats.md` §+0 and −0). -/
 def Float.max {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan

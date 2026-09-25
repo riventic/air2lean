@@ -15,7 +15,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | Zig | AIR | Model |
 |---|---|---|
 | `+ - * /` | `add sub mul div_float` | rounded exact result; IEEE 754 rules for inf, NaN and signed zero. `/` on `f128`: §`--float-semantics` group A |
-| `@mulAdd` | `mul_add` (args `[lhs, rhs, addend]`) | f32, f64, f128: rounded once. f16: rounded to f32, then to f16 (`__fmah`). f80: rounded to f128, then to f80 (`__fmax`). f64/f80/f128: §`--float-semantics` group B. f80 invalid encoding: §`--float-semantics` group C |
+| `@mulAdd` | `mul_add` (args `[lhs, rhs, addend]`) | rounded once. f16: rounded to f32, then to f16. f80: rounded to f128, then to f80. `compiler-rt` mode: §`--float-semantics` group B. f80 invalid encoding: §`--float-semantics` group C |
 | `@divTrunc`, `@divFloor` | `div_trunc`, `div_floor` | `trunc(a / b)`, `floor(a / b)`: the division rounds first. `f128`: §`--float-semantics` group A |
 | `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the ops themselves; `div_exact` = `/`. `f128`: §`--float-semantics` group A |
 | `@rem` | `rem` | `a − b·trunc(a / b)`, exact (`frem`); the sign of a zero result is the sign of `a`. f80 invalid encoding: §`--float-semantics` group C |
@@ -38,7 +38,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 The reference target has no hardware `f128` divide and no FMA instruction, so `/`/`@divExact`/`@divTrunc`/`@divFloor` on `f128` and `@mulAdd` on any format actually run a compiler_rt software routine there, not the IEEE-correct result the rest of this page describes. Two divergences, opt-in together per translated example:
 
 - **Group A — `f128` division** (`__divtf3`): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
-- **Group B — `@mulAdd` on f64, f80, f128** (`fma`, `fmaq`, `__fmax`): a Dekker's-algorithm software emulation of a fused multiply-add, needed because x86-64 baseline has no FMA instruction. f16 and f32 keep native FMA hardware (0 mismatches against the model in the reference-target diff test) and are not ported.
+- **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some subnormal inputs.
 
 `ieee` (default; what a proof assumes) always returns the model's own result for groups A and B. `compiler-rt` matches them bit-for-bit (`ZigLean/Float/CompilerRt.lean`) — needed only by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof never needs to know the divergence exists unless its example opts in.
 
@@ -54,7 +54,7 @@ Two more divergences hold in **both modes, always** — the two sides disagree o
 | f32, f64 | `.unspecified` (group D) | `.unspecified` (group D) |
 | f16, f80, f128 | −0 | +0 |
 
-f32/f64 use SSE `minss`/`maxss` sequences: real hardware gives an order- and sign-dependent result for both `@min` and `@max`, confirmed against the reference target (a stale earlier version of this table claimed `@max` always gives `+0`; it does not). f16/f80/f128 use compiler_rt `fmin`/`fmax`, which order the zeros explicitly and so stay deterministic in both modes.
+f32/f64 use SSE `minss`/`maxss` sequences: real hardware gives an order- and sign-dependent result for both `@min` and `@max`, confirmed against the reference target. f16/f80/f128 use compiler_rt `fmin`/`fmax`, which order the zeros explicitly and so stay deterministic in both modes.
 
 ### NaN
 

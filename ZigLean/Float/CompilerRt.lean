@@ -193,10 +193,22 @@ private def fmaCore {fmt : FloatFmt} (split : Float fmt) (x y z : Float fmt) : F
       else
         addAndDenorm r.hi adj spread
 
-/-- `@mulAdd` in `compiler-rt` mode. `f16`/`f32` keep native FMA hardware (0 mismatches against
-`Float.fma` in the `x86_64` diff test), so only `f64`, `f80` and `f128` differ. -/
+/-- `fma.zig:32-43` (`fmaf`): the product in `f64` (exact: 24 + 24 bits), plus `z` rounded once
+to `f64`, then rounded to `f32`. Both branches of the source return the same value (its TODO:
+no double-rounding fix), so the result can differ from one rounding by an ulp. -/
+private def fmaf (x y z : Float .f32) : Float .f32 :=
+  Float.conv .f32 (Float.add (Float.mul (Float.conv .f64 x) (Float.conv .f64 y)) (Float.conv .f64 z))
+
+/-- `@mulAdd` in `compiler-rt` mode. x86-64 baseline has no FMA instruction, so every format
+calls compiler_rt: `f32` `fmaf`, `f16` `__fmah` (`fmaf` on the `f32` extensions, then rounded
+to `f16`), `f64` `fma`, `f128` `fmaq`, `f80` `__fmax` (`fmaq` on the `f128` extensions, then
+rounded to `f80`). -/
 def Float.fmaRt {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
-  if h : fmt = .f64 then
+  if h : fmt = .f32 then
+    h ▸ fmaf (h ▸ a) (h ▸ b) (h ▸ c)
+  else if h : fmt = .f16 then
+    h ▸ Float.conv .f16 (fmaf (Float.conv .f32 a) (Float.conv .f32 b) (Float.conv .f32 c))
+  else if h : fmt = .f64 then
     h ▸ fmaCore (Float.roundRat .f64 false ((2 : Rat) ^ 27 + 1))
         (Float.conv .f64 a) (Float.conv .f64 b) (Float.conv .f64 c)
   else if h : fmt = .f128 then
