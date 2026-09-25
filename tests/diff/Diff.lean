@@ -1,4 +1,5 @@
 import Lean.Data.Json
+import Air2Lean.Air.Json
 import Proofs.Basic.Gen
 import Proofs.Recursion.Gen
 import Proofs.Options.Gen
@@ -53,26 +54,10 @@ def getArr (j : Json) : IO (Array Json) := orFail j.getArr? "getArr"
 
 def getStr (j : Json) : IO String := orFail j.getStr? "getStr"
 
-/-- `0`-`9`/`a`-`f`/`A`-`F` → its value. -/
-def hexDigitVal (c : Char) : Option Nat :=
-  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat)
-  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
-  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
-  else none
-
-/-- The digits of a diff-protocol float hex token (after its `"0x"` prefix) as its bit
-pattern. -/
-def parseHexNat (s : String) : Except String Nat :=
-  (s.drop 2).toString.toList.foldlM
-    (fun acc c => match hexDigitVal c with
-      | some d => pure (acc * 16 + d)
-      | none => throw s!"invalid hex digit '{c}' in {s}")
-    0
-
 /-- A diff-protocol float argument: `"0x"` + hex bits, width from `fmt` (docs/floats.md). -/
 def getFloat (fmt : Zig.FloatFmt) (j : Json) : IO (Zig.Float fmt) := do
   let s ← getStr j
-  let bits ← orFail (parseHexNat s) s!"float hex {s}"
+  let bits ← orFail (Air2Lean.Raw.parseHexNat "diff" fmt.width s) s!"float hex {s}"
   pure (Zig.Float.ofBits (BitVec.ofNat fmt.width bits))
 
 /-- A `u64`/`i64`/`u128` argument: quoted decimal (gen_inputs.zig's rule for any `>= 64`-bit

@@ -183,9 +183,17 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
 
 def FCtx.valSigned (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .int s _ => s | _ => false
 
+def FCtx.isFloatTy (fc : FCtx) (tid : TyId) : Bool :=
+  match fc.tyOfId tid with | .float _ => true | _ => false
+
 /-- Is `v`'s type a float? Dispatches the shared ops (`add`/`div`/`min`/`max`/`cmp`/`neg`/…)
 between the int and float `ZigLean` functions. -/
 def FCtx.isFloat (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .float _ => true | _ => false
+
+/-- `"Rt"` in `compiler-rt` mode: the model ops that differ from IEEE on the reference target
+(`Zig.Float.divRt`, `fmaRtChk`, …; `docs/floats.md` §`--float-semantics`). -/
+def FCtx.rtSuffix (fc : FCtx) : String :=
+  match fc.floatSemantics with | .ieee => "" | .compilerRt => "Rt"
 
 /-- The `FloatFmt` term (`.f16` … `.f128`) for the type at `tid`, for the ops whose target format
 is not otherwise inferable (`Zig.Float.conv`/`Zig.Float.ofInt`'s explicit `fmt` argument). -/
@@ -465,13 +473,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if fc.isFloat a then
         match op with
         | .divTrunc =>
-          let f := match fc.floatSemantics with | .ieee => "Zig.Float.divTrunc" | .compilerRt => "Zig.Float.divTruncRt"
+          let f := s!"Zig.Float.divTrunc{fc.rtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divFloor =>
-          let f := match fc.floatSemantics with | .ieee => "Zig.Float.divFloor" | .compilerRt => "Zig.Float.divFloorRt"
+          let f := s!"Zig.Float.divFloor{fc.rtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
-          let f := match fc.floatSemantics with | .ieee => "Zig.Float.div" | .compilerRt => "Zig.Float.divRt"
+          let f := s!"Zig.Float.div{fc.rtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         -- Group C's guard applies in both modes, so `rem`/`mod` never switch on `floatSemantics`.
         | .rem => s!"Zig.Float.remChk {rv a} {rv b}"
@@ -485,7 +493,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
     -- `div_float` (plain `/` on floats): group A's guard, same mode dispatch as `.divExact`.
-    let f := match fc.floatSemantics with | .ieee => "Zig.Float.div" | .compilerRt => "Zig.Float.divRt"
+    let f := s!"Zig.Float.div{fc.rtSuffix}"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
     let expr :=
@@ -553,7 +561,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .bitcast a =>
     let srcFloat := fc.isFloat a
-    let dstFloat := match fc.tyOfId inst.ty with | .float _ => true | _ => false
+    let dstFloat := fc.isFloatTy inst.ty
     let expr :=
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
@@ -573,7 +581,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.libm {opName} {rv a})"; (env, some l)
   | .mulAdd a b c =>
     -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
-    let f := match fc.floatSemantics with | .ieee => "Zig.Float.fmaChk" | .compilerRt => "Zig.Float.fmaRtChk"
+    let f := s!"Zig.Float.fma{fc.rtSuffix}Chk"
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a} {rv b} {rv c}"; (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty

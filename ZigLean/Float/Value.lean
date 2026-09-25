@@ -15,7 +15,7 @@ namespace Zig
 /-- A float of format `fmt`, as its raw bits. -/
 structure Float (fmt : FloatFmt) where
   bits : BitVec fmt.width
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 instance : Inhabited (Float fmt) := ⟨⟨0#fmt.width⟩⟩
 
