@@ -1,7 +1,7 @@
 //! Shared differential-test Zig-side runner code (docs/generated-code.md), imported as the
 //! `common` module by each `tests/diff/<ex>/harness.zig`. Build with the STOCK system zig
 //! (scripts/diff.sh does this):
-//!   zig build-exe -OReleaseSafe -femit-bin=<out> \
+//!   zig build-exe -OReleaseSafe -mcpu=baseline -femit-bin=<out> \
 //!     --dep <ex> --dep common -Mroot=tests/diff/<ex>/harness.zig \
 //!     -M<ex>=examples/<ex>/<ex>.zig -Mcommon=tests/diff/common.zig
 //! ReleaseSafe applies to the whole compilation unit, so `<ex>.zig`'s own overflow/bounds checks

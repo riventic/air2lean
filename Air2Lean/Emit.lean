@@ -449,8 +449,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   match inst.op with
   | .arg index => (env.push (inst.id, s!"p{index}"), none)
   | .arith op mode a b =>
-    -- AIR has no wrapping/saturating float arithmetic, so `mode` is always `.checked` for a
-    -- float operand.
+    -- A float operand always has `mode = .checked`: `Check.lean` rejects the other modes.
     let expr :=
       if fc.isFloat a then
         let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
