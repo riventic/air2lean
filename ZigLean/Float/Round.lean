@@ -222,6 +222,35 @@ private theorem pack_bits_spec (fmt : FloatFmt) (sign : Bool) {exp rest : Nat}
     · rw [hveq, hE2, Nat.mul_comm (2 ^ fmt.expBits + exp) (2 ^ (fmt.width - 1 - fmt.expBits)),
         Nat.mul_add_mod, Nat.mod_eq_of_lt hrest]
 
+private theorem restW_eq_fracBits (fmt : FloatFmt) (h : fmt ≠ .f80) :
+    fmt.width - 1 - fmt.expBits = fmt.fracBits := by
+  cases fmt <;> first | exact absurd rfl h | decide
+
+private theorem restW_eq_fracBits_succ_f80 :
+    FloatFmt.f80.width - 1 - FloatFmt.f80.expBits = FloatFmt.f80.fracBits + 1 := by decide
+
+private theorem expMask_succ (fmt : FloatFmt) : 2 ^ fmt.expBits - 1 + 1 = 2 ^ fmt.expBits := by
+  have := Nat.two_pow_pos fmt.expBits; omega
+
+/-- The biased-exponent field `encodeFinite` computes stays strictly below the all-ones pattern,
+given the caller's overflow check (`he_hi`) already ruled out `finalizeRounded`'s `Float.inf`
+branch. Shared by every non-zero case, both `f80` and not; strong enough to give both `≠ expMask`
+(so `classify` doesn't take the nan/inf branch) and `< 2 ^ expBits` (so `pack_bits_spec` applies). -/
+private theorem fieldExp_lt (fmt : FloatFmt) (e : Int)
+    (he_hi : e + (fmt.prec - 1 : Int) ≤ fmt.emax) :
+    (e + (fmt.bias : Int) + (fmt.fracBits : Int)).toNat < 2 ^ fmt.expBits - 1 := by
+  have hEB1 : 1 ≤ fmt.expBits := by cases fmt <;> decide
+  obtain ⟨k, hk⟩ : ∃ k, fmt.expBits = k + 1 := ⟨fmt.expBits - 1, by omega⟩
+  have hpow : (2 : Nat) ^ fmt.expBits = 2 * 2 ^ k := by rw [hk, Nat.pow_succ']
+  have hbias : fmt.bias = 2 ^ k - 1 := by
+    unfold FloatFmt.bias
+    rw [hk, Nat.add_sub_cancel]
+  have he_hi' := he_hi
+  simp only [FloatFmt.emax, FloatFmt.prec] at he_hi'
+  rw [hbias] at he_hi' ⊢
+  have hp1 : 1 ≤ 2 ^ k := Nat.one_le_two_pow
+  omega
+
 /-- Encode an already-rounded magnitude `m * 2^e` (`m < 2 ^ fmt.prec`, `e` in range).
 `m = 0` is a zero; `m < 2 ^ fmt.fracBits` is subnormal. For `f80`, `m` already carries the
 explicit integer bit (it is `2 ^ fmt.fracBits + fraction` in the normal case), so the low
@@ -236,6 +265,106 @@ private def Float.encodeFinite (fmt : FloatFmt) (neg : Bool) (m : Nat) (e : Int)
       | .f80 => m
       | _ => m - 2 ^ fmt.fracBits
     Float.pack fmt neg fieldExp rest
+
+/-- `Float.encodeFinite`'s result is never NaN and carries the given sign, given the rounded
+magnitude fits `fmt.prec` bits and the biased exponent does not overflow (`finalizeRounded`'s
+own overflow check, restated here). -/
+private theorem encodeFinite_spec (fmt : FloatFmt) (neg : Bool) (m : Nat) (e : Int)
+    (hm : m < 2 ^ fmt.prec) (he_hi : e + (fmt.prec - 1 : Int) ≤ fmt.emax) :
+    (Float.encodeFinite fmt neg m e).isNaN = false ∧
+    (Float.encodeFinite fmt neg m e).signBit = neg := by
+  unfold Float.encodeFinite
+  split
+  · exact ⟨by cases fmt <;> cases neg <;> decide, by cases fmt <;> cases neg <;> decide⟩
+  · rename_i hm0
+    split
+    · rename_i hmfrac
+      by_cases hf80 : fmt = .f80
+      · subst hf80
+        have hrest : m < 2 ^ (FloatFmt.f80.width - 1 - FloatFmt.f80.expBits) := by
+          rw [restW_eq_fracBits_succ_f80]; omega
+        obtain ⟨_, hmsb, hexpEq, hrestEq⟩ :=
+          pack_bits_spec .f80 neg (exp := 0) (by decide) hrest
+        rw [restW_eq_fracBits_succ_f80] at hexpEq hrestEq
+        refine ⟨?_, hmsb⟩
+        unfold Float.isNaN
+        simp only [Float.classify]
+        rw [expMask_succ]
+        have hintBit : (Float.pack .f80 neg 0 m).bits.toNat >>> FloatFmt.f80.fracBits % 2 = 0 := by
+          rw [show FloatFmt.f80.fracBits = 63 from rfl] at hrestEq hmfrac ⊢
+          simp only [Nat.shiftRight_eq_div_pow] at hrestEq ⊢
+          omega
+        rw [ite_eq_right (by rw [hexpEq]; decide), ite_eq_left hintBit, ite_eq_left hexpEq]
+      · have hrestBound : fmt.fracBits ≤ fmt.width - 1 - fmt.expBits := by
+          cases fmt <;> first | exact absurd rfl hf80 | decide
+        have hrest : m < 2 ^ (fmt.width - 1 - fmt.expBits) :=
+          Nat.lt_of_lt_of_le hmfrac (Nat.pow_le_pow_right (by omega) hrestBound)
+        obtain ⟨_, hmsb, hexpEq, _⟩ := pack_bits_spec fmt neg (Nat.two_pow_pos fmt.expBits) hrest
+        rw [restW_eq_fracBits fmt hf80] at hexpEq
+        refine ⟨?_, hmsb⟩
+        unfold Float.isNaN
+        cases fmt with
+        | f80 => exact absurd rfl hf80
+        | f16 | f32 | f64 | f128 =>
+          simp only [Float.classify]
+          rw [expMask_succ]
+          rw [ite_eq_right (by rw [hexpEq]; decide), ite_eq_left hexpEq]
+    · rename_i hmfrac
+      by_cases hf80 : fmt = .f80
+      · subst hf80
+        generalize hfieldExp :
+          (e + (FloatFmt.f80.bias : Int) + (FloatFmt.f80.fracBits : Int)).toNat = fieldExp
+        have hrest : m < 2 ^ (FloatFmt.f80.width - 1 - FloatFmt.f80.expBits) := by
+          rw [restW_eq_fracBits_succ_f80, show FloatFmt.f80.fracBits = 63 from rfl]
+          rw [show FloatFmt.f80.prec = 64 from rfl] at hm; exact hm
+        have hbound : fieldExp < 2 ^ FloatFmt.f80.expBits - 1 := by
+          rw [← hfieldExp]; exact fieldExp_lt .f80 e he_hi
+        have hne : fieldExp ≠ 2 ^ FloatFmt.f80.expBits - 1 := by omega
+        have hexp : fieldExp < 2 ^ FloatFmt.f80.expBits := by omega
+        obtain ⟨_, hmsb, hexpEq, hrestEq⟩ := pack_bits_spec .f80 neg hexp hrest
+        rw [restW_eq_fracBits_succ_f80] at hexpEq hrestEq
+        have hintBit :
+            (Float.pack .f80 neg fieldExp m).bits.toNat >>> FloatFmt.f80.fracBits % 2 = 1 := by
+          rw [show FloatFmt.f80.fracBits = 63 from rfl] at hrestEq ⊢
+          simp only [Nat.shiftRight_eq_div_pow] at hrestEq ⊢
+          rw [show FloatFmt.f80.prec = 64 from rfl] at hm
+          rw [show FloatFmt.f80.fracBits = 63 from rfl] at hmfrac
+          omega
+        refine ⟨?_, hmsb⟩
+        unfold Float.isNaN
+        simp only [Float.classify]
+        rw [expMask_succ]
+        rw [ite_eq_right (by rw [hexpEq]; exact hne), ite_eq_right (by omega), hexpEq]
+        by_cases hz : fieldExp = 0
+        · rw [ite_eq_left hz]
+        · rw [ite_eq_right hz]
+      · simp only []
+        generalize hfieldExp : (e + (fmt.bias : Int) + (fmt.fracBits : Int)).toNat = fieldExp
+        have hrestBound : fmt.fracBits ≤ fmt.width - 1 - fmt.expBits := by
+          cases fmt <;> first | exact absurd rfl hf80 | decide
+        have hrest : m - 2 ^ fmt.fracBits < 2 ^ (fmt.width - 1 - fmt.expBits) := by
+          have h1 : m - 2 ^ fmt.fracBits < 2 ^ fmt.fracBits := by
+            have hp : fmt.prec = fmt.fracBits + 1 := rfl
+            have h2 : (2 : Nat) ^ fmt.prec = 2 * 2 ^ fmt.fracBits := by rw [hp, Nat.pow_succ']
+            omega
+          exact Nat.lt_of_lt_of_le h1 (Nat.pow_le_pow_right (by omega) hrestBound)
+        have hbound : fieldExp < 2 ^ fmt.expBits - 1 := by
+          rw [← hfieldExp]; exact fieldExp_lt fmt e he_hi
+        have hne : fieldExp ≠ 2 ^ fmt.expBits - 1 := by omega
+        have hexp : fieldExp < 2 ^ fmt.expBits := by omega
+        obtain ⟨_, hmsb, hexpEq, _⟩ := pack_bits_spec fmt neg hexp hrest
+        rw [restW_eq_fracBits fmt hf80] at hexpEq
+        refine ⟨?_, hmsb⟩
+        unfold Float.isNaN
+        cases fmt with
+        | f80 => exact absurd rfl hf80
+        | f16 | f32 | f64 | f128 =>
+          simp only [Float.classify]
+          rw [expMask_succ]
+          rw [ite_eq_right (by rw [hexpEq]; exact hne), hexpEq]
+          by_cases hz : fieldExp = 0
+          · rw [ite_eq_left hz]
+          · rw [ite_eq_right hz]
 
 /-- Shared tail of every "I already have a correctly-rounded-to-nearest-even mantissa `m0` at
 exponent `e0`" computation (`roundRat`, and `Float.sqrt` in `Ops.lean`, which rounds via exact
