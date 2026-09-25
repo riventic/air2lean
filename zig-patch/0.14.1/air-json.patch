@@ -1,6 +1,6 @@
 --- zig-0.14.1-pristine/src/Air/json.zig	1970-01-01 01:00:00
-+++ zig-0.14.1/src/Air/json.zig	2026-09-25 01:24:12
-@@ -0,0 +1,409 @@
++++ zig-0.14.1/src/Air/json.zig	2026-09-25 12:48:17
+@@ -0,0 +1,449 @@
 +//! air2lean: write the AIR of one function as JSON.
 +//! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
 +//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to
@@ -91,7 +91,7 @@
 +        const ip = &zcu.intern_pool;
 +        try w.j.beginObject();
 +        try w.field("schema");
-+        try w.j.write(1);
++        try w.j.write(3);
 +        try w.field("zig_version");
 +        try w.j.write(build_options.version);
 +        try w.field("name");
@@ -147,7 +147,7 @@
 +        }
 +        switch (tag) {
 +            .add, .add_safe, .add_wrap, .add_sat, .sub, .sub_safe, .sub_wrap, .sub_sat,
-+            .mul, .mul_safe, .mul_wrap, .mul_sat, .div_trunc, .div_floor, .div_exact,
++            .mul, .mul_safe, .mul_wrap, .mul_sat, .div_float, .div_trunc, .div_floor, .div_exact,
 +            .rem, .mod, .bit_and, .bit_or, .xor, .cmp_lt, .cmp_lte, .cmp_eq, .cmp_gte,
 +            .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
 +            .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
@@ -156,14 +156,23 @@
 +                const b = w.data(inst).bin_op;
 +                try w.writeArgs(&.{ b.lhs, b.rhs });
 +            },
-+            .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg => {
++            .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
++            .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
++            .trunc_float,
++            => {
 +                try w.writeArgs(&.{w.data(inst).un_op});
 +            },
 +            .not, .bitcast, .load, .intcast, .intcast_safe, .trunc, .slice_ptr, .slice_len,
 +            .array_to_slice, .clz, .ctz, .popcount, .abs, .optional_payload, .wrap_optional,
 +            .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
 +            .struct_field_ptr_index_3,
++            .fptrunc, .fpext, .int_from_float, .float_from_int,
 +            => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
++            .mul_add => {
++                const pl_op = w.data(inst).pl_op;
++                const b = w.air.extraData(Air.Bin, pl_op.payload).data;
++                try w.writeArgs(&.{ b.lhs, b.rhs, pl_op.operand });
++            },
 +            .arg => {
 +                try w.field("param");
 +                try w.j.write(w.arg_index);
@@ -285,6 +294,21 @@
 +        try w.j.write(text);
 +    }
 +
++    /// Write a float constant's bit pattern as a lowercase hex string, zero-padded to the
++    /// storage width (e.g. 8 digits for f32, 20 for f80).
++    fn writeFloatBits(w: *W, storage: InternPool.Key.Float.Storage) Error!void {
++        const gpa = w.pt.zcu.gpa;
++        const text = switch (storage) {
++            .f16 => |v| try std.fmt.allocPrint(gpa, "0x{x:0>4}", .{@as(u16, @bitCast(v))}),
++            .f32 => |v| try std.fmt.allocPrint(gpa, "0x{x:0>8}", .{@as(u32, @bitCast(v))}),
++            .f64 => |v| try std.fmt.allocPrint(gpa, "0x{x:0>16}", .{@as(u64, @bitCast(v))}),
++            .f80 => |v| try std.fmt.allocPrint(gpa, "0x{x:0>20}", .{@as(u80, @bitCast(v))}),
++            .f128 => |v| try std.fmt.allocPrint(gpa, "0x{x:0>32}", .{@as(u128, @bitCast(v))}),
++        };
++        defer gpa.free(text);
++        try w.j.write(text);
++    }
++
 +    fn writeArgs(w: *W, refs: []const Air.Inst.Ref) Error!void {
 +        try w.field("args");
 +        try w.j.beginArray();
@@ -310,6 +334,17 @@
 +                    try w.j.write(ip.getNav(f.owner_nav).fqn.toSlice(ip));
 +                    try w.field("noreturn");
 +                    try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
++                },
++                .float => |f| {
++                    try w.field("fbits");
++                    try w.writeFloatBits(f.storage);
++                },
++                .opt => |o| if (o.val == .none) {
++                    try w.field("null");
++                    try w.j.write(true);
++                } else {
++                    try w.field("some");
++                    try w.writeRef(Air.internedToRef(o.val));
 +                },
 +                else => if (val.isUndef(zcu)) {
 +                    try w.field("undef");
@@ -357,6 +392,11 @@
 +            .bool => try w.j.write("bool"),
 +            .void => try w.j.write("void"),
 +            .noreturn => try w.j.write("noreturn"),
++            .float => {
++                try w.j.write("float");
++                try w.field("bits");
++                try w.j.write(ty.floatBits(zcu.getTarget()));
++            },
 +            .pointer => {
 +                try w.j.write("ptr");
 +                try w.field("size");
