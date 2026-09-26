@@ -23,10 +23,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Full job: every example, the diff test, the proofs and the mutation test.
+          # Full jobs: every example, the float probe, the diff test and the proofs. The mutation
+          # test runs once, on the default version.
+          - zig: "0.16.0"
+            examples: ""
+            full: true
+            mutate: true
           - zig: "0.15.2"
             examples: ""
             full: true
+            mutate: false
           # The 0.14.1 exporter has no error unions, so no `errors` example; `floatconv` is
           # 0.15.2-only (f16/f80/f128 conversions), so it is excluded too. Its std cannot
           # build the diff harness; the stale-Gen.lean check shows the translation is the one
@@ -34,6 +40,7 @@ jobs:
           - zig: "0.14.1"
             examples: "basic recursion options floatops floats"
             full: false
+            mutate: false
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,13 +66,13 @@ jobs:
         run: scripts/floatprobe.sh
 
       # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when
-      # the patch, the version pin, or the build script itself changes.
+      # the exporter, the version's hook, the version pin, or the build script itself changes.
       - name: Cache patched zig
         id: cache-zig-air
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: zig-air-${{ matrix.zig }}/
-          key: zig-air-${{ matrix.zig }}-${{ hashFiles(format('zig-patch/{0}/air-json.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh') }}
+          key: zig-air-${{ matrix.zig }}-${{ hashFiles('zig-patch/air-json/json.zig', format('zig-patch/{0}/hook.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh') }}
 
       # One retry: the compile step can go over the memory bound that build.zig declares
       # ("memory usage peaked at …"); the peak varies from run to run.
@@ -119,7 +126,7 @@ jobs:
         run: scripts/no-sorry.sh
 
       - name: Mutation check
-        if: matrix.full
+        if: matrix.mutate
         env:
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
         run: scripts/mutate.sh

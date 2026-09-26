@@ -101,7 +101,7 @@ for ex in $examples; do
 done
 
 if [ -n "$restore_gen" ]; then
-  echo "note:$restore_gen now hold the Zig $zig_version translation; restore the committed files with: git checkout --$restore_gen" >&2
+  echo "note: these files hold the Zig $zig_version translation:$restore_gen. Restore the committed ones with: git checkout --$restore_gen" >&2
 fi
 
 echo "== building Lean ==" >&2

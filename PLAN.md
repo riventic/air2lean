@@ -18,6 +18,7 @@
 | M11 | Zig 0.14.1: export patch, translator, CI job | done (Linux only) |
 | M12 | Proofs for `recursion`, `options`, `errors` | done: 19 theorems over 18 functions, incl. mutual recursion, early-exit loops, `try` in a loop |
 | M13 | Floats `f16`…`f128`: exact model (`ZigLean/Float/`), schema-3 export, translator, diff test (44,400 inputs, 0 mismatches on x86_64-linux), `compiler-rt` opt-in, proofs for `floats`/`floatconv` incl. rounding round trip and monotonicity | done |
+| M14 | Zig 0.16.0 (default): one shared exporter (`Compat`), shared goldens and translation (`Canon.lean`), per-version float semantics (f128 `sqrt`, f128 `/` in `compiler-rt` mode), CI job | done |
 
 Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches. So the tester sees a changed result, a changed panic kind and a changed rounding rule.
 
@@ -26,7 +27,6 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 | Item | Estimate |
 |---|---|
 | Error-union export for 0.14.1 (the `errors` example) | 0.5 day |
-| Port to 0.16.0 (released): patch, tag table, goldens, CI job (steps in "To add a Zig version") | 1 day |
 
 ## Decisions
 
@@ -47,30 +47,36 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 ## Zig version support
 
-Supported: **0.15.2** and **0.14.1** (matrix below). The design supports every major Zig release (each `0.x` minor, later `1.x`). AIR changes between releases, so the version-specific code stays at the two edges.
+Supported: **0.16.0** (default), **0.15.2** and **0.14.1** (matrix below). The design supports every major Zig release (each `0.x` minor, later `1.x`). The rule: one source for all versions; a version adds only its differences, each in one named place.
 
-| Layer | Version-specific? | Where |
+| Layer | Shared | Per version |
 |---|---|---|
-| Compiler patch | yes | `zig-patch/<version>/air-json.patch`; URL + sha256 in `zig-patch/versions.toml` |
-| JSON format | no | `docs/air-json.md`. Each file has `schema` and `zig_version`. AIR tags are written verbatim. |
-| Normalizer | yes | `Air2Lean/Air/Normalize.lean`: one tag table per Zig version → internal `Op` |
-| Checker, emitter, `ZigLean` | no | They work only on `Op`. |
-| Tests | yes | `tests/golden/<version>/`. The CI matrix runs one job per version. |
+| Exporter | `zig-patch/air-json/json.zig` | its branch in `json.zig`'s `Compat`; `zig-patch/<version>/hook.patch` (the one-line call); URL + sha256 in `zig-patch/versions.toml` |
+| JSON format | `docs/air-json.md`. Each file has `schema` and `zig_version`. AIR tags are written verbatim. | — |
+| Canonical form | `Air2Lean/Air/Canon.lean`: rewrites the AIR patterns that differ between versions for the same code, and numbers instructions without debug instructions | — |
+| Normalizer | `Air2Lean/Air/Normalize.lean`: one tag table → internal `Op` | a version case only for a subset tag that differs (none today) |
+| Checker, emitter, `ZigLean` | work only on `Op` | the float ops whose result differs by version: `FCtx.zigVersion` in `Emit.lean` picks the def (`docs/floats.md` §Per-version differences) |
+| AIR goldens | `tests/golden/<ex>/air/` | a file in `tests/golden/<version>/<ex>/air/` replaces the shared file of that name |
+| Translation | `Proofs/<Ex>/Gen.lean` (the default version's) | `tests/golden/<version>/<ex>/Gen.lean` where it differs |
+| Proofs | `Proofs/<Ex>/Proofs.lean`, built in every full CI job against that version's translation | — |
+| Float probe | `tests/floatprobe/expected.txt` | `expected.<version>.txt`: only the lines that differ |
+| CI | one job per version (`.github/workflows/ci.yml`) | — |
 
 Support matrix:
 
 | Zig | State |
 |---|---|
+| 0.16.0 | supported, default |
 | 0.15.2 | supported |
 | 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats` (no error-union export yet; `floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
-| 0.16.0 | released; port planned |
 
-**To add a Zig version:**
-1. Add its URL and sha256 to `zig-patch/versions.toml`.
-2. Port the patch: `src/Air/json.zig` + the hook after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`. Check the AIR tag list in `src/Air.zig` for new, renamed and removed tags.
-3. Add a normalizer table. Start from the nearest version and change only the tags that differ.
-4. Build with `zig-patch/build.sh <version>`, then dump `examples/` into `tests/golden/<version>/`.
-5. Run the differential tests and proofs against that version. Add it to the CI matrix and the table above.
+**To add a Zig version** (add only differences; never copy a shared file):
+1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.
+2. Add `zig-patch/<version>/hook.patch` (the call after the function body is analysed in `src/Zcu/PerThread.zig`). Build with `zig-patch/build.sh <version>`; fix each compile error in a new `Compat` branch of `zig-patch/air-json/json.zig`.
+3. Compare the AIR tag list in `src/Air.zig` with the previous version. Add the version to `supportedVersions` in `Normalize.lean`; add a tag case only if a subset tag differs.
+4. `AIR2LEAN_ZIG_VERSION=<version> scripts/check.sh`. If the AIR of an example differs: if the same code gives a different AIR pattern, rewrite it in `Canon.lean` so that the translation stays shared; copy only the differing AIR files to `tests/golden/<version>/<ex>/air/`. Write each difference in `zig-patch/<version>/TAGS.md`.
+5. Run `scripts/floatprobe.sh` with the version. Each changed float result is a model difference: a named def in `ZigLean/Float/`, picked in `Emit.lean` by `FCtx.zigVersion`, and a line in `tests/floatprobe/expected.<version>.txt`.
+6. Add the version to the CI matrix and the table above.
 
 ## Subset (v0)
 
