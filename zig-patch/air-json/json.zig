@@ -25,7 +25,12 @@ const InternPool = @import("../InternPool.zig");
 const Compat = struct {
     const zv = @import("builtin").zig_version;
     const v14 = zv.minor == 14;
-    const v16 = zv.minor >= 16;
+    const v16 = zv.minor == 16;
+    comptime {
+        // A new version needs its own review of every branch below (PLAN.md §Zig version support).
+        if (zv.major != 0 or zv.minor < 14 or zv.minor > 16)
+            @compileError("air2lean exporter: Zig version without a Compat branch");
+    }
 
     const Dir = if (v16) std.Io.Dir else std.fs.Dir;
     const File = if (v16) std.Io.File else std.fs.File;
@@ -143,8 +148,14 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     defer arena.deinit();
 
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
-    w.writeFunc(fqn, Type.fromInterned(func.ty)) catch return;
-    sink.flush() catch return;
+    // A partly written file is invalid JSON; say which one, like the open failures above.
+    w.writeFunc(fqn, Type.fromInterned(func.ty)) catch |err| {
+        std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
+        return;
+    };
+    sink.flush() catch |err| {
+        std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
+    };
 }
 
 const W = struct {
