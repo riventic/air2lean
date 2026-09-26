@@ -232,3 +232,48 @@ theorem hypot2_not_neg (a b : Zig.F64) {sa sb : Bool} {ma mb : Nat} {ea eb : Int
   have hsqrt := Zig.sqrt_nonneg_of_sign hadd.1 hadd.2
   exact ⟨_, Zig.hypot2_body a b, hsqrt.1, hsqrt.2⟩
 
+
+/-- `lerp`'s monadic scaffolding reduces to the plain arithmetic expression `a + (b - a) * t`. -/
+theorem lerp_body (a b t : Zig.F64) :
+    lerp a b t = pure (Zig.Float.add a (Zig.Float.mul (Zig.Float.sub b a) t)) := by
+  unfold lerp
+  simp [zig_unfold]
+
+/-- `lerp a b (+0) = a`, for finite `a` other than `-0` and a finite `b - a`: `(b - a) * (+0)` is a
+signed zero, and adding a signed zero to `a` rounds `a`'s own exact value, which gives back `a`
+(`Zig.add_zero_right`, via the round trip `Zig.roundRat_exact`). -/
+theorem lerp_t0 (a b : Zig.F64) (ha : a.isFinite = true)
+    (hsub_nan : (Zig.Float.sub b a).isNaN = false) (hsub_inf : (Zig.Float.sub b a).isInf = false)
+    (ha0 : a ≠ Zig.Float.zero true) :
+    lerp a b (Zig.Float.ofBits (0 : BitVec 64)) = pure a := by
+  rw [lerp_body, show (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) = Zig.Float.zero false by decide]
+  unfold Zig.Float.isNaN at hsub_nan
+  unfold Zig.Float.isInf at hsub_inf
+  unfold Zig.Float.isFinite at ha
+  cases hd : (Zig.Float.sub b a).classify with
+  | nan => rw [hd] at hsub_nan; cases hsub_nan
+  | inf sd => rw [hd] at hsub_inf; cases hsub_inf
+  | finite sd md ed =>
+    cases hca : a.classify with
+    | nan => rw [hca] at ha; cases ha
+    | inf sa => rw [hca] at ha; cases ha
+    | finite sa ma ea =>
+      rw [Zig.mul_zero_right hd, Zig.add_zero_right hca ha0 rfl]
+
+/-- `lerp (-0) b (+0)` is the zero whose sign is that of `b - (-0)`: `-0 + (±0)` keeps the sign of
+the second zero (`-0 + -0 = -0`, `-0 + +0 = +0`). -/
+theorem lerp_t0_negzero (b : Zig.F64) (hsub_nan : (Zig.Float.sub b (Zig.Float.zero true)).isNaN = false)
+    (hsub_inf : (Zig.Float.sub b (Zig.Float.zero true)).isInf = false) :
+    lerp (Zig.Float.zero true) b (Zig.Float.ofBits (0 : BitVec 64)) =
+      pure (Zig.Float.zero (Zig.Float.sub b (Zig.Float.zero true)).signBit) := by
+  rw [lerp_body, show (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) = Zig.Float.zero false by decide]
+  unfold Zig.Float.isNaN at hsub_nan
+  unfold Zig.Float.isInf at hsub_inf
+  cases hd : (Zig.Float.sub b (Zig.Float.zero true)).classify with
+  | nan => rw [hd] at hsub_nan; cases hsub_nan
+  | inf sd => rw [hd] at hsub_inf; cases hsub_inf
+  | finite sd md ed =>
+    rw [Zig.mul_zero_right hd, ← Zig.sign_of_classify_finite hd]
+    unfold Zig.Float.add
+    rw [Zig.classify_zero, Zig.classify_zero]
+    cases sd <;> simp [Rat.add_zero]

@@ -603,4 +603,115 @@ theorem roundRat_toRat_of_classify {fmt : FloatFmt} {x : Float fmt} {s : Bool} {
     unfold Float.toRat?; rw [h]
   · rw [(roundRat_ne_zero_spec fmt s hq).2, sign_of_classify_finite h]
 
+/-! ## Signed zeros -/
+
+/-- A signed zero classifies as a zero mantissa at the subnormal exponent. -/
+@[simp] theorem classify_zero {fmt : FloatFmt} (s : Bool) :
+    (Float.zero s : Float fmt).classify = .finite s 0 (fmt.emin - fmt.fracBits) := by
+  cases fmt <;> cases s <;> decide
+
+/-- A zero mantissa denotes the `Rat` zero. -/
+@[simp] theorem finiteToRat_zero (s : Bool) (e : Int) : finiteToRat s 0 e = 0 := by
+  unfold finiteToRat; split <;> split <;> simp [Rat.div_def]
+
+/-- A nonzero mantissa denotes a nonzero value. -/
+theorem finiteToRat_ne_zero (s : Bool) {m : Nat} (hm : m ≠ 0) (e : Int) :
+    finiteToRat s m e ≠ 0 := by
+  intro h0
+  have habs := abs_finiteToRat s m e
+  rw [h0] at habs
+  have hnd := num_den_finiteToRat m e
+  rw [← habs] at hnd
+  have h3 : 0 < m * 2 ^ e.toNat * (Rat.abs 0).den :=
+    Nat.mul_pos (Nat.mul_pos (Nat.pos_of_ne_zero hm) (Nat.two_pow_pos _)) (Rat.den_pos _)
+  rw [← hnd] at h3
+  simp at h3
+
+/-- The sign of a nonzero value is its sign flag. -/
+theorem finiteToRat_lt_zero_iff (s : Bool) {m : Nat} (hm : m ≠ 0) (e : Int) :
+    finiteToRat s m e < 0 ↔ s = true := by
+  have h0 := finiteToRat_nonneg m e
+  have hpos : 0 < finiteToRat false m e :=
+    Rat.lt_of_le_of_ne h0 (Ne.symm (finiteToRat_ne_zero false hm e))
+  cases s
+  · simp only [Bool.false_eq_true, iff_false]; exact Rat.not_lt.mpr h0
+  · have : finiteToRat true m e = -finiteToRat false m e := by unfold finiteToRat; simp
+    rw [this]; simp only [iff_true]
+    have := Rat.neg_lt_neg hpos
+    rwa [Rat.neg_zero] at this
+
+/-- A finite float with a zero mantissa is the signed zero of its sign. -/
+theorem eq_zero_of_classify {fmt : FloatFmt} {x : Float fmt} {s : Bool} {e : Int}
+    (h : x.classify = .finite s 0 e) : x = Float.zero s := by
+  have hs := sign_of_classify_finite h
+  obtain ⟨E, F, hE, hF, hx, -⟩ := exists_pack x
+  generalize x.signBit = sb at hx hs
+  subst hs
+  rw [hx] at h ⊢
+  unfold Float.zero
+  by_cases hf80 : fmt = .f80
+  · subst hf80
+    rw [restW_eq_fracBits_succ_f80] at hF
+    rw [classify_pack_f80' s hE hF] at h
+    have hE1 : E ≠ 2 ^ FloatFmt.f80.expBits - 1 := by
+      intro hE1; rw [ite_eq_left hE1] at h; split at h <;> (try split at h) <;> cases h
+    rw [ite_eq_right hE1] at h
+    have hF64 : F < 2 ^ 64 := hF
+    by_cases hI : F / 2 ^ 63 = 0
+    · rw [ite_eq_left hI] at h
+      by_cases hE0 : E = 0
+      · rw [ite_eq_left hE0] at h
+        injection h with _ hm' _
+        subst hE0
+        congr 1; omega
+      · rw [ite_eq_right hE0] at h; cases h
+    · rw [ite_eq_right hI] at h
+      split at h <;> (injection h with _ hm' _; omega)
+  · rw [restW_eq_fracBits fmt hf80] at hF
+    rw [classify_pack_of_ne_f80' hf80 s hE hF] at h
+    have hE1 : E ≠ 2 ^ fmt.expBits - 1 := by
+      intro hE1; rw [ite_eq_left hE1] at h; split at h <;> cases h
+    rw [ite_eq_right hE1] at h
+    split at h
+    · injection h with _ hm' _
+      subst hm'
+      congr
+    · injection h with _ hm' _
+      have := Nat.two_pow_pos fmt.fracBits
+      omega
+
+/-- `x * (±0)` for finite `x` is the zero with the XOR of the signs. -/
+theorem mul_zero_right {fmt : FloatFmt} {x : Float fmt} {sx : Bool} {mx : Nat} {ex : Int}
+    (hx : x.classify = .finite sx mx ex) (s : Bool) :
+    Float.mul x (Float.zero s) = Float.zero (sx != s) := by
+  rw [mul_of_finite hx (classify_zero s), finiteToRat_zero, Rat.mul_zero, roundRat_zero]
+
+/-- `x + (±0) = x` for finite `x` other than `-0` (`-0 + +0 = +0`), and not an `f80`
+pseudo-denormal (the sum is re-encoded canonically). -/
+theorem add_zero_right {fmt : FloatFmt} {x : Float fmt} {sx : Bool} {mx : Nat} {ex : Int}
+    (hx : x.classify = .finite sx mx ex) (hx0 : x ≠ Float.zero true)
+    (hc : x.isPseudoDenormalF80 = false) (s : Bool) :
+    Float.add x (Float.zero s) = x := by
+  unfold Float.add
+  rw [hx, classify_zero]
+  simp only [finiteToRat_zero, Rat.add_zero]
+  by_cases hm : mx = 0
+  · subst hm
+    have hxz := eq_zero_of_classify hx
+    have hsx : sx = false := by
+      cases sx
+      · rfl
+      · exact absurd hxz hx0
+    subst hsx
+    rw [finiteToRat_zero, ite_eq_left rfl, roundRat_zero, hxz]
+    simp
+  · rw [ite_eq_right (finiteToRat_ne_zero sx hm ex)]
+    have hsign : decide (finiteToRat sx mx ex < 0) = sx := by
+      cases sx
+      · exact decide_eq_false fun h =>
+          absurd ((finiteToRat_lt_zero_iff false hm ex).mp h) Bool.false_ne_true
+      · exact decide_eq_true ((finiteToRat_lt_zero_iff true hm ex).mpr rfl)
+    rw [hsign]
+    exact roundRat_exact hx hm hc sx
+
 end Zig
