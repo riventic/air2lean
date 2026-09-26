@@ -7,10 +7,12 @@
 #
 # Usage: check.sh
 # Env:
-#   AIR2LEAN_ZIG_VERSION  Zig version: selects the golden dir and the default patched zig. Default: 0.15.2
+#   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
+#                         Default: 0.16.0
 #   AIR2LEAN_ZIG_AIR      Patched zig (zig-patch/build.sh output). Default: zig-air-$AIR2LEAN_ZIG_VERSION/bin/zig
-#   AIR2LEAN_CI           If 1: fail when a committed Proofs/<Ex>/Gen.lean differs from the new
-#                         translator output.
+#   AIR2LEAN_CI           If 1: fail when the committed translation differs from the new translator
+#                         output: tests/golden/<version>/<ex>/Gen.lean if it exists, else
+#                         Proofs/<Ex>/Gen.lean.
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/.
 #                         Also forwarded (via the environment) to scripts/diff.sh at the end.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
@@ -25,7 +27,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.15.2}
+zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 [ -x "$zig_air" ] || {
   echo "error: patched zig not found/executable at $zig_air" >&2
@@ -34,25 +36,38 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 }
 
 examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+restore_gen=""
 
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
   # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
   Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
-  golden_dir="tests/golden/$zig_version/$ex/air"
+  # One golden set for every Zig version (tests/golden/<ex>/air/). A file in
+  # tests/golden/<version>/<ex>/air/ replaces the shared file of the same name for that version
+  # only (PLAN.md §Zig version support).
+  golden_dir="tests/golden/$ex/air"
+  version_dir="tests/golden/$zig_version/$ex/air"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
-  trap 'rm -rf "$air_dir"' EXIT
+  cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
+  trap 'rm -rf "$air_dir" "$cmp_dir"' EXIT
 
   echo "== $ex: dumping AIR ==" >&2
   ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$ex." "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
-  echo "== $ex: checking against golden ($golden_dir) ==" >&2
+  echo "== $ex: checking against golden ($golden_dir, then $version_dir) ==" >&2
+  # Each file names the Zig version that wrote it; compare everything else.
+  mkdir "$cmp_dir/golden" "$cmp_dir/new"
+  for f in "$golden_dir"/*.json "$version_dir"/*.json; do
+    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" >"$cmp_dir/golden/${f##*/}"; fi
+  done
+  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" >"$cmp_dir/new/${f##*/}"; done
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
-  if ! diff_output=$(diff -r "$golden_dir" "$air_dir" 2>&1); then
-    echo "error: AIR output for $ex does not match $golden_dir" >&2
+  if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
+    echo "error: AIR output for $ex does not match its golden files" >&2
     echo "$diff_output" >&2
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
+    echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
     exit 1
   fi
 
@@ -63,17 +78,31 @@ for ex in $examples; do
   fi
   lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex." $translate_args
 
+  # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version, except a
+  # version with its own tests/golden/<version>/<ex>/Gen.lean (its translation differs).
+  gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
+  if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -f "$gen_golden" ]; then
+    if ! cmp -s "$gen_golden" "Proofs/$Ex/Gen.lean"; then
+      diff -u "$gen_golden" "Proofs/$Ex/Gen.lean" >&2 || true
+      echo "error: $gen_golden differs from the translator output; commit the new file" >&2
+      exit 1
+    fi
+    restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
   # `git status` against HEAD: also catches a Gen.lean that is only staged or never added.
-  if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then
+  elif [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then
     git status --short -- "Proofs/$Ex/Gen.lean" >&2
     git diff HEAD -- "Proofs/$Ex/Gen.lean" >&2 || true
     echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
     exit 1
   fi
 
-  rm -rf "$air_dir"
+  rm -rf "$air_dir" "$cmp_dir"
   trap - EXIT
 done
+
+if [ -n "$restore_gen" ]; then
+  echo "note:$restore_gen now hold the Zig $zig_version translation; restore the committed files with: git checkout --$restore_gen" >&2
+fi
 
 echo "== building Lean ==" >&2
 lake build
