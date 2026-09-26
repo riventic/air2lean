@@ -119,6 +119,13 @@ theorem Float.lt_eq_false_of_le {fmt : FloatFmt} {a b : Float fmt} (ha : ¬a.isN
         Rat.le_iff_lt_or_eq.mpr hor
       exact decide_eq_false (Rat.not_lt.mpr hle2)
 
+/-- `hypot2`'s monadic scaffolding reduces to the plain arithmetic expression it computes: no
+branches, so `zig_unfold` alone finishes it. -/
+theorem hypot2_body (a b : Zig.F64) :
+    hypot2 a b = pure (Float.sqrt (Float.add (Float.mul a a) (Float.mul b b))) := by
+  unfold hypot2
+  simp [zig_unfold]
+
 end Zig
 
 /-- `isNan` is exactly `Float.isNaN` (`docs/floats.md` NaN semantics: `x != x`). -/
@@ -212,4 +219,16 @@ theorem celsius_nan (k : Zig.F32) (h : k.isNaN) :
   refine ⟨Zig.Float.sub k (Zig.Float.ofBits (1133024051 : BitVec 32) : Zig.F32), ?_, ?_⟩
   · rw [celsius_body, hlt]; rfl
   · exact Zig.Float.isNaN_sub_left k _ h
+
+/-- `hypot2 a b` (`sqrt(a*a + b*b)`) is never NaN and never negative, for finite operands: each
+square is non-negative regardless of its operand's own sign (`Zig.mul_self_nonneg`), their sum
+stays non-negative (`Zig.add_nonneg`), and `sqrt` preserves both facts (`Zig.sqrt_nonneg_of_sign`). -/
+theorem hypot2_not_neg (a b : Zig.F64) {sa sb : Bool} {ma mb : Nat} {ea eb : Int}
+    (ha : a.classify = .finite sa ma ea) (hb : b.classify = .finite sb mb eb) :
+    ∃ r, hypot2 a b = pure r ∧ r.isNaN = false ∧ r.signBit = false := by
+  have hmulA := Zig.mul_self_nonneg ha
+  have hmulB := Zig.mul_self_nonneg hb
+  have hadd := Zig.add_nonneg hmulA.1 hmulA.2 hmulB.1 hmulB.2
+  have hsqrt := Zig.sqrt_nonneg_of_sign hadd.1 hadd.2
+  exact ⟨_, Zig.hypot2_body a b, hsqrt.1, hsqrt.2⟩
 

@@ -509,6 +509,72 @@ theorem finiteToRat_sign_of_pos {s : Bool} {m : Nat} {e : Int} {q : Rat}
     rw [← hq] at hpos
     exact absurd hpos (by decide)
 
+/-- `finiteToRat`'s magnitude, with a `false` sign, is always `≥ 0` (same `floor`/`Rat.floor_le`
+argument as `finiteToRat_sign_of_pos`'s nonnegativity half, without the positivity hypothesis). -/
+theorem finiteToRat_nonneg (m : Nat) (e : Int) : 0 ≤ finiteToRat false m e := by
+  have hfloor := floor_magRat m e
+  have h1 : (0:Rat) ≤
+      (((if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)).floor
+        : Rat) := by
+    rw [hfloor]; exact_mod_cast Nat.zero_le _
+  show (0:Rat) ≤ (if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)
+  exact Rat.le_trans h1 (Rat.floor_le _)
+
+/-- `Float.add` preserves "not NaN and not negative": each of `nan`/`inf`/`finite` × `inf`/`finite`
+combination either short-circuits to a non-negative `inf` (both signs are `false`, so `inf`'s
+tie-break and the mixed cases all pick a `false`-signed side) or reduces to `roundRat_nonneg` once
+`add`'s signed-zero special case is shown `false` (`finiteToRat_nonneg` on both summands rules out
+the `sum < 0` disjunct; a `false` sign rules out the `-0 + -0 = -0` disjunct). -/
+theorem add_nonneg {fmt : FloatFmt} {x y : Float fmt}
+    (hxnan : x.isNaN = false) (hxsign : x.signBit = false)
+    (hynan : y.isNaN = false) (hysign : y.signBit = false) :
+    (Float.add x y).isNaN = false ∧ (Float.add x y).signBit = false := by
+  unfold Float.add
+  cases hcx : x.classify with
+  | nan => exact absurd ((isNaN_iff x).mpr hcx) (by rw [hxnan]; decide)
+  | inf sx =>
+    have hsx : sx = false := (sign_of_classify_inf hcx).trans hxsign
+    subst hsx
+    cases hcy : y.classify with
+    | nan => exact absurd ((isNaN_iff y).mpr hcy) (by rw [hynan]; decide)
+    | inf sy =>
+      have hsy : sy = false := (sign_of_classify_inf hcy).trans hysign
+      subst hsy
+      simp
+    | finite sy my ey => simp
+  | finite sx mx ex =>
+    have hsx : sx = false := (sign_of_classify_finite hcx).trans hxsign
+    subst hsx
+    cases hcy : y.classify with
+    | nan => exact absurd ((isNaN_iff y).mpr hcy) (by rw [hynan]; decide)
+    | inf sy =>
+      have hsy : sy = false := (sign_of_classify_inf hcy).trans hysign
+      subst hsy
+      simp
+    | finite sy my ey =>
+      have hsy : sy = false := (sign_of_classify_finite hcy).trans hysign
+      subst hsy
+      dsimp only
+      have hnnx : 0 ≤ finiteToRat false mx ex := finiteToRat_nonneg mx ex
+      have hnny : 0 ≤ finiteToRat false my ey := finiteToRat_nonneg my ey
+      have hsum_nonneg : 0 ≤ finiteToRat false mx ex + finiteToRat false my ey :=
+        Rat.add_nonneg hnnx hnny
+      split
+      · simp only [Bool.false_and]
+        exact roundRat_nonneg fmt _
+      · rw [decide_eq_false (Rat.not_lt.mpr hsum_nonneg)]
+        exact roundRat_nonneg fmt _
+
+/-- `x * x` is never NaN and never negative for a finite `x`, regardless of `x`'s own sign (the
+product's sign is `s != s = false`). -/
+theorem mul_self_nonneg {fmt : FloatFmt} {x : Float fmt} {s : Bool} {m : Nat} {e : Int}
+    (hx : x.classify = .finite s m e) :
+    (Float.mul x x).isNaN = false ∧ (Float.mul x x).signBit = false := by
+  rw [mul_of_finite hx hx]
+  have hs : (s != s) = false := by cases s <;> rfl
+  rw [hs]
+  exact roundRat_nonneg fmt _
+
 /-- `Float.conv` preserves "not NaN and not negative" (no need for the operand's exact value:
 the `finite` case reduces to `roundRat_nonneg`, the `inf` case to the `signBit`/`classify`
 bridge above). -/
@@ -602,10 +668,26 @@ theorem sqrtCore_nonneg {fmt : FloatFmt} {y : Float fmt}
       have hcast : ((2:Nat) ^ fmt.prec : Int) = (2 : Int) ^ fmt.prec := by exact_mod_cast rfl
       split <;> omega
 
-/-- `Float.sqrt` of a positive operand is never NaN and never negative. `f128` double-rounds
-through `f64` (`Ops.lean`'s special case): `conv_nonneg` wraps each `Float.conv`, and
-`sqrtCore_nonneg` (general in operand sign, not just positivity) handles both the direct path
-and the inner `f64` step. -/
+/-- `Float.sqrt` preserves "not NaN and not negative", for any operand (not just a positive one:
+`0` and `+inf` both take the same path). `f128` double-rounds through `f64` (`Ops.lean`'s special
+case): `conv_nonneg` wraps each `Float.conv`, and `sqrtCore_nonneg` (general in operand sign)
+handles both the direct path and the inner `f64` step. -/
+theorem sqrt_nonneg_of_sign {fmt : FloatFmt} {x : Float fmt}
+    (hnan : x.isNaN = false) (hsign : x.signBit = false) :
+    (Float.sqrt x).isNaN = false ∧ (Float.sqrt x).signBit = false := by
+  by_cases hfmt : fmt = .f128
+  · subst hfmt
+    unfold Float.sqrt
+    rw [dite_eq_left rfl]
+    have hinner := conv_nonneg (fmt2 := .f64) hnan hsign
+    have hcore := sqrtCore_nonneg hinner.1 hinner.2
+    exact conv_nonneg hcore.1 hcore.2
+  · unfold Float.sqrt
+    rw [dite_eq_right hfmt]
+    exact sqrtCore_nonneg hnan hsign
+
+/-- `Float.sqrt` of a positive operand is never NaN and never negative (`sqrt_nonneg_of_sign`,
+specialized to a `toRat?`-positive operand). -/
 theorem sqrt_nonneg {fmt : FloatFmt} {x : Float fmt} {q : Rat}
     (hx : x.toRat? = some q) (hq : 0 < q) :
     (Float.sqrt x).isNaN = false ∧ (Float.sqrt x).signBit = false := by
@@ -614,15 +696,6 @@ theorem sqrt_nonneg {fmt : FloatFmt} {x : Float fmt} {q : Rat}
   subst hs
   have hxnan : x.isNaN = false := by unfold Float.isNaN; rw [hc]
   have hxsign : x.signBit = false := (sign_of_classify_finite hc).symm
-  by_cases hfmt : fmt = .f128
-  · subst hfmt
-    unfold Float.sqrt
-    rw [dite_eq_left rfl]
-    have hinner := conv_nonneg (fmt2 := .f64) hxnan hxsign
-    have hcore := sqrtCore_nonneg hinner.1 hinner.2
-    exact conv_nonneg hcore.1 hcore.2
-  · unfold Float.sqrt
-    rw [dite_eq_right hfmt]
-    exact sqrtCore_nonneg hxnan hxsign
+  exact sqrt_nonneg_of_sign hxnan hxsign
 
 end Zig
