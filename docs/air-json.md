@@ -1,4 +1,4 @@
-# AIR JSON format (schema 2)
+# AIR JSON format (schema 3)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -30,6 +30,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `k` | Other fields |
 |---|---|
 | `int` | `signed: bool`, `bits: int` |
+| `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
 | `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id` |
 | `array` | `len: int`, `child: id` |
@@ -39,6 +40,8 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id}]` |
 | `tuple` | `fields: [{ty: id}]` |
 | `other` | `name: string` (printed type; not in the subset) |
+
+`comptime_float` never reaches runtime AIR; if seen, it is `other`.
 
 Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}`, with type 5 being `{"k": "error_set", "errors": ["NotDigit"]}`.
 
@@ -65,6 +68,10 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `line` | `dbg_stmt`: 1-based source line |
 | `unsupported` | `true` if the exporter does not decode this tag's operands |
 
+`mul_add`: `args` is `[lhs, rhs, addend]` (the `pl_op` operand is the addend, written last).
+
+Float tags decoded as `bin_op`: `div_float`. As `un_op`: `sqrt sin cos tan exp exp2 log log2 log10 floor ceil round trunc_float`. As `ty_op`: `fptrunc fpext int_from_float int_from_float_safe float_from_int` (0.14.1 has no `int_from_float_safe`). Every `*_optimized` float tag stays `unsupported`.
+
 ## Ref
 
 One of:
@@ -72,10 +79,13 @@ One of:
 | Shape | Meaning |
 |---|---|
 | `{"inst": 7}` | result of instruction 7 |
-| `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false`. An optional prints `null` or its payload's text. For a payload other than an integer, `bool` or `void` (e.g. `?(E!T)` in the error state prints `error.Bad`), the text is `fmtValue`'s own and the translator rejects the constant. |
+| `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false`, `void`. |
+| `{"ty": 3, "fbits": "0x40490fdb"}` | float constant. `fbits`: the value `@bitCast` to an unsigned int of the same width, lowercase hex, zero-padded to `width/4` digits (`f80`: 20 digits). Read from the `InternPool` storage, not `fmtValue`. |
 | `{"ty": 3, "undef": true}` | `undefined` |
 | `{"ty": 9, "func": "basic.tardiness", "noreturn": false}` | function. `noreturn: true` when the return type is `noreturn` (panic handlers). |
 | `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
 | `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
+| `{"ty": 2, "some": Ref}` | optional constant holding a payload (nested `Ref`, recursively). |
+| `{"ty": 2, "null": true}` | optional constant, `null`. |
 
 `try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.

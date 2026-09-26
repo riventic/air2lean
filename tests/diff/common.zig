@@ -155,8 +155,10 @@ pub const panic = struct {
 
 /// Writes `v`'s diff-protocol "ok" payload text (the part that goes inside `{"ok": ... }`) to
 /// `writer`: bare/quoted decimal for an int leaf (`quote_wide` picks quoting — usize/u64 only),
-/// `0`/`1` for bool, `null`/inner for `?T`, `{"err":"name"}`/inner for `E!T`. Recurses on `T`'s
-/// shape, so `?T`/`E!T` nesting composes without new cases (no example needs it today).
+/// `0`/`1` for bool, `null`/inner for `?T`, `{"err":"name"}`/inner for `E!T`, `"0x<bits>"` (or
+/// `"nan"`) for a float leaf (docs/floats.md's diff protocol — every NaN, tested with `v != v`,
+/// never bits, collapses to the one string `"nan"`). Recurses on `T`'s shape, so `?T`/`E!T`
+/// nesting composes without new cases (no example needs it today).
 fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !void {
     switch (@typeInfo(T)) {
         .optional => {
@@ -178,8 +180,27 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
             try writer.print("\"{d}\"", .{v})
         else
             try writer.print("{d}", .{v}),
+        .float => {
+            if (v != v) {
+                try writer.writeAll("\"nan\"");
+            } else {
+                const width = @bitSizeOf(T);
+                const digits = std.fmt.comptimePrint("{d}", .{width / 4});
+                const bits: std.meta.Int(.unsigned, width) = @bitCast(v);
+                try writer.print("\"0x{x:0>" ++ digits ++ "}\"", .{bits});
+            }
+        },
         else => @compileError("renderPayload: unsupported type " ++ @typeName(T)),
     }
+}
+
+/// Parses a float diff-protocol input: `"0x"` + lowercase hex bits, zero-padded to
+/// `width/4` digits (docs/generated-code.md, docs/floats.md). Inputs are always hex, never
+/// `"nan"` — `tests/diff/gen_inputs.zig` encodes a NaN input as its bit pattern too.
+pub fn parseFloatHex(comptime T: type, s: []const u8) T {
+    const width = @bitSizeOf(T);
+    const bits = std.fmt.parseInt(std.meta.Int(.unsigned, width), s[2..], 16) catch unreachable;
+    return @bitCast(bits);
 }
 
 /// Runs `func(args)` in a forked child; the child never returns to this function on the parent

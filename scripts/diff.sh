@@ -49,7 +49,40 @@ for ex in $examples; do
   "$build_dir/$ex"
 done
 
+echo "== building libm ==" >&2
+# tests/diff/libm/libm.zig re-exports 8 compiler_rt transcendental functions per float width
+# (see its doc comment for the ABI). It calls compiler_rt by Zig name through a `crt` module we
+# generate here: a copy of the stock zig's own compiler_rt/ (needed for its internal cross-file
+# imports, e.g. sin.zig's rem_pio2.zig) plus one re-export file naming the 8 top-level ops.
+lib_dir=$("$zig_bin" env | sed -n 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p')
+crt_dir="$build_dir/crt"
+cp -R "$lib_dir/compiler_rt" "$crt_dir"
+cat >"$crt_dir/air2lean_root.zig" <<'EOF'
+pub const sin = @import("sin.zig");
+pub const cos = @import("cos.zig");
+pub const tan = @import("tan.zig");
+pub const exp = @import("exp.zig");
+pub const exp2 = @import("exp2.zig");
+pub const log = @import("log.zig");
+pub const log2 = @import("log2.zig");
+pub const log10 = @import("log10.zig");
+EOF
+mkdir -p tests/diff/out/libm
+"$zig_bin" build-lib -static -fcompiler-rt -fPIC -OReleaseSafe -mcpu=baseline --name air2lean_libm \
+  -femit-bin=tests/diff/out/libm/air2lean_libm.a \
+  --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$crt_dir/air2lean_root.zig"
+
+echo "== libm self-check ==" >&2
+# Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
+# (tests/diff/libm/selfcheck.zig's doc comment): fatal on Linux, informational elsewhere.
+"$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/libm_selfcheck" \
+  tests/diff/libm/selfcheck.zig tests/diff/out/libm/air2lean_libm.a
+"$build_dir/libm_selfcheck"
+
 echo "== building + running lean side ==" >&2
+# Lake does not track tests/diff/out/libm/air2lean_libm.a (linked in via lakefile.toml's
+# moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
+rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
 tests/diff/.lake/build/bin/difftest
 

@@ -1,0 +1,13 @@
+# Separate Lake package: the parent lakefile.toml (../..) is off-limits to this tool, so the
+# float-model differential/spot-check executable lives in its own package that requires the
+# parent by path (same pattern as `tests/diff`).
+name = "floatmodel"
+defaultTargets = ["floatmodel"]
+
+[[require]]
+name = "air2lean"
+path = "../.."
+
+[[lean_exe]]
+name = "floatmodel"
+root = "FloatModel"
