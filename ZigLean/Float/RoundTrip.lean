@@ -6,7 +6,9 @@ import ZigLean.Float.Lemmas
 `classify ∘ encodeFinite` is the identity on in-range mantissa/exponent pairs
 (`classify_encodeFinite`), and `roundRat` of an exactly representable value does no rounding
 (`roundRat_finiteToRat`): it gives back the value (`roundRat_finiteToRat_toRat`), and for the
-canonical pair of a float, the float itself (`roundRat_exact`). The key facts: `ilog2` finds the
+canonical pair of a float, the float itself (`roundRat_exact`). Consequences: signed-zero
+arithmetic (`add_zero_right`, `mul_zero_right`), exact integer conversion (`ofInt_exact`). Last,
+`roundRat_mono`: rounding is monotone on nonnegative values. The key facts: `ilog2` finds the
 exact exponent, and `roundQuot` divides with remainder `0` (`roundQuot_mul_self`), so
 `finalizeRounded` neither carries nor overflows.
 -/
@@ -14,7 +16,6 @@ exact exponent, and `roundQuot` divides with remainder `0` (`roundQuot_mul_self`
 namespace Zig
 
 /-- `classify` of a packed pattern, non-`f80`, with the exponent field below all-ones. -/
-
 theorem classify_pack_of_ne_f80 {fmt : FloatFmt} (hf : fmt ≠ .f80) (s : Bool) {exp rest : Nat}
     (hexp : exp < 2 ^ fmt.expBits - 1) (hrest : rest < 2 ^ fmt.fracBits) :
     (Float.pack fmt s exp rest).classify =
@@ -122,6 +123,7 @@ theorem mul_pow_le_congr {A B x y x' y' : Nat} (h : (x : Int) - y = x' - y') :
     exact Nat.le_of_mul_le_mul_right h1 (Nat.two_pow_pos _)
   exact ⟨key x y x' y' (by omega), key x' y' x y (by omega)⟩
 
+/-- Strict form of `mul_pow_le_congr`. -/
 theorem mul_pow_lt_congr {A B x y x' y' : Nat} (h : (x : Int) - y = x' - y') :
     A * 2 ^ x < B * 2 ^ y ↔ A * 2 ^ x' < B * 2 ^ y' := by
   have := (mul_pow_le_congr (A := B) (B := A) (x := y) (y := x) (x' := y') (y' := x') (by omega))
@@ -129,6 +131,7 @@ theorem mul_pow_lt_congr {A B x y x' y' : Nat} (h : (x : Int) - y = x' - y') :
   · intro hlt; exact Nat.lt_of_not_le fun hc => Nat.not_le_of_lt hlt (this.mpr hc)
   · intro hlt; exact Nat.lt_of_not_le fun hc => Nat.not_le_of_lt hlt (this.mp hc)
 
+/-- Equality form of `mul_pow_le_congr`. -/
 theorem mul_pow_eq_congr {A B x y x' y' : Nat} (h : (x : Int) - y = x' - y') :
     A * 2 ^ x = B * 2 ^ y ↔ A * 2 ^ x' = B * 2 ^ y' := by
   have h1 := mul_pow_le_congr (A := A) (B := B) h
@@ -151,6 +154,7 @@ theorem finiteToRat_false_eq_mkRat (m : Nat) (e : Int) :
     exact h1.symm
   · rw [show e.toNat = 0 by omega]; simp
 
+/-- `|finiteToRat s m e|` is the positive-sign value. -/
 theorem abs_finiteToRat (s : Bool) (m : Nat) (e : Int) :
     (finiteToRat s m e).abs = finiteToRat false m e := by
   have h0 := finiteToRat_nonneg m e
@@ -209,6 +213,7 @@ private theorem transfer_le {n d m x y a b : Nat} (hd : 0 < d) (hnd : n * 2 ^ y 
     rw [← e1, ← e2] at h1
     exact Nat.le_of_mul_le_mul_right h1 (Nat.two_pow_pos _)
 
+/-- Equality form of `transfer_le`: `n / d = M * 2^-a` from `m * 2^e = M * 2^-a`. -/
 private theorem transfer_eq {n d m x y a b M : Nat} (hnd : n * 2 ^ y = m * 2 ^ x * d)
     (h : m * 2 ^ (x + b) = M * 2 ^ (a + y)) : n * 2 ^ b = M * (d * 2 ^ a) := by
   have e1 : n * 2 ^ b * 2 ^ y = d * (m * 2 ^ (x + b)) := by
@@ -764,5 +769,361 @@ theorem ofInt_exact {n : Nat} (fmt : FloatFmt) (s : Bool) (x : BitVec n)
     (Float.ofInt fmt s x).toRat? = some ((if s then x.toInt else (x.toNat : Int) : Int) : Rat) := by
   rw [ofInt_eq_roundRat]
   exact roundRat_intCast_toRat fmt _ h
+
+/-! ## Monotonicity -/
+
+/-- `roundQuot N D` is the floor `N / D` or one above it. -/
+theorem roundQuot_bounds (N D : Nat) :
+    ((N / D : Nat) : Int) ≤ roundQuot N D ∧ roundQuot N D ≤ ((N / D : Nat) : Int) + 1 := by
+  unfold roundQuot
+  simp only []
+  split
+  · omega
+  · split
+    · omega
+    · split <;> omega
+
+/-- `roundQuot` is monotone in the fraction `N / D`. -/
+theorem roundQuot_mono {N1 D1 N2 D2 : Nat} (hD1 : 0 < D1) (hD2 : 0 < D2)
+    (h : N1 * D2 ≤ N2 * D1) : roundQuot N1 D1 ≤ roundQuot N2 D2 := by
+  have hq : N1 / D1 ≤ N2 / D2 := by
+    apply (Nat.le_div_iff_mul_le hD2).mpr
+    have h1 : N1 / D1 * D1 ≤ N1 := Nat.div_mul_le_self N1 D1
+    have h2 : N1 / D1 * D2 * D1 ≤ N2 * D1 := by
+      calc N1 / D1 * D2 * D1 = N1 / D1 * D1 * D2 := Nat.mul_right_comm _ _ _
+        _ ≤ N1 * D2 := Nat.mul_le_mul_right _ h1
+        _ ≤ N2 * D1 := h
+    exact Nat.le_of_mul_le_mul_right h2 hD1
+  have b1 := roundQuot_bounds N1 D1
+  have b2 := roundQuot_bounds N2 D2
+  rcases Nat.lt_or_eq_of_le hq with hlt | heq
+  · omega
+  · -- Same floor `q`: compare the remainders.
+    have e1 := Nat.div_add_mod N1 D1
+    have e2 := Nat.div_add_mod N2 D2
+    generalize hq1 : N1 / D1 = q at heq e1 b1 ⊢
+    rw [heq] at hq1
+    generalize hq2 : N2 / D2 = q' at heq e2 b2 ⊢
+    subst heq
+    generalize hr1 : N1 % D1 = r1 at e1 ⊢
+    generalize hr2 : N2 % D2 = r2 at e2 ⊢
+    have hr1lt : r1 < D1 := hr1 ▸ Nat.mod_lt _ hD1
+    have hr2lt : r2 < D2 := hr2 ▸ Nat.mod_lt _ hD2
+    have hr : r1 * D2 ≤ r2 * D1 := by
+      have x1 : N1 * D2 = q * (D1 * D2) + r1 * D2 := by
+        rw [← e1, Nat.add_mul]; ac_rfl
+      have x2 : N2 * D1 = q * (D1 * D2) + r2 * D1 := by
+        rw [← e2, Nat.add_mul]; ac_rfl
+      omega
+    unfold roundQuot
+    simp only []
+    rw [hr1, hr2, hq1, hq2]
+    -- `2 r1 ≥ D1` forces `2 r2 ≥ D2`, strictly if strictly.
+    have hlt : D1 < 2 * r1 → D2 < 2 * r2 := by
+      intro h1
+      have : D1 * D2 < D1 * (2 * r2) := by
+        calc D1 * D2 < 2 * r1 * D2 := Nat.mul_lt_mul_of_pos_right h1 hD2
+          _ = 2 * (r1 * D2) := Nat.mul_assoc _ _ _
+          _ ≤ 2 * (r2 * D1) := Nat.mul_le_mul_left _ hr
+          _ = D1 * (2 * r2) := by rw [Nat.mul_comm r2, ← Nat.mul_assoc, Nat.mul_comm 2 D1, Nat.mul_assoc]
+      exact Nat.lt_of_mul_lt_mul_left this
+    have hle : D1 ≤ 2 * r1 → D2 ≤ 2 * r2 := by
+      intro h1
+      have : D1 * D2 ≤ D1 * (2 * r2) := by
+        calc D1 * D2 ≤ 2 * r1 * D2 := Nat.mul_le_mul_right _ h1
+          _ = 2 * (r1 * D2) := Nat.mul_assoc _ _ _
+          _ ≤ 2 * (r2 * D1) := Nat.mul_le_mul_left _ hr
+          _ = D1 * (2 * r2) := by rw [Nat.mul_comm r2, ← Nat.mul_assoc, Nat.mul_comm 2 D1, Nat.mul_assoc]
+      exact Nat.le_of_mul_le_mul_left this hD1
+    split <;> split <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> omega
+
+/-- The lower `ilog2` bound `d * 2^L ≤ n` (shift form, `L : Int`). -/
+theorem ilog2_low {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
+    d * 2 ^ (ilog2 n d).toNat ≤ n * 2 ^ (-ilog2 n d).toNat := by
+  have hspec := ilog2_spec hn hd
+  by_cases hL : 0 ≤ ilog2 n d
+  · rw [show (-ilog2 n d).toNat = 0 by omega, Nat.pow_zero, Nat.mul_one]; exact (hspec.1 hL).1
+  · rw [show (ilog2 n d).toNat = 0 by omega, Nat.pow_zero, Nat.mul_one]; exact (hspec.2 (by omega)).1
+
+/-- `d * 2^a ≤ n` (shift form) is downward closed in `a`. -/
+theorem shiftLe_mono {n d : Nat} {a b : Int} (hba : b ≤ a)
+    (h : d * 2 ^ a.toNat ≤ n * 2 ^ (-a).toNat) : d * 2 ^ b.toNat ≤ n * 2 ^ (-b).toNat := by
+  have h1 := (mul_pow_le_congr (x' := b.toNat + (a - b).toNat) (y' := (-b).toNat) (by omega)).mp h
+  rw [Nat.pow_add, ← Nat.mul_assoc] at h1
+  exact Nat.le_trans (Nat.le_mul_of_pos_right _ (Nat.two_pow_pos _)) h1
+
+/-- `ilog2` is monotone in the fraction `n / d`. -/
+theorem ilog2_mono {n1 d1 n2 d2 : Nat} (hn1 : 0 < n1) (hd1 : 0 < d1) (hn2 : 0 < n2)
+    (hd2 : 0 < d2) (h : n1 * d2 ≤ n2 * d1) : ilog2 n1 d1 ≤ ilog2 n2 d2 := by
+  apply Int.not_lt.mp
+  intro hlt
+  have hP := shiftLe_mono (show ilog2 n2 d2 + 1 ≤ ilog2 n1 d1 by omega) (ilog2_low hn1 hd1)
+  have hL := ilog2_succ_bound hn2 hd2
+  simp only [Nat.shiftLeft_eq] at hL
+  generalize (ilog2 n2 d2 + 1).toNat = X at hP hL
+  generalize (-(ilog2 n2 d2 + 1)).toNat = Y at hP hL
+  -- `d1 2^X ≤ n1 2^Y`, `n2 2^Y < d2 2^X`, `n1 d2 ≤ n2 d1`: contradiction.
+  have c1 : d1 * 2 ^ X * d2 ≤ n1 * 2 ^ Y * d2 := Nat.mul_le_mul_right _ hP
+  have c2 : n1 * 2 ^ Y * d2 ≤ n2 * d1 * 2 ^ Y := by
+    rw [Nat.mul_right_comm]; exact Nat.mul_le_mul_right _ h
+  have c3 : n2 * d1 * 2 ^ Y < d2 * 2 ^ X * d1 := by
+    rw [Nat.mul_right_comm]; exact Nat.mul_lt_mul_of_pos_right hL hd1
+  have c4 : d2 * 2 ^ X * d1 = d1 * 2 ^ X * d2 := by ac_rfl
+  omega
+
+/-- Compare two nonnegative `finiteToRat` values through a common power of two. -/
+theorem finiteToRat_false_le {a b : Nat} {x y : Int}
+    (h : a * 2 ^ (x.toNat + (-y).toNat) ≤ b * 2 ^ (y.toNat + (-x).toNat)) :
+    finiteToRat false a x ≤ finiteToRat false b y := by
+  have hD : (2 : Nat) ^ ((-x).toNat + (-y).toNat) ≠ 0 := Nat.pos_iff_ne_zero.mp (Nat.two_pow_pos _)
+  have e1 : finiteToRat false a x
+      = mkRat ((a * 2 ^ (x.toNat + (-y).toNat) : Nat) : Int) (2 ^ ((-x).toNat + (-y).toNat)) := by
+    rw [finiteToRat_false_eq_mkRat, Rat.mkRat_eq_iff (Nat.pos_iff_ne_zero.mp (Nat.two_pow_pos _)) hD]
+    have : a * 2 ^ x.toNat * 2 ^ ((-x).toNat + (-y).toNat)
+        = a * 2 ^ (x.toNat + (-y).toNat) * 2 ^ (-x).toNat := by
+      rw [Nat.mul_assoc, Nat.mul_assoc, ← Nat.pow_add, ← Nat.pow_add]; congr 2; omega
+    exact_mod_cast this
+  have e2 : finiteToRat false b y
+      = mkRat ((b * 2 ^ (y.toNat + (-x).toNat) : Nat) : Int) (2 ^ ((-x).toNat + (-y).toNat)) := by
+    rw [finiteToRat_false_eq_mkRat, Rat.mkRat_eq_iff (Nat.pos_iff_ne_zero.mp (Nat.two_pow_pos _)) hD]
+    have : b * 2 ^ y.toNat * 2 ^ ((-x).toNat + (-y).toNat)
+        = b * 2 ^ (y.toNat + (-x).toNat) * 2 ^ (-y).toNat := by
+      rw [Nat.mul_assoc, Nat.mul_assoc, ← Nat.pow_add, ← Nat.pow_add]; congr 2; omega
+    exact_mod_cast this
+  rw [e1, e2, Rat.mkRat_eq_div, Rat.mkRat_eq_div, Rat.div_def, Rat.div_def]
+  apply Rat.mul_le_mul_of_nonneg_right
+  · rw [Rat.intCast_natCast, Rat.intCast_natCast]; exact Rat.natCast_le_natCast.mpr h
+  · exact Rat.le_of_lt (Rat.inv_pos.mpr (by
+      have := Nat.two_pow_pos ((-x).toNat + (-y).toNat)
+      exact_mod_cast this))
+
+/-- The value of a `finalizeRounded` result that is finite: `M * 2^e0`, for a mantissa
+`M ≤ 2 ^ prec` (a negative `M` reads as `0`) that is normal or sits at the subnormal exponent. -/
+theorem finalizeRounded_toRat (fmt : FloatFmt) (s : Bool) {M e0 : Int}
+    (hM : M ≤ 2 ^ fmt.prec) (he_lo : fmt.emin - fmt.fracBits ≤ e0)
+    (hnorm : 2 ^ fmt.fracBits ≤ M ∨ e0 = fmt.emin - fmt.fracBits) {r : Rat}
+    (h : (Float.finalizeRounded fmt s M e0).toRat? = some r) : r = finiteToRat s M.toNat e0 := by
+  have hcast : (((2 ^ fmt.prec : Nat)) : Int) = (2 : Int) ^ fmt.prec := by push_cast; rfl
+  have hcastf : (((2 ^ fmt.fracBits : Nat)) : Int) = (2 : Int) ^ fmt.fracBits := by push_cast; rfl
+  have hp : (2 : Nat) ^ fmt.prec = 2 ^ fmt.fracBits * 2 ^ 1 := by rw [← Nat.pow_add]; rfl
+  have hpf : fmt.prec - 1 = fmt.fracBits := by simp only [FloatFmt.prec]; omega
+  have hinf : ∀ neg, (Float.inf neg : Float fmt).toRat? = none := by
+    intro neg; cases fmt <;> cases neg <;> decide
+  unfold Float.finalizeRounded at h
+  by_cases hc : M = (2 : Int) ^ fmt.prec
+  · rw [ite_eq_left hc] at h
+    simp only [] at h
+    by_cases ho : e0 + 1 + ((fmt.prec : Int) - 1) > fmt.emax
+    · rw [ite_eq_left ho, hinf] at h; cases h
+    · rw [ite_eq_right ho, hpf] at h
+      have hcl := classify_encodeFinite fmt s (m := 2 ^ fmt.fracBits) (e := e0 + 1)
+        (Nat.two_pow_pos _) (by rw [hp]; have := Nat.two_pow_pos fmt.fracBits; omega)
+        (by omega) (by omega) (Or.inl (Nat.le_refl _))
+      unfold Float.toRat? at h
+      rw [hcl] at h
+      injection h with h
+      rw [← h, hc, ← hcast, Int.toNat_natCast, hp]
+      have := finiteToRat_mul_pow s (2 ^ fmt.fracBits) 1 (e0 + 1)
+      rw [show e0 + 1 - ((1 : Nat) : Int) = e0 by omega] at this
+      exact this.symm
+  · rw [ite_eq_right hc] at h
+    simp only [] at h
+    by_cases ho : e0 + ((fmt.prec : Int) - 1) > fmt.emax
+    · rw [ite_eq_left ho, hinf] at h; cases h
+    · rw [ite_eq_right ho] at h
+      by_cases hM0' : M.toNat = 0
+      · rw [hM0'] at h ⊢
+        unfold Float.encodeFinite at h
+        rw [ite_eq_left rfl] at h
+        unfold Float.toRat? at h
+        rw [classify_zero] at h
+        injection h with h
+        rw [← h, finiteToRat_zero, finiteToRat_zero]
+      · have hcl := classify_encodeFinite fmt s (m := M.toNat) (e := e0)
+          (by omega) (by rw [← hcast] at hM hc; omega) he_lo (by omega)
+          (by rw [← hcastf] at hnorm; omega)
+        unfold Float.toRat? at h
+        rw [hcl] at h
+        injection h with h
+        exact h.symm
+
+/-- `roundRat`'s exponent for the fraction `n / d` (`n d` its numerator and denominator). -/
+def roundExp (fmt : FloatFmt) (n d : Nat) : Int :=
+  Max.max (ilog2 n d - ((fmt.prec : Int) - 1)) (fmt.emin - ((fmt.prec : Int) - 1))
+
+/-- `roundRat`'s rounded mantissa for the fraction `n / d`, at exponent `roundExp fmt n d`. -/
+def roundMant (fmt : FloatFmt) (n d : Nat) : Int :=
+  let e0 := roundExp fmt n d
+  roundQuot (n * 2 ^ (-e0).toNat) (d * 2 ^ e0.toNat)
+
+/-- `roundRat` of a nonzero value, as `finalizeRounded` of `roundMant`/`roundExp`. -/
+theorem roundRat_eq_finalize (fmt : FloatFmt) (s : Bool) {q : Rat} (hq : q ≠ 0) :
+    Float.roundRat fmt s q = Float.finalizeRounded fmt s
+      (roundMant fmt q.abs.num.toNat q.abs.den) (roundExp fmt q.abs.num.toNat q.abs.den) := by
+  have habs : q.abs ≠ 0 := fun h => hq (Rat.abs_eq_zero_iff.mp h)
+  unfold Float.roundRat roundMant roundExp
+  simp only [ite_eq_right habs]
+  generalize Max.max (ilog2 q.abs.num.toNat q.abs.den - ((fmt.prec : Int) - 1))
+    (fmt.emin - ((fmt.prec : Int) - 1)) = e0
+  congr 1
+  split
+  · rw [show (-e0).toNat = 0 by omega, Nat.pow_zero, Nat.mul_one, Nat.shiftLeft_eq]
+  · rw [show e0.toNat = 0 by omega, Nat.pow_zero, Nat.mul_one, Nat.shiftLeft_eq]
+
+/-- `prec - 1 = fracBits`, over `Int`. -/
+private theorem prec_sub_one (fmt : FloatFmt) : ((fmt.prec : Int) - 1) = fmt.fracBits := by
+  simp only [FloatFmt.prec]; omega
+
+/-- `roundExp` never goes below the subnormal exponent. -/
+theorem roundExp_lo (fmt : FloatFmt) (n d : Nat) : fmt.emin - fmt.fracBits ≤ roundExp fmt n d := by
+  unfold roundExp; rw [prec_sub_one]; exact Int.le_max_right _ _
+
+/-- `roundMant` never exceeds `2 ^ prec` (the carry-out case reaches it). -/
+theorem roundMant_le (fmt : FloatFmt) {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
+    roundMant fmt n d ≤ 2 ^ fmt.prec := by
+  have h := roundRat_m0_le hn hd fmt.prec (roundExp fmt n d) (by unfold roundExp; exact Int.le_max_left _ _)
+  unfold roundMant
+  simp only []
+  generalize roundExp fmt n d = e0 at h
+  split at h
+  · rwa [show (-e0).toNat = 0 by omega, Nat.pow_zero, Nat.mul_one, ← Nat.shiftLeft_eq]
+  · rwa [show e0.toNat = 0 by omega, Nat.pow_zero, Nat.mul_one, ← Nat.shiftLeft_eq]
+
+/-- A mantissa off the subnormal exponent is normal: `n / d ≥ 2 ^ ilog2`, so the scaled
+quotient is at least `2 ^ fracBits`. -/
+theorem roundMant_norm (fmt : FloatFmt) {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
+    2 ^ fmt.fracBits ≤ roundMant fmt n d ∨ roundExp fmt n d = fmt.emin - fmt.fracBits := by
+  have hlow := ilog2_low hn hd
+  have hor : roundExp fmt n d = ilog2 n d - fmt.fracBits ∨
+      roundExp fmt n d = fmt.emin - fmt.fracBits := by
+    unfold roundExp; rw [prec_sub_one]; omega
+  rcases hor with he | he
+  · left
+    unfold roundMant
+    simp only []
+    rw [he]
+    generalize ilog2 n d = L at hlow ⊢
+    have hDpos : 0 < d * 2 ^ (L - fmt.fracBits).toNat := Nat.mul_pos hd (Nat.two_pow_pos _)
+    have hN : 2 ^ fmt.fracBits * (d * 2 ^ (L - fmt.fracBits).toNat)
+        ≤ n * 2 ^ (-(L - fmt.fracBits)).toNat := by
+      have h1 := (mul_pow_le_congr (x' := (L - fmt.fracBits).toNat + fmt.fracBits)
+        (y' := (-(L - fmt.fracBits)).toNat) (by omega)).mp hlow
+      rw [Nat.pow_add, ← Nat.mul_assoc, Nat.mul_comm (d * _)] at h1
+      exact h1
+    have hdiv : 2 ^ fmt.fracBits ≤ n * 2 ^ (-(L - fmt.fracBits)).toNat
+        / (d * 2 ^ (L - fmt.fracBits).toNat) := (Nat.le_div_iff_mul_le hDpos).mpr hN
+    have hb := (roundQuot_bounds (n * 2 ^ (-(L - fmt.fracBits)).toNat)
+      (d * 2 ^ (L - fmt.fracBits).toNat)).1
+    have hcastf : (((2 ^ fmt.fracBits : Nat)) : Int) = (2 : Int) ^ fmt.fracBits := by
+      push_cast; rfl
+    omega
+  · exact Or.inr he
+
+/-- The value of a finite `roundRat` result of a nonzero `q`: `roundMant * 2 ^ roundExp`. -/
+theorem roundRat_toRat_value (fmt : FloatFmt) (s : Bool) {q r : Rat} (hq : q ≠ 0)
+    (h : (Float.roundRat fmt s q).toRat? = some r) :
+    r = finiteToRat s (roundMant fmt q.abs.num.toNat q.abs.den).toNat
+      (roundExp fmt q.abs.num.toNat q.abs.den) := by
+  have habs : q.abs ≠ 0 := fun h => hq (Rat.abs_eq_zero_iff.mp h)
+  have hnn : 0 ≤ q.abs.num := Rat.num_nonneg.mpr Rat.abs_nonneg
+  have hn : 0 < q.abs.num.toNat := by
+    have : q.abs.num ≠ 0 := fun h0 => habs (Rat.num_eq_zero.mp h0)
+    omega
+  rw [roundRat_eq_finalize fmt s hq] at h
+  exact finalizeRounded_toRat fmt s (roundMant_le fmt hn (Rat.den_pos _)) (roundExp_lo fmt _ _)
+    (roundMant_norm fmt hn (Rat.den_pos _)) h
+
+/-- `n / d` of a positive rational, cross-multiplied: `q1 ≤ q2` on numerators/denominators. -/
+private theorem num_den_le {q1 q2 : Rat} (h0 : 0 ≤ q1) (h : q1 ≤ q2) :
+    q1.num.toNat * q2.den ≤ q2.num.toNat * q1.den := by
+  have h1 := (Rat.le_iff q1 q2).mp h
+  have hn1 : 0 ≤ q1.num := Rat.num_nonneg.mpr h0
+  have hn2 : 0 ≤ q2.num := Rat.num_nonneg.mpr (Rat.le_trans h0 h)
+  have : ((q1.num.toNat * q2.den : Nat) : Int) ≤ ((q2.num.toNat * q1.den : Nat) : Int) := by
+    push_cast; rw [Int.toNat_of_nonneg hn1, Int.toNat_of_nonneg hn2]; exact h1
+  exact_mod_cast this
+
+/-- **Monotonicity** of rounding on nonnegative values: `0 ≤ q1 ≤ q2`, both results finite, then
+the rounded values are ordered the same way. -/
+theorem roundRat_mono (fmt : FloatFmt) {q1 q2 r1 r2 : Rat} (h0 : 0 ≤ q1) (h12 : q1 ≤ q2)
+    (h1 : (Float.roundRat fmt false q1).toRat? = some r1)
+    (h2 : (Float.roundRat fmt false q2).toRat? = some r2) : r1 ≤ r2 := by
+  by_cases hq1 : q1 = 0
+  · subst hq1
+    rw [roundRat_zero] at h1
+    unfold Float.toRat? at h1
+    rw [classify_zero] at h1
+    injection h1 with h1
+    rw [← h1, finiteToRat_zero]
+    by_cases hq2 : q2 = 0
+    · subst hq2
+      rw [roundRat_zero] at h2
+      unfold Float.toRat? at h2
+      rw [classify_zero] at h2
+      injection h2 with h2
+      rw [← h2, finiteToRat_zero]; exact Rat.le_refl
+    · rw [roundRat_toRat_value fmt false hq2 h2]; exact finiteToRat_nonneg _ _
+  have hpos1 : 0 < q1 := Rat.lt_of_le_of_ne h0 (Ne.symm hq1)
+  have hq2 : q2 ≠ 0 := fun h => by subst h; exact absurd (Rat.le_antisymm h12 h0) hq1
+  have h0' : 0 ≤ q2 := Rat.le_trans h0 h12
+  rw [roundRat_toRat_value fmt false hq1 h1, roundRat_toRat_value fmt false hq2 h2,
+    Rat.abs_of_nonneg h0, Rat.abs_of_nonneg h0']
+  have hnd := num_den_le h0 h12
+  have hn1 : 0 < q1.num.toNat := by
+    have := Rat.num_nonneg.mpr h0
+    have : q1.num ≠ 0 := fun h => hq1 (Rat.num_eq_zero.mp h)
+    omega
+  have hn2 : 0 < q2.num.toNat := by
+    have := Rat.num_nonneg.mpr h0'
+    have : q2.num ≠ 0 := fun h => hq2 (Rat.num_eq_zero.mp h)
+    omega
+  have hd1 := q1.den_pos
+  have hd2 := q2.den_pos
+  generalize q1.num.toNat = n1 at hnd hn1
+  generalize q2.num.toNat = n2 at hnd hn2
+  generalize q1.den = d1 at hnd hd1
+  generalize q2.den = d2 at hnd hd2
+  have hL := ilog2_mono hn1 hd1 hn2 hd2 hnd
+  have he12 : roundExp fmt n1 d1 ≤ roundExp fmt n2 d2 := by
+    unfold roundExp; omega
+  have hM1 := roundMant_le fmt hn1 hd1
+  have hM2n := roundMant_norm fmt hn2 hd2
+  have hlo1 := roundExp_lo fmt n1 d1
+  rcases Int.lt_or_eq_of_le he12 with hlt | heq
+  · -- Different exponents: `M1 * 2^e1 ≤ 2^prec * 2^e1 ≤ 2^fracBits * 2^e2 ≤ M2 * 2^e2`.
+    have hM2 : 2 ^ fmt.fracBits ≤ roundMant fmt n2 d2 := by
+      rcases hM2n with h | h
+      · exact h
+      · omega
+    have hcast : (((2 ^ fmt.prec : Nat)) : Int) = (2 : Int) ^ fmt.prec := by push_cast; rfl
+    have hcastf : (((2 ^ fmt.fracBits : Nat)) : Int) = (2 : Int) ^ fmt.fracBits := by
+      push_cast; rfl
+    have hp1 : (0 : Int) < 2 ^ fmt.prec := hcast ▸ Int.natCast_pos.mpr (Nat.two_pow_pos _)
+    have hM1' : (roundMant fmt n1 d1).toNat ≤ 2 ^ fmt.prec := by omega
+    have hM2' : 2 ^ fmt.fracBits ≤ (roundMant fmt n2 d2).toNat := by omega
+    apply finiteToRat_false_le
+    generalize roundExp fmt n1 d1 = e1 at hlt hlo1
+    generalize roundExp fmt n2 d2 = e2 at hlt
+    calc (roundMant fmt n1 d1).toNat * 2 ^ (e1.toNat + (-e2).toNat)
+        ≤ 2 ^ fmt.prec * 2 ^ (e1.toNat + (-e2).toNat) := Nat.mul_le_mul_right _ hM1'
+      _ = 2 ^ (fmt.prec + (e1.toNat + (-e2).toNat)) := (Nat.pow_add _ _ _).symm
+      _ ≤ 2 ^ (fmt.fracBits + (e2.toNat + (-e1).toNat)) :=
+          Nat.pow_le_pow_right (by omega) (by simp only [FloatFmt.prec]; omega)
+      _ = 2 ^ fmt.fracBits * 2 ^ (e2.toNat + (-e1).toNat) := Nat.pow_add _ _ _
+      _ ≤ (roundMant fmt n2 d2).toNat * 2 ^ (e2.toNat + (-e1).toNat) := Nat.mul_le_mul_right _ hM2'
+  · -- Same exponent `E`: `roundQuot` is monotone.
+    have hmono : roundMant fmt n1 d1 ≤ roundMant fmt n2 d2 := by
+      unfold roundMant
+      simp only []
+      rw [heq]
+      generalize roundExp fmt n2 d2 = E
+      apply roundQuot_mono (Nat.mul_pos hd1 (Nat.two_pow_pos _)) (Nat.mul_pos hd2 (Nat.two_pow_pos _))
+      calc n1 * 2 ^ (-E).toNat * (d2 * 2 ^ E.toNat) = n1 * d2 * (2 ^ (-E).toNat * 2 ^ E.toNat) := by
+            ac_rfl
+        _ ≤ n2 * d1 * (2 ^ (-E).toNat * 2 ^ E.toNat) := Nat.mul_le_mul_right _ hnd
+        _ = n2 * 2 ^ (-E).toNat * (d1 * 2 ^ E.toNat) := by ac_rfl
+    apply finiteToRat_false_le
+    rw [heq]
+    exact Nat.mul_le_mul_right _ (by omega)
 
 end Zig
