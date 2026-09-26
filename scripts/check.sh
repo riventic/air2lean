@@ -86,13 +86,16 @@ for ex in $examples; do
   # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version, except a
   # version with its own tests/golden/<version>/<ex>/Gen.lean (its translation differs).
   gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
+  if [ -f "$gen_golden" ]; then
+    # The committed Proofs/<Ex>/Gen.lean is overwritten in either mode: always say so (below).
+    restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
+  fi
   if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -f "$gen_golden" ]; then
     if ! cmp -s "$gen_golden" "Proofs/$Ex/Gen.lean"; then
       diff -u "$gen_golden" "Proofs/$Ex/Gen.lean" >&2 || true
       echo "error: $gen_golden differs from the translator output; commit the new file" >&2
       exit 1
     fi
-    restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
   # `git status` against HEAD: also catches a Gen.lean that is only staged or never added.
   elif [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then
     git status --short -- "Proofs/$Ex/Gen.lean" >&2
