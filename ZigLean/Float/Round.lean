@@ -452,8 +452,9 @@ def Float.finalizeRounded (fmt : FloatFmt) (neg : Bool) (m0 : Int) (e0 : Int) : 
 /-- `Float.finalizeRounded`'s result is never NaN and carries the given sign, given the
 pre-renormalization mantissa fits `2 ^ fmt.prec` (`m0 = 2 ^ fmt.prec` is the carry-out case,
 renormalized to `2 ^ (fmt.prec - 1)` at `e0 + 1`). No hypothesis on `e0`: either overflow check
-outcome keeps the sign and rules out NaN, via `Float.inf` or `encodeFinite_spec`. -/
-private theorem finalizeRounded_spec (fmt : FloatFmt) (neg : Bool) (m0 e0 : Int)
+outcome keeps the sign and rules out NaN, via `Float.inf` or `encodeFinite_spec`. Public: shared
+with `Float.sqrt`'s nonneg proof (`Lemmas.lean`). -/
+theorem finalizeRounded_spec (fmt : FloatFmt) (neg : Bool) (m0 e0 : Int)
     (hm0 : m0 ≤ 2 ^ fmt.prec) :
     (Float.finalizeRounded fmt neg m0 e0).isNaN = false ∧
     (Float.finalizeRounded fmt neg m0 e0).signBit = neg := by

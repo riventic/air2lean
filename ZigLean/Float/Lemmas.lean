@@ -437,4 +437,192 @@ theorem truncRat_gt_iff {q : Rat} {n : Int} (hn : 0 ≤ n) :
         rwa [Rat.zero_add] at h4
       exact absurd h3 (by decide)
 
+/-! ## Square root
+
+`Float.sqrt`'s nonnegativity: a positive operand never produces NaN or a negative result. Built
+from small classify/sign bridges (`sign_of_classify_*`), a mantissa bound reused from
+`classify`'s bit layout (`classify_mantissa_lt`), a `Nat.sqrt` upper bound
+(`sqrt_lt_of_lt_mul`), and the radicand bound that feeds it (`sqrt_shiftedM_lt`, mirroring
+`sqrtCore`'s `te` clamp in `Ops.lean`). -/
+
+/-- `classify`'s `inf` sign matches `signBit` (`signBit` is read off the raw bits; `classify`
+recomputes it per format, so the two must agree for every format's `inf` encoding). -/
+theorem sign_of_classify_inf {fmt : FloatFmt} {x : Float fmt} {s : Bool}
+    (h : x.classify = .inf s) : s = x.signBit := by
+  unfold Float.classify Float.signBit at *
+  cases fmt <;> simp only [] at h <;>
+    (split at h <;> (try split at h) <;> (try split at h)) <;> simp_all
+
+/-- `classify`'s `finite` sign matches `signBit` (see `sign_of_classify_inf`). -/
+theorem sign_of_classify_finite {fmt : FloatFmt} {x : Float fmt} {s : Bool} {m : Nat} {e : Int}
+    (h : x.classify = .finite s m e) : s = x.signBit := by
+  unfold Float.classify Float.signBit at *
+  cases fmt <;> simp only [] at h <;>
+    (split at h <;> (try split at h) <;> (try split at h)) <;> simp_all
+
+/-- `classify`'s mantissa always fits `fmt.prec` bits, for every format (subnormal or not: a
+subnormal mantissa is the raw `frac` field, strictly under `2 ^ fracBits < 2 ^ prec`). -/
+theorem classify_mantissa_lt {fmt : FloatFmt} {x : Float fmt} {s : Bool} {m : Nat} {e : Int}
+    (h : x.classify = .finite s m e) : m < 2 ^ fmt.prec := by
+  have hpow : (2:Nat) ^ (fmt.fracBits + 1) = 2 ^ fmt.fracBits * 2 := Nat.pow_succ ..
+  have hmod : x.bits.toNat % 2 ^ fmt.fracBits < 2 ^ fmt.fracBits := Nat.mod_lt _ (Nat.two_pow_pos _)
+  show m < 2 ^ (fmt.fracBits + 1)
+  rw [hpow]
+  unfold Float.classify at h
+  cases fmt <;> simp only [] at h <;>
+    (split at h <;> (try split at h) <;> (try split at h)) <;>
+    (try injection h) <;> omega
+
+/-- `finiteToRat`'s sign and mantissa, given its value is positive: the sign must be `false`
+(a negative-sign value is `≤ 0`), and the mantissa nonzero (a zero mantissa denotes `0`). -/
+theorem finiteToRat_sign_of_pos {s : Bool} {m : Nat} {e : Int} {q : Rat}
+    (hq : finiteToRat s m e = q) (hpos : 0 < q) : s = false ∧ m ≠ 0 := by
+  have hfloor := floor_magRat m e
+  have hnn : (0:Rat) ≤
+      (if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat) := by
+    have h1 : (0:Rat) ≤
+        (((if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat)).floor
+          : Rat) := by
+      rw [hfloor]; exact_mod_cast Nat.zero_le _
+    exact Rat.le_trans h1 (Rat.floor_le _)
+  unfold finiteToRat at hq
+  cases s with
+  | true =>
+    exfalso
+    rw [← hq] at hpos
+    have h2 : -(if e ≥ 0 then (m:Rat) * (2:Rat)^e.toNat else (m:Rat) / (2:Rat)^(-e).toNat) ≤ 0 := by
+      have := Rat.neg_le_neg_iff.mpr hnn
+      simpa using this
+    simp only [ite_true] at hpos
+    exact absurd hpos (Rat.not_lt.mpr h2)
+  | false =>
+    refine ⟨rfl, ?_⟩
+    intro hm0
+    subst hm0
+    have hmag0 : (if e ≥ 0 then ((0:Nat):Rat) * (2:Rat)^e.toNat
+        else ((0:Nat):Rat) / (2:Rat)^(-e).toNat) = 0 := by
+      split
+      · simp
+      · show (0:Rat) * ((2:Rat) ^ (-e).toNat)⁻¹ = 0
+        exact Rat.zero_mul _
+    rw [hmag0] at hq
+    rw [← hq] at hpos
+    exact absurd hpos (by decide)
+
+/-- `Float.conv` preserves "not NaN and not negative" (no need for the operand's exact value:
+the `finite` case reduces to `roundRat_nonneg`, the `inf` case to the `signBit`/`classify`
+bridge above). -/
+theorem conv_nonneg {fmt fmt2 : FloatFmt} {x : Float fmt}
+    (hnan : x.isNaN = false) (hsign : x.signBit = false) :
+    (Float.conv fmt2 x).isNaN = false ∧ (Float.conv fmt2 x).signBit = false := by
+  unfold Float.conv
+  cases hc : x.classify with
+  | nan => exact absurd ((isNaN_iff x).mpr hc) (by rw [hnan]; decide)
+  | inf s' =>
+    have hs' : s' = x.signBit := sign_of_classify_inf hc
+    rw [hs', hsign]
+    simp
+  | finite s' m' e' =>
+    have hs' : s' = x.signBit := sign_of_classify_finite hc
+    rw [hs', hsign]
+    exact roundRat_nonneg fmt2 (finiteToRat false m' e')
+
+/-- `Nat.sqrt`'s result stays under `k` whenever the radicand stays under `k * k` (no direct
+upper-bound lemma for `Nat.sqrt` in core: derived from `Nat.sqrt_le`). -/
+theorem sqrt_lt_of_lt_mul {n k : Nat} (h : n < k * k) : Nat.sqrt n < k := by
+  by_cases hc : Nat.sqrt n < k
+  · exact hc
+  · exfalso
+    have hge : k ≤ Nat.sqrt n := by omega
+    have h1 : k * k ≤ Nat.sqrt n * Nat.sqrt n := Nat.mul_le_mul hge hge
+    have h2 : Nat.sqrt n * Nat.sqrt n ≤ n := Nat.sqrt_le n
+    omega
+
+/-- `sqrtCore`'s scaled radicand (`m <<< shiftAmt`, `shiftAmt = (e - 2 * te).toNat`) stays under
+`2 ^ (2 * p)` whenever `te` sits in the window `sqrtCore` clamps it to (`hA`/`hC`, the same
+bounds `Min.min`/`Max.max` enforce there). -/
+theorem sqrt_shiftedM_lt {m : Nat} {p : Nat}
+    {e te : Int} (hA : ((Nat.log2 m : Int) + e) / 2 - ((p:Int) - 1) ≤ te) (hC : te ≤ e / 2) :
+    m <<< (e - 2 * te).toNat < 2 ^ (2 * p) := by
+  have hshift_nonneg : 0 ≤ e - 2 * te := by omega
+  have hshift_le : (e - 2*te).toNat ≤ 2*p - 1 - Nat.log2 m := by
+    have h1 : e - 2*te ≤ 2*(p:Int) - 1 - (Nat.log2 m : Int) := by omega
+    omega
+  have hmlt : m < 2 ^ (Nat.log2 m + 1) := Nat.lt_log2_self
+  rw [Nat.shiftLeft_eq]
+  calc m * 2 ^ (e - 2*te).toNat < 2 ^ (Nat.log2 m + 1) * 2 ^ (e - 2*te).toNat :=
+        (Nat.mul_lt_mul_right (Nat.two_pow_pos _)).mpr hmlt
+    _ = 2 ^ (Nat.log2 m + 1 + (e - 2*te).toNat) := by rw [← Nat.pow_add]
+    _ ≤ 2 ^ (2*p) := Nat.pow_le_pow_right (by omega) (by omega)
+
+/-- `sqrtCore` (`Float.sqrt`'s per-format worker) preserves "not NaN and not negative", given
+the operand does: the `finite`/`m ≠ 0` case bounds the rounded mantissa via
+`sqrt_shiftedM_lt` + `sqrt_lt_of_lt_mul`, then discharges `finalizeRounded_spec`'s hypothesis
+exactly as `roundRat_m0_le` does for `roundRat`. -/
+theorem sqrtCore_nonneg {fmt : FloatFmt} {y : Float fmt}
+    (hnan : y.isNaN = false) (hsign : y.signBit = false) :
+    (Float.sqrt.sqrtCore fmt y).isNaN = false ∧ (Float.sqrt.sqrtCore fmt y).signBit = false := by
+  unfold Float.sqrt.sqrtCore
+  cases hc : y.classify with
+  | nan => exact absurd ((isNaN_iff y).mpr hc) (by rw [hnan]; decide)
+  | inf s' =>
+    have hs' : s' = false := (sign_of_classify_inf hc).trans hsign
+    subst hs'
+    simp
+  | finite s' m' e' =>
+    have hs' : s' = false := (sign_of_classify_finite hc).trans hsign
+    subst hs'
+    dsimp only
+    by_cases hm0 : m' = 0
+    · rw [ite_eq_left hm0]
+      exact ⟨isNaN_zero false, signBit_zero false⟩
+    · rw [ite_eq_right hm0]
+      have hmlt : m' < 2 ^ fmt.prec := classify_mantissa_lt hc
+      have hp1 : 1 ≤ fmt.prec := by cases fmt <;> decide
+      have hlog : (Nat.log2 m' : Int) < (fmt.prec:Int) := by
+        exact_mod_cast (Nat.log2_lt hm0).mpr hmlt
+      have hexle : (Nat.log2 m' : Int) + e' ≤ e' + ((fmt.prec:Int) - 1) := by omega
+      apply finalizeRounded_spec
+      have hediv2 : ∀ x : Int, x.ediv 2 = x / 2 := fun _ => rfl
+      simp only [hediv2]
+      have hA : ((Nat.log2 m':Int)+e')/2 - ((fmt.prec:Int)-1) ≤
+          Min.min (Max.max (((Nat.log2 m':Int)+e')/2 - ((fmt.prec:Int)-1))
+            (fmt.emin-((fmt.prec:Int)-1))) (e'/2) := by omega
+      have hC : Min.min (Max.max (((Nat.log2 m':Int)+e')/2 - ((fmt.prec:Int)-1))
+          (fmt.emin-((fmt.prec:Int)-1))) (e'/2) ≤ e'/2 := by omega
+      have hshiftedM_lt := sqrt_shiftedM_lt hA hC
+      have h2p : (2:Nat)^(2*fmt.prec) = 2^fmt.prec * 2^fmt.prec := by
+        rw [Nat.two_mul, Nat.pow_add]
+      have hrootlt : Nat.sqrt (m' <<< (e' - 2 *
+          (Min.min (Max.max (((Nat.log2 m':Int)+e')/2 - ((fmt.prec:Int)-1))
+            (fmt.emin-((fmt.prec:Int)-1))) (e'/2))).toNat) < 2 ^ fmt.prec := by
+        apply sqrt_lt_of_lt_mul
+        rw [← h2p]
+        exact hshiftedM_lt
+      have hcast : ((2:Nat) ^ fmt.prec : Int) = (2 : Int) ^ fmt.prec := by exact_mod_cast rfl
+      split <;> omega
+
+/-- `Float.sqrt` of a positive operand is never NaN and never negative. `f128` double-rounds
+through `f64` (`Ops.lean`'s special case): `conv_nonneg` wraps each `Float.conv`, and
+`sqrtCore_nonneg` (general in operand sign, not just positivity) handles both the direct path
+and the inner `f64` step. -/
+theorem sqrt_nonneg {fmt : FloatFmt} {x : Float fmt} {q : Rat}
+    (hx : x.toRat? = some q) (hq : 0 < q) :
+    (Float.sqrt x).isNaN = false ∧ (Float.sqrt x).signBit = false := by
+  obtain ⟨s, m, e, hc, hfr⟩ := exists_finite_of_toRat? hx
+  obtain ⟨hs, _⟩ := finiteToRat_sign_of_pos hfr hq
+  subst hs
+  have hxnan : x.isNaN = false := by unfold Float.isNaN; rw [hc]
+  have hxsign : x.signBit = false := (sign_of_classify_finite hc).symm
+  by_cases hfmt : fmt = .f128
+  · subst hfmt
+    unfold Float.sqrt
+    rw [dite_eq_left rfl]
+    have hinner := conv_nonneg (fmt2 := .f64) hxnan hxsign
+    have hcore := sqrtCore_nonneg hinner.1 hinner.2
+    exact conv_nonneg hcore.1 hcore.2
+  · unfold Float.sqrt
+    rw [dite_eq_right hfmt]
+    exact sqrtCore_nonneg hxnan hxsign
+
 end Zig
