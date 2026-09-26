@@ -243,15 +243,10 @@ rounding direction exactly, and a tie (`Real.sqrt shiftedM = root + 1/2`) is pro
 impossible (`4 * shiftedM = (2 * root + 1) ^ 2` would need a perfect square that is both a
 multiple of 4 and odd). -/
 
-/-- Correctly rounded (`sqrtCore`; `f80` too: x87 `fsqrt`), except `f128`: compiler_rt's
-`sqrtq` rounds to `f64`, takes the `f64` root and extends back (`docs/floats.md` §Semantics).
-Not `f80` via `f128`: `sqrt` rounded twice is exact only if the inner format has at least
-`2 * 64 + 2` bits of precision, and `f128` has 113. -/
+/-- Correctly rounded for every format (`sqrtCore`; `f80` too: x87 `fsqrt`). Before Zig 0.16.0,
+`f128` differs: see `Float.sqrtF128ViaF64`. -/
 def Float.sqrt {fmt : FloatFmt} (x : Float fmt) : Float fmt :=
-  if h : fmt = .f128 then
-    h ▸ Float.conv .f128 (sqrtCore .f64 (Float.conv .f64 x))
-  else
-    sqrtCore fmt x
+  sqrtCore fmt x
 where
   /-- `sqrt` for every format directly (no intermediate-format rounding). -/
   sqrtCore (fmt : FloatFmt) (x : Float fmt) : Float fmt :=
@@ -275,6 +270,12 @@ where
         let rem := shiftedM - root * root
         let m0 : Int := if rem ≤ root then root else root + 1
         Float.finalizeRounded fmt false m0 te
+
+/-- `@sqrt` on `f128` before Zig 0.16.0: compiler_rt's `sqrtq` rounds to `f64`, takes the `f64`
+root and extends back (`docs/floats.md` §Per-version differences). The emitter uses it for
+0.14.1 and 0.15.2 only. -/
+def Float.sqrtF128ViaF64 (x : Float .f128) : Float .f128 :=
+  Float.conv .f128 (Float.sqrt (Float.conv .f64 x))
 
 /-! ## Remainder, modulo, integer division -/
 

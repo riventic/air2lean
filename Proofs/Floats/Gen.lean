@@ -8,20 +8,20 @@ structure celsiusLocals where
 
 inductive celsiusExit where
   | ret (v : Option (Zig.F32))
-  | br2 (v : Option (Zig.F32))
+  | br1 (v : Option (Zig.F32))
 
 def celsius (p0 : Zig.F32) : Zig.Result (Option (Zig.F32)) := do
   let e ← ((do
     match ← ((do
-      let i3 ← pure (Zig.Float.lt p0 (Zig.Float.ofBits (0 : BitVec 32) : Zig.F32))
-      if i3 then (do
-        pure (.br2 none))
+      let i2 ← pure (Zig.Float.lt p0 (Zig.Float.ofBits (0 : BitVec 32) : Zig.F32))
+      if i2 then (do
+        pure (.br1 none))
       else (do
-        let i6 ← pure (Zig.Float.sub p0 (Zig.Float.ofBits (1133024051 : BitVec 32) : Zig.F32))
-        let i7 ← pure (some i6)
-        pure (.br2 i7))) : Zig.M celsiusLocals celsiusExit) with
-    | .br2 v2 => (do
-      pure (.ret v2))
+        let i5 ← pure (Zig.Float.sub p0 (Zig.Float.ofBits (1133024051 : BitVec 32) : Zig.F32))
+        let i6 ← pure (some i5)
+        pure (.br1 i6))) : Zig.M celsiusLocals celsiusExit) with
+    | .br1 v1 => (do
+      pure (.ret v1))
     | e => pure e) : Zig.M celsiusLocals celsiusExit).run' (default : celsiusLocals)
   match e with
   | .ret v => pure v
@@ -32,27 +32,27 @@ structure clampLocals where
 
 inductive clampExit where
   | ret (v : Zig.F32)
-  | br4 (v : Zig.F32)
+  | br3 (v : Zig.F32)
   | br7 (v : Zig.F32)
 
 def clamp (p0 : Zig.F32) (p1 : Zig.F32) (p2 : Zig.F32) : Zig.Result (Zig.F32) := do
   let e ← ((do
     match ← ((do
-      let i5 ← pure (Zig.Float.lt p0 p1)
-      if i5 then (do
-        pure (.br4 p1))
+      let i4 ← pure (Zig.Float.lt p0 p1)
+      if i4 then (do
+        pure (.br3 p1))
       else (do
         match ← ((do
-          let i9 ← pure (Zig.Float.gt p0 p2)
-          if i9 then (do
+          let i8 ← pure (Zig.Float.gt p0 p2)
+          if i8 then (do
             pure (.br7 p2))
           else (do
             pure (.br7 p0))) : Zig.M clampLocals clampExit) with
         | .br7 v7 => (do
-          pure (.br4 v7))
+          pure (.br3 v7))
         | e => pure e)) : Zig.M clampLocals clampExit) with
-    | .br4 v4 => (do
-      pure (.ret v4))
+    | .br3 v3 => (do
+      pure (.ret v3))
     | e => pure e) : Zig.M clampLocals clampExit).run' (default : clampLocals)
   match e with
   | .ret v => pure v
@@ -60,60 +60,60 @@ def clamp (p0 : Zig.F32) (p1 : Zig.F32) (p2 : Zig.F32) : Zig.Result (Zig.F32) :=
 
 structure dotLocals where
   s : Zig.F64
-  local6 : BitVec 64
+  local4 : BitVec 64
   deriving Inhabited
 
 inductive dotExit where
   | ret (v : Zig.F64)
-  | br14
-  | br20
+  | br9
   | br17
-  | rep18
+  | br14
+  | rep15
 
-def dot.again18 : dotExit → Bool
-  | .rep18 => true
+def dot.again15 : dotExit → Bool
+  | .rep15 => true
   | _ => false
 
-def dot.loop18 (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (i9 : BitVec 64) : Zig.M dotLocals dotExit := do
-  let i19 ← pure ((← get).local6)
+def dot.loop15 (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (i6 : BitVec 64) : Zig.M dotLocals dotExit := do
+  let i16 ← pure ((← get).local4)
   match ← ((do
-    let i21 ← pure (i19)
-    let i22 ← pure (i9)
-    let i23 ← pure (Zig.lt false i21 i22)
-    if i23 then (do
-      let i24 ← Zig.call (Zig.index p0 i19)
-      let i26 ← Zig.call (Zig.index p1 i19)
-      let i29 ← pure ((← get).s)
-      let i31 ← pure (Zig.Float.mul i24 i26)
-      let i33 ← pure (Zig.Float.add i29 i31)
-      modify (fun s => { s with s := i33 })
-      pure .br20)
+    let i18 ← pure (i16)
+    let i19 ← pure (i6)
+    let i20 ← pure (Zig.lt false i18 i19)
+    if i20 then (do
+      let i22 ← Zig.call (Zig.index p0 i16)
+      let i23 ← Zig.call (Zig.index p1 i16)
+      let i24 ← pure ((← get).s)
+      let i25 ← pure (Zig.Float.mul i22 i23)
+      let i26 ← pure (Zig.Float.add i24 i25)
+      modify (fun s => { s with s := i26 })
+      pure .br17)
     else (do
-      pure .br17)) : Zig.M dotLocals dotExit) with
-  | .br20 => (do
-    let i40 ← Zig.add false i19 (1 : BitVec 64)
-    modify (fun s => { s with local6 := i40 })
-    pure .rep18)
+      pure .br14)) : Zig.M dotLocals dotExit) with
+  | .br17 => (do
+    let i30 ← Zig.add false i16 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i30 })
+    pure .rep15)
   | e => pure e
 
 def dot (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) : Zig.Result (Zig.F64) := do
   let e ← ((do
     modify (fun s => { s with s := (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) })
-    modify (fun s => { s with local6 := (0 : BitVec 64) })
-    let i9 ← pure (Zig.len p0)
-    let i10 ← pure (Zig.len p1)
-    let i11 ← pure (i9 == i10)
+    modify (fun s => { s with local4 := (0 : BitVec 64) })
+    let i6 ← pure (Zig.len p0)
+    let i7 ← pure (Zig.len p1)
+    let i8 ← pure (i6 == i7)
     match ← ((do
-      if i11 then (do
-        pure .br14)
+      if i8 then (do
+        pure .br9)
       else (do
         throw .panic)) : Zig.M dotLocals dotExit) with
-    | .br14 => (do
+    | .br9 => (do
       match ← ((do
-        Zig.loop (dot.loop18 p0 p1 i9) dot.again18) : Zig.M dotLocals dotExit) with
-      | .br17 => (do
-        let i44 ← pure ((← get).s)
-        pure (.ret i44))
+        Zig.loop (dot.loop15 p0 p1 i6) dot.again15) : Zig.M dotLocals dotExit) with
+      | .br14 => (do
+        let i33 ← pure ((← get).s)
+        pure (.ret i33))
       | e => pure e)
     | e => pure e) : Zig.M dotLocals dotExit).run' (default : dotLocals)
   match e with
@@ -128,11 +128,11 @@ inductive hypot2Exit where
 
 def hypot2 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i3 ← pure (Zig.Float.mul p0 p0)
-    let i5 ← pure (Zig.Float.mul p1 p1)
-    let i7 ← pure (Zig.Float.add i3 i5)
-    let i8 ← pure (Zig.Float.sqrt i7)
-    pure (.ret i8)) : Zig.M hypot2Locals hypot2Exit).run' (default : hypot2Locals)
+    let i2 ← pure (Zig.Float.mul p0 p0)
+    let i3 ← pure (Zig.Float.mul p1 p1)
+    let i4 ← pure (Zig.Float.add i2 i3)
+    let i5 ← pure (Zig.Float.sqrt i4)
+    pure (.ret i5)) : Zig.M hypot2Locals hypot2Exit).run' (default : hypot2Locals)
   match e with
   | .ret v => pure v
 
@@ -144,8 +144,8 @@ inductive isNanExit where
 
 def isNan (p0 : Zig.F64) : Zig.Result (Bool) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.ne p0 p0)
-    pure (.ret i2)) : Zig.M isNanLocals isNanExit).run' (default : isNanLocals)
+    let i1 ← pure (Zig.Float.ne p0 p0)
+    pure (.ret i1)) : Zig.M isNanLocals isNanExit).run' (default : isNanLocals)
   match e with
   | .ret v => pure v
 
@@ -157,10 +157,10 @@ inductive lerpExit where
 
 def lerp (p0 : Zig.F64) (p1 : Zig.F64) (p2 : Zig.F64) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i4 ← pure (Zig.Float.sub p1 p0)
-    let i6 ← pure (Zig.Float.mul i4 p2)
-    let i8 ← pure (Zig.Float.add p0 i6)
-    pure (.ret i8)) : Zig.M lerpLocals lerpExit).run' (default : lerpLocals)
+    let i3 ← pure (Zig.Float.sub p1 p0)
+    let i4 ← pure (Zig.Float.mul i3 p2)
+    let i5 ← pure (Zig.Float.add p0 i4)
+    pure (.ret i5)) : Zig.M lerpLocals lerpExit).run' (default : lerpLocals)
   match e with
   | .ret v => pure v
 

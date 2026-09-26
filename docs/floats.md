@@ -4,7 +4,7 @@ The model of `f16`, `f32`, `f64`, `f80` and `f128` (`ZigLean/Float/`) and the ta
 
 ## Reference target
 
-Zig leaves some float results to the target. The model follows **Zig 0.15.2, LLVM backend, `-OReleaseSafe`, x86_64-linux, `-mcpu=baseline`**, the CI target. `scripts/floatprobe.sh` (CI step "Float target probe") runs `tests/floatprobe/probe.zig` there and compares its output with `tests/floatprobe/expected.txt`. A difference means that the target or the Zig version changed a case the model depends on.
+Zig leaves some float results to the target. The model follows **Zig 0.16.0, 0.15.2 and 0.14.1, LLVM backend, `-OReleaseSafe`, x86_64-linux, `-mcpu=baseline`**, the CI target; §Per-version differences lists what differs between the versions. `scripts/floatprobe.sh` (CI step "Float target probe") runs `tests/floatprobe/probe.zig` there and compares its output with `tests/floatprobe/expected.txt`, where `tests/floatprobe/expected.<version>.txt` replaces the lines that differ for that version. A difference means that the target or the Zig version changed a case the model depends on.
 
 The float diff test counts only on this target. On other targets (e.g. arm64 macOS: native f16, other `@min` zero rule, soft f80) exclude the float examples with `AIR2LEAN_EXAMPLES`.
 
@@ -20,7 +20,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the ops themselves; `div_exact` = `/`. `f128`: §`--float-semantics` group A |
 | `@rem` | `rem` | `a − b·trunc(a / b)`, exact (`frem`); the sign of a zero result is the sign of `a`. f80 invalid encoding: §`--float-semantics` group C |
 | `@mod` | `mod` | `a < 0 ? rem(rem(a, b) + b, b) : rem(a, b)` (the LLVM lowering). f80 invalid encoding: §`--float-semantics` group C |
-| `@sqrt` | `sqrt` | correctly rounded. f128: `fpext(sqrt(fptrunc x to f64))` (compiler_rt `sqrtq`) |
+| `@sqrt` | `sqrt` | correctly rounded. Before 0.16.0, f128: §Per-version differences |
 | `@floor @ceil @trunc` | `floor ceil trunc_float` | exact. f80 invalid encoding: §`--float-semantics` group C |
 | `@round` | `round` | nearest integer, ties away from zero. f80 invalid encoding: §`--float-semantics` group C |
 | `@abs`, `-x` | `abs`, `neg` | clear or flip the sign bit (also of a NaN) |
@@ -37,7 +37,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 
 The reference target has no hardware `f128` divide and no FMA instruction, so `/`/`@divExact`/`@divTrunc`/`@divFloor` on `f128` and `@mulAdd` on any format actually run a compiler_rt software routine there, not the IEEE-correct result the rest of this page describes. Two divergences, opt-in together per translated example:
 
-- **Group A — `f128` division** (`__divtf3`): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
+- **Group A — `f128` division** (`__divtf3`, before Zig 0.16.0; §Per-version differences): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
 - **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some subnormal inputs.
 
 `ieee` (default; what a proof assumes) always returns the model's own result for groups A and B. `compiler-rt` matches them bit-for-bit (`ZigLean/Float/CompilerRt.lean`) — needed only by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof never needs to know the divergence exists unless its example opts in.
@@ -75,6 +75,17 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 | pseudo-denormal | 0 | 1 | the value `1.f × 2^(1 − 16383)` |
 
 The first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is a correctly-modeled value everywhere except `@mulAdd`, where it is group C too.
+
+## Per-version differences
+
+The model is one set of defs. Where a Zig version gives a different result, the emitter picks the def for the version that wrote the AIR (`FCtx.zigVersion` in `Air2Lean/Emit.lean`), so the generated code states that version's rule. The translations differ only on these lines (`tests/golden/<version>/<ex>/Gen.lean`).
+
+| Op | 0.14.1, 0.15.2 | 0.16.0 | Source |
+|---|---|---|---|
+| f128 `@sqrt` | `fpext(sqrt(fptrunc x to f64))`: `Zig.Float.sqrtF128ViaF64` | correctly rounded: `Zig.Float.sqrt` | compiler_rt `sqrtq` (`sqrt.zig`, a musl port since 0.16.0) |
+| f128 `/`, `@divExact`, `@divTrunc`, `@divFloor`, `compiler-rt` mode | subnormal quotient flushed to ±0 (group A): `Zig.Float.divRt` … | correctly rounded: `Zig.Float.div` … | compiler_rt `__divtf3` (`divtf3.zig`) |
+
+The probe checks both on the reference target (`tests/floatprobe/expected.0.16.0.txt`).
 
 ## Transcendental functions
 
