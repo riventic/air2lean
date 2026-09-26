@@ -24,9 +24,7 @@ Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279
 
 ## Next
 
-| Item | Estimate |
-|---|---|
-| Error-union export for 0.14.1 (the `errors` example) | 0.5 day |
+No open item.
 
 ## Decisions
 
@@ -68,7 +66,7 @@ Support matrix:
 |---|---|
 | 0.16.0 | supported, default |
 | 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats` (no error-union export yet; `floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
+| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation is byte-identical to the 0.15.2 one; the diff test runs on 0.15.2. |
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.

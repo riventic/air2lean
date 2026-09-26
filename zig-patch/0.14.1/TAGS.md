@@ -13,10 +13,11 @@
 
 ## Exporter port
 
-- `src/Air/json.zig`: ported from 0.15.2. Writes schema 3 (floats and the current optional
-  encoding are ported; error unions are not — the 0.15.2 exporter's `errors` support is not
-  ported yet).
-- Hook: the same place as in 0.15.2, after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`.
+- `zig-patch/air-json/json.zig` is shared with every version; its `Compat` section has the 0.14.1
+  branch: `std.json.WriteStream` over an unbuffered `std.fs.File.Writer`; `Air.extra` is a slice;
+  `arg` has no ZIR parameter index (a running count of `arg`s gives the same value in the
+  subset); `Value.fmtValue` takes `{}`, not `{f}`; no `int_from_float_safe` tag.
+- Hook (`hook.patch`): after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`, as in 0.15.2.
 
 ## Build
 
@@ -30,4 +31,6 @@ docker run --rm -v "$PWD":/w -w /w debian:bookworm-slim zig-patch/build.sh 0.14.
 
 ## Observed differences on the examples
 
-`tests/golden/0.14.1/{basic,recursion,options}/air/` are equal to the 0.15.2 dumps, except for `zig_version` and `schema` (1 vs 2). The translation of each is byte-identical to the 0.15.2 one; CI checks this. `errors` is not supported: the 0.14.1 exporter writes the error-union instructions as `unsupported`.
+The dumps of `basic`, `recursion`, `options`, `floatops`, `floats` and `errors` equal the shared goldens (`tests/golden/<ex>/air/`) apart from `zig_version`. Their translation equals the committed one, except `floatops` (`tests/golden/0.14.1/floatops/Gen.lean`: the f128 compiler_rt rules before 0.16.0, `docs/floats.md` §Per-version differences); CI checks this.
+
+`floatconv` differs in 3 files (`toI32`, `toU64`, `toByte`): 0.14.1 lowers `@intFromFloat` to the unchecked `int_from_float` and checks the range after it, so an out-of-range input is undefined before the check. It is not in the 0.14.1 CI job.
