@@ -13,7 +13,7 @@ round happens at.
 namespace Zig
 
 /-- Truncate a rational toward zero. -/
-private def truncRat (r : Rat) : Int := if r ≥ 0 then r.floor else r.ceil
+def truncRat (r : Rat) : Int := if r ≥ 0 then r.floor else r.ceil
 
 /-! ## Sign-bit-only ops -/
 

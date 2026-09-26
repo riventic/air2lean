@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** v0 works for Zig 0.15.2 and 0.14.1. 18 functions in 4 examples (`basic`, `recursion`, `options`, `errors`) translate and match the compiled Zig on 5,400 differential tests, including the panic kind. All 18 have machine-checked proofs (19 theorems, `Proofs/`), including loops, mutual recursion, optionals and `try`. See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.15.2 and 0.14.1. 41 functions in 7 examples translate and match the compiled Zig on 49,800 differential tests, including the panic kind: `basic`, `recursion`, `options`, `errors`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). The integer examples and `floats`/`floatconv` have machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try` and IEEE-754 rounding. See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -20,7 +20,7 @@ foo.zig ──patched zig──▶ *.json ──air2lean──▶ Gen.lean ─�
 |---|---|
 | Compiler patch (AIR → JSON) | [`zig-patch/`](zig-patch/README.md), format in [`docs/air-json.md`](docs/air-json.md) |
 | Translator | `Air2Lean/` (parser, per-version normalizer, subset checker, emitter) |
-| Runtime semantics + lemmas | `ZigLean/` |
+| Runtime semantics + lemmas | `ZigLean/` (floats: `ZigLean/Float/`, [docs/floats.md](docs/floats.md)) |
 | Generated code, proofs | `Proofs/Basic/` ([naming rules](docs/generated-code.md)) |
 | Differential tests | `tests/diff/`, `scripts/diff.sh` |
 
