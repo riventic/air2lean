@@ -103,9 +103,13 @@ mkdir -p tests/diff/out/libm
 # without this flag that link fails with "undefined symbol: __extendxftf2" (seen on 0.15.2 too,
 # not just 0.16.0). Our own crt module's `symbol` is a no-op (see above) so it doesn't also
 # @export the 8 ops we import, which would otherwise duplicate compiler_rt.o's own exports.
-"$zig_bin" build-lib -static -fcompiler-rt -fPIC -OReleaseSafe -mcpu=baseline --name air2lean_libm \
+# The crt module is built -OReleaseFast (a per-module option), like Zig builds compiler_rt for a
+# ReleaseSafe program (Compilation.compilerRtOptMode): with safety checks, 0.16.0's f80 `cosx`
+# panics ("integer overflow" in rem_pio2_large) on inputs where the real `@cos` returns a value.
+"$zig_bin" build-lib -static -fcompiler-rt -fPIC -mcpu=baseline --name air2lean_libm \
   -femit-bin=tests/diff/out/libm/air2lean_libm.a \
-  --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$build_dir/air2lean_root.zig"
+  --dep crt -OReleaseSafe -Mroot=tests/diff/libm/libm.zig \
+  -OReleaseFast -Mcrt="$build_dir/air2lean_root.zig"
 
 echo "== libm self-check ==" >&2
 # Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
