@@ -1,0 +1,65 @@
+{
+ "schema": 3,
+ "zig_version": "0.15.2",
+ "name": "floatconv.f80ToF64",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "fptrunc",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 80
+  },
+  {
+   "k": "float",
+   "bits": 64
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

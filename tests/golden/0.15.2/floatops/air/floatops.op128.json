@@ -1,0 +1,1099 @@
+{
+ "schema": 3,
+ "zig_version": "0.15.2",
+ "name": "floatops.op128",
+ "params": [
+  0,
+  1,
+  1,
+  1
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 1,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "arg",
+   "ty": 1,
+   "param": 3
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 5,
+   "tag": "dbg_inline_block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 6,
+     "tag": "dbg_arg_inline",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 0
+      }
+     ],
+     "name": "sel"
+    },
+    {
+     "id": 7,
+     "tag": "dbg_arg_inline",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 1
+      }
+     ],
+     "name": "a"
+    },
+    {
+     "id": 8,
+     "tag": "dbg_arg_inline",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 2
+      }
+     ],
+     "name": "b"
+    },
+    {
+     "id": 9,
+     "tag": "dbg_arg_inline",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 3
+      }
+     ],
+     "name": "c"
+    },
+    {
+     "id": 10,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 2
+    },
+    {
+     "id": 11,
+     "tag": "block",
+     "ty": 1,
+     "body": [
+      {
+       "id": 73,
+       "tag": "switch_br",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 0
+        }
+       ],
+       "cases": [
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "0"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 12,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 3
+          },
+          {
+           "id": 13,
+           "tag": "add",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 14,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 13
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "1"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 15,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 4
+          },
+          {
+           "id": 16,
+           "tag": "sub",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 17,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 16
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "2"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 18,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 5
+          },
+          {
+           "id": 19,
+           "tag": "mul",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 20,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 19
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "3"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 21,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 6
+          },
+          {
+           "id": 22,
+           "tag": "div_float",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 23,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 22
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "4"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 24,
+           "tag": "mul_add",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            },
+            {
+             "inst": 3
+            }
+           ]
+          },
+          {
+           "id": 25,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 24
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "5"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 26,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 8
+          },
+          {
+           "id": 27,
+           "tag": "div_trunc",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 28,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 27
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "6"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 29,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 9
+          },
+          {
+           "id": 30,
+           "tag": "div_floor",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 31,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 30
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "7"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 32,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 10
+          },
+          {
+           "id": 33,
+           "tag": "rem",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 34,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 33
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "8"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 35,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 11
+          },
+          {
+           "id": 36,
+           "tag": "mod",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 37,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 36
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "9"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 38,
+           "tag": "sqrt",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 39,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 38
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "10"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 40,
+           "tag": "floor",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 41,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 40
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "11"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 42,
+           "tag": "ceil",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 43,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 42
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "12"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 44,
+           "tag": "trunc_float",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 45,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 44
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "13"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 46,
+           "tag": "round",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 47,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 46
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "14"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 48,
+           "tag": "abs",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 49,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 48
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "15"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 50,
+           "tag": "neg",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 51,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 50
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "16"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 52,
+           "tag": "min",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 53,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 52
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "17"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 54,
+           "tag": "max",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 2
+            }
+           ]
+          },
+          {
+           "id": 55,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 54
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "18"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 56,
+           "tag": "sin",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 57,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 56
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "19"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 58,
+           "tag": "cos",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 59,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 58
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "20"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 60,
+           "tag": "tan",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 61,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 60
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "21"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 62,
+           "tag": "exp",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 63,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 62
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "22"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 64,
+           "tag": "exp2",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 65,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 64
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "23"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 66,
+           "tag": "log",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 67,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 66
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "24"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 68,
+           "tag": "log2",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 69,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 68
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 0,
+           "val": "25"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 70,
+           "tag": "log10",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 71,
+           "tag": "br",
+           "ty": 3,
+           "target": 11,
+           "args": [
+            {
+             "inst": 70
+            }
+           ]
+          }
+         ]
+        }
+       ],
+       "else": [
+        {
+         "id": 72,
+         "tag": "br",
+         "ty": 3,
+         "target": 11,
+         "args": [
+          {
+           "inst": 1
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 74,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 2
+    },
+    {
+     "id": 75,
+     "tag": "br",
+     "ty": 3,
+     "target": 5,
+     "args": [
+      {
+       "inst": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 76,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 77,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8
+  },
+  {
+   "k": "float",
+   "bits": 128
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

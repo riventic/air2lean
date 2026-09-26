@@ -75,7 +75,7 @@ scripts/mutate.sh      # a changed function must fail a test
 
 | In (v0) | Out (v0) |
 |---|---|
-| integers of any width, `bool` | floats |
+| integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping (`+%`), saturating (`+\|`) arithmetic | mutable pointers, pointer aliasing |
 | `if`, `switch`, `while`, `for` | allocators, heap memory |
 | local `var` whose address does not escape | `@ptrCast`, `packed` layout |

@@ -1,0 +1,116 @@
+{
+ "schema": 3,
+ "zig_version": "0.14.1",
+ "name": "floats.lerp",
+ "params": [
+  0,
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 4,
+   "tag": "sub",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 6,
+   "tag": "mul",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 8,
+   "tag": "add",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 10,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 64
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

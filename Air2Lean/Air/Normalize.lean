@@ -24,10 +24,18 @@ def arg2 (fnName : String) (raw : Raw.RawInst) : Except String (Val × Val) :=
   | some a, some b => pure (a, b)
   | _, _ => throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs 2 args"
 
+def arg3 (fnName : String) (raw : Raw.RawInst) : Except String (Val × Val × Val) :=
+  match raw.args[0]?, raw.args[1]?, raw.args[2]? with
+  | some a, some b, some c => pure (a, b, c)
+  | _, _, _ => throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs 3 args"
+
 mutual
 
 /-- The 0.15.2 AIR tag table. -/
 partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except String Op := do
+  -- Fast-math float tags (the exporter also marks these `unsupported`): a specific message.
+  if raw.tag.endsWith "_optimized" then
+    throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag})"
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter"
   match raw.tag with
@@ -47,6 +55,7 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
   | "div_trunc" => let (a, b) ← arg2 fnName raw; return .div .divTrunc a b
   | "div_floor" => let (a, b) ← arg2 fnName raw; return .div .divFloor a b
   | "div_exact" => let (a, b) ← arg2 fnName raw; return .div .divExact a b
+  | "div_float" => let (a, b) ← arg2 fnName raw; return .divFloat a b
   | "rem" => let (a, b) ← arg2 fnName raw; return .div .rem a b
   | "mod" => let (a, b) ← arg2 fnName raw; return .div .mod a b
   | "min" => let (a, b) ← arg2 fnName raw; return .minMax false a b
@@ -59,6 +68,25 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
   | "xor" => let (a, b) ← arg2 fnName raw; return .bit .xor a b
   | "not" => let a ← arg1 fnName raw; return .not a
   | "neg" => let a ← arg1 fnName raw; return .neg a
+  | "abs" => let a ← arg1 fnName raw; return .abs a
+  | "sqrt" => let a ← arg1 fnName raw; return .sqrt a
+  | "floor" => let a ← arg1 fnName raw; return .floatRound .floor a
+  | "ceil" => let a ← arg1 fnName raw; return .floatRound .ceil a
+  | "trunc_float" => let a ← arg1 fnName raw; return .floatRound .trunc a
+  | "round" => let a ← arg1 fnName raw; return .floatRound .round a
+  | "sin" => let a ← arg1 fnName raw; return .libm .sin a
+  | "cos" => let a ← arg1 fnName raw; return .libm .cos a
+  | "tan" => let a ← arg1 fnName raw; return .libm .tan a
+  | "exp" => let a ← arg1 fnName raw; return .libm .exp a
+  | "exp2" => let a ← arg1 fnName raw; return .libm .exp2 a
+  | "log" => let a ← arg1 fnName raw; return .libm .log a
+  | "log2" => let a ← arg1 fnName raw; return .libm .log2 a
+  | "log10" => let a ← arg1 fnName raw; return .libm .log10 a
+  | "mul_add" => let (a, b, c) ← arg3 fnName raw; return .mulAdd a b c
+  | "fptrunc" | "fpext" => let a ← arg1 fnName raw; return .floatConv a
+  | "float_from_int" => let a ← arg1 fnName raw; return .floatFromInt a
+  | "int_from_float" => let a ← arg1 fnName raw; return .intFromFloat false a
+  | "int_from_float_safe" => let a ← arg1 fnName raw; return .intFromFloat true a
   | "shl" => let (a, b) ← arg2 fnName raw; return .shift .shl a b
   | "shl_exact" => let (a, b) ← arg2 fnName raw; return .shift .shlExact a b
   | "shl_sat" => let (a, b) ← arg2 fnName raw; return .shift .shlSat a b

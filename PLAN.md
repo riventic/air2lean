@@ -75,7 +75,7 @@ Support matrix:
 
 | In | Out |
 |---|---|
-| integers of any width, `bool` | floats |
+| integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping, saturating arithmetic | mutable pointers, aliasing |
 | `if`, `switch`, `while`, `for` | allocators, heap |
 | local `var` whose address does not escape | `@ptrCast`, packed layout |

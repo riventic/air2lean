@@ -56,8 +56,9 @@ def Float.gt {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.lt b a
 def Float.ge {fmt : FloatFmt} (a b : Float fmt) : Bool := Float.le b a
 
 /-- `@min`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign: `f32`/`f64` (SSE `minss`) give `+0`; `f16`/`f80`/`f128` (compiler_rt
-`fmin`) give `-0` (`docs/floats.md` §+0 and −0 in `@min`/`@max`). -/
+of different sign: `f16`/`f80`/`f128` (compiler_rt `fmin`) give `-0`. For `f32`/`f64` the target
+result depends on the operand order, so generated code calls `Float.minChk`, which throws
+`.unspecified`; the `+0` here is only a total-function default (`docs/floats.md` §+0 and −0). -/
 def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan
@@ -70,7 +71,8 @@ def Float.min {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   | _, _ => if Float.le a b then a else b
 
 /-- `@max`. NaN loses to a non-NaN operand; if both are NaN, the result is NaN. Of two zeros
-of different sign, the result is `+0` (docs: `@max(+0,-0) = @max(-0,+0) = +0`). -/
+of different sign: `+0` for `f16`/`f80`/`f128` (compiler_rt `fmax`). For `f32`/`f64` generated
+code calls `Float.maxChk`, which throws `.unspecified` (`docs/floats.md` §+0 and −0). -/
 def Float.max {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, .nan => Float.nan
@@ -309,5 +311,99 @@ def Float.divTrunc {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.trunc
 
 /-- `@divFloor`: division, rounded once, then floored. -/
 def Float.divFloor {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.div a b)
+
+/-! ## `.unspecified` guards (`docs/floats.md` §Semantics groups C and D; both modes, always)
+
+The reference target (`x86_64-linux -mcpu=baseline`)'s compiler_rt routines diverge from x87
+hardware on two input shapes the model itself does not distinguish from an ordinary case, so
+without a guard the model would silently disagree with actual Zig output on these inputs
+regardless of `--float-semantics`. Each guard wraps the model's own (unmodified) op: the
+`.unspecified` throw is the only change, never a different computed value. -/
+
+/-- Group D: real SSE `minss`/`maxss` give an order-and-sign-dependent result for `f32`/`f64`
+when one operand is `+0` and the other `-0` — confirmed on real hardware for both `@min` and
+`@max` (`tests/diff` sel 16/17 mismatches), unlike `Float.min`/`Float.max`'s own deterministic
+choice. `f16`/`f80`/`f128` keep that deterministic result (compiler_rt `fmin`/`fmax`, 0
+mismatches there). -/
+def Float.minChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  match a.classify, b.classify with
+  | .finite sa 0 _, .finite sb 0 _ =>
+    match fmt with
+    | .f32 | .f64 => if sa != sb then throw .unspecified else pure (Float.min a b)
+    | .f16 | .f80 | .f128 => pure (Float.min a b)
+  | _, _ => pure (Float.min a b)
+
+/-- `@max`'s group D guard: the same condition as `minChk`. -/
+def Float.maxChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  match a.classify, b.classify with
+  | .finite sa 0 _, .finite sb 0 _ =>
+    match fmt with
+    | .f32 | .f64 => if sa != sb then throw .unspecified else pure (Float.max a b)
+    | .f16 | .f80 | .f128 => pure (Float.max a b)
+  | _, _ => pure (Float.max a b)
+
+/-- Group C: does `x`'s bit pattern encode an f80 "unnormal", pseudo-infinity or pseudo-NaN —
+the explicit integer bit clear while the biased exponent is nonzero. `classify`'s doc comment
+folds all three into `.nan`, indistinguishable there from a real NaN; compiler_rt's software
+floor/ceil/trunc/round/rem/mod/fma read these bits directly and diverge from x87 hardware on
+them. Always `false` for every other format, whose `classify` never folds distinct bit patterns
+together. -/
+def Float.isInvalidF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  match fmt with
+  | .f80 =>
+    let v := x.bits.toNat
+    let exp := (v >>> (fmt.fracBits + 1)) % 2 ^ fmt.expBits
+    let intBit := (v >>> fmt.fracBits) % 2
+    intBit == 0 && exp != 0
+  | _ => false
+
+/-- Group C, `@mulAdd` only: does `x`'s bit pattern encode an f80 pseudo-denormal — the explicit
+integer bit set while the biased exponent is zero (`docs/floats.md` §f80: modeled as the value
+`1.f × 2^(1 − 16383)`, unlike a true zero/subnormal's clear integer bit). `fma`'s f128-extension
+step on the reference target re-derives the value from the exponent alone by the ordinary
+subnormal formula, ignoring this explicit bit, and reads it as `0`. `@floor`/`@ceil`/`@trunc`/
+`@round`/`@rem`/`@mod` read a pseudo-denormal correctly (0 mismatches there) and need no such
+guard. Always `false` for every other format. -/
+def Float.isPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  match fmt with
+  | .f80 =>
+    let v := x.bits.toNat
+    let exp := (v >>> (fmt.fracBits + 1)) % 2 ^ fmt.expBits
+    let intBit := (v >>> fmt.fracBits) % 2
+    intBit == 1 && exp == 0
+  | _ => false
+
+/-- `@floor`, guarded against group C. -/
+def Float.floorChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.floor x)
+
+/-- `@ceil`, guarded against group C. -/
+def Float.ceilChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.ceil x)
+
+/-- `@trunc` (round-to-integer), guarded against group C. -/
+def Float.truncChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.trunc x)
+
+/-- `@round`, guarded against group C. -/
+def Float.roundChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.round x)
+
+/-- `@rem`, guarded against group C on either operand. -/
+def Float.remChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 then throw .unspecified else pure (Float.rem a b)
+
+/-- `@mod`, guarded against group C on either operand. -/
+def Float.modChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 then throw .unspecified else pure (Float.mod a b)
+
+/-- `@mulAdd` in `ieee` mode, guarded against group C on any operand: an invalid encoding or a
+pseudo-denormal (`Float.isPseudoDenormalF80`). `compiler-rt` mode's `Float.fmaRtChk`
+(`CompilerRt.lean`) applies the identical guard around `Float.fmaRt`. -/
+def Float.fmaChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 || c.isInvalidF80 ||
+      a.isPseudoDenormalF80 || b.isPseudoDenormalF80 || c.isPseudoDenormalF80 then
+    throw .unspecified
+  else pure (Float.fma a b c)
 
 end Zig

@@ -27,11 +27,12 @@ jobs:
           - zig: "0.15.2"
             examples: ""
             full: true
-          # The 0.14.1 exporter has no error unions, so no `errors` example. Its std cannot
+          # The 0.14.1 exporter has no error unions, so no `errors` example; `floatconv` is
+          # 0.15.2-only (f16/f80/f128 conversions), so it is excluded too. Its std cannot
           # build the diff harness; the stale-Gen.lean check shows the translation is the one
           # that the 0.15.2 job tests (zig-patch/0.14.1/TAGS.md).
           - zig: "0.14.1"
-            examples: "basic recursion options"
+            examples: "basic recursion options floatops floats"
             full: false
     steps:
       - name: Checkout

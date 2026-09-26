@@ -16,6 +16,10 @@
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
+#
+# examples/<ex>/translate.args, if present: one line of extra `lake exe air2lean` arguments for
+# that example (e.g. `--float-semantics compiler-rt`; docs/generated-code.md). Opt-in per
+# example, since most examples never need a non-default flag.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -53,7 +57,11 @@ for ex in $examples; do
   fi
 
   echo "== $ex: translating to Lean ==" >&2
-  lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex."
+  translate_args=""
+  if [ -f "examples/$ex/translate.args" ]; then
+    translate_args=$(cat "examples/$ex/translate.args")
+  fi
+  lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex." $translate_args
 
   # `git status` against HEAD: also catches a Gen.lean that is only staged or never added.
   if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then

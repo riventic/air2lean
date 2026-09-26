@@ -1,0 +1,119 @@
+{
+ "schema": 3,
+ "zig_version": "0.14.1",
+ "name": "floats.hypot2",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 3,
+   "tag": "mul",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 5,
+   "tag": "mul",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 7,
+   "tag": "add",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "sqrt",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 1
+  },
+  {
+   "id": 10,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 64
+  },
+  {
+   "k": "void"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

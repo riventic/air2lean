@@ -16,6 +16,8 @@ abbrev InstId := Nat
 
 inductive Ty where
   | int (signed : Bool) (bits : Nat)
+  /-- An IEEE-754 float type. `bits` is one of `16 32 64 80 128` (`Check.lean`). -/
+  | float (bits : Nat)
   | bool
   | void
   | noreturn
@@ -36,6 +38,9 @@ inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type. -/
   | int (ty : TyId) (v : Int)
+  /-- A float constant: the raw bit pattern (`docs/air-json.md`'s `fbits`). `ty` is a `float`
+  type. -/
+  | float (ty : TyId) (bits : Nat)
   | bool (b : Bool)
   /-- `{}`, the only value of `void`. -/
   | void
@@ -68,7 +73,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
-  | some "call" => some ".panic"
+  | some "forLenMismatch" | some "call" => some ".panic"
   | _ => none
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
@@ -98,18 +103,32 @@ inductive CmpOp where
   | lt | le | eq | ne | ge | gt
   deriving Repr, Inhabited, BEq
 
+/-- `floor`, `ceil`, `trunc_float`, `round` (float-only; `trunc` is bit truncation, unrelated). -/
+inductive FloatRoundOp where
+  | floor | ceil | trunc | round
+  deriving Repr, Inhabited, BEq
+
+/-- The libm-backed transcendentals (`docs/floats.md`). -/
+inductive LibmOp where
+  | sin | cos | tan | exp | exp2 | log | log2 | log10
+  deriving Repr, Inhabited, BEq
+
 mutual
 
 inductive Op where
   | arg (index : Nat)
   | arith (op : ArithOp) (mode : Mode) (a b : Val)
   | div (op : DivOp) (a b : Val)
+  /-- `div_float`: float-only division, always exact rounding (no overflow check). -/
+  | divFloat (a b : Val)
   | minMax (isMax : Bool) (a b : Val)
   | withOverflow (op : ArithOp) (a b : Val)
   | bit (op : BitOp) (a b : Val)
   /-- `not` on an integer (bitwise) or a `bool` (logical); `Emit` looks at the type. -/
   | not (a : Val)
   | neg (a : Val)
+  /-- `@abs`. Float-only in the subset (`Check.lean` rejects an integer `abs`). -/
+  | abs (a : Val)
   | shift (op : ShiftOp) (a b : Val)
   | cmp (op : CmpOp) (a b : Val)
   | boolAnd (a b : Val)
@@ -118,8 +137,22 @@ inductive Op where
   | intCast (a : Val)
   /-- `@truncate`. -/
   | trunc (a : Val)
-  /-- Same bits, other type with the same representation (for example `usize` → `u64`). -/
+  /-- Same bits, other type with the same representation (for example `usize` → `u64`); also
+  int ↔ float bit reinterpretation (`Emit` looks at the types on each side). -/
   | bitcast (a : Val)
+  | floatRound (op : FloatRoundOp) (a : Val)
+  | sqrt (a : Val)
+  | libm (op : LibmOp) (a : Val)
+  /-- `mul_add`: `a * b + c`. `raw.args` order is `[lhs, rhs, addend]`. -/
+  | mulAdd (a b c : Val)
+  /-- `fptrunc`/`fpext`: float ↔ float. The target format is the instruction's result type. -/
+  | floatConv (a : Val)
+  /-- `float_from_int`. The source int's signedness matters (`Emit`); the target format is the
+  instruction's result type. -/
+  | floatFromInt (a : Val)
+  /-- `int_from_float` (`safe = false`) / `int_from_float_safe` (`safe = true`). The target int's
+  signedness and width are the instruction's result type. -/
+  | intFromFloat (safe : Bool) (a : Val)
   /-- `is_null`: true iff the optional `a` is `null`. -/
   | isNull (a : Val)
   /-- `is_non_null`: true iff the optional `a` holds a value. -/
