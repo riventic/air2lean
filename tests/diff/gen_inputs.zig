@@ -19,6 +19,7 @@
 //! why their inputs stay small. gcd's recursion is O(log(min(a,b))), so it takes any u32.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 
 const N = 300;
 /// Fixed seed: reused across runs, and generator functions run in a fixed order below, so
@@ -28,13 +29,13 @@ const seed: u64 = 0xA17_1EA0_5EED_0001;
 const Job = struct { duration: u32, due: u32, weight: u8 };
 
 pub fn main() !void {
-    try std.fs.cwd().makePath("tests/diff/basic/inputs");
-    try std.fs.cwd().makePath("tests/diff/recursion/inputs");
-    try std.fs.cwd().makePath("tests/diff/options/inputs");
-    try std.fs.cwd().makePath("tests/diff/errors/inputs");
-    try std.fs.cwd().makePath("tests/diff/floatops/inputs");
-    try std.fs.cwd().makePath("tests/diff/floatconv/inputs");
-    try std.fs.cwd().makePath("tests/diff/floats/inputs");
+    try compat.makePath("tests/diff/basic/inputs");
+    try compat.makePath("tests/diff/recursion/inputs");
+    try compat.makePath("tests/diff/options/inputs");
+    try compat.makePath("tests/diff/errors/inputs");
+    try compat.makePath("tests/diff/floatops/inputs");
+    try compat.makePath("tests/diff/floatconv/inputs");
+    try compat.makePath("tests/diff/floats/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -90,8 +91,8 @@ pub fn main() !void {
     try genDot(rng);
 }
 
-fn openOut(comptime name: []const u8) !std.fs.File {
-    return std.fs.cwd().createFile("tests/diff/basic/inputs/" ++ name ++ ".jsonl", .{});
+fn openOut(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/basic/inputs/" ++ name ++ ".jsonl");
 }
 
 fn edgesU(comptime T: type) [4]T {
@@ -108,9 +109,9 @@ fn printJob(writer: anytype, job: Job) !void {
 
 /// scale(a: u32, b: u8) -> u32. Edges: 4 x 4 = 16 combos, then random fill.
 fn genScale(rng: std.Random) !void {
-    const file = try openOut("scale");
+    var file = try openOut("scale");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesU(u32)) |a| {
@@ -126,9 +127,9 @@ fn genScale(rng: std.Random) !void {
 
 /// clampAdd(a: u16, b: u16) -> u16 (saturating; never panics). Edges: 4 x 4, then random.
 fn genClampAdd(rng: std.Random) !void {
-    const file = try openOut("clampAdd");
+    var file = try openOut("clampAdd");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesU(u16)) |a| {
@@ -144,9 +145,9 @@ fn genClampAdd(rng: std.Random) !void {
 
 /// absDiff(a: i32, b: i32) -> u32. Edges: 7 x 7 = 49 combos (incl. min/max/-1), then random.
 fn genAbsDiff(rng: std.Random) !void {
-    const file = try openOut("absDiff");
+    var file = try openOut("absDiff");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesI(i32)) |a| {
@@ -162,9 +163,9 @@ fn genAbsDiff(rng: std.Random) !void {
 
 /// tardiness(end: u32, due: u32) -> u32. Edges: 4 x 4, then random.
 fn genTardiness(rng: std.Random) !void {
-    const file = try openOut("tardiness");
+    var file = try openOut("tardiness");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesU(u32)) |a| {
@@ -183,9 +184,9 @@ fn genTardiness(rng: std.Random) !void {
 /// `tardiness(..) * job.weight` are both checked; several edge combos (e.g. start=max,
 /// duration=1) drive them into overflow.
 fn genWeightedTardiness(rng: std.Random) !void {
-    const file = try openOut("weightedTardiness");
+    var file = try openOut("weightedTardiness");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesU(u32)) |duration| {
@@ -212,9 +213,9 @@ fn genWeightedTardiness(rng: std.Random) !void {
 /// needed) — the "large sum" edges below exercise the accumulation path without expecting
 /// a panic. Edges: empty, 1-element (0 / 1 / max-1 / max), a few long max-valued slices.
 fn genSum(rng: std.Random) !void {
-    const file = try openOut("sum");
+    var file = try openOut("sum");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     try writer.writeAll("[[]]\n");
@@ -249,9 +250,9 @@ fn genSum(rng: std.Random) !void {
 /// crafted so the running `t += jobs[i].duration` (u32) overflows, or `weightedTardiness`'s
 /// internal add/multiply overflows on its own; then random-length random fill.
 fn genTotalWeightedTardiness(rng: std.Random) !void {
-    const file = try openOut("totalWeightedTardiness");
+    var file = try openOut("totalWeightedTardiness");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     try writer.writeAll("[[]]\n");
@@ -299,9 +300,9 @@ fn genTotalWeightedTardiness(rng: std.Random) !void {
 
 /// classify(x: u8) -> u8. Edges: the switch's own boundaries (0, 1, 9, 10) plus 0/1/max-1/max.
 fn genClassify(rng: std.Random) !void {
-    const file = try openOut("classify");
+    var file = try openOut("classify");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for ([_]u8{ 0, 1, 9, 10, 254, 255 }) |x| {
@@ -315,8 +316,8 @@ fn genClassify(rng: std.Random) !void {
 
 // --- examples/recursion, examples/options, examples/errors -----------------------------
 
-fn openOutIn(comptime dir: []const u8, comptime name: []const u8) !std.fs.File {
-    return std.fs.cwd().createFile(dir ++ "/" ++ name ++ ".jsonl", .{});
+fn openOutIn(comptime dir: []const u8, comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open(dir ++ "/" ++ name ++ ".jsonl");
 }
 
 /// Writes `xs` as a JSON array of numbers, e.g. `[1,2,3]`. Works for any integer element type
@@ -339,9 +340,9 @@ const max_recursion_n: u32 = 1000;
 /// (Euclid's worst case: the most subtraction/mod steps for a given magnitude), then random
 /// fill.
 fn genGcd(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/recursion/inputs", "gcd");
+    var file = try openOutIn("tests/diff/recursion/inputs", "gcd");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesU(u32)) |a| {
@@ -363,9 +364,9 @@ fn genGcd(rng: std.Random) !void {
 /// isEven/isOdd(n: u32) -> bool. n is capped at max_recursion_n (see doc comment above). Edges:
 /// 0, 1, 2, max_recursion_n - 1, max_recursion_n, then random fill in [0, max_recursion_n].
 fn genParity(rng: std.Random, comptime name: []const u8) !void {
-    const file = try openOutIn("tests/diff/recursion/inputs", name);
+    var file = try openOutIn("tests/diff/recursion/inputs", name);
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for ([_]u32{ 0, 1, 2, max_recursion_n - 1, max_recursion_n }) |v| {
@@ -381,9 +382,9 @@ fn genParity(rng: std.Random, comptime name: []const u8) !void {
 /// multiply overflows (panics) at n=13 and every n above it. Edges: the overflow boundary
 /// (11, 12, 13, 14, 20), 0, 1, max_recursion_n - 1, max_recursion_n, then random fill.
 fn genFact(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/recursion/inputs", "fact");
+    var file = try openOutIn("tests/diff/recursion/inputs", "fact");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for ([_]u32{ 0, 1, 2, 11, 12, 13, 14, 20, max_recursion_n - 1, max_recursion_n }) |v| {
@@ -454,18 +455,18 @@ fn writeOptionsRandom(writer: anytype, rng: std.Random, n_start: usize) !void {
 
 /// find(xs: []const u32, x: u32) -> ?usize.
 fn genFind(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/options/inputs", "find");
+    var file = try openOutIn("tests/diff/options/inputs", "find");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
     const n = try writeOptionsEdges(writer);
     try writeOptionsRandom(writer, rng, n);
 }
 
 /// findOr(xs: []const u32, x: u32) -> usize.
 fn genFindOr(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/options/inputs", "findOr");
+    var file = try openOutIn("tests/diff/options/inputs", "findOr");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
     const n = try writeOptionsEdges(writer);
     try writeOptionsRandom(writer, rng, n);
 }
@@ -473,9 +474,9 @@ fn genFindOr(rng: std.Random) !void {
 /// firstIndexPlusOne(xs: []const u32, x: u32) -> usize. Panics (`.?` on null) on the absent
 /// cases in writeOptionsEdges/writeOptionsRandom.
 fn genFirstIndexPlusOne(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/options/inputs", "firstIndexPlusOne");
+    var file = try openOutIn("tests/diff/options/inputs", "firstIndexPlusOne");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
     const n = try writeOptionsEdges(writer);
     try writeOptionsRandom(writer, rng, n);
 }
@@ -486,9 +487,9 @@ const digit_byte_edges = [_]u8{ 0, 1, '/', '0', '9', ':', 254, 255 };
 /// parseDigit(c: u8) -> error{NotDigit}!u8 and digitOrZero(c: u8) -> u8. Edges:
 /// digit_byte_edges, then random fill over the full byte range.
 fn genDigitByte(rng: std.Random, comptime name: []const u8) !void {
-    const file = try openOutIn("tests/diff/errors/inputs", name);
+    var file = try openOutIn("tests/diff/errors/inputs", name);
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (digit_byte_edges) |c| {
@@ -508,9 +509,9 @@ fn genDigitByte(rng: std.Random, comptime name: []const u8) !void {
 /// string; then random fill (about 1 in 6 bytes a non-digit, so both success and failure stay
 /// frequent).
 fn genSumDigits(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/errors/inputs", "sumDigits");
+    var file = try openOutIn("tests/diff/errors/inputs", "sumDigits");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     const fixed = [_][]const u8{
@@ -621,12 +622,16 @@ fn edgesF(comptime T: type) [edgesFLen(T)]T {
         std.math.floatMax(T),     -std.math.floatMax(T),
         std.math.inf(T),          -std.math.inf(T),
         std.math.nan(T),          std.math.snan(T),
-        ulpDown(T, b31),          b31,                      ulpUp(T, b31),
-        ulpDown(T, b31m1),        b31m1,                    ulpUp(T, b31m1),
-        ulpDown(T, b32),          b32,                      ulpUp(T, b32),
-        ulpDown(T, b63),          b63,                      ulpUp(T, b63),
-        ulpDown(T, b64),          b64,                      ulpUp(T, b64),
-        255.5,                    256.0,                    -0.5,          -1.0,
+        ulpDown(T, b31),          b31,
+        ulpUp(T, b31),            ulpDown(T, b31m1),
+        b31m1,                    ulpUp(T, b31m1),
+        ulpDown(T, b32),          b32,
+        ulpUp(T, b32),            ulpDown(T, b63),
+        b63,                      ulpUp(T, b63),
+        ulpDown(T, b64),          b64,
+        ulpUp(T, b64),            255.5,
+        256.0,                    -0.5,
+        -1.0,
     };
     if (T != f80) return base;
     return base ++ [_]T{ f80Unnormal(), f80PseudoInf(), f80PseudoNan(), f80PseudoDenormal() };
@@ -706,9 +711,9 @@ fn writeFloatOpLine(writer: anytype, comptime T: type, sel: u8, a: T, b: T, c: T
 /// `c` (sel 4's mulAdd addend) draws from the edge/random pools alongside `a`/`b`; every other
 /// sel ignores it.
 fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !void {
-    const file = try openOutIn("tests/diff/floatops/inputs", name);
+    var file = try openOutIn("tests/diff/floatops/inputs", name);
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(T);
     var sel: u16 = 0;
@@ -750,9 +755,9 @@ fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !voi
 /// random fill split the same random-bits/controlled-exponent way as genFloatOp, cycling all 4
 /// sign combinations (comparisons are sign-sensitive by nature).
 fn genCmp64(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floatops/inputs", "cmp64");
+    var file = try openOutIn("tests/diff/floatops/inputs", "cmp64");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f64);
     var n: usize = 0;
@@ -783,9 +788,9 @@ fn genCmp64(rng: std.Random) !void {
 /// construction (`b` random, `a = b * k` for a small integer k, so the safety check passes),
 /// half fully random (almost always inexact, so the panic path gets heavy coverage too).
 fn genDivExact64(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floatops/inputs", "divExact64");
+    var file = try openOutIn("tests/diff/floatops/inputs", "divExact64");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f64);
     var n: usize = 0;
@@ -816,9 +821,9 @@ fn genDivExact64(rng: std.Random) !void {
 /// range (only where `@intFromFloat`'s safety check makes the boundary interesting; `void`
 /// skips this for the 4 pure cast/bit-reinterpret targets), then random fill.
 fn genFloatConvF(rng: std.Random, comptime FromT: type, comptime name: []const u8, comptime Bias: type) !void {
-    const file = try openOutIn("tests/diff/floatconv/inputs", name);
+    var file = try openOutIn("tests/diff/floatconv/inputs", name);
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesF(FromT)) |x| {
@@ -844,9 +849,9 @@ fn genFloatConvF(rng: std.Random, comptime FromT: type, comptime name: []const u
 /// Int-argument floatconv functions (fromI64, fromU128, ofBits64): edges of FromT, then random
 /// fill. See the section doc comment above for the wide (>= 64-bit) quoting rule.
 fn genFloatConvI(rng: std.Random, comptime FromT: type, comptime name: []const u8) !void {
-    const file = try openOutIn("tests/diff/floatconv/inputs", name);
+    var file = try openOutIn("tests/diff/floatconv/inputs", name);
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const wide = @bitSizeOf(FromT) >= 64;
     var n: usize = 0;
@@ -870,9 +875,9 @@ fn genFloatConvI(rng: std.Random, comptime FromT: type, comptime name: []const u
 /// through edgesF(f64) at a different stride, so each argument alone visits its full edge set
 /// repeatedly across decorrelated combinations. Then random fill.
 fn genLerp(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "lerp");
+    var file = try openOutIn("tests/diff/floats/inputs", "lerp");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f64);
     const e = edges.len;
@@ -895,9 +900,9 @@ fn genLerp(rng: std.Random) !void {
 /// third of the random `lo`/`hi` pairs are swapped (lo > hi) so both clamp directions and the
 /// already-in-range branch all get exercised.
 fn genClamp(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "clamp");
+    var file = try openOutIn("tests/diff/floats/inputs", "clamp");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f32);
     const e = edges.len;
@@ -923,9 +928,9 @@ fn genClamp(rng: std.Random) !void {
 
 /// isNan(x: f64) -> bool. edgesF(f64), then random fill.
 fn genIsNan(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "isNan");
+    var file = try openOutIn("tests/diff/floats/inputs", "isNan");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesF(f64)) |x| {
@@ -942,9 +947,9 @@ fn genIsNan(rng: std.Random) !void {
 /// random fill (`@sqrt` of a sum of squares: worth stressing both very large and very small
 /// magnitudes, which the random-bits half already reaches).
 fn genHypot2(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "hypot2");
+    var file = try openOutIn("tests/diff/floats/inputs", "hypot2");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f64);
     var n: usize = 0;
@@ -964,9 +969,9 @@ fn genHypot2(rng: std.Random) !void {
 
 /// celsius(k: f32) -> ?f32. edgesF(f32), then random fill.
 fn genCelsius(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "celsius");
+    var file = try openOutIn("tests/diff/floats/inputs", "celsius");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     var n: usize = 0;
     for (edgesF(f32)) |k| {
@@ -1003,9 +1008,9 @@ fn writeRandomFloatSlice(writer: anytype, rng: std.Random, comptime T: type, len
 /// array of float strings): each length gets a few edge-flavored (xs, ys) pairs, offset so xs
 /// and ys differ; then random-length (0-8) random fill.
 fn genDot(rng: std.Random) !void {
-    const file = try openOutIn("tests/diff/floats/inputs", "dot");
+    var file = try openOutIn("tests/diff/floats/inputs", "dot");
     defer file.close();
-    const writer = file.deprecatedWriter();
+    const writer = file.writer();
 
     const edges = edgesF(f64);
     var n: usize = 0;
