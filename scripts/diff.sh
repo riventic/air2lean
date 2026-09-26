@@ -119,21 +119,8 @@ echo "== building + running lean side ==" >&2
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
-# Fatal on Linux (the real check, run in CI), like selfcheck.zig's own fatal/informational split
-# above. Elsewhere: a crash partway through is not fatal — main() runs int categories first, each
-# fully flushed to tests/diff/out/lean/<ex>/ before floatops starts, so a later crash there (seen
-# on 0.16.0 arm64: compiler_rt's f80 rem_pio2l panics on software-emulated f80, which real x86_64
-# hardware doesn't hit) still leaves int output usable. The comparison loop below only reads the
-# dirs $AIR2LEAN_EXAMPLES names, so this only matters when that set excludes float categories.
-if tests/diff/.lake/build/bin/difftest; then
-  :
-else
-  status=$?
-  if [ "$(uname)" = "Linux" ]; then
-    exit "$status"
-  fi
-  echo "warning: Lean side exited $status; continuing (see comment above)" >&2
-fi
+# Diff.lean runs only the examples this script compares.
+AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 
 # Classifies one JSONL output line into $kind (ok|fail|diverge) and $val. For ok: `null` as the
 # literal string "null"; an error union's `{"err":"Name"}` as "err:Name"; otherwise the decimal
