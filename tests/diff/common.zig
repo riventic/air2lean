@@ -30,6 +30,7 @@
 //! interface, so a re-exporting `pub const` declaration in the actual root file is enough.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 
 /// Longest name in `panic` below (`integerPartOutOfBounds` / `exactDivisionRemainder`, 22
 /// bytes) plus headroom; also sized to fit the longest ok-payload this protocol writes (a quoted
@@ -61,10 +62,10 @@ fn reportPanic(kind: []const u8) noreturn {
     // Not `std.debug.panic`: that calls this override again.
     if (panic_fd < 0) {
         std.debug.print("harness panic outside a child: {s}\n", .{kind});
-        std.posix.abort();
+        compat.abort();
     }
-    _ = std.posix.write(panic_fd, kind) catch {};
-    std.posix.exit(1);
+    _ = compat.write(panic_fd, kind) catch {};
+    compat.exit(1);
 }
 
 /// Overrides Zig's default panic handler for the whole binary that imports it as its root
@@ -211,31 +212,29 @@ pub fn parseFloatHex(comptime T: type, s: []const u8) T {
 /// exit with bytes; a nonzero exit with a reported name becomes `.fail` with that name; anything
 /// else (a signal, or no bytes at all) becomes `.fail("unknown")`.
 pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_wide: bool) !Outcome {
-    const fds = try std.posix.pipe();
-    const pid = try std.posix.fork();
+    const fds = try compat.pipe();
+    const pid = try compat.fork();
     if (pid == 0) {
         // Child: never returns. `panic_fd` lets `panic` above report a safety-check trip; the
         // stderr redirect below covers the unlikely case something still writes there (e.g. the
         // generic `panic.call` path) since that noise adds nothing over the `{"fail":...}` line
         // already recorded.
-        std.posix.close(fds[0]);
+        compat.close(fds[0]);
         panic_fd = fds[1];
-        if (std.fs.openFileAbsolute("/dev/null", .{ .mode = .write_only })) |devnull| {
-            std.posix.dup2(devnull.handle, std.posix.STDERR_FILENO) catch {};
-        } else |_| {}
+        compat.silenceStderr();
 
         const raw = @call(.auto, func, args);
         var buf: [max_out_len]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        renderPayload(@TypeOf(raw), fbs.writer(), quote_wide, raw) catch unreachable;
-        const text = fbs.getWritten();
-        _ = std.posix.write(fds[1], text) catch {};
-        std.posix.exit(0);
+        var fbs: std.Io.Writer = .fixed(&buf);
+        renderPayload(@TypeOf(raw), &fbs, quote_wide, raw) catch unreachable;
+        const text = fbs.buffered();
+        _ = compat.write(fds[1], text) catch {};
+        compat.exit(0);
     }
 
     // Parent.
-    std.posix.close(fds[1]);
-    defer std.posix.close(fds[0]);
+    compat.close(fds[1]);
+    defer compat.close(fds[0]);
     var buf: [max_out_len]u8 = undefined;
     var total: usize = 0;
     while (total < buf.len) {
@@ -243,7 +242,7 @@ pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_w
         if (n == 0) break;
         total += n;
     }
-    const wr = std.posix.waitpid(pid, 0);
+    const wr = compat.waitpid(pid, 0);
     const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
     const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
     if (exited_ok and total > 0) {
@@ -262,6 +261,10 @@ pub fn writeResult(writer: anytype, outcome: Outcome) !void {
     }
 }
 
+/// Re-exported so each tests/diff/<ex>/harness.zig calls `common.makePath` instead of importing
+/// compat.zig itself.
+pub const makePath = compat.makePath;
+
 /// Reads `tests/diff/<ex>/inputs/<name>.jsonl`, opens `tests/diff/out/zig/<ex>/<name>.jsonl`,
 /// and calls `perLine` for each non-empty input line with the parsed JSON array and the output
 /// writer.
@@ -274,11 +277,11 @@ pub fn forEachLine(
     const in_path = "tests/diff/" ++ ex ++ "/inputs/" ++ name ++ ".jsonl";
     const out_path = "tests/diff/out/zig/" ++ ex ++ "/" ++ name ++ ".jsonl";
 
-    const content = try std.fs.cwd().readFileAlloc(gpa, in_path, 4 << 20);
+    const content = try compat.readFileAlloc(gpa, in_path, 4 << 20);
     defer gpa.free(content);
-    const out_file = try std.fs.cwd().createFile(out_path, .{});
+    var out_file = try compat.OutFile.open(out_path);
     defer out_file.close();
-    const writer = out_file.deprecatedWriter();
+    const writer = out_file.writer();
 
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {

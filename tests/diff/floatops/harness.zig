@@ -51,11 +51,11 @@ fn runDivExact64(gpa: std.mem.Allocator) !void {
 }
 
 pub fn main() !void {
-    var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
 
-    try std.fs.cwd().makePath("tests/diff/out/zig/floatops");
+    try common.makePath("tests/diff/out/zig/floatops");
 
     try runOp(gpa, f16, "op16", floatops.op16);
     try runOp(gpa, f32, "op32", floatops.op32);

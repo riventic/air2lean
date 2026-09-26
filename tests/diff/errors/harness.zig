@@ -56,11 +56,11 @@ fn runDigitOrZero(gpa: std.mem.Allocator) !void {
 }
 
 pub fn main() !void {
-    var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
 
-    try std.fs.cwd().makePath("tests/diff/out/zig/errors");
+    try common.makePath("tests/diff/out/zig/errors");
 
     try runParseDigit(gpa);
     try runSumDigits(gpa);
