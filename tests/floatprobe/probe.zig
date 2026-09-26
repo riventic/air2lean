@@ -72,7 +72,7 @@ fn probeF80(out: *std.Io.Writer) !void {
     for (cases) |c| {
         const x: f80 = @bitCast(rt(u80, c.b));
         try line(out, f80, c.name, x + rt(f80, 0.0));
-        try out.print("f80 {s} isnan={}\n", .{ c.name, x != x });
+        try out.print("f80 isnan({s}) {}\n", .{ c.name, x != x });
     }
 }
 

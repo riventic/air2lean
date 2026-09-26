@@ -29,10 +29,20 @@ version=$("$zig_bin" version)
 override="tests/floatprobe/expected.$version.txt"
 if [[ -f "$override" ]]; then
   merged="$build_dir/expected.merged.txt"
+  # A duplicate key, or an override key that is not in expected.txt, is an error: either one
+  # would make the merge drop or ignore a line.
   awk '
-    NR == FNR { line[$1 " " $2] = $0; order[++n] = $1 " " $2; next }
-    { line[$1 " " $2] = $0 }
-    END { for (i = 1; i <= n; i++) print line[order[i]] }
+    NR == FNR {
+      k = $1 " " $2
+      if (k in line) { print "duplicate key in " FILENAME ": " k > "/dev/stderr"; bad = 1 }
+      line[k] = $0; order[++n] = k; next
+    }
+    {
+      k = $1 " " $2
+      if (!(k in line)) { print "override key not in expected.txt: " k > "/dev/stderr"; bad = 1 }
+      line[k] = $0
+    }
+    END { if (bad) exit 1; for (i = 1; i <= n; i++) print line[order[i]] }
   ' "$expected" "$override" >"$merged"
   expected="$merged"
 fi

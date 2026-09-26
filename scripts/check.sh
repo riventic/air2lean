@@ -55,6 +55,11 @@ for ex in $examples; do
   ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$ex." "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
+  if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
+    echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$ex.)" >&2
+    exit 1
+  fi
+
   echo "== $ex: checking against golden ($golden_dir, then $version_dir) ==" >&2
   # Each file names the Zig version that wrote it; compare everything else.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
