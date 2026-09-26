@@ -82,7 +82,14 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   let chk (vs : Array Val) : Except String Unit := vs.forM chk1
   match op with
   | .arg _ => pure st
-  | .arith _ _ a b => chk #[a, b]; pure st
+  | .arith _ mode a b =>
+    chk #[a, b]
+    -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
+    -- operand with a wrapping or saturating mode (Zig has none today) instead of guessing.
+    if mode != .checked then
+      if let some (.float _) := types[ty]? then
+        throw s!"{fnName}: near line {st.line}: wrapping/saturating float arithmetic is outside the subset"
+    pure st
   | .div _ a b => chk #[a, b]; pure st
   | .divFloat a b => chk #[a, b]; pure st
   | .minMax _ a b => chk #[a, b]; pure st

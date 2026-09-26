@@ -144,10 +144,14 @@ def hexDigitVal (c : Char) : Option Nat :=
   else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
   else none
 
-/-- A float constant's `fbits`: `"0x"` followed by lowercase hex (`docs/air-json.md`). -/
-def parseHexNat (fnName : String) (s : String) : Except String Nat := do
+/-- A float's bits as `"0x"` + exactly `bits / 4` hex digits: an `fbits` constant
+(`docs/air-json.md`) or a diff-protocol value (`tests/diff/Diff.lean`). -/
+def parseHexNat (fnName : String) (bits : Nat) (s : String) : Except String Nat := do
   if !s.startsWith "0x" then throw s!"{fnName}: not a hex literal: {s}"
-  (s.drop 2).toString.toList.foldlM (fun acc c => do
+  let digits := (s.drop 2).toString.toList
+  if digits.length != bits / 4 then
+    throw s!"{fnName}: {s} has {digits.length} hex digits, expected {bits / 4} for {bits} bits"
+  digits.foldlM (fun acc c => do
     let some d := hexDigitVal c
       | throw s!"{fnName}: invalid hex digit '{c}' in {s}"
     return acc * 16 + d) 0
@@ -204,7 +208,7 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?
       match ty with
-      | .float _ => return .float tyId (← parseHexNat fnName s)
+      | .float n => return .float tyId (← parseHexNat fnName n s)
       | other => throw s!"{fnName}: 'fbits' constant of unexpected type {repr other}"
     else
       let s ← (← j.getObjVal? "val").getStr?

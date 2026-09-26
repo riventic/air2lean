@@ -596,15 +596,18 @@ fn edgesFLen(comptime T: type) usize {
 
 /// Edge values shared by every float-taking generator below: signed zero/subnormal/normal
 /// boundaries, small exact integers, the format's extremes, both infinities, a quiet and a
-/// signaling NaN, five magnitudes (2^31, 2^31-1, 2^32, 2^63, 2^64) with the adjacent bit
-/// pattern on each side, and 255.5/256/-0.5/-1. f80 adds its 4 invalid encodings above.
+/// signaling NaN, five magnitudes with the adjacent bit pattern on each side, and
+/// 255.5/256/-0.5/-1. The magnitudes are the integer-range bounds 2^31, 2^31-1, 2^32, 2^63,
+/// 2^64; f16 cannot hold them (max 65504), so it takes 2^11 (its precision limit), 2^11-1, 2^12,
+/// 2^14, 2^15. f80 adds its 4 invalid encodings above.
 fn edgesF(comptime T: type) [edgesFLen(T)]T {
     const max_sub = fromBits(T, toBits(T, std.math.floatMin(T)) - 1);
-    const b31: T = 2147483648.0;
-    const b31m1: T = 2147483647.0;
-    const b32: T = 4294967296.0;
-    const b63: T = 9223372036854775808.0;
-    const b64: T = 18446744073709551616.0;
+    const small = T == f16;
+    const b31: T = if (small) 2048.0 else 2147483648.0;
+    const b31m1: T = if (small) 2047.0 else 2147483647.0;
+    const b32: T = if (small) 4096.0 else 4294967296.0;
+    const b63: T = if (small) 16384.0 else 9223372036854775808.0;
+    const b64: T = if (small) 32768.0 else 18446744073709551616.0;
     const base = [_]T{
         0.0,                      -0.0,
         std.math.floatTrueMin(T), -std.math.floatTrueMin(T),
