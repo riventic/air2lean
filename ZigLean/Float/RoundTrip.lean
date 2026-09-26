@@ -714,4 +714,55 @@ theorem add_zero_right {fmt : FloatFmt} {x : Float fmt} {sx : Bool} {mx : Nat} {
     rw [hsign]
     exact roundRat_exact hx hm hc sx
 
+/-! ## Integers -/
+
+/-- An integer is `finiteToRat` of its sign and magnitude at exponent `0`. -/
+theorem intCast_eq_finiteToRat (v : Int) : (v : Rat) = finiteToRat (decide (v < 0)) v.natAbs 0 := by
+  unfold finiteToRat
+  simp only [show (0 : Int) ≥ 0 by decide, ↓reduceIte, Int.toNat_zero, Rat.pow_zero, Rat.mul_one]
+  by_cases hv : v < 0
+  · simp only [hv, decide_true, ↓reduceIte]
+    have : v = -((v.natAbs : Nat) : Int) := by omega
+    conv => lhs; rw [this]
+    rw [Rat.intCast_neg, Rat.intCast_natCast]
+  · simp only [hv, decide_false, Bool.false_eq_true, ↓reduceIte]
+    have : v = ((v.natAbs : Nat) : Int) := by omega
+    conv => lhs; rw [this]
+    rfl
+
+/-- The fraction width never exceeds `emax - 1`, in every format: every integer up to
+`2 ^ prec` sits in the normal range. -/
+private theorem fracBits_add_one_le_emax (fmt : FloatFmt) : (fmt.fracBits : Int) + 1 ≤ fmt.emax := by
+  cases fmt <;> decide
+
+/-- Rounding an integer of at most `prec` bits (magnitude `≤ 2 ^ prec`) with its own sign is exact. -/
+theorem roundRat_intCast_toRat (fmt : FloatFmt) (v : Int) (hv : v.natAbs ≤ 2 ^ fmt.prec) :
+    (Float.roundRat fmt (decide (v < 0)) (v : Rat)).toRat? = some (v : Rat) := by
+  have hfe := fracBits_add_one_le_emax fmt
+  have hemin : fmt.emin - fmt.fracBits ≤ 0 := by cases fmt <;> decide
+  have hp : ((fmt.prec : Int) - 1) = fmt.fracBits := by simp only [FloatFmt.prec]; omega
+  by_cases h0 : v = 0
+  · subst h0
+    rw [show ((0 : Int) : Rat) = 0 from rfl, roundRat_zero]
+    unfold Float.toRat?
+    rw [classify_zero]
+    exact congrArg some (finiteToRat_zero _ _)
+  rw [intCast_eq_finiteToRat v]
+  by_cases hlt : v.natAbs < 2 ^ fmt.prec
+  · exact roundRat_finiteToRat_toRat fmt _ _ (by omega) hlt hemin (by omega)
+  · have heq : v.natAbs = 2 ^ fmt.fracBits * 2 ^ 1 := by
+      rw [← Nat.pow_add]; exact Nat.le_antisymm hv (Nat.not_lt.mp hlt)
+    have hshift := finiteToRat_mul_pow (decide (v < 0)) (2 ^ fmt.fracBits) 1 1
+    rw [show (1 : Int) - ((1 : Nat) : Int) = 0 by decide, ← heq] at hshift
+    rw [hshift]
+    exact roundRat_finiteToRat_toRat fmt _ _ (Nat.two_pow_pos _)
+      (Nat.pow_lt_pow_right (by omega) (by simp only [FloatFmt.prec]; omega)) (by omega) (by omega)
+
+/-- `@floatFromInt` is exact on integers of magnitude at most `2 ^ prec`. -/
+theorem ofInt_exact {n : Nat} (fmt : FloatFmt) (s : Bool) (x : BitVec n)
+    (h : (if s then x.toInt else (x.toNat : Int)).natAbs ≤ 2 ^ fmt.prec) :
+    (Float.ofInt fmt s x).toRat? = some ((if s then x.toInt else (x.toNat : Int) : Int) : Rat) := by
+  rw [ofInt_eq_roundRat]
+  exact roundRat_intCast_toRat fmt _ h
+
 end Zig
