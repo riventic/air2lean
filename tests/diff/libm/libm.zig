@@ -6,7 +6,7 @@
 //! fn` of the C symbol name, which the linker could bind to the system libm instead. scripts/
 //! diff.sh's build step copies Zig's own lib/zig/compiler_rt/ and adds the `crt` module's root
 //! file (one `pub const <op> = @import("<op>.zig");` line per op) before building this file with:
-//!   zig build-lib -static -fcompiler-rt -fPIC -OReleaseSafe -mcpu=baseline --name air2lean_libm \
+//!   zig build-lib -static -fcompiler-rt -fPIC -OReleaseFast -mcpu=baseline --name air2lean_libm \
 //!     --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt=<generated crt root>
 //!
 //! ABI, one pair of functions per op x width:
