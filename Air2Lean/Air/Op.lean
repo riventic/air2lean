@@ -11,7 +11,8 @@ namespace Air2Lean
 /-- A type ID, the same as the index into the file's `types` table. -/
 abbrev TyId := Nat
 
-/-- An instruction ID, the same as the AIR instruction index. -/
+/-- An instruction ID: the instruction's position in the function, debug instructions last
+(`Air2Lean/Air/Canon.lean`'s `renumber`), so the same code has the same IDs in every Zig version. -/
 abbrev InstId := Nat
 
 inductive Ty where

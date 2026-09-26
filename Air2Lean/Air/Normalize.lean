@@ -1,4 +1,4 @@
-import Air2Lean.Air.Json
+import Air2Lean.Air.Canon
 
 /-!
 # Per-version normalizer
@@ -8,8 +8,9 @@ import Air2Lean.Air.Json
 version-specific knowledge — the AIR tag table — lives here. `Check.lean` and `Emit.lean`
 never see a `Raw.RawFunc` or a tag string.
 
-To add a Zig version: add a case to `normalize`'s outer `match`, and a tag table that calls
-`normalizeOp_0_15_2` for tags that did not change (`PLAN.md` §Zig version support).
+One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
+0.16.0 (`zig-patch/<version>/TAGS.md`). To add a Zig version: add it to `supportedVersions`;
+if a subset tag differs, add a version case to `normalizeOp` (`PLAN.md` §Zig version support).
 -/
 
 namespace Air2Lean
@@ -31,8 +32,8 @@ def arg3 (fnName : String) (raw : Raw.RawInst) : Except String (Val × Val × Va
 
 mutual
 
-/-- The 0.15.2 AIR tag table. -/
-partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except String Op := do
+/-- The AIR tag table, shared by every supported version. -/
+partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op := do
   -- Fast-math float tags (the exporter also marks these `unsupported`): a specific message.
   if raw.tag.endsWith "_optimized" then
     throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag})"
@@ -125,10 +126,10 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
     return .structFieldVal a idx
   | "aggregate_init" => return .aggregateInit raw.args
   | "block" | "dbg_inline_block" =>
-    let body ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+    let body ← raw.body.mapM (normalizeInst fnName)
     return .block body
   | "loop" =>
-    let body ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+    let body ← raw.body.mapM (normalizeInst fnName)
     return .loop body
   | "br" =>
     let some target := raw.target
@@ -141,17 +142,17 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
     return .repeat target
   | "cond_br" =>
     let c ← arg1 fnName raw
-    let thenBody ← raw.thenBody.mapM (normalizeInst_0_15_2 fnName)
-    let elseBody ← raw.elseBody.mapM (normalizeInst_0_15_2 fnName)
+    let thenBody ← raw.thenBody.mapM (normalizeInst fnName)
+    let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
     return .condBr c thenBody elseBody
   | "switch_br" =>
     let v ← arg1 fnName raw
-    let cases ← raw.cases.mapM (normalizeCase_0_15_2 fnName)
-    let elseBody ← raw.elseBody.mapM (normalizeInst_0_15_2 fnName)
+    let cases ← raw.cases.mapM (normalizeCase fnName)
+    let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
     return .switchBr v cases elseBody
   | "try" | "try_cold" =>
     let v ← arg1 fnName raw
-    let errBody ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+    let errBody ← raw.body.mapM (normalizeInst fnName)
     return .«try» v errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
@@ -168,34 +169,31 @@ partial def normalizeOp_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except St
         | throw s!"{fnName}: inst {raw.id}: '{tag}' needs 'callee'"
       return .call callee raw.args
     else
-      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (0.15.2 tag table)"
+      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
 
-partial def normalizeInst_0_15_2 (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
+partial def normalizeInst (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
   let some ty := raw.ty
     | throw s!"{fnName}: inst {raw.id}: missing 'ty'"
-  let op ← normalizeOp_0_15_2 fnName raw
+  let op ← normalizeOp fnName raw
   return { id := raw.id, ty, op }
 
-partial def normalizeCase_0_15_2 (fnName : String) (raw : Raw.RawCase) :
+partial def normalizeCase (fnName : String) (raw : Raw.RawCase) :
     Except String SwitchCase := do
-  let body ← raw.body.mapM (normalizeInst_0_15_2 fnName)
+  let body ← raw.body.mapM (normalizeInst fnName)
   return { items := raw.items, ranges := raw.ranges, body }
 
 end
 
-def supportedVersions : List String := ["0.15.2", "0.14.1"]
+def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 
-/-- `RawFunc → Func`, dispatching on `zig_version`. -/
+/-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
-  match raw.zigVersion with
-  -- 0.14.1 has no subset tag that differs from 0.15.2 (`zig-patch/0.14.1/TAGS.md`), so it
-  -- uses the same table.
-  | "0.15.2" | "0.14.1" =>
-    let body ← raw.body.mapM (normalizeInst_0_15_2 raw.name)
-    return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
-             body, types := raw.types }
-  | v =>
-    throw s!"{raw.name}: unsupported zig_version '{v}' (supported: \
+  let raw := Raw.canonicalize raw
+  unless supportedVersions.contains raw.zigVersion do
+    throw s!"{raw.name}: unsupported zig_version '{raw.zigVersion}' (supported: \
       {String.intercalate ", " supportedVersions})"
+  let body ← raw.body.mapM (normalizeInst raw.name)
+  return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
+           body, types := raw.types }
 
 end Air2Lean

@@ -12,14 +12,14 @@ open Options
 theorem find_loop_step (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^ 64)
     (s : findLocals) (hle : s.local2.toNat ≤ xs.size)
     (hnf : ∀ j < s.local2.toNat, xs[j]! ≠ x) :
-    ∃ e s', (find.loop7 xs x (Zig.len xs)).run s = pure (e, s') ∧
-      (if find.again7 e then
+    ∃ e s', (find.loop6 xs x (Zig.len xs)).run s = pure (e, s') ∧
+      (if find.again6 e then
           (s'.local2.toNat ≤ xs.size ∧ ∀ j < s'.local2.toNat, xs[j]! ≠ x) ∧
             xs.size - s'.local2.toNat < xs.size - s.local2.toNat
         else (∃ i, e = .ret (some i) ∧ i.toNat < xs.size ∧ xs[i.toNat]! = x ∧
                 ∀ j < i.toNat, xs[j]! ≠ x) ∨
-             (e = .br6 ∧ ∀ j < xs.size, xs[j]! ≠ x)) := by
-  unfold find.loop7
+             (e = .br5 ∧ ∀ j < xs.size, xs[j]! ≠ x)) := by
+  unfold find.loop6
   have hm : xs.size % 18446744073709551616 = xs.size := Nat.mod_eq_of_lt (by omega)
   by_cases hlt : s.local2.toNat < xs.size
   · have hget : xs[s.local2.toNat]! = xs[s.local2.toNat] := getElem!_pos xs s.local2.toNat hlt
@@ -27,11 +27,11 @@ theorem find_loop_step (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 
     · have heq' : xs[s.local2.toNat] = x := by rw [← hget]; exact heq
       refine ⟨.ret (some s.local2), s, ?_, ?_⟩
       · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, heq']
-      · simp only [find.again7, Bool.false_eq_true, ↓reduceIte]
+      · simp only [find.again6, Bool.false_eq_true, ↓reduceIte]
         exact Or.inl ⟨s.local2, rfl, hlt, heq, hnf⟩
     · have hne' : xs[s.local2.toNat] ≠ x := by rw [← hget]; exact heq
       have hinc : ¬ 18446744073709551615 ≤ s.local2.toNat := by omega
-      refine ⟨.rep7, { local2 := s.local2 + 1 }, ?_, ?_⟩
+      refine ⟨.rep6, { local2 := s.local2 + 1 }, ?_, ?_⟩
       · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hne', hinc]
       · have h2 : (s.local2 + 1).toNat = s.local2.toNat + 1 :=
           Zig.toNat_add_one _ (by omega)
@@ -46,9 +46,9 @@ theorem find_loop_step (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 
             exact heq
         · rw [h2]; omega
   · have heqsize : s.local2.toNat = xs.size := by omega
-    refine ⟨.br6, s, ?_, ?_⟩
+    refine ⟨.br5, s, ?_, ?_⟩
     · simp [zig_unfold, Zig.len, Zig.index, hlt, hm]
-    · simp only [find.again7, Bool.false_eq_true, ↓reduceIte]
+    · simp only [find.again6, Bool.false_eq_true, ↓reduceIte]
       refine Or.inr ⟨?_, ?_⟩
       · trivial
       · rw [← heqsize]
@@ -60,20 +60,20 @@ theorem find_spec (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^ 6
     ∃ r, find xs x = pure r ∧
       (∀ i, r = some i → i.toNat < xs.size ∧ xs[i.toNat]! = x ∧ ∀ j < i.toNat, xs[j]! ≠ x) ∧
       (r = none → ∀ j < xs.size, xs[j]! ≠ x) := by
-  obtain ⟨⟨e, s'⟩, hrun, hpost⟩ := Zig.loop_spec (find.loop7 xs x (Zig.len xs))
-    find.again7
+  obtain ⟨⟨e, s'⟩, hrun, hpost⟩ := Zig.loop_spec (find.loop6 xs x (Zig.len xs))
+    find.again6
     (fun s => s.local2.toNat ≤ xs.size ∧ ∀ j < s.local2.toNat, xs[j]! ≠ x)
     (fun s => xs.size - s.local2.toNat)
     (fun r => (∃ i, r.1 = .ret (some i) ∧ i.toNat < xs.size ∧ xs[i.toNat]! = x ∧
                  ∀ j < i.toNat, xs[j]! ≠ x) ∨
-               (r.1 = .br6 ∧ ∀ j < xs.size, xs[j]! ≠ x))
+               (r.1 = .br5 ∧ ∀ j < xs.size, xs[j]! ≠ x))
     (fun s hs' => find_loop_step xs x hs s hs'.1 hs'.2)
     { local2 := 0 } (by simp)
   rcases hpost with ⟨i, hei, hib, hxi, hnf⟩ | ⟨hebr6, hnfall⟩
   · subst hei
     refine ⟨some i, ?_, ?_, ?_⟩
     · unfold find
-      change Zig.loop (find.loop7 xs x (Zig.len xs)) find.again7 { local2 := 0 }
+      change Zig.loop (find.loop6 xs x (Zig.len xs)) find.again6 { local2 := 0 }
         = some (Except.ok (findExit.ret (some i), s')) at hrun
       simp only [zig_unfold]
       rw [hrun]
@@ -86,8 +86,8 @@ theorem find_spec (xs : Array (BitVec 32)) (x : BitVec 32) (hs : xs.size < 2 ^ 6
   · subst hebr6
     refine ⟨none, ?_, ?_, ?_⟩
     · unfold find
-      change Zig.loop (find.loop7 xs x (Zig.len xs)) find.again7 { local2 := 0 }
-        = some (Except.ok (findExit.br6, s')) at hrun
+      change Zig.loop (find.loop6 xs x (Zig.len xs)) find.again6 { local2 := 0 }
+        = some (Except.ok (findExit.br5, s')) at hrun
       simp only [zig_unfold]
       rw [hrun]
       simp [zig_unfold]

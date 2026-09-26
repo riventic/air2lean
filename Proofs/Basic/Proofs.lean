@@ -72,56 +72,56 @@ theorem weightedTardiness_ok (j : Job) (start : BitVec 32)
       simp [zig_unfold, hz]
 
 theorem sum_loop_step (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) (s : sumLocals)
-    (hk : s.local5.toNat ≤ xs.size) (ht : s.total.toNat = psum xs s.local5.toNat) :
-    ∃ e s', (sum.loop10 xs (Zig.len xs)).run s = pure (e, s') ∧
-      (if sum.again10 e then
-          (s'.local5.toNat ≤ xs.size ∧ s'.total.toNat = psum xs s'.local5.toNat) ∧
-            xs.size - s'.local5.toNat < xs.size - s.local5.toNat
-        else e = .br9 ∧ s'.total.toNat = psum xs xs.size) := by
-  unfold sum.loop10
+    (hk : s.local3.toNat ≤ xs.size) (ht : s.total.toNat = psum xs s.local3.toNat) :
+    ∃ e s', (sum.loop7 xs (Zig.len xs)).run s = pure (e, s') ∧
+      (if sum.again7 e then
+          (s'.local3.toNat ≤ xs.size ∧ s'.total.toNat = psum xs s'.local3.toNat) ∧
+            xs.size - s'.local3.toNat < xs.size - s.local3.toNat
+        else e = .br6 ∧ s'.total.toNat = psum xs xs.size) := by
+  unfold sum.loop7
   have hm : xs.size % 18446744073709551616 = xs.size := Nat.mod_eq_of_lt (by omega)
-  by_cases hlt : s.local5.toNat < xs.size
-  · have hx := xs[s.local5.toNat].isLt
-    have hx' : xs[s.local5.toNat].toNat % 18446744073709551616 = xs[s.local5.toNat].toNat :=
+  by_cases hlt : s.local3.toNat < xs.size
+  · have hx := xs[s.local3.toNat].isLt
+    have hx' : xs[s.local3.toNat].toNat % 18446744073709551616 = xs[s.local3.toNat].toNat :=
       Nat.mod_eq_of_lt (by omega)
-    have hp := psum_le xs s.local5.toNat
-    have hadd : ¬ 18446744073709551616 ≤ s.total.toNat + xs[s.local5.toNat].toNat := by
-      have : s.local5.toNat * 2 ^ 32 + 2 ^ 32 ≤ 2 ^ 64 := by omega
+    have hp := psum_le xs s.local3.toNat
+    have hadd : ¬ 18446744073709551616 ≤ s.total.toNat + xs[s.local3.toNat].toNat := by
+      have : s.local3.toNat * 2 ^ 32 + 2 ^ 32 ≤ 2 ^ 64 := by omega
       omega
-    have hinc : ¬ 18446744073709551615 ≤ s.local5.toNat := by omega
-    refine ⟨.rep10, { total := s.total + xs[s.local5.toNat].setWidth 64, local5 := s.local5 + 1 },
+    have hinc : ¬ 18446744073709551615 ≤ s.local3.toNat := by omega
+    refine ⟨.rep7, { total := s.total + xs[s.local3.toNat].setWidth 64, local3 := s.local3 + 1 },
       ?_, ?_⟩
     · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hx', hadd, hinc, StateT.lift]
-    · have h5 : (s.local5 + 1).toNat = s.local5.toNat + 1 :=
+    · have h5 : (s.local3 + 1).toNat = s.local3.toNat + 1 :=
         Zig.toNat_add_one _ (by omega)
-      have htot : (s.total + xs[s.local5.toNat].setWidth 64).toNat
-          = s.total.toNat + xs[s.local5.toNat].toNat := by
+      have htot : (s.total + xs[s.local3.toNat].setWidth 64).toNat
+          = s.total.toNat + xs[s.local3.toNat].toNat := by
         rw [BitVec.toNat_add, BitVec.toNat_setWidth, hx']; omega
       refine ⟨⟨?_, ?_⟩, ?_⟩
       · rw [h5]; omega
       · rw [h5, htot, psum_succ xs _ hlt, ht]
       · rw [h5]; omega
-  · have heq : s.local5.toNat = xs.size := by omega
-    refine ⟨.br9, s, ?_, ?_⟩
+  · have heq : s.local3.toNat = xs.size := by omega
+    refine ⟨.br6, s, ?_, ?_⟩
     · simp [zig_unfold, Zig.len, Zig.index, hlt, hm]
-    · simp only [sum.again10, Bool.false_eq_true, ↓reduceIte]
+    · simp only [sum.again7, Bool.false_eq_true, ↓reduceIte]
       exact ⟨trivial, heq ▸ ht⟩
 
 /-- `sum` never panics for fewer than 2^32 elements, and returns the exact sum. -/
 theorem sum_spec (xs : Array (BitVec 32)) (hs : xs.size < 2 ^ 32) :
     ∃ r, sum xs = pure r ∧ r.toNat = (xs.toList.map BitVec.toNat).sum := by
-  obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (sum.loop10 xs (Zig.len xs))
-    sum.again10
-    (fun s => s.local5.toNat ≤ xs.size ∧ s.total.toNat = psum xs s.local5.toNat)
-    (fun s => xs.size - s.local5.toNat)
-    (fun r => r.1 = .br9 ∧ r.2.total.toNat = psum xs xs.size)
+  obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (sum.loop7 xs (Zig.len xs))
+    sum.again7
+    (fun s => s.local3.toNat ≤ xs.size ∧ s.total.toNat = psum xs s.local3.toNat)
+    (fun s => xs.size - s.local3.toNat)
+    (fun r => r.1 = .br6 ∧ r.2.total.toNat = psum xs xs.size)
     (fun s hs' => sum_loop_step xs hs s hs'.1 hs'.2)
-    { total := 0, local5 := 0 } (by simp [zig_unfold, psum])
+    { total := 0, local3 := 0 } (by simp [zig_unfold, psum])
   subst he
   refine ⟨s'.total, ?_, ?_⟩
   · unfold sum
-    change Zig.loop (sum.loop10 xs (Zig.len xs)) sum.again10 { total := 0, local5 := 0 }
-      = some (Except.ok (sumExit.br9, s')) at hrun
+    change Zig.loop (sum.loop7 xs (Zig.len xs)) sum.again7 { total := 0, local3 := 0 }
+      = some (Except.ok (sumExit.br6, s')) at hrun
     simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]
