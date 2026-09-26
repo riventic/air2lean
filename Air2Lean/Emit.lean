@@ -199,12 +199,13 @@ def FCtx.rtSuffix (fc : FCtx) : String :=
   match fc.floatSemantics with | .ieee => "" | .compilerRt => "Rt"
 
 /-- Before 0.16.0, compiler_rt rounded the `f128` square root through `f64` (`sqrt.zig`) and
-flushed a subnormal `f128` quotient to zero (`divtf3.zig`). 0.16.0 rounds both correctly. -/
+flushed a subnormal `f128` quotient to zero (`divtf3.zig`). 0.16.0 rounds the square root
+correctly, and rounds a subnormal quotient in its own way (`Float.divRt016`). -/
 def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.zigVersion == "0.14.1" || fc.zigVersion == "0.15.2"
 
-/-- `rtSuffix` for the float divisions: `divRt` differs from `div` only in the `f128` flush,
-which 0.16.0 no longer does. -/
-def FCtx.divRtSuffix (fc : FCtx) : String := if fc.zigBefore016 then fc.rtSuffix else ""
+/-- `rtSuffix` for the float divisions: `divRt` before 0.16.0, `divRt016` from 0.16.0. -/
+def FCtx.divRtSuffix (fc : FCtx) : String :=
+  if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
 
 /-- The `FloatFmt` term (`.f16` … `.f128`) for the type at `tid`, for the ops whose target format
 is not otherwise inferable (`Zig.Float.conv`/`Zig.Float.ofInt`'s explicit `fmt` argument). -/

@@ -11,7 +11,8 @@ only through `--float-semantics compiler-rt` (`Air2Lean/Main.lean`); the default
 never calls into it.
 
 Every helper below is `private`: nothing outside this file names them, only the four
-`Float.divRt`/`Float.divTruncRt`/`Float.divFloorRt`/`Float.fmaRt` entry points do.
+`Float.divRt`/`Float.divTruncRt`/`Float.divFloorRt`/`Float.fmaRt` entry points (and the Zig 0.16.0
+`Float.divRt016` family) do.
 -/
 
 namespace Zig
@@ -247,6 +248,97 @@ def Float.divTruncRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.tru
 
 /-- `@divFloor` in `compiler-rt` mode: division, rounded once (`Float.divRt`), then floored. -/
 def Float.divFloorRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.divRt a b)
+
+/-! ## `f128` division, Zig 0.16.0 (`divtf3.zig`)
+
+0.16.0's `__divtf3` no longer flushes a subnormal quotient. It rounds the 113-bit quotient `q`
+and shifts it into the subnormal range (`divtf3.zig:213-247`). `q` comes from a truncated
+Newton-Raphson reciprocal, so it can be one unit below the exact quotient (the source's residual
+then equals `b`); the rounding decision there depends on those bits, not only on the exact value.
+So this port computes `q` and the residual exactly as the source does, in `Nat` arithmetic
+modulo `2^64`/`2^128` for the source's `u64`/`u128`. The normal-range path is correctly rounded
+(the source's own comment: the halfway case cannot occur), so it stays `Float.div`. -/
+
+/-- `normalize` (`compiler_rt.zig`): shift a nonzero subnormal significand up to the implicit
+bit; returns the shifted significand and `1 - shift`. -/
+private def normalize128 (sig : Nat) : Nat × Int :=
+  let shift := 112 - Nat.log2 sig
+  (sig <<< shift, 1 - (shift : Int))
+
+/-- `divtf3.zig`'s result for finite, nonzero `a` and `b` whose quotient is below the normal
+range (`writtenExponent < 1`); `none` for every other case (`Float.div` is exact there). -/
+private def divtf3Subnormal (a b : Float .f128) : Option (Float .f128) := Id.run do
+  let m64 : Nat := 2 ^ 64
+  let m128 : Nat := 2 ^ 128
+  let implicit : Nat := 2 ^ 112
+  let mask : Nat := implicit - 1
+  let A := a.bits.toNat
+  let B := b.bits.toNat
+  let aExp := (A >>> 112) % 2 ^ 15
+  let bExp := (B >>> 112) % 2 ^ 15
+  let sign := (A ^^^ B) &&& 2 ^ 127
+  let mut aSig := A % implicit
+  let mut bSig := B % implicit
+  -- NaN, infinity or zero: not this path.
+  if aExp == 0x7fff || bExp == 0x7fff then return none
+  if (aExp == 0 && aSig == 0) || (bExp == 0 && bSig == 0) then return none
+  let mut scale : Int := 0
+  if aExp == 0 then
+    let (s, k) := normalize128 aSig
+    aSig := s; scale := scale + k
+  if bExp == 0 then
+    let (s, k) := normalize128 bSig
+    bSig := s; scale := scale - k
+  aSig := aSig ||| implicit
+  bSig := bSig ||| implicit
+  let mut qExp : Int := (aExp : Int) - bExp + scale
+  let q63b := (bSig >>> 49) % m64
+  let mut recip64 := (0x7504f333F9DE6484 + m64 - q63b) % m64
+  for _ in [0:5] do
+    let corr := (m64 - ((recip64 * q63b) >>> 64) % m64) % m64
+    recip64 := ((recip64 * corr) >>> 63) % m64
+  recip64 := (recip64 + m64 - 1) % m64
+  let q127blo := (bSig <<< 15) % m64
+  let r64q63 := recip64 * q63b
+  let r64q127 := recip64 * q127blo
+  let correction := (m128 - (r64q63 + (r64q127 >>> 64)) % m128) % m128
+  let r64cH := recip64 * (correction >>> 64)
+  let r64cL := recip64 * (correction % m64)
+  let reciprocal := ((r64cH + (r64cL >>> 64)) + m128 - 2) % m128
+  let mut quotient := (((aSig <<< 2) % m128) * reciprocal) >>> 128
+  let mut residual := 0
+  if quotient < 2 * implicit then
+    residual := ((aSig <<< 113) % m128 + m128 - (quotient * bSig) % m128) % m128
+    qExp := qExp - 1
+  else
+    quotient := quotient >>> 1
+    residual := ((aSig <<< 112) % m128 + m128 - (quotient * bSig) % m128) % m128
+  let written := qExp + 16383
+  if written ≥ 1 then return none
+  let roundUp : Nat := if (residual <<< 1) % m128 > bSig then 1 else 0
+  if written == 0 then
+    -- The source clears the implicit bit and rounds; both of its returns are this value.
+    return some (Float.ofBits (BitVec.ofNat 128 (((quotient % implicit) + roundUp) ||| sign)))
+  -- `@as(u7, @intCast(1 - writtenExponent))`: compiler_rt is built ReleaseFast, so the cast is
+  -- not checked and keeps the low 7 bits. A deep underflow then shifts by less than it should.
+  let shift := (1 - written).toNat % 128
+  if shift > 112 then return some (Float.ofBits (BitVec.ofNat 128 sign))
+  let rounded := (quotient + roundUp) % (2 * implicit)
+  return some (Float.ofBits (BitVec.ofNat 128 (((rounded >>> shift) &&& mask) ||| sign)))
+
+/-- `@divExact`/`/` in `compiler-rt` mode on Zig 0.16.0 (`divtf3.zig` above for `f128`). -/
+def Float.divRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  if h : fmt = .f128 then
+    h ▸ (divtf3Subnormal (h ▸ a) (h ▸ b)).getD (Float.div (h ▸ a) (h ▸ b))
+  else Float.div a b
+
+/-- `@divTrunc` in `compiler-rt` mode on Zig 0.16.0. -/
+def Float.divTruncRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  Float.trunc (Float.divRt016 a b)
+
+/-- `@divFloor` in `compiler-rt` mode on Zig 0.16.0. -/
+def Float.divFloorRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  Float.floor (Float.divRt016 a b)
 
 /-- `@mulAdd` in `compiler-rt` mode, guarded against group C on any operand — the same guard as
 `Float.fmaChk` (`Ops.lean`), around `Float.fmaRt` instead of `Float.fma`. -/

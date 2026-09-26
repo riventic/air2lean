@@ -37,7 +37,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 
 The reference target has no hardware `f128` divide and no FMA instruction, so `/`/`@divExact`/`@divTrunc`/`@divFloor` on `f128` and `@mulAdd` on any format actually run a compiler_rt software routine there, not the IEEE-correct result the rest of this page describes. Two divergences, opt-in together per translated example:
 
-- **Group A — `f128` division** (`__divtf3`, before Zig 0.16.0; §Per-version differences): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
+- **Group A — `f128` division** (`__divtf3`; this paragraph: before Zig 0.16.0; 0.16.0: §Per-version differences): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
 - **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some subnormal inputs.
 
 `ieee` (default; what a proof assumes) always returns the model's own result for groups A and B. `compiler-rt` matches them bit-for-bit (`ZigLean/Float/CompilerRt.lean`) — needed only by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof never needs to know the divergence exists unless its example opts in.
@@ -83,9 +83,9 @@ The model is one set of defs. Where a Zig version gives a different result, the 
 | Op | 0.14.1, 0.15.2 | 0.16.0 | Source |
 |---|---|---|---|
 | f128 `@sqrt` | `fpext(sqrt(fptrunc x to f64))`: `Zig.Float.sqrtF128ViaF64` | correctly rounded: `Zig.Float.sqrt` | compiler_rt `sqrtq` (`sqrt.zig`, a musl port since 0.16.0) |
-| f128 `/`, `@divExact`, `@divTrunc`, `@divFloor`, `compiler-rt` mode | subnormal quotient flushed to ±0 (group A): `Zig.Float.divRt` … | correctly rounded: `Zig.Float.div` … | compiler_rt `__divtf3` (`divtf3.zig`) |
+| f128 `/`, `@divExact`, `@divTrunc`, `@divFloor`, `compiler-rt` mode | subnormal quotient flushed to ±0 (group A): `Zig.Float.divRt` … | subnormal quotient rounded from a 113-bit quotient that can be one unit low, and a deep underflow wraps its shift amount (the unchecked `@intCast` to `u7`): `Zig.Float.divRt016` …, a bit-exact port, equal to 0.16.0 on 80,000 random quotients | compiler_rt `__divtf3` (`divtf3.zig`) |
 
-The probe checks both on the reference target (`tests/floatprobe/expected.0.16.0.txt`).
+The probe checks the `sqrt` rows on the reference target (`tests/floatprobe/expected.0.16.0.txt`); the diff test (`floatops`, `compiler-rt` mode) checks the division rows.
 
 ## Transcendental functions
 
