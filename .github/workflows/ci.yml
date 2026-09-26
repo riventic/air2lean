@@ -51,6 +51,12 @@ jobs:
           tar -xJf host-zig.tar.xz -C host-zig --strip-components=1
           echo "$PWD/host-zig" >> "$GITHUB_PATH"
 
+      # The float model follows the reference target (x86_64-linux); this checks that the
+      # target still gives the results it depends on (docs/floats.md).
+      - name: Float target probe
+        if: matrix.full
+        run: scripts/floatprobe.sh
+
       # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when
       # the patch, the version pin, or the build script itself changes.
       - name: Cache patched zig

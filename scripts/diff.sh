@@ -16,6 +16,11 @@
 # recursion's functions should ever not terminate) — is a mismatch: printed immediately, and
 # makes the whole run exit 1.
 #
+# A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics)
+# matches any Zig line and is counted as "unspecified". The count per function must equal the
+# one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
+# expects 0), so a model that throws `unspecified` too often fails the test.
+#
 # Usage: diff.sh
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
@@ -37,7 +42,8 @@ echo "== building zig harnesses ==" >&2
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
 trap 'rm -rf "$build_dir"' EXIT
 for ex in $examples; do
-  "$zig_bin" build-exe -OReleaseSafe -femit-bin="$build_dir/$ex" \
+  # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
+  "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/$ex" \
     --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" \
     -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig
   "$build_dir/$ex"
@@ -99,7 +105,8 @@ classify_line() {
 # seeing one at all is itself a bug. bash 3.2 has no associative arrays, hence the `case`.
 expected_ctor_for_zig_kind() {
   case "$1" in
-    integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds) echo overflow ;;
+    integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds | integerPartOutOfBounds)
+      echo overflow ;;
     outOfBounds) echo outOfBounds ;;
     divideByZero) echo divByZero ;;
     reachedUnreachable) echo unreachable ;;
@@ -111,12 +118,14 @@ expected_ctor_for_zig_kind() {
 echo "== comparing ==" >&2
 total_ok=0
 total_fail_match=0
+total_unspecified=0
 total_mismatch=0
 mismatch_found=0
 
 for ex in $examples; do
   ex_ok=0
   ex_fail_match=0
+  ex_unspecified=0
   ex_mismatch=0
 
   for fn in $(functions_of "$ex"); do
@@ -135,6 +144,7 @@ for ex in $examples; do
 
     fn_ok=0
     fn_fail_match=0
+    fn_unspecified=0
     fn_mismatch=0
     i=0
     while IFS=$'\t' read -r in_line zig_line lean_line; do
@@ -148,6 +158,8 @@ for ex in $examples; do
 
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ]; then
         fn_ok=$((fn_ok + 1))
+      elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.unspecified ]; then
+        fn_unspecified=$((fn_unspecified + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
         [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
         [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
@@ -161,17 +173,33 @@ for ex in $examples; do
       fi
     done < <(paste "$in_file" "$zig_file" "$lean_file")
 
-    echo "$ex.$fn: ok=$fn_ok fail_match=$fn_fail_match mismatch=$fn_mismatch (of $n)"
+    want_unspecified=0
+    if [ -f "tests/diff/$ex/unspecified.txt" ]; then
+      want_unspecified=$(awk -v f="$fn" '$1 == f { print $2 }' "tests/diff/$ex/unspecified.txt")
+      want_unspecified=${want_unspecified:-0}
+    fi
+    if [ "$fn_unspecified" -ne "$want_unspecified" ]; then
+      mismatch_found=1
+      echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected $want_unspecified" \
+        "(tests/diff/$ex/unspecified.txt)" >&2
+    fi
+
+    echo "$ex.$fn: ok=$fn_ok fail_match=$fn_fail_match unspecified=$fn_unspecified" \
+      "mismatch=$fn_mismatch (of $n)"
     ex_ok=$((ex_ok + fn_ok))
     ex_fail_match=$((ex_fail_match + fn_fail_match))
+    ex_unspecified=$((ex_unspecified + fn_unspecified))
     ex_mismatch=$((ex_mismatch + fn_mismatch))
   done
 
-  echo "TOTAL $ex: ok=$ex_ok fail_match=$ex_fail_match mismatch=$ex_mismatch"
+  echo "TOTAL $ex: ok=$ex_ok fail_match=$ex_fail_match unspecified=$ex_unspecified" \
+    "mismatch=$ex_mismatch"
   total_ok=$((total_ok + ex_ok))
   total_fail_match=$((total_fail_match + ex_fail_match))
+  total_unspecified=$((total_unspecified + ex_unspecified))
   total_mismatch=$((total_mismatch + ex_mismatch))
 done
 
-echo "TOTAL: ok=$total_ok fail_match=$total_fail_match mismatch=$total_mismatch"
+echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspecified" \
+  "mismatch=$total_mismatch"
 [ "$mismatch_found" -eq 0 ]

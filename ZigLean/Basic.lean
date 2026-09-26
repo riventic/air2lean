@@ -18,6 +18,10 @@ inductive Error where
   | divByZero
   | unreachable
   | panic
+  /-- Zig leaves the result open, and the model does not choose one: the bits of a NaN
+  (`@bitCast`), or `@intFromFloat` of a NaN or of an out-of-range value without a safety
+  check. A proof of "never throws" shows that the code never reaches such a case. -/
+  | unspecified
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/
