@@ -201,11 +201,9 @@ private theorem roundQuot_le {N D : Nat} (prec : Nat) (h : N < D * 2 ^ prec) :
   have hcast : ((2 ^ prec : Nat) : Int) = (2:Int) ^ prec := by exact_mod_cast rfl
   unfold roundQuot
   simp only []
-  split
-  · omega
-  · split
-    · omega
-    · split <;> omega
+  -- `try split` per level: the proof must also hold for `scripts/mutate.sh` (d), which removes
+  -- the tie-to-even branch.
+  split <;> (try split) <;> (try split) <;> omega
 
 private theorem expBits_le_width_pred (fmt : FloatFmt) : fmt.expBits ≤ fmt.width - 1 := by
   cases fmt <;> decide

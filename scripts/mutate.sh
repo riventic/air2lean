@@ -21,15 +21,13 @@
 # (c) Zig-source mutation, options: `findOr`'s `orelse xs.len` becomes `orelse 0` in a temp copy
 #     of examples/options/options.zig, re-translated to Lean — same shape as (a), but for the
 #     optional-result protocol (a not-found search now returns 0 instead of xs.len).
-# (d) Lean-runtime mutation: `roundTiesEven` (ZigLean/Float/Round.lean) rounds ties away from
-#     zero instead of to even. `Float.roundRat`'s domain is already `q.abs` (nonnegative), so
-#     "away from zero" on that domain is just "always round up" — the tie branch's
-#     `if fl % 2 = 0 then fl else fl + 1` becomes `fl + 1`. Every float op that rounds
-#     (`+ - * /`, `@sqrt`, `@floatFromInt`, …) routes through this one function, so a tie input
-#     changes result across all of them; `scripts/diff.sh` must catch it via mismatches, not a
-#     build failure. `ZigLean/Float/Lemmas.lean` never unfolds into `roundTiesEven`/`floorLog2`
-#     (its arithmetic lemmas restate ops via the opaque `Float.roundRat`, not its internals), so
-#     no lemma needs stubbing for this mutation.
+# (d) Lean-runtime mutation: `roundQuot` (ZigLean/Float/Round.lean) rounds ties away from zero
+#     instead of to even. `Float.roundRat`'s domain is nonnegative, so "away from zero" is
+#     "always round up": the tie branch `else if m % 2 = 0 then (m : Int) else (m : Int) + 1`
+#     becomes `else (m : Int) + 1`. Every float op that rounds (`+ - * /`, `@sqrt`,
+#     `@floatFromInt`, …) goes through it, so `scripts/diff.sh` must catch it via mismatches,
+#     not a build failure: the one lemma that unfolds `roundQuot` (`roundQuot_le`) is written to
+#     hold for both forms.
 #
 # Usage: mutate.sh
 # Env:
@@ -201,14 +199,14 @@ else
   [ "$detected" -eq 1 ] || all_detected=0
 fi
 
-echo "== mutation (d): roundTiesEven ties away from zero (Lean runtime) ==" >&2
+echo "== mutation (d): roundQuot ties away from zero (Lean runtime) ==" >&2
 if ! has_example floatops; then
   echo "mutation (d): skipped (AIR2LEAN_EXAMPLES excludes floatops)"
 else
-  sed -i.bak 's/if fl % 2 = 0 then fl else fl + 1/fl + 1/' "$round_lean"
+  sed -i.bak 's/else if m % 2 = 0 then (m : Int) else (m : Int) + 1/else (m : Int) + 1/' "$round_lean"
   rm -f "$round_lean.bak"
-  grep -q 'else fl + 1$' "$round_lean" && ! grep -q 'if fl % 2 = 0' "$round_lean" || {
-    echo "error: mutation (d): sed did not change roundTiesEven" >&2
+  ! grep -q 'if m % 2 = 0 then' "$round_lean" || {
+    echo "error: mutation (d): sed did not change roundQuot" >&2
     exit 1
   }
 
