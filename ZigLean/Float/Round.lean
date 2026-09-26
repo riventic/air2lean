@@ -119,7 +119,7 @@ private theorem shiftLt_mono {n d : Nat} {e1 e2 : Int} (hle : e1 ≤ e2)
 /-- `⌊log₂(n/d)⌋` for `n d : Nat`, both positive: a `Nat.log2` guess, corrected by one
 comparison (`ilog2_spec`) — all in `Nat`/`Int`, so no `zpow` (`Rat^Int`) monotonicity is
 ever needed, unlike the `Rat`-based `floorLog2` this replaces. -/
-private def ilog2 (n d : Nat) : Int :=
+def ilog2 (n d : Nat) : Int :=
   let g : Int := (Nat.log2 n : Int) - (Nat.log2 d : Int)
   if n <<< (-g).toNat < d <<< g.toNat then g - 1 else g
 
@@ -169,7 +169,7 @@ theorem ilog2_spec {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
 `up_bound`/`low_bound`'s shift encoding. Directly from `ilog2_spec`'s two branches (`.1` gives it
 outright; `.2` gives the doubled form at `-ilog2 n d`, halved back down here). The base case
 `shiftLt_mono` widens to reach `roundRat`'s clamped `e0 + prec`. -/
-private theorem ilog2_succ_bound {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
+theorem ilog2_succ_bound {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
     n <<< (-(ilog2 n d + 1)).toNat < d <<< (ilog2 n d + 1).toNat := by
   have hspec := ilog2_spec hn hd
   by_cases hk : 0 ≤ ilog2 n d
@@ -184,7 +184,7 @@ private theorem ilog2_succ_bound {n d : Nat} (hn : 0 < n) (hd : 0 < d) :
     omega
 
 /-- Round-half-to-even of the (unreduced) fraction `N / D`, `D > 0`. -/
-private def roundQuot (N D : Nat) : Int :=
+def roundQuot (N D : Nat) : Int :=
   let m := N / D
   let r := N % D
   if 2 * r < D then (m : Int)
@@ -216,7 +216,7 @@ private theorem width_pos (fmt : FloatFmt) : 1 ≤ fmt.width := by
 /-- Bit-level content of `Float.pack`: the packed value stays in range, its top bit is the
 sign, the exponent field is recovered exactly by shifting past the low
 `fmt.width - 1 - fmt.expBits` bits, and those low bits are exactly `rest`. -/
-private theorem pack_bits_spec (fmt : FloatFmt) (sign : Bool) {exp rest : Nat}
+theorem pack_bits_spec (fmt : FloatFmt) (sign : Bool) {exp rest : Nat}
     (hexp : exp < 2 ^ fmt.expBits) (hrest : rest < 2 ^ (fmt.width - 1 - fmt.expBits)) :
     (Float.pack fmt sign exp rest).bits.toNat < 2 ^ fmt.width ∧
     (Float.pack fmt sign exp rest).bits.msb = sign ∧
@@ -296,21 +296,21 @@ private theorem pack_bits_spec (fmt : FloatFmt) (sign : Bool) {exp rest : Nat}
     · rw [hveq, hE2, Nat.mul_comm (2 ^ fmt.expBits + exp) (2 ^ (fmt.width - 1 - fmt.expBits)),
         Nat.mul_add_mod, Nat.mod_eq_of_lt hrest]
 
-private theorem restW_eq_fracBits (fmt : FloatFmt) (h : fmt ≠ .f80) :
+theorem restW_eq_fracBits (fmt : FloatFmt) (h : fmt ≠ .f80) :
     fmt.width - 1 - fmt.expBits = fmt.fracBits := by
   cases fmt <;> first | exact absurd rfl h | decide
 
-private theorem restW_eq_fracBits_succ_f80 :
+theorem restW_eq_fracBits_succ_f80 :
     FloatFmt.f80.width - 1 - FloatFmt.f80.expBits = FloatFmt.f80.fracBits + 1 := by decide
 
-private theorem expMask_succ (fmt : FloatFmt) : 2 ^ fmt.expBits - 1 + 1 = 2 ^ fmt.expBits := by
+theorem expMask_succ (fmt : FloatFmt) : 2 ^ fmt.expBits - 1 + 1 = 2 ^ fmt.expBits := by
   have := Nat.two_pow_pos fmt.expBits; omega
 
 /-- The biased-exponent field `encodeFinite` computes stays strictly below the all-ones pattern,
 given the caller's overflow check (`he_hi`) already ruled out `finalizeRounded`'s `Float.inf`
 branch. Shared by every non-zero case, both `f80` and not; strong enough to give both `≠ expMask`
 (so `classify` doesn't take the nan/inf branch) and `< 2 ^ expBits` (so `pack_bits_spec` applies). -/
-private theorem fieldExp_lt (fmt : FloatFmt) (e : Int)
+theorem fieldExp_lt (fmt : FloatFmt) (e : Int)
     (he_hi : e + (fmt.prec - 1 : Int) ≤ fmt.emax) :
     (e + (fmt.bias : Int) + (fmt.fracBits : Int)).toNat < 2 ^ fmt.expBits - 1 := by
   have hEB1 : 1 ≤ fmt.expBits := by cases fmt <;> decide
@@ -329,7 +329,7 @@ private theorem fieldExp_lt (fmt : FloatFmt) (e : Int)
 `m = 0` is a zero; `m < 2 ^ fmt.fracBits` is subnormal. For `f80`, `m` already carries the
 explicit integer bit (it is `2 ^ fmt.fracBits + fraction` in the normal case), so the low
 `fmt.width - 1 - fmt.expBits` bits are `m` itself in both cases. -/
-private def Float.encodeFinite (fmt : FloatFmt) (neg : Bool) (m : Nat) (e : Int) : Float fmt :=
+def Float.encodeFinite (fmt : FloatFmt) (neg : Bool) (m : Nat) (e : Int) : Float fmt :=
   if m = 0 then Float.zero neg
   else if m < 2 ^ fmt.fracBits then
     Float.pack fmt neg 0 m
@@ -484,17 +484,16 @@ theorem finalizeRounded_spec (fmt : FloatFmt) (neg : Bool) (m0 e0 : Int)
         rw [← hcast] at hm0 hEq; omega
       · omega
 
-/-- `roundRat`'s pre-renormalization mantissa `roundQuot N D` never exceeds `2 ^ prec`, given the
+/-- `roundRat`'s quotient `N / D` stays below `2 ^ prec`, given the
 clamp `e0 ≥ ilog2 n d - (prec - 1)` (always true of `roundRat`'s `e0`, a `Max.max` against a
 floor). Widens `ilog2_succ_bound` up to `e0 + prec` via `shiftLt_mono`, splits on `e0`'s sign to
-match `N`/`D`'s own split, then hands the resulting `N < D * 2 ^ prec` to `roundQuot_le`. -/
-private theorem roundRat_m0_le {n d : Nat} (hn : 0 < n) (hd : 0 < d) (prec : Nat) (e0 : Int)
+match `N`/`D`'s own split. -/
+theorem roundRat_N_lt {n d : Nat} (hn : 0 < n) (hd : 0 < d) (prec : Nat) (e0 : Int)
     (he0 : ilog2 n d - ((prec : Int) - 1) ≤ e0) :
-    roundQuot (if e0 ≥ 0 then n else n <<< (-e0).toNat)
-        (if e0 ≥ 0 then d <<< e0.toNat else d) ≤ (2:Int) ^ prec := by
+    (if e0 ≥ 0 then n else n <<< (-e0).toNat)
+      < (if e0 ≥ 0 then d <<< e0.toNat else d) * 2 ^ prec := by
   have hmono : n <<< (-(e0 + (prec:Int))).toNat < d <<< (e0 + (prec:Int)).toNat :=
     shiftLt_mono (by omega) (ilog2_succ_bound hn hd)
-  apply roundQuot_le prec
   split
   · rename_i he0'
     have hc : n < d * 2 ^ (e0 + (prec:Int)).toNat := shiftLt_of_nonneg (by omega) hmono
@@ -517,6 +516,14 @@ private theorem roundRat_m0_le {n d : Nat} (hn : 0 < n) (hd : 0 < d) (prec : Nat
       calc n * 2 ^ (-e0).toNat = n * 2 ^ (-(e0 + (prec:Int))).toNat * 2 ^ prec := by
             rw [Nat.mul_assoc, ← Nat.pow_add, hsplit]
         _ < d * 2 ^ prec := (Nat.mul_lt_mul_right (Nat.two_pow_pos _)).mpr hc
+
+/-- `roundRat`'s pre-renormalization mantissa `roundQuot N D` never exceeds `2 ^ prec`
+(`roundRat_N_lt`, then `roundQuot_le`). -/
+theorem roundRat_m0_le {n d : Nat} (hn : 0 < n) (hd : 0 < d) (prec : Nat) (e0 : Int)
+    (he0 : ilog2 n d - ((prec : Int) - 1) ≤ e0) :
+    roundQuot (if e0 ≥ 0 then n else n <<< (-e0).toNat)
+        (if e0 ≥ 0 then d <<< e0.toNat else d) ≤ (2:Int) ^ prec :=
+  roundQuot_le prec (roundRat_N_lt hn hd prec e0 he0)
 
 /-- Round `|q|` to `fmt`, to nearest, ties to even; `neg` gives the sign, also of a zero
 result. Subnormals and overflow (→ `inf`) follow from the exponent clamp and range check
