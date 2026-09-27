@@ -9,6 +9,7 @@ import Proofs.Floatconv.Gen
 import Proofs.Floats.Gen
 import Proofs.Variants.Gen
 import Proofs.Pointers.Gen
+import Proofs.Slices.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -470,30 +471,31 @@ def runVariants : IO Unit := do
     let items ← getArr j
     pure (renderBool (Variants.isRound (← shapeOf items[0]!)))
 
-/-! ### Memory: `{"bufs":[…],"args":[…]}` (docs/generated-code.md §Differential test) -/
+/-! ### Memory: `{"bufs":[…],"args":[…]}` (docs/generated-code.md §Differential test)
 
-/-- One 16-byte aligned heap block per input buffer, so block `i` is buffer `i`. -/
-def memOf (bufs : Array (Array (BitVec 8))) : IO Zig.Mem := do
+The memory at the start is the example's `mem0`: its `g` globals are blocks `0 … g-1`. Input
+buffer `i` is block `g + i`. -/
+
+/-- One 16-byte aligned heap block per input buffer, after the globals of `m0`. -/
+def memOf (m0 : Zig.Mem) (bufs : Array (Array (BitVec 8))) : IO Zig.Mem := do
   let act : Zig.MemM Unit := bufs.forM fun bytes => do
     let p ← Zig.alloc .heap bytes.size 16
     Zig.storeBytes p 1 (bytes.map .int)
-  match (act.run {}).run with
+  match (act.run m0).run with
   | some (.ok (_, m)) => pure m
   | _ => throw (IO.userError "memOf: cannot make the input buffers")
 
-/-- A pointer argument `{"buf":i,"off":o}`. -/
-def ptrOf (j : Json) : IO Zig.Ptr := do
-  pure ⟨some (← getField j "buf").toNat, ← getField j "off"⟩
+/-- A pointer argument `{"buf":i,"off":o}`, after `g` globals. -/
+def ptrOf (g : Nat) (j : Json) : IO Zig.Ptr := do
+  pure ⟨some (g + (← getField j "buf").toNat), ← getField j "off"⟩
 
 /-- An optional pointer argument: `null` or a pointer. -/
-def optPtrOf (j : Json) : IO (Option Zig.Ptr) :=
-  if j.isNull then pure none else some <$> ptrOf j
+def optPtrOf (g : Nat) (j : Json) : IO (Option Zig.Ptr) :=
+  if j.isNull then pure none else some <$> ptrOf g j
 
-/-- A pointer result: `{"buf":i,"off":o}`, the same as common.zig writes it. -/
-def ptrStr (p : Zig.Ptr) : String :=
-  match p.block with
-  | some b => s!"\{\"buf\":{b},\"off\":{p.off}}"
-  | none => "\"outside the buffers\""
+/-- A slice argument `{"buf":i,"off":o,"len":n}`, after `g` globals. -/
+def sliceOf (g : Nat) (j : Json) : IO Zig.Slice := do
+  pure ⟨← ptrOf g j, bv 64 (← getField j "len")⟩
 
 /-- A byte as two hex digits; `??` for an undefined byte (it matches any Zig byte, diff.sh). -/
 def byteStr : Zig.Byte → String
@@ -501,51 +503,111 @@ def byteStr : Zig.Byte → String
   | .undef => "??"
   | .ptrFrag .. => "pp"
 
-/-- `renderOk` for a function that uses memory: the result, then the bytes of the first `n`
-blocks (the input buffers) after the call. -/
-def renderMem {α : Type} (n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : α → String) :
+/-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
+a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer. -/
+def ptrStr (g : Nat) (m : Zig.Mem) (p : Zig.Ptr) (size : Nat) (len : Option Nat := none) :
+    String :=
+  let lenStr := match len with | some n => s!",\"len\":{n}" | none => ""
+  match p.block with
+  | some b =>
+    if g ≤ b then s!"\{\"buf\":{b - g},\"off\":{p.off}{lenStr}}"
+    else
+      let bytes := (m.blocks[b]?.map (·.bytes)).getD #[]
+      let o := p.off.toNat
+      "{\"bytes\":\"" ++ String.join ((bytes.extract o (o + size)).toList.map byteStr) ++ "\"}"
+  | none => "\"outside the buffers\""
+
+/-- A slice result of items of `size` bytes (`ptrStr`). -/
+def sliceStr (g : Nat) (m : Zig.Mem) (size : Nat) (s : Zig.Slice) : String :=
+  ptrStr g m s.ptr (size * s.len.toNat) (some s.len.toNat)
+
+/-- `renderOk` for a function that uses memory: the result, then the bytes of the `n` input
+buffers after the call (blocks `g` to `g + n - 1`). -/
+def renderMem {α : Type} (g n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : Zig.Mem → α → String) :
     String :=
   match r.run with
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok (v, m)) =>
-    let bufs := (m.blocks.extract 0 n).toList.map fun blk =>
+    let bufs := (m.blocks.extract g (g + n)).toList.map fun blk =>
       "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
-    "{\"ok\":" ++ payload v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]}"
+    "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]}"
 
 /-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
-memory. -/
-def processMem {α : Type} (ex name : String) (call : Array Json → IO (Zig.MemM α))
-    (payload : α → String) : IO Unit :=
+memory, from the memory `m0` of the example. `call` gets the number of globals. -/
+def processMem {α : Type} (ex : String) (m0 : Zig.Mem) (name : String)
+    (call : Nat → Array Json → IO (Zig.MemM α)) (payload : Zig.Mem → α → String) : IO Unit :=
   processFile ex name fun j => do
     let bufsJ ← getArr (← orFail (j.getObjVal? "bufs") "bufs")
     let bufs ← bufsJ.mapM fun b => do (← getArr b).mapM fun x => return bv 8 (← getInt x)
     let args ← getArr (← orFail (j.getObjVal? "args") "args")
-    pure (renderMem bufs.size ((← call args).run (← memOf bufs)) payload)
+    let g := m0.blocks.size
+    pure (renderMem g bufs.size ((← call g args).run (← memOf m0 bufs)) payload)
 
-def unitStr (_ : Unit) : String := "null"
+def unitStr (_ : Zig.Mem) (_ : Unit) : String := "null"
 
 def runPointers : IO Unit := do
   let ex := "pointers"
-  processMem ex "swap" (fun a => return Pointers.swap (← ptrOf a[0]!) (← ptrOf a[1]!)) unitStr
-  processMem ex "delay"
-    (fun a => return Pointers.delay (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
-  processMem ex "maxPtr" (fun a => return Pointers.maxPtr (← optPtrOf a[0]!) (← optPtrOf a[1]!))
-    fun p => match p with | none => "null" | some p => ptrStr p
-  processMem ex "dueOf" (fun a => return Pointers.dueOf (← ptrOf a[0]!)) ptrStr
-  processMem ex "sumTo" (fun a => return Pointers.sumTo (bv 32 (← getInt a[0]!))) (natStr · true)
-  processMem ex "copyJob" (fun a => return Pointers.copyJob (← ptrOf a[0]!) (← ptrOf a[1]!))
+  let m0 := Pointers.mem0
+  processMem ex m0 "swap" (fun g a => return Pointers.swap (← ptrOf g a[0]!) (← ptrOf g a[1]!)) unitStr
+  processMem ex m0 "delay"
+    (fun g a => return Pointers.delay (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex m0 "maxPtr" (fun g a => return Pointers.maxPtr (← optPtrOf g a[0]!) (← optPtrOf g a[1]!))
+    fun m p => match p with | none => "null" | some p => ptrStr m0.blocks.size m p 4
+  processMem ex m0 "dueOf" (fun g a => return Pointers.dueOf (← ptrOf g a[0]!)) fun m p => ptrStr m0.blocks.size m p 4
+  processMem ex m0 "sumTo" (fun _ a => return Pointers.sumTo (bv 32 (← getInt a[0]!))) fun _ v => natStr v true
+  processMem ex m0 "copyJob" (fun g a => return Pointers.copyJob (← ptrOf g a[0]!) (← ptrOf g a[1]!))
     unitStr
-  processMem ex "bumpOpt" (fun a => return Pointers.bumpOpt (← ptrOf a[0]!)) unitStr
-  processMem ex "setOpt" (fun a => do
+  processMem ex m0 "bumpOpt" (fun g a => return Pointers.bumpOpt (← ptrOf g a[0]!)) unitStr
+  processMem ex m0 "setOpt" (fun g a => do
       let x ← if a[1]!.isNull then pure none else pure (some (bv 32 (← getInt a[1]!)))
-      return Pointers.setOpt (← ptrOf a[0]!) x) unitStr
-  processMem ex "same" (fun a => return Pointers.same (← ptrOf a[0]!) (← ptrOf a[1]!))
-    fun b => if b then "1" else "0"
-  processMem ex "setOptJob"
-    (fun a => return Pointers.setOptJob (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
-  processMem ex "addDown"
-    (fun a => return Pointers.addDown (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+      return Pointers.setOpt (← ptrOf g a[0]!) x) unitStr
+  processMem ex m0 "same" (fun g a => return Pointers.same (← ptrOf g a[0]!) (← ptrOf g a[1]!))
+    fun _ b => if b then "1" else "0"
+  processMem ex m0 "setOptJob"
+    (fun g a => return Pointers.setOptJob (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex m0 "addDown"
+    (fun g a => return Pointers.addDown (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+
+/-- A pure function in the memory protocol (no buffers). -/
+def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
+
+def runSlices : IO Unit := do
+  let ex := "slices"
+  let m0 := Slices.mem0
+  let u32 (m : Zig.Mem) (v : BitVec 32) := let _ := m; natStr v false
+  let bytes (m : Zig.Mem) (s : Zig.Slice) := sliceStr m0.blocks.size m 1 s
+  processMem ex m0 "reverse" (fun g a => return Slices.reverse (← sliceOf g a[0]!)) unitStr
+  processMem ex m0 "fill" (fun g a => return Slices.fill (← sliceOf g a[0]!) (bv 8 (← getInt a[1]!))) unitStr
+  processMem ex m0 "clear" (fun g a => return Slices.clear (← sliceOf g a[0]!)) unitStr
+  processMem ex m0 "copyWithin" (fun g a => return (Slices.copyWithin (← sliceOf g a[0]!)
+    (bv 64 (← getInt a[1]!)) (bv 64 (← getInt a[2]!)) (bv 64 (← getInt a[3]!)))) unitStr
+  processMem ex m0 "copy" (fun g a => return Slices.copy (← sliceOf g a[0]!) (← sliceOf g a[1]!)) unitStr
+  processMem ex m0 "indexOfScalar" (fun _ a => return Slices.indexOfScalar (bv 8 (← getInt a[0]!)))
+    fun _ v => optStr v true
+  processMem ex m0 "factorial" (fun _ a => return pureMem (Slices.factorial (bv 64 (← getInt a[0]!))))
+    fun _ v => natStr v false
+  processMem ex m0 "bump" (fun _ _ => return Slices.bump) u32
+  processMem ex m0 "sumZ" (fun g a => return Slices.sumZ (← ptrOf g a[0]!)) u32
+  processMem ex m0 "subZ" (fun g a => return (Slices.subZ (← sliceOf g a[0]!)
+    (bv 64 (← getInt a[1]!)) (bv 64 (← getInt a[2]!)))) bytes
+  processMem ex m0 "sumMid" (fun g a => return Slices.sumMid (← sliceOf g a[0]!)) u32
+  processMem ex m0 "total" (fun g a => return Slices.total (← ptrOf g a[0]!)) u32
+  processMem ex m0 "at" (fun g a => return Slices.«at» (← ptrOf g a[0]!) (bv 64 (← getInt a[1]!))) u32
+  processMem ex m0 "second" (fun g a => return Slices.second (← ptrOf g a[0]!)) u32
+  processMem ex m0 "prevItem" (fun g a => return Slices.prevItem (← ptrOf g a[0]!)) u32
+  processMem ex m0 "colorName" (fun _ a => do
+      let c ← match (← getInt a[0]!) with
+        | 0 => pure Slices.Color.red | 1 => pure .green | _ => pure .blue
+      return Slices.colorName c) bytes
+  processMem ex m0 "failName" (fun _ a => return Slices.failName (bv 8 (← getInt a[0]!))) bytes
+  processMem ex m0 "bumpAt" (fun g a => return Slices.bumpAt (← ptrOf g a[0]!) (bv 64 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "localArr" (fun _ a => return Slices.localArr (bv 64 (← getInt a[0]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "lenOr" (fun g a => do
+      let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
+      return Slices.lenOr s) fun _ v => natStr v true
 
 end DiffTest
 
@@ -608,6 +670,8 @@ def main : IO Unit := do
   run "variants" DiffTest.runVariants
 
   run "pointers" DiffTest.runPointers
+
+  run "slices" DiffTest.runSlices
 
   run "floats" do
     DiffTest.runLerp

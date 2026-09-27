@@ -15,6 +15,9 @@ instance : Zig.Enc Job where
   encode v := Zig.Enc.fields 12 [(0, Zig.Enc.encode v.duration), (4, Zig.Enc.encode v.due), (8, Zig.Enc.encode v.weight)]
   decode bs := do pure { duration := ← Zig.Enc.decodeAt bs 0, due := ← Zig.Enc.decodeAt bs 4, weight := ← Zig.Enc.decodeAt bs 8 }
 
+/-- The memory at program start: block `k` is global `k`. -/
+def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+
 structure addDownLocals where
   deriving Inhabited
 

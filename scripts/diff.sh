@@ -190,11 +190,12 @@ expected_ctor_for_zig_kind() {
   case "$1" in
     integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds | integerPartOutOfBounds)
       echo overflow ;;
-    outOfBounds) echo outOfBounds ;;
+    outOfBounds | startGreaterThanEnd) echo outOfBounds ;;
     divideByZero) echo divByZero ;;
     reachedUnreachable) echo unreachable ;;
     exactDivisionRemainder | unwrapNull | unwrapError | forLenMismatch | invalidEnumValue \
-      | inactiveUnionField | corruptSwitch | panic) echo panic ;;
+      | inactiveUnionField | corruptSwitch | sentinelMismatch | copyLenMismatch | memcpyAlias \
+      | panic) echo panic ;;
     *) echo "" ;;
   esac
 }

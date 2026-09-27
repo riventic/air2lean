@@ -167,6 +167,10 @@ end Arith
 
 @[inline] def len {α : Type} (a : Array α) : usize := BitVec.ofNat 64 a.size
 
+/-- Array element (`array_elem_val`). Out of range ⇒ `outOfBounds`. -/
+@[inline] def vindex {α : Type} {n : Nat} (a : Vector α n) (i : usize) : Result α :=
+  if h : i.toNat < n then pure a[i.toNat] else throw .outOfBounds
+
 /-! ## Optionals -/
 
 /-- Unwrap an optional's payload (`optional_payload`). Sema emits this only after an

@@ -141,6 +141,20 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b
   | "slice_len" => let a ← arg1 fnName raw; return .sliceLen a
   | "slice_elem_val" => let (a, b) ← arg2 fnName raw; return .sliceElemVal a b
+  | "ptr_add" => let (a, b) ← arg2 fnName raw; return .ptrAdd false a b
+  | "ptr_sub" => let (a, b) ← arg2 fnName raw; return .ptrAdd true a b
+  | "ptr_elem_ptr" | "slice_elem_ptr" => let (a, b) ← arg2 fnName raw; return .elemPtr a b
+  | "ptr_elem_val" => let (a, b) ← arg2 fnName raw; return .ptrElemVal a b
+  | "array_elem_val" => let (a, b) ← arg2 fnName raw; return .arrayElemVal a b
+  | "slice" => let (a, b) ← arg2 fnName raw; return .slice a b
+  | "slice_ptr" => let a ← arg1 fnName raw; return .slicePtr a
+  | "array_to_slice" => let a ← arg1 fnName raw; return .arrayToSlice a
+  | "ptr_slice_len_ptr" => let a ← arg1 fnName raw; return .sliceFieldPtr true a
+  | "ptr_slice_ptr_ptr" => let a ← arg1 fnName raw; return .sliceFieldPtr false a
+  | "memset" | "memset_safe" => let (a, b) ← arg2 fnName raw; return .memset a b
+  | "memcpy" | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy a b
+  | "tag_name" => let a ← arg1 fnName raw; return .tagName a
+  | "error_name" => let a ← arg1 fnName raw; return .errorName a
   | "struct_field_val" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -216,6 +230,6 @@ def normalize (raw : Raw.RawFunc) : Except String Func := do
       {String.intercalate ", " supportedVersions})"
   let body ← raw.body.mapM (normalizeInst raw.name)
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types, layouts := raw.layouts }
+           body, types := raw.types, layouts := raw.layouts, globals := raw.globals }
 
 end Air2Lean
