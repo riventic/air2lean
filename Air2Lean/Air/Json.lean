@@ -4,7 +4,7 @@ import Air2Lean.Air.Op
 /-!
 # AIR JSON parser
 
-Parses one exported function file (`docs/air-json.md`, schema 1 or 2) into `RawFunc`: a literal,
+Parses one exported function file (`docs/air-json.md`) into `RawFunc`: a literal,
 tag-agnostic mirror of the JSON. `Normalize.lean` turns a `RawFunc` into a version-independent
 `Func` (`Air2Lean/Air/Op.lean`).
 
@@ -39,7 +39,7 @@ structure RawInst where
   param : Option Nat
   /-- `call*`. -/
   callee : Option Val
-  /-- `struct_field_val`, `struct_field_ptr`. -/
+  /-- `struct_field_val`, `struct_field_ptr`, `union_init`. -/
   index : Option Nat
   /-- `dbg_var_ptr`, `dbg_var_val`, `dbg_arg_inline`. -/
   name : Option String
@@ -69,6 +69,17 @@ structure RawFunc where
 def optField (j : Json) (k : String) : Option Json :=
   let v := j.getObjValD k
   if v.isNull then none else some v
+
+/-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
+def parseIntLit (fnName : String) (s : String) : Except String Int :=
+  if s.startsWith "-" then
+    match (s.drop 1).toNat? with
+    | some n => return (-(n : Int))
+    | none => throw s!"{fnName}: not an integer literal: {s}"
+  else
+    match s.toNat? with
+    | some n => return (n : Int)
+    | none => throw s!"{fnName}: not an integer literal: {s}"
 
 def parseTy (j : Json) : Except String Ty := do
   let k ← (← j.getObjVal? "k").getStr?
@@ -110,6 +121,28 @@ def parseTy (j : Json) : Except String Ty := do
       let fty ← fj.getObjVal? "ty"
       fty.getNat?
     return .tuple fields
+  | "enum" =>
+    let name ← (← j.getObjVal? "name").getStr?
+    let tag ← (← j.getObjVal? "tag").getNat?
+    let exhaustive ← (← j.getObjVal? "exhaustive").getBool?
+    let fieldsJ ← (← j.getObjVal? "fields").getArr?
+    let fields ← fieldsJ.mapM fun fj => do
+      let fname ← (← fj.getObjVal? "name").getStr?
+      let v ← (← fj.getObjVal? "value").getStr?
+      return (fname, ← parseIntLit name v)
+    return .enum name tag exhaustive fields
+  | "union" =>
+    let name ← (← j.getObjVal? "name").getStr?
+    let layout ← (← j.getObjVal? "layout").getStr?
+    let tag ← match optField j "tag" with
+      | some tj => some <$> tj.getNat?
+      | none => pure none
+    let fieldsJ ← (← j.getObjVal? "fields").getArr?
+    let fields ← fieldsJ.mapM fun fj => do
+      let fname ← (← fj.getObjVal? "name").getStr?
+      let fty ← (← fj.getObjVal? "ty").getNat?
+      return (fname, fty)
+    return .union name layout tag fields
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
     return .other name
@@ -125,17 +158,6 @@ def parseTy (j : Json) : Except String Ty := do
       let errs ← errsJ.mapM Json.getStr?
       return .errorSet (some errs)
   | other => throw s!"unknown type kind: {other}"
-
-/-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
-def parseIntLit (fnName : String) (s : String) : Except String Int :=
-  if s.startsWith "-" then
-    match (s.drop 1).toNat? with
-    | some n => return (-(n : Int))
-    | none => throw s!"{fnName}: not an integer literal: {s}"
-  else
-    match s.toNat? with
-    | some n => return (n : Int)
-    | none => throw s!"{fnName}: not an integer literal: {s}"
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -205,6 +227,27 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       match ty with
       | .optional .. => return .optNull tyId
       | other => throw s!"{fnName}: 'null' constant of unexpected type {repr other}"
+    else if let some enumJ := optField j "enum" then
+      match ty with
+      | .enum .. => return .enumTag tyId (← parseIntLit fnName (← enumJ.getStr?))
+      | other => throw s!"{fnName}: 'enum' constant of unexpected type {repr other}"
+    else if let some uvalJ := optField j "uval" then
+      match ty with
+      | .union _ _ (some _) fields =>
+        -- The active field is the tag enum constant's position among the union fields; the
+        -- tag enum lists its names in the same order (`docs/air-json.md`).
+        let some tagJ := optField j "utag"
+          | throw s!"{fnName}: tagged union constant without 'utag'"
+        let .enumTag tagTy v ← parseVal fnName types tagJ
+          | throw s!"{fnName}: union constant: 'utag' is not an enum constant"
+        let some (.enum _ _ _ tagFields) := types[tagTy]?
+          | throw s!"{fnName}: union constant: bad tag type {tagTy}"
+        let some fname := (tagFields.find? (·.2 == v)).map (·.1)
+          | throw s!"{fnName}: union constant: no tag field with value {v}"
+        let some idx := fields.findIdx? (·.1 == fname)
+          | throw s!"{fnName}: union constant: no field {fname}"
+        return .unionVal tyId idx (← parseVal fnName types uvalJ)
+      | other => throw s!"{fnName}: 'uval' constant of unexpected type {repr other}"
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?
       match ty with

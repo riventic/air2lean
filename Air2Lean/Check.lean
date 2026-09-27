@@ -4,24 +4,24 @@ import Air2Lean.Air.Op
 # Subset checker
 
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
-types, a float type outside `16 32 64 80 128` bits, an integer `@abs`, pointer types that are
-not an `alloc` local or a read-only slice, and an `alloc` result whose address escapes past
-`load`/`store`/`dbg`. Errors name the function and the nearest `dbg_stmt` line.
+types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
+pointer that is not a place (a pointer into a local) or a read-only slice, and a place whose
+address escapes past `load`/`store`/`dbg`. Errors name the function and the nearest `dbg_stmt` line.
 -/
 
 namespace Air2Lean
 
 /-- Checker state threaded through a function body in program order: `line` is the most
-recent `dbg_stmt`'s source line (for error messages), `allocs` is every `alloc` id seen so
-far. -/
+recent `dbg_stmt`'s source line (for error messages), `places` is every pointer into a local seen
+so far: an `alloc` (or `ret_ptr`), and a field pointer or `bitcast` of a place. -/
 structure CheckState where
   line : Nat
-  allocs : Array InstId
+  places : Array InstId
 
-/-- The only pointer shapes in the subset: an `alloc` local (`one`, mutable) or a read-only
-slice (`slice`, const). -/
+/-- The only pointer shapes in the subset: a pointer into a local (`one`; `checkPlace` rejects
+any other single pointer) or a read-only slice (`slice`, const). -/
 def ptrInSubset (size : String) (isConst : Bool) : Bool :=
-  (size == "one" && !isConst) || (size == "slice" && isConst)
+  size == "one" || (size == "slice" && isConst)
 
 /-- Reject `other` types, an out-of-subset float width, and non-alloc/non-const-slice
 pointers, recursively through struct fields, array/optional children, and tuple fields. -/
@@ -42,7 +42,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
     if ptrInSubset size isConst then checkTy fnName types line child
     else
       throw s!"{fnName}: near line {line}: pointer type (size={size}, const={isConst}) is \
-        outside the subset (only an `alloc` local or a read-only slice `[]const T`)"
+        outside the subset (only a pointer into a local or a read-only slice `[]const T`)"
   | .array _ child => checkTy fnName types line child
   | .optional child =>
     if let some (.ptr ..) := types[child]? then
@@ -54,20 +54,38 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
     checkTy fnName types line payload
   | .errorSet _ => pure ()
   | .struct _ _ fields => fields.forM fun (_, fty) => checkTy fnName types line fty
+  | .enum _ tag _ _ => checkTy fnName types line tag
+  | .union name layout tag fields =>
+    if tag.isNone then
+      throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
+        subset (only a tagged `union(enum)`)"
+    fields.forM fun (_, fty) => checkTy fnName types line fty
   | .tuple fields => fields.forM (checkTy fnName types line)
   | .int .. | .bool | .void | .noreturn => pure ()
 
-/-- `v` is not the address of an `alloc` seen so far — the escape check. Any other use of an
-`alloc`'s id besides the `ptr` operand of `load`/`store` or inside `dbg` goes through here. -/
+/-- `v` is not a place (a pointer into a local) — the escape check. Any use of a place other than
+the pointer operand of `load`/`store`/`struct_field_ptr`/`set_union_tag`/`ret_load`, a `bitcast`
+of it, or `dbg` goes through here. -/
 def checkNotEscaping (fnName : String) (st : CheckState) (ctxId : InstId) (v : Val) :
     Except String Unit :=
   match v with
   | .inst vid =>
-    if st.allocs.contains vid then
+    if st.places.contains vid then
       throw s!"{fnName}: near line {st.line}: inst {ctxId} uses local {vid}'s address outside \
         load/store/dbg"
     else pure ()
   | _ => pure ()
+
+/-- `v` is a place: a memory access through any other pointer is outside the subset. -/
+def checkPlace (fnName : String) (st : CheckState) (ctxId : InstId) (v : Val) :
+    Except String Unit :=
+  match v with
+  | .inst vid =>
+    if st.places.contains vid then pure ()
+    else throw s!"{fnName}: near line {st.line}: inst {ctxId}: access through a pointer that is \
+      not a local (pointers are outside the subset)"
+  | _ => throw s!"{fnName}: near line {st.line}: inst {ctxId}: access through a constant pointer \
+      (outside the subset)"
 
 mutual
 
@@ -115,7 +133,11 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   | .boolOr a b => chk #[a, b]; pure st
   | .intCast a => chk1 a; pure st
   | .trunc a => chk1 a; pure st
-  | .bitcast a => chk1 a; pure st
+  | .bitcast a =>
+    match a with
+    | .inst aid => if st.places.contains aid then pure { st with places := st.places.push id }
+                   else pure st
+    | _ => pure st
   | .isNull a => chk1 a; pure st
   | .isNonNull a => chk1 a; pure st
   | .optPayload a => chk1 a; pure st
@@ -126,9 +148,16 @@ partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id :
   | .errCode a => chk1 a; pure st
   | .wrapErrPayload a => chk1 a; pure st
   | .wrapErr a => chk1 a; pure st
-  | .alloc => pure { st with allocs := st.allocs.push id }
-  | .load _ptr => pure st
-  | .store _ptr v => chk1 v; pure st
+  | .isNamedEnum a => chk1 a; pure st
+  | .unionTag a => chk1 a; pure st
+  | .unionInit _ a => chk1 a; pure st
+  | .alloc => pure { st with places := st.places.push id }
+  | .fieldPtr base _ =>
+    checkPlace fnName st id base; pure { st with places := st.places.push id }
+  | .setUnionTag ptr tag => checkPlace fnName st id ptr; chk1 tag; pure st
+  | .retLoad ptr => checkPlace fnName st id ptr; pure st
+  | .load ptr => checkPlace fnName st id ptr; pure st
+  | .store ptr v => checkPlace fnName st id ptr; chk1 v; pure st
   | .sliceLen s => chk1 s; pure st
   | .sliceElemVal s i => chk #[s, i]; pure st
   | .structFieldVal s _ => chk1 s; pure st
@@ -176,7 +205,7 @@ def check (f : Func) : Except String Unit := do
   for p in f.params do
     checkTy f.name f.types 0 p
   checkTy f.name f.types 0 f.ret
-  let _ ← checkInsts f.name f.types { line := 0, allocs := #[] } f.body
+  let _ ← checkInsts f.name f.types { line := 0, places := #[] } f.body
   pure ()
 
 end Air2Lean

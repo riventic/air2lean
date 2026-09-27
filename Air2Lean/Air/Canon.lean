@@ -9,11 +9,11 @@ Two rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, be
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
-1. `forwardReadOnlyCopies`. Sema lowers `&p` of a parameter `p` to a read-only stack copy:
-   `alloc`, one `store` of `p` in the function's own body, and `bitcast`s to a const pointer
-   after it. Only this shape is rewritten: a store in a branch or a loop, or of another value,
-   keeps its `alloc`. Zig 0.16.0 reads a field, the
-   length or an element of a struct or slice parameter through such a copy
+1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
+   payload) to a read-only stack copy: `alloc`, one `store` of `v`, and `bitcast`s to a const
+   pointer after the store in the store's own body. Only this shape is rewritten: a `bitcast`
+   outside that body, or a second store, keeps the `alloc`. Zig 0.16.0 reads a field, the
+   length or an element of a struct, union or slice value through such a copy
    (`struct_field_ptr_index_N`, `ptr_slice_len_ptr`, `slice_elem_ptr`, then `load`), where 0.15.2
    reads the value (`struct_field_val`, `slice_len`, `slice_elem_val`). Nothing writes the copy,
    so a read through it equals the read of the value. The pass changes each such pointer
@@ -70,6 +70,17 @@ def projection? (i : RawInst) : Option (String × Option Nat) :=
   | "slice_elem_ptr" => some ("slice_elem_val", none)
   | _ => none
 
+/-- For each instruction `i` of `body` (nested bodies included): the instructions after `i` in
+its own body, and everything nested in them. They run after `i` on every path that reaches
+them. -/
+partial def afterIds (body : Array RawInst) : Std.HashMap InstId (Std.HashSet InstId) :=
+  let nested (i : RawInst) : Array (Array RawInst) :=
+    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
+  (body.mapIdx fun k i => (k, i)).foldl (init := {}) fun m (k, i) =>
+    let later := (flatten (body.extract (k + 1) body.size)).foldl (fun s j => s.insert j.id) {}
+    (nested i).foldl (fun m b => (afterIds b).fold (fun m a s => m.insert a s) m)
+      (m.insert i.id later)
+
 /-- `forwardReadOnlyCopies` (module doc). A copy is forwarded only if every use of every pointer
 derived from it is a `load`, another such projection, or a debug instruction; otherwise the
 function keeps its pointers, and `Check.lean` decides. -/
@@ -81,16 +92,10 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
       users := users.insert u ((users.getD u #[]).push i)
   let isConstPtr (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with | some (.ptr _ c _) => c | _ => false
-  -- Position in body order: an instruction in the function's own body (not in a nested body)
-  -- runs on every path, and before every instruction at a later position.
-  let pos : Std.HashMap InstId Nat :=
-    (all.mapIdx fun k i => (i.id, k)).foldl (fun m (a, b) => m.insert a b) {}
-  let topLevel : Std.HashSet InstId := f.body.foldl (fun s i => s.insert i.id) {}
-  let isArg (v : Val) : Bool :=
-    match v with | .inst id => all.any (fun i => i.id == id && i.tag == "arg") | _ => false
-  -- Copies: an `alloc` whose uses are one `store` of a parameter into it, in the function's own
-  -- body, and `bitcast`s to a const pointer after that store. So the store runs before every
-  -- read on every path, and the stored value never changes.
+  let after := afterIds f.body
+  -- Copies: an `alloc` whose uses are one `store` of a value into it, and `bitcast`s to a const
+  -- pointer after that store in the store's own body (`afterIds`). So the store runs before
+  -- every read on every path, and the stored value (an SSA value) never changes.
   let mut copyVal : Std.HashMap InstId Val := {}
   for a in all do
     if a.tag != "alloc" then continue
@@ -101,9 +106,9 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     let rest := us.filter fun u => !(stores.any (·.id == u.id))
     if let #[s] := stores then
       if let some v := s.args[1]? then
-        if topLevel.contains s.id && isArg v &&
-            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty &&
-              pos.getD u.id 0 > pos.getD s.id 0) then
+        let later := after.getD s.id {}
+        if (match v with | .undef _ => false | _ => true) &&
+            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty && later.contains u.id) then
           copyVal := copyVal.insert a.id v
   -- Read-only pointers: a `bitcast` of a copy, or a projection of one (or of a slice value).
   let mut ptrs : Std.HashSet InstId := {}
