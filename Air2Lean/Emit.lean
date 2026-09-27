@@ -5,7 +5,8 @@ import Air2Lean.Check
 
 `emit : Array Func → String → String → String` turns a list of already-checked functions into
 one Lean source file: `import ZigLean`, one `namespace <ns>`, struct types once (deduplicated
-by Zig name), then per function a generated `<Fn>Locals` structure (one field per `alloc`), a
+by Zig name), `mem0` and the `@tagName`/`@errorName` defs if a function uses memory (§Globals),
+then per function a generated `<Fn>Locals` structure (one field per `alloc`), a
 generated `<Fn>Exit` inductive (`ret` / `br<targetId>` / `rep<targetId>`, one constructor per
 distinct branch target reachable in the function), and the function itself as a
 `Zig.M <Fn>Locals <Fn>Exit` do-block wrapped by a top-level `def` that unwraps `.ret`.

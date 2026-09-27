@@ -9,14 +9,15 @@
 | | `memmove` |
 | | `runtime_nav_ptr` |
 
-207 tags in 0.14.1, 212 in 0.15.2. None of the differences is in the air2lean subset (floats, SIMD, memory, pointers).
+207 tags in 0.14.1, 212 in 0.15.2. `memmove` is in the subset (M16b): 0.14.1 has no `@memmove`, so the `slices` example does not run on 0.14.1, and the exporter decodes `memmove` only from 0.15.2 on (`Compat.isNewBinOp`). No other difference is in the subset.
 
 ## Exporter port
 
 - `zig-patch/air-json/json.zig` is shared with every version; its `Compat` section has the 0.14.1
   branch: `std.json.WriteStream` over an unbuffered `std.fs.File.Writer`; `Air.extra` is a slice;
   `arg` has no ZIR parameter index (a running count of `arg`s gives the same value in the
-  subset); `Value.fmtValue` takes `{}`, not `{f}`; no `int_from_float_safe` tag.
+  subset); `Value.fmtValue` takes `{}`, not `{f}`; no `int_from_float_safe` tag; no `memmove`
+  tag; a resolved global has no `is_const` (a `var` has a `variable` value; `Compat.navInfo`).
 - Hook (`hook.patch`): after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`, as in 0.15.2.
 
 ## Build

@@ -6,9 +6,10 @@ import ZigLean.Mem.Enc
 
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
-pointer other than `*T` or a read-only slice `[]const T`, and a memory access to a value that
-the memory model cannot encode (`memTyOk`). `checkProgram` rejects a function that uses memory
-and has a slice (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
+`[*c]T`, `allowzero` or bit-pointer, a memory access to a value that the memory model cannot
+encode (`modelLayout`), a pointer constant without a global, and a global that is `threadlocal`,
+`extern` or has no initial value. `checkProgram` checks the slice items that a function that
+uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 -/
 
