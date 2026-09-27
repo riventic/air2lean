@@ -31,13 +31,17 @@
 # (e) Emitter-output mutation, variants: the generated `Light.ofInt?` (Proofs/Variants/Gen.lean) also
 #     accepts the unnamed value 3. `lightOf(3)` then returns `.red`, where Zig panics
 #     (`invalidEnumValue`): the conversion an enum's generated defs do must match Zig's.
+# (f) Lean-runtime mutation, pointers: `Zig.store` (ZigLean/Mem/Basic.lean) writes one byte too
+#     few (the last byte of the value stays as it was). `swap`, `delay` and `copyJob` then leave
+#     other bytes in the buffers than Zig: the diff test compares the buffers after each call.
 #
 # Usage: mutate.sh
 # Env:
 #   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
-#                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e))
+#                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
+#                         pointers for (f))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -68,18 +72,21 @@ variants_gen="Proofs/Variants/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
+mem_lean="ZigLean/Mem/Basic.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
+mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
+cp "$mem_lean" "$mem_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -93,7 +100,9 @@ cleanup() {
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
-  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup"
+  cp "$mem_backup" "$mem_lean"
+  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
+    "$mem_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -237,6 +246,22 @@ else
   run_and_report "mutation (e)" variants
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$variants_backup" "$variants_gen"
+fi
+
+echo "== mutation (f): Zig.store writes one byte too few (Lean runtime) ==" >&2
+if ! has_example pointers; then
+  echo "mutation (f): skipped (AIR2LEAN_EXAMPLES excludes pointers)"
+else
+  sed -i.bak 's/storeBytes p align (Enc.encode v)$/storeBytes p align (Enc.encode v).pop/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q 'storeBytes p align (Enc.encode v).pop' "$mem_lean" || {
+    echo "error: mutation (f): sed did not change Zig.store" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (f)" pointers
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$mem_backup" "$mem_lean"
 fi
 
 [ "$all_detected" -eq 1 ]
