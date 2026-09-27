@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 84 functions in 10 examples translate and match the compiled Zig on 61,380 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers` and `slices`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding. See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 84 functions in 10 examples translate and match the compiled Zig on 61,380 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers` and `slices`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding. Memory proofs use a separation logic ([docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -20,7 +20,7 @@ foo.zig ──patched zig──▶ *.json ──air2lean──▶ Gen.lean ─�
 |---|---|
 | Compiler patch (AIR → JSON) | [`zig-patch/`](zig-patch/README.md), format in [`docs/air-json.md`](docs/air-json.md) |
 | Translator | `Air2Lean/` (parser, per-version normalizer, subset checker, emitter) |
-| Runtime semantics + lemmas | `ZigLean/` (floats: `ZigLean/Float/`, [docs/floats.md](docs/floats.md)) |
+| Runtime semantics + lemmas | `ZigLean/` (floats: `ZigLean/Float/`, [docs/floats.md](docs/floats.md); separation logic: `ZigLean/Sep/`, [docs/proofs.md](docs/proofs.md)) |
 | Generated code, proofs | `Proofs/Basic/` ([naming rules](docs/generated-code.md)) |
 | Differential tests | `tests/diff/`, `scripts/diff.sh` |
 
