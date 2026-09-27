@@ -10,7 +10,8 @@ path = "../.."
 [[lean_exe]]
 name = "difftest"
 root = "Diff"
-# Static libm (tests/diff/libm/libm.zig), built by scripts/diff.sh before `lake build difftest`.
-# Lake does not track this path as a build input, so a rebuild does not by itself relink
-# `difftest` against a changed archive — scripts/diff.sh forces that by deleting the stale binary.
-moreLinkArgs = ["./out/libm/air2lean_libm.a"]
+# Static libm (tests/diff/libm/libm.zig) and asm (tests/diff/asm/asm.zig) archives, built by
+# scripts/diff.sh before `lake build difftest`. Lake does not track these paths as build inputs,
+# so a rebuild does not by itself relink `difftest` against a changed archive — scripts/diff.sh
+# forces that by deleting the stale binary.
+moreLinkArgs = ["./out/libm/air2lean_libm.a", "./out/asm/air2lean_asm.a"]

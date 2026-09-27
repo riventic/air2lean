@@ -119,6 +119,14 @@ echo "== libm self-check ==" >&2
   tests/diff/libm/selfcheck.zig tests/diff/out/libm/air2lean_libm.a
 "$build_dir/libm_selfcheck"
 
+echo "== building asm archive ==" >&2
+# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's 3 ops with ordinary Zig builtins
+# (@byteSwap/@popCount/@clz) instead of inline asm, so it builds on any host, unlike the example
+# itself (x86_64 only). No compiler_rt dependency (unlike libm): these are plain integer ops.
+mkdir -p tests/diff/out/asm
+"$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \
+  -femit-bin=tests/diff/out/asm/air2lean_asm.a -Mroot=tests/diff/asm/asm.zig
+
 echo "== building + running lean side ==" >&2
 # Lake does not track tests/diff/out/libm/air2lean_libm.a (linked in via lakefile.toml's
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
