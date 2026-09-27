@@ -19,12 +19,25 @@
 | M12 | Proofs for `recursion`, `options`, `errors` | done: 19 theorems over 18 functions, incl. mutual recursion, early-exit loops, `try` in a loop |
 | M13 | Floats `f16`…`f128`: exact model (`ZigLean/Float/`), schema-3 export, translator, diff test (44,400 inputs, 0 mismatches on x86_64-linux), `compiler-rt` opt-in, proofs for `floats`/`floatconv` incl. rounding round trip and monotonicity | done |
 | M14 | Zig 0.16.0 (default): one shared exporter (`Compat`), shared goldens and translation (`Canon.lean`), per-version float semantics (f128 `sqrt`, f128 `/` in `compiler-rt` mode), CI job | done |
+| M15 | Enums (exhaustive and non-exhaustive) and tagged unions; places (a result built in `ret_ptr`, stores through field pointers of a local); JSON schema 4; `enums` example with proofs | done |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches. So the tester sees a changed result, a changed panic kind and a changed rounding rule.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch. So the tester sees a changed result, a changed panic kind, a changed rounding rule and a changed enum conversion.
 
 ## Next
 
-No open item.
+v1: the rest of the language, one milestone per PR.
+
+| # | Milestone |
+|---|---|
+| M16a | Byte-level memory (blocks, `Enc`), single pointers `*T`/`?*T`, escaping locals, pure/memory function split |
+| M16b | Mutable slices, `@memcpy`/`@memset`, globals, string literals, bare/`extern` unions |
+| M17 | Separation logic (`ZigLean/Sep/`), pointer proofs |
+| M18 | Allocators: a model of the `mem.Allocator` API with an allocation-failure oracle; `ArrayListUnmanaged` translated from std |
+| M19 | SIMD `@Vector` |
+| M20 | `@ptrCast`, `packed`/`extern` layout, function pointers |
+| M21 | Inline asm with register operands only, as opaque functions |
+| M22 | Atomics, fork-join threads with a data-race check |
+| M23 | Upstream the AIR export; v1.0.0 |
 
 ## Decisions
 
@@ -66,7 +79,7 @@ Support matrix:
 |---|---|
 | 0.16.0 | supported, default |
 | 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
+| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `enums` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.
@@ -76,18 +89,19 @@ Support matrix:
 5. Run `scripts/floatprobe.sh` with the version. Each changed float result is a model difference: a named def in `ZigLean/Float/`, picked in `Emit.lean` by `FCtx.zigVersion`, and a line in `tests/floatprobe/expected.<version>.txt`.
 6. Add the version to the CI matrix and the table above.
 
-## Subset (v0)
+## Subset
 
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping, saturating arithmetic | mutable pointers, aliasing |
 | `if`, `switch`, `while`, `for` | allocators, heap |
-| local `var` whose address does not escape | `@ptrCast`, packed layout |
+| local `var` whose address does not escape; field pointers into it; a result built in `ret_ptr` | `@ptrCast`, packed layout |
 | read-only slices `[]const T` | inline asm, threads, atomics |
 | structs by value | SIMD vectors, `async` |
 | calls, recursion | optional pointers `?*T` |
-| optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
+| optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | unions without a tag |
+| enums (also non-exhaustive), tagged unions `union(enum)` | |
 
 ## Risks
 
@@ -97,11 +111,3 @@ Support matrix:
 | A safety check is lowered in a form the translator does not recognize, so the model is too optimistic | Differential tests on edge inputs (0, max, min, empty slice). |
 | An escaping `alloc` makes the `Locals` model unsound | Conservative escape check that rejects on any doubt. |
 | Loop proofs are slow to write | Unfolding lemmas for `Zig.loop`. Prefer `for` over slices. |
-
-## Later
-
-- Immutable pointers `*const T`, then mutable pointers with a separation-logic memory model.
-- Port to 0.16.x. One shared `json.zig` with small per-version branches (review, pass 5: the
-  0.14.1 and 0.15.2 exporters differ in only 4 API points), so each port is a small change.
-- Error-union export for 0.14.1: its AIR has the same tags, so this is a copy of the 0.15.2 code.
-- Upstream the export as a compiler debug feature.

@@ -37,7 +37,7 @@ jobs:
           # zig-patch/0.14.1/TAGS.md). Its std cannot build the diff harness; the stale-Gen.lean
           # check shows the translation is the one that the full jobs test.
           - zig: "0.14.1"
-            examples: "basic recursion options floatops floats errors"
+            examples: "basic recursion options floatops floats errors enums"
             full: false
             mutate: false
     steps:

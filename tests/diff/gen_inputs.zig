@@ -36,6 +36,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/floatops/inputs");
     try compat.makePath("tests/diff/floatconv/inputs");
     try compat.makePath("tests/diff/floats/inputs");
+    try compat.makePath("tests/diff/enums/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -89,6 +90,9 @@ pub fn main() !void {
     try genHypot2(rng);
     try genCelsius(rng);
     try genDot(rng);
+
+    // The enums generators run after every earlier one, so the earlier inputs stay the same.
+    try genEnums(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1033,5 +1037,132 @@ fn genDot(rng: std.Random) !void {
         try writer.writeAll(",");
         try writeRandomFloatSlice(writer, rng, f64, len2);
         try writer.writeAll("]\n");
+    }
+}
+
+// ---- enums (examples/enums/enums.zig) ----
+//
+// An enum argument is its tag value (a JSON number). A `Shape` is an object with its active
+// field: `{"circle":r}`, `{"rect":{"w":w,"h":h}}`, `{"square":a}`, `{"empty":null}`.
+
+fn openEnums(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/enums/inputs/" ++ name ++ ".jsonl");
+}
+
+const shape_sizes = [_]u32{ 0, 1, 2, 65535, 65536, std.math.maxInt(u32) - 1, std.math.maxInt(u32) };
+
+fn randSize(rng: std.Random) u32 {
+    // Half small (no overflow in area/scale), half any u32.
+    return if (rng.boolean()) rng.uintLessThan(u32, 100_000) else rng.int(u32);
+}
+
+fn writeShape(writer: anytype, kind: u2, a: u32, b: u32) !void {
+    switch (kind) {
+        0 => try writer.print("{{\"circle\":{d}}}", .{a}),
+        1 => try writer.print("{{\"rect\":{{\"w\":{d},\"h\":{d}}}}}", .{ a, b }),
+        2 => try writer.print("{{\"square\":{d}}}", .{a}),
+        3 => try writer.writeAll("{\"empty\":null}"),
+    }
+}
+
+fn writeRandShape(writer: anytype, rng: std.Random) !void {
+    try writeShape(writer, rng.int(u2), randSize(rng), randSize(rng));
+}
+
+/// Every shape kind with the edge sizes (every pair for `rect`), then random shapes. `with_k`:
+/// a second `u32` argument (an edge, or a random one).
+fn genShapeFn(rng: std.Random, comptime name: []const u8, comptime with_k: bool) !void {
+    var file = try openEnums(name);
+    defer file.close();
+    const writer = file.writer();
+    var n: usize = 0;
+    for (0..4) |kind| {
+        for (shape_sizes) |a| {
+            for (shape_sizes) |b| {
+                if (kind != 1 and b != 0) continue;
+                try writer.writeAll("[");
+                try writeShape(writer, @intCast(kind), a, b);
+                if (with_k) try writer.print(",{d}", .{shape_sizes[(n / 3) % shape_sizes.len]});
+                try writer.writeAll("]\n");
+                n += 1;
+            }
+        }
+    }
+    while (n < N) : (n += 1) {
+        try writer.writeAll("[");
+        try writeRandShape(writer, rng);
+        if (with_k) try writer.print(",{d}", .{if (rng.boolean()) rng.uintLessThan(u32, 1000) else rng.int(u32)});
+        try writer.writeAll("]\n");
+    }
+}
+
+fn genEnums(rng: std.Random) !void {
+    // next(l: Light), prioValue/isUrgent(p: Prio): every value.
+    {
+        var file = try openEnums("next");
+        defer file.close();
+        const writer = file.writer();
+        for (0..3) |l| try writer.print("[{d}]\n", .{l});
+    }
+    inline for (.{ "prioValue", "isUrgent" }) |name| {
+        var file = try openEnums(name);
+        defer file.close();
+        const writer = file.writer();
+        for ([_]i8{ -1, 0, 5 }) |p| try writer.print("[{d}]\n", .{p});
+    }
+    // lightOf/codeOf/severity(x: u8): every u8.
+    inline for (.{ "lightOf", "codeOf", "severity" }) |name| {
+        var file = try openEnums(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |x| try writer.print("[{d}]\n", .{x});
+    }
+    // advance(l: Light, n: u32): small step counts, then random ones below 3000.
+    {
+        var file = try openEnums("advance");
+        defer file.close();
+        const writer = file.writer();
+        var n: usize = 0;
+        for (0..3) |l| {
+            for ([_]u32{ 0, 1, 2, 3, 4, 5, 6, 7 }) |k| {
+                try writer.print("[{d},{d}]\n", .{ l, k });
+                n += 1;
+            }
+        }
+        while (n < N) : (n += 1) try writer.print("[{d},{d}]\n", .{ rng.uintLessThan(u8, 3), rng.uintLessThan(u32, 3000) });
+    }
+    try genShapeFn(rng, "area", false);
+    try genShapeFn(rng, "scale", true);
+    try genShapeFn(rng, "radius", false);
+    try genShapeFn(rng, "isRound", false);
+    // totalArea(shapes: []const Shape): empty, one of each kind, an overflowing sum, random.
+    {
+        var file = try openEnums("totalArea");
+        defer file.close();
+        const writer = file.writer();
+        try writer.writeAll("[[]]\n");
+        var n: usize = 1;
+        for (0..4) |kind| {
+            try writer.writeAll("[[");
+            try writeShape(writer, @intCast(kind), 7, 9);
+            try writer.writeAll("]]\n");
+            n += 1;
+        }
+        // Two squares of side 2^32-1: each area fits in u64, the sum does not.
+        try writer.writeAll("[[");
+        try writeShape(writer, 2, std.math.maxInt(u32), 0);
+        try writer.writeAll(",");
+        try writeShape(writer, 2, std.math.maxInt(u32), 0);
+        try writer.writeAll("]]\n");
+        n += 1;
+        while (n < N) : (n += 1) {
+            const len = rng.uintLessThan(usize, 8);
+            try writer.writeAll("[[");
+            for (0..len) |i| {
+                if (i > 0) try writer.writeAll(",");
+                try writeRandShape(writer, rng);
+            }
+            try writer.writeAll("]]\n");
+        }
     }
 }
