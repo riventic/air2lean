@@ -917,7 +917,7 @@ def asmDefName (source : String) (constraints : Array String) (inputWidths : Arr
   let key := s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
     {inputWidths.toList}\u0001{outputWidth}"
   let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
-    (h ^^^ c.val.toUInt32) * 0x01000193
+    (h ^^^ c.val) * 0x01000193
   s!"airAsm_{h}"
 
 /-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
