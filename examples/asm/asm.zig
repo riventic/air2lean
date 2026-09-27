@@ -47,7 +47,7 @@ test "bswap32" {
 }
 
 test "popcnt64" {
-    try std.testing.expectEqual(@as(u64, 4), popcnt64(0b1011));
+    try std.testing.expectEqual(@as(u64, 3), popcnt64(0b1011));
 }
 
 test "lzcnt64" {
