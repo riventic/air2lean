@@ -159,6 +159,9 @@ structure FCtx where
   exitName : String
   /-- `--float-semantics` (default `ieee`), for `.div`/`.divFloat`/`.mulAdd` on a float operand. -/
   floatSemantics : FloatSemantics
+  /-- The Zig version that wrote the AIR (`Func.zigVersion`), for the float ops whose result
+  differs by version (`docs/floats.md` §Per-version differences). -/
+  zigVersion : String
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -194,6 +197,15 @@ def FCtx.isFloat (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .float 
 (`Zig.Float.divRt`, `fmaRtChk`, …; `docs/floats.md` §`--float-semantics`). -/
 def FCtx.rtSuffix (fc : FCtx) : String :=
   match fc.floatSemantics with | .ieee => "" | .compilerRt => "Rt"
+
+/-- Before 0.16.0, compiler_rt rounded the `f128` square root through `f64` (`sqrt.zig`) and
+flushed a subnormal `f128` quotient to zero (`divtf3.zig`). 0.16.0 rounds the square root
+correctly, and rounds a subnormal quotient in its own way (`Float.divRt016`). -/
+def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.zigVersion == "0.14.1" || fc.zigVersion == "0.15.2"
+
+/-- `rtSuffix` for the float divisions: `divRt` before 0.16.0, `divRt016` from 0.16.0. -/
+def FCtx.divRtSuffix (fc : FCtx) : String :=
+  if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
 
 /-- The `FloatFmt` term (`.f16` … `.f128`) for the type at `tid`, for the ops whose target format
 is not otherwise inferable (`Zig.Float.conv`/`Zig.Float.ofInt`'s explicit `fmt` argument). -/
@@ -472,13 +484,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if fc.isFloat a then
         match op with
         | .divTrunc =>
-          let f := s!"Zig.Float.divTrunc{fc.rtSuffix}"
+          let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divFloor =>
-          let f := s!"Zig.Float.divFloor{fc.rtSuffix}"
+          let f := s!"Zig.Float.divFloor{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
-          let f := s!"Zig.Float.div{fc.rtSuffix}"
+          let f := s!"Zig.Float.div{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         -- Group C's guard applies in both modes, so `rem`/`mod` never switch on `floatSemantics`.
         | .rem => s!"Zig.Float.remChk {rv a} {rv b}"
@@ -492,7 +504,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
     -- `div_float` (plain `/` on floats): group A's guard, same mode dispatch as `.divExact`.
-    let f := s!"Zig.Float.div{fc.rtSuffix}"
+    let f := s!"Zig.Float.div{fc.divRtSuffix}"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
     let expr :=
@@ -572,7 +584,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .floor => "Zig.Float.floorChk" | .ceil => "Zig.Float.ceilChk"
       | .trunc => "Zig.Float.truncChk" | .round => "Zig.Float.roundChk"
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
-  | .sqrt a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.sqrt {rv a})"; (env, some l)
+  | .sqrt a =>
+    let f := if fc.zigBefore016 && fc.valTy a == .float 128 then "Zig.Float.sqrtF128ViaF64"
+      else "Zig.Float.sqrt"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"; (env, some l)
   | .libm op a =>
     let opName := match op with
       | .sin => ".sin" | .cos => ".cos" | .tan => ".tan" | .exp => ".exp"
@@ -810,7 +825,8 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blTys, allInsts,
-      retTy := f.ret, fnName := leanName, localsName, exitName, floatSemantics }
+      retTy := f.ret, fnName := leanName, localsName, exitName, floatSemantics,
+      zigVersion := f.zigVersion }
   let localsStr := emitLocalsStruct structNames f.types localsName allocs
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node

@@ -53,24 +53,64 @@ echo "== building libm ==" >&2
 # tests/diff/libm/libm.zig re-exports 8 compiler_rt transcendental functions per float width
 # (see its doc comment for the ABI). It calls compiler_rt by Zig name through a `crt` module we
 # generate here: a copy of the stock zig's own compiler_rt/ (needed for its internal cross-file
-# imports, e.g. sin.zig's rem_pio2.zig) plus one re-export file naming the 8 top-level ops.
+# imports, e.g. sin.zig's rem_pio2.zig) plus one re-export file naming the 8 top-level ops. 0.16.0
+# also needs a top-level compiler_rt.zig: its compiler_rt/<op>.zig files import it as
+# "../compiler_rt.zig" for `symbol`/`want_ppc_abi`/`want_float_exceptions` (0.15.2's op files
+# don't need it at all). The real lib/compiler_rt.zig is NOT an option here: its own top-level
+# `comptime` block unconditionally imports and @exports all of compiler_rt (incl. memset/memcpy/
+# memmove), which the Lean difftest link then pulls in whole — that bloats the archive and once
+# hung the Lean binary for over an hour inside its allocator init. A stub with just the 3 names
+# the 8 op files (and everything they transitively import: trig.zig, rem_pio2*.zig,
+# long_double.zig) use — checked by grep — avoids that. Values taken from the real file for this
+# build's conditions (not a test build, not wasm, not C object format, static linkage). `symbol`
+# itself is a no-op here, not the real @export: -fcompiler-rt below already bundles Zig's own
+# compiler_rt.o, which @exports these same 8 ops' C names for the (non-Zig, clang-linked) Lean
+# side. If our copy exported them too, both would be duplicate weak defs; 0.16.0's linker rejects
+# that (0.15.2's happens not to). We only ever call these files' Zig-level decls (libm.zig's
+# `crt.sin.sinh` etc.), never their C names, so dropping our own export side effect is safe.
+# Both versions' compiler_rt.zig import their sibling files as literal "compiler_rt/<name>.zig",
+# so the copied dir must be named exactly "compiler_rt" on disk. A module's imports must stay
+# inside its root file's directory tree, so the re-export file (the module root) lives at
+# $build_dir, one level above compiler_rt/, with the stub compiler_rt.zig alongside it — putting
+# both "../compiler_rt.zig" and "compiler_rt/*.zig" in path. The stub is inert for 0.15.2: its
+# op files never import the top-level compiler_rt.zig at all.
 lib_dir=$("$zig_bin" env | sed -n 's/^ *\.lib_dir = "\([^"]*\)".*/\1/p')
-crt_dir="$build_dir/crt"
+crt_dir="$build_dir/compiler_rt"
 cp -R "$lib_dir/compiler_rt" "$crt_dir"
-cat >"$crt_dir/air2lean_root.zig" <<'EOF'
-pub const sin = @import("sin.zig");
-pub const cos = @import("cos.zig");
-pub const tan = @import("tan.zig");
-pub const exp = @import("exp.zig");
-pub const exp2 = @import("exp2.zig");
-pub const log = @import("log.zig");
-pub const log2 = @import("log2.zig");
-pub const log10 = @import("log10.zig");
+cat >"$build_dir/compiler_rt.zig" <<'EOF'
+const builtin = @import("builtin");
+pub const want_ppc_abi = builtin.cpu.arch.isPowerPC();
+pub const want_float_exceptions = !builtin.cpu.arch.isWasm();
+pub inline fn symbol(comptime func: *const anyopaque, comptime name: []const u8) void {
+    _ = func;
+    _ = name;
+}
+EOF
+cat >"$build_dir/air2lean_root.zig" <<'EOF'
+pub const sin = @import("compiler_rt/sin.zig");
+pub const cos = @import("compiler_rt/cos.zig");
+pub const tan = @import("compiler_rt/tan.zig");
+pub const exp = @import("compiler_rt/exp.zig");
+pub const exp2 = @import("compiler_rt/exp2.zig");
+pub const log = @import("compiler_rt/log.zig");
+pub const log2 = @import("compiler_rt/log2.zig");
+pub const log10 = @import("compiler_rt/log10.zig");
 EOF
 mkdir -p tests/diff/out/libm
-"$zig_bin" build-lib -static -fcompiler-rt -fPIC -OReleaseSafe -mcpu=baseline --name air2lean_libm \
+# -fcompiler-rt: the Lean-side link is a plain clang/lld link, not a zig one, so it doesn't get
+# Zig's own implicit compiler-rt support the way a zig-compiled consumer (e.g. selfcheck) does.
+# sin.zig's f80/f128 wide paths need helpers like __extendxftf2 that only compiler_rt.o provides;
+# without this flag that link fails with "undefined symbol: __extendxftf2" (seen on 0.15.2 too,
+# not just 0.16.0). Our own crt module's `symbol` is a no-op (see above) so it doesn't also
+# @export the 8 ops we import, which would otherwise duplicate compiler_rt.o's own exports.
+# -OReleaseFast, like Zig builds compiler_rt for a ReleaseSafe program
+# (Compilation.compilerRtOptMode): with safety checks, 0.16.0's f80 `cosx` panics ("integer
+# overflow" in rem_pio2_large) on inputs where the real `@cos` returns a value. A per-module -O
+# for the crt module alone does not change its code (the archive stays the same). libm.zig itself
+# only uses @bitCast and @truncate, which have no safety checks.
+"$zig_bin" build-lib -static -fcompiler-rt -fPIC -OReleaseFast -mcpu=baseline --name air2lean_libm \
   -femit-bin=tests/diff/out/libm/air2lean_libm.a \
-  --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$crt_dir/air2lean_root.zig"
+  --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt="$build_dir/air2lean_root.zig"
 
 echo "== libm self-check ==" >&2
 # Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
@@ -84,7 +124,8 @@ echo "== building + running lean side ==" >&2
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
-tests/diff/.lake/build/bin/difftest
+# Diff.lean runs only the examples this script compares.
+AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 
 # Classifies one JSONL output line into $kind (ok|fail|diverge) and $val. For ok: `null` as the
 # literal string "null"; an error union's `{"err":"Name"}` as "err:Name"; otherwise the decimal

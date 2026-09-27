@@ -2,6 +2,7 @@
 //! §Semantics). CI runs it on the reference target and compares with `expected.txt`.
 //! Build: `zig build-exe -OReleaseSafe -mcpu=baseline tests/floatprobe/probe.zig`.
 const std = @import("std");
+const compat = @import("compat"); // wired as a module by scripts/floatprobe.sh
 
 /// Hides `x` from the optimizer, so that each case runs on the target, not in LLVM's
 /// constant folder.
@@ -71,13 +72,13 @@ fn probeF80(out: *std.Io.Writer) !void {
     for (cases) |c| {
         const x: f80 = @bitCast(rt(u80, c.b));
         try line(out, f80, c.name, x + rt(f80, 0.0));
-        try out.print("f80 {s} isnan={}\n", .{ c.name, x != x });
+        try out.print("f80 isnan({s}) {}\n", .{ c.name, x != x });
     }
 }
 
 pub fn main() !void {
     var buf: [4096]u8 = undefined;
-    var w = std.fs.File.stdout().writer(&buf);
+    var w = compat.stdoutWriter(&buf);
     const out = &w.interface;
     inline for (.{ f16, f32, f64, f80, f128 }) |T| try probeType(out, T);
     try probeF80(out);

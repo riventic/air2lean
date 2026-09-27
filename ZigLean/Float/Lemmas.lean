@@ -669,22 +669,22 @@ theorem sqrtCore_nonneg {fmt : FloatFmt} {y : Float fmt}
       split <;> omega
 
 /-- `Float.sqrt` preserves "not NaN and not negative", for any operand (not just a positive one:
-`0` and `+inf` both take the same path). `f128` double-rounds through `f64` (`Ops.lean`'s special
-case): `conv_nonneg` wraps each `Float.conv`, and `sqrtCore_nonneg` (general in operand sign)
-handles both the direct path and the inner `f64` step. -/
+`0` and `+inf` both take the same path): `sqrtCore_nonneg` is general in operand sign. -/
 theorem sqrt_nonneg_of_sign {fmt : FloatFmt} {x : Float fmt}
     (hnan : x.isNaN = false) (hsign : x.signBit = false) :
     (Float.sqrt x).isNaN = false ∧ (Float.sqrt x).signBit = false := by
-  by_cases hfmt : fmt = .f128
-  · subst hfmt
-    unfold Float.sqrt
-    rw [dite_eq_left rfl]
-    have hinner := conv_nonneg (fmt2 := .f64) hnan hsign
-    have hcore := sqrtCore_nonneg hinner.1 hinner.2
-    exact conv_nonneg hcore.1 hcore.2
-  · unfold Float.sqrt
-    rw [dite_eq_right hfmt]
-    exact sqrtCore_nonneg hnan hsign
+  unfold Float.sqrt
+  exact sqrtCore_nonneg hnan hsign
+
+/-- `Float.sqrtF128ViaF64` (`f128` before Zig 0.16.0) preserves the same facts: `conv_nonneg`
+wraps each `Float.conv` around `sqrt_nonneg_of_sign`'s `f64` step. -/
+theorem sqrtF128ViaF64_nonneg_of_sign {x : Float .f128}
+    (hnan : x.isNaN = false) (hsign : x.signBit = false) :
+    (Float.sqrtF128ViaF64 x).isNaN = false ∧ (Float.sqrtF128ViaF64 x).signBit = false := by
+  unfold Float.sqrtF128ViaF64
+  have hinner := conv_nonneg (fmt2 := .f64) hnan hsign
+  have hroot := sqrt_nonneg_of_sign hinner.1 hinner.2
+  exact conv_nonneg hroot.1 hroot.2
 
 /-- `Float.sqrt` of a positive operand is never NaN and never negative (`sqrt_nonneg_of_sign`,
 specialized to a `toRat?`-positive operand). -/

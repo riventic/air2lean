@@ -32,7 +32,7 @@
 # Usage: mutate.sh
 # Env:
 #   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
-#   AIR2LEAN_ZIG_VERSION  Zig version: golden dir suffix. Default: 0.15.2 (same as check.sh).
+#   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d)) is in the list.
 #                         Default: every dir in examples/.
@@ -41,7 +41,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-zig_version=${AIR2LEAN_ZIG_VERSION:-0.15.2}
+zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 [ -x "$zig_air" ] || {
   echo "error: patched zig not found/executable at $zig_air" >&2

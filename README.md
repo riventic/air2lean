@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.15.2 and 0.14.1. 41 functions in 7 examples translate and match the compiled Zig on 49,800 differential tests, including the panic kind: `basic`, `recursion`, `options`, `errors`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). The integer examples and `floats`/`floatconv` have machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try` and IEEE-754 rounding. See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 41 functions in 7 examples translate and match the compiled Zig on 49,800 differential tests, including the panic kind: `basic`, `recursion`, `options`, `errors`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). The integer examples and `floats`/`floatconv` have machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try` and IEEE-754 rounding. See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -43,10 +43,10 @@ theorem tardiness_spec (a b : BitVec 32) :
 
 ## Quick start
 
-Needs: Zig 0.15.2 on `PATH` (to build the patched compiler), [elan](https://github.com/leanprover/elan).
+Needs: Zig 0.16.0 on `PATH` (to build the patched compiler), [elan](https://github.com/leanprover/elan).
 
 ```sh
-zig-patch/build.sh 0.15.2          # patched compiler → ./zig-air-0.15.2/ (a few minutes)
+zig-patch/build.sh 0.16.0          # patched compiler → ./zig-air-0.16.0/ (a few minutes)
 lake build                         # runtime library + translator
 scripts/check.sh                   # dump AIR, check goldens, translate, build, differential test
 lake build Proofs                  # check the proofs
@@ -55,7 +55,7 @@ lake build Proofs                  # check the proofs
 Translate your own file:
 
 ```sh
-ZIG_AIR_JSON_DIR=out ZIG_AIR_JSON_FILTER=myfile. zig-air-0.15.2/bin/zig \
+ZIG_AIR_JSON_DIR=out ZIG_AIR_JSON_FILTER=myfile. zig-air-0.16.0/bin/zig \
   build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing myfile.zig
 lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.
 ```
@@ -91,7 +91,7 @@ The trusted base is: Zig `Sema`, the AIR export patch, the translator, and the L
 
 ## Zig versions
 
-Supported: Zig **0.15.2**, and **0.14.1** (Linux only; no error unions yet). The design supports every Zig release: version-specific code is limited to the compiler patch and the normalizer table. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
+Supported: Zig **0.16.0** (default), **0.15.2** and **0.14.1** (Linux only; no `floatconv`). One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR or float results that differ). See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
 
 ## License
 

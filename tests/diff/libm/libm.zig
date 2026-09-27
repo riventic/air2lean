@@ -6,7 +6,7 @@
 //! fn` of the C symbol name, which the linker could bind to the system libm instead. scripts/
 //! diff.sh's build step copies Zig's own lib/zig/compiler_rt/ and adds the `crt` module's root
 //! file (one `pub const <op> = @import("<op>.zig");` line per op) before building this file with:
-//!   zig build-lib -static -fcompiler-rt -fPIC -OReleaseSafe -mcpu=baseline --name air2lean_libm \
+//!   zig build-lib -static -fcompiler-rt -fPIC -OReleaseFast -mcpu=baseline --name air2lean_libm \
 //!     --dep crt -Mroot=tests/diff/libm/libm.zig -Mcrt=<generated crt root>
 //!
 //! ABI, one pair of functions per op x width:
@@ -17,9 +17,21 @@
 //! compiler_rt's own per-width names are not uniform (checked against Zig 0.15.2's lib/zig/
 //! compiler_rt/{op}.zig for all 8 ops): `__<op>h` (f16), `<op>f` (f32), `<op>` (f64), `__<op>x`
 //! (f80), `<op>q` (f128).
+//!
+//! 0.16.0 renamed sin/cos/tan's f16 and f80 helpers (`__sinh`->`sinh`, `__sinx`->`sinx`, same for
+//! cos/tan) but left exp/exp2/log/log2/log10's `__<op>h`/`__<op>x` names alone — checked against
+//! both versions' lib/zig/compiler_rt/{op}.zig for all 8 ops. `v16` below picks the right name per
+//! op. One quirk: 0.16.0's sin.zig declares `sinx` (f80) without `pub`, unlike cos.zig's `cosx`
+//! and tan.zig's `tanx`, so it isn't reachable through `crt.sin` there — `__sinx` is called
+//! directly by its exported C symbol name instead, which resolves the same way in both versions.
 
 const std = @import("std");
 const crt = @import("crt");
+
+const v16 = @import("builtin").zig_version.minor >= 16;
+
+// See the module doc comment: 0.16.0's compiler_rt/sin.zig does not mark f80's `sinx` `pub`.
+extern fn __sinx(f80) callconv(.c) f80;
 
 fn narrow(comptime T: type, x: u64, comptime f: fn (T) callconv(.c) T) u64 {
     const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
@@ -49,7 +61,7 @@ fn wideLo(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T)
 
 // sin
 export fn air2lean_libm_sin_f16(x: u64) u64 {
-    return narrow(f16, x, crt.sin.__sinh);
+    return narrow(f16, x, if (v16) crt.sin.sinh else crt.sin.__sinh);
 }
 export fn air2lean_libm_sin_f32(x: u64) u64 {
     return narrow(f32, x, crt.sin.sinf);
@@ -58,10 +70,10 @@ export fn air2lean_libm_sin_f64(x: u64) u64 {
     return narrow(f64, x, crt.sin.sin);
 }
 export fn air2lean_libm_sin_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.sin.__sinx);
+    return wideHi(f80, hi, lo, __sinx);
 }
 export fn air2lean_libm_sin_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.sin.__sinx);
+    return wideLo(f80, hi, lo, __sinx);
 }
 export fn air2lean_libm_sin_f128_hi(hi: u64, lo: u64) u64 {
     return wideHi(f128, hi, lo, crt.sin.sinq);
@@ -72,7 +84,7 @@ export fn air2lean_libm_sin_f128_lo(hi: u64, lo: u64) u64 {
 
 // cos
 export fn air2lean_libm_cos_f16(x: u64) u64 {
-    return narrow(f16, x, crt.cos.__cosh);
+    return narrow(f16, x, if (v16) crt.cos.cosh else crt.cos.__cosh);
 }
 export fn air2lean_libm_cos_f32(x: u64) u64 {
     return narrow(f32, x, crt.cos.cosf);
@@ -81,10 +93,10 @@ export fn air2lean_libm_cos_f64(x: u64) u64 {
     return narrow(f64, x, crt.cos.cos);
 }
 export fn air2lean_libm_cos_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.cos.__cosx);
+    return wideHi(f80, hi, lo, if (v16) crt.cos.cosx else crt.cos.__cosx);
 }
 export fn air2lean_libm_cos_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.cos.__cosx);
+    return wideLo(f80, hi, lo, if (v16) crt.cos.cosx else crt.cos.__cosx);
 }
 export fn air2lean_libm_cos_f128_hi(hi: u64, lo: u64) u64 {
     return wideHi(f128, hi, lo, crt.cos.cosq);
@@ -95,7 +107,7 @@ export fn air2lean_libm_cos_f128_lo(hi: u64, lo: u64) u64 {
 
 // tan
 export fn air2lean_libm_tan_f16(x: u64) u64 {
-    return narrow(f16, x, crt.tan.__tanh);
+    return narrow(f16, x, if (v16) crt.tan.tanh else crt.tan.__tanh);
 }
 export fn air2lean_libm_tan_f32(x: u64) u64 {
     return narrow(f32, x, crt.tan.tanf);
@@ -104,10 +116,10 @@ export fn air2lean_libm_tan_f64(x: u64) u64 {
     return narrow(f64, x, crt.tan.tan);
 }
 export fn air2lean_libm_tan_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.tan.__tanx);
+    return wideHi(f80, hi, lo, if (v16) crt.tan.tanx else crt.tan.__tanx);
 }
 export fn air2lean_libm_tan_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.tan.__tanx);
+    return wideLo(f80, hi, lo, if (v16) crt.tan.tanx else crt.tan.__tanx);
 }
 export fn air2lean_libm_tan_f128_hi(hi: u64, lo: u64) u64 {
     return wideHi(f128, hi, lo, crt.tan.tanq);

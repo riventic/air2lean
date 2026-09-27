@@ -38,11 +38,11 @@ fn runIntArg(gpa: std.mem.Allocator, comptime FromT: type, comptime name: []cons
 }
 
 pub fn main() !void {
-    var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
     const gpa = gpa_state.allocator();
 
-    try std.fs.cwd().makePath("tests/diff/out/zig/floatconv");
+    try common.makePath("tests/diff/out/zig/floatconv");
 
     try runFloatArg(gpa, f64, "toI32", floatconv.toI32, false);
     try runFloatArg(gpa, f32, "toU64", floatconv.toU64, true); // u64 result: wide

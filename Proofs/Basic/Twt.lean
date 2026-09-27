@@ -74,12 +74,12 @@ theorem twt_loop_step (jobs : Array Job) (hs : jobs.size < 2 ^ 32)
       wt jobs k < 2 ^ 32)
     (s : totalWeightedTardinessLocals) (hi : s.i.toNat ≤ jobs.size)
     (htv : s.t.toNat = tPre jobs s.i.toNat) (hcv : s.cost.toNat = twtPre jobs s.i.toNat) :
-    ∃ e s', (totalWeightedTardiness.loop14 jobs).run s = pure (e, s') ∧
-      (if totalWeightedTardiness.again14 e then
+    ∃ e s', (totalWeightedTardiness.loop8 jobs).run s = pure (e, s') ∧
+      (if totalWeightedTardiness.again8 e then
           (s'.i.toNat ≤ jobs.size ∧ s'.t.toNat = tPre jobs s'.i.toNat ∧
             s'.cost.toNat = twtPre jobs s'.i.toNat) ∧
             jobs.size - s'.i.toNat < jobs.size - s.i.toNat
-        else e = .br13 ∧ s'.cost.toNat = twtPre jobs jobs.size) := by
+        else e = .br7 ∧ s'.cost.toNat = twtPre jobs jobs.size) := by
   have hm : jobs.size % 18446744073709551616 = jobs.size := Nat.mod_eq_of_lt (by omega)
   by_cases hlt : s.i.toNat < jobs.size
   · have htsum : tPre jobs s.i.toNat + jobs[s.i.toNat].duration.toNat < 2 ^ 32 := by
@@ -104,10 +104,10 @@ theorem twt_loop_step (jobs : Array Job) (hs : jobs.size < 2 ^ 32)
     have hTadd : ¬ 4294967296 ≤ s.t.toNat + jobs[s.i.toNat].duration.toNat := by omega
     have hCadd : ¬ 18446744073709551616 ≤ s.cost.toNat + wtr.toNat := by omega
     have hIinc : ¬ 18446744073709551615 ≤ s.i.toNat := by omega
-    refine ⟨.rep14,
+    refine ⟨.rep8,
       { t := s.t + jobs[s.i.toNat].duration, cost := s.cost + wtr.setWidth 64, i := s.i + 1 },
       ?_, ?_⟩
-    · unfold totalWeightedTardiness.loop14
+    · unfold totalWeightedTardiness.loop8
       simp [zig_unfold, Zig.len, Zig.index, hlt, hm, hwtr_eq, hwtrmod, hTadd, hCadd, hIinc]
     · have hi' : (s.i + 1).toNat = s.i.toNat + 1 :=
         Zig.toNat_add_one _ (by omega)
@@ -126,8 +126,8 @@ theorem twt_loop_step (jobs : Array Job) (hs : jobs.size < 2 ^ 32)
       · show jobs.size - (s.i + 1).toNat < jobs.size - s.i.toNat
         rw [hi']; omega
   · have heq : s.i.toNat = jobs.size := by omega
-    refine ⟨.br13, s, ?_, ?_⟩
-    · unfold totalWeightedTardiness.loop14
+    refine ⟨.br7, s, ?_, ?_⟩
+    · unfold totalWeightedTardiness.loop8
       simp [zig_unfold, Zig.len, Zig.index, hlt, hm]
     · exact ⟨rfl, heq ▸ hcv⟩
 
@@ -139,19 +139,19 @@ theorem totalWeightedTardiness_spec (jobs : Array Job)
     (hw : ∀ k < jobs.size, jobs[k]!.due.toNat < tPre jobs k + jobs[k]!.duration.toNat →
       wt jobs k < 2 ^ 32) :
     ∃ r, totalWeightedTardiness jobs = pure r ∧ r.toNat = twtPre jobs jobs.size := by
-  obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (totalWeightedTardiness.loop14 jobs)
-    totalWeightedTardiness.again14
+  obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (totalWeightedTardiness.loop8 jobs)
+    totalWeightedTardiness.again8
     (fun s => s.i.toNat ≤ jobs.size ∧ s.t.toNat = tPre jobs s.i.toNat ∧
       s.cost.toNat = twtPre jobs s.i.toNat)
     (fun s => jobs.size - s.i.toNat)
-    (fun r => r.1 = .br13 ∧ r.2.cost.toNat = twtPre jobs jobs.size)
+    (fun r => r.1 = .br7 ∧ r.2.cost.toNat = twtPre jobs jobs.size)
     (fun s hs' => twt_loop_step jobs hs ht hw s hs'.1 hs'.2.1 hs'.2.2)
     { t := 0, cost := 0, i := 0 } (by simp [tPre, twtPre])
   subst he
   refine ⟨s'.cost, ?_, ?_⟩
   · unfold totalWeightedTardiness
-    change Zig.loop (totalWeightedTardiness.loop14 jobs) totalWeightedTardiness.again14
-      { t := 0, cost := 0, i := 0 } = some (Except.ok (totalWeightedTardinessExit.br13, s')) at hrun
+    change Zig.loop (totalWeightedTardiness.loop8 jobs) totalWeightedTardiness.again8
+      { t := 0, cost := 0, i := 0 } = some (Except.ok (totalWeightedTardinessExit.br7, s')) at hrun
     simp only [zig_unfold]
     rw [hrun]
     simp [zig_unfold]

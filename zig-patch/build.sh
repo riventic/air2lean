@@ -30,9 +30,10 @@ host_version=$(zig version)
 
 url=$("$script_dir/toml-get.sh" "[\"$version\"]" url)
 sha256=$("$script_dir/toml-get.sh" "[\"$version\"]" sha256)
-patch_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" patch)
-patch_file="$script_dir/$patch_rel"
-[ -f "$patch_file" ] || { echo "error: patch file not found: $patch_file" >&2; exit 1; }
+hook_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" hook)
+hook_file="$script_dir/$hook_rel"
+exporter="$script_dir/air-json/json.zig"
+[ -f "$hook_file" ] || { echo "error: hook patch not found: $hook_file" >&2; exit 1; }
 
 mkdir -p "$cache_dir"
 tarball="$cache_dir/zig-${version}.tar.xz"
@@ -68,8 +69,11 @@ src_dir="$work_dir/zig-${version}"
 mkdir -p "$src_dir"
 tar -xJf "$tarball" -C "$src_dir" --strip-components=1
 
-echo "applying $patch_file" >&2
-(cd "$src_dir" && patch -p1 < "$patch_file")
+# The exporter is one source for every version (its `Compat` section holds the differences);
+# only the one-line hook that calls it differs per version.
+cp "$exporter" "$src_dir/src/Air/json.zig"
+echo "applying $hook_file" >&2
+(cd "$src_dir" && patch -p1 < "$hook_file")
 
 # No -Dno-lib: the build installs lib/ into the prefix alongside the binary, so the
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.

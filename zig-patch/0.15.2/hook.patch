@@ -1,0 +1,10 @@
+--- zig-0.15.2-pristine/src/Zcu/PerThread.zig	2025-10-11 05:53:18
++++ zig-0.15.2/src/Zcu/PerThread.zig	2026-09-23 14:31:27
+@@ -1725,6 +1725,7 @@
+ 
+     var air = try pt.analyzeFnBodyInner(func_index);
+     errdefer air.deinit(gpa);
++    @import("../Air/json.zig").dumpToDir(&air, pt, func_index);
+ 
+     const ies_outdated = !func.analysisUnordered(ip).inferred_error_set or
+         func.resolvedErrorSetUnordered(ip) != old_resolved_ies;

@@ -166,15 +166,15 @@ theorem clamp_id (x lo hi : Zig.F32) (hxn : ¬x.isNaN) (hlon : ¬lo.isNaN) (hhin
 /-- `dot` of two empty slices is `+0` (the model's zero result, no addends). -/
 theorem dot_nil : dot (#[] : Array Zig.F64) (#[] : Array Zig.F64) =
     pure (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) := by
-  have hbody : (dot.loop18 (#[] : Array Zig.F64) #[] (0 : BitVec 64)).run
-      ({ s := Zig.Float.ofBits (0 : BitVec 64), local6 := 0 } : dotLocals) =
-      pure (dotExit.br17, ({ s := Zig.Float.ofBits (0 : BitVec 64), local6 := 0 } : dotLocals)) := by
-    unfold dot.loop18
+  have hbody : (dot.loop15 (#[] : Array Zig.F64) #[] (0 : BitVec 64)).run
+      ({ s := Zig.Float.ofBits (0 : BitVec 64), local4 := 0 } : dotLocals) =
+      pure (dotExit.br14, ({ s := Zig.Float.ofBits (0 : BitVec 64), local4 := 0 } : dotLocals)) := by
+    unfold dot.loop15
     simp [zig_unfold, Zig.lt]
-  have hloop := Zig.loop_run (dot.loop18 (#[] : Array Zig.F64) #[] (0 : BitVec 64)) dot.again18
-    ({ s := Zig.Float.ofBits (0 : BitVec 64), local6 := 0 } : dotLocals)
+  have hloop := Zig.loop_run (dot.loop15 (#[] : Array Zig.F64) #[] (0 : BitVec 64)) dot.again15
+    ({ s := Zig.Float.ofBits (0 : BitVec 64), local4 := 0 } : dotLocals)
   rw [hbody] at hloop
-  simp [zig_unfold, dot.again18] at hloop
+  simp [zig_unfold, dot.again15] at hloop
   unfold dot
   simp [zig_unfold, Zig.len, hloop]
 

@@ -4,8 +4,12 @@ Adds an AIR-JSON exporter to the Zig compiler: one `<fqn>.json` per function,
 schema in `docs/air-json.md`, for the Lean 4 translator to read.
 
 ## What it does
-- `src/Air/json.zig`: walks AIR, writes one JSON file per function.
-- One-line hook in `src/Zcu/PerThread.zig`, after `analyzeFnBodyInner`.
+- `air-json/json.zig` → `src/Air/json.zig`: walks AIR, writes one JSON file per
+  function. One source for every supported version: its `Compat` section holds
+  the version differences (comptime branches on `builtin.zig_version`).
+- `<version>/hook.patch`: the one-line call in `src/Zcu/PerThread.zig`, after the
+  function body is analysed. The only per-version file of the exporter.
+- `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
 ## Env vars
 - `ZIG_AIR_JSON_DIR` — output directory. Unset disables the exporter.
@@ -18,10 +22,11 @@ drops error-return-trace noise, skips linking a binary.
 ## Build
     ./build.sh <version> [prefix]
 
-Downloads the pinned tarball (sha256-checked), patches, builds with
+Downloads the pinned tarball (sha256-checked), copies `air-json/json.zig` in,
+applies `<version>/hook.patch`, builds with
 `-Denable-llvm=false -Ddebug-extensions=true`, installs `lib/` into the prefix
 (no `-Dno-lib`) so the built `zig` needs no `--zig-lib-dir`. Needs a host `zig`
-of the same version on `PATH`. `AIR2LEAN_OPTIMIZE` / `AIR2LEAN_CACHE` override
+of the same version on `PATH`: `Compat` selects its branch by that version. `AIR2LEAN_OPTIMIZE` / `AIR2LEAN_CACHE` override
 the optimize mode and download cache dir.
 
 ## Porting to a new Zig version

@@ -11,8 +11,8 @@ inductive bits32Exit where
 
 def bits32 (p0 : Zig.F32) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i2 ← Zig.Float.toBits? p0
-    pure (.ret i2)) : Zig.M bits32Locals bits32Exit).run' (default : bits32Locals)
+    let i1 ← Zig.Float.toBits? p0
+    pure (.ret i1)) : Zig.M bits32Locals bits32Exit).run' (default : bits32Locals)
   match e with
   | .ret v => pure v
 
@@ -24,8 +24,8 @@ inductive f16ToF128Exit where
 
 def f16ToF128 (p0 : Zig.F16) : Zig.Result (Zig.F128) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.conv .f128 p0)
-    pure (.ret i2)) : Zig.M f16ToF128Locals f16ToF128Exit).run' (default : f16ToF128Locals)
+    let i1 ← pure (Zig.Float.conv .f128 p0)
+    pure (.ret i1)) : Zig.M f16ToF128Locals f16ToF128Exit).run' (default : f16ToF128Locals)
   match e with
   | .ret v => pure v
 
@@ -37,8 +37,8 @@ inductive f64ToF16Exit where
 
 def f64ToF16 (p0 : Zig.F64) : Zig.Result (Zig.F16) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.conv .f16 p0)
-    pure (.ret i2)) : Zig.M f64ToF16Locals f64ToF16Exit).run' (default : f64ToF16Locals)
+    let i1 ← pure (Zig.Float.conv .f16 p0)
+    pure (.ret i1)) : Zig.M f64ToF16Locals f64ToF16Exit).run' (default : f64ToF16Locals)
   match e with
   | .ret v => pure v
 
@@ -50,8 +50,8 @@ inductive f80ToF64Exit where
 
 def f80ToF64 (p0 : Zig.F80) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.conv .f64 p0)
-    pure (.ret i2)) : Zig.M f80ToF64Locals f80ToF64Exit).run' (default : f80ToF64Locals)
+    let i1 ← pure (Zig.Float.conv .f64 p0)
+    pure (.ret i1)) : Zig.M f80ToF64Locals f80ToF64Exit).run' (default : f80ToF64Locals)
   match e with
   | .ret v => pure v
 
@@ -63,8 +63,8 @@ inductive fromI64Exit where
 
 def fromI64 (p0 : BitVec 64) : Zig.Result (Zig.F32) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.ofInt .f32 true p0)
-    pure (.ret i2)) : Zig.M fromI64Locals fromI64Exit).run' (default : fromI64Locals)
+    let i1 ← pure (Zig.Float.ofInt .f32 true p0)
+    pure (.ret i1)) : Zig.M fromI64Locals fromI64Exit).run' (default : fromI64Locals)
   match e with
   | .ret v => pure v
 
@@ -76,8 +76,8 @@ inductive fromU128Exit where
 
 def fromU128 (p0 : BitVec 128) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.ofInt .f64 false p0)
-    pure (.ret i2)) : Zig.M fromU128Locals fromU128Exit).run' (default : fromU128Locals)
+    let i1 ← pure (Zig.Float.ofInt .f64 false p0)
+    pure (.ret i1)) : Zig.M fromU128Locals fromU128Exit).run' (default : fromU128Locals)
   match e with
   | .ret v => pure v
 
@@ -89,8 +89,8 @@ inductive ofBits64Exit where
 
 def ofBits64 (p0 : BitVec 64) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i2 ← pure ((Zig.Float.ofBits p0) : Zig.F64)
-    pure (.ret i2)) : Zig.M ofBits64Locals ofBits64Exit).run' (default : ofBits64Locals)
+    let i1 ← pure ((Zig.Float.ofBits p0) : Zig.F64)
+    pure (.ret i1)) : Zig.M ofBits64Locals ofBits64Exit).run' (default : ofBits64Locals)
   match e with
   | .ret v => pure v
 
@@ -102,8 +102,8 @@ inductive toByteExit where
 
 def toByte (p0 : Zig.F32) : Zig.Result (BitVec 8) := do
   let e ← ((do
-    let i2 ← Zig.Float.toInt false 8 true p0
-    pure (.ret i2)) : Zig.M toByteLocals toByteExit).run' (default : toByteLocals)
+    let i1 ← Zig.Float.toInt false 8 true p0
+    pure (.ret i1)) : Zig.M toByteLocals toByteExit).run' (default : toByteLocals)
   match e with
   | .ret v => pure v
 
@@ -115,8 +115,8 @@ inductive toI32Exit where
 
 def toI32 (p0 : Zig.F64) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i2 ← Zig.Float.toInt true 32 true p0
-    pure (.ret i2)) : Zig.M toI32Locals toI32Exit).run' (default : toI32Locals)
+    let i1 ← Zig.Float.toInt true 32 true p0
+    pure (.ret i1)) : Zig.M toI32Locals toI32Exit).run' (default : toI32Locals)
   match e with
   | .ret v => pure v
 
@@ -128,8 +128,8 @@ inductive toU64Exit where
 
 def toU64 (p0 : Zig.F32) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i2 ← Zig.Float.toInt false 64 true p0
-    pure (.ret i2)) : Zig.M toU64Locals toU64Exit).run' (default : toU64Locals)
+    let i1 ← Zig.Float.toInt false 64 true p0
+    pure (.ret i1)) : Zig.M toU64Locals toU64Exit).run' (default : toU64Locals)
   match e with
   | .ret v => pure v
 

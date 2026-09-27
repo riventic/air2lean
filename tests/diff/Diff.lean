@@ -403,58 +403,67 @@ def runDot : IO Unit :=
 
 end DiffTest
 
+/-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
+`scripts/diff.sh`), or all of them if it is unset or empty. -/
 def main : IO Unit := do
-  IO.FS.createDirAll "tests/diff/out/lean/basic"
-  DiffTest.runScale
-  DiffTest.runClampAdd
-  DiffTest.runAbsDiff
-  DiffTest.runTardiness
-  DiffTest.runWeightedTardiness
-  DiffTest.runSum
-  DiffTest.runTotalWeightedTardiness
-  DiffTest.runClassify
+  let only := ((← IO.getEnv "AIR2LEAN_EXAMPLES").getD "").splitOn " " |>.filter (· != "")
+  let run (ex : String) (tests : IO Unit) : IO Unit := do
+    if only.isEmpty || only.contains ex then
+      IO.FS.createDirAll s!"tests/diff/out/lean/{ex}"
+      tests
 
-  IO.FS.createDirAll "tests/diff/out/lean/recursion"
-  DiffTest.runGcd
-  DiffTest.runIsEven
-  DiffTest.runIsOdd
-  DiffTest.runFact
+  run "basic" do
+    DiffTest.runScale
+    DiffTest.runClampAdd
+    DiffTest.runAbsDiff
+    DiffTest.runTardiness
+    DiffTest.runWeightedTardiness
+    DiffTest.runSum
+    DiffTest.runTotalWeightedTardiness
+    DiffTest.runClassify
 
-  IO.FS.createDirAll "tests/diff/out/lean/options"
-  DiffTest.runFind
-  DiffTest.runFindOr
-  DiffTest.runFirstIndexPlusOne
+  run "recursion" do
+    DiffTest.runGcd
+    DiffTest.runIsEven
+    DiffTest.runIsOdd
+    DiffTest.runFact
 
-  IO.FS.createDirAll "tests/diff/out/lean/errors"
-  DiffTest.runParseDigit
-  DiffTest.runSumDigits
-  DiffTest.runDigitOrZero
+  run "options" do
+    DiffTest.runFind
+    DiffTest.runFindOr
+    DiffTest.runFirstIndexPlusOne
 
-  IO.FS.createDirAll "tests/diff/out/lean/floatops"
-  DiffTest.runOp16
-  DiffTest.runOp32
-  DiffTest.runOp64
-  DiffTest.runOp80
-  DiffTest.runOp128
-  DiffTest.runCmp64
-  DiffTest.runDivExact64
+  run "errors" do
+    DiffTest.runParseDigit
+    DiffTest.runSumDigits
+    DiffTest.runDigitOrZero
 
-  IO.FS.createDirAll "tests/diff/out/lean/floatconv"
-  DiffTest.runToI32
-  DiffTest.runToU64
-  DiffTest.runToByte
-  DiffTest.runFromI64
-  DiffTest.runFromU128
-  DiffTest.runF64ToF16
-  DiffTest.runF16ToF128
-  DiffTest.runF80ToF64
-  DiffTest.runBits32
-  DiffTest.runOfBits64
+  run "floatops" do
+    DiffTest.runOp16
+    DiffTest.runOp32
+    DiffTest.runOp64
+    DiffTest.runOp80
+    DiffTest.runOp128
+    DiffTest.runCmp64
+    DiffTest.runDivExact64
 
-  IO.FS.createDirAll "tests/diff/out/lean/floats"
-  DiffTest.runLerp
-  DiffTest.runClamp
-  DiffTest.runIsNan
-  DiffTest.runHypot2
-  DiffTest.runCelsius
-  DiffTest.runDot
+  run "floatconv" do
+    DiffTest.runToI32
+    DiffTest.runToU64
+    DiffTest.runToByte
+    DiffTest.runFromI64
+    DiffTest.runFromU128
+    DiffTest.runF64ToF16
+    DiffTest.runF16ToF128
+    DiffTest.runF80ToF64
+    DiffTest.runBits32
+    DiffTest.runOfBits64
+
+  run "floats" do
+    DiffTest.runLerp
+    DiffTest.runClamp
+    DiffTest.runIsNan
+    DiffTest.runHypot2
+    DiffTest.runCelsius
+    DiffTest.runDot
+
