@@ -197,6 +197,15 @@ statically impossible. -/
   | .error name => pure name
   | .ok _ => throw .panic
 
+/-! ## Enums -/
+
+/-- `@enumFromInt`: `o` is the enum's `ofInt?` of the value (generated per enum). An unnamed
+value of an exhaustive enum is the safety panic `invalidEnumValue`. -/
+@[inline] def enumOf {α : Type} (o : Option α) : Result α :=
+  match o with
+  | some v => pure v
+  | none => throw .panic
+
 /-! ## Control flow -/
 
 /-- An AIR `loop`: run `body` until it returns an exit that is not `repeat` for this loop. -/

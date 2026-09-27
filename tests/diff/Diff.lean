@@ -7,6 +7,7 @@ import Proofs.Errors.Gen
 import Proofs.Floatops.Gen
 import Proofs.Floatconv.Gen
 import Proofs.Floats.Gen
+import Proofs.Variants.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -401,6 +402,73 @@ def runDot : IO Unit :=
     let ys ← (← getArr items[1]!).mapM (getFloat .f64)
     pure (renderOk (Floats.dot xs ys) floatStr)
 
+/-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
+
+def lightOf (j : Json) : IO Variants.Light := do
+  match Variants.Light.ofInt? (← getInt j) with
+  | some l => pure l
+  | none => throw (IO.userError s!"not a Light: {j.compress}")
+
+def prioOf (j : Json) : IO Variants.Prio := do
+  match Variants.Prio.ofInt? (← getInt j) with
+  | some p => pure p
+  | none => throw (IO.userError s!"not a Prio: {j.compress}")
+
+def shapeOf (j : Json) : IO Variants.Shape := do
+  let size (k : String) : IO (BitVec 32) := do pure (bv 32 (← getField j k))
+  if (j.getObjVal? "circle").isOk then return .circle (← size "circle")
+  if (j.getObjVal? "square").isOk then return .square (← size "square")
+  if (j.getObjVal? "empty").isOk then return .empty
+  let r ← orFail (j.getObjVal? "rect") "shape"
+  pure (.rect { w := bv 32 (← getField r "w"), h := bv 32 (← getField r "h") })
+
+def shapeStr : Variants.Shape → String
+  | .circle r => s!"\{\"circle\":{r.toNat}}"
+  | .rect r => s!"\{\"rect\":\{\"w\":{r.w.toNat},\"h\":{r.h.toNat}}}"
+  | .square a => s!"\{\"square\":{a.toNat}}"
+  | .empty => "{\"empty\":null}"
+
+def runVariants : IO Unit := do
+  processFile "variants" "next" fun j => do
+    let items ← getArr j
+    pure (renderOk (Variants.next (← lightOf items[0]!)) (natStr ·.toBits false))
+  processFile "variants" "advance" fun j => do
+    let items ← getArr j
+    let n ← getInt items[1]!
+    pure (renderOk (Variants.advance (← lightOf items[0]!) (bv 32 n)) (natStr ·.toBits false))
+  processFile "variants" "lightOf" fun j => do
+    let items ← getArr j
+    pure (renderOk (Variants.lightOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
+  processFile "variants" "prioValue" fun j => do
+    let items ← getArr j
+    pure (renderSigned (Variants.prioValue (← prioOf items[0]!)))
+  processFile "variants" "isUrgent" fun j => do
+    let items ← getArr j
+    pure (renderBool (Variants.isUrgent (← prioOf items[0]!)))
+  processFile "variants" "severity" fun j => do
+    let items ← getArr j
+    pure (render (Variants.severity ⟨bv 8 (← getInt items[0]!)⟩) false)
+  processFile "variants" "codeOf" fun j => do
+    let items ← getArr j
+    pure (renderOk (Variants.codeOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
+  processFile "variants" "area" fun j => do
+    let items ← getArr j
+    pure (render (Variants.area (← shapeOf items[0]!)) true)
+  processFile "variants" "totalArea" fun j => do
+    let items ← getArr j
+    let shapes ← (← getArr items[0]!).mapM shapeOf
+    pure (render (Variants.totalArea shapes) true)
+  processFile "variants" "scale" fun j => do
+    let items ← getArr j
+    let k ← getInt items[1]!
+    pure (renderOk (Variants.scale (← shapeOf items[0]!) (bv 32 k)) shapeStr)
+  processFile "variants" "radius" fun j => do
+    let items ← getArr j
+    pure (render (Variants.radius (← shapeOf items[0]!)) false)
+  processFile "variants" "isRound" fun j => do
+    let items ← getArr j
+    pure (renderBool (Variants.isRound (← shapeOf items[0]!)))
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -458,6 +526,8 @@ def main : IO Unit := do
     DiffTest.runF80ToF64
     DiffTest.runBits32
     DiffTest.runOfBits64
+
+  run "variants" DiffTest.runVariants
 
   run "floats" do
     DiffTest.runLerp

@@ -31,6 +31,12 @@ inductive Ty where
   /-- An error set. `none` = `anyerror` (every error name, `docs/air-json.md`). -/
   | errorSet (names : Option (Array String))
   | struct (name : String) (layout : String) (fields : Array (String × TyId))
+  /-- `tag` is the integer tag type; `fields` are the names with their tag values. A
+  non-exhaustive enum (`_`) also has every other value of `tag`. -/
+  | enum (name : String) (tag : TyId) (exhaustive : Bool) (fields : Array (String × Int))
+  /-- `tag` is the tag enum of a tagged union, `none` for a bare, `extern` or `packed` union.
+  `fields` are in tag order. -/
+  | union (name : String) (layout : String) (tag : Option TyId) (fields : Array (String × TyId))
   | tuple (fields : Array TyId)
   | other (name : String)
   deriving Repr, Inhabited, BEq
@@ -59,22 +65,28 @@ inductive Val where
   | errUnionErr (ty : TyId) (name : String)
   /-- An error-union constant in the payload state (schema 2). `ty`'s `k` is `error_union`. -/
   | errUnionOk (ty : TyId) (payload : Val)
+  /-- An enum constant: its tag value. `ty`'s `k` is `enum`. -/
+  | enumTag (ty : TyId) (v : Int)
+  /-- A union constant: the active field's index and its payload. `ty`'s `k` is `union`. -/
+  | unionVal (ty : TyId) (field : Nat) (payload : Val)
   deriving Repr, Inhabited, BEq
 
 /-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
-`debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`
-(docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
+`debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`,
+without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
 `expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
-  match (calleeName.splitOn ".").getLast? with
+  -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
+  match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
   | some "shlOverflow" | some "shrOverflow" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
-  | some "forLenMismatch" | some "call" => some ".panic"
+  | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
+  | some "corruptSwitch" | some "call" => some ".panic"
   | _ => none
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
@@ -178,7 +190,20 @@ inductive Op where
   | wrapErrPayload (a : Val)
   /-- `wrap_errunion_err`: build an error union in the error state. -/
   | wrapErr (a : Val)
+  /-- `is_named_enum_value`: does the enum value `a` have a name? -/
+  | isNamedEnum (a : Val)
+  /-- `get_union_tag`: the tag of the tagged union `a`. -/
+  | unionTag (a : Val)
+  /-- `union_init`: a union with field `index` active, holding `a`. -/
+  | unionInit (index : Nat) (a : Val)
+  /-- A local: `alloc`, or `ret_ptr` (the place the result is built in). -/
   | alloc
+  /-- `struct_field_ptr*`: the pointer to field `index` of the struct or union at `base`. -/
+  | fieldPtr (base : Val) (index : Nat)
+  /-- `set_union_tag`: make `tag`'s field active in the union at `ptr` (its payload undefined). -/
+  | setUnionTag (ptr : Val) (tag : Val)
+  /-- `ret_load`: return the value at `ptr` (the `ret_ptr` local). -/
+  | retLoad (ptr : Val)
   | load (ptr : Val)
   | store (ptr : Val) (v : Val)
   | sliceLen (s : Val)

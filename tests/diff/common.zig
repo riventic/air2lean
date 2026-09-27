@@ -158,7 +158,8 @@ pub const panic = struct {
 /// `writer`: bare/quoted decimal for an int leaf (`quote_wide` picks quoting — usize/u64 only),
 /// `0`/`1` for bool, `null`/inner for `?T`, `{"err":"name"}`/inner for `E!T`, `"0x<bits>"` (or
 /// `"nan"`) for a float leaf (docs/floats.md's diff protocol — every NaN, tested with `v != v`,
-/// never bits, collapses to the one string `"nan"`). Recurses on `T`'s shape, so `?T`/`E!T`
+/// never bits, collapses to the one string `"nan"`), the tag value for an enum, and objects for
+/// a union and a struct (below). Recurses on `T`'s shape, so `?T`/`E!T`
 /// nesting composes without new cases (no example needs it today).
 fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !void {
     switch (@typeInfo(T)) {
@@ -191,6 +192,26 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
                 try writer.print("\"0x{x:0>" ++ digits ++ "}\"", .{bits});
             }
         },
+        // An enum is its tag value; a union is `{"<active field>":<payload>}` (`null` for a
+        // field without payload); a struct is `{"<field>":<value>,…}` in field order.
+        .@"enum" => try writer.print("{d}", .{@intFromEnum(v)}),
+        .@"union" => switch (v) {
+            inline else => |payload, tag| {
+                try writer.print("{{\"{s}\":", .{@tagName(tag)});
+                try renderPayload(@TypeOf(payload), writer, quote_wide, payload);
+                try writer.writeAll("}");
+            },
+        },
+        .@"struct" => |st| {
+            try writer.writeAll("{");
+            inline for (st.fields, 0..) |f, i| {
+                if (i > 0) try writer.writeAll(",");
+                try writer.print("\"{s}\":", .{f.name});
+                try renderPayload(f.type, writer, quote_wide, @field(v, f.name));
+            }
+            try writer.writeAll("}");
+        },
+        .void => try writer.writeAll("null"),
         else => @compileError("renderPayload: unsupported type " ++ @typeName(T)),
     }
 }

@@ -114,7 +114,25 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "unwrap_errunion_err" => let a ← arg1 fnName raw; return .errCode a
   | "wrap_errunion_payload" => let a ← arg1 fnName raw; return .wrapErrPayload a
   | "wrap_errunion_err" => let a ← arg1 fnName raw; return .wrapErr a
-  | "alloc" => return .alloc
+  | "is_named_enum_value" => let a ← arg1 fnName raw; return .isNamedEnum a
+  | "get_union_tag" => let a ← arg1 fnName raw; return .unionTag a
+  | "union_init" =>
+    let a ← arg1 fnName raw
+    let some idx := raw.index
+      | throw s!"{fnName}: inst {raw.id}: 'union_init' needs 'index'"
+    return .unionInit idx a
+  | "alloc" | "ret_ptr" => return .alloc
+  | "struct_field_ptr" =>
+    let a ← arg1 fnName raw
+    let some idx := raw.index
+      | throw s!"{fnName}: inst {raw.id}: 'struct_field_ptr' needs 'index'"
+    return .fieldPtr a idx
+  | "struct_field_ptr_index_0" => let a ← arg1 fnName raw; return .fieldPtr a 0
+  | "struct_field_ptr_index_1" => let a ← arg1 fnName raw; return .fieldPtr a 1
+  | "struct_field_ptr_index_2" => let a ← arg1 fnName raw; return .fieldPtr a 2
+  | "struct_field_ptr_index_3" => let a ← arg1 fnName raw; return .fieldPtr a 3
+  | "set_union_tag" => let (a, b) ← arg2 fnName raw; return .setUnionTag a b
+  | "ret_load" => let a ← arg1 fnName raw; return .retLoad a
   | "load" => let a ← arg1 fnName raw; return .load a
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b
   | "slice_len" => let a ← arg1 fnName raw; return .sliceLen a

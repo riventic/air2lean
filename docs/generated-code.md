@@ -11,6 +11,8 @@
 | function `basic.scale` (with `--prefix basic.`) | `Ns.scale` |
 | any other `.` in a name | `_` |
 | struct type `basic.Job` | `Ns.Job` (a `structure`, same field names) |
+| enum or union type `variants.Shape` | `Ns.Shape` |
+| tag enum of `union(enum)` `variants.Shape` | `Ns.ShapeTag` |
 | a name that is a Lean keyword | `«name»` |
 
 ## Types
@@ -25,7 +27,45 @@
 | `?T` (`T` not a pointer) | `Option T'` |
 | `struct` (layout `auto` or `extern`) | `structure … deriving Repr, Inhabited, DecidableEq` |
 | `E!T` (error union) | `Except Zig.ErrName T'` |
+| exhaustive `enum` | `inductive` with one constructor per name |
+| non-exhaustive `enum(T) { …, _ }` | `structure` with `bits : BitVec N` (every value of `T`) |
+| `union(enum)` | `inductive` with one constructor per field (no argument for a `void` field) |
 | error set (`error{A, B}`, `anyerror`) | `Zig.ErrName` (`abbrev ErrName := String`; an error's identity is its name) |
+
+### Enums and unions
+
+Each enum `E` also gets:
+
+| Def | What |
+|---|---|
+| `E.toBits : E → BitVec N` | the tag value (`@intFromEnum`) |
+| `E.ofInt? : Int → Option E` | the value with that tag, or `none` (`@enumFromInt` → `Zig.enumOf (E.ofInt? …)`, which throws `.panic` on `none`: `invalidEnumValue`) |
+| `E.isNamed : E → Bool` | `is_named_enum_value` |
+| `E.<name> : E` | a named value (non-exhaustive enum only; an exhaustive one has the constructor) |
+
+Each tagged union `U` with tag enum `UTag` also gets, per field `f`:
+
+| Def | What |
+|---|---|
+| `U.tag : U → UTag` | `get_union_tag` |
+| `U.get_f : U → Zig.Result T` | the payload of `f` (`struct_field_val`); throws `.panic` if `f` is not active. Sema checks the tag first (`inactiveUnionField`), so the throw is not reached. |
+| `U.modify_f : (T → T) → U → U` | a store into the payload of `f`: `f` becomes active with `g` applied to its payload, or to `default` if another field was active |
+| `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is `default` (Zig: undefined) |
+
+Zig keeps the payload bytes when the tag changes, and the Zig versions write a union result in different orders: 0.15.2 and 0.16.0 set the tag first, then store the payload; 0.14.1 stores the payload first. `modify_f` and `setTag_f` give the same value for both orders.
+
+A `switch` on an exhaustive enum that names every value becomes a `match` with one arm per case and no `else` arm (its `corruptSwitch` panic cannot happen). Any other `switch` is an `if` chain.
+
+A union without a tag (bare, `extern`, `packed`) is outside the subset.
+
+### Places
+
+A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`), or a `bitcast` of a place. A place is used only as the pointer operand of `load`, `store`, `set_union_tag` and `ret_load` (`Check.lean` rejects any other use, and any access through a pointer that is not a place). A place is the local's `Locals` field plus a path of struct fields and union payloads:
+
+```lean
+-- store to rect.w in the result local (a union): change the payload of `rect`
+modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
+```
 
 ## Signature
 
@@ -74,13 +114,15 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 | `outOfBounds` | `.outOfBounds` |
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
-| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `call` (`@panic`) | `.panic` |
+| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `call` (`@panic`) | `.panic` |
+
+A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 
 `tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0).
 
 ## Differential test
 
-One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. Per example:
+One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
 
 | Path | What |
 |---|---|
@@ -105,6 +147,9 @@ One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true
 | `bool` | `0` or `1` |
 | `?T` | `null`, or `T`'s `v` |
 | `E!T` | `{"err": "<Name>"}` (the bare error name, e.g. `@errorName` on the Zig side), or `T`'s `v` |
+| enum | the tag value, a bare decimal |
+| `union(enum)` | `{"<active field>": v}` (`null` for a field without payload) |
+| struct | `{"<field>": v, …}` in field order |
 
 A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or `T`'s `v`, all three at the same JSON depth as a plain `?T`.
 

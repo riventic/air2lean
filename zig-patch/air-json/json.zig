@@ -177,7 +177,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(3);
+        try w.j.write(4);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -237,12 +237,13 @@ const W = struct {
             .rem, .mod, .bit_and, .bit_or, .xor, .cmp_lt, .cmp_lte, .cmp_eq, .cmp_gte,
             .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
             .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
-            .min, .max,
+            .min, .max, .set_union_tag,
             => {
                 const b = w.data(inst).bin_op;
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
+            .is_named_enum_value,
             .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
             .trunc_float,
             => {
@@ -254,8 +255,14 @@ const W = struct {
             .wrap_errunion_err,
             .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
             .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
-            .fptrunc, .fpext, .int_from_float, .float_from_int,
+            .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
+            .union_init => {
+                const extra = w.air.extraData(Air.UnionInit, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{extra.init});
+                try w.field("index");
+                try w.j.write(extra.field_index);
+            },
             .mul_add => {
                 const pl_op = w.data(inst).pl_op;
                 const b = w.air.extraData(Air.Bin, pl_op.payload).data;
@@ -449,6 +456,19 @@ const W = struct {
                     try w.field("fbits");
                     try w.writeFloatBits(f.storage);
                 },
+                .enum_tag => |e| {
+                    try w.field("enum");
+                    try w.writeFmt(Value.fromInterned(e.int).fmtValue(w.pt));
+                },
+                .un => |u| {
+                    // `tag` is `.none` for a union without a runtime tag.
+                    if (u.tag != .none) {
+                        try w.field("utag");
+                        try w.writeRef(Air.internedToRef(u.tag));
+                    }
+                    try w.field("uval");
+                    try w.writeRef(Air.internedToRef(u.val));
+                },
                 .opt => |o| if (o.val == .none) {
                     try w.field("null");
                     try w.j.write(true);
@@ -586,6 +606,51 @@ const W = struct {
                     }
                     try w.field("ty");
                     try w.writeTypeRef(ty.fieldType(i, zcu));
+                    try w.j.endObject();
+                }
+                try w.j.endArray();
+            },
+            .@"enum" => {
+                try w.j.write("enum");
+                try w.field("name");
+                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.field("tag");
+                try w.writeTypeRef(ty.intTagType(zcu));
+                try w.field("exhaustive");
+                try w.j.write(!ty.isNonexhaustiveEnum(zcu));
+                try w.field("fields");
+                try w.j.beginArray();
+                for (0..ty.enumFieldCount(zcu)) |i| {
+                    const tag_val = try w.pt.enumValueFieldIndex(ty, @intCast(i));
+                    try w.j.beginObject();
+                    try w.field("name");
+                    try w.j.write(ty.enumFieldName(i, zcu).toSlice(ip));
+                    try w.field("value");
+                    try w.writeFmt(Value.fromInterned(ip.indexToKey(tag_val.toIntern()).enum_tag.int).fmtValue(w.pt));
+                    try w.j.endObject();
+                }
+                try w.j.endArray();
+            },
+            .@"union" => {
+                try w.j.write("union");
+                try w.field("name");
+                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.field("layout");
+                try w.j.write(@tagName(ty.containerLayout(zcu)));
+                // The field names are the names of the tag enum, also for an untagged union.
+                const names_ty = ty.unionTagTypeHypothetical(zcu);
+                if (ty.unionTagType(zcu)) |tag_ty| {
+                    try w.field("tag");
+                    try w.writeTypeRef(tag_ty);
+                }
+                try w.field("fields");
+                try w.j.beginArray();
+                for (0..names_ty.enumFieldCount(zcu)) |i| {
+                    try w.j.beginObject();
+                    try w.field("name");
+                    try w.j.write(names_ty.enumFieldName(i, zcu).toSlice(ip));
+                    try w.field("ty");
+                    try w.writeTypeRef(ty.unionFieldTypeByIndex(i, zcu));
                     try w.j.endObject();
                 }
                 try w.j.endArray();

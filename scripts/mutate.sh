@@ -28,13 +28,17 @@
 #     `@floatFromInt`, …) goes through it, so `scripts/diff.sh` must catch it via mismatches,
 #     not a build failure: the one lemma that unfolds `roundQuot` (`roundQuot_le`) is written to
 #     hold for both forms.
+# (e) Emitter-output mutation, variants: the generated `Light.ofInt?` (Proofs/Variants/Gen.lean) also
+#     accepts the unnamed value 3. `lightOf(3)` then returns `.red`, where Zig panics
+#     (`invalidEnumValue`): the conversion an enum's generated defs do must match Zig's.
 #
 # Usage: mutate.sh
 # Env:
 #   AIR2LEAN_ZIG_AIR      Patched zig for translation (same as check.sh), needed for (a)/(c).
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
-#                         (basic for (a)/(b), options for (c), floatops for (d)) is in the list.
+#                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e))
+#                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
 
@@ -60,16 +64,19 @@ has_example() {
 
 gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
+variants_gen="Proofs/Variants/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
+variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
+cp "$variants_gen" "$variants_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
@@ -82,10 +89,11 @@ cleanup() {
   local ec=$?
   cp "$gen_backup" "$gen_file"
   cp "$options_backup" "$options_gen"
+  cp "$variants_backup" "$variants_gen"
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
-  rm -f "$gen_backup" "$options_backup" "$basic_backup" "$lemmas_backup" "$round_backup"
+  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -213,6 +221,22 @@ else
   run_and_report "mutation (d)" floatops
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$round_backup" "$round_lean"
+fi
+
+echo "== mutation (e): Light.ofInt? accepts the unnamed value 3 (emitter output) ==" >&2
+if ! has_example variants; then
+  echo "mutation (e): skipped (AIR2LEAN_EXAMPLES excludes variants)"
+else
+  sed -i.bak 's/else if v = 2 then some .green else none/else if v = 2 then some .green else if v = 3 then some .red else none/' "$variants_gen"
+  rm -f "$variants_gen.bak"
+  grep -q 'if v = 3 then some .red' "$variants_gen" || {
+    echo "error: mutation (e): sed did not change Light.ofInt?" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (e)" variants
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$variants_backup" "$variants_gen"
 fi
 
 [ "$all_detected" -eq 1 ]
