@@ -22,15 +22,15 @@ open Assn
 
 /-- `p` points to `v`, and an access with alignment `a` to it is aligned. -/
 def pts {T : Type} [Enc T] (p : Ptr) (a : Nat) (v : T) : Assn := fun h =>
-  ∃ A S bs, (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧
-    bytesAt p A S bs h
+  ∃ A S K bs, (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧
+    bytesAt p A S K bs h
 
 /-- `p` points to the items `vs`, each `Enc.size T` bytes, the first aligned to `Enc.align T`. -/
 def arr {T : Type} [Enc T] (p : Ptr) (vs : List T) : Assn := fun h =>
-  ∃ A S bs, (A + p.off.toNat) % Enc.align T = 0 ∧ bs.size = Enc.size T * vs.length ∧
+  ∃ A S K bs, (A + p.off.toNat) % Enc.align T = 0 ∧ bs.size = Enc.size T * vs.length ∧
     (∀ i (hi : i < vs.length),
       Enc.decode (bs.extract (Enc.size T * i) (Enc.size T * i + Enc.size T)) = pure vs[i]) ∧
-    bytesAt p A S bs h
+    bytesAt p A S K bs h
 
 section Lemmas
 
@@ -60,7 +60,7 @@ theorem Ptr.elem_eq (p : Ptr) (size : Nat) (i : BitVec 64) :
 
 theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap = h ∪ hF)
     (hn : 0 < Enc.size T) : (load T a p).run m = pure (v, m) := by
-  obtain ⟨A, S, bs, ha, hs, hv, hb⟩ := hp
+  obtain ⟨A, S, K, bs, ha, hs, hv, hb⟩ := hp
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (q := p) (k := 0) (n := Enc.size T) (a := a) hb hm (by simp [Ptr.add])
       hn (by omega) (by simpa using ha)
@@ -73,12 +73,12 @@ theorem pts_store_run [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hp : pts p a v 
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (w : T) :
     ∃ m', (store a p w).run m = pure ((), m') ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ pts p a w h' := by
-  obtain ⟨A, S, bs, ha, hs, -, hb⟩ := hp
+  obtain ⟨A, S, K, bs, ha, hs, -, hb⟩ := hp
   have hw := LawfulEnc.size_encode w
   obtain ⟨m', hrun, h', hd', hm', hb'⟩ :=
     bytesAt_store (q := p) (k := 0) (a := a) (bs' := Enc.encode w) hb hm hd (by simp [Ptr.add])
       (by omega) (by omega) (by simpa using ha)
-  refine ⟨m', hrun, h', hd', hm', A, S, _, ha, ?_, ?_, hb'⟩
+  refine ⟨m', hrun, h', hd', hm', A, S, K, _, ha, ?_, ?_, hb'⟩
   · rw [writeBytes_all (by omega)]; exact hw
   · rw [writeBytes_all (by omega)]; exact LawfulEnc.decode_encode w
 
@@ -94,7 +94,7 @@ theorem arr_load_run {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64} (hp : arr
     (hm : m.heap = h ∪ hF) (hn : 0 < Enc.size T) (ha : a ∣ Enc.align T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
     (load T a (p.elem (Enc.size T) i)).run m = pure (vs[i.toNat], m) := by
-  obtain ⟨A, S, bs, hA, hsz, hv, hb⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, hv, hb⟩ := hp
   have hk : Enc.size T * i.toNat + Enc.size T ≤ bs.size := by
     rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
@@ -108,14 +108,14 @@ theorem arr_store_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {i : BitVe
     (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
     ∃ m', (store a (p.elem (Enc.size T) i) w).run m = pure ((), m') ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ arr p (vs.set i.toNat w) h' := by
-  obtain ⟨A, S, bs, hA, hsz, hv, hb⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, hv, hb⟩ := hp
   have hw := LawfulEnc.size_encode w
   have hk : Enc.size T * i.toNat + (Enc.encode w).size ≤ bs.size := by
     rw [hsz, hw, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
   obtain ⟨m', hrun, h', hd', hm', hb'⟩ :=
     bytesAt_store (k := Enc.size T * i.toNat) (a := a) (bs' := Enc.encode w) hb hm hd
       (Ptr.elem_eq p _ i) (by omega) hk (item_aligned hA ha hs)
-  refine ⟨m', hrun, h', hd', hm', A, S, _, hA, ?_, ?_, hb'⟩
+  refine ⟨m', hrun, h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
   · rw [writeBytes_size _ _ _ hk, hsz, List.length_set]
   · intro j hj
     rw [List.length_set] at hj
@@ -171,7 +171,7 @@ theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitV
     · simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
     · have : vs = [] := List.eq_nil_of_length_eq_zero (by omega)
       subst this; exact hp
-  obtain ⟨A, S, bs, hA, hsz, -, hb⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, -, hb⟩ := hp
   have hw := LawfulEnc.size_encode w
   let bs' := (Array.replicate n.toNat (Enc.encode w)).flatten
   have hs' : bs'.size = Enc.size T * vs.length := by
@@ -185,7 +185,7 @@ theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitV
   obtain ⟨m', hrun, h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := a) (bs' := bs') hb
     hm hd hp0 hpos (by omega) ha0
   rw [writeBytes_all (by omega)] at hb'
-  refine ⟨m', ?_, h', hd', hm', A, S, bs', hA, by simp [hs'], ?_, hb'⟩
+  refine ⟨m', ?_, h', hd', hm', A, S, K, bs', hA, by simp [hs'], ?_, hb'⟩
   · have e : n.toNat * Enc.size T = bs'.size := by rw [hs', hn', Nat.mul_comm]
     simp only [StateT.run] at hrun
     simp only [memset, h0, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
@@ -215,7 +215,7 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
     · have : copyItems vs d.toNat s.toNat n.toNat = vs := by
         apply List.ext_getElem hlen; intro j _ _; simp [copyItems, h0]; omega
       rw [this]; exact hp
-  obtain ⟨A, S, bs, hA, hsz, hv, hb⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, hv, hb⟩ := hp
   have hdk : (Enc.size T) * d.toNat + (Enc.size T) * n.toNat ≤ bs.size := by
     rw [hsz, ← Nat.mul_add]; exact Nat.mul_le_mul_left _ hdn
   have hsk : (Enc.size T) * s.toNat + (Enc.size T) * n.toNat ≤ bs.size := by
@@ -229,7 +229,7 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
   have hsrc : src.size = (Enc.size T) * n.toNat := by simp [src]; omega
   obtain ⟨m', hrun, h', hd', hm', hb'⟩ := bytesAt_store (k := (Enc.size T) * d.toNat) (a := a) (bs' := src)
     hb hm hd (Ptr.elem_eq p _ d) (by omega) (by omega) (item_aligned hA ha hs)
-  refine ⟨m', ?_, h', hd', hm', A, S, _, hA, ?_, ?_, hb'⟩
+  refine ⟨m', ?_, h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
   · have hl := loadBytes_run hacc₂
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun

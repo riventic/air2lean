@@ -1,8 +1,8 @@
 //! air2lean: write the AIR of one function as JSON.
 //! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
 //! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
-//! to functions whose fully qualified name starts with one of the prefixes. Instructions outside the
-//! air2lean subset are written with their tag and `"unsupported": true`, so the reader can
+//! to functions whose fully qualified name starts with one of the prefixes. Instructions outside
+//! the air2lean subset are written with their tag and `"unsupported": true`, so the reader can
 //! reject them. Types are interned into a `types` table; everywhere a type appears in the
 //! body it is written as an integer ID (an index into that table).
 //!
@@ -145,9 +145,13 @@ const Compat = struct {
 
     /// Are the fields of the struct or union `ty` known? 0.16.0 asserts `want_layout` in
     /// `structFieldCount` and `unionTagTypeHypothetical`; before 0.16.0 the fields are known
-    /// once the type exists.
+    /// once the type exists. A tuple always has its fields.
     fn hasFields(zcu: *Zcu, ty: Type) bool {
-        return if (v16) hasLayout(zcu, ty) else true;
+        if (!v16) return true;
+        return switch (zcu.intern_pool.indexToKey(ty.toIntern())) {
+            .struct_type, .union_type => hasLayout(zcu, ty),
+            else => true,
+        };
     }
 
     const NavInfo = struct {
@@ -290,7 +294,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(6);
+        try w.j.write(7);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");

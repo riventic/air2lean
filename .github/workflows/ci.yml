@@ -34,7 +34,9 @@ jobs:
             full: true
             mutate: false
           # 0.14.1: `floatconv` is excluded (0.14.1 lowers `@intFromFloat` without the check,
-          # zig-patch/0.14.1/TAGS.md). Its std cannot build the diff harness; the stale-Gen.lean
+          # zig-patch/0.14.1/TAGS.md), `slices` (no `@memmove`) and `lists` (its
+          # `ArrayListUnmanaged` is another type, docs/std-models.md). Its std cannot build the
+          # diff harness; the stale-Gen.lean
           # check shows the translation is the one that the full jobs test.
           - zig: "0.14.1"
             examples: "basic recursion options floatops floats errors variants pointers"

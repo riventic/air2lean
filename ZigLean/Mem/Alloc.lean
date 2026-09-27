@@ -80,21 +80,24 @@ dead after the free, and a bad free throws in both steps, so the model only free
 def Allocator.free (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
   if size * s.len.toNat = 0 then pure () else rawFree s.ptr (size * s.len.toNat)
 
-/-- `dupe(T, m)`: a new block with a copy of the items of `m`. -/
+/-- `dupe(T, m)`: a new block with a copy of the items of `m`. Items of 0 bytes have no bytes to
+copy (and the result has no block). -/
 def Allocator.dupe (a : Allocator) (size align srcAlign : Nat) (m : Slice) :
     MemM (Except ErrName Slice) := do
   match ← a.alloc size align m.len with
   | .ok s =>
-    memmove size align srcAlign s.ptr m.ptr m.len
+    if size ≠ 0 then memmove size align srcAlign s.ptr m.ptr m.len
     pure (.ok s)
   | .error e => pure (.error e)
 
-/-- `remap(s, n)`: the model cannot remap. A new length of 0 frees `s`. -/
+/-- `remap(s, n)`: the model cannot remap. A new length of 0 frees `s`; items of 0 bytes need no
+bytes, so `s` gets the new length. -/
 def Allocator.remap (a : Allocator) (size : Nat) (s : Slice) (n : BitVec 64) :
     MemM (Option Slice) := do
   if n.toNat = 0 then
     a.free size s
     return some ⟨s.ptr, 0⟩
+  if s.len.toNat ≠ 0 ∧ size = 0 then return some ⟨s.ptr, n⟩
   return none
 
 end Zig

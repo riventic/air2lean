@@ -4,8 +4,8 @@ import ZigLean.Sep.Heap
 # Assertions
 
 An assertion is a predicate on a heap. `P ∗ Q` holds of a heap that splits into two disjoint
-parts, one for `P` and one for `Q`. `bytesAt p A S bs` owns exactly the bytes `bs` at `p`, in a
-block with address `A` and size `S`. The typed forms (`pts`, `arr`, `ZigLean/Sep/Triple.lean`)
+parts, one for `P` and one for `Q`. `bytesAt p A S K bs` owns exactly the bytes `bs` at `p`, in a
+block with address `A`, size `S` and kind `K`. The typed forms (`pts`, `arr`, `ZigLean/Sep/Triple.lean`)
 build on it.
 
 The two lemmas at the end are the base of every rule: an access to a part of owned bytes succeeds
@@ -36,11 +36,11 @@ scoped notation "⌜" φ "⌝" => Assn.lift φ
 
 open Assn
 
-/-- `h` owns exactly the bytes `bs` at `p`, in a block with address `A` and size `S`. -/
-def bytesAt (p : Ptr) (A S : Nat) (bs : Array Byte) : Assn := fun h =>
+/-- `h` owns exactly the bytes `bs` at `p`, in a block with address `A`, size `S` and kind `K`. -/
+def bytesAt (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : Assn := fun h =>
   ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ ∀ l : Loc, h l =
     if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
-    then some ⟨bs[l.2 - p.off.toNat]!, A, S⟩ else none
+    then some ⟨bs[l.2 - p.off.toNat]!, A, S, K⟩ else none
 
 section Sep
 
@@ -79,12 +79,12 @@ end Sep
 
 section Bytes
 
-variable {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
+variable {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
 
 /-- The cell of an owned byte in the memory. -/
-theorem bytesAt_cell (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) {b : BlockId}
+theorem bytesAt_cell (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {b : BlockId}
     (hpb : p.block = some b) {j : Nat} (hj : j < bs.size) :
-    m.heap (b, p.off.toNat + j) = some ⟨bs[j]!, A, S⟩ := by
+    m.heap (b, p.off.toNat + j) = some ⟨bs[j]!, A, S, K⟩ := by
   obtain ⟨b', hb', -, hl⟩ := hb
   rw [hpb] at hb'; cases hb'
   rw [hm]
@@ -94,7 +94,7 @@ theorem bytesAt_cell (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) {b : Blo
 
 /-- An access to the `n > 0` bytes at `q`, a part of the bytes that `h` owns (`q` is `k` bytes
 after `p`), succeeds if its address is aligned, and reads the owned bytes. -/
-theorem bytesAt_access (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) {q : Ptr} {k n a : Nat}
+theorem bytesAt_access (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {q : Ptr} {k n a : Nat}
     (hq : q = p.add k) (hn : 0 < n) (hk : k + n ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) :
     ∃ b blk, m.access q n a = pure (b, blk, p.off.toNat + k) ∧ m.blocks[b]? = some blk ∧
       blk.addr = A ∧ blk.bytes.size = S ∧
@@ -107,7 +107,7 @@ theorem bytesAt_access (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) {q : P
   obtain ⟨blk', hblk', -, hlt, -⟩ := Mem.heap_some cl
   rw [hblk] at hblk'; cases hblk'
   simp only [Cell.mk.injEq] at hc0
-  obtain ⟨-, hA, hS⟩ := hc0
+  obtain ⟨-, hA, hS, -⟩ := hc0
   refine ⟨b, blk, ?_, hblk, hA.symm, hS.symm, ?_⟩
   · have hoff : q.off.toNat = p.off.toNat + k := by subst hq; simp [Ptr.add]; omega
     have := access_of (m := m) (p := q) (n := n) (a := a) (by subst hq; simpa [Ptr.add] using hpb)
@@ -131,11 +131,11 @@ theorem bytesAt_access (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) {q : P
 /-- A store of `bs'` (`0 < bs'.size`) at `q`, a part of the bytes that `h` owns, succeeds if its
 address is aligned. After it, the owned bytes are `writeBytes bs k bs'`, and the frame `hF` is
 unchanged. -/
-theorem bytesAt_store (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k) (hn : 0 < bs'.size)
     (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) :
     ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧
-      ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S (writeBytes bs k bs') h' := by
+      ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access hb hm hq hn hk ha
   obtain ⟨hqb, -, hl, hq0, hbound, -, -⟩ := access_eq hacc
   obtain ⟨b', hpb, h0, hown⟩ := id hb
@@ -143,13 +143,17 @@ theorem bytesAt_store (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) (hd : H
     have : q.block = p.block := by subst hq; rfl
     rw [this, hpb] at hqb; exact Option.some.inj hqb
   subst hbb
+  have hK : blk.kind = K := by
+    obtain ⟨blk', hblk', -, _, hc⟩ := Mem.heap_some (bytesAt_cell hb hm hpb (j := k) (by omega))
+    rw [hblk] at hblk'; cases hblk'
+    simp only [Cell.mk.injEq] at hc; exact hc.2.2.2.symm
   have hws := writeBytes_size bs k bs' hk
   have hqo : q.off.toNat = p.off.toNat + k := by subst hq; simp [Ptr.add]; omega
   have hpbq := hpb
   generalize ho : p.off.toNat = o at hown hqo ha hacc
   let h' : Heap := fun l =>
     if l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
-    then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S⟩ else none
+    then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S, K⟩ else none
   refine ⟨_, storeBytes_run hacc, h', ?_, ?_, ⟨b', hpb, h0, fun l => by simp only [h', ho]⟩⟩
   · intro l
     by_cases hc : l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
@@ -170,7 +174,7 @@ theorem bytesAt_store (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) (hd : H
       · have hin : o ≤ y ∧ y < o + bs.size := by omega
         simp only [hw, hin, and_self, ↓reduceIte, Option.some_or, writeBytes_getElem! bs k bs' hk,
           show k ≤ y - o ∧ y - o < k + bs'.size by omega]
-        rw [← hA, ← hS, show y - (o + k) = y - o - k by omega]
+        rw [← hA, ← hS, ← hK, show y - (o + k) = y - o - k by omega]
       · simp only [hw, true_and, ↓reduceIte]
         by_cases hin : o ≤ y ∧ y < o + bs.size
         · simp only [hin, and_self, ↓reduceIte, Option.some_or] at hmx ⊢
@@ -185,7 +189,7 @@ theorem bytesAt_store (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) (hd : H
 theorem Mem.heap_split {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (hl : blk.live) :
     ∃ h hF, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧
-      bytesAt ⟨some b, 0⟩ blk.addr blk.bytes.size blk.bytes h := by
+      bytesAt ⟨some b, 0⟩ blk.addr blk.bytes.size blk.kind blk.bytes h := by
   refine ⟨fun l => if l.1 = b then m.heap l else none, fun l => if l.1 = b then none else m.heap l,
     ?_, ?_, b, rfl, Int.le_refl 0, ?_⟩
   · intro l; by_cases e : l.1 = b <;> simp [e]

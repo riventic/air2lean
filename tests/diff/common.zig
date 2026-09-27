@@ -326,7 +326,7 @@ pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_w
 
 /// `forkCall` for a function that uses memory: after the result, the child also writes the
 /// bytes of `bufs` as they are after the call, `,"bufs":["<hex>",…]` (two lowercase hex digits
-/// per byte).
+/// per byte), and with `test_alloc` set the number of live allocations, `,"live":<n>`.
 pub fn forkCallBufs(
     comptime Args: type,
     args: Args,

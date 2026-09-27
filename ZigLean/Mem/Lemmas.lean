@@ -275,4 +275,17 @@ instance : LawfulEnc (BitVec 8) where
     simp only [BitVec.toNat_ofNat]
     omega
 
+/-- `?*T`: `null` is 8 zero bytes, and pointer bytes are never zero bytes. -/
+instance : LawfulEnc (Option Ptr) where
+  size_encode v := by cases v <;> simp [Enc.encode, Enc.size]
+  decode_encode v := by
+    have hr : Array.finRange 8 = #[0, 1, 2, 3, 4, 5, 6, 7] := by decide
+    cases v with
+    | none => simp [Enc.encode, Enc.decode, pure, ExceptT.pure, ExceptT.mk]
+    | some p =>
+      simp [Enc.encode, Enc.decode, hr, pure, ExceptT.pure, ExceptT.mk, Functor.map, ExceptT.map]
+      intro h
+      have := congrArg (·[0]?) h
+      simp at this
+
 end Zig

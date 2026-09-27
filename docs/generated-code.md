@@ -10,6 +10,7 @@
 |---|---|
 | function `basic.scale` (with `--prefix basic.`) | `Ns.scale` |
 | any other `.` in a name | `_` |
+| a generic instance `array_list.Aligned(u32,null).append` | `array_list_Aligned_u32_null_append` (each character other than a letter, a digit or `_` is `_`; `)` is dropped) |
 | struct type `basic.Job` | `Ns.Job` (a `structure`, same field names) |
 | enum or union type `variants.Shape` | `Ns.Shape` |
 | tag enum of `union(enum)` `variants.Shape` | `Ns.ShapeTag` |
@@ -34,6 +35,7 @@
 | non-exhaustive `enum(T) { …, _ }` | `structure` with `bits : BitVec N` (every value of `T`) |
 | `union(enum)` | `inductive` with one constructor per field (no argument for a `void` field) |
 | error set (`error{A, B}`, `anyerror`) | `Zig.ErrName` (`abbrev ErrName := String`; an error's identity is its name) |
+| `std.mem.Allocator` | `Zig.Allocator` (the allocator model, [std-models.md](std-models.md)) |
 
 ### Enums and unions
 
@@ -74,7 +76,7 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 `ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, or `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block). A `Zig.Ptr` is a block and a byte offset.
 
-A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
+A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
 | | Pure | Uses memory |
 |---|---|---|
@@ -100,6 +102,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | `memcpy`, `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |
 | `tag_name` | `E.tagName e` (below) |
 | `error_name` | `errorNameOf e` (below) |
+| `call` of `mem.Allocator.create`, `alloc`, `free`, … | `Zig.Allocator.create a size align`, … ([std-models.md](std-models.md)) |
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 
@@ -172,7 +175,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
   ...
 ```
 
-- Parameters are the loop body's captures: every SSA value (`p<i>`/`i<id>`) it reads that is bound outside it. Names match the body text exactly (no renaming); order is params first (param order), then by id.
+- Parameters are the loop body's captures: every SSA value (`p<i>`/`i<id>`) it reads that is bound outside it; order is params first (param order), then by id. The call passes the caller's name of each value (the payload of a `try` is `v<id>` there).
 - A `Locals` field (`total`, `local3`, …) is not a capture: it goes through `get`/`modify`, unaffected by which def the code sits in.
 - A nested loop gets its own def too, emitted before its enclosing loop's def; the enclosing loop's body calls it the same way `<fn>` calls the outer one.
 - The repeat test is a named def `<fn>.again<id>` too. An inline `fun e => match …` would get a new matcher each time it is elaborated, so a proof could not restate it.
@@ -195,11 +198,12 @@ A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>
 
 ## Differential test
 
-One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
+One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `heap`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
 
 | Path | What |
 |---|---|
 | `examples/<ex>/<ex>.zig` | The Zig source under test |
+| `examples/<ex>/filter` | Optional: more name prefixes to translate, one per line (std code; [std-models.md](std-models.md)) |
 | `tests/golden/<v>/<ex>/air/` | Golden AIR-JSON, checked by `scripts/check.sh` |
 | `Proofs/<Ex>/Gen.lean` | Committed translator output (`--namespace <Ex> --prefix <ex>.`) |
 | `tests/diff/<ex>/inputs/<fn>.jsonl` | Generated inputs, one file per function (`tests/diff/gen_inputs.zig`) |
@@ -226,7 +230,9 @@ One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true
 
 A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or `T`'s `v`, all three at the same JSON depth as a plain `?T`.
 
-A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one heap block per buffer, after the globals of `mem0` (block `g + i` = buffer `i`). A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a slice argument also has `"len": n`. A pointer or slice result into the buffers is written the same way; a result into a global is `{"bytes": "<hex>"}`, the bytes of the value or of the items. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct).
+A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one block per buffer, after the globals of `mem0` (block `g + i` = buffer `i`). A buffer block has the kind `.stack`: the allocator did not make it, so a free of it throws `.illegal`. A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a slice argument also has `"len": n`. A pointer or slice result into the buffers is written the same way; a result into a global or a heap block is `{"bytes": "<hex>"}`, the bytes of the value or of the items. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct).
+
+A function that takes a `std.mem.Allocator` gets `TestAllocator` ([std-models.md](std-models.md)). Its first argument in `args` is the allocation that fails: `null` or its number (`Zig.Mem.failAt`). The result line ends with the number of live allocations after the call, `,"live": n`, and `scripts/diff.sh` compares it. A free that `TestAllocator` does not accept is the kind `doubleFree` (the Lean side: `.illegal`).
 
 ## Error unions
 

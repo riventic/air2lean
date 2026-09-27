@@ -5,7 +5,9 @@ import ZigLean.Sep.Triple
 
 `loopMM_spec` is `Zig.loop_spec` (`ZigLean/Loop.lean`) for a loop body that uses memory: the
 invariant is on the locals and the memory. `loop_sep_spec` states the invariant as an assertion
-on the part of the memory that the loop owns; the rest (the frame `hF`) is unchanged.
+on the part of the memory that the loop owns; the rest (the frame `hF`) is unchanged. The
+`_ghost` forms take the measure from the invariant, not from the locals: a walk over a list ends
+because the rest of the list gets shorter.
 -/
 
 namespace Zig
@@ -46,6 +48,30 @@ theorem loopMM_spec {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (inv 
       refine ⟨e₂, s₂, m₂, ?_, hpost⟩
       simp [hrun, ha, hr, bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure]
 
+/-- `loopMM_spec` with the measure in the invariant: a number that each repeat makes smaller (the
+length of the rest of a list, which the locals alone do not give). -/
+theorem loopMM_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (inv : σ → Mem → Nat → Prop)
+    (post : ε → σ → Mem → Prop)
+    (step : ∀ s m n, inv s m n → ∃ e s' m', (body.run s).run m = pure ((e, s'), m') ∧
+      (if again e then ∃ n' < n, inv s' m' n' else post e s' m')) :
+    ∀ s m n, inv s m n → ∃ e s' m', ((loop body again).run s).run m = pure ((e, s'), m') ∧
+      post e s' m' := by
+  intro s m n
+  induction n using Nat.strongRecOn generalizing s m with
+  | _ n ih =>
+    intro hs
+    obtain ⟨e, s', m', hrun, hnext⟩ := step s m n hs
+    rw [loopMM_run]
+    cases ha : again e
+    · simp only [ha, Bool.false_eq_true, ↓reduceIte] at hnext
+      refine ⟨e, s', m', ?_, hnext⟩
+      simp [hrun, ha, bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure]
+    · simp only [ha, ↓reduceIte] at hnext
+      obtain ⟨n', hlt, hinv⟩ := hnext
+      obtain ⟨e₂, s₂, m₂, hr, hpost⟩ := ih n' hlt s' m' hinv
+      refine ⟨e₂, s₂, m₂, ?_, hpost⟩
+      simp [hrun, ha, hr, bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure]
+
 /-- A loop with the invariant `I s`, an assertion on the part of the memory that the loop owns.
 The frame `hF` stays unchanged. -/
 theorem loop_sep_spec {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I : σ → Assn)
@@ -67,6 +93,30 @@ theorem loop_sep_spec {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I 
       · rename_i ha; simp only [ha, ↓reduceIte] at hn; exact ⟨⟨h', hd', hm', hn.1⟩, hn.2⟩
       · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn; exact ⟨h', hd', hm', hn⟩)
     s m ⟨h, hd, hm, hi⟩
+  obtain ⟨e, s', m', hr, h', hd', hm', hp⟩ := this
+  exact ⟨e, s', m', h', hr, hd', hm', hp⟩
+
+/-- `loop_sep_spec` with the measure in the invariant (`loopMM_ghost`). -/
+theorem loop_sep_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I : σ → Nat → Assn)
+    (post : ε → σ → Assn) (hF : Heap)
+    (step : ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h →
+      ∃ e s' m' h', (body.run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
+        m'.heap = h' ∪ hF ∧ (if again e then ∃ n' < n, I s' n' h' else post e s' h')) :
+    ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h →
+      ∃ e s' m' h', ((loop body again).run s).run m = pure ((e, s'), m') ∧
+        Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' := by
+  intro s n m h hd hm hi
+  have := loopMM_ghost body again
+    (fun s m n => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ I s n h)
+    (fun e s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ post e s h)
+    (fun s m n ⟨h, hd, hm, hi⟩ => by
+      obtain ⟨e, s', m', h', hr, hd', hm', hn⟩ := step s n m h hd hm hi
+      refine ⟨e, s', m', hr, ?_⟩
+      split
+      · rename_i ha; simp only [ha, ↓reduceIte] at hn
+        obtain ⟨n', hlt, hi'⟩ := hn; exact ⟨n', hlt, h', hd', hm', hi'⟩
+      · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn; exact ⟨h', hd', hm', hn⟩)
+    s m n ⟨h, hd, hm, hi⟩
   obtain ⟨e, s', m', hr, h', hd', hm', hp⟩ := this
   exact ⟨e, s', m', h', hr, hd', hm', hp⟩
 

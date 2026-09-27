@@ -19,7 +19,8 @@ theorem counter_init : ∃ h hF, Heap.Disjoint h hF ∧ mem0.heap = h ∪ hF ∧
   have hb : mem0.blocks[0]? = some ⟨Enc.encode (0 : BitVec 32), 4, .global, true, 4096⟩ := by
     simp [mem0, Mem.ofGlobals, Mem.addGlobal, alignUp]
   obtain ⟨h, hF, hd, hm, hbytes⟩ := Mem.heap_split hb rfl
-  refine ⟨h, hF, hd, hm, 4096, _, _, rfl, LawfulEnc.size_encode _, LawfulEnc.decode_encode _, hbytes⟩
+  refine ⟨h, hF, hd, hm, 4096, _, _, _, rfl, LawfulEnc.size_encode _, LawfulEnc.decode_encode _,
+    hbytes⟩
 
 /-- `bump` adds 1 to the counter and returns the new value. -/
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :
