@@ -110,6 +110,9 @@ def parseTy (j : Json) : Except String Ty := do
     return .optional child
   | "struct" =>
     let name ← (← j.getObjVal? "name").getStr?
+    if name == "mem.Allocator" then return .allocator
+    -- A struct that is only behind a pointer can have no known fields (`no_fields`).
+    if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
     let fieldsJ ← (← j.getObjVal? "fields").getArr?
     let fields ← fieldsJ.mapM fun fj => do
@@ -135,6 +138,7 @@ def parseTy (j : Json) : Except String Ty := do
     return .enum name tag exhaustive fields
   | "union" =>
     let name ← (← j.getObjVal? "name").getStr?
+    if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
     let tag ← match optField j "tag" with
       | some tj => some <$> tj.getNat?

@@ -12,8 +12,8 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
   `set_union_tag`, `ret_load`, or in `dbg`. An escaping `alloc` is a stack block in memory.
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
-  pointer constant and no memory op (`memoryOp`), and it calls only pure functions. Every other
-  function **uses memory**.
+  pointer constant and no memory op (`memoryOp`, which includes a call to the allocator model),
+  and it calls only pure functions. Every other function **uses memory**.
 -/
 
 namespace Air2Lean
@@ -98,7 +98,7 @@ def escapingAllocs (f : Func) : Array InstId :=
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr ..) => true
+  | some (.ptr ..) | some .allocator => true
   | some (.array _ c) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
@@ -111,11 +111,30 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
   | some (.ptr "slice" true c) => !hasPtr types c
   | _ => !hasPtr types id
 
+/-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
+inductive AllocFn where
+  | create | destroy | alloc | alignedAlloc | free | dupe | remap
+  deriving BEq, Repr
+
+/-- The allocator function that the function `name` is an instance of
+(`mem.Allocator.<fn>__anon_<n>`). -/
+def allocFn? (name : String) : Option AllocFn :=
+  match (name.splitOn "__anon_").head! with
+  | "mem.Allocator.create" => some .create
+  | "mem.Allocator.destroy" => some .destroy
+  | "mem.Allocator.alloc" => some .alloc
+  | "mem.Allocator.alignedAlloc" => some .alignedAlloc
+  | "mem.Allocator.free" => some .free
+  | "mem.Allocator.dupe" => some .dupe
+  | "mem.Allocator.remap" => some .remap
+  | _ => none
+
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
   match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
+  | .call (.func name _) _ => (allocFn? name).isSome
   | _ => false
 
 /-- A constant that points into memory. -/

@@ -37,6 +37,9 @@
 # (g) Lean-runtime mutation, slices: `Zig.memmove` (ZigLean/Mem/Basic.lean) writes one byte too
 #     few (the last byte of the destination stays as it was). `copy` and `copyWithin` then leave
 #     other bytes in the buffers than Zig.
+# (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
+#     `Mem.failAt`. Every lists function then returns a value where Zig returns
+#     `error.OutOfMemory`.
 #
 # Usage: mutate.sh
 # Env:
@@ -44,7 +47,7 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers for (f), slices for (g))
+#                         pointers for (f), slices for (g), lists for (h))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -76,6 +79,7 @@ basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
+alloc_lean="ZigLean/Mem/Alloc.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -83,6 +87,7 @@ basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
+alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -90,6 +95,7 @@ cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
 cp "$mem_lean" "$mem_backup"
+cp "$alloc_lean" "$alloc_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -104,8 +110,9 @@ cleanup() {
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
   cp "$mem_backup" "$mem_lean"
+  cp "$alloc_backup" "$alloc_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup"
+    "$mem_backup" "$alloc_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -281,6 +288,22 @@ else
   run_and_report "mutation (g)" slices
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$mem_backup" "$mem_lean"
+fi
+
+echo "== mutation (h): Zig.rawAlloc never fails at Mem.failAt (Lean runtime) ==" >&2
+if ! has_example lists; then
+  echo "mutation (h): skipped (AIR2LEAN_EXAMPLES excludes lists)"
+else
+  sed -i.bak 's/  if m.failAt = some m.allocs ∨ maxAllocBytes < n then return none/  if maxAllocBytes < n then return none/' "$alloc_lean"
+  rm -f "$alloc_lean.bak"
+  grep -q '  if maxAllocBytes < n then return none' "$alloc_lean" || {
+    echo "error: mutation (h): sed did not change Zig.rawAlloc" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (h)" lists
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$alloc_backup" "$alloc_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

@@ -139,12 +139,18 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     | "slice_elem_ptr", _ => ptrs := ptrs.insert i.id
     | _, some (.inst p) => if (projection? i).isSome && ptrs.contains p then ptrs := ptrs.insert i.id
     | _, _ => pure ()
-  -- Keep only pointers read by `load`, by a kept projection, or by a debug instruction.
+  -- Keep only pointers read by `load`, by a kept projection, or by a debug instruction, and
+  -- projections of a kept pointer.
+  let byId : Std.HashMap InstId RawInst := all.foldl (fun m i => m.insert i.id i) {}
   let mut changed := true
   while changed do
     changed := false
     for p in ptrs.toArray do
-      let ok := (users.getD p #[]).all fun u =>
+      let baseOk := match byId[p]? with
+        | some i => i.tag == "bitcast" || i.tag == "slice_elem_ptr" ||
+          match (i.args[0]? : Option Val) with | some (.inst b) => ptrs.contains b | _ => false
+        | none => false
+      let ok := baseOk && (users.getD p #[]).all fun u =>
         isDbgTag u.tag || (u.tag == "load" && u.args[0]? == some (.inst p)) ||
           ((projection? u).isSome && u.tag != "slice_elem_ptr" && u.args[0]? == some (.inst p) &&
             ptrs.contains u.id)

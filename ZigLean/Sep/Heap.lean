@@ -5,17 +5,19 @@ import ZigLean.Mem.Lemmas
 
 A separation-logic assertion is a predicate on a `Heap`: a partial map from a location (a block
 and a byte offset) to a `Cell`. `Mem.heap m` is the heap of all live bytes of `m`. A cell also
-holds the address and the size of its block, so an assertion can state the alignment of a
-pointer, and that it owns a whole block (for `free`).
+holds the address, the size and the kind of its block, so an assertion can state the alignment
+of a pointer, that it owns a whole block (for `free`), and that the allocator made the block (for
+`Allocator.free`).
 -/
 
 namespace Zig
 
-/-- A byte, with the address and the size of its block. -/
+/-- A byte, with the address, the size and the kind of its block. -/
 structure Cell where
   byte : Byte
   addr : Nat
   size : Nat
+  kind : BlockKind
   deriving DecidableEq
 
 abbrev Loc := BlockId × Nat
@@ -87,13 +89,13 @@ end Heap
 def Mem.heap (m : Mem) : Heap := fun (b, o) =>
   match m.blocks[b]? with
   | some blk =>
-    if h : blk.live ∧ o < blk.bytes.size then some ⟨blk.bytes[o], blk.addr, blk.bytes.size⟩
+    if h : blk.live ∧ o < blk.bytes.size then some ⟨blk.bytes[o], blk.addr, blk.bytes.size, blk.kind⟩
     else none
   | none => none
 
 theorem Mem.heap_some {m : Mem} {b : BlockId} {o : Nat} {c : Cell} (h : m.heap (b, o) = some c) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.live ∧ ∃ ho : o < blk.bytes.size,
-      c = ⟨blk.bytes[o], blk.addr, blk.bytes.size⟩ := by
+      c = ⟨blk.bytes[o], blk.addr, blk.bytes.size, blk.kind⟩ := by
   unfold Mem.heap at h
   cases hb : m.blocks[b]? with
   | none => simp [hb] at h
@@ -133,7 +135,7 @@ theorem writeBytes_getElem (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o +
 theorem Mem.heap_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hn : o + bs.size ≤ blk.bytes.size) (l : Loc) :
     (m.write b blk o bs).heap l =
-      if l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size then some ⟨bs[l.2 - o]!, blk.addr, blk.bytes.size⟩
+      if l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size then some ⟨bs[l.2 - o]!, blk.addr, blk.bytes.size, blk.kind⟩
       else m.heap l := by
   obtain ⟨b', x⟩ := l
   have hb : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1

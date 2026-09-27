@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 84 functions in 10 examples translate and match the compiled Zig on 61,380 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers` and `slices`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding. Memory proofs use a separation logic ([docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 88 functions in 11 examples translate and match the compiled Zig on 62,580 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers`, `slices` and `lists` (heap memory, an allocator, translated std code), and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding. Memory proofs use a separation logic ([docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -77,7 +77,7 @@ scripts/mutate.sh      # a changed function must fail a test
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` and `extern` globals |
-| `if`, `switch`, `while`, `for` | allocators, heap memory |
+| `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
 | enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | inline asm, threads, atomics |
@@ -85,6 +85,7 @@ scripts/mutate.sh      # a changed function must fail a test
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | unions and error unions in memory |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
+| `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 
 Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 

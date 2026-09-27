@@ -6,13 +6,13 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 
 | Name | What |
 |---|---|
-| `Heap` | a partial map from a location (block, byte offset) to a `Cell`: the byte, and the address and size of its block |
+| `Heap` | a partial map from a location (block, byte offset) to a `Cell`: the byte, and the address, size and kind of its block |
 | `Mem.heap m` | the heap of all live bytes of `m` |
 | `Assn` | `Heap → Prop` |
 | `P ∗ Q` | the heap splits into two disjoint parts: `P` holds of one, `Q` of the other |
 | `⌜φ⌝` | the fact `φ`, and no bytes |
 | `emp` | no bytes |
-| `bytesAt p A S bs` | exactly the bytes `bs` at `p`, in a block with address `A` and size `S` |
+| `bytesAt p A S K bs` | exactly the bytes `bs` at `p`, in a block with address `A`, size `S` and kind `K` (`.heap` for a block of the allocator) |
 | `pts p a v` | `p` points to `v : T` (`Zig.Enc T`); an access with alignment `a` is aligned |
 | `arr p vs` | `p` points to the items `vs : List T`, one after the other, the first aligned to `Enc.align T` |
 
@@ -28,7 +28,8 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.conseq`, `ret`, `bind`, `ex`, `lift` | the structural rules |
 | `Triple.load`, `Triple.store` | `pts p a v` before and after (`0 < Enc.size T`; `store` needs `LawfulEnc T`) |
 | `Triple.alloc`, `Triple.free` | a new block with undefined bytes; `free` needs every byte of the block, from offset 0 |
-| `loop_sep_spec` | a `Zig.loop` with an invariant that is an assertion (below) |
+| `Triple.create`, `Triple.destroy` | the allocator (`ZigLean/Sep/Alloc.lean`): `newBlock` is a new `.heap` block or `error.OutOfMemory` and no bytes; `destroy` needs the whole `.heap` block |
+| `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 
 A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`:
 
@@ -40,6 +41,7 @@ A proof about generated code does not apply the rules one by one. It unfolds the
 | `arr_memmove_run` | `Zig.memmove` of `n` items from `s` to `d` | `arr p (copyItems vs d s n)`: all bytes read before the first write |
 | `arr_memset_run` | `Zig.memset` of all items | `arr p (List.replicate n w)` |
 | `alloc_run`, `free_run` | `Zig.alloc`, `Zig.free` | a new owned block; the block removed |
+| `create_run`, `rawFree_run` | `Allocator.create`, `Zig.rawFree` | `newBlock`; the `.heap` block removed |
 
 ## A spec
 
@@ -63,6 +65,8 @@ Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b
 
 `reverse` (`Proofs/Slices/Sep.lean`): the invariant `revInv` says that the items before `i` and after `j` are swapped and the others are unchanged; `revMeas s = j + 1 - i`. `reverse_step` proves one iteration; `reverse_spec` starts the loop with `i = 0`, `j = n - 1`.
 
+A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `loop_sep_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. In `Proofs/Lists/Sep.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
+
 ## Globals
 
 `mem0` holds one block per global. `Mem.heap_split` splits a live block off a memory as owned bytes; `counter_init` uses it to show that at program start the memory owns the counter with the value 0, and `bump_spec` is the triple of one `bump`.
@@ -73,3 +77,6 @@ Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b
 |---|---|
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
+| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed) |
+
+`append` of `ArrayListUnmanaged` has no proof. Its `@memcpy` alias check compares the addresses of the old and the new block. A proof of that check needs a fact that no assertion can state: every block ends below `Mem.nextAddr`.

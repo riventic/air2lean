@@ -1,8 +1,8 @@
 //! air2lean: write the AIR of one function as JSON.
 //! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
-//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to
-//! functions whose fully qualified name starts with the prefix. Instructions outside the
-//! air2lean subset are written with their tag and `"unsupported": true`, so the reader can
+//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
+//! to functions whose fully qualified name starts with one of the prefixes. Instructions outside
+//! the air2lean subset are written with their tag and `"unsupported": true`, so the reader can
 //! reject them. Types are interned into a `types` table; everywhere a type appears in the
 //! body it is written as an integer ID (an index into that table).
 //!
@@ -143,6 +143,17 @@ const Compat = struct {
         };
     }
 
+    /// Are the fields of the struct or union `ty` known? 0.16.0 asserts `want_layout` in
+    /// `structFieldCount` and `unionTagTypeHypothetical`; before 0.16.0 the fields are known
+    /// once the type exists. A tuple always has its fields.
+    fn hasFields(zcu: *Zcu, ty: Type) bool {
+        if (!v16) return true;
+        return switch (zcu.intern_pool.indexToKey(ty.toIntern())) {
+            .struct_type, .union_type => hasLayout(zcu, ty),
+            else => true,
+        };
+    }
+
     const NavInfo = struct {
         ty: InternPool.Index,
         is_const: bool,
@@ -216,8 +227,11 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     const func = zcu.funcInfo(func_index);
     const fqn = ip.getNav(func.owner_nav).fqn.toSlice(ip);
 
-    if (Compat.getEnv(pt, "ZIG_AIR_JSON_FILTER")) |prefix| {
-        if (!std.mem.startsWith(u8, fqn, prefix)) return;
+    if (Compat.getEnv(pt, "ZIG_AIR_JSON_FILTER")) |prefixes| {
+        var it = std.mem.splitScalar(u8, prefixes, ',');
+        while (it.next()) |prefix| {
+            if (std.mem.startsWith(u8, fqn, prefix)) break;
+        } else return;
     }
 
     // A function without a file must not pass silently: warn on every failure.
@@ -280,7 +294,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(6);
+        try w.j.write(7);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -857,6 +871,13 @@ const W = struct {
                     try w.field("layout");
                     try w.j.write(@tagName(ty.containerLayout(zcu)));
                 }
+                // A struct that is only behind a pointer can have no known fields (0.16.0).
+                if (!Compat.hasFields(zcu, ty)) {
+                    try w.field("no_fields");
+                    try w.j.write(true);
+                    try w.j.endObject();
+                    return;
+                }
                 // A packed struct has bit offsets, not byte offsets.
                 const offsets = Compat.hasLayout(zcu, ty) and
                     (is_tuple or ty.containerLayout(zcu) != .@"packed");
@@ -905,6 +926,12 @@ const W = struct {
                 try w.j.write(ty.containerTypeName(ip).toSlice(ip));
                 try w.field("layout");
                 try w.j.write(@tagName(ty.containerLayout(zcu)));
+                if (!Compat.hasFields(zcu, ty)) {
+                    try w.field("no_fields");
+                    try w.j.write(true);
+                    try w.j.endObject();
+                    return;
+                }
                 // The field names are the names of the tag enum, also for an untagged union.
                 const names_ty = ty.unionTagTypeHypothetical(zcu);
                 if (ty.unionTagType(zcu)) |tag_ty| {

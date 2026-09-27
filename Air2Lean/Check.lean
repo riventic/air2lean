@@ -17,12 +17,13 @@ namespace Air2Lean
 
 /-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
 `allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
-tuple fields. -/
+tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
-    (id : TyId) : Except String Unit := do
+    (id : TyId) (seen : Array TyId := #[]) : Except String Unit := do
+  if seen.contains id then return
   let some ty := types[id]?
     | throw s!"{fnName}: near line {line}: unknown type id {id}"
-  let recur := checkTy fnName types layouts line
+  let recur (c : TyId) := checkTy fnName types layouts line c (seen.push id)
   match ty with
   | .other name =>
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
@@ -62,7 +63,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       recur t
     fields.forM fun (_, fty) => recur fty
   | .tuple fields => fields.forM recur
-  | .int .. | .bool | .void | .noreturn => pure ()
+  | .int .. | .bool | .void | .noreturn | .allocator => pure ()
 
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
@@ -80,6 +81,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some .void => pure (0, 1)
   | some (.ptr "slice" ..) => pure (16, 8)
   | some (.ptr ..) => pure (8, 8)
+  | some .allocator => pure (16, 8)
   | some (.optional c) =>
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
@@ -337,11 +339,43 @@ def check (f : Func) : Except String Unit := do
   let _ ← checkInsts cx 0 f.body
   pure ()
 
+/-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
+arguments and result have a known item size and `ptr_align`, and a slice that it frees has no
+sentinel. -/
+def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : Except String Unit := do
+  let tyOf (v : Val) : Option TyId := match v with
+    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+    | v => v.constTy?
+  -- `args[1]` is a pointer or slice, except the item count of `alloc`.
+  let argPtr := if fn == .alloc || fn == .alignedAlloc then #[] else (args.extract 1 2).filterMap tyOf
+  let ptrs := (match f.types[ret]? with
+    | some (.errorUnion _ p) | some (.optional p) => #[p]
+    | _ => #[]) ++ argPtr
+  for p in ptrs do
+    let known := (ptrChild f.types p).bind (f.layouts[·]?.bind (·.size)) |>.isSome
+    let l := f.layouts[p]?.getD {}
+    unless known && l.ptrAlign.isSome do
+      throw s!"{f.name}: a call to the allocator ({repr fn}) with pointer type {p}, which has \
+        no item size or `ptr_align` in the AIR file"
+    if l.sentinel && (fn == .free || fn == .remap) then
+      throw s!"{f.name}: a free of a slice with a sentinel is outside the subset"
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
-(`Zig.readSlice`): `T` must be a type that the model encodes. -/
+(`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
+function or has a model (`allocFn?`). -/
 def checkProgram (funcs : Array Func) : Except String Unit := do
   let mem := memoryFunctions funcs
+  let names := funcs.map (·.name)
+  for f in funcs do
+    for i in f.allInsts do
+      if let .call (.func callee false) args := i.op then
+        unless names.contains callee do
+          match allocFn? callee with
+          | some fn => checkAllocCall f fn args i.ty
+          | none =>
+            throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
+              name to the example's `filter` file, docs/std-models.md)"
   for f in funcs do
     if mem.contains f.name then
       let insts := f.allInsts

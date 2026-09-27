@@ -1,12 +1,12 @@
-# AIR JSON format (schema 6)
+# AIR JSON format (schema 7)
 
-The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
+The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
 ## File
 
 ```json
 {
-  "schema": 6,
+  "schema": 7,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -43,6 +43,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `tuple` | `fields: [{ty: id, offset: int}]` |
 | `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
 | `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
+| `struct`, `union` without known fields | `name`, `layout`, `no_fields: true` in place of the fields (schema 7). 0.16.0 knows the fields of a container only when its layout is wanted; a container that is only behind a pointer (`mem.Allocator.VTable`) can have none. The reader makes it `other`. |
 | `other` | `name: string` (printed type; not in the subset) |
 
 Schema 5: a type that can be in memory (`int`, `bool`, `void`, `float`, `ptr`, `array`, `optional`, `error_union`, `error_set`, `struct`, `enum`, `union`) also has `abi_size: int` and `abi_align: int`, in bytes, if its layout is known when the file is written. 0.16.0 resolves a container layout only when some code needs it (`want_layout`); 0.14.1 and 0.15.2 keep a status per container type (`Compat.hasLayout`). A type that a function body loads, stores or takes a field pointer of always has its layout.

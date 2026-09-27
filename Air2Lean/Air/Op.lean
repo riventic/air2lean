@@ -38,6 +38,9 @@ inductive Ty where
   `fields` are in tag order. -/
   | union (name : String) (layout : String) (tag : Option TyId) (fields : Array (String × TyId))
   | tuple (fields : Array TyId)
+  /-- `std.mem.Allocator`: the model's `Zig.Allocator` (`ZigLean/Mem/Alloc.lean`). Its fields
+  (`*anyopaque`, a table of function pointers) are not translated. -/
+  | allocator
   | other (name : String)
   deriving Repr, Inhabited, BEq
 

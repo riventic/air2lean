@@ -16,7 +16,7 @@ open Assn
 theorem Mem.heap_push (m : Mem) (nb : Block) (a : Nat) (l : Loc) :
     ({ m with blocks := m.blocks.push nb, nextAddr := a } : Mem).heap l =
       if l.1 = m.blocks.size then
-        (if h : nb.live ∧ l.2 < nb.bytes.size then some ⟨nb.bytes[l.2], nb.addr, nb.bytes.size⟩
+        (if h : nb.live ∧ l.2 < nb.bytes.size then some ⟨nb.bytes[l.2], nb.addr, nb.bytes.size, nb.kind⟩
          else none)
       else m.heap l := by
   obtain ⟨x, y⟩ := l
@@ -31,11 +31,11 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧
-      ∃ A, A % align = 0 ∧ bytesAt p A size (Array.replicate size .undef) h' := by
+      ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' := by
   let A := alignUp m.nextAddr align
   let nb : Block := { bytes := Array.replicate size .undef, align, kind, live := true, addr := A }
   let h' : Heap := fun l =>
-    if l.1 = m.blocks.size ∧ 0 ≤ l.2 ∧ l.2 < 0 + size then some ⟨.undef, A, size⟩ else none
+    if l.1 = m.blocks.size ∧ 0 ≤ l.2 ∧ l.2 < 0 + size then some ⟨.undef, A, size, kind⟩ else none
   -- Every location of the new block is free in the old memory.
   have hfree : ∀ y, h (m.blocks.size, y) = none ∧ hF (m.blocks.size, y) = none := by
     intro y
@@ -68,15 +68,15 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     split <;> simp_all
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned) removes it from the heap. -/
-theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
-    (hb : bytesAt p A S bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
   have c0 := bytesAt_cell hb hm hpb (j := 0) (by omega)
   obtain ⟨blk, hblk, hl, _, hc⟩ := Mem.heap_some c0
   simp only [Cell.mk.injEq] at hc
-  have hsz : blk.bytes.size = S := hc.2.2.symm
+  have hsz : blk.bytes.size = S := hc.2.2.1.symm
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_⟩
   · simp [free, hpb, hblk, hl, h0, zig_unfold, set, StateT.set, MonadStateOf.set]
@@ -106,7 +106,7 @@ theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
 
 theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     Triple emp (alloc kind size align) (fun p => Assn.ex fun A =>
-      ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size (Array.replicate size .undef)) :=
+      ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
   Triple.of_run fun _ hP _ hd hm hp => by
     obtain ⟨p, m', h', hr, h0, hd', hm', -, A, hA, hb⟩ := alloc_run hd hm kind size align ha
     have hP0 : hP = Heap.empty := hp
@@ -114,8 +114,9 @@ theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     simp only [Heap.empty_union] at hd' hm'
     exact ⟨p, m', h', hr, hd', hm', A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩
 
-theorem Triple.free {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.size = S) (h0 : p.off = 0)
-    (hpos : 0 < S) : Triple (bytesAt p A S bs) (free p) (fun _ => emp) :=
+theorem Triple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
+    (h0 : p.off = 0)
+    (hpos : 0 < S) : Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb => by
     obtain ⟨m', hr, hm'⟩ := free_run hb hm hd hS h0 hpos
     exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl⟩
