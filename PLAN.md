@@ -22,7 +22,7 @@
 | M15 | Enums (exhaustive and non-exhaustive) and tagged unions; places (a result built in `ret_ptr`, stores through field pointers of a local); JSON schema 4; `variants` example with proofs | done |
 | M16a | Byte-level memory (`ZigLean/Mem/`: blocks, `Zig.Enc`, `Error.illegal`); single pointers `*T`, `?*T`; escaping locals as stack blocks; pure/memory function split; JSON schema 5 (sizes, alignments, field offsets); diff test with input buffers; `pointers` example with proofs (`swap` incl. `swap(p, p)`) | done |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 802 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion and a changed memory write.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion and a changed memory write.
 
 ## Next
 

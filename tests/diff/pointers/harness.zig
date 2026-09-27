@@ -58,6 +58,12 @@ fn argBumpOpt(b: []common.Buf, it: []std.json.Value) struct { *?u32 } {
 fn argSetOpt(b: []common.Buf, it: []std.json.Value) struct { *?u32, ?u32 } {
     return .{ ptr(*?u32, b, it[0]), if (it[1] == .null) null else int(u32, it[1]) };
 }
+fn argSetOptJob(b: []common.Buf, it: []std.json.Value) struct { *?Job, u32 } {
+    return .{ ptr(*?Job, b, it[0]), int(u32, it[1]) };
+}
+fn argAddDown(b: []common.Buf, it: []std.json.Value) struct { *u64, u32 } {
+    return .{ ptr(*u64, b, it[0]), int(u32, it[1]) };
+}
 fn argSame(b: []common.Buf, it: []std.json.Value) struct { *const u32, *const u32 } {
     return .{ ptr(*const u32, b, it[0]), ptr(*const u32, b, it[1]) };
 }
@@ -78,4 +84,6 @@ pub fn main() !void {
     try run(gpa, "bumpOpt", pointers.bumpOpt, false, argBumpOpt);
     try run(gpa, "setOpt", pointers.setOpt, false, argSetOpt);
     try run(gpa, "same", pointers.same, false, argSame);
+    try run(gpa, "setOptJob", pointers.setOptJob, false, argSetOptJob);
+    try run(gpa, "addDown", pointers.addDown, false, argAddDown);
 }

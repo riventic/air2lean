@@ -62,7 +62,21 @@ pub fn same(a: *const u32, b: *const u32) bool {
     return a == b;
 }
 
+/// Build the job in place in the optional behind `p` (`optional_payload_ptr_set`).
+pub fn setOptJob(p: *?Job, d: u32) void {
+    p.* = .{ .duration = d, .due = 2, .weight = 3 };
+}
+
+/// Add n, n-1, …, 1 to the value behind `acc`, by recursion.
+pub fn addDown(acc: *u64, n: u32) void {
+    if (n == 0) return;
+    acc.* += n;
+    addDown(acc, n - 1);
+}
+
 comptime {
+    _ = &setOptJob;
+    _ = &addDown;
     _ = &bumpOpt;
     _ = &setOpt;
     _ = &same;

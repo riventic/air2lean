@@ -1338,6 +1338,33 @@ fn genPointers(rng: std.Random) !void {
     }
     // bumpOpt(p: *?u32), setOpt(p: *?u32, x: ?u32): a `?u32` is 8 bytes, the flag (0 or 1) at
     // offset 4.
+    // setOptJob(p: *?Job, d: u32): a `?Job` is 16 bytes, the flag at offset 12.
+    {
+        var file = try openPointers("setOptJob");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            var b = Bytes.random(rng, 16);
+            b.b[12] = rng.uintLessThan(u8, 2);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{rng.int(u32)});
+        }
+    }
+    // addDown(acc: *u64, n: u32): a small n; every second start value is close to the maximum,
+    // so the sum can overflow.
+    {
+        var file = try openPointers("addDown");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, 8);
+            if (i % 2 == 0) @memset(b.b[2..8], 0xff);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{rng.uintLessThan(u32, 200)});
+        }
+    }
     inline for (.{ "bumpOpt", "setOpt" }) |name| {
         var file = try openPointers(name);
         defer file.close();

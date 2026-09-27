@@ -117,15 +117,6 @@ def free (p : Ptr) : MemM Unit := do
 /-- The stack block of a local whose address escapes: made at function entry. -/
 @[inline] def allocStack (size align : Nat) : MemM Ptr := alloc .stack size align
 
-/-- The address of `p` (`@intFromPtr`; the order of pointers). -/
-def addrOf (p : Ptr) : MemM Nat := do
-  match p.block with
-  | none => pure p.off.toNat
-  | some b =>
-    match (← get).blocks[b]? with
-    | some blk => pure (blk.addr + p.off).toNat
-    | none => throw .illegal
-
 /-! ## Typed access -/
 
 /-- The memory encoding of a Lean type: its size and alignment in bytes (the Zig ABI values),

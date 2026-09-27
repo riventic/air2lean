@@ -542,6 +542,10 @@ def runPointers : IO Unit := do
       return Pointers.setOpt (← ptrOf a[0]!) x) unitStr
   processMem ex "same" (fun a => return Pointers.same (← ptrOf a[0]!) (← ptrOf a[1]!))
     fun b => if b then "1" else "0"
+  processMem ex "setOptJob"
+    (fun a => return Pointers.setOptJob (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex "addDown"
+    (fun a => return Pointers.addDown (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
 
 end DiffTest
 

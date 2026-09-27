@@ -15,6 +15,39 @@ instance : Zig.Enc Job where
   encode v := Zig.Enc.fields 12 [(0, Zig.Enc.encode v.duration), (4, Zig.Enc.encode v.due), (8, Zig.Enc.encode v.weight)]
   decode bs := do pure { duration := ← Zig.Enc.decodeAt bs 0, due := ← Zig.Enc.decodeAt bs 4, weight := ← Zig.Enc.decodeAt bs 8 }
 
+structure addDownLocals where
+  deriving Inhabited
+
+inductive addDownExit where
+  | ret
+  | br2
+
+mutual
+
+def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← pure (p1 == (0 : BitVec 32))
+      if i3 then (do
+        pure .ret)
+      else (do
+        pure .br2)) : Zig.MM addDownLocals addDownExit) with
+    | .br2 => (do
+      let i7 ← Zig.load (BitVec 64) 8 p0
+      let i8 ← Zig.intCast false false 64 p1
+      let i9 ← Zig.add false i7 i8
+      Zig.store (α := BitVec 64) 8 p0 i9
+      let i11 ← Zig.sub false p1 (1 : BitVec 32)
+      let _i12 ← Zig.callM (addDown p0 i11)
+      pure .ret)
+    | e => pure e) : Zig.MM addDownLocals addDownExit).run' (default : addDownLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+partial_fixpoint
+
+end
+
 structure addToLocals where
   deriving Inhabited
 
@@ -169,6 +202,25 @@ def setOpt (p0 : Zig.Ptr) (p1 : Option (BitVec 32)) : Zig.MemM (Unit) := do
   let e ← ((do
     Zig.store (α := Option (BitVec 32)) 4 p0 p1
     pure .ret) : Zig.MM setOptLocals setOptExit).run' (default : setOptLocals)
+  match e with
+  | .ret => pure ()
+
+structure setOptJobLocals where
+  deriving Inhabited
+
+inductive setOptJobExit where
+  | ret
+
+def setOptJob (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  let e ← ((do
+    let i2 ← Zig.optSetSome (Job) p0
+    let i3 ← pure (i2.add 0)
+    Zig.store (α := BitVec 32) 4 i3 p1
+    let i5 ← pure (i2.add 4)
+    Zig.store (α := BitVec 32) 4 i5 (2 : BitVec 32)
+    let i7 ← pure (i2.add 8)
+    Zig.store (α := BitVec 8) 1 i7 (3 : BitVec 8)
+    pure .ret) : Zig.MM setOptJobLocals setOptJobExit).run' (default : setOptJobLocals)
   match e with
   | .ret => pure ()
 

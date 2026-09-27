@@ -136,13 +136,19 @@ structure CheckCtx where
   places : Array InstId
 
 /-- A memory access through `ptr` (not a place): the pointee must be a type the model encodes. -/
-def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit :=
+def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   match ptr with
   | .inst p =>
     if cx.places.contains p then pure ()
     else
-      match (cx.instTys.find? (·.1 == p)).bind (ptrChild cx.types ·.2) with
-      | some c => checkMemTy cx.fnName cx.types cx.layouts line c
+      match cx.instTys.find? (·.1 == p) with
+      | some (_, pty) =>
+        let some c := ptrChild cx.types pty
+          | throw s!"{cx.fnName}: near line {line}: access through a value that is not a pointer"
+        -- The access alignment is the pointer type's `align(N)`: no default.
+        if (cx.layouts[pty]?.bind (·.ptrAlign)).isNone then
+          throw s!"{cx.fnName}: near line {line}: pointer type {pty} has no `ptr_align` in the AIR file"
+        checkMemTy cx.fnName cx.types cx.layouts line c
       | none => throw s!"{cx.fnName}: near line {line}: access through a value that is not a pointer"
   | _ => throw s!"{cx.fnName}: near line {line}: access through a constant pointer (M16b)"
 
@@ -162,6 +168,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if let some (.float _) := cx.types[ty]? then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .bitcast (.inst a) =>
+    -- `@intFromPtr`: a pointer to an integer needs addresses in the model (M20).
+    let isPtr (t : TyId) : Bool := match cx.types[t]? with
+      | some (.ptr ..) => true
+      | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
+      | _ => false
+    match cx.instTys.find? (·.1 == a) with
+    | some (_, aty) =>
+      if isPtr aty && !isPtr ty then
+        throw s!"{fnName}: near line {line}: `@intFromPtr` (a pointer to an integer) is outside the subset (M20)"
+      pure line
+    | none => pure line
   | .abs _ =>
     match cx.types[ty]? with
     | some (.int ..) => throw s!"{fnName}: near line {line}: integer @abs is outside the subset"
