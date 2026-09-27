@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "floatconv.f64ToF16",
  "params": [
@@ -49,14 +49,20 @@
  "types": [
   {
    "k": "float",
-   "bits": 64
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "float",
-   "bits": 16
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "noreturn"

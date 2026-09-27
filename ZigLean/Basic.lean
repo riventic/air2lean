@@ -22,6 +22,10 @@ inductive Error where
   (`@bitCast`), or `@intFromFloat` of a NaN or of an out-of-range value without a safety
   check. A proof of "never throws" shows that the code never reaches such a case. -/
   | unspecified
+  /-- Illegal behaviour that `ReleaseSafe` does not check (`ZigLean/Mem/Basic.lean`): an access
+  to a freed block, out of bounds, or misaligned; a double free. A proof of "never throws" shows
+  that the code never reaches such a case. -/
+  | illegal
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/
@@ -208,8 +212,10 @@ value of an exhaustive enum is the safety panic `invalidEnumValue`. -/
 
 /-! ## Control flow -/
 
-/-- An AIR `loop`: run `body` until it returns an exit that is not `repeat` for this loop. -/
-def loop {σ ε : Type} (body : M σ ε) (again : ε → Bool) : M σ ε := do
+/-- An AIR `loop`: run `body` until it returns an exit that is not `repeat` for this loop. `m` is
+`Zig.M σ` (a pure function) or `Zig.MM σ` (a function that uses memory, `ZigLean/Mem/Basic.lean`). -/
+def loop {m : Type → Type} [Monad m] [∀ α, Lean.Order.CCPO (m α)] [Lean.Order.MonoBind m]
+    {ε : Type} (body : m ε) (again : ε → Bool) : m ε := do
   let e ← body
   if again e then loop body again else pure e
 partial_fixpoint

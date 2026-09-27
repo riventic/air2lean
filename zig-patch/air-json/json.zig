@@ -110,6 +110,33 @@ const Compat = struct {
     fn isNewTyOp(tag: Air.Inst.Tag) bool {
         return if (v14) false else tag == .int_from_float_safe;
     }
+
+    /// Is the layout of `ty` known, so that `abiSize`, `abiAlignment` and `structFieldOffset`
+    /// are valid? Those functions assert it. 0.16.0 sets `want_layout` right before it resolves
+    /// a container layout (`PerThread.ensureTypeLayoutUpToDate`); before 0.16.0 the container
+    /// type has a status.
+    fn hasLayout(zcu: *Zcu, ty: Type) bool {
+        const ip = &zcu.intern_pool;
+        return switch (ip.indexToKey(ty.toIntern())) {
+            .int_type, .ptr_type, .simple_type, .error_set_type, .inferred_error_set_type => true,
+            .array_type => |a| hasLayout(zcu, Type.fromInterned(a.child)),
+            .opt_type => |c| hasLayout(zcu, Type.fromInterned(c)),
+            .error_union_type => |eu| hasLayout(zcu, Type.fromInterned(eu.payload_type)),
+            .tuple_type => |t| for (t.types.get(ip)) |f| {
+                if (!hasLayout(zcu, Type.fromInterned(f))) break false;
+            } else true,
+            .struct_type => if (v16)
+                ip.loadStructType(ty.toIntern()).want_layout
+            else
+                ip.loadStructType(ty.toIntern()).haveLayout(ip),
+            .union_type => if (v16)
+                ip.loadUnionType(ty.toIntern()).want_layout
+            else
+                ip.loadUnionType(ty.toIntern()).haveLayout(ip),
+            .enum_type => if (v16) ip.loadEnumType(ty.toIntern()).want_layout else true,
+            else => false,
+        };
+    }
 };
 
 const Error = Compat.WriteError || Allocator.Error;
@@ -177,7 +204,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(4);
+        try w.j.write(5);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -243,7 +270,7 @@ const W = struct {
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
-            .is_named_enum_value,
+            .is_named_enum_value, .is_null_ptr, .is_non_null_ptr,
             .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
             .trunc_float,
             => {
@@ -256,6 +283,7 @@ const W = struct {
             .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
             .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
             .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
+            .optional_payload_ptr, .optional_payload_ptr_set,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
             .union_init => {
                 const extra = w.air.extraData(Air.UnionInit, w.data(inst).ty_pl.payload).data;
@@ -535,6 +563,22 @@ const W = struct {
                 try w.j.write(ty.isConstPtr(zcu));
                 try w.field("child");
                 try w.writeTypeRef(ty.childType(zcu));
+                const info = ty.ptrInfo(zcu);
+                // The `align(N)` of the pointer type. The natural alignment needs the child's
+                // layout (`ptrAlignment` asserts it).
+                if (info.flags.alignment != .none or Compat.hasLayout(zcu, ty.childType(zcu))) {
+                    try w.field("ptr_align");
+                    try w.j.write(ty.ptrAlignment(zcu).toByteUnits() orelse 0);
+                }
+                try w.field("volatile");
+                try w.j.write(info.flags.is_volatile);
+                try w.field("allowzero");
+                try w.j.write(info.flags.is_allowzero);
+                try w.field("sentinel");
+                try w.j.write(info.sentinel != .none);
+                // A bit-pointer (`&packed_struct.field`): the size of its host integer in bytes.
+                try w.field("host_size");
+                try w.j.write(info.packed_offset.host_size);
             },
             .array => {
                 try w.j.write("array");
@@ -596,6 +640,9 @@ const W = struct {
                     try w.field("layout");
                     try w.j.write(@tagName(ty.containerLayout(zcu)));
                 }
+                // A packed struct has bit offsets, not byte offsets.
+                const offsets = Compat.hasLayout(zcu, ty) and
+                    (is_tuple or ty.containerLayout(zcu) != .@"packed");
                 try w.field("fields");
                 try w.j.beginArray();
                 for (0..ty.structFieldCount(zcu)) |i| {
@@ -606,6 +653,10 @@ const W = struct {
                     }
                     try w.field("ty");
                     try w.writeTypeRef(ty.fieldType(i, zcu));
+                    if (offsets) {
+                        try w.field("offset");
+                        try w.j.write(ty.structFieldOffset(i, zcu));
+                    }
                     try w.j.endObject();
                 }
                 try w.j.endArray();
@@ -660,6 +711,19 @@ const W = struct {
                 try w.field("name");
                 try w.writeFmt(ty.fmt(w.pt));
             },
+        }
+        // The size and alignment in bytes, for the types that can be in memory.
+        const in_memory = switch (ty.zigTypeTag(zcu)) {
+            .int, .bool, .void, .float, .pointer, .array, .optional, .error_union, .error_set,
+            .@"struct", .@"enum", .@"union",
+            => true,
+            else => false,
+        };
+        if (in_memory and Compat.hasLayout(zcu, ty)) {
+            try w.field("abi_size");
+            try w.j.write(ty.abiSize(zcu));
+            try w.field("abi_align");
+            try w.j.write(ty.abiAlignment(zcu).toByteUnits() orelse 0);
         }
         try w.j.endObject();
     }

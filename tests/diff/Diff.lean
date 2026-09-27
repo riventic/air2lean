@@ -8,6 +8,7 @@ import Proofs.Floatops.Gen
 import Proofs.Floatconv.Gen
 import Proofs.Floats.Gen
 import Proofs.Variants.Gen
+import Proofs.Pointers.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -469,6 +470,83 @@ def runVariants : IO Unit := do
     let items ← getArr j
     pure (renderBool (Variants.isRound (← shapeOf items[0]!)))
 
+/-! ### Memory: `{"bufs":[…],"args":[…]}` (docs/generated-code.md §Differential test) -/
+
+/-- One 16-byte aligned heap block per input buffer, so block `i` is buffer `i`. -/
+def memOf (bufs : Array (Array (BitVec 8))) : IO Zig.Mem := do
+  let act : Zig.MemM Unit := bufs.forM fun bytes => do
+    let p ← Zig.alloc .heap bytes.size 16
+    Zig.storeBytes p 1 (bytes.map .int)
+  match (act.run {}).run with
+  | some (.ok (_, m)) => pure m
+  | _ => throw (IO.userError "memOf: cannot make the input buffers")
+
+/-- A pointer argument `{"buf":i,"off":o}`. -/
+def ptrOf (j : Json) : IO Zig.Ptr := do
+  pure ⟨some (← getField j "buf").toNat, ← getField j "off"⟩
+
+/-- An optional pointer argument: `null` or a pointer. -/
+def optPtrOf (j : Json) : IO (Option Zig.Ptr) :=
+  if j.isNull then pure none else some <$> ptrOf j
+
+/-- A pointer result: `{"buf":i,"off":o}`, the same as common.zig writes it. -/
+def ptrStr (p : Zig.Ptr) : String :=
+  match p.block with
+  | some b => s!"\{\"buf\":{b},\"off\":{p.off}}"
+  | none => "\"outside the buffers\""
+
+/-- A byte as two hex digits; `??` for an undefined byte (it matches any Zig byte, diff.sh). -/
+def byteStr : Zig.Byte → String
+  | .int x => natToHex x.toNat 2
+  | .undef => "??"
+  | .ptrFrag .. => "pp"
+
+/-- `renderOk` for a function that uses memory: the result, then the bytes of the first `n`
+blocks (the input buffers) after the call. -/
+def renderMem {α : Type} (n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : α → String) :
+    String :=
+  match r.run with
+  | none => "{\"diverge\":true}"
+  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
+  | some (.ok (v, m)) =>
+    let bufs := (m.blocks.extract 0 n).toList.map fun blk =>
+      "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
+    "{\"ok\":" ++ payload v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]}"
+
+/-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
+memory. -/
+def processMem {α : Type} (ex name : String) (call : Array Json → IO (Zig.MemM α))
+    (payload : α → String) : IO Unit :=
+  processFile ex name fun j => do
+    let bufsJ ← getArr (← orFail (j.getObjVal? "bufs") "bufs")
+    let bufs ← bufsJ.mapM fun b => do (← getArr b).mapM fun x => return bv 8 (← getInt x)
+    let args ← getArr (← orFail (j.getObjVal? "args") "args")
+    pure (renderMem bufs.size ((← call args).run (← memOf bufs)) payload)
+
+def unitStr (_ : Unit) : String := "null"
+
+def runPointers : IO Unit := do
+  let ex := "pointers"
+  processMem ex "swap" (fun a => return Pointers.swap (← ptrOf a[0]!) (← ptrOf a[1]!)) unitStr
+  processMem ex "delay"
+    (fun a => return Pointers.delay (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex "maxPtr" (fun a => return Pointers.maxPtr (← optPtrOf a[0]!) (← optPtrOf a[1]!))
+    fun p => match p with | none => "null" | some p => ptrStr p
+  processMem ex "dueOf" (fun a => return Pointers.dueOf (← ptrOf a[0]!)) ptrStr
+  processMem ex "sumTo" (fun a => return Pointers.sumTo (bv 32 (← getInt a[0]!))) (natStr · true)
+  processMem ex "copyJob" (fun a => return Pointers.copyJob (← ptrOf a[0]!) (← ptrOf a[1]!))
+    unitStr
+  processMem ex "bumpOpt" (fun a => return Pointers.bumpOpt (← ptrOf a[0]!)) unitStr
+  processMem ex "setOpt" (fun a => do
+      let x ← if a[1]!.isNull then pure none else pure (some (bv 32 (← getInt a[1]!)))
+      return Pointers.setOpt (← ptrOf a[0]!) x) unitStr
+  processMem ex "same" (fun a => return Pointers.same (← ptrOf a[0]!) (← ptrOf a[1]!))
+    fun b => if b then "1" else "0"
+  processMem ex "setOptJob"
+    (fun a => return Pointers.setOptJob (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex "addDown"
+    (fun a => return Pointers.addDown (← ptrOf a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -528,6 +606,8 @@ def main : IO Unit := do
     DiffTest.runOfBits64
 
   run "variants" DiffTest.runVariants
+
+  run "pointers" DiffTest.runPointers
 
   run "floats" do
     DiffTest.runLerp

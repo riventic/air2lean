@@ -1,4 +1,4 @@
-import Air2Lean.Air.Op
+import Air2Lean.Check
 
 /-!
 # Emitter
@@ -17,26 +17,6 @@ unresolved name).
 -/
 
 namespace Air2Lean
-
-/-! ## Flatten: every instruction in a function, including nested bodies -/
-
-mutual
-partial def flattenInst (acc : Array Inst) (i : Inst) : Array Inst :=
-  flattenOp (acc.push i) i.op
-
-partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
-  match op with
-  | .block body => body.foldl flattenInst acc
-  | .loop body => body.foldl flattenInst acc
-  | .condBr _ t e => e.foldl flattenInst (t.foldl flattenInst acc)
-  | .switchBr _ cases e =>
-    let acc := cases.foldl (fun acc c => c.body.foldl flattenInst acc) acc
-    e.foldl flattenInst acc
-  | .«try» _ errBody => errBody.foldl flattenInst acc
-  | _ => acc
-end
-
-def Func.allInsts (f : Func) : Array Inst := f.body.foldl flattenInst #[]
 
 /-- Is `op` a terminator: the one instruction that ends its containing body (`docs/air-json.md`
 / `PLAN.md`)? A noreturn call counts (the `unreach` Sema emits right after it is dead code). -/
@@ -88,7 +68,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .void => "Unit"
   | .noreturn => "Unit"
   | .ptr "slice" true child => s!"Array ({emitTy structNames types types[child]!})"
-  | .ptr _ _ child => emitTy structNames types types[child]!
+  | .ptr .. => "Zig.Ptr"
   | .array _ child => s!"Array ({emitTy structNames types types[child]!})"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
   | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
@@ -107,6 +87,11 @@ structure NamedType where
   leanName : String
   ty : Ty
   srcTypes : Array Ty
+  /-- `srcLayouts[i]` is the layout of `srcTypes[i]`. -/
+  srcLayouts : Array Layout
+  /-- The layout of `ty`. -/
+  layout : Layout
+  deriving Inhabited
 
 /-- The Lean name of a named Zig type. The tag enum of `union(enum)` has the Zig name
 `@typeInfo(U).@"union".tag_type.?`; its Lean name is `<U>Tag`. -/
@@ -131,7 +116,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .struct _ _ fields | .union _ _ none fields => fields.flatMap (go ·.2)
   | .union _ _ (some tag) fields => go tag ++ fields.flatMap (go ·.2)
   | .enum .. => #[]
-  | .ptr _ _ c | .array _ c | .optional c => go c
+  | .ptr "slice" _ c | .array _ c | .optional c => go c
   | .errorUnion _ p => go p
   | .tuple fs => fs.flatMap go
   | _ => #[]
@@ -140,12 +125,18 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
 def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id.run do
   let mut found : Array NamedType := #[]
   for f in funcs do
-    for ty in f.types do
+    for (ty, i) in f.types.zipIdx do
       match ty with
       | .struct name .. | .enum name .. | .union name .. =>
-        if !found.any (·.zigName == name) then
-          found := found.push { zigName := name, leanName := namedLeanName prefix_ name, ty,
-                                srcTypes := f.types }
+        let entry : NamedType := { zigName := name, leanName := namedLeanName prefix_ name, ty,
+                                   srcTypes := f.types, srcLayouts := f.layouts,
+                                   layout := f.layouts[i]?.getD {} }
+        match found.findIdx? (·.zigName == name) with
+        | none => found := found.push entry
+        -- Another function's file can have the layout that this one does not.
+        | some k =>
+          if found[k]!.layout.size.isNone && entry.layout.size.isSome then
+            found := found.set! k entry
       | _ => pure ()
   -- Depth-first: a type after its dependencies. Zig types cannot contain themselves by value,
   -- and `Check.lean` rejects a pointer inside a type; `open` still keeps a cycle finite.
@@ -172,7 +163,35 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
 def tagLit (bits : Nat) (v : Int) : String :=
   if v < 0 then s!"(-({(-v).toNat} : BitVec {bits}))" else s!"({v.toNat} : BitVec {bits})"
 
-def emitNamed (structNames : Array (String × String)) (s : NamedType) : String :=
+/-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
+the size, alignment and field offsets from the exporter. -/
+def emitEnc (s : NamedType) : String :=
+  let n := s.leanName
+  let size := s.layout.size.getD 0
+  let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
+               s!"  align := {s.layout.align.getD 1}"]
+  match s.ty with
+  | .struct _ _ fields =>
+    let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
+      s!"({o}, Zig.Enc.encode v.{mangleField f})"
+    let decs := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
+      s!"{mangleField f} := ← Zig.Enc.decodeAt bs {o}"
+    String.intercalate "\n" (head ++
+      [s!"  encode v := Zig.Enc.fields {size} [{String.intercalate ", " parts}]",
+       s!"  decode bs := do pure \{ {String.intercalate ", " decs} }"])
+  | .enum _ tag exhaustive _ =>
+    let (signed, bits) := match s.srcTypes[tag]! with | .int sg b => (sg, b) | _ => (false, 0)
+    let dec := if exhaustive then
+        -- A tag value without a name is not a value of the enum: illegal behaviour.
+        [s!"    match {n}.ofInt? (Zig.val {signed} b) with",
+         "    | some v => pure v", "    | none => throw .illegal"]
+      else ["    pure ⟨b⟩"]
+    String.intercalate "\n" (head ++
+      ["  encode v := Zig.Enc.encode v.toBits", "  decode bs := do",
+       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs"] ++ dec)
+  | _ => ""
+
+def emitNamedType (structNames : Array (String × String)) (s : NamedType) : String :=
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   match s.ty with
@@ -232,6 +251,33 @@ def emitNamed (structNames : Array (String × String)) (s : NamedType) : String 
       ([s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"])
   | _ => ""
 
+/-- The named types reachable from `id` through struct fields and optionals, that the memory
+model encodes (`modelLayout`). -/
+partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array String) (id : TyId) :
+    Array String :=
+  if (modelLayout types layouts id).toOption.isNone then acc else
+  match types[id]? with
+  | some (.struct name _ fs) =>
+    if acc.contains name then acc else fs.foldl (fun a (_, t) => memNamed types layouts a t) (acc.push name)
+  | some (.enum name ..) => if acc.contains name then acc else acc.push name
+  | some (.optional c) => memNamed types layouts acc c
+  | _ => acc
+
+/-- The named types that get a `Zig.Enc` instance: those that a `*T` of a function that uses
+memory can point to. A pure function never has one, so v0 translations do not change. -/
+def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :=
+  funcs.foldl (init := #[]) fun acc f =>
+    if !memFuncs.contains f.name then acc
+    else f.types.foldl (init := acc) fun acc t => match t with
+      | .ptr "one" _ c => memNamed f.types f.layouts acc c
+      | _ => acc
+
+/-- A named type, and its `Zig.Enc` instance if it is in `encNames`. -/
+def emitNamed (structNames : Array (String × String)) (encNames : Array String)
+    (s : NamedType) : String :=
+  let body := emitNamedType structNames s
+  if encNames.contains s.zigName then s!"{body}\n\n{emitEnc s}" else body
+
 /-! ## Float semantics mode (`--float-semantics`, `docs/floats.md` §Semantics) -/
 
 /-- `ieee`: every float op is the model's own IEEE-correct result (`ZigLean/Float/Ops.lean`;
@@ -280,6 +326,14 @@ structure FCtx where
   /-- The Zig version that wrote the AIR (`Func.zigVersion`), for the float ops whose result
   differs by version (`docs/floats.md` §Per-version differences). -/
   zigVersion : String
+  /-- This function uses memory (`Air2Lean/Memory.lean`): it returns `Zig.MemM`, and its body
+  runs in `Zig.MM`. -/
+  mem : Bool
+  /-- The names of the functions that use memory. -/
+  memFuncs : Array String
+  layouts : Array Layout
+  /-- The `alloc`s whose address escapes: stack blocks, not places. -/
+  escaping : Array InstId
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -454,7 +508,7 @@ of a place with one more step, a `bitcast` of a place with the same path. -/
 def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) :=
   fc.allInsts.foldl (init := #[]) fun acc i =>
     match i.op with
-    | .alloc => acc.push (i.id, i.id, #[])
+    | .alloc => if fc.escaping.contains i.id then acc else acc.push (i.id, i.id, #[])
     | .fieldPtr (.inst b) idx =>
       match acc.find? (·.1 == b) with
       | some (_, root, path) =>
@@ -492,7 +546,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
     path.foldl (init := s!"(← get).{field}") fun e step =>
       match step with
       | .field f => s!"({e}).{f}"
-      | .ufield u f => s!"(← Zig.call ({u}.get_{f} {e}))"
+      | .ufield u f => s!"(← {if fc.mem then "Zig.callR" else "Zig.call"} ({u}.get_{f} {e}))"
   | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
@@ -516,6 +570,40 @@ def FCtx.modifyPlace (fc : FCtx) (ptr : Val) (new : String → String) : String 
 def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
   fc.modifyPlace ptr fun _ => v
 
+/-! ## Memory (`docs/generated-code.md` §Memory) -/
+
+/-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
+def FCtx.monad (fc : FCtx) : String := if fc.mem then "Zig.MM" else "Zig.M"
+
+/-- A `Zig.Result` term called from the body. -/
+def FCtx.liftR (fc : FCtx) (e : String) : String :=
+  if fc.mem then s!"Zig.callR ({e})" else s!"Zig.call ({e})"
+
+/-- The alignment of an access through the pointer `v`: its type's `align(N)`. -/
+def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
+  match v with
+  | .inst id => (fc.layouts[fc.instTyId id]?.bind (·.ptrAlign)).getD 1
+  | _ => 1
+
+/-- The Lean type of the value that the pointer `v` points to. -/
+def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
+
+/-- The byte offset of field `idx` of the struct that the pointer `base` points to. -/
+def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
+  match base with
+  | .inst id => match fc.tyOfId (fc.instTyId id) with
+    | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+    | _ => 0
+  | _ => 0
+
+/-- `v` is a pointer to memory: not a place. -/
+def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
+  !fc.isPlace v && match fc.valTy v with | .ptr .. => true | _ => false
+
+/-- A load through a pointer to memory. -/
+def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
+  s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+
 /-! ## `alloc` → `<Fn>Locals` field prepass -/
 
 /-- `(allocId, fieldName, childTy)` for every `alloc` in the function: the field name is the
@@ -534,10 +622,13 @@ def collectAllocs (types : Array Ty) (allInsts : Array Inst) : Array (InstId × 
       | none => 0
     (aid, nm, childTy)
 
+/-- An escaping `alloc`'s field holds the pointer to its stack block. -/
 def emitLocalsStruct (structNames : Array (String × String)) (types : Array Ty)
-    (localsName : String) (allocs : Array (InstId × String × TyId)) : String :=
-  let lines := (allocs.map fun (_, nm, cty) =>
-    s!"  {nm} : {emitTy structNames types types[cty]!}").toList
+    (localsName : String) (allocs : Array (InstId × String × TyId)) (escaping : Array InstId) :
+    String :=
+  let lines := (allocs.map fun (aid, nm, cty) =>
+    if escaping.contains aid then s!"  {nm} : Zig.Ptr"
+    else s!"  {nm} : {emitTy structNames types types[cty]!}").toList
   String.intercalate "\n" ([s!"structure {localsName} where"] ++ lines ++ ["  deriving Inhabited"])
 
 /-! ## `Exit` prepass and emission -/
@@ -620,11 +711,11 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .unionTag a => #[a]
   | .unionInit _ a => #[a]
   | .alloc => #[]
-  | .fieldPtr .. => #[]
+  | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
   | .setUnionTag .. => #[]
-  | .retLoad _ => #[]
-  | .load _ => #[]
-  | .store _ v => #[v]
+  | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
+  | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
+  | .store p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
@@ -704,7 +795,7 @@ operand position does not inherit the expected type from an outer ascription (co
 elaboration failures when only the outermost per-function do-block was ascribed), so it needs
 its own. -/
 def FCtx.ascribedDo (fc : FCtx) (body : String) : String :=
-  s!"({doBlock body} : Zig.M {fc.localsName} {fc.exitName})"
+  s!"({doBlock body} : {fc.monad} {fc.localsName} {fc.exitName})"
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
 effect stays; the `_` prefix stops Lean's unused-variable warning. -/
@@ -874,12 +965,29 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .isNonNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
   | .optPayload a => let (env, l) := bindLet fc env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
   | .wrapOptional a => let (env, l) := bindLet fc env inst.id s!"pure (some {rv a})"; (env, some l)
+  | .isNullPtr isNull p =>
+    -- `?*T`: the payload is the flag (null = address 0). `?T`: a flag byte after the payload.
+    let some' := match fc.pointeeOf p with
+      | .optional c => match fc.tyOfId c with
+        | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
+        | ct => s!"Zig.optIsSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+      | _ => "(panic! \"air2lean: is_null_ptr of a non-optional\")"
+    let expr := if isNull then s!"(!·) <$> {some'}" else some'
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .optPayloadPtr set p =>
+    let expr := match set, fc.pointeeOf p with
+      | true, .optional c =>
+        match fc.tyOfId c with
+        | .ptr .. => s!"pure {rv p}"
+        | ct => s!"Zig.optSetSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+      | _, _ => s!"pure {rv p}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
   | .isNonErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
   | .errPayload a =>
-    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.unwrapPayload {rv a})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.unwrapPayload {rv a}"); (env, some l)
   | .errCode a =>
-    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.unwrapErr {rv a})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.unwrapErr {rv a}"); (env, some l)
   | .wrapErrPayload a =>
     let ety := fc.emitTyOf inst.ty
     let (env, l) := bindLet fc env inst.id s!"pure ((.ok {rv a}) : {ety})"; (env, some l)
@@ -898,21 +1006,41 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
       | none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
-  | .alloc | .fieldPtr .. => (env, none)
+  | .alloc =>
+    if fc.escaping.contains inst.id then
+      -- The pointer to the local's stack block (made at function entry: `emitFunctionDef`).
+      let field := (fc.allocFields.find? (·.1 == inst.id)).map (·.2) |>.getD s!"local{inst.id}"
+      let (env, l) := bindLet fc env inst.id s!"pure (← get).{field}"; (env, some l)
+    else (env, none)
+  | .fieldPtr base idx =>
+    if fc.isMemPtr base then
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {fc.fieldOffset base idx})"
+      (env, some l)
+    else (env, none)
   | .setUnionTag ptr tag =>
     match fc.unionFieldOfTag? (fc.pointeeOf ptr) tag with
     | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.setTag_{f} {old})"))
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
   | .load ptr =>
-    let (env, l) := bindLet fc env inst.id s!"pure ({fc.loadPlace ptr})"; (env, some l)
-  | .store ptr v => (env, some (fc.storePlace ptr (rv v)))
+    if fc.isMemPtr ptr then
+      let (env, l) := bindLet fc env inst.id (fc.loadMem ptr (rv ptr)); (env, some l)
+    else
+      let (env, l) := bindLet fc env inst.id s!"pure ({fc.loadPlace ptr})"; (env, some l)
+  | .store ptr v =>
+    if fc.isMemPtr ptr then
+      let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
+      match v with
+      -- `undefined`: every byte of the value becomes undefined.
+      | .undef _ => (env, some s!"Zig.storeUndef ({ty}) {align} {rv ptr}")
+      | _ => (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
+    else (env, some (fc.storePlace ptr (rv v)))
   | .sliceLen s => let (env, l) := bindLet fc env inst.id s!"pure (Zig.len {rv s})"; (env, some l)
   | .sliceElemVal s i =>
-    let (env, l) := bindLet fc env inst.id s!"Zig.call (Zig.index {rv s} {rv i})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.index {rv s} {rv i}"); (env, some l)
   | .structFieldVal s index =>
     match fc.unionField? (fc.valTy s) index with
     | some (u, f, _) =>
-      let (env, l) := bindLet fc env inst.id s!"Zig.call ({u}.get_{f} {rv s})"; (env, some l)
+      let (env, l) := bindLet fc env inst.id (fc.liftR s!"{u}.get_{f} {rv s}"); (env, some l)
     | none =>
       let fname := fc.structFieldName s index
       let (env, l) := bindLet fc env inst.id s!"pure (({rv s}).{fname})"; (env, some l)
@@ -927,8 +1055,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (isNoreturn, cexpr) := fc.resolveCallee callee
     if isNoreturn then (env, none)
     else
-      let argStrs := (args.map rv).toList
-      let (env, l) := bindLet fc env inst.id s!"Zig.call ({cexpr} {String.intercalate " " argStrs})"
+      let term := s!"{cexpr} {String.intercalate " " (args.map rv).toList}"
+      let memCallee := match callee with | .func name _ => fc.memFuncs.contains name | _ => false
+      let expr := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
+      let (env, l) := bindLet fc env inst.id expr
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
@@ -1001,7 +1131,9 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
   | .retLoad ptr =>
     match fc.tyOfId fc.retTy with
     | .void => "pure .ret"
-    | _ => s!"pure (.ret {fc.loadPlace ptr})"
+    | _ =>
+      if fc.isMemPtr ptr then s!"pure (.ret (← {fc.loadMem ptr (rv ptr)}))"
+      else s!"pure (.ret {fc.loadPlace ptr})"
   | .unreach => "throw .unreachable"
   | .trap => "throw .panic"
   | .condBr c thenBody elseBody =>
@@ -1060,7 +1192,7 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
     let initEnv := caps.map fun (id, name, _) => (id, name)
     let bodyStr := emitStmts fc initEnv body.toList
     String.intercalate "\n"
-      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : Zig.M {fc.localsName} {fc.exitName} := do",
+      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := do",
        indent 2 bodyStr]
   | _ => "" -- unreachable: `emitOneFunction` only calls this with a `.loop` instruction
 
@@ -1074,6 +1206,14 @@ def emitAgainDef (fc : FCtx) (loopInst : Inst) : String :=
 
 /-! ## Per-function emission -/
 
+/-- An escaping `alloc`'s stack block: `(allocId, field, size, align)`. -/
+def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
+  fc.escaping.map fun aid =>
+    let field := (fc.allocFields.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
+    let child := match fc.tyOfId (fc.instTyId aid) with | .ptr _ _ c => c | _ => 0
+    let l := fc.layouts[child]?.getD {}
+    (aid, field, l.size.getD 0, l.align.getD 1)
+
 def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
     (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
   let paramsStr := String.intercalate " "
@@ -1082,7 +1222,16 @@ def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTy
   let bodyStr := emitStmts fc #[] body.toList
   -- The `M`-do-block's `σ`/`ε` never appear as a literal type anywhere inside it (`(← get)`,
   -- `.br<k>`, …), so without this ascription nothing pins them down for the elaborator.
-  let ascribedBody := s!"({doBlock bodyStr} : Zig.M {localsName} {exitName})"
+  let ascribedBody := s!"({doBlock bodyStr} : {fc.monad} {localsName} {exitName})"
+  -- Each escaping local's stack block lives from function entry to the return.
+  let stack := fc.stackBlocks
+  let allocLines := (stack.map fun (aid, _, size, align) =>
+    s!"  let s{aid} ← Zig.allocStack {size} {align}").toList
+  let init := if stack.isEmpty then s!"(default : {localsName})"
+    else
+      let sets := stack.map fun (aid, field, _, _) => s!"{field} := s{aid}"
+      s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
+  let freeLines := (stack.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -1091,10 +1240,11 @@ def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTy
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
+  let resultTy := if fc.mem then "Zig.MemM" else "Zig.Result"
   String.intercalate "\n"
-    ([s!"def {leanName} {paramsStr} : Zig.Result ({retStr}) := do",
-      s!"  let e ← {indentTail 2 ascribedBody}.run' (default : {localsName})",
-      "  match e with"] ++ matchLines)
+    ([s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := do"] ++ allocLines ++
+     [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
+     ["  match e with"] ++ matchLines)
 
 /-- One function's output in four parts: the `Locals`/`Exit` types, the `again<k>` defs, the
 `loop<k>` defs (inner loop first), and the function def. `emit` joins them, and puts a
@@ -1106,7 +1256,8 @@ structure FuncParts where
   defn : String
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
-    (funcNames : Array (String × String)) (floatSemantics : FloatSemantics) : FuncParts :=
+    (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
+    (memFuncs : Array String) : FuncParts :=
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   let allocs := collectAllocs f.types allInsts
@@ -1115,13 +1266,15 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   let repT := repTargets allInsts
   let localsName := s!"{leanName}Locals"
   let exitName := s!"{leanName}Exit"
+  let escaping := escapingAllocs f
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blTys, allInsts,
       retTy := f.ret, fnName := leanName, localsName, exitName, floatSemantics,
-      zigVersion := f.zigVersion, places := #[] }
+      zigVersion := f.zigVersion, places := #[], mem := memFuncs.contains f.name, memFuncs,
+      layouts := f.layouts, escaping }
   let fc := { fc with places := fc.computePlaces }
-  let localsStr := emitLocalsStruct structNames f.types localsName allocs
+  let localsStr := emitLocalsStruct structNames f.types localsName allocs escaping
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
   -- before its children (pre-order), so a parent loop always precedes a nested one; reversing
@@ -1205,9 +1358,11 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structs := collectNamed funcs prefix_
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
-  let structsStr := (structs.map (emitNamed structNames)).toList
+  let memFuncs := memoryFunctions funcs
+  let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
-    let parts := members.toList.map fun f => emitOneFunction f structNames funcNames floatSemantics
+    let parts := members.toList.map fun f =>
+      emitOneFunction f structNames funcNames floatSemantics memFuncs
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

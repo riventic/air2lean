@@ -41,6 +41,22 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
+/-- The memory facts of one type (`docs/air-json.md` schema 5), in a table parallel to the
+types. `none` where the exporter did not know the layout. -/
+structure Layout where
+  size : Option Nat := none
+  align : Option Nat := none
+  /-- The byte offset of each struct or tuple field, in field order. Empty if unknown, and for
+  a packed struct. -/
+  offsets : Array Nat := #[]
+  /-- A pointer type's `align(N)` (explicit, or the child's ABI alignment). -/
+  ptrAlign : Option Nat := none
+  isVolatile : Bool := false
+  allowzero : Bool := false
+  /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
+  hostSize : Nat := 0
+  deriving Repr, Inhabited
+
 inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type. -/
@@ -176,6 +192,12 @@ inductive Op where
   | optPayload (a : Val)
   /-- Wrap a value into `some`. -/
   | wrapOptional (a : Val)
+  /-- `is_null_ptr` (`isNull = true`) / `is_non_null_ptr`: is the optional at the pointer `p`
+  `null` / not `null`? -/
+  | isNullPtr (isNull : Bool) (p : Val)
+  /-- `optional_payload_ptr` / `optional_payload_ptr_set` (`set = true`: the optional at `p`
+  becomes non-null): the pointer to the payload of the optional at `p`. -/
+  | optPayloadPtr (set : Bool) (p : Val)
   /-- `is_err`: does an error union hold an error? -/
   | isErr (a : Val)
   /-- `is_non_err`. -/
@@ -247,5 +269,7 @@ structure Func where
   ret : TyId
   body : Array Inst
   types : Array Ty
+  /-- `layouts[i]` is the layout of `types[i]`. -/
+  layouts : Array Layout
 
 end Air2Lean

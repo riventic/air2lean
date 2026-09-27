@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.16.0",
  "name": "variants.radius",
  "params": [
@@ -198,27 +198,47 @@
      "name": "empty",
      "ty": 3
     }
-   ]
+   ],
+   "abi_size": 12,
+   "abi_align": 4
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 0
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 0
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "enum",
@@ -242,10 +262,14 @@
      "name": "empty",
      "value": "3"
     }
-   ]
+   ],
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
-   "k": "bool"
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "noreturn"
@@ -258,7 +282,14 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 1
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "struct",
@@ -267,18 +298,24 @@
    "fields": [
     {
      "name": "w",
-     "ty": 1
+     "ty": 1,
+     "offset": 0
     },
     {
      "name": "h",
-     "ty": 1
+     "ty": 1,
+     "offset": 4
     }
-   ]
+   ],
+   "abi_size": 8,
+   "abi_align": 4
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 2
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

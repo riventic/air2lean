@@ -24,7 +24,8 @@
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[]const T` | `Array T'` |
-| `?T` (`T` not a pointer) | `Option T'` |
+| `*T`, `*const T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
+| `?T` | `Option T'` (`?*T` is `Option Zig.Ptr`) |
 | `struct` (layout `auto` or `extern`) | `structure … deriving Repr, Inhabited, DecidableEq` |
 | `E!T` (error union) | `Except Zig.ErrName T'` |
 | exhaustive `enum` | `inductive` with one constructor per name |
@@ -60,12 +61,50 @@ A union without a tag (bare, `extern`, `packed`) is outside the subset.
 
 ### Places
 
-A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`), or a `bitcast` of a place. A place is used only as the pointer operand of `load`, `store`, `set_union_tag` and `ret_load` (`Check.lean` rejects any other use, and any access through a pointer that is not a place). A place is the local's `Locals` field plus a path of struct fields and union payloads:
+A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`), or a `bitcast` of a place. If every place of an `alloc` is used only as the pointer operand of `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag` and `ret_load` (`Air2Lean/Memory.lean`), the local is a `Locals` field plus a path of struct fields and union payloads. Any other use (a call argument, a stored value, a returned pointer, `optional_payload_ptr`) makes the address escape: the local is then a stack block in memory (§Memory).
 
 ```lean
 -- store to rect.w in the result local (a union): change the payload of `rect`
 modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
 ```
+
+## Memory
+
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, or `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block). A `Zig.Ptr` is a block and a byte offset.
+
+A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
+
+| | Pure | Uses memory |
+|---|---|---|
+| result | `Zig.Result α` | `Zig.MemM α` (`StateT Zig.Mem Zig.Result α`) |
+| body | `Zig.M Locals Exit` | `Zig.MM Locals Exit` (`StateT Locals Zig.MemM`) |
+| call of a function that uses memory | — | `Zig.callM` |
+| call of a pure function | `Zig.call` | `Zig.callR` |
+
+| AIR, through a pointer to memory | Lean |
+|---|---|
+| `load` | `Zig.load T align p` |
+| `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p` |
+| `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
+| `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
+| `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
+| `cmp_eq`, `cmp_neq` on pointers | `==`, `!=` on block and offset |
+
+`align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
+
+`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr` and optionals; each struct and enum that a `*T` can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A load that reads an `undef` byte of the value throws `.unspecified`; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Arrays, unions, error unions and slices in memory are outside the subset (M16b).
+
+An escaping `alloc` gets a stack block at function entry. Its `Locals` field holds the pointer, and the block is freed when the function returns:
+
+```lean
+def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
+  let s1 ← Zig.allocStack 8 8
+  let e ← ((do ...) : Zig.MM sumToLocals sumToExit).run' { (default : sumToLocals) with acc := s1 }
+  Zig.free s1
+  match e with ...
+```
+
+`ZigLean/Mem/Lemmas.lean` (generated code does not import it) has the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`).
 
 ## Signature
 
@@ -77,6 +116,7 @@ def scale (a : BitVec 32) (b : BitVec 8) : Zig.Result (BitVec 32) := ...
 
 - Parameters keep the Zig order. Their names are `p0`, `p1`, … unless a `dbg_arg_inline` gives the source name.
 - A function that panics (overflow, bounds, `unreachable`) returns `throw e`; for the error values see `Zig.Error`.
+- A function that uses memory (§Memory) returns `Zig.MemM T`; `(f args).run m` is its result with the memory after the call.
 - A function that does not terminate returns `none` (the `Option` layer of `Zig.Result`).
 - Functions come in dependency order: a callee before its caller.
 - A recursive group (a function that calls itself, or functions that call each other) becomes one `mutual` block. The group's `Locals`/`Exit` types and `again<k>` defs come before the block. In the block, every function def and every `loop<k>` def has `partial_fixpoint`: a loop body can call a group member. The monotonicity lemmas in `ZigLean/Basic.lean` (`Zig.call`, `run'`, `Zig.loop`) let Lean accept these defs.
@@ -106,7 +146,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 6 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`. `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
+`Zig.Error` has 7 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`. `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|
@@ -118,7 +158,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 
-`tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0).
+`tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` or `illegal` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0).
 
 ## Differential test
 
@@ -152,6 +192,8 @@ One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true
 | struct | `{"<field>": v, …}` in field order |
 
 A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or `T`'s `v`, all three at the same JSON depth as a plain `?T`.
+
+A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one heap block per buffer (block `i` = buffer `i`). A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a pointer result is written the same way. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct).
 
 ## Error unions
 

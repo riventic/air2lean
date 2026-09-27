@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "floatops.op80",
  "params": [
@@ -1083,14 +1083,20 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 8
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "float",
-   "bits": 80
+   "bits": 80,
+   "abi_size": 16,
+   "abi_align": 16
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "noreturn"

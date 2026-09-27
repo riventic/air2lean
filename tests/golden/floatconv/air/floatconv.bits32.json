@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "floatconv.bits32",
  "params": [
@@ -49,15 +49,21 @@
  "types": [
   {
    "k": "float",
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "noreturn"

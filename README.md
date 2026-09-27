@@ -76,15 +76,16 @@ scripts/mutate.sh      # a changed function must fail a test
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
-| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | mutable pointers, pointer aliasing |
+| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | mutable slices, many-pointers, globals, string literals |
 | `if`, `switch`, `while`, `for` | allocators, heap memory |
-| local `var` whose address does not escape | `@ptrCast`, `packed` layout |
+| local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
 | enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
-| read-only slices `[]const T` | inline asm, threads, atomics |
+| read-only slices `[]const T` in a function without pointers | inline asm, threads, atomics |
 | structs and unions passed and returned by value | SIMD vectors |
-| calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | |
+| calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | arrays, unions and error unions in memory |
+| single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 

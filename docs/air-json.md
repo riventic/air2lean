@@ -1,4 +1,4 @@
-# AIR JSON format (schema 4)
+# AIR JSON format (schema 5)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 4,
+  "schema": 5,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -32,16 +32,18 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id` |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5) |
 | `array` | `len: int`, `child: id` |
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
-| `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id}]` |
-| `tuple` | `fields: [{ty: id}]` |
+| `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5) |
+| `tuple` | `fields: [{ty: id, offset: int}]` |
 | `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
 | `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `other` | `name: string` (printed type; not in the subset) |
+
+Schema 5: a type that can be in memory (`int`, `bool`, `void`, `float`, `ptr`, `array`, `optional`, `error_union`, `error_set`, `struct`, `enum`, `union`) also has `abi_size: int` and `abi_align: int`, in bytes, if its layout is known when the file is written. 0.16.0 resolves a container layout only when some code needs it (`want_layout`); 0.14.1 and 0.15.2 keep a status per container type (`Compat.hasLayout`). A type that a function body loads, stores or takes a field pointer of always has its layout.
 
 `comptime_float` never reaches runtime AIR; if seen, it is `other`.
 
@@ -71,6 +73,8 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `unsupported` | `true` if the exporter does not decode this tag's operands |
 
 `mul_add`: `args` is `[lhs, rhs, addend]` (the `pl_op` operand is the addend, written last).
+
+Optional pointer tags (schema 5), all with `args: [pointer]`: `is_null_ptr`, `is_non_null_ptr` (`un_op`), `optional_payload_ptr`, `optional_payload_ptr_set` (`ty_op`).
 
 Enum and union tags: `get_union_tag` (`ty_op`), `is_named_enum_value` (`un_op`), `set_union_tag` (`bin_op`: the union pointer, the tag), `union_init` (`args: [payload]`, `index`: the field). `@intFromEnum`/`@enumFromInt` are `bitcast`/`intcast`/`intcast_safe` with an enum on one side. The tag enum of `union(enum)` has the name `@typeInfo(U).@"union".tag_type.?`.
 

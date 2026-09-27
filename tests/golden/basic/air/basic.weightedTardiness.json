@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "basic.weightedTardiness",
  "params": [
@@ -179,25 +179,34 @@
    "fields": [
     {
      "name": "duration",
-     "ty": 1
+     "ty": 1,
+     "offset": 0
     },
     {
      "name": "due",
-     "ty": 1
+     "ty": 1,
+     "offset": 4
     },
     {
      "name": "weight",
-     "ty": 4
+     "ty": 4,
+     "offset": 8
     }
-   ]
+   ],
+   "abi_size": 12,
+   "abi_align": 4
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "other",
@@ -206,7 +215,9 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 8
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "noreturn"

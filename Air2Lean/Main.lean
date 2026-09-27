@@ -85,9 +85,9 @@ def main (args : List String) : IO UInt32 := do
           match processOne contents with
           | .error e => err := some s!"{path}: {e}"
           | .ok f => funcs := funcs.push f
-      match err with
-      | some e => die e
-      | none =>
+      match err.map Except.error |>.getD (checkProgram funcs) with
+      | .error e => die e
+      | .ok () =>
         let src := emit funcs a.ns a.prefix_ a.floatSemantics
         IO.FS.writeFile a.outPath src
         pure 0

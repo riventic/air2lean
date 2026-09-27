@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "variants.area",
  "params": [
@@ -438,15 +438,21 @@
      "name": "empty",
      "ty": 2
     }
-   ]
+   ],
+   "abi_size": 12,
+   "abi_align": 4
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 64
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "enum",
@@ -470,7 +476,9 @@
      "name": "empty",
      "value": "3"
     }
-   ]
+   ],
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "noreturn"
@@ -478,7 +486,9 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "struct",
@@ -487,13 +497,17 @@
    "fields": [
     {
      "name": "w",
-     "ty": 5
+     "ty": 5,
+     "offset": 0
     },
     {
      "name": "h",
-     "ty": 5
+     "ty": 5,
+     "offset": 4
     }
-   ]
+   ],
+   "abi_size": 8,
+   "abi_align": 4
   },
   {
    "k": "other",
@@ -502,7 +516,9 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 2
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }
