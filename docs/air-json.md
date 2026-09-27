@@ -1,4 +1,4 @@
-# AIR JSON format (schema 3)
+# AIR JSON format (schema 4)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 3,
+  "schema": 4,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -39,6 +39,8 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
 | `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id}]` |
 | `tuple` | `fields: [{ty: id}]` |
+| `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
+| `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `other` | `name: string` (printed type; not in the subset) |
 
 `comptime_float` never reaches runtime AIR; if seen, it is `other`.
@@ -63,12 +65,14 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `cases`, `else` | `switch_br`, `loop_switch_br`: `cases: [{items: [Ref], ranges: [[Ref, Ref]], body}]`, `else: body` |
 | `target` | `br`, `switch_dispatch`: the block `id`; `repeat`: the loop `id` |
 | `callee` | `call*`: a Ref |
-| `index` | `struct_field_val`, `struct_field_ptr`: field index |
+| `index` | `struct_field_val`, `struct_field_ptr`, `union_init`: field index |
 | `name` | `dbg_var_ptr`, `dbg_var_val`, `dbg_arg_inline`: variable name |
 | `line` | `dbg_stmt`: 1-based source line |
 | `unsupported` | `true` if the exporter does not decode this tag's operands |
 
 `mul_add`: `args` is `[lhs, rhs, addend]` (the `pl_op` operand is the addend, written last).
+
+Enum and union tags: `get_union_tag` (`ty_op`), `is_named_enum_value` (`un_op`), `set_union_tag` (`bin_op`: the union pointer, the tag), `union_init` (`args: [payload]`, `index`: the field). `@intFromEnum`/`@enumFromInt` are `bitcast`/`intcast`/`intcast_safe` with an enum on one side. The tag enum of `union(enum)` has the name `@typeInfo(U).@"union".tag_type.?`.
 
 Float tags decoded as `bin_op`: `div_float`. As `un_op`: `sqrt sin cos tan exp exp2 log log2 log10 floor ceil round trunc_float`. As `ty_op`: `fptrunc fpext int_from_float int_from_float_safe float_from_int` (0.14.1 has no `int_from_float_safe`). Every `*_optimized` float tag stays `unsupported`.
 
@@ -87,5 +91,7 @@ One of:
 | `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
 | `{"ty": 2, "some": Ref}` | optional constant holding a payload (nested `Ref`, recursively). |
 | `{"ty": 2, "null": true}` | optional constant, `null`. |
+| `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
+| `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
 
 `try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.
