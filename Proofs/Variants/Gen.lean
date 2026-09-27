@@ -1,7 +1,7 @@
 import ZigLean
 
 
-namespace Enums
+namespace Variants
 
 inductive Prio where
   | low
@@ -351,25 +351,25 @@ def scale (p0 : Shape) (p1 : BitVec 32) : Zig.Result (Shape) := do
       match i3 with
       | .circle => (do
         let i8 ← Zig.call (Shape.get_circle p0)
-        let i10 ← Zig.mul false i8 p1
-        modify (fun s => { s with local2 := (Shape.modify_circle (fun _ => i10) s.local2) })
         modify (fun s => { s with local2 := (Shape.setTag_circle s.local2) })
+        let i11 ← Zig.mul false i8 p1
+        modify (fun s => { s with local2 := (Shape.modify_circle (fun _ => i11) s.local2) })
         pure .br4)
       | .rect => (do
         let i14 ← Zig.call (Shape.get_rect p0)
-        let i17 ← pure ((i14).w)
-        let i18 ← Zig.mul false i17 p1
-        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i18 }) s.local2) })
-        let i21 ← pure ((i14).h)
-        let i22 ← Zig.mul false i21 p1
-        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with h := i22 }) s.local2) })
         modify (fun s => { s with local2 := (Shape.setTag_rect s.local2) })
+        let i18 ← pure ((i14).w)
+        let i19 ← Zig.mul false i18 p1
+        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
+        let i22 ← pure ((i14).h)
+        let i23 ← Zig.mul false i22 p1
+        modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with h := i23 }) s.local2) })
         pure .br4)
       | .square => (do
         let i26 ← Zig.call (Shape.get_square p0)
-        let i28 ← Zig.mul false i26 p1
-        modify (fun s => { s with local2 := (Shape.modify_square (fun _ => i28) s.local2) })
         modify (fun s => { s with local2 := (Shape.setTag_square s.local2) })
+        let i29 ← Zig.mul false i26 p1
+        modify (fun s => { s with local2 := (Shape.modify_square (fun _ => i29) s.local2) })
         pure .br4)
       | .empty => (do
         modify (fun s => { s with local2 := Shape.empty })
@@ -457,4 +457,4 @@ def totalArea (p0 : Array (Shape)) : Zig.Result (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
-end Enums
+end Variants

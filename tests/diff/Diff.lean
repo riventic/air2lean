@@ -7,7 +7,7 @@ import Proofs.Errors.Gen
 import Proofs.Floatops.Gen
 import Proofs.Floatconv.Gen
 import Proofs.Floats.Gen
-import Proofs.Enums.Gen
+import Proofs.Variants.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -402,19 +402,19 @@ def runDot : IO Unit :=
     let ys ← (← getArr items[1]!).mapM (getFloat .f64)
     pure (renderOk (Floats.dot xs ys) floatStr)
 
-/-! ### enums: an enum is its tag value; a `Shape` is an object with its active field -/
+/-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
 
-def lightOf (j : Json) : IO Enums.Light := do
-  match Enums.Light.ofInt? (← getInt j) with
+def lightOf (j : Json) : IO Variants.Light := do
+  match Variants.Light.ofInt? (← getInt j) with
   | some l => pure l
   | none => throw (IO.userError s!"not a Light: {j.compress}")
 
-def prioOf (j : Json) : IO Enums.Prio := do
-  match Enums.Prio.ofInt? (← getInt j) with
+def prioOf (j : Json) : IO Variants.Prio := do
+  match Variants.Prio.ofInt? (← getInt j) with
   | some p => pure p
   | none => throw (IO.userError s!"not a Prio: {j.compress}")
 
-def shapeOf (j : Json) : IO Enums.Shape := do
+def shapeOf (j : Json) : IO Variants.Shape := do
   let size (k : String) : IO (BitVec 32) := do pure (bv 32 (← getField j k))
   if (j.getObjVal? "circle").isOk then return .circle (← size "circle")
   if (j.getObjVal? "square").isOk then return .square (← size "square")
@@ -422,52 +422,52 @@ def shapeOf (j : Json) : IO Enums.Shape := do
   let r ← orFail (j.getObjVal? "rect") "shape"
   pure (.rect { w := bv 32 (← getField r "w"), h := bv 32 (← getField r "h") })
 
-def shapeStr : Enums.Shape → String
+def shapeStr : Variants.Shape → String
   | .circle r => s!"\{\"circle\":{r.toNat}}"
   | .rect r => s!"\{\"rect\":\{\"w\":{r.w.toNat},\"h\":{r.h.toNat}}}"
   | .square a => s!"\{\"square\":{a.toNat}}"
   | .empty => "{\"empty\":null}"
 
-def runEnums : IO Unit := do
-  processFile "enums" "next" fun j => do
+def runVariants : IO Unit := do
+  processFile "variants" "next" fun j => do
     let items ← getArr j
-    pure (renderOk (Enums.next (← lightOf items[0]!)) (natStr ·.toBits false))
-  processFile "enums" "advance" fun j => do
+    pure (renderOk (Variants.next (← lightOf items[0]!)) (natStr ·.toBits false))
+  processFile "variants" "advance" fun j => do
     let items ← getArr j
     let n ← getInt items[1]!
-    pure (renderOk (Enums.advance (← lightOf items[0]!) (bv 32 n)) (natStr ·.toBits false))
-  processFile "enums" "lightOf" fun j => do
+    pure (renderOk (Variants.advance (← lightOf items[0]!) (bv 32 n)) (natStr ·.toBits false))
+  processFile "variants" "lightOf" fun j => do
     let items ← getArr j
-    pure (renderOk (Enums.lightOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
-  processFile "enums" "prioValue" fun j => do
+    pure (renderOk (Variants.lightOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
+  processFile "variants" "prioValue" fun j => do
     let items ← getArr j
-    pure (renderSigned (Enums.prioValue (← prioOf items[0]!)))
-  processFile "enums" "isUrgent" fun j => do
+    pure (renderSigned (Variants.prioValue (← prioOf items[0]!)))
+  processFile "variants" "isUrgent" fun j => do
     let items ← getArr j
-    pure (renderBool (Enums.isUrgent (← prioOf items[0]!)))
-  processFile "enums" "severity" fun j => do
+    pure (renderBool (Variants.isUrgent (← prioOf items[0]!)))
+  processFile "variants" "severity" fun j => do
     let items ← getArr j
-    pure (render (Enums.severity ⟨bv 8 (← getInt items[0]!)⟩) false)
-  processFile "enums" "codeOf" fun j => do
+    pure (render (Variants.severity ⟨bv 8 (← getInt items[0]!)⟩) false)
+  processFile "variants" "codeOf" fun j => do
     let items ← getArr j
-    pure (renderOk (Enums.codeOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
-  processFile "enums" "area" fun j => do
+    pure (renderOk (Variants.codeOf (bv 8 (← getInt items[0]!))) (natStr ·.toBits false))
+  processFile "variants" "area" fun j => do
     let items ← getArr j
-    pure (render (Enums.area (← shapeOf items[0]!)) true)
-  processFile "enums" "totalArea" fun j => do
+    pure (render (Variants.area (← shapeOf items[0]!)) true)
+  processFile "variants" "totalArea" fun j => do
     let items ← getArr j
     let shapes ← (← getArr items[0]!).mapM shapeOf
-    pure (render (Enums.totalArea shapes) true)
-  processFile "enums" "scale" fun j => do
+    pure (render (Variants.totalArea shapes) true)
+  processFile "variants" "scale" fun j => do
     let items ← getArr j
     let k ← getInt items[1]!
-    pure (renderOk (Enums.scale (← shapeOf items[0]!) (bv 32 k)) shapeStr)
-  processFile "enums" "radius" fun j => do
+    pure (renderOk (Variants.scale (← shapeOf items[0]!) (bv 32 k)) shapeStr)
+  processFile "variants" "radius" fun j => do
     let items ← getArr j
-    pure (render (Enums.radius (← shapeOf items[0]!)) false)
-  processFile "enums" "isRound" fun j => do
+    pure (render (Variants.radius (← shapeOf items[0]!)) false)
+  processFile "variants" "isRound" fun j => do
     let items ← getArr j
-    pure (renderBool (Enums.isRound (← shapeOf items[0]!)))
+    pure (renderBool (Variants.isRound (← shapeOf items[0]!)))
 
 end DiffTest
 
@@ -527,7 +527,7 @@ def main : IO Unit := do
     DiffTest.runBits32
     DiffTest.runOfBits64
 
-  run "enums" DiffTest.runEnums
+  run "variants" DiffTest.runVariants
 
   run "floats" do
     DiffTest.runLerp

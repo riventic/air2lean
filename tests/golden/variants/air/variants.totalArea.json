@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.totalArea",
+ "name": "variants.totalArea",
  "params": [
   0
  ],
@@ -204,7 +204,7 @@
            "ty": 1,
            "callee": {
             "ty": 9,
-            "func": "enums.area",
+            "func": "variants.area",
             "noreturn": false
            },
            "args": [
@@ -396,7 +396,7 @@
   },
   {
    "k": "union",
-   "name": "enums.Shape",
+   "name": "variants.Shape",
    "layout": "auto",
    "tag": 10,
    "fields": [
@@ -420,11 +420,11 @@
   },
   {
    "k": "other",
-   "name": "fn (enums.Shape) u64"
+   "name": "fn (variants.Shape) u64"
   },
   {
    "k": "enum",
-   "name": "@typeInfo(enums.Shape).@\"union\".tag_type.?",
+   "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
    "tag": 13,
    "exhaustive": true,
    "fields": [
@@ -453,7 +453,7 @@
   },
   {
    "k": "struct",
-   "name": "enums.Rect",
+   "name": "variants.Rect",
    "layout": "auto",
    "fields": [
     {

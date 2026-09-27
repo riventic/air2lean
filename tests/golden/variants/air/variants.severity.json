@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.severity",
+ "name": "variants.severity",
  "params": [
   0
  ],
@@ -118,7 +118,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "enums.Code",
+   "name": "variants.Code",
    "tag": 1,
    "exhaustive": false,
    "fields": [

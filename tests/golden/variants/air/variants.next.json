@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.next",
+ "name": "variants.next",
  "params": [
   0
  ],
@@ -151,7 +151,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "enums.Light",
+   "name": "variants.Light",
    "tag": 4,
    "exhaustive": true,
    "fields": [

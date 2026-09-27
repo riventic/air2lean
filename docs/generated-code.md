@@ -11,8 +11,8 @@
 | function `basic.scale` (with `--prefix basic.`) | `Ns.scale` |
 | any other `.` in a name | `_` |
 | struct type `basic.Job` | `Ns.Job` (a `structure`, same field names) |
-| enum or union type `enums.Shape` | `Ns.Shape` |
-| tag enum of `union(enum)` `enums.Shape` | `Ns.ShapeTag` |
+| enum or union type `variants.Shape` | `Ns.Shape` |
+| tag enum of `union(enum)` `variants.Shape` | `Ns.ShapeTag` |
 | a name that is a Lean keyword | `«name»` |
 
 ## Types
@@ -122,7 +122,7 @@ A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>
 
 ## Differential test
 
-One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. Per example:
+One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
 
 | Path | What |
 |---|---|

@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.prioValue",
+ "name": "variants.codeOf",
  "params": [
   0
  ],
@@ -21,7 +21,7 @@
   },
   {
    "id": 2,
-   "tag": "bitcast",
+   "tag": "intcast_safe",
    "ty": 1,
    "args": [
     {
@@ -48,29 +48,25 @@
  ],
  "types": [
   {
+   "k": "int",
+   "signed": false,
+   "bits": 8
+  },
+  {
    "k": "enum",
-   "name": "enums.Prio",
-   "tag": 1,
-   "exhaustive": true,
+   "name": "variants.Code",
+   "tag": 0,
+   "exhaustive": false,
    "fields": [
     {
-     "name": "low",
-     "value": "-1"
-    },
-    {
-     "name": "mid",
+     "name": "ok",
      "value": "0"
     },
     {
-     "name": "high",
-     "value": "5"
+     "name": "warn",
+     "value": "1"
     }
    ]
-  },
-  {
-   "k": "int",
-   "signed": true,
-   "bits": 8
   },
   {
    "k": "void"

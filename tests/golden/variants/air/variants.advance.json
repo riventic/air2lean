@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.advance",
+ "name": "variants.advance",
  "params": [
   0,
   1
@@ -173,7 +173,7 @@
            "ty": 0,
            "callee": {
             "ty": 7,
-            "func": "enums.next",
+            "func": "variants.next",
             "noreturn": false
            },
            "args": [
@@ -331,7 +331,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "enums.Light",
+   "name": "variants.Light",
    "tag": 8,
    "exhaustive": true,
    "fields": [
@@ -377,7 +377,7 @@
   },
   {
    "k": "other",
-   "name": "fn (enums.Light) enums.Light"
+   "name": "fn (variants.Light) variants.Light"
   },
   {
    "k": "int",

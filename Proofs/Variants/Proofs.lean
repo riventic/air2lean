@@ -1,14 +1,14 @@
-import Proofs.Enums.Gen
+import Proofs.Variants.Gen
 
 /-!
-# Proofs about `examples/enums/enums.zig`
+# Proofs about `examples/variants/variants.zig`
 
 `next` steps a traffic light, `advance` steps it `n` times. `lightOf`/`codeOf` convert a byte to
 an enum: an unnamed value panics for the exhaustive `Light`, and is kept for the non-exhaustive
 `Code`. `area`/`scale`/`radius` work on the tagged union `Shape`.
 -/
 
-open Enums
+open Variants
 
 /-- The traffic-light cycle as a plain function. -/
 def nextSpec : Light → Light

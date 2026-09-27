@@ -36,7 +36,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/floatops/inputs");
     try compat.makePath("tests/diff/floatconv/inputs");
     try compat.makePath("tests/diff/floats/inputs");
-    try compat.makePath("tests/diff/enums/inputs");
+    try compat.makePath("tests/diff/variants/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -91,8 +91,8 @@ pub fn main() !void {
     try genCelsius(rng);
     try genDot(rng);
 
-    // The enums generators run after every earlier one, so the earlier inputs stay the same.
-    try genEnums(rng);
+    // The variants generators run after every earlier one, so the earlier inputs stay the same.
+    try genVariants(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1040,13 +1040,13 @@ fn genDot(rng: std.Random) !void {
     }
 }
 
-// ---- enums (examples/enums/enums.zig) ----
+// ---- variants (examples/variants/variants.zig) ----
 //
 // An enum argument is its tag value (a JSON number). A `Shape` is an object with its active
 // field: `{"circle":r}`, `{"rect":{"w":w,"h":h}}`, `{"square":a}`, `{"empty":null}`.
 
-fn openEnums(comptime name: []const u8) !compat.OutFile {
-    return compat.OutFile.open("tests/diff/enums/inputs/" ++ name ++ ".jsonl");
+fn openVariants(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/variants/inputs/" ++ name ++ ".jsonl");
 }
 
 const shape_sizes = [_]u32{ 0, 1, 2, 65535, 65536, std.math.maxInt(u32) - 1, std.math.maxInt(u32) };
@@ -1072,7 +1072,7 @@ fn writeRandShape(writer: anytype, rng: std.Random) !void {
 /// Every shape kind with the edge sizes (every pair for `rect`), then random shapes. `with_k`:
 /// a second `u32` argument (an edge, or a random one).
 fn genShapeFn(rng: std.Random, comptime name: []const u8, comptime with_k: bool) !void {
-    var file = try openEnums(name);
+    var file = try openVariants(name);
     defer file.close();
     const writer = file.writer();
     var n: usize = 0;
@@ -1096,30 +1096,30 @@ fn genShapeFn(rng: std.Random, comptime name: []const u8, comptime with_k: bool)
     }
 }
 
-fn genEnums(rng: std.Random) !void {
+fn genVariants(rng: std.Random) !void {
     // next(l: Light), prioValue/isUrgent(p: Prio): every value.
     {
-        var file = try openEnums("next");
+        var file = try openVariants("next");
         defer file.close();
         const writer = file.writer();
         for (0..3) |l| try writer.print("[{d}]\n", .{l});
     }
     inline for (.{ "prioValue", "isUrgent" }) |name| {
-        var file = try openEnums(name);
+        var file = try openVariants(name);
         defer file.close();
         const writer = file.writer();
         for ([_]i8{ -1, 0, 5 }) |p| try writer.print("[{d}]\n", .{p});
     }
     // lightOf/codeOf/severity(x: u8): every u8.
     inline for (.{ "lightOf", "codeOf", "severity" }) |name| {
-        var file = try openEnums(name);
+        var file = try openVariants(name);
         defer file.close();
         const writer = file.writer();
         for (0..256) |x| try writer.print("[{d}]\n", .{x});
     }
     // advance(l: Light, n: u32): small step counts, then random ones below 3000.
     {
-        var file = try openEnums("advance");
+        var file = try openVariants("advance");
         defer file.close();
         const writer = file.writer();
         var n: usize = 0;
@@ -1137,7 +1137,7 @@ fn genEnums(rng: std.Random) !void {
     try genShapeFn(rng, "isRound", false);
     // totalArea(shapes: []const Shape): empty, one of each kind, an overflowing sum, random.
     {
-        var file = try openEnums("totalArea");
+        var file = try openVariants("totalArea");
         defer file.close();
         const writer = file.writer();
         try writer.writeAll("[[]]\n");

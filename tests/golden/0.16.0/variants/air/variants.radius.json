@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.16.0",
- "name": "enums.radius",
+ "name": "variants.radius",
  "params": [
   0
  ],
@@ -178,7 +178,7 @@
  "types": [
   {
    "k": "union",
-   "name": "enums.Shape",
+   "name": "variants.Shape",
    "layout": "auto",
    "tag": 5,
    "fields": [
@@ -222,7 +222,7 @@
   },
   {
    "k": "enum",
-   "name": "@typeInfo(enums.Shape).@\"union\".tag_type.?",
+   "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
    "tag": 11,
    "exhaustive": true,
    "fields": [
@@ -252,7 +252,7 @@
   },
   {
    "k": "other",
-   "name": "fn (@typeInfo(enums.Shape).@\"union\".tag_type.?, @typeInfo(enums.Shape).@\"union\".tag_type.?) noreturn"
+   "name": "fn (@typeInfo(variants.Shape).@\"union\".tag_type.?, @typeInfo(variants.Shape).@\"union\".tag_type.?) noreturn"
   },
   {
    "k": "ptr",
@@ -262,7 +262,7 @@
   },
   {
    "k": "struct",
-   "name": "enums.Rect",
+   "name": "variants.Rect",
    "layout": "auto",
    "fields": [
     {

@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 53 functions in 8 examples translate and match the compiled Zig on 52,377 differential tests, including the panic kind: `basic`, `recursion`, `options`, `errors`, `enums`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). The integer examples and `floats`/`floatconv` have machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions and IEEE-754 rounding. See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 53 functions in 8 examples translate and match the compiled Zig on 52,377 differential tests, including the panic kind: `basic`, `recursion`, `options`, `errors`, `variants`, and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). The integer examples and `floats`/`floatconv` have machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions and IEEE-754 rounding. See [PLAN.md](PLAN.md).
 
 ## How it works
 

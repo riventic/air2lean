@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.isUrgent",
+ "name": "variants.isUrgent",
  "params": [
   0
  ],
@@ -53,7 +53,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "enums.Prio",
+   "name": "variants.Prio",
    "tag": 4,
    "exhaustive": true,
    "fields": [

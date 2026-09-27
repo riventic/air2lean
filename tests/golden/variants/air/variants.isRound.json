@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.isRound",
+ "name": "variants.isRound",
  "params": [
   0
  ],
@@ -63,7 +63,7 @@
  "types": [
   {
    "k": "union",
-   "name": "enums.Shape",
+   "name": "variants.Shape",
    "layout": "auto",
    "tag": 3,
    "fields": [
@@ -93,7 +93,7 @@
   },
   {
    "k": "enum",
-   "name": "@typeInfo(enums.Shape).@\"union\".tag_type.?",
+   "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
    "tag": 7,
    "exhaustive": true,
    "fields": [
@@ -125,7 +125,7 @@
   },
   {
    "k": "struct",
-   "name": "enums.Rect",
+   "name": "variants.Rect",
    "layout": "auto",
    "fields": [
     {

@@ -1,7 +1,7 @@
 {
  "schema": 4,
- "zig_version": "0.15.2",
- "name": "enums.radius",
+ "zig_version": "0.14.1",
+ "name": "variants.radius",
  "params": [
   0
  ],
@@ -78,7 +78,7 @@
        "ty": 5,
        "callee": {
         "ty": 6,
-        "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__anon_400",
+        "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__anon_375",
         "noreturn": true
        },
        "args": [
@@ -131,7 +131,7 @@
  "types": [
   {
    "k": "union",
-   "name": "enums.Shape",
+   "name": "variants.Shape",
    "layout": "auto",
    "tag": 3,
    "fields": [
@@ -163,7 +163,7 @@
   },
   {
    "k": "enum",
-   "name": "@typeInfo(enums.Shape).@\"union\".tag_type.?",
+   "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
    "tag": 8,
    "exhaustive": true,
    "fields": [
@@ -193,11 +193,11 @@
   },
   {
    "k": "other",
-   "name": "fn (@typeInfo(enums.Shape).@\"union\".tag_type.?, @typeInfo(enums.Shape).@\"union\".tag_type.?) noreturn"
+   "name": "fn (@typeInfo(variants.Shape).@\"union\".tag_type.?, @typeInfo(variants.Shape).@\"union\".tag_type.?) noreturn"
   },
   {
    "k": "struct",
-   "name": "enums.Rect",
+   "name": "variants.Rect",
    "layout": "auto",
    "fields": [
     {

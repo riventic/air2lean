@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.lightOf",
+ "name": "variants.prioValue",
  "params": [
   0
  ],
@@ -21,7 +21,7 @@
   },
   {
    "id": 2,
-   "tag": "intcast_safe",
+   "tag": "bitcast",
    "ty": 1,
    "args": [
     {
@@ -48,29 +48,29 @@
  ],
  "types": [
   {
-   "k": "int",
-   "signed": false,
-   "bits": 8
-  },
-  {
    "k": "enum",
-   "name": "enums.Light",
-   "tag": 0,
+   "name": "variants.Prio",
+   "tag": 1,
    "exhaustive": true,
    "fields": [
     {
-     "name": "red",
+     "name": "low",
+     "value": "-1"
+    },
+    {
+     "name": "mid",
      "value": "0"
     },
     {
-     "name": "yellow",
-     "value": "1"
-    },
-    {
-     "name": "green",
-     "value": "2"
+     "name": "high",
+     "value": "5"
     }
    ]
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 8
   },
   {
    "k": "void"

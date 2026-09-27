@@ -1,7 +1,7 @@
 {
  "schema": 4,
  "zig_version": "0.15.2",
- "name": "enums.codeOf",
+ "name": "variants.lightOf",
  "params": [
   0
  ],
@@ -54,17 +54,21 @@
   },
   {
    "k": "enum",
-   "name": "enums.Code",
+   "name": "variants.Light",
    "tag": 0,
-   "exhaustive": false,
+   "exhaustive": true,
    "fields": [
     {
-     "name": "ok",
+     "name": "red",
      "value": "0"
     },
     {
-     "name": "warn",
+     "name": "yellow",
      "value": "1"
+    },
+    {
+     "name": "green",
+     "value": "2"
     }
    ]
   },
