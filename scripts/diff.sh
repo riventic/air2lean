@@ -137,6 +137,16 @@ AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 # `case` glob like '{"ok":'*'}' also matches them.
 classify_line() {
   local line=$1
+  # A function that takes an allocator also writes the number of live allocations after the
+  # call: split it off.
+  live=
+  case "$line" in
+    '{"ok":'*',"live":'*'}')
+      live=${line##*,\"live\":}
+      live=${live%\}}
+      line="${line%,\"live\":*}}"
+      ;;
+  esac
   # A function that uses memory also writes the input buffers after the call: split them off.
   bufs=
   case "$line" in
@@ -192,6 +202,9 @@ expected_ctor_for_zig_kind() {
       echo overflow ;;
     outOfBounds | startGreaterThanEnd) echo outOfBounds ;;
     divideByZero) echo divByZero ;;
+    # common.zig's TestAllocator: a free of memory that it did not allocate. The Lean `.illegal`
+    # matches any Zig line (below), so this entry only names the pair.
+    doubleFree) echo illegal ;;
     reachedUnreachable) echo unreachable ;;
     exactDivisionRemainder | unwrapNull | unwrapError | forLenMismatch | invalidEnumValue \
       | inactiveUnionField | corruptSwitch | sentinelMismatch | copyLenMismatch | memcpyAlias \
@@ -245,13 +258,15 @@ for ex in $examples; do
       zkind=$kind
       zval=${val:-}
       zbufs=$bufs
+      zlive=$live
       classify_line "$lean_line"
       lkind=$kind
       lval=${val:-}
       lbufs=$bufs
+      llive=$live
 
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
-        bufs_match "$zbufs" "$lbufs"; then
+        bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
         fn_ok=$((fn_ok + 1))
       elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ]; }; then
         fn_unspecified=$((fn_unspecified + 1))

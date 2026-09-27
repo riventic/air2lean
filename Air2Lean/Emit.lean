@@ -43,7 +43,10 @@ def mangleName (prefix_ : String) (raw : String) : String :=
   let stripped : String :=
     if prefix_.length > 0 && raw.startsWith prefix_ then (raw.drop prefix_.length).toString
     else raw
-  let underscored := stripped.replace "." "_"
+  -- A generic instance has its arguments in the name: `array_list.Aligned(u32,null)` gives
+  -- `array_list_Aligned_u32_null`.
+  let underscored := String.ofList (stripped.toList.filterMap fun c =>
+    if c.isAlphanum || c == '_' then some c else if c == ')' then none else some '_')
   if leanKeywords.contains underscored then s!"«{underscored}»" else underscored
 
 def mangleField (raw : String) : String :=
@@ -83,6 +86,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .tuple fields =>
     let parts := (fields.map (fun fid => emitTy structNames types types[fid]!)).toList
     if parts.isEmpty then "Unit" else String.intercalate " × " parts
+  | .allocator => "Zig.Allocator"
   | .other name => name
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
@@ -662,6 +666,27 @@ def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
 def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
 
+/-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
+call's result type. `args[0]` is the allocator. -/
+def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (args : Array Val)
+    (ret : TyId) : String :=
+  let rv := fc.resolveVal env
+  -- The pointer or slice in the result (`E!*T`, `E![]T`, `?[]T`).
+  let p := match fc.tyOfId ret with | .errorUnion _ p | .optional p => p | _ => ret
+  let size := fc.sizeOf ((ptrChild fc.types p).getD 0)
+  let align := (fc.layouts[p]?.bind (·.ptrAlign)).getD 1
+  -- The size of what the pointer or slice argument `args[1]` points to.
+  let arg (i : Nat) : Val := args[i]?.getD .void
+  let argSize := fc.sizeOf (((fc.valTyId? (arg 1)).bind (ptrChild fc.types)).getD 0)
+  let a := rv (arg 0)
+  match fn with
+  | .create => s!"Zig.Allocator.create {a} {size} {align}"
+  | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+  | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
+  | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
+  | .free => s!"Zig.Allocator.free {a} {argSize} {rv (arg 1)}"
+  | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
+
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
 def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
@@ -1187,7 +1212,11 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .call callee args =>
     let (isNoreturn, cexpr) := fc.resolveCallee callee
-    if isNoreturn then (env, none)
+    let allocFn := match callee with | .func name _ => allocFn? name | _ => none
+    if let some fn := allocFn then
+      let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.allocCall env fn args inst.ty})"
+      (env, some l)
+    else if isNoreturn then (env, none)
     else
       let memCallee := match callee with | .func name _ => fc.memFuncs.contains name | _ => false
       -- A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`).
@@ -1238,11 +1267,13 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         -- (`emitLoopDef`, called from `emitOneFunction` before this function's own def), so a
         -- proof can name it. Call it with its captures instead.
         let caps := fc.loopCaptures body
-        let args := String.intercalate " " ((caps.map fun (_, name, _) => name).toList)
+        -- The caller's name of each value: a `try` or `block` result is `v<id>` here.
+        let args := String.intercalate " " ((caps.map fun (id, _, _) => fc.resolveVal env (.inst id)).toList)
         s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
       | .«try» v errBody =>
         let errStr := emitStmts fc env errBody.toList
-        let vname := s!"v{inst.id}"
+        -- `try` on `!void`: nothing reads the payload.
+        let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
         let restStr := emitStmts fc (env.push (inst.id, vname)) rest
         s!"match {fc.resolveVal env v} with\n\
           | .error _ => {doBlock errStr}\n\

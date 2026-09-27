@@ -67,6 +67,10 @@ structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
   nextAddr : Nat := 4096
+  /-- The number of allocations so far (`Zig.rawAlloc`, `ZigLean/Mem/Alloc.lean`). -/
+  allocs : Nat := 0
+  /-- The allocation that fails: allocation number `failAt` (from 0), or none. -/
+  failAt : Option Nat := none
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

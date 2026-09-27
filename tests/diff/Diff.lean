@@ -10,6 +10,7 @@ import Proofs.Floats.Gen
 import Proofs.Variants.Gen
 import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
+import Proofs.Lists.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -476,10 +477,11 @@ def runVariants : IO Unit := do
 The memory at the start is the example's `mem0`: its `g` globals are blocks `0 … g-1`. Input
 buffer `i` is block `g + i`. -/
 
-/-- One 16-byte aligned heap block per input buffer, after the globals of `m0`. -/
+/-- One 16-byte aligned block per input buffer, after the globals of `m0`. The allocator did not
+make it (`.stack`, not `.heap`): a free of it throws `.illegal`, as `TestAllocator` panics. -/
 def memOf (m0 : Zig.Mem) (bufs : Array (Array (BitVec 8))) : IO Zig.Mem := do
   let act : Zig.MemM Unit := bufs.forM fun bytes => do
-    let p ← Zig.alloc .heap bytes.size 16
+    let p ← Zig.alloc .stack bytes.size 16
     Zig.storeBytes p 1 (bytes.map .int)
   match (act.run m0).run with
   | some (.ok (_, m)) => pure m
@@ -504,45 +506,53 @@ def byteStr : Zig.Byte → String
   | .ptrFrag .. => "pp"
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
-a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer. -/
+a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a
+global, or a heap block of the allocator). -/
 def ptrStr (g : Nat) (m : Zig.Mem) (p : Zig.Ptr) (size : Nat) (len : Option Nat := none) :
     String :=
   let lenStr := match len with | some n => s!",\"len\":{n}" | none => ""
   match p.block with
   | some b =>
-    if g ≤ b then s!"\{\"buf\":{b - g},\"off\":{p.off}{lenStr}}"
+    if g ≤ b && (m.blocks[b]?.map (·.kind != .heap)).getD true then
+      s!"\{\"buf\":{b - g},\"off\":{p.off}{lenStr}}"
     else
       let bytes := (m.blocks[b]?.map (·.bytes)).getD #[]
       let o := p.off.toNat
       "{\"bytes\":\"" ++ String.join ((bytes.extract o (o + size)).toList.map byteStr) ++ "\"}"
-  | none => "\"outside the buffers\""
+  -- An allocation of 0 bytes has no block (`Zig.zeroAllocPtr`).
+  | none => if size = 0 then "{\"bytes\":\"\"}" else "\"outside the buffers\""
 
 /-- A slice result of items of `size` bytes (`ptrStr`). -/
 def sliceStr (g : Nat) (m : Zig.Mem) (size : Nat) (s : Zig.Slice) : String :=
   ptrStr g m s.ptr (size * s.len.toNat) (some s.len.toNat)
 
 /-- `renderOk` for a function that uses memory: the result, then the bytes of the `n` input
-buffers after the call (blocks `g` to `g + n - 1`). -/
-def renderMem {α : Type} (g n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : Zig.Mem → α → String) :
-    String :=
+buffers after the call (blocks `g` to `g + n - 1`). `heap`: then the number of live blocks of the
+allocator, `,"live":<n>`. -/
+def renderMem {α : Type} (g n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : Zig.Mem → α → String)
+    (heap : Bool := false) : String :=
   match r.run with
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok (v, m)) =>
     let bufs := (m.blocks.extract g (g + n)).toList.map fun blk =>
       "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
-    "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]}"
+    let live := if heap then s!",\"live\":{(m.blocks.filter fun b => b.kind == .heap && b.live).size}"
+      else ""
+    "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}"
 
 /-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
-memory, from the memory `m0` of the example. `call` gets the number of globals. -/
+memory, from the memory `m0` of the example. `call` gets the number of globals. `heap`: the
+function takes an allocator (`renderMem`). -/
 def processMem {α : Type} (ex : String) (m0 : Zig.Mem) (name : String)
-    (call : Nat → Array Json → IO (Zig.MemM α)) (payload : Zig.Mem → α → String) : IO Unit :=
+    (call : Nat → Array Json → IO (Zig.MemM α)) (payload : Zig.Mem → α → String)
+    (heap : Bool := false) : IO Unit :=
   processFile ex name fun j => do
     let bufsJ ← getArr (← orFail (j.getObjVal? "bufs") "bufs")
     let bufs ← bufsJ.mapM fun b => do (← getArr b).mapM fun x => return bv 8 (← getInt x)
     let args ← getArr (← orFail (j.getObjVal? "args") "args")
     let g := m0.blocks.size
-    pure (renderMem g bufs.size ((← call g args).run (← memOf m0 bufs)) payload)
+    pure (renderMem g bufs.size ((← call g args).run (← memOf m0 bufs)) payload heap)
 
 def unitStr (_ : Zig.Mem) (_ : Unit) : String := "null"
 
@@ -609,6 +619,29 @@ def runSlices : IO Unit := do
       let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
       return Slices.lenOr s) fun _ v => natStr v true
 
+/-- A function that takes an allocator: `args[0]` is the allocation that fails, `null` or its
+number (`Zig.Mem.failAt`). -/
+def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
+  let f ← if fa.isNull then pure none else some <$> (Int.toNat <$> getInt fa)
+  return (do modify fun m => { m with failAt := f }; r)
+
+def runLists : IO Unit := do
+  let ex := "lists"
+  let m0 := Lists.mem0
+  let a : Zig.Allocator := {}
+  let wide (_ : Zig.Mem) (v : Except Zig.ErrName (BitVec 64)) := errStr v true
+  let items (size : Nat) (m : Zig.Mem) : Except Zig.ErrName Zig.Slice → String
+    | .error e => "{\"err\":\"" ++ e ++ "\"}"
+    | .ok s => sliceStr m0.blocks.size m size s
+  processMem ex m0 "sumRange"
+    (fun _ x => do withFailAt x[0]! (Lists.sumRange a (bv 64 (← getInt x[1]!)))) wide (heap := true)
+  processMem ex m0 "dupe" (fun g x => do withFailAt x[0]! (Lists.dupe a (← sliceOf g x[1]!)))
+    (items 1) (heap := true)
+  processMem ex m0 "evens" (fun g x => do withFailAt x[0]! (Lists.evens a (← sliceOf g x[1]!)))
+    (items 4) (heap := true)
+  processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
+    wide (heap := true)
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -672,6 +705,8 @@ def main : IO Unit := do
   run "pointers" DiffTest.runPointers
 
   run "slices" DiffTest.runSlices
+
+  run "lists" DiffTest.runLists
 
   run "floats" do
     DiffTest.runLerp

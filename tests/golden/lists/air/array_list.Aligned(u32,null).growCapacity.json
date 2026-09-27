@@ -1,0 +1,103 @@
+{
+ "schema": 6,
+ "zig_version": "0.16.0",
+ "name": "array_list.Aligned(u32,null).growCapacity",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4
+  },
+  {
+   "id": 4,
+   "tag": "div_trunc",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4
+  },
+  {
+   "id": 6,
+   "tag": "add_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "ty": 0,
+     "val": "32"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "add_sat",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4
+  },
+  {
+   "id": 9,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 7
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

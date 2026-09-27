@@ -51,12 +51,18 @@ for ex in $examples; do
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   trap 'rm -rf "$air_dir" "$cmp_dir"' EXIT
 
+  # examples/<ex>/filter, if present: more name prefixes to translate, one per line: the std
+  # functions that the example calls and that have no model (docs/std-models.md).
+  filter="$ex."
+  if [ -f "examples/$ex/filter" ]; then
+    filter="$filter,$(paste -sd, "examples/$ex/filter")"
+  fi
   echo "== $ex: dumping AIR ==" >&2
-  ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$ex." "$zig_air" \
+  ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
-    echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$ex.)" >&2
+    echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2
     exit 1
   fi
 

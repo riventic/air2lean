@@ -53,6 +53,62 @@ pub const Buf = []align(16) u8;
 /// index and offset in these buffers.
 var render_bufs: []const Buf = &.{};
 
+/// The allocator of a function that takes a `std.mem.Allocator`, with the rules of the model
+/// (`ZigLean/Mem/Alloc.lean`, docs/std-models.md): allocation number `fail_at` (from 0) fails, and
+/// so does an allocation of more than `max_alloc_bytes` bytes; `resize` and `remap` always fail;
+/// a free of memory that is not a live allocation of the same length panics with the kind
+/// `doubleFree`.
+pub const TestAllocator = struct {
+    fail_at: ?usize,
+    count: usize = 0,
+    live: std.ArrayListUnmanaged([]u8) = .empty,
+
+    pub const max_alloc_bytes = 1 << 20;
+
+    pub fn allocator(self: *TestAllocator) std.mem.Allocator {
+        return .{ .ptr = self, .vtable = &.{
+            .alloc = alloc,
+            .resize = resize,
+            .remap = remap,
+            .free = free,
+        } };
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        const self: *TestAllocator = @ptrCast(@alignCast(ctx));
+        const k = self.count;
+        self.count += 1;
+        if (self.fail_at == k or len > max_alloc_bytes) return null;
+        const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportPanic("harnessOutOfMemory");
+        self.live.append(out_gpa, p[0..len]) catch reportPanic("harnessOutOfMemory");
+        return p;
+    }
+
+    fn resize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
+        return false;
+    }
+
+    fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
+        return null;
+    }
+
+    fn free(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+        const self: *TestAllocator = @ptrCast(@alignCast(ctx));
+        for (self.live.items, 0..) |m, i| {
+            if (m.ptr == memory.ptr and m.len == memory.len) {
+                _ = self.live.swapRemove(i);
+                out_gpa.rawFree(memory, alignment, ret_addr);
+                return;
+            }
+        }
+        reportPanic("doubleFree");
+    }
+};
+
+/// The allocator of the call that the child runs, if the function takes one: the child also
+/// writes the number of live allocations after the call, `,"live":<n>`.
+pub var test_alloc: ?*TestAllocator = null;
+
 fn writeAll(fd: std.posix.fd_t, bytes: []const u8) void {
     var done: usize = 0;
     while (done < bytes.len) done += compat.write(fd, bytes[done..]) catch return;
@@ -303,6 +359,7 @@ pub fn forkCallBufs(
             }
             aw.writer.writeAll("]") catch unreachable;
         }
+        if (test_alloc) |ta| aw.writer.print(",\"live\":{d}", .{ta.live.items.len}) catch unreachable;
         writeAll(fds[1], aw.written());
         compat.exit(0);
     }

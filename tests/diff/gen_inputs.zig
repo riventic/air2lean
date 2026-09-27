@@ -39,6 +39,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/variants/inputs");
     try compat.makePath("tests/diff/pointers/inputs");
     try compat.makePath("tests/diff/slices/inputs");
+    try compat.makePath("tests/diff/lists/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -99,8 +100,11 @@ pub fn main() !void {
     // The pointers generators run after every earlier one, so the earlier inputs stay the same.
     try genPointers(rng);
 
-    // The slices generators run last, so the earlier inputs stay the same.
+    // The slices generators run after every earlier one, so the earlier inputs stay the same.
     try genSlices(rng);
+
+    // The lists generators run last, so the earlier inputs stay the same.
+    try genLists(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1624,6 +1628,62 @@ fn genSlices(rng: std.Random) !void {
                 try writeItemSlice(writer, rng, 1, 16, 0);
                 try writer.writeAll("]}\n");
             }
+        }
+    }
+}
+
+fn openLists(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/lists/inputs/" ++ name ++ ".jsonl");
+}
+
+/// The first argument of a function that takes an allocator: the allocation that fails, `null`
+/// on every third line, else a number up to `max`.
+fn writeFailAt(writer: anytype, rng: std.Random, i: usize, max: usize) !void {
+    if (i % 3 == 0) try writer.writeAll("null") else try writer.print("{d}", .{rng.uintAtMost(usize, max)});
+}
+
+fn genLists(rng: std.Random) !void {
+    // sumRange(n): small `n`, and sizes that cannot be allocated (more than 1 MiB, or an
+    // overflow of `4 * n`). A JSON integer is at most `maxInt(i64)`.
+    {
+        var file = try openLists("sumRange");
+        defer file.close();
+        const writer = file.writer();
+        const big = [_]usize{ (1 << 18) + 1, 1 << 62, std.math.maxInt(i64) };
+        for (0..N) |i| {
+            try writer.writeAll("{\"bufs\":[],\"args\":[");
+            try writeFailAt(writer, rng, i, 1);
+            const n = if (i % 10 == 9) big[rng.uintLessThan(usize, big.len)] else rng.uintAtMost(usize, 40);
+            try writer.print(",{d}]}}\n", .{n});
+        }
+    }
+    // dupe(xs: []const u8), evens(xs: []const u32), listSum(xs: []const u32): the allocation that
+    // fails is one of the first ones.
+    {
+        var file = try openLists("dupe");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n = rng.uintAtMost(usize, 24);
+            try writeBuf(writer, rng, n, 0);
+            try writeFailAt(writer, rng, i, 1);
+            try writer.writeAll(",");
+            const a = rng.uintAtMost(usize, n);
+            try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
+            try writer.writeAll("]}\n");
+        }
+    }
+    inline for (.{ .{ "evens", 40, 3 }, .{ "listSum", 10, 11 } }) |g| {
+        var file = try openLists(g[0]);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n = rng.uintAtMost(usize, g[1]);
+            try writeBuf(writer, rng, 4 * n, 0);
+            try writeFailAt(writer, rng, i, g[2]);
+            try writer.writeAll(",");
+            try writeSlice(writer, 0, 0, n);
+            try writer.writeAll("]}\n");
         }
     }
 }
