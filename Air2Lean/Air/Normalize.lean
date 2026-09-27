@@ -108,6 +108,10 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a
   | "optional_payload" => let a ← arg1 fnName raw; return .optPayload a
   | "wrap_optional" => let a ← arg1 fnName raw; return .wrapOptional a
+  | "is_null_ptr" => let a ← arg1 fnName raw; return .isNullPtr true a
+  | "is_non_null_ptr" => let a ← arg1 fnName raw; return .isNullPtr false a
+  | "optional_payload_ptr" => let a ← arg1 fnName raw; return .optPayloadPtr false a
+  | "optional_payload_ptr_set" => let a ← arg1 fnName raw; return .optPayloadPtr true a
   | "is_err" => let a ← arg1 fnName raw; return .isErr a
   | "is_non_err" => let a ← arg1 fnName raw; return .isNonErr a
   | "unwrap_errunion_payload" => let a ← arg1 fnName raw; return .errPayload a
@@ -212,6 +216,6 @@ def normalize (raw : Raw.RawFunc) : Except String Func := do
       {String.intercalate ", " supportedVersions})"
   let body ← raw.body.mapM (normalizeInst raw.name)
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types }
+           body, types := raw.types, layouts := raw.layouts }
 
 end Air2Lean

@@ -137,6 +137,15 @@ AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 # `case` glob like '{"ok":'*'}' also matches them.
 classify_line() {
   local line=$1
+  # A function that uses memory also writes the input buffers after the call: split them off.
+  bufs=
+  case "$line" in
+    '{"ok":'*',"bufs":['*']}')
+      bufs=${line##*,\"bufs\":}
+      bufs=${bufs%\}}
+      line="${line%,\"bufs\":*}}"
+      ;;
+  esac
   case "$line" in
     '{"ok":null}')
       kind=ok
@@ -190,6 +199,13 @@ expected_ctor_for_zig_kind() {
   esac
 }
 
+# The buffers after the call: a Lean `??` (an undefined byte, docs/generated-code.md §Memory)
+# matches any two Zig hex digits. `[` and `]` are glob characters, so both sides replace them.
+bufs_match() {
+  local z=${1//[\[\]]/_} l=${2//[\[\]]/_}
+  [[ $z == $l ]]
+}
+
 echo "== comparing ==" >&2
 total_ok=0
 total_fail_match=0
@@ -227,13 +243,16 @@ for ex in $examples; do
       classify_line "$zig_line"
       zkind=$kind
       zval=${val:-}
+      zbufs=$bufs
       classify_line "$lean_line"
       lkind=$kind
       lval=${val:-}
+      lbufs=$bufs
 
-      if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ]; then
+      if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
+        bufs_match "$zbufs" "$lbufs"; then
         fn_ok=$((fn_ok + 1))
-      elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.unspecified ]; then
+      elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ]; }; then
         fn_unspecified=$((fn_unspecified + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
         [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&

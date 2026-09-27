@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "errors.digitOrZero",
  "params": [
@@ -135,22 +135,30 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 8
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "error_union",
    "error": 6,
-   "payload": 0
+   "payload": 0,
+   "abi_size": 4,
+   "abi_align": 2
   },
   {
    "k": "other",
    "name": "fn (u8) error{NotDigit}!u8"
   },
   {
-   "k": "bool"
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "noreturn"
@@ -159,7 +167,9 @@
    "k": "error_set",
    "errors": [
     "NotDigit"
-   ]
+   ],
+   "abi_size": 2,
+   "abi_align": 2
   }
  ]
 }

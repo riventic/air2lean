@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "variants.codeOf",
  "params": [
@@ -50,7 +50,9 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 8
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "enum",
@@ -66,10 +68,14 @@
      "name": "warn",
      "value": "1"
     }
-   ]
+   ],
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "noreturn"

@@ -63,6 +63,7 @@ structure RawFunc where
   ret : TyId
   body : Array RawInst
   types : Array Ty
+  layouts : Array Layout
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -158,6 +159,26 @@ def parseTy (j : Json) : Except String Ty := do
       let errs ← errsJ.mapM Json.getStr?
       return .errorSet (some errs)
   | other => throw s!"unknown type kind: {other}"
+
+/-- The memory facts of a type entry (schema 5): `abi_size`, `abi_align`, the fields' `offset`,
+and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`. -/
+def parseLayout (j : Json) : Except String Layout := do
+  let nat? (k : String) : Except String (Option Nat) :=
+    match optField j k with
+    | some v => some <$> v.getNat?
+    | none => pure none
+  let bool (k : String) : Except String Bool :=
+    match optField j k with
+    | some v => v.getBool?
+    | none => pure false
+  let offsets ← match optField j "fields" with
+    | some (.arr fs) => fs.filterMapM fun fj => match optField fj "offset" with
+      | some o => some <$> o.getNat?
+      | none => pure none
+    | _ => pure #[]
+  return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
+           ptrAlign := ← nat? "ptr_align", isVolatile := ← bool "volatile",
+           allowzero := ← bool "allowzero", hostSize := (← nat? "host_size").getD 0 }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -330,12 +351,13 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
+  let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
   let params ← paramsJ.mapM Json.getNat?
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
-  return { schema, zigVersion, name, params, ret, body, types }
+  return { schema, zigVersion, name, params, ret, body, types, layouts }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do

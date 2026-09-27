@@ -37,6 +37,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/floatconv/inputs");
     try compat.makePath("tests/diff/floats/inputs");
     try compat.makePath("tests/diff/variants/inputs");
+    try compat.makePath("tests/diff/pointers/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -93,6 +94,9 @@ pub fn main() !void {
 
     // The variants generators run after every earlier one, so the earlier inputs stay the same.
     try genVariants(rng);
+
+    // The pointers generators run last, so the earlier inputs stay the same.
+    try genPointers(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1163,6 +1167,192 @@ fn genVariants(rng: std.Random) !void {
                 try writeRandShape(writer, rng);
             }
             try writer.writeAll("]]\n");
+        }
+    }
+}
+
+// -- pointers (examples/pointers) ----------------------------------------------------------
+//
+// An input line of a function that uses memory is `{"bufs":[[<byte>,…],…],"args":[…]}`, and a
+// pointer argument is `{"buf":i,"off":o}` into the buffers (docs/generated-code.md
+// §Differential test). Every offset is a multiple of the pointee's alignment: the harness makes
+// each buffer 16-byte aligned, so the pointers are aligned too.
+
+fn openPointers(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/pointers/inputs/" ++ name ++ ".jsonl");
+}
+
+/// Random buffer contents; `setU32` then writes chosen values.
+const Bytes = struct {
+    b: [32]u8,
+    len: usize,
+
+    fn random(rng: std.Random, len: usize) Bytes {
+        var r: Bytes = .{ .b = undefined, .len = len };
+        rng.bytes(r.b[0..len]);
+        return r;
+    }
+
+    fn setU32(self: *Bytes, off: usize, v: u32) void {
+        std.mem.writeInt(u32, self.b[off..][0..4], v, .little);
+    }
+};
+
+fn writeBufs(writer: anytype, bufs: []const Bytes) !void {
+    try writer.writeAll("{\"bufs\":[");
+    for (bufs, 0..) |b, i| {
+        if (i > 0) try writer.writeAll(",");
+        try writer.writeAll("[");
+        for (b.b[0..b.len], 0..) |x, k| {
+            if (k > 0) try writer.writeAll(",");
+            try writer.print("{d}", .{x});
+        }
+        try writer.writeAll("]");
+    }
+    try writer.writeAll("],\"args\":[");
+}
+
+fn writePtr(writer: anytype, buf: usize, off: usize) !void {
+    try writer.print("{{\"buf\":{d},\"off\":{d}}}", .{ buf, off });
+}
+
+/// A u32 that is sometimes an edge value, so that `+=` can overflow.
+fn edgyU32(rng: std.Random) u32 {
+    return switch (rng.uintLessThan(u8, 4)) {
+        0 => edgesU(u32)[rng.uintLessThan(usize, 4)],
+        else => rng.int(u32),
+    };
+}
+
+/// Two pointers to `u32` for `swap`/`same`/`maxPtr`: into two buffers, the same pointer, or
+/// two offsets of one buffer (`kind` 0, 1, 2).
+fn writeTwoPtrs(writer: anytype, rng: std.Random, kind: usize) !void {
+    const a = 4 * rng.uintLessThan(usize, 2);
+    const b = 4 * rng.uintLessThan(usize, 2);
+    switch (kind) {
+        0 => {
+            try writeBufs(writer, &.{ Bytes.random(rng, 8), Bytes.random(rng, 8) });
+            try writePtr(writer, 0, a);
+            try writer.writeAll(",");
+            try writePtr(writer, 1, b);
+        },
+        1 => {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, a);
+            try writer.writeAll(",");
+            try writePtr(writer, 0, a);
+        },
+        else => {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 0);
+            try writer.writeAll(",");
+            try writePtr(writer, 0, 4);
+        },
+    }
+}
+
+fn genPointers(rng: std.Random) !void {
+    inline for (.{ "swap", "same" }) |name| {
+        var file = try openPointers(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeTwoPtrs(writer, rng, i % 3);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // maxPtr(a: ?*const u32, b: ?*const u32): each of a and b null or not.
+    {
+        var file = try openPointers("maxPtr");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            switch (i % 4) {
+                0 => try writer.writeAll("{\"bufs\":[],\"args\":[null,null"),
+                1, 2 => {
+                    try writeBufs(writer, &.{Bytes.random(rng, 8)});
+                    if (i % 4 == 1) try writer.writeAll("null,") else {}
+                    try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+                    if (i % 4 == 2) try writer.writeAll(",null");
+                },
+                else => try writeTwoPtrs(writer, rng, (i / 4) % 3),
+            }
+            try writer.writeAll("]}\n");
+        }
+    }
+    // delay(j: *Job, d: u32), dueOf(j: *Job): one of two jobs in a 24-byte buffer.
+    inline for (.{ "delay", "dueOf" }) |name| {
+        var file = try openPointers(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            var b = Bytes.random(rng, 24);
+            const off: usize = 12 * rng.uintLessThan(usize, 2);
+            b.setU32(off, edgyU32(rng));
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, off);
+            if (comptime std.mem.eql(u8, name, "delay")) try writer.print(",{d}", .{edgyU32(rng)});
+            try writer.writeAll("]}\n");
+        }
+    }
+    // sumTo(n: u32): no buffers; small counts, then random ones below 2000.
+    {
+        var file = try openPointers("sumTo");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n: u32 = if (i < 8) @intCast(i) else rng.uintLessThan(u32, 2000);
+            try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{n});
+        }
+    }
+    // copyJob(dst: *Job, src: *const Job): two buffers, the same pointer, or the two jobs of
+    // one 24-byte buffer.
+    {
+        var file = try openPointers("copyJob");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            switch (i % 3) {
+                0 => {
+                    try writeBufs(writer, &.{ Bytes.random(rng, 12), Bytes.random(rng, 12) });
+                    try writePtr(writer, 0, 0);
+                    try writer.writeAll(",");
+                    try writePtr(writer, 1, 0);
+                },
+                1 => {
+                    try writeBufs(writer, &.{Bytes.random(rng, 12)});
+                    try writePtr(writer, 0, 0);
+                    try writer.writeAll(",");
+                    try writePtr(writer, 0, 0);
+                },
+                else => {
+                    const d: usize = 12 * rng.uintLessThan(usize, 2);
+                    try writeBufs(writer, &.{Bytes.random(rng, 24)});
+                    try writePtr(writer, 0, d);
+                    try writer.writeAll(",");
+                    try writePtr(writer, 0, 12 - d);
+                },
+            }
+            try writer.writeAll("]}\n");
+        }
+    }
+    // bumpOpt(p: *?u32), setOpt(p: *?u32, x: ?u32): a `?u32` is 8 bytes, the flag (0 or 1) at
+    // offset 4.
+    inline for (.{ "bumpOpt", "setOpt" }) |name| {
+        var file = try openPointers(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            var b = Bytes.random(rng, 16);
+            const off: usize = 8 * rng.uintLessThan(usize, 2);
+            b.setU32(off, edgyU32(rng));
+            b.b[off + 4] = rng.uintLessThan(u8, 2);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, off);
+            if (comptime std.mem.eql(u8, name, "setOpt")) {
+                if (rng.boolean()) try writer.writeAll(",null") else try writer.print(",{d}", .{rng.int(u32)});
+            }
+            try writer.writeAll("]}\n");
         }
     }
 }

@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.16.0",
  "name": "basic.totalWeightedTardiness",
  "params": [
@@ -805,55 +805,105 @@
    "k": "ptr",
    "size": "slice",
    "const": true,
-   "child": 15
+   "child": 15,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 64
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 0
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 0
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 6
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 32
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 1
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 9
+   "child": 9,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 64
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "noreturn"
@@ -862,10 +912,19 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 9
+   "child": 9,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
-   "k": "bool"
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "other",
@@ -875,7 +934,14 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 15
+   "child": 15,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "struct",
@@ -884,17 +950,22 @@
    "fields": [
     {
      "name": "duration",
-     "ty": 6
+     "ty": 6,
+     "offset": 0
     },
     {
      "name": "due",
-     "ty": 6
+     "ty": 6,
+     "offset": 4
     },
     {
      "name": "weight",
-     "ty": 18
+     "ty": 18,
+     "offset": 8
     }
-   ]
+   ],
+   "abi_size": 12,
+   "abi_align": 4
   },
   {
    "k": "other",
@@ -904,12 +975,21 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 6
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 8
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

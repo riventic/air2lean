@@ -32,21 +32,30 @@
 const std = @import("std");
 const compat = @import("compat.zig");
 
-/// Longest name in `panic` below (`integerPartOutOfBounds` / `exactDivisionRemainder`, 22
-/// bytes) plus headroom; also sized to fit the longest ok-payload this protocol writes (a quoted
-/// u64: `"18446744073709551615"`, 23 bytes) — it doubles as the parent's read buffer, which
-/// doesn't know in advance whether the child reports a value or a panic kind.
-const max_out_len = 64;
-
+/// The child's output text: the rendered ok-payload or the panic kind. Any length (a result
+/// with the input buffers can be long); `writeResult` frees it.
 pub const Outcome = union(enum) {
-    ok: struct { buf: [max_out_len]u8, len: usize },
-    fail: struct { buf: [max_out_len]u8, len: usize },
+    ok: []u8,
+    fail: []u8,
 };
 
+const out_gpa = std.heap.page_allocator;
+
 fn failOutcome(kind: []const u8) Outcome {
-    var f: Outcome = .{ .fail = .{ .buf = undefined, .len = kind.len } };
-    @memcpy(f.fail.buf[0..kind.len], kind);
-    return f;
+    return .{ .fail = out_gpa.dupe(u8, kind) catch @panic("out of memory") };
+}
+
+/// The input buffers of a function that uses memory (docs/generated-code.md §Differential test):
+/// each 16-byte aligned, like the blocks that `tests/diff/Diff.lean` makes for them.
+pub const Buf = []align(16) u8;
+
+/// Set by the child before it renders a result: `renderPayload` writes a pointer as its buffer
+/// index and offset in these buffers.
+var render_bufs: []const Buf = &.{};
+
+fn writeAll(fd: std.posix.fd_t, bytes: []const u8) void {
+    var done: usize = 0;
+    while (done < bytes.len) done += compat.write(fd, bytes[done..]) catch return;
 }
 
 /// Set to the write end of the result pipe by the child right after `fork()`, so `panic` below
@@ -212,6 +221,19 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
             try writer.writeAll("}");
         },
         .void => try writer.writeAll("null"),
+        // A single pointer is `{"buf":<index>,"off":<offset>}` into the input buffers.
+        .pointer => |p| {
+            if (p.size != .one) @compileError("renderPayload: unsupported pointer " ++ @typeName(T));
+            const addr = @intFromPtr(v);
+            for (render_bufs, 0..) |b, i| {
+                const base = @intFromPtr(b.ptr);
+                if (addr >= base and addr <= base + b.len) {
+                    try writer.print("{{\"buf\":{d},\"off\":{d}}}", .{ i, addr - base });
+                    return;
+                }
+            }
+            try writer.writeAll("\"outside the buffers\"");
+        },
         else => @compileError("renderPayload: unsupported type " ++ @typeName(T)),
     }
 }
@@ -233,6 +255,19 @@ pub fn parseFloatHex(comptime T: type, s: []const u8) T {
 /// exit with bytes; a nonzero exit with a reported name becomes `.fail` with that name; anything
 /// else (a signal, or no bytes at all) becomes `.fail("unknown")`.
 pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_wide: bool) !Outcome {
+    return forkCallBufs(Args, args, func, quote_wide, null);
+}
+
+/// `forkCall` for a function that uses memory: after the result, the child also writes the
+/// bytes of `bufs` as they are after the call, `,"bufs":["<hex>",…]` (two lowercase hex digits
+/// per byte).
+pub fn forkCallBufs(
+    comptime Args: type,
+    args: Args,
+    comptime func: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+) !Outcome {
     const fds = try compat.pipe();
     const pid = try compat.fork();
     if (pid == 0) {
@@ -245,40 +280,54 @@ pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_w
         compat.silenceStderr();
 
         const raw = @call(.auto, func, args);
-        var buf: [max_out_len]u8 = undefined;
-        var fbs: std.Io.Writer = .fixed(&buf);
-        renderPayload(@TypeOf(raw), &fbs, quote_wide, raw) catch unreachable;
-        const text = fbs.buffered();
-        _ = compat.write(fds[1], text) catch {};
+        var aw: std.Io.Writer.Allocating = .init(out_gpa);
+        render_bufs = bufs orelse &.{};
+        renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch unreachable;
+        if (bufs) |bs| {
+            aw.writer.writeAll(",\"bufs\":[") catch unreachable;
+            for (bs, 0..) |b, i| {
+                if (i > 0) aw.writer.writeAll(",") catch unreachable;
+                aw.writer.writeAll("\"") catch unreachable;
+                for (b) |byte| aw.writer.print("{x:0>2}", .{byte}) catch unreachable;
+                aw.writer.writeAll("\"") catch unreachable;
+            }
+            aw.writer.writeAll("]") catch unreachable;
+        }
+        writeAll(fds[1], aw.written());
         compat.exit(0);
     }
 
     // Parent.
     compat.close(fds[1]);
     defer compat.close(fds[0]);
-    var buf: [max_out_len]u8 = undefined;
-    var total: usize = 0;
-    while (total < buf.len) {
-        const n = std.posix.read(fds[0], buf[total..]) catch break;
+    var text: std.ArrayListUnmanaged(u8) = .empty;
+    var chunk: [4096]u8 = undefined;
+    while (true) {
+        const n = std.posix.read(fds[0], &chunk) catch break;
         if (n == 0) break;
-        total += n;
+        try text.appendSlice(out_gpa, chunk[0..n]);
     }
     const wr = compat.waitpid(pid, 0);
     const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
     const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
-    if (exited_ok and total > 0) {
-        var o: Outcome = .{ .ok = .{ .buf = undefined, .len = total } };
-        @memcpy(o.ok.buf[0..total], buf[0..total]);
-        return o;
+    if (text.items.len > 0 and (exited_ok or exited_fail)) {
+        const s = try text.toOwnedSlice(out_gpa);
+        return if (exited_ok) .{ .ok = s } else .{ .fail = s };
     }
-    if (exited_fail and total > 0) return failOutcome(buf[0..total]);
+    text.deinit(out_gpa);
     return failOutcome("unknown");
 }
 
 pub fn writeResult(writer: anytype, outcome: Outcome) !void {
     switch (outcome) {
-        .ok => |o| try writer.print("{{\"ok\":{s}}}\n", .{o.buf[0..o.len]}),
-        .fail => |f| try writer.print("{{\"fail\":\"{s}\"}}\n", .{f.buf[0..f.len]}),
+        .ok => |o| {
+            try writer.print("{{\"ok\":{s}}}\n", .{o});
+            out_gpa.free(o);
+        },
+        .fail => |f| {
+            try writer.print("{{\"fail\":\"{s}\"}}\n", .{f});
+            out_gpa.free(f);
+        },
     }
 }
 
@@ -295,6 +344,20 @@ pub fn forEachLine(
     comptime name: []const u8,
     perLine: anytype,
 ) !void {
+    try forEachValue(gpa, ex, name, struct {
+        fn call(a: std.mem.Allocator, v: std.json.Value, writer: anytype) !void {
+            try perLine(a, v.array.items, writer);
+        }
+    }.call);
+}
+
+/// The loop of `forEachLine`: `perValue` gets each parsed line.
+fn forEachValue(
+    gpa: std.mem.Allocator,
+    comptime ex: []const u8,
+    comptime name: []const u8,
+    perValue: anytype,
+) !void {
     const in_path = "tests/diff/" ++ ex ++ "/inputs/" ++ name ++ ".jsonl";
     const out_path = "tests/diff/out/zig/" ++ ex ++ "/" ++ name ++ ".jsonl";
 
@@ -309,6 +372,42 @@ pub fn forEachLine(
         if (line.len == 0) continue;
         var parsed = try std.json.parseFromSlice(std.json.Value, gpa, line, .{});
         defer parsed.deinit();
-        try perLine(gpa, parsed.value.array.items, writer);
+        try perValue(gpa, parsed.value, writer);
     }
+}
+
+
+/// `forEachLine` for a function that uses memory: each input line is
+/// `{"bufs":[[<byte>,…],…],"args":[…]}` (docs/generated-code.md §Differential test). `perLine`
+/// gets the buffers (16-byte aligned copies of the bytes) and the args.
+pub fn forEachMemLine(
+    gpa: std.mem.Allocator,
+    comptime ex: []const u8,
+    comptime name: []const u8,
+    perLine: anytype,
+) !void {
+    try forEachValue(gpa, ex, name, struct {
+        fn call(a: std.mem.Allocator, v: std.json.Value, writer: anytype) !void {
+            const bufsJ = v.object.get("bufs").?.array.items;
+            const bufs = try a.alloc(Buf, bufsJ.len);
+            defer a.free(bufs);
+            for (bufsJ, bufs) |bj, *b| {
+                b.* = try a.alignedAlloc(u8, comptime .fromByteUnits(16), bj.array.items.len);
+                for (bj.array.items, b.*) |x, *byte| byte.* = @intCast(x.integer);
+            }
+            defer for (bufs) |b| a.free(b);
+            try perLine(a, bufs, v.object.get("args").?.array.items, writer);
+        }
+    }.call);
+}
+
+/// A pointer argument: `{"buf":<index>,"off":<offset>}` into `bufs`, or `null` for an optional
+/// pointer type `P`.
+pub fn ptrArg(comptime P: type, bufs: []const Buf, v: std.json.Value) P {
+    if (v == .null) {
+        if (@typeInfo(P) != .optional) unreachable;
+        return null;
+    }
+    const b = bufs[@intCast(v.object.get("buf").?.integer)];
+    return @ptrCast(@alignCast(b.ptr + @as(usize, @intCast(v.object.get("off").?.integer))));
 }

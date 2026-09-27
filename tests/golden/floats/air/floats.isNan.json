@@ -1,5 +1,5 @@
 {
- "schema": 4,
+ "schema": 5,
  "zig_version": "0.15.2",
  "name": "floats.isNan",
  "params": [
@@ -52,13 +52,19 @@
  "types": [
   {
    "k": "float",
-   "bits": 64
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
-   "k": "bool"
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
-   "k": "void"
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
   },
   {
    "k": "noreturn"
