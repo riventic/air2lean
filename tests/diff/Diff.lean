@@ -575,7 +575,7 @@ def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
 def runSlices : IO Unit := do
   let ex := "slices"
   let m0 := Slices.mem0
-  let u32 (m : Zig.Mem) (v : BitVec 32) := let _ := m; natStr v false
+  let u32 (_ : Zig.Mem) (v : BitVec 32) := natStr v false
   let bytes (m : Zig.Mem) (s : Zig.Slice) := sliceStr m0.blocks.size m 1 s
   processMem ex m0 "reverse" (fun g a => return Slices.reverse (← sliceOf g a[0]!)) unitStr
   processMem ex m0 "fill" (fun g a => return Slices.fill (← sliceOf g a[0]!) (bv 8 (← getInt a[1]!))) unitStr

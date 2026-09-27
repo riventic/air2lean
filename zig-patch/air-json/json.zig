@@ -602,17 +602,22 @@ const W = struct {
                     try w.writeRef(Air.internedToRef(s.len));
                 },
                 .aggregate => |a| {
-                    // An array has its sentinel as the last element.
+                    // An array has its sentinel as the last element. A vector stays text.
                     const ty = Type.fromInterned(a.ty);
                     const is_array = ty.zigTypeTag(zcu) == .array;
-                    const len = if (is_array) ty.arrayLenIncludingSentinel(zcu) else ty.structFieldCount(zcu);
-                    try w.field("elems");
-                    try w.j.beginArray();
-                    for (0..@intCast(len)) |i| {
-                        const elem = if (is_array) try val.elemValue(w.pt, i) else try val.fieldValue(w.pt, i);
-                        try w.writeRef(Air.internedToRef(elem.toIntern()));
+                    if (is_array or ty.zigTypeTag(zcu) == .@"struct") {
+                        const len = if (is_array) ty.arrayLenIncludingSentinel(zcu) else ty.structFieldCount(zcu);
+                        try w.field("elems");
+                        try w.j.beginArray();
+                        for (0..@intCast(len)) |i| {
+                            const elem = if (is_array) try val.elemValue(w.pt, i) else try val.fieldValue(w.pt, i);
+                            try w.writeRef(Air.internedToRef(elem.toIntern()));
+                        }
+                        try w.j.endArray();
+                    } else {
+                        try w.field("val");
+                        try w.writeFmt(val.fmtValue(w.pt));
                     }
-                    try w.j.endArray();
                 },
                 else => if (val.isUndef(zcu)) {
                     try w.field("undef");

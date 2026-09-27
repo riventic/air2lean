@@ -1152,7 +1152,11 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
     (env, some s!"Zig.callM (Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'})")
   | .memcpy dst src =>
+    -- The item count of the operand that has one (the AIR checks that both agree).
+    let hasLen (v : Val) : Bool :=
+      fc.isSlice v || match fc.pointeeOf v with | .array .. => true | _ => false
     let (dptr, n) := fc.itemsOf dst (rv dst)
+    let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
     (env, some s!"Zig.callM (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
@@ -1440,20 +1444,23 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
 structure ProgGlobal where
   /-- What the block holds: a global's Zig name, `a constant`, or a tag name. -/
   label : String
-  /-- The initial value as a term, and its Lean type. -/
-  term : String
-  ty : String
+  /-- The initial bytes, a term of type `Array Zig.Byte`. -/
+  bytes : String
   align : Nat
 
-/-- The initial value of global `g` of `fc`'s function, as a term and its Lean type. An array with
-a sentinel is one item longer: the sentinel is its last item. -/
-def FCtx.globalInit (fc : FCtx) (g : Global) : String × String :=
-  let init := g.init.getD (.undef g.ty)
-  match fc.tyOfId g.ty, init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
-  | .array _ c, .agg _ elems, true =>
+/-- The bytes of `term : ty`. -/
+def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
+
+/-- The initial bytes of global `g` of `fc`'s function. An array with a sentinel is one item
+longer: the sentinel is its last item. `undefined` is undefined bytes. -/
+def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
+  let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
+  match fc.tyOfId g.ty, g.init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
+  | _, some (.undef _), _ | _, none, _ => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
+  | .array _ c, some (.agg _ elems), true =>
     let t := s!"Vector ({emitTy fc.structNames fc.types (fc.tyOfId c)}) {elems.size}"
-    (s!"(#v[{", ".intercalate (elems.map (fc.resolveVal #[])).toList}] : {t})", t)
-  | _, _, _ => (fc.resolveVal #[] init, emitTy fc.structNames fc.types (fc.tyOfId g.ty))
+    encodeTerm s!"#v[{", ".intercalate (elems.map (fc.resolveVal #[])).toList}]" t
+  | _, some init, _ => encodeTerm (fc.resolveVal #[] init) ty
 
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with
@@ -1469,54 +1476,44 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
     (f.name, f.globals.map fun g => (g.name.bind named.idxOf?).getD 0)
   -- A constant can point to a constant after it in `Func.globals` (the exporter adds them in the
   -- order it finds them), so the last one comes first.
-  let mut unnamed : Array (String × String) := #[]
+  let mut unnamed : Array (String × Nat) := #[]
   for (f, k) in funcs.zipIdx do
     for j in (List.range f.globals.size).reverse do
       let g := f.globals[j]!
       if g.name.isNone then
-        let (term, ty) := (mkFc f ids[k]!.2).globalInit g
-        let id := match unnamed.findIdx? (· == (term, ty)) with
+        let bytes := (mkFc f ids[k]!.2).globalBytes g
+        let id := match unnamed.findIdx? (·.1 == bytes) with
           | some u => named.size + u
           | none => named.size + unnamed.size
-        if id == named.size + unnamed.size then unnamed := unnamed.push (term, ty)
+        if id == named.size + unnamed.size then
+          unnamed := unnamed.push (bytes, (f.layouts[g.ty]?.bind (·.align)).getD 1)
         ids := ids.set! k (f.name, ids[k]!.2.set! j id)
   let mut out : Array ProgGlobal := #[]
   for n in named do
     let some (f, k) := funcs.zipIdx.find? fun (f, _) => f.globals.any (·.name == some n)
       | continue
     let some g := f.globals.find? (·.name == some n) | continue
-    let (term, ty) := (mkFc f ids[k]!.2).globalInit g
-    out := out.push { label := n, term, ty, align := (f.layouts[g.ty]?.bind (·.align)).getD 1 }
-  for (term, ty) in unnamed do
-    -- The alignment of the value's type: its items for an array.
-    out := out.push { label := "a constant", term, ty, align := 1 }
+    out := out.push { label := n, bytes := (mkFc f ids[k]!.2).globalBytes g,
+                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1 }
+  for (bytes, align) in unnamed do
+    out := out.push { label := "a constant", bytes, align }
   return (out, ids)
 
-/-- The alignment of each unnamed constant: the ABI alignment of its type. -/
-def fixUnnamedAlign (funcs : Array Func) (ids : Array (String × Array Nat)) (gs : Array ProgGlobal) :
-    Array ProgGlobal := Id.run do
-  let mut gs := gs
-  for f in funcs do
-    let some (_, fid) := ids.find? (·.1 == f.name) | continue
-    for (g, j) in f.globals.zipIdx do
-      if g.name.isNone then
-        let a := (f.layouts[g.ty]?.bind (·.align)).getD 1
-        gs := gs.modify fid[j]! fun pg => { pg with align := a }
-  return gs
-
-/-- The enums whose tag names a function reads (`@tagName`), as `(Zig name, Lean name, fields)`. -/
+/-- The enums whose tag names a function reads (`@tagName`), as `(Zig name, Lean name, fields,
+exhaustive, tag bits)`. -/
 def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
-    Array (String × String × Array (String × Int) × Bool) := Id.run do
+    Array (String × String × Array (String × Int) × Bool × Nat) := Id.run do
   let mut out := #[]
   for f in funcs do
     let insts := f.allInsts
     for i in insts do
       if let .tagName (.inst a) := i.op then
         let some ai := insts.find? (·.id == a) | continue
-        if let some (.enum name _ exhaustive fields) := f.types[ai.ty]? then
+        if let some (.enum name tag exhaustive fields) := f.types[ai.ty]? then
           if !out.any (·.1 == name) then
             let lean := (structNames.find? (·.1 == name)).map (·.2) |>.getD name
-            out := out.push (name, lean, fields, exhaustive)
+            let bits := match f.types[tag]? with | some (.int _ b) => b | _ => 0
+            out := out.push (name, lean, fields, exhaustive, bits)
   return out
 
 /-- The error names of the program (the names of its error sets), if a function reads one
@@ -1538,16 +1535,15 @@ def emitErrorNameOf (names : Array String) (first : Nat) : String :=
     (["def errorNameOf (e : Zig.ErrName) : Zig.Result Zig.Slice :="] ++ arms ++
       ["  throw .unspecified"])
 
-/-- The name bytes of `s` with a 0 sentinel, as a term and its type. -/
-def nameBytes (s : String) : String × String :=
+/-- The bytes of the name `s` with a 0 sentinel. -/
+def nameBytes (s : String) : String :=
   let bs := s.toUTF8.toList.map (s!"{·}")
-  let t := s!"Vector (BitVec 8) {bs.length + 1}"
-  (s!"(#v[{", ".intercalate (bs ++ ["0"])}] : {t})", t)
+  encodeTerm s!"#v[{", ".intercalate (bs ++ ["0"])}]" s!"Vector (BitVec 8) {bs.length + 1}"
 
 /-- `mem0`: the memory at program start, one block per global. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
   let lines := gs.toList.zipIdx.map fun (g, k) =>
-    s!"  -- {k}: {g.label}\n  (Zig.Enc.encode ({g.term} : {g.ty}), {g.align})"
+    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
   s!"/-- The memory at program start: block `k` is global `k`. -/\n\
     def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
@@ -1641,26 +1637,17 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
-  let globals := fixUnnamedAlign funcs ids globals
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
-    fun (gs, defs) (_, lean, fields, exhaustive) =>
-      let bits := match funcs.findSome? fun f => f.types.findSome? fun t => match t with
-          | .enum n tag .. => if (structNames.find? (·.1 == n)).map (·.2) == some lean then
-              (match f.types[tag]? with | some (.int _ b) => some b | _ => none) else none
-          | _ => none with
-        | some b => b
-        | none => 0
+    fun (gs, defs) (_, lean, fields, exhaustive, bits) =>
       let d := emitTagName lean fields exhaustive bits gs.size
       let gs := fields.foldl (fun gs (f, _) =>
-        let (term, ty) := nameBytes f
-        gs.push { label := s!"the name of {lean}.{f}", term, ty, align := 1 }) gs
+        gs.push { label := s!"the name of {lean}.{f}", bytes := nameBytes f, align := 1 }) gs
       (gs, defs.push d)
   let errNames := errorNames funcs
   let errDefs := if errNames.isEmpty then [] else [emitErrorNameOf errNames globals.size]
   let globals := errNames.foldl (fun gs n =>
-    let (term, ty) := nameBytes n
-    gs.push { label := s!"the name of error.{n}", term, ty, align := 1 }) globals
+    gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
