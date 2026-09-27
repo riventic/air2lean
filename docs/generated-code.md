@@ -137,7 +137,7 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   match e with ...
 ```
 
-`ZigLean/Mem/Lemmas.lean` (generated code does not import it) has the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`). It adds `Zig.callM` and `Zig.callR` to the `zig_unfold` simp set.
+`ZigLean/Sep/` (separation logic, [proofs.md](proofs.md)) and `ZigLean/Mem/Lemmas.lean` (generated code imports neither) have the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`). It adds `Zig.callM` and `Zig.callR` to the `zig_unfold` simp set.
 
 ## Signature
 

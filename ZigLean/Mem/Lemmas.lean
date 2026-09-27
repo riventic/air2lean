@@ -263,4 +263,16 @@ instance : LawfulEnc (BitVec 32) where
     simp only [Nat.shiftRight_eq_div_pow, BitVec.toNat_ofNat]
     omega
 
+instance : LawfulEnc (BitVec 8) where
+  size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
+  decode_encode v := by
+    have hr : Array.range 1 = #[0] := by decide
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
+      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    congr 2
+    apply BitVec.eq_of_toNat_eq
+    have := v.isLt
+    simp only [BitVec.toNat_ofNat]
+    omega
+
 end Zig

@@ -22,6 +22,7 @@
 | M15 | Enums (exhaustive and non-exhaustive) and tagged unions; places (a result built in `ret_ptr`, stores through field pointers of a local); JSON schema 4; `variants` example with proofs | done |
 | M16a | Byte-level memory (`ZigLean/Mem/`: blocks, `Zig.Enc`, `Error.illegal`); single pointers `*T`, `?*T`; escaping locals as stack blocks; pure/memory function split; JSON schema 5 (sizes, alignments, field offsets); diff test with input buffers; `pointers` example with proofs (`swap` incl. `swap(p, p)`) | done |
 | M16b | Slices `[]T`, many-pointers, sentinel pointers, arrays (`Vector`) in memory; `@memset`, `@memcpy`, `@memmove`; globals and string literals (`mem0`); `@tagName`, `@errorName`; `Zig.readSlice` for a pure callee; JSON schema 6 (pointer, slice and aggregate constants, globals table); `Canon.lean` item reads and always-true checks; `slices` example (20 functions, 6000 diff inputs) with proofs | done |
+| M17 | Separation logic (`ZigLean/Sep/`): heaps, `∗`, `pts`, `arr`, `Triple` with the frame rule; rules for load, store, `@memmove`, `@memset`, `alloc`, `free`, loops (`loop_sep_spec`); `docs/proofs.md`; proofs `swap` (also `swap(p, p)`), `reverse` (a loop invariant), `copyWithin` (overlapping ranges), `fill`, the global counter. A tactic that reorders `∗` is not done: the proofs reorder heaps with `Heap.union_assoc` and `Heap.union_left_comm` | done |
 
 Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches; a `Zig.memmove` that writes one byte too few gives 188 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion and a changed memory write.
 
@@ -31,7 +32,6 @@ v1: the rest of the language, one milestone per PR.
 
 | # | Milestone |
 |---|---|
-| M17 | Separation logic (`ZigLean/Sep/`), pointer proofs |
 | M18 | Allocators: a model of the `mem.Allocator` API with an allocation-failure oracle; `ArrayListUnmanaged` translated from std |
 | M19 | SIMD `@Vector` |
 | M20 | `@ptrCast`, `packed`/`extern` layout, function pointers; unions and error unions in memory (moved from M16b: their layout needs the tag and payload offsets) |
