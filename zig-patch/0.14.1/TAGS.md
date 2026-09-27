@@ -33,4 +33,6 @@ docker run --rm -v "$PWD":/w -w /w debian:bookworm-slim zig-patch/build.sh 0.14.
 
 The dumps of `basic`, `recursion`, `options`, `floatops`, `floats` and `errors` equal the shared goldens (`tests/golden/<ex>/air/`) apart from `zig_version`. Their translation equals the committed one, except `floatops` (`tests/golden/0.14.1/floatops/Gen.lean`: the f128 compiler_rt rules before 0.16.0, `docs/floats.md` §Per-version differences); CI checks this.
 
+`enums` differs in 2 files. `radius`: the generic panic member has another instance number (`inactiveUnionField__anon_375`; `panicErrorFor?` drops the suffix). `scale`: 0.14.1 stores a union field's payload first, then sets the tag; 0.15.2 and 0.16.0 set the tag first. The translation (`tests/golden/0.14.1/enums/Gen.lean`) differs only in that order and gives the same value (`docs/generated-code.md` §Enums and unions).
+
 `floatconv` differs in 3 files (`toI32`, `toU64`, `toByte`): 0.14.1 lowers `@intFromFloat` to the unchecked `int_from_float` and checks the range after it, so an out-of-range input is undefined before the check. It is not in the 0.14.1 CI job.

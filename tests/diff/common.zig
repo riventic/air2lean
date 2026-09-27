@@ -195,14 +195,12 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
         // An enum is its tag value; a union is `{"<active field>":<payload>}` (`null` for a
         // field without payload); a struct is `{"<field>":<value>,…}` in field order.
         .@"enum" => try writer.print("{d}", .{@intFromEnum(v)}),
-        .@"union" => |u| {
-            inline for (u.fields) |f| {
-                if (v == @field(std.meta.Tag(T), f.name)) {
-                    try writer.print("{{\"{s}\":", .{f.name});
-                    try renderPayload(f.type, writer, quote_wide, @field(v, f.name));
-                    try writer.writeAll("}");
-                }
-            }
+        .@"union" => switch (v) {
+            inline else => |payload, tag| {
+                try writer.print("{{\"{s}\":", .{@tagName(tag)});
+                try renderPayload(@TypeOf(payload), writer, quote_wide, payload);
+                try writer.writeAll("}");
+            },
         },
         .@"struct" => |st| {
             try writer.writeAll("{");

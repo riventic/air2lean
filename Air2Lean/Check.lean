@@ -18,14 +18,16 @@ structure CheckState where
   line : Nat
   places : Array InstId
 
-/-- The only pointer shapes in the subset: a pointer into a local (`one`; `checkPlace` rejects
-any other single pointer) or a read-only slice (`slice`, const). -/
-def ptrInSubset (size : String) (isConst : Bool) : Bool :=
-  size == "one" || (size == "slice" && isConst)
+/-- The only pointer shapes in the subset: a read-only slice (`slice`, const) anywhere, and a
+single pointer (`one`) only as the type of a place instruction (`place`; not in a parameter,
+the return type, or a child type). -/
+def ptrInSubset (size : String) (isConst : Bool) (place : Bool) : Bool :=
+  (size == "one" && place) || (size == "slice" && isConst)
 
 /-- Reject `other` types, an out-of-subset float width, and non-alloc/non-const-slice
 pointers, recursively through struct fields, array/optional children, and tuple fields. -/
-partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId) :
+partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId)
+    (place : Bool := false) :
     Except String Unit := do
   let some ty := types[id]?
     | throw s!"{fnName}: near line {line}: unknown type id {id}"
@@ -39,7 +41,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
       throw s!"{fnName}: near line {line}: float type of {bits} bits is outside the subset \
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
-    if ptrInSubset size isConst then checkTy fnName types line child
+    if ptrInSubset size isConst place then checkTy fnName types line child
     else
       throw s!"{fnName}: near line {line}: pointer type (size={size}, const={isConst}) is \
         outside the subset (only a pointer into a local or a read-only slice `[]const T`)"
@@ -56,9 +58,14 @@ partial def checkTy (fnName : String) (types : Array Ty) (line : Nat) (id : TyId
   | .struct _ _ fields => fields.forM fun (_, fty) => checkTy fnName types line fty
   | .enum _ tag _ _ => checkTy fnName types line tag
   | .union name layout tag fields =>
-    if tag.isNone then
+    match tag with
+    | none =>
       throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
         subset (only a tagged `union(enum)`)"
+    | some t =>
+      unless (match types[t]? with | some (.enum ..) => true | _ => false) do
+        throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
+      checkTy fnName types line t
     fields.forM fun (_, fty) => checkTy fnName types line fty
   | .tuple fields => fields.forM (checkTy fnName types line)
   | .int .. | .bool | .void | .noreturn => pure ()
@@ -72,7 +79,7 @@ def checkNotEscaping (fnName : String) (st : CheckState) (ctxId : InstId) (v : V
   | .inst vid =>
     if st.places.contains vid then
       throw s!"{fnName}: near line {st.line}: inst {ctxId} uses local {vid}'s address outside \
-        load/store/dbg"
+        a load, store, field pointer, `bitcast`, `set_union_tag`, `ret_load` or `dbg`"
     else pure ()
   | _ => pure ()
 
@@ -91,7 +98,11 @@ mutual
 
 partial def checkInst (fnName : String) (types : Array Ty) (st : CheckState) (inst : Inst) :
     Except String CheckState := do
-  checkTy fnName types st.line inst.ty
+  let place := match inst.op with
+    | .alloc | .fieldPtr .. => true
+    | .bitcast (.inst a) => st.places.contains a
+    | _ => false
+  checkTy fnName types st.line inst.ty place
   checkOp fnName types st inst.id inst.ty inst.op
 
 partial def checkOp (fnName : String) (types : Array Ty) (st : CheckState) (id : InstId)

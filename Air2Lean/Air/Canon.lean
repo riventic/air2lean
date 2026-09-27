@@ -70,16 +70,26 @@ def projection? (i : RawInst) : Option (String × Option Nat) :=
   | "slice_elem_ptr" => some ("slice_elem_val", none)
   | _ => none
 
-/-- For each instruction `i` of `body` (nested bodies included): the instructions after `i` in
-its own body, and everything nested in them. They run after `i` on every path that reaches
-them. -/
-partial def afterIds (body : Array RawInst) : Std.HashMap InstId (Std.HashSet InstId) :=
-  let nested (i : RawInst) : Array (Array RawInst) :=
-    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
-  (body.mapIdx fun k i => (k, i)).foldl (init := {}) fun m (k, i) =>
-    let later := (flatten (body.extract (k + 1) body.size)).foldl (fun s j => s.insert j.id) {}
-    (nested i).foldl (fun m b => (afterIds b).fold (fun m a s => m.insert a s) m)
-      (m.insert i.id later)
+/-- For each instruction (nested bodies included): its position as a chain of (body number,
+index in that body), from the function's own body (number 0) down to the body that holds it.
+Bodies are numbered in order. -/
+partial def positions (body : Array RawInst) : Std.HashMap InstId (Array (Nat × Nat)) :=
+  let rec go (body : Array RawInst) (bid : Nat) (chain : Array (Nat × Nat))
+      (st : Nat × Std.HashMap InstId (Array (Nat × Nat))) :
+      Nat × Std.HashMap InstId (Array (Nat × Nat)) :=
+    (body.mapIdx fun k i => (k, i)).foldl (init := st) fun (next, m) (k, i) =>
+      let c := chain.push (bid, k)
+      let nested := #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
+      nested.foldl (init := (next, m.insert i.id c)) fun (next, m) b =>
+        go b (next + 1) c (next + 1, m)
+  (go body 0 #[] (0, {})).2
+
+/-- `u` runs after `s` on every path that reaches `u` from `s`'s body: it is later in `s`'s body,
+or nested in an instruction that is. -/
+def runsAfter (pos : Std.HashMap InstId (Array (Nat × Nat))) (s u : InstId) : Bool :=
+  match (pos.getD s #[]).back? with
+  | some (b, k) => (pos.getD u #[]).any fun (b', k') => b' == b && k' > k
+  | none => false
 
 /-- `forwardReadOnlyCopies` (module doc). A copy is forwarded only if every use of every pointer
 derived from it is a `load`, another such projection, or a debug instruction; otherwise the
@@ -92,9 +102,9 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
       users := users.insert u ((users.getD u #[]).push i)
   let isConstPtr (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with | some (.ptr _ c _) => c | _ => false
-  let after := afterIds f.body
+  let pos := positions f.body
   -- Copies: an `alloc` whose uses are one `store` of a value into it, and `bitcast`s to a const
-  -- pointer after that store in the store's own body (`afterIds`). So the store runs before
+  -- pointer after that store in the store's own body (`runsAfter`). So the store runs before
   -- every read on every path, and the stored value (an SSA value) never changes.
   let mut copyVal : Std.HashMap InstId Val := {}
   for a in all do
@@ -106,9 +116,8 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     let rest := us.filter fun u => !(stores.any (·.id == u.id))
     if let #[s] := stores then
       if let some v := s.args[1]? then
-        let later := after.getD s.id {}
         if (match v with | .undef _ => false | _ => true) &&
-            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty && later.contains u.id) then
+            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty && runsAfter pos s.id u.id) then
           copyVal := copyVal.insert a.id v
   -- Read-only pointers: a `bitcast` of a copy, or a projection of one (or of a slice value).
   let mut ptrs : Std.HashSet InstId := {}

@@ -102,7 +102,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
 
-structure StructInfo where
+structure NamedType where
   zigName : String
   leanName : String
   ty : Ty
@@ -115,7 +115,7 @@ def namedLeanName (prefix_ : String) (zigName : String) : String :=
   let post := ").@\"union\".tag_type.?"
   if zigName.startsWith pre && zigName.endsWith post then
     let u := ((zigName.drop pre.length).dropEnd post.length).toString
-    mangleName prefix_ u ++ "Tag"
+    mangleName prefix_ (u ++ "Tag")
   else mangleName prefix_ zigName
 
 /-- The named types that `ty` refers to directly or through arrays, pointers, optionals, error
@@ -137,8 +137,8 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | _ => #[]
 
 /-- Every named type of `funcs`, each after the named types its fields use. -/
-def collectStructs (funcs : Array Func) (prefix_ : String) : Array StructInfo := Id.run do
-  let mut found : Array StructInfo := #[]
+def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id.run do
+  let mut found : Array NamedType := #[]
   for f in funcs do
     for ty in f.types do
       match ty with
@@ -147,9 +147,11 @@ def collectStructs (funcs : Array Func) (prefix_ : String) : Array StructInfo :=
           found := found.push { zigName := name, leanName := namedLeanName prefix_ name, ty,
                                 srcTypes := f.types }
       | _ => pure ()
-  -- Depth-first: a type after its dependencies. Zig types cannot contain themselves by value.
+  -- Depth-first: a type after its dependencies. Zig types cannot contain themselves by value,
+  -- and `Check.lean` rejects a pointer inside a type; `open` still keeps a cycle finite.
   let mut done : Array String := #[]
-  let mut order : Array StructInfo := #[]
+  let mut «open» : Array String := #[]
+  let mut order : Array NamedType := #[]
   let mut stack : List (String × Bool) := (found.toList.map (·.zigName, false)).reverse
   while !stack.isEmpty do
     match stack with
@@ -161,15 +163,16 @@ def collectStructs (funcs : Array Func) (prefix_ : String) : Array StructInfo :=
       if expanded then
         done := done.push n
         order := order.push info
-      else
+      else if !«open».contains n then
+        «open» := «open».push n
         stack := (namedDeps info.srcTypes info.ty).toList.map (·, false) ++ (n, true) :: stack
   return order
 
-/-- A tag value as a `BitVec` literal of the enum's tag type. -/
+/-- An integer as a `BitVec` literal (a constant, or an enum's tag value). -/
 def tagLit (bits : Nat) (v : Int) : String :=
   if v < 0 then s!"(-({(-v).toNat} : BitVec {bits}))" else s!"({v.toNat} : BitVec {bits})"
 
-def emitStruct (structNames : Array (String × String)) (s : StructInfo) : String :=
+def emitNamed (structNames : Array (String × String)) (s : NamedType) : String :=
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   match s.ty with
@@ -249,8 +252,8 @@ inductive FloatSemantics where
 field. -/
 inductive PathStep where
   | field (name : String)
-  /-- `union`: the union's Lean name; `void`: the field has no payload. -/
-  | ufield (union : String) (name : String) (void : Bool)
+  /-- `union`: the union's Lean name; `name`: the field's Zig name (`FCtx.unionField?`). -/
+  | ufield (union : String) (name : String)
   deriving Inhabited
 
 structure FCtx where
@@ -339,9 +342,7 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
 def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : String :=
   match v with
   | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD s!"(panic! \"air2lean: unbound inst {id}\")"
-  | .int tid n =>
-    let bits := fc.tyBits tid
-    if n < 0 then s!"(-({(-n).toNat} : BitVec {bits}))" else s!"({n.toNat} : BitVec {bits})"
+  | .int tid n => tagLit (fc.tyBits tid) n
   | .float tid bits =>
     let n := match fc.tyOfId tid with | .float b => b | _ => 0
     s!"(Zig.Float.ofBits ({bits} : BitVec {n}) : {fc.emitTyOf tid})"
@@ -396,36 +397,35 @@ def FCtx.structFieldNamesFor (_fc : FCtx) (ty : Ty) : Array String :=
   | .struct _ _ fields => fields.map (fun (n, _) => mangleField n)
   | _ => #[]
 
-/-- `v`'s type ID. -/
-def FCtx.valTyId (fc : FCtx) (v : Val) : TyId :=
-  match v with
-  | .inst id => fc.instTyId id
-  | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
-  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. => t
-  | _ => 0
+/-- The Lean type of `v`. -/
+def FCtx.emitValTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.valTy v)
 
-def FCtx.isEnumTy (_fc : FCtx) (t : Ty) : Bool := match t with | .enum .. => true | _ => false
+def isEnumTy (t : Ty) : Bool := match t with | .enum .. => true | _ => false
 
 /-- `@enumFromInt`, `@intFromEnum` (an `intcast` or `bitcast` with an enum on one side), and
 `@intCast` between integers. -/
 def FCtx.enumIntCast (fc : FCtx) (a : Val) (dstId : TyId) (av : String) : String :=
   let dst := fc.tyOfId dstId
   match fc.valTy a, dst with
+  | .enum _ tag _ _, .enum .. =>
+    s!"Zig.enumOf ({fc.emitTyOf dstId}.ofInt? (Zig.val {fc.tySigned tag} ({fc.emitValTy a}.toBits {av})))"
   | _, .enum .. =>
     -- An unnamed value of an exhaustive enum: `invalidEnumValue` (`.panic`).
     s!"Zig.enumOf ({fc.emitTyOf dstId}.ofInt? (Zig.val {fc.valSigned a} {av}))"
   | .enum _ tag _ _, _ =>
-    let bits := s!"({fc.emitTyOf (fc.valTyId a)}.toBits {av})"
+    let bits := s!"({fc.emitValTy a}.toBits {av})"
     if fc.tyOfId tag == dst then s!"pure {bits}"
     else s!"Zig.intCast {fc.tySigned tag} {fc.tySigned dstId} {fc.tyBits dstId} {bits}"
   | _, _ => s!"Zig.intCast {fc.valSigned a} {fc.tySigned dstId} {fc.tyBits dstId} {av}"
 
-/-- The Lean name of a union type, and its field `idx`: name and whether it has no payload. -/
+/-- The Lean name of a union type, and its field `idx`: the Zig name (in accessor names
+`get_f`, `modify_f`, `setTag_f`; `mangleField` for the constructor) and whether it has no
+payload. -/
 def FCtx.unionField? (fc : FCtx) (uty : Ty) (idx : Nat) : Option (String × String × Bool) :=
   match uty with
   | .union name _ _ fields =>
     let u := (fc.structNames.find? (·.1 == name)).map (·.2) |>.getD name
-    (fields[idx]?).map fun (f, fty) => (u, mangleField f, fc.tyOfId fty == .void)
+    (fields[idx]?).map fun (f, fty) => (u, f, fc.tyOfId fty == .void)
   | _ => none
 
 /-- The field of union type `uty` whose tag has the value of the enum constant `tag`. -/
@@ -464,7 +464,7 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             PathStep.field ((fields[idx]?).map (mangleField ·.1) |>.getD s!"fld{idx}")
           | .union .. =>
             match fc.unionField? base idx with
-            | some (u, f, v) => .ufield u f v
+            | some (u, f, _) => .ufield u f
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
         acc.push (i.id, root, path.push step)
@@ -492,7 +492,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
     path.foldl (init := s!"(← get).{field}") fun e step =>
       match step with
       | .field f => s!"({e}).{f}"
-      | .ufield u f _ => s!"(← Zig.call ({u}.get_{f} {e}))"
+      | .ufield u f => s!"(← Zig.call ({u}.get_{f} {e}))"
   | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
@@ -500,7 +500,7 @@ def setPath (path : List PathStep) (new : String → String) (base : String) : S
   match path with
   | [] => new base
   | .field f :: rest => s!"\{ {base} with {f} := {setPath rest new s!"({base}).{f}"} }"
-  | .ufield u f _ :: rest =>
+  | .ufield u f :: rest =>
     let inner := setPath rest new "x"
     let x := if inner == setPath rest new "y" then "_" else "x"
     s!"({u}.modify_{f} (fun {x} => {inner}) {base})"
@@ -828,7 +828,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .bitcast a =>
     if fc.isPlace a then (env, none) else
-    if fc.isEnumTy (fc.valTy a) || fc.isEnumTy (fc.tyOfId inst.ty) then
+    if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
     let srcFloat := fc.isFloat a
@@ -887,15 +887,15 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let ety := fc.emitTyOf inst.ty
     let (env, l) := bindLet fc env inst.id s!"pure ((.error {rv a}) : {ety})"; (env, some l)
   | .isNamedEnum a =>
-    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitTyOf (fc.valTyId a)}.isNamed {rv a})"
+    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.isNamed {rv a})"
     (env, some l)
   | .unionTag a =>
-    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitTyOf (fc.valTyId a)}.tag {rv a})"
+    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.tag {rv a})"
     (env, some l)
   | .unionInit idx a =>
     let expr := match fc.unionField? (fc.tyOfId inst.ty) idx with
-      | some (u, f, true) => s!"pure {u}.{f}"
-      | some (u, f, false) => s!"pure ({u}.{f} {rv a})"
+      | some (u, f, true) => s!"pure {u}.{mangleField f}"
+      | some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
       | none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .alloc | .fieldPtr .. => (env, none)
@@ -998,7 +998,10 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     match fc.tyOfId fc.retTy with
     | .void => "pure .ret"
     | _ => s!"pure (.ret {rv v})"
-  | .retLoad ptr => s!"pure (.ret {fc.loadPlace ptr})"
+  | .retLoad ptr =>
+    match fc.tyOfId fc.retTy with
+    | .void => "pure .ret"
+    | _ => s!"pure (.ret {fc.loadPlace ptr})"
   | .unreach => "throw .unreachable"
   | .trap => "throw .panic"
   | .condBr c thenBody elseBody =>
@@ -1199,10 +1202,10 @@ stripped from every Zig name (function or struct) before mangling. `floatSemanti
 `--float-semantics` (default `ieee`). -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) : String :=
-  let structs := collectStructs funcs prefix_
+  let structs := collectNamed funcs prefix_
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
-  let structsStr := (structs.map (emitStruct structNames)).toList
+  let structsStr := (structs.map (emitNamed structNames)).toList
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f => emitOneFunction f structNames funcNames floatSemantics
     if recursive then
