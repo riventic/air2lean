@@ -23,7 +23,7 @@
    "id": 2,
    "tag": "assembly",
    "ty": 0,
-   "source": "bswap %[x]",
+   "source": "bswap %[ret]",
    "volatile": false,
    "clobbers": [],
    "outputs": [
@@ -34,7 +34,7 @@
    ],
    "inputs": [
     {
-     "constraint": "r",
+     "constraint": "0",
      "name": "x",
      "ref": {
       "inst": 0

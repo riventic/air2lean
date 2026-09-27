@@ -13,9 +13,9 @@ opaque it needs, then derives a property of the generated wrapper from that fact
 open Asm
 
 /-- `bswap` is its own inverse on real x86_64 hardware. Stated as a hypothesis about the opaque
-`airAsm_3750515349` (never assumed for free): applying `bswap32` twice returns the input. -/
+`airAsm_3500345798` (never assumed for free): applying `bswap32` twice returns the input. -/
 theorem bswap32_involutive
-    (hinv : ∀ x : BitVec 32, airAsm_3750515349 (airAsm_3750515349 x) = x) (x : BitVec 32) :
+    (hinv : ∀ x : BitVec 32, airAsm_3500345798 (airAsm_3500345798 x) = x) (x : BitVec 32) :
     (do let y ← bswap32 x; bswap32 y) = pure x := by
   unfold bswap32
   simp [zig_unfold, hinv]

@@ -15,9 +15,9 @@
 const std = @import("std");
 
 pub fn bswap32(x: u32) u32 {
-    return asm ("bswap %[x]"
+    return asm ("bswap %[ret]"
         : [ret] "=r" (-> u32),
-        : [x] "r" (x),
+        : [x] "0" (x),
     );
 }
 

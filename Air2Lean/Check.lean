@@ -13,9 +13,11 @@ uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nea
 line.
 
 An `assembly` instruction (M21) is accepted only when every operand is a register constraint
-(`=r`, `r`, `{reg}`, `={reg}`), there is no `"memory"` clobber, and at most one output is
-present and it is the asm expression's own result (`ref = none`) — anything else (a memory
-operand, a named/read-write output, a `"memory"` clobber) is outside the subset.
+(`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint tying it to the sole
+output register (`0`; valid only because at most one output is ever allowed here), there is no
+`"memory"` clobber, and at most one output is present and it is the asm expression's own result
+(`ref = none`) — anything else (a memory operand, a named/read-write output, a `"memory"`
+clobber) is outside the subset.
 -/
 
 namespace Air2Lean
@@ -25,6 +27,12 @@ named register in braces — either alone or with a leading `=` (write-only) mar
 def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=" then c.drop 1 else c
   body == "r" || (body.startsWith "{" && body.endsWith "}" && body.length > 2)
+
+/-- Is `c` a matching constraint on an input, tying it to output operand `0` — the register a
+register-modify-in-place instruction (`bswap`) both reads and writes? Always `0`: `checkInst`
+already rejects more than one output, so `0` is the only output index that can ever exist. -/
+def isMatchingConstraint (c : String) : Bool :=
+  c == "0"
 
 /-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
 `allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
@@ -298,9 +306,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if !isIntTy ty then
         throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
     for i in inputs do
-      if !isRegisterConstraint i.constraint then
+      if !(isRegisterConstraint i.constraint ||
+          (outputs.size == 1 && isMatchingConstraint i.constraint)) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
-          register constraint (M21)"
+          register or matching constraint (M21)"
       let some r := i.ref
         | cx.fail line s!"asm input '{i.name}' has no operand (malformed input in the AIR file)"
       let some rty := cx.valTy? r

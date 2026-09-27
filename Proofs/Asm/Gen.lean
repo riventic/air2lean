@@ -3,7 +3,7 @@ import ZigLean
 
 namespace Asm
 
-opaque airAsm_3750515349 (i0 : BitVec 32) : BitVec 32
+opaque airAsm_3500345798 (i0 : BitVec 32) : BitVec 32
 
 opaque airAsm_3884223243 (i0 : BitVec 64) : BitVec 64
 
@@ -17,7 +17,7 @@ inductive bswap32Exit where
 
 def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (airAsm_3750515349 p0)
+    let i1 ← pure (airAsm_3500345798 p0)
     pure (.ret i1)) : Zig.M bswap32Locals bswap32Exit).run' (default : bswap32Locals)
   match e with
   | .ret v => pure v

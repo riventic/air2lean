@@ -71,7 +71,7 @@ f80/f128 hi/lo split. -/
 @[extern "air2lean_asm_popcnt64"] private opaque asmPopcnt64 : UInt64 → UInt64
 @[extern "air2lean_asm_lzcnt64"] private opaque asmLzcnt64 : UInt64 → UInt64
 
-private def airAsm_3750515349_impl (x : BitVec 32) : BitVec 32 :=
+private def airAsm_3500345798_impl (x : BitVec 32) : BitVec 32 :=
   (asmBswap32 (.ofBitVec x)).toBitVec
 
 private def airAsm_3884223243_impl (x : BitVec 64) : BitVec 64 :=
@@ -80,7 +80,7 @@ private def airAsm_3884223243_impl (x : BitVec 64) : BitVec 64 :=
 private def airAsm_4040357768_impl (x : BitVec 64) : BitVec 64 :=
   (asmPopcnt64 (.ofBitVec x)).toBitVec
 
-@[csimp] theorem airAsm_3750515349_eq : @Asm.airAsm_3750515349 = @airAsm_3750515349_impl := sorry
+@[csimp] theorem airAsm_3500345798_eq : @Asm.airAsm_3500345798 = @airAsm_3500345798_impl := sorry
 @[csimp] theorem airAsm_3884223243_eq : @Asm.airAsm_3884223243 = @airAsm_3884223243_impl := sorry
 @[csimp] theorem airAsm_4040357768_eq : @Asm.airAsm_4040357768 = @airAsm_4040357768_impl := sorry
 
@@ -700,7 +700,7 @@ def runBswap32 : IO Unit :=
   processFile "asm" "bswap32" fun j => do
     let items ← getArr j
     let x ← getInt items[0]!
-    pure (render (pure (Asm.airAsm_3750515349 (bv 32 x)) : Zig.Result (BitVec 32)) false)
+    pure (render (pure (Asm.airAsm_3500345798 (bv 32 x)) : Zig.Result (BitVec 32)) false)
 
 def runPopcnt64 : IO Unit :=
   processFile "asm" "popcnt64" fun j => do
