@@ -323,7 +323,8 @@ private def divtf3Subnormal (a b : Float .f128) : Option (Float .f128) := Id.run
   -- not checked and keeps the low 7 bits. A deep underflow then shifts by less than it should.
   let shift := (1 - written).toNat % 128
   if shift > 112 then return some (Float.ofBits (BitVec.ofNat 128 sign))
-  let rounded := (quotient + roundUp) % (2 * implicit)
+  -- `quotient +% @as(u113, …)`: the add is in `u128`, so a carry to `2^113` is kept.
+  let rounded := (quotient + roundUp) % m128
   return some (Float.ofBits (BitVec.ofNat 128 (((rounded >>> shift) &&& mask) ||| sign)))
 
 /-- `@divExact`/`/` in `compiler-rt` mode on Zig 0.16.0 (`divtf3.zig` above for `f128`). -/
