@@ -55,10 +55,10 @@ theorem sep_assoc {P Q R : Assn} {h : Heap} : ((P ∗ Q) ∗ R) h → (P ∗ (Q 
     h₂, h₃, hd₂₃, rfl, hq, hr⟩
 
 theorem sep_assoc' {P Q R : Assn} {h : Heap} : (P ∗ (Q ∗ R)) h → ((P ∗ Q) ∗ R) h := by
-  intro h'
-  have := sep_comm (sep_assoc (sep_comm (sep_assoc (sep_comm h'))))
-  -- (Q ∗ R) ∗ P → ... : rotate twice more
-  exact sep_comm (sep_assoc (sep_comm (sep_assoc (sep_comm (sep_assoc this)))))
+  rintro ⟨h₁, h₂₃, hd, rfl, hp, ⟨h₂, h₃, hd', rfl, hq, hr⟩⟩
+  obtain ⟨hd₁₂, hd₁₃⟩ := Heap.disjoint_union_right.mp hd
+  exact ⟨h₁ ∪ h₂, h₃, Heap.disjoint_union_left.mpr ⟨hd₁₃, hd'⟩, (Heap.union_assoc _ _ _).symm,
+    ⟨h₁, h₂, hd₁₂, rfl, hp, hq⟩, hr⟩
 
 theorem sep_mono {P P' Q Q' : Assn} {h : Heap} (hp : ∀ h, P h → P' h) (hq : ∀ h, Q h → Q' h) :
     (P ∗ Q) h → (P' ∗ Q') h := by

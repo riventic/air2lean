@@ -40,7 +40,6 @@ theorem swap_self_sep (p : Ptr) (x : BitVec 32) :
   intro m h hF hd hm hp
   have lx := pts_load_run hp hm (by decide)
   obtain ⟨m₁, s₁, h₁, hd₁, hm₁, hp₁⟩ := pts_store_run hp hm hd (by decide) x
-  have lx' := pts_load_run hp₁ hm₁ (by decide)
   obtain ⟨m₂, s₂, h₂, hd₂, hm₂, hp₂⟩ := pts_store_run hp₁ hm₁ hd₁ (by decide) x
   refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, hp₂⟩
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at lx s₁ s₂
