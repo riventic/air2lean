@@ -21,8 +21,9 @@
 | M14 | Zig 0.16.0 (default): one shared exporter (`Compat`), shared goldens and translation (`Canon.lean`), per-version float semantics (f128 `sqrt`, f128 `/` in `compiler-rt` mode), CI job | done |
 | M15 | Enums (exhaustive and non-exhaustive) and tagged unions; places (a result built in `ret_ptr`, stores through field pointers of a local); JSON schema 4; `variants` example with proofs | done |
 | M16a | Byte-level memory (`ZigLean/Mem/`: blocks, `Zig.Enc`, `Error.illegal`); single pointers `*T`, `?*T`; escaping locals as stack blocks; pure/memory function split; JSON schema 5 (sizes, alignments, field offsets); diff test with input buffers; `pointers` example with proofs (`swap` incl. `swap(p, p)`) | done |
+| M16b | Slices `[]T`, many-pointers, sentinel pointers, arrays (`Vector`) in memory; `@memset`, `@memcpy`, `@memmove`; globals and string literals (`mem0`); `@tagName`, `@errorName`; `Zig.readSlice` for a pure callee; JSON schema 6 (pointer, slice and aggregate constants, globals table); `Canon.lean` item reads and always-true checks; `slices` example (20 functions, 6000 diff inputs) with proofs | done |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion and a changed memory write.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches; a `Zig.memmove` that writes one byte too few gives 188 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion and a changed memory write.
 
 ## Next
 
@@ -30,11 +31,10 @@ v1: the rest of the language, one milestone per PR.
 
 | # | Milestone |
 |---|---|
-| M16b | Mutable slices, `@memcpy`/`@memset`, globals, string literals, bare/`extern` unions |
 | M17 | Separation logic (`ZigLean/Sep/`), pointer proofs |
 | M18 | Allocators: a model of the `mem.Allocator` API with an allocation-failure oracle; `ArrayListUnmanaged` translated from std |
 | M19 | SIMD `@Vector` |
-| M20 | `@ptrCast`, `packed`/`extern` layout, function pointers |
+| M20 | `@ptrCast`, `packed`/`extern` layout, function pointers; unions and error unions in memory (moved from M16b: their layout needs the tag and payload offsets) |
 | M21 | Inline asm with register operands only, as opaque functions |
 | M22 | Atomics, fork-join threads with a data-race check |
 | M23 | Upstream the AIR export; v1.0.0 |
@@ -80,7 +80,7 @@ Support matrix:
 |---|---|
 | 0.16.0 | supported, default |
 | 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
+| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.
@@ -95,15 +95,17 @@ Support matrix:
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
-| checked, wrapping, saturating arithmetic | mutable slices, many-pointers, globals, string literals (M16b) |
+| checked, wrapping, saturating arithmetic | |
 | `if`, `switch`, `while`, `for` | allocators, heap |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | `@ptrCast`, packed layout |
 | read-only slices `[]const T` in a pure function | inline asm, threads, atomics |
 | structs by value | SIMD vectors, `async` |
-| calls, recursion | arrays, unions and error unions in memory (M16b) |
+| calls, recursion | unions and error unions in memory (M20) |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | unions without a tag |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
-| single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | |
+| single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |
+| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove` | an array with a sentinel as one value in memory |
+| globals (`var`, `const`), string literals, `@tagName`, `@errorName` | |
 
 ## Risks
 

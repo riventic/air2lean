@@ -41,7 +41,7 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
-/-- The memory facts of one type (`docs/air-json.md` schema 5), in a table parallel to the
+/-- The memory facts of one type (`docs/air-json.md` schema 6), in a table parallel to the
 types. `none` where the exporter did not know the layout. -/
 structure Layout where
   size : Option Nat := none
@@ -51,6 +51,8 @@ structure Layout where
   offsets : Array Nat := #[]
   /-- A pointer type's `align(N)` (explicit, or the child's ABI alignment). -/
   ptrAlign : Option Nat := none
+  /-- An array `[N:s]T`, or a pointer `[*:s]T` or `[:s]T`, with a sentinel. -/
+  sentinel : Bool := false
   isVolatile : Bool := false
   allowzero : Bool := false
   /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
@@ -85,7 +87,26 @@ inductive Val where
   | enumTag (ty : TyId) (v : Int)
   /-- A union constant: the active field's index and its payload. `ty`'s `k` is `union`. -/
   | unionVal (ty : TyId) (field : Nat) (payload : Val)
+  /-- An array, struct or tuple constant: its items or fields. An array with a sentinel has the
+  sentinel as the last item. -/
+  | agg (ty : TyId) (elems : Array Val)
+  /-- A pointer constant: byte `off` of the global with index `global` in `Func.globals`. -/
+  | ptrConst (ty : TyId) (global : Nat) (off : Nat)
+  /-- A pointer constant without a global (`@ptrFromInt`, a comptime-only value): `kind` names
+  its base. `Check.lean` rejects it. -/
+  | ptrOther (ty : TyId) (kind : String)
+  /-- A slice constant. -/
+  | sliceConst (ty : TyId) (ptr : Val) (len : Val)
   deriving Repr, Inhabited, BEq
+
+/-- The type of a constant; `none` for an instruction, `func` and the constants without a type
+field. -/
+def Val.constTy? (v : Val) : Option TyId :=
+  match v with
+  | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
+  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrOther t _
+  | .sliceConst t .. => some t
+  | _ => none
 
 /-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
 `debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`,
@@ -102,7 +123,9 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "reachedUnreachable" => some ".unreachable"
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
-  | some "corruptSwitch" | some "call" => some ".panic"
+  | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
+  | some "memcpyAlias" => some ".panic"
+  | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
@@ -230,6 +253,32 @@ inductive Op where
   | store (ptr : Val) (v : Val)
   | sliceLen (s : Val)
   | sliceElemVal (s : Val) (i : Val)
+  /-- `ptr_add` (`sub = false`) / `ptr_sub`: the pointer `n` items after / before `p`. -/
+  | ptrAdd (sub : Bool) (p n : Val)
+  /-- `ptr_elem_ptr`, `slice_elem_ptr`: the pointer to item `i` of the many-pointer, array pointer
+  or slice `p`. -/
+  | elemPtr (p i : Val)
+  /-- `ptr_elem_val`: item `i` of the many-pointer or array pointer `p`. -/
+  | ptrElemVal (p i : Val)
+  /-- `array_elem_val`: item `i` of the array value `a`. -/
+  | arrayElemVal (a i : Val)
+  /-- `slice`: the slice with item pointer `p` and length `len`. -/
+  | slice (p len : Val)
+  /-- `slice_ptr`: the item pointer of the slice `s`. -/
+  | slicePtr (s : Val)
+  /-- `array_to_slice`: the slice of all items of the array that `p` points to. -/
+  | arrayToSlice (p : Val)
+  /-- `ptr_slice_len_ptr` (`len = true`) / `ptr_slice_ptr_ptr`: the pointer to the length / item
+  pointer of the slice at `p`. -/
+  | sliceFieldPtr (len : Bool) (p : Val)
+  /-- `memset`, `memset_safe`: each item of the slice or array pointer `dst` becomes `v`. -/
+  | memset (dst v : Val)
+  /-- `memcpy`, `memmove`: copy the items of `src` to the slice or array pointer `dst`. -/
+  | memcpy (dst src : Val)
+  /-- `tag_name`: the name of the enum value `a`, a `[:0]const u8`. -/
+  | tagName (a : Val)
+  /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/
+  | errorName (a : Val)
   | structFieldVal (s : Val) (index : Nat)
   | aggregateInit (elems : Array Val)
   | call (callee : Val) (args : Array Val)
@@ -262,6 +311,18 @@ structure Inst where
 
 end
 
+/-- A global that a pointer constant points into: a container-level `var` or `const` (`name`),
+or an unnamed constant such as a string literal. -/
+structure Global where
+  name : Option String
+  ty : TyId
+  isConst : Bool
+  threadlocal : Bool
+  isExtern : Bool
+  /-- `none`: the exporter did not have the initial value (`docs/air-json.md`). -/
+  init : Option Val
+  deriving Repr, Inhabited
+
 structure Func where
   zigVersion : String
   name : String
@@ -271,5 +332,6 @@ structure Func where
   types : Array Ty
   /-- `layouts[i]` is the layout of `types[i]`. -/
   layouts : Array Layout
+  globals : Array Global
 
 end Air2Lean

@@ -64,6 +64,7 @@ structure RawFunc where
   body : Array RawInst
   types : Array Ty
   layouts : Array Layout
+  globals : Array Global
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -160,8 +161,8 @@ def parseTy (j : Json) : Except String Ty := do
       return .errorSet (some errs)
   | other => throw s!"unknown type kind: {other}"
 
-/-- The memory facts of a type entry (schema 5): `abi_size`, `abi_align`, the fields' `offset`,
-and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`. -/
+/-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
+`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`. -/
 def parseLayout (j : Json) : Except String Layout := do
   let nat? (k : String) : Except String (Option Nat) :=
     match optField j k with
@@ -177,7 +178,8 @@ def parseLayout (j : Json) : Except String Layout := do
       | none => pure none
     | _ => pure #[]
   return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
-           ptrAlign := ← nat? "ptr_align", isVolatile := ← bool "volatile",
+           ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel",
+           isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize := (← nat? "host_size").getD 0 }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
@@ -269,6 +271,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
           | throw s!"{fnName}: union constant: no field {fname}"
         return .unionVal tyId idx (← parseVal fnName types uvalJ)
       | other => throw s!"{fnName}: 'uval' constant of unexpected type {repr other}"
+    else if let some elemsJ := optField j "elems" then
+      return .agg tyId (← (← elemsJ.getArr?).mapM (parseVal fnName types))
+    else if let some ptrJ := optField j "ptr" then
+      if let some k := optField ptrJ "unsupported" then
+        return .ptrOther tyId (← k.getStr?)
+      return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
+    else if let some pJ := optField j "slice_ptr" then
+      return .sliceConst tyId (← parseVal fnName types pJ)
+        (← parseVal fnName types (← j.getObjVal? "slice_len"))
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?
       match ty with
@@ -345,6 +356,21 @@ partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except S
 
 end
 
+/-- One entry of the `globals` table (`docs/air-json.md`). -/
+def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String Global := do
+  let bool (k : String) : Except String Bool :=
+    match optField j k with
+    | some v => v.getBool?
+    | none => pure false
+  let name ← match optField j "name" with
+    | some n => some <$> n.getStr?
+    | none => pure none
+  let init ← match optField j "init" with
+    | some v => some <$> parseVal fnName types v
+    | none => pure none
+  return { name, ty := ← (← j.getObjVal? "ty").getNat?, isConst := ← bool "const",
+           threadlocal := ← bool "threadlocal", isExtern := ← bool "extern", init }
+
 def parseFunc (j : Json) : Except String RawFunc := do
   let name ← (← j.getObjVal? "name").getStr?
   let schema ← (← j.getObjVal? "schema").getNat?
@@ -357,7 +383,11 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
-  return { schema, zigVersion, name, params, ret, body, types, layouts }
+  let globalsJ ← match optField j "globals" with
+    | some g => g.getArr?
+    | none => pure #[]
+  let globals ← globalsJ.mapM (parseGlobal name types)
+  return { schema, zigVersion, name, params, ret, body, types, layouts, globals }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do

@@ -107,6 +107,34 @@ instance {α : Type} [Enc α] : Enc (Option α) where
     | some (.int _) => throw .illegal
     | _ => throw .unspecified
 
+/-- A slice: the pointer at offset 0, the length at offset 8. -/
+instance : Enc Slice where
+  size := 16
+  align := 8
+  encode s := Enc.encode s.ptr ++ Enc.encode s.len
+  decode bs := do
+    pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩
+
+/-- `?[]T`: `null` is a pointer with address 0; the length bytes are undefined. -/
+instance (priority := high) : Enc (Option Slice) where
+  size := 16
+  align := 8
+  encode
+    | none => Array.replicate 8 (.int 0) ++ Array.replicate 8 .undef
+    | some s => Enc.encode s
+  decode bs :=
+    if bs.extract 0 8 == Array.replicate 8 (.int 0) then pure none else some <$> Enc.decode bs
+
+/-- `[n]T`: the items one after the other, each `Enc.size α` bytes. -/
+instance {α : Type} {n : Nat} [Enc α] : Enc (Vector α n) where
+  size := n * Enc.size α
+  align := Enc.align α
+  encode v := (v.toArray.map Enc.encode).flatten
+  decode bs := do
+    let xs ← (Array.range n).mapM fun i =>
+      (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
+    if h : xs.size = n then pure ⟨xs, h⟩ else throw .unspecified
+
 /-! ## Structs: helpers for the generated instances -/
 
 /-- `size` bytes: each part at its offset, the rest (padding) undefined. -/

@@ -61,12 +61,15 @@ for ex in $examples; do
   fi
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir) ==" >&2
-  # Each file names the Zig version that wrote it; compare everything else.
+  # Each file names the Zig version that wrote it; compare everything else. The number of a
+  # generic std instance (`sentinelMismatch__anon_5800`) depends on how much std code the
+  # compiler analyses, which differs by host OS in 0.16.0; the translator ignores it
+  # (`panicErrorFor?`), so the comparison ignores it too.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   for f in "$golden_dir"/*.json "$version_dir"/*.json; do
-    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" >"$cmp_dir/golden/${f##*/}"; fi
+    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/golden/${f##*/}"; fi
   done
-  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" >"$cmp_dir/new/${f##*/}"; done
+  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/new/${f##*/}"; done
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
     echo "error: AIR output for $ex does not match its golden files" >&2

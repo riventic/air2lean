@@ -5,14 +5,15 @@ import Air2Lean.Air.Op
 
 Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
 
-* A **place** is an `alloc` (a `var`, or `ret_ptr`), a field pointer of a place, or a `bitcast`
-  of a place. A place whose `alloc` does not escape stays a `Locals` field.
+* A **place** is an `alloc` (a `var`, or `ret_ptr`), a field pointer of a place (a struct
+  field, or the length or item pointer of a slice), or a `bitcast` of a place. A place whose `alloc` does not escape stays a `Locals` field.
 * An `alloc` **escapes** if one of its places is used other than as the pointer operand of
-  `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, or in `dbg`. An
-  escaping `alloc` is a stack block in memory.
+  `load`, `store`, `struct_field_ptr`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr`, `bitcast`,
+  `set_union_tag`, `ret_load`, or in `dbg`. An escaping `alloc` is a stack block in memory.
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
-  `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, and it calls
-  only pure functions. Every other function **uses memory**.
+  `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
+  pointer constant and no memory op (`memoryOp`), and it calls only pure functions. Every other
+  function **uses memory**.
 -/
 
 namespace Air2Lean
@@ -43,7 +44,7 @@ def placeRoots (insts : Array Inst) : Array (InstId × InstId) :=
       | _ => none
     match i.op with
     | .alloc => acc.push (i.id, i.id)
-    | .fieldPtr b _ | .bitcast b => match root? b with
+    | .fieldPtr b _ | .bitcast b | .sliceFieldPtr _ b => match root? b with
       | some r => acc.push (i.id, r)
       | none => acc
     | _ => acc
@@ -62,7 +63,10 @@ def valueOperands (op : Op) : Array Val :=
   -- A place has no optional-payload path: the local becomes a stack block.
   | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
   | .mulAdd a b c => #[a, b, c]
-  | .bitcast _ | .fieldPtr .. | .load _ | .retLoad _ => #[]
+  | .bitcast _ | .fieldPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
+  | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
+  | .memset a b | .memcpy a b => #[a, b]
+  | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
   | .setUnionTag _ tag => #[tag]
   | .store _ v => #[v]
   | .sliceLen s => #[s]
@@ -107,9 +111,28 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
   | some (.ptr "slice" true c) => !hasPtr types c
   | _ => !hasPtr types id
 
+/-- An op that only a function that uses memory has. -/
+def memoryOp (op : Op) : Bool :=
+  match op with
+  | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
+  | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
+  | _ => false
+
+/-- A constant that points into memory. -/
+partial def Val.pointsToMem (v : Val) : Bool :=
+  match v with
+  | .ptrConst .. | .ptrOther .. | .sliceConst .. => true
+  | .agg _ elems => elems.any Val.pointsToMem
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
+  | _ => false
+
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
-  !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty
+  !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
+    f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+      match i.op with
+      | .load p | .store p _ | .fieldPtr p _ | .retLoad p => p.pointsToMem
+      | _ => false
 
 def Func.callees (f : Func) : Array String :=
   f.allInsts.filterMap fun i => match i.op with

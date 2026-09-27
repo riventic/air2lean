@@ -29,6 +29,18 @@ structure Ptr where
 /-- The pointer `n` bytes after `p` (`struct_field_ptr`). -/
 @[inline] def Ptr.add (p : Ptr) (n : Int) : Ptr := { p with off := p.off + n }
 
+/-- The pointer to item `i` after `p`, for items of `size` bytes (`ptr_add`, `ptr_elem_ptr`). -/
+@[inline] def Ptr.elem (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (size * i.toNat)
+
+/-- The pointer to item `i` before `p` (`ptr_sub`). -/
+@[inline] def Ptr.elemSub (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (-(size * i.toNat))
+
+/-- A slice `[]T`: the pointer to item 0, and the item count. -/
+structure Slice where
+  ptr : Ptr
+  len : BitVec 64
+  deriving DecidableEq, Repr, Inhabited
+
 inductive Byte where
   | undef
   | int (b : BitVec 8)
@@ -152,6 +164,67 @@ def optSetSome (α : Type) [Enc α] (p : Ptr) : MemM Ptr := do
 /-- A store of `undefined`: every byte of the value becomes undefined. -/
 def storeUndef (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Unit :=
   storeBytes p align (Array.replicate (Enc.size α) .undef)
+
+/-! ## Memory ops
+
+`@memset`, `@memcpy` and `@memmove` do nothing for 0 items, also through a pointer that is not
+valid. For more items, the access is checked before the bytes are made. -/
+
+/-- `@memset`: each of the `n` items at `p` becomes `v`. `v = none`: `undefined`, every byte of
+the items becomes undefined. -/
+def memset {α : Type} [Enc α] (align : Nat) (p : Ptr) (n : BitVec 64) (v : Option α) :
+    MemM Unit := do
+  if n.toNat = 0 then return
+  let _ ← (← get).access p (n.toNat * Enc.size α) align
+  let item := match v with
+    | some x => Enc.encode x
+    | none => Array.replicate (Enc.size α) .undef
+  storeBytes p align (Array.replicate n.toNat item).flatten
+
+/-- `@memcpy` and `@memmove`: copy `n` items of `size` bytes from `src` to `dst`. All bytes are
+read before the first write, so an overlap copies the old bytes (`@memmove`). For `@memcpy`, the
+AIR checks before that the two ranges do not overlap. -/
+def memmove (size dstAlign srcAlign : Nat) (dst src : Ptr) (n : BitVec 64) : MemM Unit := do
+  if n.toNat = 0 then return
+  let _ ← (← get).access dst (n.toNat * size) dstAlign
+  let bs ← loadBytes src (n.toNat * size) srcAlign
+  storeBytes dst dstAlign bs
+
+/-- The items of `s`, for a call to a pure function with a `[]const T` parameter. An undefined
+byte in any item throws `.unspecified`, also in an item that the function does not read. -/
+def readSlice (α : Type) [Enc α] (align : Nat) (s : Slice) : MemM (Array α) := do
+  if s.len.toNat = 0 then return #[]
+  let bs ← loadBytes s.ptr (s.len.toNat * Enc.size α) align
+  (Array.range s.len.toNat).mapM fun i =>
+    (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
+
+/-- The address of `p`: the address of its block plus the offset. A pointer without a block has
+the address `p.off`. -/
+def ptrAddr (p : Ptr) : MemM Int := do
+  match p.block with
+  | none => pure p.off
+  | some b =>
+    match (← get).blocks[b]? with
+    | some blk => pure (blk.addr + p.off)
+    | none => throw .illegal
+
+/-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. Two blocks have the order of their
+addresses in the model, which can differ from the compiled code. -/
+def ptrLt (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) < (← ptrAddr b)))
+def ptrLe (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) ≤ (← ptrAddr b)))
+
+/-! ## Globals -/
+
+/-- `m` with one more global block: `bytes` at the next free address, aligned to `align`. -/
+def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) : Mem :=
+  let addr := alignUp m.nextAddr align
+  { blocks := m.blocks.push { bytes, align, kind := .global, live := true, addr }
+    nextAddr := addr + bytes.size + 1 }
+
+/-- The memory at program start: block `k` is global `k`, with its initial bytes and
+alignment. -/
+def Mem.ofGlobals (gs : List (Array Byte × Nat)) : Mem :=
+  gs.foldl (fun m (bs, a) => m.addGlobal bs a) {}
 
 /-! ## Calls -/
 

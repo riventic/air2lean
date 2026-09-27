@@ -221,18 +221,28 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
             try writer.writeAll("}");
         },
         .void => try writer.writeAll("null"),
-        // A single pointer is `{"buf":<index>,"off":<offset>}` into the input buffers.
+        // A pointer into the input buffers is `{"buf":<index>,"off":<offset>}`, a slice also has
+        // `"len"`. A pointer to other memory (a global) is `{"bytes":"<hex>"}`: the bytes of the
+        // value, or of the items of a slice.
         .pointer => |p| {
-            if (p.size != .one) @compileError("renderPayload: unsupported pointer " ++ @typeName(T));
-            const addr = @intFromPtr(v);
+            const addr = switch (p.size) {
+                .one => @intFromPtr(v),
+                .slice => @intFromPtr(v.ptr),
+                else => @compileError("renderPayload: unsupported pointer " ++ @typeName(T)),
+            };
             for (render_bufs, 0..) |b, i| {
                 const base = @intFromPtr(b.ptr);
                 if (addr >= base and addr <= base + b.len) {
-                    try writer.print("{{\"buf\":{d},\"off\":{d}}}", .{ i, addr - base });
+                    try writer.print("{{\"buf\":{d},\"off\":{d}", .{ i, addr - base });
+                    if (p.size == .slice) try writer.print(",\"len\":{d}", .{v.len});
+                    try writer.writeAll("}");
                     return;
                 }
             }
-            try writer.writeAll("\"outside the buffers\"");
+            const bytes = if (p.size == .slice) std.mem.sliceAsBytes(v) else std.mem.asBytes(v);
+            try writer.writeAll("{\"bytes\":\"");
+            for (bytes) |byte| try writer.print("{x:0>2}", .{byte});
+            try writer.writeAll("\"}");
         },
         else => @compileError("renderPayload: unsupported type " ++ @typeName(T)),
     }
@@ -399,6 +409,22 @@ pub fn forEachMemLine(
             try perLine(a, bufs, v.object.get("args").?.array.items, writer);
         }
     }.call);
+}
+
+/// A slice argument: `{"buf":<index>,"off":<offset>,"len":<items>}` into `bufs`, or `null` for
+/// an optional slice type `S`.
+pub fn sliceArg(comptime S: type, bufs: []const Buf, v: std.json.Value) S {
+    if (v == .null) {
+        if (@typeInfo(S) != .optional) unreachable;
+        return null;
+    }
+    const T = switch (@typeInfo(S)) {
+        .optional => |o| @typeInfo(o.child).pointer.child,
+        else => @typeInfo(S).pointer.child,
+    };
+    const b = bufs[@intCast(v.object.get("buf").?.integer)];
+    const items: [*]T = @ptrCast(@alignCast(b.ptr + @as(usize, @intCast(v.object.get("off").?.integer))));
+    return items[0..@intCast(v.object.get("len").?.integer)];
 }
 
 /// A pointer argument: `{"buf":<index>,"off":<offset>}` into `bufs`, or `null` for an optional

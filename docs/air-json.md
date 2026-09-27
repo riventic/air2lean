@@ -1,4 +1,4 @@
-# AIR JSON format (schema 5)
+# AIR JSON format (schema 6)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>` limits output to functions whose fully qualified name starts with the prefix. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,12 +6,13 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 5,
+  "schema": 6,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
   "ret": 3,
   "body": [ Inst, ... ],
+  "globals": [ Global, ... ],
   "types": [ Type, ... ]
 }
 ```
@@ -21,6 +22,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
+| `globals` | the globals that pointer constants point into (§Global). A global ID is an index into this array. Missing if the function has no pointer constant (schema 6). |
 | `types` | type table. A type ID is an index into this array. Each type is listed once. |
 
 ## Type
@@ -33,7 +35,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
 | `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5) |
-| `array` | `len: int`, `child: id` |
+| `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
@@ -74,6 +76,8 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 
 `mul_add`: `args` is `[lhs, rhs, addend]` (the `pl_op` operand is the addend, written last).
 
+Memory tags (schema 6), all `bin_op`: `memset`, `memset_safe` (the destination slice or array pointer, the item value), `memcpy`, `memmove` (the destination, the source pointer; 0.14.1 has no `memmove`). `tag_name` and `error_name` are `un_op`. The pointer tags `ptr_add`, `ptr_sub`, `ptr_elem_ptr`, `slice_elem_ptr`, `slice` (`ty_pl` + `Bin`), `ptr_elem_val`, `slice_elem_val`, `array_elem_val` (`bin_op`), `slice_ptr`, `slice_len`, `array_to_slice`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr` (`ty_op`) have always been decoded.
+
 Optional pointer tags (schema 5), all with `args: [pointer]`: `is_null_ptr`, `is_non_null_ptr` (`un_op`), `optional_payload_ptr`, `optional_payload_ptr_set` (`ty_op`).
 
 Enum and union tags: `get_union_tag` (`ty_op`), `is_named_enum_value` (`un_op`), `set_union_tag` (`bin_op`: the union pointer, the tag), `union_init` (`args: [payload]`, `index`: the field). `@intFromEnum`/`@enumFromInt` are `bitcast`/`intcast`/`intcast_safe` with an enum on one side. The tag enum of `union(enum)` has the name `@typeInfo(U).@"union".tag_type.?`.
@@ -97,5 +101,20 @@ One of:
 | `{"ty": 2, "null": true}` | optional constant, `null`. |
 | `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
 | `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
+| `{"ty": 8, "elems": [Ref, ...]}` | array, struct or tuple constant: its items or fields. An array with a sentinel has the sentinel as the last item (schema 6). |
+| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice is the global and the total offset. A pointer without a global has `{"unsupported": "<base>", "off": n}` instead: `int` (`@ptrFromInt`), `comptime_alloc`, `comptime_field`, `eu_payload`, `opt_payload`, `arr_elem`, or `field` of a packed struct (schema 6). |
+| `{"ty": 10, "slice_ptr": Ref, "slice_len": Ref}` | slice constant (schema 6). |
+
+## Global
+
+Schema 6. One entry per global that a pointer constant points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
+
+| Field | Meaning |
+|---|---|
+| `name` | fully qualified name of a container-level `var` or `const`. Missing for an unnamed constant (a string literal, the value behind `&.{…}`). |
+| `ty` | type ID of the value |
+| `const` | `false` only for a `var` |
+| `threadlocal`, `extern` | a named global only |
+| `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
 
 `try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.

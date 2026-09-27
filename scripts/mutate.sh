@@ -34,6 +34,9 @@
 # (f) Lean-runtime mutation, pointers: `Zig.store` (ZigLean/Mem/Basic.lean) writes one byte too
 #     few (the last byte of the value stays as it was). `swap`, `delay` and `copyJob` then leave
 #     other bytes in the buffers than Zig: the diff test compares the buffers after each call.
+# (g) Lean-runtime mutation, slices: `Zig.memmove` (ZigLean/Mem/Basic.lean) writes one byte too
+#     few (the last byte of the destination stays as it was). `copy` and `copyWithin` then leave
+#     other bytes in the buffers than Zig.
 #
 # Usage: mutate.sh
 # Env:
@@ -41,7 +44,7 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers for (f))
+#                         pointers for (f), slices for (g))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -260,6 +263,22 @@ else
   }
 
   run_and_report "mutation (f)" pointers
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$mem_backup" "$mem_lean"
+fi
+
+echo "== mutation (g): Zig.memmove writes one byte too few (Lean runtime) ==" >&2
+if ! has_example slices; then
+  echo "mutation (g): skipped (AIR2LEAN_EXAMPLES excludes slices)"
+else
+  sed -i.bak 's/^  storeBytes dst dstAlign bs$/  storeBytes dst dstAlign bs.pop/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q 'storeBytes dst dstAlign bs.pop' "$mem_lean" || {
+    echo "error: mutation (g): sed did not change Zig.memmove" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (g)" slices
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$mem_backup" "$mem_lean"
 fi

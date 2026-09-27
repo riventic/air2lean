@@ -5,7 +5,7 @@ import Air2Lean.Air.Json
 /-!
 # Canonical AIR
 
-Two rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Four rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -18,7 +18,19 @@ supported version, so one translation (and the proofs over it) serves all versio
    reads the value (`struct_field_val`, `slice_len`, `slice_elem_val`). Nothing writes the copy,
    so a read through it equals the read of the value. The pass changes each such pointer
    projection to the value read, and drops the copy, the `bitcast`s and the `load`s.
-2. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+2. `itemReads`. A read of one item through a pointer is `ptr_elem_val` in 0.15.2, and
+   `ptr_elem_ptr` then `load` in 0.16.0. A read of one item of a local array is a `load` of the
+   whole array then `array_elem_val` in 0.15.2, and the same `ptr_elem_ptr` and `load` in 0.16.0.
+   The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use.
+   For the second pair, the `array_elem_val` must come directly after the `load` in its body, so
+   no write comes between them.
+3. `dropTrueChecks`. For `s[a..b]`, 0.15.2 checks `a <= b` a second time, after the check
+   that panics when it is false, and for `s[0..b]` it checks `0 <= b`; 0.16.0 does neither. The
+   pass drops a safety check (`checkCond?`) that is always true, and its comparison: a comparison
+   with the same tag and operands as an earlier check in the same body, `0 <= x`, or `x <= x + y`
+   after the `add` (it does not wrap), for unsigned `x` and `y`. For `s[a..][0..n]`, 0.15.2
+   checks `a <= a + n`.
+4. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -172,6 +184,93 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
       | none => some i
   return { f with body }
 
+/-- A safety check: `block { cond_br c then { br } else { … unreach } }`, whose `then` body only
+leaves the block. After it, `c` is true. The condition `c`, if the block is one. -/
+def checkCond? (b : RawInst) : Option InstId :=
+  match b.tag, b.body with
+  | "block", #[cb] =>
+    match cb.tag, (cb.args[0]? : Option Val), cb.thenBody, cb.elseBody.back? with
+    | "cond_br", some (.inst c), #[br], some last =>
+      if br.tag == "br" && br.target == some b.id && (last.tag == "unreach" || last.tag == "trap")
+      then some c else none
+    | _, _, _, _ => none
+  | _, _ => none
+
+/-- `dropTrueChecks` (module doc). -/
+partial def dropTrueChecks (f : RawFunc) : RawFunc := Id.run do
+  let all := flatten f.body
+  let mut users : Std.HashMap InstId (Array RawInst) := {}
+  for i in all do
+    for u in i.uses do
+      users := users.insert u ((users.getD u #[]).push i)
+  let byId : Std.HashMap InstId RawInst := all.foldl (fun m i => m.insert i.id i) {}
+  let key (c : InstId) : Option (String × Array Val) :=
+    (byId[c]?).bind fun i => if i.tag.startsWith "cmp_" then some (i.tag, i.args) else none
+  let mut gone : Std.HashSet InstId := {}
+  let bodies := #[f.body] ++ all.flatMap fun i =>
+    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
+  for b in bodies do
+    let mut known : Array (String × Array Val) := #[]
+    for i in b do
+      let some c := checkCond? i | continue
+      let some k := key c | continue
+      let unsigned (t : Option TyId) : Bool :=
+        match t.bind (f.types[·]?) with | some (.int false _) => true | _ => false
+      -- `0 <= x` and `x <= x + y` (an `add` does not wrap) for unsigned `x`, `y`.
+      let alwaysLe := match k with
+        | ("cmp_lte", #[.int t 0, _]) => unsigned (some t)
+        | ("cmp_lte", #[x, .inst y]) => match byId[y]? with
+          | some a => (a.tag == "add" || a.tag == "add_safe") && a.args[0]? == some x && unsigned a.ty
+          | none => false
+        | _ => false
+      -- The condition has no use but this check, and it is always true.
+      if (alwaysLe || known.contains k) &&
+          (users.getD c #[]).all (fun u => some u.id == (i.body[0]?.map (·.id))) then
+        gone := (gone.insert c).insert i.id
+      else known := known.push k
+  let body := rewriteBody (body := f.body) fun i =>
+    if gone.contains i.id || (isDbgTag i.tag && i.uses.any gone.contains) then none else some i
+  return { f with body }
+
+/-- `itemReads` (module doc). -/
+def itemReads (f : RawFunc) : RawFunc := Id.run do
+  let all := flatten f.body
+  let mut users : Std.HashMap InstId (Array RawInst) := {}
+  for i in all do
+    for u in i.uses do
+      users := users.insert u ((users.getD u #[]).push i)
+  let only (x : InstId) : Option RawInst :=
+    match (users.getD x #[]).filter (!isDbgTag ·.tag) with
+    | #[u] => some u
+    | _ => none
+  -- The non-debug instruction after each one in the same body.
+  let mut next : Std.HashMap InstId InstId := {}
+  let bodies := #[f.body] ++ all.flatMap fun i =>
+    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
+  for b in bodies do
+    let ids := (b.filter (!isDbgTag ·.tag)).map (·.id)
+    for (a, c) in ids.zip (ids.extract 1 ids.size) do
+      next := next.insert a c
+  -- The item read that replaces each instruction, and the instructions that go.
+  let mut repl : Std.HashMap InstId (Val × Val) := {}
+  let mut gone : Std.HashSet InstId := {}
+  for x in all do
+    match x.tag, x.args[0]?, x.args[1]?, only x.id with
+    | "ptr_elem_ptr", some p, some i, some u =>
+      if u.tag == "load" && u.args[0]? == some (.inst x.id) then
+        repl := repl.insert u.id (p, i); gone := gone.insert x.id
+    | "load", some p, _, some u =>
+      if u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
+        if let some i := u.args[1]? then
+          repl := repl.insert u.id (p, i); gone := gone.insert x.id
+    | _, _, _, _ => pure ()
+  let body := rewriteBody (body := f.body) fun i =>
+    if gone.contains i.id || (isDbgTag i.tag && i.uses.any gone.contains) then none
+    else match repl[i.id]? with
+      | some (p, idx) => some { i with tag := "ptr_elem_val", args := #[p, idx] }
+      | none => some i
+  return { f with body }
+
 /-- `renumber` (module doc). -/
 def renumber (f : RawFunc) : RawFunc :=
   let all := flatten f.body
@@ -184,7 +283,8 @@ def renumber (f : RawFunc) : RawFunc :=
     some { (i.mapVals rv) with id := r i.id, target := i.target.map r }
   { f with body }
 
-/-- Both rewrites (module doc). -/
-def canonicalize (f : RawFunc) : RawFunc := renumber (forwardReadOnlyCopies f)
+/-- The four rewrites (module doc). -/
+def canonicalize (f : RawFunc) : RawFunc :=
+  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies f)))
 
 end Air2Lean.Raw

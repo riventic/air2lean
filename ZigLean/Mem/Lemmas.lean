@@ -1,4 +1,5 @@
 import ZigLean.Mem.Enc
+import ZigLean.Simp
 
 /-!
 # Lemmas about memory
@@ -8,6 +9,8 @@ accesses, and the `u32` round trip. `M17` builds separation logic on these.
 -/
 
 namespace Zig
+
+attribute [zig_unfold] callM callR
 
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/

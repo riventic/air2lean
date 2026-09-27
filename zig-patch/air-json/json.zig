@@ -111,6 +111,11 @@ const Compat = struct {
         return if (v14) false else tag == .int_from_float_safe;
     }
 
+    /// A `bin_op` tag that does not exist in every version (`memmove`: 0.15.2+).
+    fn isNewBinOp(tag: Air.Inst.Tag) bool {
+        return if (v14) false else tag == .memmove;
+    }
+
     /// Is the layout of `ty` known, so that `abiSize`, `abiAlignment` and `structFieldOffset`
     /// are valid? Those functions assert it. 0.16.0 sets `want_layout` right before it resolves
     /// a container layout (`PerThread.ensureTypeLayoutUpToDate`); before 0.16.0 the container
@@ -135,6 +140,69 @@ const Compat = struct {
                 ip.loadUnionType(ty.toIntern()).haveLayout(ip),
             .enum_type => if (v16) ip.loadEnumType(ty.toIntern()).want_layout else true,
             else => false,
+        };
+    }
+
+    const NavInfo = struct {
+        ty: InternPool.Index,
+        is_const: bool,
+        is_threadlocal: bool,
+        is_extern: bool,
+        /// The initial value; `null` if Sema has not resolved it yet.
+        init: ?InternPool.Index,
+    };
+
+    /// A global's type, flags and initial value. 0.16.0 keeps them in `Nav.resolved`; before
+    /// 0.16.0, `Nav.status` has them, and the value of a `var` is a `variable` key that holds the
+    /// initial value.
+    fn navInfo(zcu: *Zcu, nav_index: InternPool.Nav.Index) NavInfo {
+        const ip = &zcu.intern_pool;
+        const nav = ip.getNav(nav_index);
+        if (v16) {
+            const r = nav.resolved.?;
+            const is_extern = r.is_extern_decl or
+                (r.value != .none and ip.indexToKey(r.value) == .@"extern");
+            return .{
+                .ty = r.type,
+                .is_const = r.@"const",
+                .is_threadlocal = r.@"threadlocal",
+                .is_extern = is_extern,
+                .init = if (r.value == .none or is_extern) null else r.value,
+            };
+        }
+        return switch (nav.status) {
+            .unresolved => unreachable, // a pointer to the global has its type
+            .type_resolved => |r| .{
+                .ty = r.type,
+                .is_const = r.is_const,
+                .is_threadlocal = r.is_threadlocal,
+                .is_extern = r.is_extern_decl,
+                .init = null,
+            },
+            // 0.14.1 has no `is_const` here: a `var` has a `variable` value.
+            .fully_resolved => |r| switch (ip.indexToKey(r.val)) {
+                .variable => |v| .{
+                    .ty = v.ty,
+                    .is_const = if (v14) false else r.is_const,
+                    .is_threadlocal = v.is_threadlocal,
+                    .is_extern = false,
+                    .init = v.init,
+                },
+                .@"extern" => |e| .{
+                    .ty = e.ty,
+                    .is_const = if (v14) e.is_const else r.is_const,
+                    .is_threadlocal = e.is_threadlocal,
+                    .is_extern = true,
+                    .init = null,
+                },
+                else => .{
+                    .ty = ip.typeOf(r.val),
+                    .is_const = if (v14) true else r.is_const,
+                    .is_threadlocal = false,
+                    .is_extern = false,
+                    .init = r.val,
+                },
+            },
         };
     }
 };
@@ -198,13 +266,21 @@ const W = struct {
     /// Types in first-encounter order. Grows while draining it in `writeFunc`: writing a
     /// type entry can discover further types, which get appended and drained in turn.
     queue: std.ArrayListUnmanaged(InternPool.Index) = .empty,
+    /// The globals that pointer constants point into, in first-encounter order: the `globals`
+    /// table. Grows while `writeFunc` drains it, like `queue`.
+    globals: std.ArrayListUnmanaged(Global) = .empty,
+
+    const Global = union(enum) {
+        nav: InternPool.Nav.Index,
+        uav: InternPool.Key.Ptr.BaseAddr.Uav,
+    };
 
     fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type) Error!void {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(5);
+        try w.j.write(6);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -218,6 +294,14 @@ const W = struct {
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
         try w.field("body");
         try w.writeBody(w.air.getMainBody());
+        // Only a function with a pointer constant has globals.
+        if (w.globals.items.len > 0) {
+            try w.field("globals");
+            try w.j.beginArray();
+            var g: usize = 0;
+            while (g < w.globals.items.len) : (g += 1) try w.writeGlobalEntry(w.globals.items[g]);
+            try w.j.endArray();
+        }
         try w.field("types");
         try w.j.beginArray();
         var i: usize = 0;
@@ -264,13 +348,13 @@ const W = struct {
             .rem, .mod, .bit_and, .bit_or, .xor, .cmp_lt, .cmp_lte, .cmp_eq, .cmp_gte,
             .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
             .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
-            .min, .max, .set_union_tag,
+            .min, .max, .set_union_tag, .memset, .memset_safe, .memcpy,
             => {
                 const b = w.data(inst).bin_op;
                 try w.writeArgs(&.{ b.lhs, b.rhs });
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
-            .is_named_enum_value, .is_null_ptr, .is_non_null_ptr,
+            .is_named_enum_value, .is_null_ptr, .is_non_null_ptr, .tag_name, .error_name,
             .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
             .trunc_float,
             => {
@@ -410,6 +494,9 @@ const W = struct {
             .alloc, .ret_ptr, .unreach, .trap, .dbg_empty_stmt => {},
             else => if (Compat.isNewTyOp(tag)) {
                 try w.writeArgs(&.{w.data(inst).ty_op.operand});
+            } else if (Compat.isNewBinOp(tag)) {
+                const b = w.data(inst).bin_op;
+                try w.writeArgs(&.{ b.lhs, b.rhs });
             } else {
                 try w.field("unsupported");
                 try w.j.write(true);
@@ -504,6 +591,34 @@ const W = struct {
                     try w.field("some");
                     try w.writeRef(Air.internedToRef(o.val));
                 },
+                .ptr => |p| {
+                    try w.field("ptr");
+                    try w.writePtr(p);
+                },
+                .slice => |s| {
+                    try w.field("slice_ptr");
+                    try w.writeRef(Air.internedToRef(s.ptr));
+                    try w.field("slice_len");
+                    try w.writeRef(Air.internedToRef(s.len));
+                },
+                .aggregate => |a| {
+                    // An array has its sentinel as the last element. A vector stays text.
+                    const ty = Type.fromInterned(a.ty);
+                    const is_array = ty.zigTypeTag(zcu) == .array;
+                    if (is_array or ty.zigTypeTag(zcu) == .@"struct") {
+                        const len = if (is_array) ty.arrayLenIncludingSentinel(zcu) else ty.structFieldCount(zcu);
+                        try w.field("elems");
+                        try w.j.beginArray();
+                        for (0..@intCast(len)) |i| {
+                            const elem = if (is_array) try val.elemValue(w.pt, i) else try val.fieldValue(w.pt, i);
+                            try w.writeRef(Air.internedToRef(elem.toIntern()));
+                        }
+                        try w.j.endArray();
+                    } else {
+                        try w.field("val");
+                        try w.writeFmt(val.fmtValue(w.pt));
+                    }
+                },
                 else => if (val.isUndef(zcu)) {
                     try w.field("undef");
                     try w.j.write(true);
@@ -520,6 +635,106 @@ const W = struct {
     /// full `writeTypeEntry` the first time it is seen; see the drain loop in `writeFunc`.
     fn writeTypeRef(w: *W, ty: Type) Error!void {
         try w.j.write(try w.typeId(ty));
+    }
+
+    /// A pointer constant: the global it points into and the byte offset, or the kind of base
+    /// that the model has no block for (`int`: `@ptrFromInt`; a comptime-only base).
+    fn writePtr(w: *W, p: InternPool.Key.Ptr) Error!void {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        var base = p.base_addr;
+        var off: u64 = p.byte_offset;
+        try w.j.beginObject();
+        while (true) switch (base) {
+            .nav => |nav| {
+                try w.field("global");
+                try w.j.write(try w.globalId(.{ .nav = nav }));
+                break;
+            },
+            .uav => |uav| {
+                try w.field("global");
+                try w.j.write(try w.globalId(.{ .uav = uav }));
+                break;
+            },
+            // A field of the struct or slice that the pointer `f.base` points to.
+            .field => |f| {
+                const parent = ip.indexToKey(f.base).ptr;
+                const agg = Type.fromInterned(parent.ty).childType(zcu);
+                switch (agg.zigTypeTag(zcu)) {
+                    .pointer => off += f.index * 8, // a slice: `ptr`, then `len`
+                    .@"struct" => if (agg.containerLayout(zcu) != .@"packed" and Compat.hasLayout(zcu, agg)) {
+                        off += agg.structFieldOffset(@intCast(f.index), zcu);
+                    } else {
+                        try w.field("unsupported");
+                        try w.j.write("field");
+                        break;
+                    },
+                    else => {
+                        try w.field("unsupported");
+                        try w.j.write("field");
+                        break;
+                    },
+                }
+                off += parent.byte_offset;
+                base = parent.base_addr;
+            },
+            else => {
+                try w.field("unsupported");
+                try w.j.write(@tagName(base));
+                break;
+            },
+        };
+        try w.field("off");
+        try w.j.write(off);
+        try w.j.endObject();
+    }
+
+    fn globalId(w: *W, g: Global) Error!u32 {
+        for (w.globals.items, 0..) |x, i| {
+            const same = switch (x) {
+                .nav => |n| g == .nav and g.nav == n,
+                .uav => |u| g == .uav and g.uav.val == u.val and g.uav.orig_ty == u.orig_ty,
+            };
+            if (same) return @intCast(i);
+        }
+        try w.globals.append(w.gpa, g);
+        return @intCast(w.globals.items.len - 1);
+    }
+
+    /// One entry of the `globals` table. A `nav` is a container-level `var` or `const`; a `uav`
+    /// is an unnamed constant (a string literal, or the value behind `&.{…}`).
+    fn writeGlobalEntry(w: *W, g: Global) Error!void {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        try w.j.beginObject();
+        switch (g) {
+            .nav => |nav| {
+                const info = Compat.navInfo(zcu, nav);
+                try w.field("name");
+                try w.j.write(ip.getNav(nav).fqn.toSlice(ip));
+                try w.field("ty");
+                try w.writeTypeRef(Type.fromInterned(info.ty));
+                try w.field("const");
+                try w.j.write(info.is_const);
+                try w.field("threadlocal");
+                try w.j.write(info.is_threadlocal);
+                try w.field("extern");
+                try w.j.write(info.is_extern);
+                if (info.init) |init| {
+                    try w.field("init");
+                    try w.writeRef(Air.internedToRef(init));
+                }
+            },
+            .uav => |uav| {
+                try w.field("ty");
+                try w.writeTypeRef(Value.fromInterned(uav.val).typeOf(zcu));
+                try w.field("const");
+                try w.j.write(true);
+                try w.field("init");
+                try w.writeRef(Air.internedToRef(uav.val));
+            },
+        }
+        try w.j.endObject();
     }
 
     fn typeId(w: *W, ty: Type) Error!u32 {
@@ -586,6 +801,8 @@ const W = struct {
                 try w.j.write(ty.arrayLen(zcu));
                 try w.field("child");
                 try w.writeTypeRef(ty.childType(zcu));
+                try w.field("sentinel");
+                try w.j.write(ty.sentinel(zcu) != null);
             },
             .optional => {
                 try w.j.write("optional");

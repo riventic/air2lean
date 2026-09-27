@@ -23,9 +23,11 @@
 | `f16`, `f32`, `f64`, `f80`, `f128` | `Zig.F16`, `Zig.F32`, `Zig.F64`, `Zig.F80`, `Zig.F128` (`Zig.Float .f16` … `.f128`; docs/floats.md) |
 | `bool` | `Bool` |
 | `void` | `Unit` |
-| `[]const T` | `Array T'` |
-| `*T`, `*const T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
-| `?T` | `Option T'` (`?*T` is `Option Zig.Ptr`) |
+| `[N]T` | `Vector T' N` |
+| `[]const T` in a pure function (§Memory) | `Array T'` |
+| `[]T`, `[:s]T`; `[]const T` in a function that uses memory | `Zig.Slice` (an item pointer and a `BitVec 64` length; §Memory) |
+| `*T`, `*const T`, `[*]T`, `[*:s]T`, `*[N]T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
+| `?T` | `Option T'` (`?*T` is `Option Zig.Ptr`, `?[]T` is `Option Zig.Slice`) |
 | `struct` (layout `auto` or `extern`) | `structure … deriving Repr, Inhabited, DecidableEq` |
 | `E!T` (error union) | `Except Zig.ErrName T'` |
 | exhaustive `enum` | `inductive` with one constructor per name |
@@ -61,7 +63,7 @@ A union without a tag (bare, `extern`, `packed`) is outside the subset.
 
 ### Places
 
-A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`), or a `bitcast` of a place. If every place of an `alloc` is used only as the pointer operand of `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag` and `ret_load` (`Air2Lean/Memory.lean`), the local is a `Locals` field plus a path of struct fields and union payloads. Any other use (a call argument, a stored value, a returned pointer, `optional_payload_ptr`) makes the address escape: the local is then a stack block in memory (§Memory).
+A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`; `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr` of a slice), or a `bitcast` of a place. If every place of an `alloc` is used only as the pointer operand of `load`, `store`, a field pointer, `bitcast`, `set_union_tag` and `ret_load` (`Air2Lean/Memory.lean`), the local is a `Locals` field plus a path of struct fields and union payloads. Any other use (a call argument, a stored value, a returned pointer, `optional_payload_ptr`, an item pointer of a local array) makes the address escape: the local is then a stack block in memory (§Memory).
 
 ```lean
 -- store to rect.w in the result local (a union): change the payload of `rect`
@@ -72,14 +74,14 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 `ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, or `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block). A `Zig.Ptr` is a block and a byte offset.
 
-A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
+A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
 | | Pure | Uses memory |
 |---|---|---|
 | result | `Zig.Result α` | `Zig.MemM α` (`StateT Zig.Mem Zig.Result α`) |
 | body | `Zig.M Locals Exit` | `Zig.MM Locals Exit` (`StateT Locals Zig.MemM`) |
 | call of a function that uses memory | — | `Zig.callM` |
-| call of a pure function | `Zig.call` | `Zig.callR` |
+| call of a pure function | `Zig.call` | `Zig.callR`; a `[]const T` argument is `Zig.readSlice T align s` |
 
 | AIR, through a pointer to memory | Lean |
 |---|---|
@@ -89,10 +91,41 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
 | `cmp_eq`, `cmp_neq` on pointers | `==`, `!=` on block and offset |
+| `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
+| `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
+| `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
+| `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment) |
+| `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩` |
+| `memset`, `memset_safe` | `Zig.memset (α := T) align p n (some v)`; `none` for `undefined` |
+| `memcpy`, `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |
+| `tag_name` | `E.tagName e` (below) |
+| `error_name` | `errorNameOf e` (below) |
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 
-`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr` and optionals; each struct and enum that a `*T` can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A load that reads an `undef` byte of the value throws `.unspecified`; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Arrays, unions, error unions and slices in memory are outside the subset (M16b).
+`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A load that reads an `undef` byte of the value throws `.unspecified`; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Unions and error unions in memory, and an array with a sentinel as one value, are outside the subset (M20).
+
+`@memset`, `@memcpy`, `@memmove` and `Zig.readSlice` do nothing for 0 items, also through a pointer that is not valid. `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
+
+Two pointers into different blocks have the order of the model's addresses, which can differ from the compiled code. The `@memcpy` overlap check of `ReleaseSafe` compares pointers: for two blocks, the model and the compiled code both find no overlap.
+
+### Globals
+
+A function file lists the globals that its pointer constants point into (`docs/air-json.md` §Global). The translator makes one program-wide table: a named global is one block, shared by name; an unnamed constant (a string literal) with the same type and value as another one shares its block. Then one block per name of each enum that a function reads with `@tagName`, and one per name of each error of the program's error sets if a function reads `@errorName`. `mem0` is the memory at program start: block `k` is global `k`, with its initial bytes. A pointer constant is `⟨some k, off⟩`. An array with a sentinel (`[12:0]u8`) is stored with its sentinel.
+
+```lean
+def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+  -- 0: slices.counter
+  (Zig.Enc.encode ((0 : BitVec 32) : BitVec 32), 4),
+  ...]
+
+def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
+  match e with
+  | .red => pure ⟨⟨some 2, 0⟩, 3⟩
+  ...
+```
+
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global is not read-only in the model: without `@constCast` (M20), Zig code cannot write it. `threadlocal` and `extern` globals are outside the subset.
 
 An escaping `alloc` gets a stack block at function entry. Its `Locals` field holds the pointer, and the block is freed when the function returns:
 
@@ -104,7 +137,7 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   match e with ...
 ```
 
-`ZigLean/Mem/Lemmas.lean` (generated code does not import it) has the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`).
+`ZigLean/Mem/Lemmas.lean` (generated code does not import it) has the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`). It adds `Zig.callM` and `Zig.callR` to the `zig_unfold` simp set.
 
 ## Signature
 
@@ -151,10 +184,10 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 | segment | constructor |
 |---|---|
 | `integerOverflow`, `integerOutOfBounds`, `integerPartOutOfBounds`, `shlOverflow`, `shrOverflow` | `.overflow` |
-| `outOfBounds` | `.outOfBounds` |
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
-| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `call` (`@panic`) | `.panic` |
+| `outOfBounds`, `startGreaterThanEnd` | `.outOfBounds` |
+| `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch`, `memcpyAlias`, `call` (`@panic`) | `.panic` |
 
 A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 
@@ -193,7 +226,7 @@ One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true
 
 A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or `T`'s `v`, all three at the same JSON depth as a plain `?T`.
 
-A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one heap block per buffer (block `i` = buffer `i`). A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a pointer result is written the same way. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct).
+A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one heap block per buffer, after the globals of `mem0` (block `g + i` = buffer `i`). A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a slice argument also has `"len": n`. A pointer or slice result into the buffers is written the same way; a result into a global is `{"bytes": "<hex>"}`, the bytes of the value or of the items. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct).
 
 ## Error unions
 

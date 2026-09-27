@@ -38,6 +38,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/floats/inputs");
     try compat.makePath("tests/diff/variants/inputs");
     try compat.makePath("tests/diff/pointers/inputs");
+    try compat.makePath("tests/diff/slices/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -95,8 +96,11 @@ pub fn main() !void {
     // The variants generators run after every earlier one, so the earlier inputs stay the same.
     try genVariants(rng);
 
-    // The pointers generators run last, so the earlier inputs stay the same.
+    // The pointers generators run after every earlier one, so the earlier inputs stay the same.
     try genPointers(rng);
+
+    // The slices generators run last, so the earlier inputs stay the same.
+    try genSlices(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1380,6 +1384,246 @@ fn genPointers(rng: std.Random) !void {
                 if (rng.boolean()) try writer.writeAll(",null") else try writer.print(",{d}", .{rng.int(u32)});
             }
             try writer.writeAll("]}\n");
+        }
+    }
+}
+
+fn openSlices(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/slices/inputs/" ++ name ++ ".jsonl");
+}
+
+/// `{"bufs":[<bytes>],"args":[` with one buffer: `len` random bytes, each 0 with probability
+/// 1/`zeros` (0: no forced zeros).
+fn writeBuf(writer: anytype, rng: std.Random, len: usize, zeros: u8) !void {
+    try writer.writeAll("{\"bufs\":[[");
+    for (0..len) |k| {
+        if (k > 0) try writer.writeAll(",");
+        const x = if (zeros > 0 and rng.uintLessThan(u8, zeros) == 0) 0 else rng.int(u8);
+        try writer.print("{d}", .{x});
+    }
+    try writer.writeAll("]],\"args\":[");
+}
+
+fn writeSlice(writer: anytype, buf: usize, off: usize, len: usize) !void {
+    try writer.print("{{\"buf\":{d},\"off\":{d},\"len\":{d}}}", .{ buf, off, len });
+}
+
+/// A slice of items of `size` bytes in a random buffer of up to `max` items: an aligned start,
+/// and a length up to the end (sometimes 0).
+fn writeItemSlice(writer: anytype, rng: std.Random, size: usize, max: usize, zeros: u8) !void {
+    const n = rng.uintAtMost(usize, max);
+    try writeBuf(writer, rng, n * size, zeros);
+    const a = rng.uintAtMost(usize, n);
+    try writeSlice(writer, 0, a * size, rng.uintAtMost(usize, n - a));
+}
+
+fn genSlices(rng: std.Random) !void {
+    // reverse, sumMid: `[]u32`. sumMid overflows on large items, and on an empty slice.
+    inline for (.{ "reverse", "sumMid" }) |name| {
+        var file = try openSlices(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeItemSlice(writer, rng, 4, 8, if (i % 2 == 0) 0 else 1);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // fill(s: []u8, v), clear(s: []u16).
+    {
+        var file = try openSlices("fill");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeItemSlice(writer, rng, 1, 24, 0);
+            try writer.print(",{d}]}}\n", .{rng.int(u8)});
+        }
+    }
+    {
+        var file = try openSlices("clear");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeItemSlice(writer, rng, 2, 12, 0);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // copyWithin(s: []u32, dst, src, len): the whole buffer; out-of-range values panic.
+    {
+        var file = try openSlices("copyWithin");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n = rng.uintAtMost(usize, 8);
+            try writeBuf(writer, rng, 4 * n, 0);
+            try writeSlice(writer, 0, 0, n);
+            if (i % 3 == 0) {
+                try writer.print(",{d},{d},{d}]}}\n", .{
+                    rng.uintAtMost(usize, n + 1), rng.uintAtMost(usize, n + 1), rng.uintAtMost(usize, n + 1),
+                });
+            } else {
+                // In range: the two ranges overlap or not.
+                const len = rng.uintAtMost(usize, n);
+                try writer.print(",{d},{d},{d}]}}\n", .{
+                    rng.uintAtMost(usize, n - len), rng.uintAtMost(usize, n - len), len,
+                });
+            }
+        }
+    }
+    // copy(dst: []u8, src: []const u8): two parts of one buffer, which can overlap (a panic), and
+    // lengths that can differ (a panic).
+    {
+        var file = try openSlices("copy");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeBuf(writer, rng, 24, 0);
+            const len = rng.uintAtMost(usize, 12);
+            const len2 = if (i % 5 == 0) rng.uintAtMost(usize, 12) else len;
+            try writeSlice(writer, 0, rng.uintAtMost(usize, 24 - len), len);
+            try writer.writeAll(",");
+            try writeSlice(writer, 0, rng.uintAtMost(usize, 24 - len2), len2);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // indexOfScalar(c), failName(n), colorName(c), factorial(n), localArr(i), bump().
+    {
+        var file = try openSlices("indexOfScalar");
+        defer file.close();
+        const writer = file.writer();
+        const text = "hello, world";
+        for (0..N) |i| {
+            const c = if (i % 2 == 0) text[rng.uintLessThan(usize, text.len)] else rng.int(u8);
+            try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{c});
+        }
+    }
+    {
+        var file = try openSlices("failName");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n = if (i % 2 == 0) 0 else rng.int(u8);
+            try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{n});
+        }
+    }
+    {
+        var file = try openSlices("colorName");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{i % 3});
+    }
+    {
+        var file = try openSlices("factorial");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{i % 10});
+    }
+    {
+        var file = try openSlices("localArr");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const x = if (i % 4 == 0) edgesU(u32)[rng.uintLessThan(usize, 4)] else rng.int(u32);
+            try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{x});
+        }
+    }
+    {
+        var file = try openSlices("bump");
+        defer file.close();
+        const writer = file.writer();
+        for (0..3) |_| try writer.writeAll("{\"bufs\":[],\"args\":[]}\n");
+    }
+    // sumZ(p: [*:0]const u8): the last byte is 0, so the items end in the buffer.
+    {
+        var file = try openSlices("sumZ");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            const n = 1 + rng.uintLessThan(usize, 24);
+            try writer.writeAll("{\"bufs\":[[");
+            for (0..n) |k| {
+                if (k > 0) try writer.writeAll(",");
+                const x = if (k == n - 1 or rng.uintLessThan(u8, 6) == 0) 0 else rng.int(u8);
+                try writer.print("{d}", .{x});
+            }
+            try writer.writeAll("]],\"args\":[");
+            try writePtr(writer, 0, rng.uintLessThan(usize, n));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // subZ(s: []const u8, a, b): the whole buffer; `a > b`, `b >= len` and `s[b] != 0` panic.
+    {
+        var file = try openSlices("subZ");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const n = rng.uintAtMost(usize, 16);
+            try writeBuf(writer, rng, n, 2);
+            try writeSlice(writer, 0, 0, n);
+            if (i % 2 == 0 and n > 0) {
+                // `a <= b < len`: only `s[b] != 0` panics.
+                const b = rng.uintLessThan(usize, n);
+                try writer.print(",{d},{d}]}}\n", .{ rng.uintAtMost(usize, b), b });
+            } else {
+                try writer.print(",{d},{d}]}}\n", .{ rng.uintAtMost(usize, n + 1), rng.uintAtMost(usize, n + 1) });
+            }
+        }
+    }
+    // total(a: *const [3]u32), second and prevItem (two items), at(p, i): items in the buffer.
+    {
+        var file = try openSlices("total");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeBuf(writer, rng, 16, if (i % 2 == 0) 0 else 1);
+            try writePtr(writer, 0, 4 * rng.uintAtMost(usize, 1));
+            try writer.writeAll("]}\n");
+        }
+    }
+    inline for (.{ "second", "prevItem" }) |name| {
+        var file = try openSlices(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBuf(writer, rng, 16, 0);
+            try writePtr(writer, 0, 4 * rng.uintAtMost(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    {
+        var file = try openSlices("at");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            const n = 1 + rng.uintLessThan(usize, 6);
+            try writeBuf(writer, rng, 4 * n, 0);
+            const a = rng.uintLessThan(usize, n);
+            try writePtr(writer, 0, 4 * a);
+            try writer.print(",{d}]}}\n", .{rng.uintLessThan(usize, n - a)});
+        }
+    }
+    // bumpAt(a: *[4]u8, i): `i = 4` panics.
+    {
+        var file = try openSlices("bumpAt");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBuf(writer, rng, 8, 0);
+            try writePtr(writer, 0, 4 * rng.uintAtMost(usize, 1));
+            try writer.print(",{d}]}}\n", .{rng.uintAtMost(usize, 4)});
+        }
+    }
+    // lenOr(s: ?[]const u8): null, or a slice.
+    {
+        var file = try openSlices("lenOr");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            if (i % 3 == 0) {
+                try writer.writeAll("{\"bufs\":[],\"args\":[null]}\n");
+            } else {
+                try writeItemSlice(writer, rng, 1, 16, 0);
+                try writer.writeAll("]}\n");
+            }
         }
     }
 }
