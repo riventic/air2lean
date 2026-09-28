@@ -40,6 +40,12 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
+# (i) Diff-test-archive mutation, asm: `tests/diff/asm/asm.zig`'s `air2lean_asm_bswap32` returns
+#     `x` unchanged instead of `@byteSwap(x)`. This archive (docs/generated-code.md §Inline asm)
+#     is the diff test's own stand-in for `Asm.airAsm_*`'s opaque behaviour (M21: no defining
+#     equation exists to mutate on the Lean side, unlike (b)/(d)/(f)/(g)/(h) above) -- mutating
+#     it and comparing against `examples/asm/asm.zig`'s real inline asm checks that the
+#     comparison is live, not vacuous. x86_64 only, same as `asm` itself.
 #
 # Usage: mutate.sh
 # Env:
@@ -47,7 +53,7 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers for (f), slices for (g), lists for (h))
+#                         pointers for (f), slices for (g), lists for (h), asm for (i))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -80,6 +86,7 @@ lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
+asm_zig="tests/diff/asm/asm.zig"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -88,6 +95,7 @@ lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
 alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
+asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -96,6 +104,7 @@ cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
 cp "$mem_lean" "$mem_backup"
 cp "$alloc_lean" "$alloc_backup"
+cp "$asm_zig" "$asm_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -111,8 +120,9 @@ cleanup() {
   cp "$round_backup" "$round_lean"
   cp "$mem_backup" "$mem_lean"
   cp "$alloc_backup" "$alloc_lean"
+  cp "$asm_backup" "$asm_zig"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$alloc_backup"
+    "$mem_backup" "$alloc_backup" "$asm_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -304,6 +314,22 @@ else
   run_and_report "mutation (h)" lists
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$alloc_backup" "$alloc_lean"
+fi
+
+echo "== mutation (i): air2lean_asm_bswap32 returns x unchanged (diff-test archive) ==" >&2
+if ! has_example asm; then
+  echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes asm)"
+else
+  sed -i.bak 's/return @byteSwap(x);/return x;/' "$asm_zig"
+  rm -f "$asm_zig.bak"
+  grep -q 'return x;' "$asm_zig" || {
+    echo "error: mutation (i): sed did not change air2lean_asm_bswap32" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (i)" asm
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$asm_backup" "$asm_zig"
 fi
 
 [ "$all_detected" -eq 1 ]

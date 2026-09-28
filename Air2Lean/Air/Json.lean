@@ -17,6 +17,25 @@ namespace Air2Lean.Raw
 
 open Lean (Json)
 
+/-- One operand of an `assembly` instruction: its constraint, its ZIR-source name, and (for an
+input, always; for an output, unless it is the asm expression's own result) the operand `Val`
+(`docs/air-json.md`). -/
+structure RawAsmOperand where
+  constraint : String
+  name : String
+  ref : Option Val
+
+/-- The `assembly` instruction's asm-specific fields (`docs/air-json.md`). Not a variant of
+`RawInst` itself: `id`/`ty` already cover the result, and every other AIR tag has no use for
+these fields, so keeping them optional on `RawInst` (like `body`/`callee`/...) matches the
+existing shape. -/
+structure RawAsm where
+  source : String
+  isVolatile : Bool
+  clobbers : Array String
+  outputs : Array RawAsmOperand
+  inputs : Array RawAsmOperand
+
 mutual
 
 structure RawInst where
@@ -45,6 +64,8 @@ structure RawInst where
   name : Option String
   /-- `dbg_stmt`. -/
   line : Option Nat
+  /-- `assembly`. -/
+  asm : Option RawAsm
   unsupported : Bool
 
 /-- One case of a `switch_br`/`loop_switch_br`, before tag interpretation. -/
@@ -293,6 +314,30 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       let s ← (← j.getObjVal? "val").getStr?
       parseLeafVal fnName tyId ty s
 
+/-- One `outputs`/`inputs` entry of an `assembly` instruction. -/
+def parseAsmOperand (fnName : String) (types : Array Ty) (j : Json) : Except String RawAsmOperand := do
+  let constraint ← (← j.getObjVal? "constraint").getStr?
+  let name ← (← j.getObjVal? "name").getStr?
+  let ref ← match optField j "ref" with
+    | some rj => some <$> parseVal fnName types rj
+    | none => pure none
+  return { constraint, name, ref }
+
+/-- `assembly`'s asm-specific fields, given the instruction already carries `source`
+(`docs/air-json.md`). -/
+def parseAsm (fnName : String) (types : Array Ty) (j : Json) : Except String RawAsm := do
+  let source ← (← j.getObjVal? "source").getStr?
+  let isVolatile := match optField j "volatile" with
+    | some (.bool b) => b
+    | _ => false
+  let clobbersJ ← (← j.getObjVal? "clobbers").getArr?
+  let clobbers ← clobbersJ.mapM Json.getStr?
+  let outputsJ ← (← j.getObjVal? "outputs").getArr?
+  let outputs ← outputsJ.mapM (parseAsmOperand fnName types)
+  let inputsJ ← (← j.getObjVal? "inputs").getArr?
+  let inputs ← inputsJ.mapM (parseAsmOperand fnName types)
+  return { source, isVolatile, clobbers, outputs, inputs }
+
 mutual
 
 partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except String RawInst := do
@@ -339,11 +384,14 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let line ← match optField j "line" with
     | some lj => some <$> lj.getNat?
     | none => pure none
+  let asm ← match optField j "source" with
+    | some _ => some <$> parseAsm fnName types j
+    | none => pure none
   let unsupported := match optField j "unsupported" with
     | some (.bool b) => b
     | _ => false
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, unsupported }
+           line, asm, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?

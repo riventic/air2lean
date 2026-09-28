@@ -199,6 +199,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     return .line line
   | "dbg_var_ptr" | "dbg_var_val" | "dbg_arg_inline" | "dbg_empty_stmt" =>
     return .dbg raw.name raw.args[0]?
+  | "assembly" =>
+    let some a := raw.asm
+      | throw s!"{fnName}: inst {raw.id}: 'assembly' needs asm data (schema ≥ 8)"
+    let toOperand (o : Raw.RawAsmOperand) : AsmOperand :=
+      { constraint := o.constraint, name := o.name, ref := o.ref }
+    return .asm a.source a.isVolatile a.clobbers (a.outputs.map toOperand) (a.inputs.map toOperand)
   | tag =>
     if tag.startsWith "call" then
       let some callee := raw.callee

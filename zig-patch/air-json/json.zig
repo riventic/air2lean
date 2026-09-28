@@ -216,7 +216,116 @@ const Compat = struct {
             },
         };
     }
+
+    /// The `assembly` AIR instruction, normalized. 0.16.0 has a convenience `Air.unwrapAsm`;
+    /// 0.15.2 has no such helper, and its extra-data order differs (outputs, inputs, output
+    /// constraint/name pairs, input constraint/name pairs, source — 0.16.0 instead puts the
+    /// source right after inputs, before either constraint/name block). Not called for 0.14.1:
+    /// M21 does not support inline asm there.
+    const AsmData = struct {
+        outputs: []const Air.Inst.Ref,
+        inputs: []const Air.Inst.Ref,
+        /// `constraint\0name\0` pairs, u32-padded, one per output, in `outputs` order.
+        output_names: []const u32,
+        /// Same, one per input, in `inputs` order.
+        input_names: []const u32,
+        source: []const u8,
+        clobbers: InternPool.Index,
+        is_volatile: bool,
+    };
+
+    fn unwrapAsm(air: *const Air, inst: Air.Inst.Index) AsmData {
+        if (v16) {
+            const u = air.unwrapAsm(inst);
+            return .{
+                .outputs = u.outputs,
+                .inputs = u.inputs,
+                .output_names = u.output_constraint_names,
+                .input_names = u.input_constraint_names,
+                .source = u.source,
+                .clobbers = u.clobbers,
+                .is_volatile = u.is_volatile,
+            };
+        }
+        const ty_pl = air.instructions.items(.data)[@intFromEnum(inst)].ty_pl;
+        const asm_extra = air.extraData(Air.Asm, ty_pl.payload);
+        const outputs_len = asm_extra.data.flags.outputs_len;
+        const inputs_len = asm_extra.data.inputs_len;
+        var i = asm_extra.end;
+        const outputs: []const Air.Inst.Ref = @ptrCast(extra(air)[i..][0..outputs_len]);
+        i += outputs_len;
+        const inputs: []const Air.Inst.Ref = @ptrCast(extra(air)[i..][0..inputs_len]);
+        i += inputs_len;
+        const output_names_start = i;
+        for (0..outputs_len) |_| i += asmNamePairLen(extra(air)[i..]);
+        const input_names_start = i;
+        for (0..inputs_len) |_| i += asmNamePairLen(extra(air)[i..]);
+        const source_start = i;
+        return .{
+            .outputs = outputs,
+            .inputs = inputs,
+            .output_names = extra(air)[output_names_start..input_names_start],
+            .input_names = extra(air)[input_names_start..source_start],
+            .source = std.mem.sliceAsBytes(extra(air)[source_start..])[0..asm_extra.data.source_len],
+            .clobbers = asm_extra.data.clobbers,
+            .is_volatile = asm_extra.data.flags.is_volatile,
+        };
+    }
+
+    /// The clobbered register/flag names of a comptime `std.builtin.assembly.Clobbers` value.
+    /// 0.16.0 stores it as a packed integer (`Value.toBigInt`); 0.15.2 as an aggregate of
+    /// per-field `bool_true`/`bool_false` (`InternPool.Key.Aggregate`).
+    fn writeClobbers(w: *W, clobbers: InternPool.Index) Error!void {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        try w.j.beginArray();
+        if (v16) {
+            const clobbers_val: Value = .fromInterned(clobbers);
+            const clobbers_ty = clobbers_val.typeOf(zcu);
+            var buf: Value.BigIntSpace = undefined;
+            const bigint = clobbers_val.toBigInt(&buf, zcu);
+            const limb_bits = @bitSizeOf(std.math.big.Limb);
+            for (0..clobbers_ty.structFieldCount(zcu)) |field_index| {
+                if (field_index / limb_bits >= bigint.limbs.len) continue;
+                const bit: u1 = @truncate(bigint.limbs[field_index / limb_bits] >> @intCast(field_index % limb_bits));
+                if (bit == 0) continue;
+                try w.j.write(clobbers_ty.structFieldName(field_index, zcu).toSlice(ip).?);
+            }
+        } else {
+            const aggregate = ip.indexToKey(clobbers).aggregate;
+            const struct_type: Type = .fromInterned(aggregate.ty);
+            switch (aggregate.storage) {
+                .elems => |elems| for (elems, 0..) |elem, field_index| {
+                    if (elem != .bool_true) continue;
+                    try w.j.write(struct_type.structFieldName(field_index, zcu).toSlice(ip).?);
+                },
+                .repeated_elem => |elem| if (elem == .bool_true) {
+                    for (0..struct_type.structFieldCount(zcu)) |field_index|
+                        try w.j.write(struct_type.structFieldName(field_index, zcu).toSlice(ip).?);
+                },
+                else => {},
+            }
+        }
+        try w.j.endArray();
+    }
 };
+
+/// The u32-word length of one `constraint\0name\0` pair (padded: even an exact 4-byte fit still
+/// uses the next word for the terminator). Shared layout in every version.
+fn asmNamePairLen(words: []const u32) usize {
+    const bytes = std.mem.sliceAsBytes(words);
+    const constraint = std.mem.sliceTo(bytes, 0);
+    const name = std.mem.sliceTo(bytes[constraint.len + 1 ..], 0);
+    return (constraint.len + name.len + (2 + 3)) / 4;
+}
+
+/// One `constraint\0name\0` pair read from the start of `words`, and its u32-word length.
+fn readAsmNamePair(words: []const u32) struct { constraint: []const u8, name: []const u8, len: usize } {
+    const bytes = std.mem.sliceAsBytes(words);
+    const constraint = std.mem.sliceTo(bytes, 0);
+    const name = std.mem.sliceTo(bytes[constraint.len + 1 ..], 0);
+    return .{ .constraint = constraint, .name = name, .len = asmNamePairLen(words) };
+}
 
 const Error = Compat.WriteError || Allocator.Error;
 
@@ -294,7 +403,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(7);
+        try w.j.write(8);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -505,6 +614,13 @@ const W = struct {
                 try w.field("line");
                 try w.j.write(d.line + 1);
             },
+            .assembly => if (Compat.v14) {
+                // M21: no inline asm support for 0.14.1.
+                try w.field("unsupported");
+                try w.j.write(true);
+            } else {
+                try w.writeAsm(inst);
+            },
             .alloc, .ret_ptr, .unreach, .trap, .dbg_empty_stmt => {},
             else => if (Compat.isNewTyOp(tag)) {
                 try w.writeArgs(&.{w.data(inst).ty_op.operand});
@@ -517,6 +633,56 @@ const W = struct {
             },
         }
         try w.j.endObject();
+    }
+
+    /// `assembly`: source, per-output/-input constraint+name+operand, clobbers, volatile.
+    /// An output whose operand is `.none` is the asm expression's own result (no `ref`).
+    fn writeAsm(w: *W, inst: Air.Inst.Index) Error!void {
+        const a = Compat.unwrapAsm(w.air, inst);
+        try w.field("source");
+        try w.j.write(a.source);
+        try w.field("volatile");
+        try w.j.write(a.is_volatile);
+        try w.field("clobbers");
+        try Compat.writeClobbers(w, a.clobbers);
+        try w.field("outputs");
+        try w.j.beginArray();
+        {
+            var names = a.output_names;
+            for (a.outputs) |ref| {
+                const pair = readAsmNamePair(names);
+                names = names[pair.len..];
+                try w.j.beginObject();
+                try w.field("constraint");
+                try w.j.write(pair.constraint);
+                try w.field("name");
+                try w.j.write(pair.name);
+                if (ref != .none) {
+                    try w.field("ref");
+                    try w.writeRef(ref);
+                }
+                try w.j.endObject();
+            }
+        }
+        try w.j.endArray();
+        try w.field("inputs");
+        try w.j.beginArray();
+        {
+            var names = a.input_names;
+            for (a.inputs) |ref| {
+                const pair = readAsmNamePair(names);
+                names = names[pair.len..];
+                try w.j.beginObject();
+                try w.field("constraint");
+                try w.j.write(pair.constraint);
+                try w.field("name");
+                try w.j.write(pair.name);
+                try w.field("ref");
+                try w.writeRef(ref);
+                try w.j.endObject();
+            }
+        }
+        try w.j.endArray();
     }
 
     /// Format into a string, then write it as an escaped JSON string.

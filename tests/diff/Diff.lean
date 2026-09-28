@@ -11,6 +11,7 @@ import Proofs.Variants.Gen
 import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
 import Proofs.Lists.Gen
+import Proofs.Asm.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -39,6 +40,49 @@ Run: `lake exe difftest` from `tests/diff/` (its own Lake package, see lakefile.
 -/
 
 open Lean (Json)
+
+/-! ## Asm's diff-test-only implementation
+
+`Proofs/Asm/Gen.lean`'s `Asm.airAsm_*` opaques carry no defining equation in the main pipeline —
+M21's whole point is that a proof gets only what the caller states about one, no built-in
+axiom. For the differential test to actually run, though, an executable needs real behaviour, the
+same problem `ZigLean/Float/Libm.lean` solves for the transcendental ops. That file's
+`@[implemented_by]` is attached inline, at the opaque's own declaration, in the same module — it
+does not apply here: `Asm.airAsm_*` are auto-generated pipeline output, declared in
+`Proofs/Asm/Gen.lean`, a module already imported by the time this file runs, and both
+`@[implemented_by]` and `@[extern]` refuse to attach to a declaration from an imported module
+(`Lean.throwAttrDeclInImportedModule`; the same `ParametricAttribute` machinery backs both).
+
+`@[csimp]` does not have that restriction: it tags a fresh theorem (declared here, not imported)
+stating `@f = @g`, and swaps `f` for `g` in compiled code only, never in the kernel or type theory
+(its doc comment). The theorem needs a real proof term, and there is none — an asm opaque's whole
+point is that no equation is derivable from the main pipeline alone — so this is the one place in
+the repo that assumes rather than proves, via `sorry` (the unsound path `@[csimp]`'s own doc
+comment names). Confined to this diff-test package, never `ZigLean`/`Proofs`
+(`scripts/no-sorry.sh` checks only those two dirs), and load-bearing only for turning the archive's
+real implementation into what the differential test runs against `examples/asm/asm.zig`'s inline
+asm — not for anything the main pipeline emits or proves.
+
+Raw `@[extern]` opaques into `tests/diff/asm/asm.zig`'s archive (docs/generated-code.md §Inline
+asm), marshaled through `UInt32`/`UInt64` — everything here fits one register, unlike libm's
+f80/f128 hi/lo split. -/
+
+@[extern "air2lean_asm_bswap32"] private opaque asmBswap32 : UInt32 → UInt32
+@[extern "air2lean_asm_popcnt64"] private opaque asmPopcnt64 : UInt64 → UInt64
+@[extern "air2lean_asm_lzcnt64"] private opaque asmLzcnt64 : UInt64 → UInt64
+
+private def airAsm_3500345798_impl (x : BitVec 32) : BitVec 32 :=
+  (asmBswap32 (.ofBitVec x)).toBitVec
+
+private def airAsm_3884223243_impl (x : BitVec 64) : BitVec 64 :=
+  (asmLzcnt64 (.ofBitVec x)).toBitVec
+
+private def airAsm_4040357768_impl (x : BitVec 64) : BitVec 64 :=
+  (asmPopcnt64 (.ofBitVec x)).toBitVec
+
+@[csimp] theorem airAsm_3500345798_eq : @Asm.airAsm_3500345798 = @airAsm_3500345798_impl := sorry
+@[csimp] theorem airAsm_3884223243_eq : @Asm.airAsm_3884223243 = @airAsm_3884223243_impl := sorry
+@[csimp] theorem airAsm_4040357768_eq : @Asm.airAsm_4040357768 = @airAsm_4040357768_impl := sorry
 
 namespace DiffTest
 
@@ -642,6 +686,34 @@ def runLists : IO Unit := do
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
 
+-- Calls the opaque directly (`Asm.airAsm_*`), not the generated wrapper (`Asm.bswap32` etc.):
+-- the wrapper's own body is compiled once, inside `Proofs/Asm/Gen.lean`, before this file's
+-- `@[csimp]` swap exists to see -- `@[csimp]` only redirects references compiled after it, so a
+-- call already baked into the wrapper stays on the opaque's own placeholder value (`Inhabited`'s
+-- default; the `airAsm_*_eq` theorems above never fire there). A direct call from this file *is*
+-- compiled after the swap, so it does. The wrapper itself is one-line pass-through boilerplate
+-- (`let i1 ← pure (airAsm_* p0); pure (.ret i1)`) shared in shape with every other example's
+-- generated code, already exercised by every other example's diff test -- calling the opaque
+-- directly here still compares the real archive's behaviour against `examples/asm/asm.zig`'s
+-- actual inline asm, which is the property this test exists to check.
+def runBswap32 : IO Unit :=
+  processFile "asm" "bswap32" fun j => do
+    let items ← getArr j
+    let x ← getInt items[0]!
+    pure (render (pure (Asm.airAsm_3500345798 (bv 32 x)) : Zig.Result (BitVec 32)) false)
+
+def runPopcnt64 : IO Unit :=
+  processFile "asm" "popcnt64" fun j => do
+    let items ← getArr j
+    let x ← getWideInt items[0]!
+    pure (render (pure (Asm.airAsm_4040357768 (bv 64 x)) : Zig.Result (BitVec 64)) true)
+
+def runLzcnt64 : IO Unit :=
+  processFile "asm" "lzcnt64" fun j => do
+    let items ← getArr j
+    let x ← getWideInt items[0]!
+    pure (render (pure (Asm.airAsm_3884223243 (bv 64 x)) : Zig.Result (BitVec 64)) true)
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -715,4 +787,9 @@ def main : IO Unit := do
     DiffTest.runHypot2
     DiffTest.runCelsius
     DiffTest.runDot
+
+  run "asm" do
+    DiffTest.runBswap32
+    DiffTest.runPopcnt64
+    DiffTest.runLzcnt64
 

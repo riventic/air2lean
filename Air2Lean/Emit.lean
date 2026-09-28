@@ -831,6 +831,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .trap => #[]
   | .line _ => #[]
   | .dbg _ _ => #[]
+  -- `Check.lean` accepts only the no-`ref` output convention, so only the inputs carry a `ref`.
+  | .asm _ _ _ _ inputs => inputs.filterMap (·.ref)
 
 /-- Ids referenced inside `body` (recursively) that are defined outside it: the free variables
 of a loop body, i.e. what its extracted top-level def must take as parameters. -/
@@ -891,6 +893,65 @@ elaboration failures when only the outermost per-function do-block was ascribed)
 its own. -/
 def FCtx.ascribedDo (fc : FCtx) (body : String) : String :=
   s!"({doBlock body} : {fc.monad} {fc.localsName} {fc.exitName})"
+
+/-! ## Inline asm (M21) -/
+
+/-- One distinct asm op across the whole program (`docs/generated-code.md` §asm): the generated
+`opaque` def's name and `BitVec` widths. Two occurrences share a def when their source, ordered
+constraint list (outputs then inputs) and operand widths all match — width is not part of the
+brief's stated key (a hash of template and constraints), but two different-width asm exprs
+sharing a name would give one of them the wrong `BitVec` width, so width is folded into the
+identity here too. -/
+structure AsmDef where
+  name : String
+  inputWidths : Array Nat
+  outputWidth : Option Nat
+  deriving BEq
+
+/-- The generated Lean name of the `opaque` def for an asm op: `airAsm_<hash>`, `<hash>` a small
+FNV-1a hash of the source template, the ordered constraint list and the operand widths. Not
+Lean's own `hash`: this only needs to be stable within one generation run (the toolchain is
+pinned), and a hand-rolled hash keeps that independent of a core implementation detail. -/
+def asmDefName (source : String) (constraints : Array String) (inputWidths : Array Nat)
+    (outputWidth : Option Nat) : String :=
+  let key := s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
+    {inputWidths.toList}\u0001{outputWidth}"
+  let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
+    (h ^^^ c.val) * 0x01000193
+  s!"airAsm_{h}"
+
+/-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
+`Check.lean` accepts only register (so integer) operands. -/
+def asmValBits (f : Func) (v : Val) : Nat :=
+  let tyBits (tid : TyId) : Nat := match f.types[tid]? with | some (.int _ b) => b | _ => 0
+  match v with
+  | .inst id => ((f.allInsts.find? (·.id == id)).map fun i => tyBits i.ty).getD 0
+  | v => (v.constTy?.map tyBits).getD 0
+
+/-- Every distinct asm op in `funcs`, in first-seen order (`asmDefName` gives the identity). -/
+def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
+  let mut seen : Array String := #[]
+  let mut defs : Array AsmDef := #[]
+  for f in funcs do
+    for i in f.allInsts do
+      if let .asm source _ _ outputs inputs := i.op then
+        let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
+        let outputWidth := if outputs.isEmpty then none else some (asmValBits f (.inst i.id))
+        let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
+        let name := asmDefName source constraints inputWidths outputWidth
+        if !seen.contains name then
+          seen := seen.push name
+          defs := defs.push { name, inputWidths, outputWidth }
+  return defs
+
+/-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
+to its output's `BitVec` (`Unit` for no output). A proof can use only what the caller states
+about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
+doc comment). -/
+def emitAsmDef (d : AsmDef) : String :=
+  let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
+  let ret := match d.outputWidth with | some w => s!"BitVec {w}" | none => "Unit"
+  s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
 effect stays; the `_` prefix stops Lean's unused-variable warning. -/
@@ -1231,6 +1292,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
+  | .asm source _ _ outputs inputs =>
+    -- Same identity as `collectAsmOps`/`asmDefName`: this must name the very `opaque` def that
+    -- pass emitted, or the call below resolves to nothing.
+    let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
+    let outputWidth := if outputs.isEmpty then none else some (fc.tyBits inst.ty)
+    let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
+    let name := asmDefName source constraints inputWidths outputWidth
+    let args := inputs.toList.map fun i => rv i.ref.get!
+    let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
+    let (env, l) := bindLet fc env inst.id s!"pure ({call})"
+    (env, some l)
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 mutual
@@ -1666,6 +1738,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
   let memFuncs := memoryFunctions funcs
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
+  let asmStr := (collectAsmOps funcs).toList.map emitAsmDef
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
@@ -1694,6 +1767,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     else
       String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   String.intercalate "\n\n"
-    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ globalsStr ++ funcsStr ++ [s!"end {ns}"])
+    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ funcsStr ++
+      [s!"end {ns}"])
 
 end Air2Lean

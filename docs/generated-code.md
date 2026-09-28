@@ -196,6 +196,33 @@ A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>
 
 `tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` or `illegal` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0).
 
+## Inline asm
+
+M21 (register operands only, x86_64): one `opaque` per distinct (source template, ordered constraint list, operand widths) tuple — a proof gets only what the caller states about an op, no built-in axiom for what it computes (`Air2Lean/Air/Op.lean`'s `.asm` doc comment). Two occurrences with the same source, constraints and widths share one opaque; the name is `airAsm_<hash>`, a hash of that tuple (`Air2Lean/Emit.lean`'s `asmDefName` — not Lean's own `hash`, just stable within one generation run). `Check.lean` rejects a memory or immediate constraint, so every operand is a register, hence a plain `BitVec`; the opaque is `BitVec` in, `BitVec` out (`Unit` for no output). An input may also carry a matching constraint (`0`) tying it to the sole output register — the standard idiom for a register-modify-in-place instruction (`bswap32`'s `bswap`, which both reads and writes one register); still a register operand, so the opaque's shape does not change:
+
+```lean
+opaque airAsm_3500345798 (i0 : BitVec 32) : BitVec 32   -- bswap32: one input, one output, both 32 bits
+
+def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (airAsm_3500345798 p0)
+    pure (.ret i1)) : Zig.M bswap32Locals bswap32Exit).run' (default : bswap32Locals)
+  match e with
+  | .ret v => pure v
+```
+
+`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
+
+### Differential-test implementation
+
+`Asm.airAsm_*` has no defining equation to run — that is M21's whole point — so `tests/diff/asm/asm.zig` gives the diff test one, the same role `tests/diff/libm/libm.zig` plays for `ZigLean/Float/Libm.lean`'s transcendental ops: one `export fn air2lean_asm_<op>` per op, reimplementing `examples/asm/asm.zig`'s behaviour with ordinary Zig builtins (`@byteSwap`, `@popCount`, `@clz`) instead of the inline asm itself — the diff test needs behavioural equivalence, not instruction equivalence, and a builtin-based archive builds on every host, not only x86_64. Built into `air2lean_asm.a` by `scripts/diff.sh` and linked into `difftest` (`tests/diff/lakefile.toml`'s `moreLinkArgs`).
+
+Wiring an already-imported opaque to an `@[extern]` archive function needs `@[csimp]`, not `@[implemented_by]`: both attributes refuse to attach to a declaration from an already-imported module (`Asm.airAsm_*` lives in `Proofs/Asm/Gen.lean`, imported by `tests/diff/Diff.lean`), but `@[csimp]` tags a fresh theorem instead (`@Asm.airAsm_3500345798 = @airAsm_3500345798_impl`, one per op, in `Diff.lean`) and swaps `f` for `g` in compiled code only, never in the kernel. The theorem needs a real proof, and none exists (again, M21's point) — `Diff.lean` uses `sorry` for it, the one place in the repo that assumes rather than proves; confined to `tests/diff/`, outside `scripts/no-sorry.sh`'s scope (`ZigLean`, `Proofs`).
+
+`@[csimp]` only redirects references *compiled after* the theorem — `Asm.bswap32` (and `lzcnt64`, `popcnt64`) are compiled once, inside `Proofs/Asm/Gen.lean`, long before `Diff.lean`'s theorems exist, so a call through the generated wrapper never sees the swap and stays on the opaque's `Inhabited`-default placeholder. `Diff.lean`'s `runBswap32`/`runLzcnt64`/`runPopcnt64` call `Asm.airAsm_*` directly instead, bypassing the wrapper: those calls compile after the theorems, so the swap applies.
+
+Mutation (i) (`scripts/mutate.sh`) mutates this archive (`air2lean_asm_bswap32` returns its input unchanged), not a Lean file: there is no Lean-side equation to mutate for an opaque, so this is the only way to confirm the comparison against `examples/asm/asm.zig`'s real inline asm is live, not vacuous.
+
 ## Differential test
 
 One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `heap`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
