@@ -1,6 +1,5 @@
 //! M20: casts (`@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`,
-//! `@alignCast`) and `@fieldParentPtr`. `packed`/`extern` layout, unions/error unions in memory,
-//! and function pointers are outside this milestone's scope (PLAN.md).
+//! `@alignCast`), `@fieldParentPtr`, and `packed` structs.
 
 pub const Point = struct {
     x: u32,
@@ -56,6 +55,41 @@ pub fn parentOfY(yp: *u32) *Point {
     return @fieldParentPtr("y", yp);
 }
 
+/// A flags register: 8 bits, first field in the lowest bit.
+pub const Flags = packed struct(u8) {
+    ready: bool,
+    err: bool,
+    mode: u2,
+    count: u4,
+};
+
+/// The byte of `f` (`@bitCast` of a packed struct).
+pub fn flagsToByte(f: Flags) u8 {
+    return @bitCast(f);
+}
+
+/// The flags of `b`.
+pub fn byteToFlags(b: u8) Flags {
+    return @bitCast(b);
+}
+
+/// `b` with its `mode` bits set to `m`.
+pub fn setMode(b: u8, m: u2) u8 {
+    var f: Flags = @bitCast(b);
+    f.mode = m;
+    return @bitCast(f);
+}
+
+/// Add 1 to `p.count`, wrapping (a bit-pointer read and write through memory).
+pub fn incCount(p: *Flags) void {
+    p.count +%= 1;
+}
+
+/// `p.ready and !p.err`.
+pub fn isOk(p: *const Flags) bool {
+    return p.ready and !p.err;
+}
+
 comptime {
     _ = &addrEq;
     _ = &ptrRoundTrip;
@@ -66,4 +100,9 @@ comptime {
     _ = &align4;
     _ = &parentOfX;
     _ = &parentOfY;
+    _ = &flagsToByte;
+    _ = &byteToFlags;
+    _ = &setMode;
+    _ = &incCount;
+    _ = &isOk;
 }

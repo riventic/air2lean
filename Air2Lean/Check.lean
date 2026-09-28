@@ -57,9 +57,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     let l := layouts[id]?.getD {}
     if l.allowzero then
       throw s!"{fnName}: near line {line}: an `allowzero` pointer is outside the subset"
-    if l.hostSize != 0 then
-      throw s!"{fnName}: near line {line}: a pointer to a packed struct field is outside the \
-        subset (M20)"
+    -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
+    -- `hostSize` (`Zig.loadBits`).
+    if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
+      throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
+        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8, 16)"
     let _ := isConst
     match size with
     | "one" | "many" | "slice" => recur child
@@ -71,7 +73,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     recur set
     recur payload
   | .errorSet _ => pure ()
-  | .struct _ _ fields => fields.forM fun (_, fty) => recur fty
+  | .struct name layout fields =>
+    if layout == "packed" && (packedBits types id).isNone then
+      throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
+        integer, a `bool` or a packed struct: outside the subset"
+    fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
     match tag with
@@ -126,7 +132,11 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let _ ← modelLayout types layouts tag
     exported
   | some (.struct name layout fields) =>
-    if layout == "packed" then throw s!"packed struct '{name}' (M20)"
+    if layout == "packed" then
+      -- Its backing integer (`Zig.Packed`).
+      let some bits := packedBits types id | throw s!"packed struct '{name}' with a field other \
+        than an integer, a `bool` or a packed struct"
+      return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
       let _ ← modelLayout types layouts fty
     if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
@@ -267,7 +277,21 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if isOptPtr aty || isOptPtr ty then
         throw s!"{fnName}: near line {line}: a bitcast of an optional pointer (`?*T`) is \
           outside the subset (M20)"
-      pure line
+      -- A packed struct is a bitcast of its backing integer only (`Zig.Packed`). A bitcast of
+      -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
+      -- (`@ptrCast`), it is a load of other bytes.
+      let kind (t : TyId) : String := match cx.types[t]? with
+        | some (.struct _ "packed" _) => "packed"
+        | some (.struct ..) | some (.array ..) | some (.union ..) | some (.tuple _) => "agg"
+        | some (.int ..) => "int"
+        | _ => "other"
+      if aty == ty then return line
+      match kind aty, kind ty with
+      | "packed", "int" | "int", "packed" => pure line
+      | "packed", _ | _, "packed" | "agg", _ | _, "agg" =>
+        throw s!"{fnName}: near line {line}: a `@bitCast` of an aggregate other than a packed \
+          struct to or from an integer is outside the subset"
+      | _, _ => pure line
     | none => pure line
   | .abs _ =>
     match cx.types[ty]? with

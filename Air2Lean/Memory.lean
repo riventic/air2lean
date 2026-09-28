@@ -112,6 +112,20 @@ def escapingAllocs (f : Func) : Array InstId :=
         | none => acc
       | _ => acc
 
+/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, or another packed
+struct. `none` for every other type (outside the subset, M20). -/
+partial def packedBits (types : Array Ty) (id : TyId) : Option Nat :=
+  match types[id]? with
+  | some (.int _ bits) => some bits
+  | some .bool => some 1
+  | some (.struct _ "packed" fields) =>
+    fields.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedBits types t
+  | _ => none
+
+/-- The first bit of field `idx` of the packed struct `fields`: field 0 is at bit 0. -/
+def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : Nat) : Nat :=
+  (fields.extract 0 idx).foldl (fun acc (_, t) => acc + (packedBits types t).getD 0) 0
+
 /-- The type `id` contains a pointer (a slice too), through struct, tuple, union and array
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=

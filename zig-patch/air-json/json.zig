@@ -1160,6 +1160,11 @@ const W = struct {
                 // A bit-pointer (`&packed_struct.field`): the size of its host integer in bytes.
                 try w.field("host_size");
                 try w.j.write(info.packed_offset.host_size);
+                // Its field's first bit in the host integer (schema 11).
+                if (info.packed_offset.host_size != 0) {
+                    try w.field("bit_offset");
+                    try w.j.write(info.packed_offset.bit_offset);
+                }
             },
             .array => {
                 try w.j.write("array");

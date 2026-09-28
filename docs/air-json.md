@@ -34,7 +34,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5) |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9) |
 | `optional` | `child: id` |

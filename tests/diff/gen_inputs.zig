@@ -2280,4 +2280,31 @@ fn genLayout(rng: std.Random) !void {
             try writer.writeAll("]}\n");
         }
     }
+    // flagsToByte(f: Flags), byteToFlags(b: u8): every byte (both harnesses build `f` field by
+    // field from the byte, not with `@bitCast`).
+    inline for (.{ "flagsToByte", "byteToFlags" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{b});
+    }
+    // setMode(b: u8, m: u2): every pair.
+    {
+        var file = try openLayout("setMode");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| for (0..4) |m| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ b, m });
+    }
+    // incCount/isOk(p: *Flags): a 3-byte buffer, the flags at offset 0, 1 or 2 (the other
+    // bytes must not change).
+    inline for (.{ "incCount", "isOk" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 3)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 3));
+            try writer.writeAll("]}\n");
+        }
+    }
 }

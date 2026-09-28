@@ -731,6 +731,9 @@ def runPointers : IO Unit := do
   processMem ex m0 "addDown"
     (fun g a => return Pointers.addDown (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
 
+/-- A pure function in the memory protocol (no buffers). -/
+def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
+
 def runLayout : IO Unit := do
   let ex := "layout"
   let m0 := Layout.mem0
@@ -747,9 +750,21 @@ def runLayout : IO Unit := do
   processMem ex m0 "align4" (fun g a => return Layout.align4 (← ptrOf g a[0]!)) (ptrRes 4)
   processMem ex m0 "parentOfX" (fun g a => return Layout.parentOfX (← ptrOf g a[0]!)) (ptrRes 8)
   processMem ex m0 "parentOfY" (fun g a => return Layout.parentOfY (← ptrOf g a[0]!)) (ptrRes 8)
-
-/-- A pure function in the memory protocol (no buffers). -/
-def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
+  -- `Flags` field by field from a byte (not `Zig.Packed.ofBits`, which is what the tests check).
+  let flagsOf (b : Nat) : Layout.Flags :=
+    { ready := b % 2 == 1, err := b / 2 % 2 == 1, mode := BitVec.ofNat 2 (b / 4), count := BitVec.ofNat 4 (b / 16) }
+  let b01 (b : Bool) := if b then "1" else "0"
+  let flagsStr (_ : Zig.Mem) (f : Layout.Flags) : String :=
+    s!"\{\"ready\":{b01 f.ready},\"err\":{b01 f.err},\"mode\":{f.mode.toNat},\"count\":{f.count.toNat}}"
+  processMem ex m0 "flagsToByte"
+    (fun _ a => return pureMem (Layout.flagsToByte (flagsOf (← getInt a[0]!).toNat))) fun _ v => natStr v false
+  processMem ex m0 "byteToFlags"
+    (fun _ a => return pureMem (Layout.byteToFlags (bv 8 (← getInt a[0]!)))) flagsStr
+  processMem ex m0 "setMode"
+    (fun _ a => return pureMem (Layout.setMode (bv 8 (← getInt a[0]!)) (bv 2 (← getInt a[1]!))))
+    fun _ v => natStr v false
+  processMem ex m0 "incCount" (fun g a => return Layout.incCount (← ptrOf g a[0]!)) unitStr
+  processMem ex m0 "isOk" (fun g a => return Layout.isOk (← ptrOf g a[0]!)) fun _ b => b01 b
 
 def runSlices : IO Unit := do
   let ex := "slices"

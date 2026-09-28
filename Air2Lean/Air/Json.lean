@@ -204,7 +204,7 @@ def parseTy (j : Json) : Except String Ty := do
   | other => throw s!"unknown type kind: {other}"
 
 /-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
-`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`. -/
+`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`. -/
 def parseLayout (j : Json) : Except String Layout := do
   let nat? (k : String) : Except String (Option Nat) :=
     match optField j k with
@@ -222,7 +222,8 @@ def parseLayout (j : Json) : Except String Layout := do
   return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel",
            isVolatile := ← bool "volatile",
-           allowzero := ← bool "allowzero", hostSize := (← nat? "host_size").getD 0 }
+           allowzero := ← bool "allowzero", hostSize := (← nat? "host_size").getD 0,
+           bitOffset := (← nat? "bit_offset").getD 0 }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=

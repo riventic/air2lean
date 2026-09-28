@@ -58,6 +58,31 @@ fn argParentOfY(b: []common.Buf, it: []std.json.Value) struct { *u32 } {
     return .{ptr(*u32, b, it[0])};
 }
 
+/// The flags of `b`, field by field (not with `@bitCast`, which is what the tests check).
+fn flagsOf(b: u8) layout.Flags {
+    return .{
+        .ready = b & 1 != 0,
+        .err = b & 2 != 0,
+        .mode = @intCast((b >> 2) & 3),
+        .count = @intCast(b >> 4),
+    };
+}
+fn argFlagsToByte(_: []common.Buf, it: []std.json.Value) struct { layout.Flags } {
+    return .{flagsOf(@intCast(it[0].integer))};
+}
+fn argByteToFlags(_: []common.Buf, it: []std.json.Value) struct { u8 } {
+    return .{@intCast(it[0].integer)};
+}
+fn argSetMode(_: []common.Buf, it: []std.json.Value) struct { u8, u2 } {
+    return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
+}
+fn argIncCount(b: []common.Buf, it: []std.json.Value) struct { *layout.Flags } {
+    return .{ptr(*layout.Flags, b, it[0])};
+}
+fn argIsOk(b: []common.Buf, it: []std.json.Value) struct { *const layout.Flags } {
+    return .{ptr(*const layout.Flags, b, it[0])};
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -74,4 +99,9 @@ pub fn main() !void {
     try run(gpa, "align4", layout.align4, argAlign4);
     try run(gpa, "parentOfX", layout.parentOfX, argParentOfX);
     try run(gpa, "parentOfY", layout.parentOfY, argParentOfY);
+    try run(gpa, "flagsToByte", layout.flagsToByte, argFlagsToByte);
+    try run(gpa, "byteToFlags", layout.byteToFlags, argByteToFlags);
+    try run(gpa, "setMode", layout.setMode, argSetMode);
+    try run(gpa, "incCount", layout.incCount, argIncCount);
+    try run(gpa, "isOk", layout.isOk, argIsOk);
 }

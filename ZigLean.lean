@@ -4,5 +4,6 @@ import ZigLean.Float.Libm
 import ZigLean.Lemmas
 import ZigLean.Loop
 import ZigLean.Mem
+import ZigLean.Packed
 import ZigLean.Simp
 import ZigLean.Vec

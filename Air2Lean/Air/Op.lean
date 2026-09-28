@@ -66,6 +66,8 @@ structure Layout where
   allowzero : Bool := false
   /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
   hostSize : Nat := 0
+  /-- A bit-pointer: the first bit of its field in the host integer. -/
+  bitOffset : Nat := 0
   deriving Repr, Inhabited
 
 inductive Val where

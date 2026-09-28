@@ -14,6 +14,25 @@ instance : Zig.Enc Point where
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x), (4, Zig.Enc.encode v.y)]
   decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0, y := ← Zig.Enc.decodeAt bs 4 }
 
+structure Flags where
+  ready : Bool
+  err : Bool
+  mode : BitVec 2
+  count : BitVec 4
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed Flags 8 where
+  toBits v := ((Zig.Packed.toBits v.ready).setWidth 8 <<< 0) ||| ((Zig.Packed.toBits v.err).setWidth 8 <<< 1) ||| ((Zig.Packed.toBits v.mode).setWidth 8 <<< 2) ||| ((Zig.Packed.toBits v.count).setWidth 8 <<< 4)
+  ofBits b := { ready := Zig.Packed.get b 0, err := Zig.Packed.get b 1, mode := Zig.Packed.get b 2, count := Zig.Packed.get b 4 }
+
+instance : Zig.Enc Flags where
+  size := 1
+  align := 1
+  encode v := Zig.Enc.encode (Zig.Packed.toBits v)
+  decode bs := do
+    let b : BitVec 8 ← Zig.Enc.decode bs
+    pure (Zig.Packed.ofBits b)
+
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
 
@@ -86,6 +105,19 @@ def asVolatile (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+structure byteToFlagsLocals where
+  deriving Inhabited
+
+inductive byteToFlagsExit where
+  | ret (v : Flags)
+
+def byteToFlags (p0 : BitVec 8) : Zig.Result (Flags) := do
+  let e ← ((do
+    let i1 ← pure (Zig.Packed.ofBits p0 : Flags)
+    pure (.ret i1)) : Zig.M byteToFlagsLocals byteToFlagsExit).run' (default : byteToFlagsLocals)
+  match e with
+  | .ret v => pure v
+
 structure dropConstLocals where
   deriving Inhabited
 
@@ -98,6 +130,61 @@ def dropConst (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i1)) : Zig.MM dropConstLocals dropConstExit).run' (default : dropConstLocals)
   match e with
   | .ret v => pure v
+
+structure flagsToByteLocals where
+  deriving Inhabited
+
+inductive flagsToByteExit where
+  | ret (v : BitVec 8)
+
+def flagsToByte (p0 : Flags) : Zig.Result (BitVec 8) := do
+  let e ← ((do
+    let i1 ← pure (Zig.Packed.toBits p0)
+    pure (.ret i1)) : Zig.M flagsToByteLocals flagsToByteExit).run' (default : flagsToByteLocals)
+  match e with
+  | .ret v => pure v
+
+structure incCountLocals where
+  deriving Inhabited
+
+inductive incCountExit where
+  | ret
+
+def incCount (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 0)
+    let i2 ← Zig.loadBits (BitVec 4) 1 1 4 i1
+    let i3 ← pure (Zig.addWrap i2 (1 : BitVec 4))
+    Zig.storeBits (α := BitVec 4) 1 1 4 i1 i3
+    pure .ret) : Zig.MM incCountLocals incCountExit).run' (default : incCountLocals)
+  match e with
+  | .ret => pure ()
+
+structure isOkLocals where
+  deriving Inhabited
+
+inductive isOkExit where
+  | ret (v : Bool)
+  | br3 (v : Bool)
+
+def isOk (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 0)
+    let i2 ← Zig.loadBits (Bool) 1 1 0 i1
+    match ← ((do
+      if i2 then (do
+        let i5 ← pure (p0.add 0)
+        let i6 ← Zig.loadBits (Bool) 1 1 1 i5
+        let i7 ← pure (!i6)
+        pure (.br3 i7))
+      else (do
+        pure (.br3 false))) : Zig.MM isOkLocals isOkExit) with
+    | .br3 v3 => (do
+      pure (.ret v3))
+    | e => pure e) : Zig.MM isOkLocals isOkExit).run' (default : isOkLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 
 structure parentOfXLocals where
   deriving Inhabited
@@ -193,5 +280,23 @@ def ptrRoundTrip (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+structure setModeLocals where
+  f : Flags
+  deriving Inhabited
+
+inductive setModeExit where
+  | ret (v : BitVec 8)
+
+def setMode (p0 : BitVec 8) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
+  let e ← ((do
+    let i3 ← pure (Zig.Packed.ofBits p0 : Flags)
+    modify (fun s => { s with f := i3 })
+    modify (fun s => { s with f := { s.f with mode := p1 } })
+    let i7 ← pure ((← get).f)
+    let i8 ← pure (Zig.Packed.toBits i7)
+    pure (.ret i8)) : Zig.M setModeLocals setModeExit).run' (default : setModeLocals)
+  match e with
+  | .ret v => pure v
 
 end Layout

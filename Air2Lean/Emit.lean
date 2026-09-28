@@ -219,6 +219,12 @@ def emitEnc (s : NamedType) : String :=
   let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
                s!"  align := {s.layout.align.getD 1}"]
   match s.ty with
+  | .struct _ "packed" fields =>
+    -- Its backing integer (`Zig.Packed`).
+    let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
+    String.intercalate "\n" (head ++
+      ["  encode v := Zig.Enc.encode (Zig.Packed.toBits v)", "  decode bs := do",
+       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    pure (Zig.Packed.ofBits b)"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
       s!"({o}, Zig.Enc.encode v.{mangleField f})"
@@ -293,10 +299,21 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     String.intercalate "\n"
       ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
         s!"def {n}.tag : {n} → {tagName}"] ++ tagArms ++ perField)
-  | .struct _ _ fields =>
+  | .struct _ layout fields =>
     let fieldLines := (fields.map fun (fname, fty) => s!"  {mangleField fname} : {tyStr fty}").toList
-    String.intercalate "\n"
-      ([s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"])
+    let decl := [s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"]
+    if layout != "packed" then String.intercalate "\n" decl else
+    -- `Zig.Packed`: field 0 in the lowest bits (`ZigLean/Packed.lean`).
+    let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
+    let offs := (List.range fields.size).map (packedFieldBit s.srcTypes fields)
+    let toBits := (fields.toList.zip offs).map fun ((f, _), o) =>
+      s!"((Zig.Packed.toBits v.{mangleField f}).setWidth {bits} <<< {o})"
+    let ofBits := (fields.toList.zip offs).map fun ((f, _), o) =>
+      s!"{mangleField f} := Zig.Packed.get b {o}"
+    String.intercalate "\n" (decl ++ ["",
+      s!"instance : Zig.Packed {n} {bits} where",
+      s!"  toBits v := {String.intercalate " ||| " toBits}",
+      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"])
   | _ => ""
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
@@ -679,8 +696,16 @@ def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.ty
 /-- The byte offset of field `idx` of the struct that the pointer `base` points to. -/
 def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   match fc.valTy base with
-  | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+  | .ptr _ _ c =>
+    match fc.tyOfId c with
+    -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
+    -- not a bit-pointer.
+    | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
+    | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
   | _ => 0
+
+/-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
+def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
 
 /-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
@@ -718,7 +743,13 @@ def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
 
 /-- A load through a pointer to memory. -/
 def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
-  s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+  match fc.valTyId? ptr with
+  | some t =>
+    if fc.hostSize t != 0 then
+      s!"Zig.loadBits ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
+        {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
+    else s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+  | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -1239,6 +1270,14 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
+    let isPacked (t : Ty) : Bool := match t with | .struct _ "packed" _ => true | _ => false
+    if isPacked (fc.valTy a) then
+      -- A packed struct to its backing integer.
+      let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
+    else if isPacked (fc.tyOfId inst.ty) then
+      let expr := s!"pure (Zig.Packed.ofBits {rv a} : {fc.emitTyOf inst.ty})"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     let srcPtr := fc.isPtr a
     let dstPtr := fc.isPtrTy inst.ty
     if srcPtr && !dstPtr then
@@ -1342,7 +1381,9 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else (env, none)
   | .fieldPtr base idx =>
     if fc.isMemPtr base then
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {fc.fieldOffset base idx})"
+      -- A bit-pointer points to the host integer: the base's own address.
+      let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {off})"
       (env, some l)
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
@@ -1366,7 +1407,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match v with
       -- `undefined`: every byte of the value becomes undefined.
       | .undef _ => (env, some s!"Zig.storeUndef ({ty}) {align} {rv ptr}")
-      | _ => (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
+      | _ =>
+        let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+        if host != 0 then
+          let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
+          (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
+        else (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
     else (env, some (fc.storePlace ptr (rv v)))
   | .atomicLoad ptr _order =>
     let bits := fc.tyBits inst.ty
