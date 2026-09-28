@@ -40,6 +40,14 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
+# (i) Lean-runtime mutation, threads: `RmwOp.group` (ZigLean/Mem/Thread.lean) puts `Xchg` in the
+#     `Xor` commuting group. `xchgRace`'s two concurrent, unused-result swaps then commute: the
+#     model computes a value instead of throwing `.nondet` -- tests/diff/threads/nondet.txt's
+#     pinned count (300) drops to 0.
+# (j) Lean-runtime mutation, threads: `recordAccess` (ZigLean/Mem/Basic.lean) never checks for a
+#     race (`raceAt`'s result is ignored; every access is recorded as race-free). `race` and
+#     `xchgRace` then both return a value instead of throwing `.illegal`/`.nondet` --
+#     tests/diff/threads/unspecified.txt and nondet.txt's pinned counts both drop to 0.
 #
 # Usage: mutate.sh
 # Env:
@@ -47,7 +55,7 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers for (f), slices for (g), lists for (h))
+#                         pointers for (f), slices for (g), lists for (h), threads for (i)/(j))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -80,6 +88,7 @@ lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
+thread_lean="ZigLean/Mem/Thread.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -88,6 +97,7 @@ lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
 alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
+thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -96,6 +106,7 @@ cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
 cp "$mem_lean" "$mem_backup"
 cp "$alloc_lean" "$alloc_backup"
+cp "$thread_lean" "$thread_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -111,8 +122,9 @@ cleanup() {
   cp "$round_backup" "$round_lean"
   cp "$mem_backup" "$mem_lean"
   cp "$alloc_backup" "$alloc_lean"
+  cp "$thread_backup" "$thread_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$alloc_backup"
+    "$mem_backup" "$alloc_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -304,6 +316,39 @@ else
   run_and_report "mutation (h)" lists
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$alloc_backup" "$alloc_lean"
+fi
+
+echo "== mutation (i): RmwOp.group puts Xchg in the Xor commuting group (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/| \.xor => some \.xor/| .xor | .xchg => some .xor/' "$thread_lean"
+  sed -i.bak 's/| \.xchg | \.nand => none/| .nand => none/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '| .xor | .xchg => some .xor' "$thread_lean" || {
+    echo "error: mutation (i): sed did not change RmwOp.group" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (i)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (j): recordAccess never checks for a race (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (j): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/match raceAt m.footprint clock block off len kind with/match (none : Option Error) with/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q 'match (none : Option Error) with' "$mem_lean" || {
+    echo "error: mutation (j): sed did not change recordAccess" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (j)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$mem_backup" "$mem_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

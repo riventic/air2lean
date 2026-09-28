@@ -1,4 +1,4 @@
-# AIR JSON format (schema 7)
+# AIR JSON format (schema 8)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 7,
+  "schema": 8,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -73,6 +73,9 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `index` | `struct_field_val`, `struct_field_ptr`, `union_init`: field index |
 | `name` | `dbg_var_ptr`, `dbg_var_val`, `dbg_arg_inline`: variable name |
 | `line` | `dbg_stmt`: 1-based source line |
+| `order` | `atomic_load`, `atomic_rmw`: `std.builtin.AtomicOrder` field name (schema 8) |
+| `op` | `atomic_rmw`: `std.builtin.AtomicRmwOp` field name (schema 8) |
+| `success_order`, `failure_order` | `cmpxchg_weak`, `cmpxchg_strong` (schema 8) |
 | `unsupported` | `true` if the exporter does not decode this tag's operands |
 
 `mul_add`: `args` is `[lhs, rhs, addend]` (the `pl_op` operand is the addend, written last).
@@ -84,6 +87,8 @@ Optional pointer tags (schema 5), all with `args: [pointer]`: `is_null_ptr`, `is
 Enum and union tags: `get_union_tag` (`ty_op`), `is_named_enum_value` (`un_op`), `set_union_tag` (`bin_op`: the union pointer, the tag), `union_init` (`args: [payload]`, `index`: the field). `@intFromEnum`/`@enumFromInt` are `bitcast`/`intcast`/`intcast_safe` with an enum on one side. The tag enum of `union(enum)` has the name `@typeInfo(U).@"union".tag_type.?`.
 
 Float tags decoded as `bin_op`: `div_float`. As `un_op`: `sqrt sin cos tan exp exp2 log log2 log10 floor ceil round trunc_float`. As `ty_op`: `fptrunc fpext int_from_float int_from_float_safe float_from_int` (0.14.1 has no `int_from_float_safe`). Every `*_optimized` float tag stays `unsupported`.
+
+Atomic and thread tags (schema 8, `docs/generated-code.md` § Atomics and threads): `atomic_store_unordered`, `atomic_store_monotonic`, `atomic_store_release`, `atomic_store_seq_cst` are `bin_op` (the pointer, the value); the order is the tag name's suffix, not a separate field. `atomic_load` is `args: [pointer]` plus `order`. `atomic_rmw` is `args: [pointer, operand]` plus `op` and `order` (`Air.AtomicRmw`'s extra struct). `cmpxchg_weak`/`cmpxchg_strong` are `args: [pointer, expected, new]` plus `success_order` and `failure_order` (`Air.Cmpxchg`'s extra struct). `Thread.spawn`/`.join` are ordinary calls (`call*`), not AIR tags — the translator recognizes the callee name (`Air2Lean.Check.lean`'s `rejectedThreadFn?`; `docs/std-models.md` §Thread model).
 
 ## Ref
 

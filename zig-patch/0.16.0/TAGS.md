@@ -25,7 +25,7 @@ branch:
 
 | Difference | Examples | Handled by |
 |---|---|---|
-| A read of a field, the length or an element of a struct or slice parameter goes through a read-only stack copy: `alloc`, `store`, `bitcast` to a const pointer, then `struct_field_ptr_index_N` / `ptr_slice_len_ptr` / `slice_elem_ptr` and `load`. 0.15.2 reads the value (`struct_field_val`, `slice_len`, `slice_elem_val`). | `basic` (`weightedTardiness`, `totalWeightedTardiness`), `options` (`findOr`) | `Air2Lean/Air/Canon.lean` `forwardReadOnlyCopies`; the exporter writes `ptr_slice_len_ptr`'s operand |
+| A read of a field, the length or an element of a struct or slice parameter goes through a read-only stack copy: `alloc`, `store`, `bitcast` to a const pointer, then `struct_field_ptr_index_N` / `ptr_slice_len_ptr` / `slice_elem_ptr` and `load`. 0.15.2 reads the value (`struct_field_val`, `slice_len`, `slice_elem_val`). | `basic` (`weightedTardiness`, `totalWeightedTardiness`), `options` (`findOr`), `threads` (every function taking a `*Ctx` parameter) | `Air2Lean/Air/Canon.lean` `forwardReadOnlyCopies`; the exporter writes `ptr_slice_len_ptr`'s operand |
 | More `dbg_stmt` instructions (one per `switch` prong), so the AIR instruction indexes shift. | `floatops` | `Canon.lean` `renumber` |
 | A read of a union parameter's field, or of a field of a switch prong's captured payload, goes through the same read-only stack copy (in the prong's body for a capture). | `variants` (`area`, `radius`, `scale`) | `Canon.lean` `forwardReadOnlyCopies` (any stored value, not only a parameter) |
 
