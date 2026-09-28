@@ -38,6 +38,24 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
 
+## Thread model
+
+`std.Thread.spawn`/`.join` are modelled, like the allocator, in `Zig.Mem` (`ZigLean/Mem/Thread.lean`). Fork-join only: `Thread.detach`, `.yield`, `.spinLoopHint`, `std.Thread.Futex`, `.Mutex`, `.Condition` are outside the subset and rejected at translation time (`Air2Lean/Memory.lean`'s `rejectedThreadFn?`), with the reason in the error message.
+
+| Rule | |
+|---|---|
+| `spawn(config, f, args)` | Runs `f args` eagerly, as a new thread forked from the caller. Never fails: the `SpawnConfig`'s stack size and allocator have no observable effect. `args` (the `.{...}` tuple) must have exactly 1 field (`Check.lean`) — one argument only. |
+| `join(handle)` | Runs to completion (it already did, at `spawn`). Requires `handle` to be joined by the same thread that spawned it, and not already joined; anything else throws `.illegal`. |
+| Happens-before | A Lamport vector clock per thread (`Zig.VClock`), bumped at every `spawn`/`join`. `spawn` bumps the parent's clock and gives the child a copy; `join` merges the joined thread's clock into the caller's. Two accesses are concurrent when neither clock is `≤` the other. |
+| Footprint | Every access (`Mem.footprint`) is a byte range, a kind (plain read/write, atomic read/write, with the atomic write's commuting group if any), and the clock at the time. |
+| Race check | Two concurrent accesses to the same bytes, at least one a non-atomic write, is `.illegal`. A concurrent atomic access with a write is `.nondet`, except two atomic RMWs of the same op group (`docs/generated-code.md` §Atomics and threads) on the same location, width and signedness, both with an unused result — those commute, so they never race. |
+
+`Thread.spawn`'s eager run does not change which accesses are concurrent: concurrency is a property of the vector clocks, not of physical execution order.
+
+**Known limit**: a spin-wait on a flag that no thread the model has run yet has set does not terminate — `Zig.loop`'s recursion returns `none` for it, the same as any other loop whose condition never becomes true.
+
+Every atomic op and RMW is sequentially consistent within one thread: the model does not weaken `unordered`/`monotonic`/`acquire`/`release`/`acq_rel` orderings — it decodes the ordering argument and otherwise ignores it. `cmpxchg_weak` never fails spuriously: both it and `cmpxchg_strong` compile to the same model. The subset restricts an atomic op's pointee to an integer type: no float, `bool`, enum or pointer atomic (M20 territory: pointer atomics need the memory model to track a `Zig.Ptr`'s bytes atomically, and float/`bool` atomics have no test coverage yet).
+
 ## Versions
 
 The std code differs between Zig versions: 0.15.2's `growCapacity` has a loop, 0.16.0's does not. So an example with translated std code has a translation per version (`tests/golden/<version>/<ex>/Gen.lean`), and the proofs are about the 0.16.0 translation. 0.14.1 does not run `lists`: its `ArrayListUnmanaged` is a different type (`ArrayListAlignedUnmanaged`).

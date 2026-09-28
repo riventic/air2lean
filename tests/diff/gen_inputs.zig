@@ -120,6 +120,10 @@ pub fn main() !void {
     try genMaxLane(rng);
     try genReverse(rng);
     try genCheckedAdd(rng);
+
+    // The threads generators run last, so the earlier inputs stay the same.
+    try compat.makePath("tests/diff/threads/inputs");
+    try genThreads(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2012,4 +2016,40 @@ fn genCheckedAdd(rng: std.Random) !void {
         try writeIntSlice(writer, u32, &b);
         try writer.writeAll("]\n");
     }
+}
+
+// --- examples/threads --------------------------------------------------------------------
+
+/// parallelCounter(itersPerThread: u32) -> u32. No pointer/allocator args: 4 threads share one
+/// atomic counter, so the result is always `4 * itersPerThread`, regardless of interleaving.
+/// itersPerThread stays small (0..64): each line spawns 4 real threads that loop that many
+/// times, and the differential test runs every line.
+fn genThreadsCounter(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/threads/inputs", "parallelCounter");
+    defer file.close();
+    const writer = file.writer();
+    for ([_]u32{ 0, 1 }) |n| try writer.print("[{d}]\n", .{n});
+    for (0..N - 2) |_| try writer.print("[{d}]\n", .{rng.uintAtMost(u32, 64)});
+}
+
+/// race(a: u32, b: u32) -> u32 and xchgRace(a: u32, b: u32) -> u32: both race two threads on
+/// one shared location without an ordering between them (a plain write, an atomic swap). The
+/// model rejects every call (`.illegal`/`.nondet`, docs/std-models.md §Thread model) regardless
+/// of `a`/`b`, so the values only need to exercise the full u32 range.
+fn genThreadsRace(rng: std.Random, comptime name: []const u8) !void {
+    var file = try openOutIn("tests/diff/threads/inputs", name);
+    defer file.close();
+    const writer = file.writer();
+    for (edgesU(u32)) |a| {
+        for (edgesU(u32)) |b| try writer.print("[{d},{d}]\n", .{ a, b });
+    }
+    for (0..N - edgesU(u32).len * edgesU(u32).len) |_| {
+        try writer.print("[{d},{d}]\n", .{ rng.int(u32), rng.int(u32) });
+    }
+}
+
+fn genThreads(rng: std.Random) !void {
+    try genThreadsCounter(rng);
+    try genThreadsRace(rng, "race");
+    try genThreadsRace(rng, "xchgRace");
 }

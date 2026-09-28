@@ -4,7 +4,7 @@
 
 Translate a pure subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 88 functions in 11 examples translate and match the compiled Zig on 62,580 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers`, `slices` and `lists` (heap memory, an allocator, translated std code), and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding. Memory proofs use a separation logic ([docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 91 functions in 12 examples translate and match the compiled Zig on 63,480 differential tests, including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers`, `slices` and `lists` (heap memory, an allocator, translated std code), `threads` (atomics and fork-join threads with a data-race check; [docs/std-models.md](docs/std-models.md)), and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example except `floatops` has machine-checked proofs (`Proofs/`), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding; `threads`' proof covers one atomic step, not the full multi-thread composition (`Proofs/Threads/Proofs.lean`). Memory proofs use a separation logic ([docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
 
 ## How it works
 
@@ -80,7 +80,8 @@ scripts/mutate.sh      # a changed function must fail a test
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
 | enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
-| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | threads, atomics |
+| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | |
+| atomics on an integer pointee, fork-join threads with a data-race check | |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | unions and error unions in memory |
 | `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |

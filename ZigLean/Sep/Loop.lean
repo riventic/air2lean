@@ -76,48 +76,52 @@ theorem loopMM_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (inv
 The frame `hF` stays unchanged. -/
 theorem loop_sep_spec {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I : σ → Assn)
     (meas : σ → Nat) (post : ε → σ → Assn) (hF : Heap)
-    (step : ∀ s m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s h →
+    (step : ∀ s m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s h → m.SingleThread →
       ∃ e s' m' h', (body.run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
-        m'.heap = h' ∪ hF ∧ (if again e then I s' h' ∧ meas s' < meas s else post e s' h')) :
-    ∀ s m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s h →
+        m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
+        (if again e then I s' h' ∧ meas s' < meas s else post e s' h')) :
+    ∀ s m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s h → m.SingleThread →
       ∃ e s' m' h', ((loop body again).run s).run m = pure ((e, s'), m') ∧
-        Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' := by
-  intro s m h hd hm hi
+        Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' ∧ m'.SingleThread := by
+  intro s m h hd hm hi hst
   have := loopMM_spec body again
-    (fun s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ I s h) meas
-    (fun e s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ post e s h)
-    (fun s m ⟨h, hd, hm, hi⟩ => by
-      obtain ⟨e, s', m', h', hr, hd', hm', hn⟩ := step s m h hd hm hi
+    (fun s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ I s h ∧ m.SingleThread) meas
+    (fun e s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ post e s h ∧ m.SingleThread)
+    (fun s m ⟨h, hd, hm, hi, hst⟩ => by
+      obtain ⟨e, s', m', h', hr, hd', hm', hst', hn⟩ := step s m h hd hm hi hst
       refine ⟨e, s', m', hr, ?_⟩
       split
-      · rename_i ha; simp only [ha, ↓reduceIte] at hn; exact ⟨⟨h', hd', hm', hn.1⟩, hn.2⟩
-      · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn; exact ⟨h', hd', hm', hn⟩)
-    s m ⟨h, hd, hm, hi⟩
-  obtain ⟨e, s', m', hr, h', hd', hm', hp⟩ := this
-  exact ⟨e, s', m', h', hr, hd', hm', hp⟩
+      · rename_i ha; simp only [ha, ↓reduceIte] at hn; exact ⟨⟨h', hd', hm', hn.1, hst'⟩, hn.2⟩
+      · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn
+        exact ⟨h', hd', hm', hn, hst'⟩)
+    s m ⟨h, hd, hm, hi, hst⟩
+  obtain ⟨e, s', m', hr, h', hd', hm', hp, hst'⟩ := this
+  exact ⟨e, s', m', h', hr, hd', hm', hp, hst'⟩
 
 /-- `loop_sep_spec` with the measure in the invariant (`loopMM_ghost`). -/
 theorem loop_sep_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (I : σ → Nat → Assn)
     (post : ε → σ → Assn) (hF : Heap)
-    (step : ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h →
+    (step : ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h → m.SingleThread →
       ∃ e s' m' h', (body.run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
-        m'.heap = h' ∪ hF ∧ (if again e then ∃ n' < n, I s' n' h' else post e s' h')) :
-    ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h →
+        m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
+        (if again e then ∃ n' < n, I s' n' h' else post e s' h')) :
+    ∀ s n m h, Heap.Disjoint h hF → m.heap = h ∪ hF → I s n h → m.SingleThread →
       ∃ e s' m' h', ((loop body again).run s).run m = pure ((e, s'), m') ∧
-        Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' := by
-  intro s n m h hd hm hi
+        Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' ∧ m'.SingleThread := by
+  intro s n m h hd hm hi hst
   have := loopMM_ghost body again
-    (fun s m n => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ I s n h)
-    (fun e s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ post e s h)
-    (fun s m n ⟨h, hd, hm, hi⟩ => by
-      obtain ⟨e, s', m', h', hr, hd', hm', hn⟩ := step s n m h hd hm hi
+    (fun s m n => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ I s n h ∧ m.SingleThread)
+    (fun e s m => ∃ h, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧ post e s h ∧ m.SingleThread)
+    (fun s m n ⟨h, hd, hm, hi, hst⟩ => by
+      obtain ⟨e, s', m', h', hr, hd', hm', hst', hn⟩ := step s n m h hd hm hi hst
       refine ⟨e, s', m', hr, ?_⟩
       split
       · rename_i ha; simp only [ha, ↓reduceIte] at hn
-        obtain ⟨n', hlt, hi'⟩ := hn; exact ⟨n', hlt, h', hd', hm', hi'⟩
-      · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn; exact ⟨h', hd', hm', hn⟩)
-    s m n ⟨h, hd, hm, hi⟩
-  obtain ⟨e, s', m', hr, h', hd', hm', hp⟩ := this
-  exact ⟨e, s', m', h', hr, hd', hm', hp⟩
+        obtain ⟨n', hlt, hi'⟩ := hn; exact ⟨n', hlt, h', hd', hm', hi', hst'⟩
+      · rename_i ha; simp only [ha, Bool.false_eq_true, ↓reduceIte] at hn
+        exact ⟨h', hd', hm', hn, hst'⟩)
+    s m n ⟨h, hd, hm, hi, hst⟩
+  obtain ⟨e, s', m', hr, h', hd', hm', hp, hst'⟩ := this
+  exact ⟨e, s', m', h', hr, hd', hm', hp, hst'⟩
 
 end Zig

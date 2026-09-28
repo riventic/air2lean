@@ -30,6 +30,32 @@ def arg3 (fnName : String) (raw : Raw.RawInst) : Except String (Val × Val × Va
   | some a, some b, some c => pure (a, b, c)
   | _, _, _ => throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs 3 args"
 
+/-- `std.builtin.AtomicOrder` field name → `AtomicOrder`. -/
+def parseOrder (fnName : String) (raw : Raw.RawInst) (field : String) (s : String) :
+    Except String AtomicOrder :=
+  match s with
+  | "unordered" => pure .unordered
+  | "monotonic" => pure .monotonic
+  | "acquire" => pure .acquire
+  | "release" => pure .release
+  | "acq_rel" => pure .acqRel
+  | "seq_cst" => pure .seqCst
+  | _ => throw s!"{fnName}: inst {raw.id}: unknown '{field}' value '{s}'"
+
+/-- `std.builtin.AtomicRmwOp` field name → `RmwOp`. -/
+def parseRmwOp (fnName : String) (raw : Raw.RawInst) (s : String) : Except String RmwOp :=
+  match s with
+  | "Xchg" => pure .xchg
+  | "Add" => pure .add
+  | "Sub" => pure .sub
+  | "And" => pure .and
+  | "Nand" => pure .nand
+  | "Or" => pure .or
+  | "Xor" => pure .xor
+  | "Max" => pure .max
+  | "Min" => pure .min
+  | _ => throw s!"{fnName}: inst {raw.id}: unknown 'op' value '{s}'"
+
 mutual
 
 /-- The AIR tag table, shared by every supported version. -/
@@ -168,6 +194,35 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "ret_load" => let a ← arg1 fnName raw; return .retLoad a
   | "load" => let a ← arg1 fnName raw; return .load a
   | "store" | "store_safe" => let (a, b) ← arg2 fnName raw; return .store a b
+  | "atomic_load" =>
+    let a ← arg1 fnName raw
+    let some orderS := raw.order
+      | throw s!"{fnName}: inst {raw.id}: 'atomic_load' needs 'order'"
+    let order ← parseOrder fnName raw "order" orderS
+    return .atomicLoad a order
+  | "atomic_store_unordered" | "atomic_store_monotonic" | "atomic_store_release"
+  | "atomic_store_seq_cst" =>
+    let (a, b) ← arg2 fnName raw
+    let order ← parseOrder fnName raw "order" ((raw.tag.splitOn "atomic_store_").getLastD "")
+    return .atomicStore a b order
+  | "atomic_rmw" =>
+    let (a, b) ← arg2 fnName raw
+    let some rmwOpS := raw.rmwOp
+      | throw s!"{fnName}: inst {raw.id}: 'atomic_rmw' needs 'op'"
+    let some orderS := raw.order
+      | throw s!"{fnName}: inst {raw.id}: 'atomic_rmw' needs 'order'"
+    let op ← parseRmwOp fnName raw rmwOpS
+    let order ← parseOrder fnName raw "order" orderS
+    return .atomicRmw op order a b
+  | "cmpxchg_weak" | "cmpxchg_strong" =>
+    let (ptr, expected, new) ← arg3 fnName raw
+    let some succS := raw.successOrder
+      | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs 'success_order'"
+    let some failS := raw.failureOrder
+      | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs 'failure_order'"
+    let succ ← parseOrder fnName raw "success_order" succS
+    let fail ← parseOrder fnName raw "failure_order" failS
+    return .cmpxchg (raw.tag == "cmpxchg_weak") ptr expected new succ fail
   | "slice_len" => let a ← arg1 fnName raw; return .sliceLen a
   | "slice_elem_val" => let (a, b) ← arg2 fnName raw; return .sliceElemVal a b
   | "ptr_add" => let (a, b) ← arg2 fnName raw; return .ptrAdd false a b

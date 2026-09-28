@@ -417,7 +417,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(9);
+        try w.j.write(10);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -486,9 +486,35 @@ const W = struct {
             .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
             .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
             .min, .max, .set_union_tag, .memset, .memset_safe, .memcpy,
+            // Pointer (lhs), element (rhs). The order is the tag name's suffix.
+            .atomic_store_unordered, .atomic_store_monotonic, .atomic_store_release,
+            .atomic_store_seq_cst,
             => {
                 const b = w.data(inst).bin_op;
                 try w.writeArgs(&.{ b.lhs, b.rhs });
+            },
+            .atomic_load => {
+                const al = w.data(inst).atomic_load;
+                try w.writeArgs(&.{al.ptr});
+                try w.field("order");
+                try w.j.write(@tagName(al.order));
+            },
+            .atomic_rmw => {
+                const pl_op = w.data(inst).pl_op;
+                const extra = w.air.extraData(Air.AtomicRmw, pl_op.payload).data;
+                try w.writeArgs(&.{ pl_op.operand, extra.operand });
+                try w.field("op");
+                try w.j.write(@tagName(extra.op()));
+                try w.field("order");
+                try w.j.write(@tagName(extra.ordering()));
+            },
+            .cmpxchg_weak, .cmpxchg_strong => {
+                const extra = w.air.extraData(Air.Cmpxchg, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{ extra.ptr, extra.expected_value, extra.new_value });
+                try w.field("success_order");
+                try w.j.write(@tagName(extra.successOrder()));
+                try w.field("failure_order");
+                try w.j.write(@tagName(extra.failureOrder()));
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
             .is_named_enum_value, .is_null_ptr, .is_non_null_ptr, .tag_name, .error_name,
@@ -862,6 +888,23 @@ const W = struct {
                     try w.j.write(ip.getNav(f.owner_nav).fqn.toSlice(ip));
                     try w.field("noreturn");
                     try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
+                    // A generic instantiation (e.g. `std.Thread.spawn`'s `function` comptime
+                    // parameter) carries its comptime arguments. The one that is itself a
+                    // function value is the callee the model must dispatch to
+                    // (`docs/std-models.md` §Thread model).
+                    if (f.generic_owner != .none) {
+                        for (f.comptime_args.get(ip)) |carg| {
+                            if (carg == .none) continue;
+                            switch (ip.indexToKey(carg)) {
+                                .func => |cf| {
+                                    try w.field("comptime_fn");
+                                    try w.j.write(ip.getNav(cf.owner_nav).fqn.toSlice(ip));
+                                    break;
+                                },
+                                else => {},
+                            }
+                        }
+                    }
                 },
                 .err => |e| {
                     try w.field("err");

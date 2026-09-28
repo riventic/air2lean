@@ -28,9 +28,9 @@ theorem Mem.heap_none_size (m : Mem) (y : Nat) : m.heap (m.blocks.size, y) = non
   simp [Mem.heap]
 
 theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hst : m.SingleThread) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
-      Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧
+      Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.SingleThread ∧
       ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' := by
   let A := alignUp m.nextAddr align
   let nb : Block := { bytes := Array.replicate size .undef, align, kind, live := true, addr := A }
@@ -44,7 +44,7 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     exact Option.or_eq_none_iff.mp this.symm
   have hh' : ∀ x y, x ≠ m.blocks.size → h' (x, y) = none := by
     intro x y hx; simp [h', hx]
-  refine ⟨⟨some m.blocks.size, 0⟩, _, h', rfl, rfl, ?_, ?_, ?_, A, ?_, ?_⟩
+  refine ⟨⟨some m.blocks.size, 0⟩, _, h', rfl, rfl, ?_, ?_, ?_, ?_, A, ?_, ?_⟩
   · refine Heap.disjoint_union_left.mpr ⟨hd, fun ⟨x, y⟩ => ?_⟩
     by_cases hx : x = m.blocks.size
     · subst hx; right; exact (hfree y).2
@@ -62,6 +62,8 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     by_cases hx : x = m.blocks.size
     · subst hx; left; exact (hfree y).1
     · right; exact hh' x y hx
+  · -- `alloc` only changes `blocks`/`nextAddr`; `SingleThread` depends on neither.
+    exact hst
   · simp only [A, alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
   · refine ⟨m.blocks.size, rfl, Int.le_refl 0, fun l => ?_⟩
     simp only [h', Int.toNat_zero, Array.size_replicate]
@@ -70,15 +72,15 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned) removes it from the heap. -/
 theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
-    ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF := by
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.SingleThread) :
+    ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.SingleThread := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
   have c0 := bytesAt_cell hb hm hpb (j := 0) (by omega)
   obtain ⟨blk, hblk, hl, _, hc⟩ := Mem.heap_some c0
   simp only [Cell.mk.injEq] at hc
   have hsz : blk.bytes.size = S := hc.2.2.1.symm
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-  refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_⟩
+  refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, hst⟩
   · simp [free, hpb, hblk, hl, h0, zig_unfold, set, StateT.set, MonadStateOf.set]
   · funext ⟨x, y⟩
     have hmx := congrFun hm (x, y)
@@ -107,18 +109,19 @@ theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {
 theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     Triple emp (alloc kind size align) (fun p => Assn.ex fun A =>
       ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
-  Triple.of_run fun _ hP _ hd hm hp => by
-    obtain ⟨p, m', h', hr, h0, hd', hm', -, A, hA, hb⟩ := alloc_run hd hm kind size align ha
+  Triple.of_run fun _ hP _ hd hm hp hst => by
+    obtain ⟨p, m', h', hr, h0, hd', hm', -, hst', A, hA, hb⟩ := alloc_run hd hm kind size align ha hst
     have hP0 : hP = Heap.empty := hp
     subst hP0
     simp only [Heap.empty_union] at hd' hm'
-    exact ⟨p, m', h', hr, hd', hm', A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩
+    refine ⟨p, m', h', hr, hd', hm', ?_, hst'⟩
+    exact ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩
 
 theorem Triple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0)
     (hpos : 0 < S) : Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
-  Triple.of_run fun _ _ hF hd hm hb => by
-    obtain ⟨m', hr, hm'⟩ := free_run hb hm hd hS h0 hpos
-    exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl⟩
+  Triple.of_run fun _ _ hF hd hm hb hst => by
+    obtain ⟨m', hr, hm', hst'⟩ := free_run hb hm hd hS h0 hpos hst
+    exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
 
 end Zig

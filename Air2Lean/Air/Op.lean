@@ -44,6 +44,9 @@ inductive Ty where
   /-- `std.mem.Allocator`: the model's `Zig.Allocator` (`ZigLean/Mem/Alloc.lean`). Its fields
   (`*anyopaque`, a table of function pointers) are not translated. -/
   | allocator
+  /-- `std.Thread`: the model's `Zig.ThreadId` (`ZigLean/Mem/Thread.lean`). Its field (a
+  platform-specific handle, e.g. `pthread_t`) is not translated. -/
+  | thread
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
@@ -76,7 +79,10 @@ inductive Val where
   /-- `{}`, the only value of `void`. -/
   | void
   | undef (ty : TyId)
-  | func (name : String) (noreturn : Bool)
+  /-- `spawnFn`: for a generic instantiation of `std.Thread.spawn`, the fqn of the function
+  passed as its comptime `function` argument (the exporter's `comptime_fn`,
+  `docs/std-models.md` §Thread model). `none` for any other function value. -/
+  | func (name : String) (noreturn : Bool) (spawnFn : Option String := none)
   /-- A `null` constant of an optional type. `ty` is the `optional` type. -/
   | optNull (ty : TyId)
   /-- An optional constant holding a payload (`docs/air-json.md`'s `Ref` reuses the plain `val`
@@ -196,6 +202,18 @@ inductive LibmOp where
   | sin | cos | tan | exp | exp2 | log | log2 | log10
   deriving Repr, Inhabited, BEq
 
+/-- `std.builtin.AtomicOrder`. Within one thread every atomic op is sequentially consistent
+(`docs/generated-code.md` §Atomics and threads); the ordering only matters for `Check.lean`'s
+race classification. -/
+inductive AtomicOrder where
+  | unordered | monotonic | acquire | release | acqRel | seqCst
+  deriving Repr, Inhabited, BEq
+
+/-- `std.builtin.AtomicRmwOp`. -/
+inductive RmwOp where
+  | xchg | add | sub | and | nand | or | xor | max | min
+  deriving Repr, Inhabited, BEq
+
 mutual
 
 inductive Op where
@@ -293,6 +311,12 @@ inductive Op where
   | retLoad (ptr : Val)
   | load (ptr : Val)
   | store (ptr : Val) (v : Val)
+  | atomicLoad (ptr : Val) (order : AtomicOrder)
+  | atomicStore (ptr v : Val) (order : AtomicOrder)
+  | atomicRmw (op : RmwOp) (order : AtomicOrder) (ptr v : Val)
+  /-- `cmpxchg_weak` (`weak = true`) / `cmpxchg_strong`. The model's `cmpxchg_weak` never fails
+  spuriously (`docs/std-models.md`), so the two behave alike. -/
+  | cmpxchg (weak : Bool) (ptr expected new : Val) (succ fail : AtomicOrder)
   | sliceLen (s : Val)
   | sliceElemVal (s : Val) (i : Val)
   /-- `ptr_add` (`sub = false`) / `ptr_sub`: the pointer `n` items after / before `p`. -/

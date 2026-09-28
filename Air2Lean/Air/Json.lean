@@ -64,6 +64,13 @@ structure RawInst where
   name : Option String
   /-- `dbg_stmt`. -/
   line : Option Nat
+  /-- `atomic_load`, `atomic_rmw`'s ordering. -/
+  order : Option String
+  /-- `atomic_rmw`'s `AtomicRmwOp`. -/
+  rmwOp : Option String
+  /-- `cmpxchg_weak`/`cmpxchg_strong`. -/
+  successOrder : Option String
+  failureOrder : Option String
   /-- `reduce`'s (`std.builtin.ReduceOp`) or `cmp_vector`'s (`std.math.CompareOperator`) operator
   name. -/
   op : Option String
@@ -141,6 +148,7 @@ def parseTy (j : Json) : Except String Ty := do
   | "struct" =>
     let name ← (← j.getObjVal? "name").getStr?
     if name == "mem.Allocator" then return .allocator
+    if name == "Thread" then return .thread
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
     if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
@@ -259,7 +267,10 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     let noreturn := match optField j "noreturn" with
       | some b => b.getBool?.toOption.getD false
       | none => false
-    return .func name noreturn
+    let spawnFn ← match optField j "comptime_fn" with
+      | some sj => some <$> sj.getStr?
+      | none => pure none
+    return .func name noreturn spawnFn
   else
     let tyId ← (← j.getObjVal? "ty").getNat?
     let some ty := types[tyId]?
@@ -402,6 +413,18 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let line ← match optField j "line" with
     | some lj => some <$> lj.getNat?
     | none => pure none
+  let order ← match optField j "order" with
+    | some oj => some <$> oj.getStr?
+    | none => pure none
+  let rmwOp ← match optField j "op" with
+    | some oj => some <$> oj.getStr?
+    | none => pure none
+  let successOrder ← match optField j "success_order" with
+    | some oj => some <$> oj.getStr?
+    | none => pure none
+  let failureOrder ← match optField j "failure_order" with
+    | some oj => some <$> oj.getStr?
+    | none => pure none
   let op ← match optField j "op" with
     | some oj => some <$> oj.getStr?
     | none => pure none
@@ -416,7 +439,7 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
     | some (.bool b) => b
     | _ => false
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, op, mask, asm, unsupported }
+           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?

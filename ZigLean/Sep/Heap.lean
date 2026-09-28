@@ -132,6 +132,11 @@ theorem writeBytes_getElem (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o +
   · simp only [hc, ↓reduceIte]
     rw [getElem!_pos a i (by omega), Array.getElem?_eq_getElem (by omega)]
 
+/-- `Mem.recordAt` only changes `clocks`/`footprint`, never `blocks`, so it never changes the
+heap (bridges `storeBytes_run`/`loadBytes_run`'s extra `.recordAt` layer for `Assert.lean`). -/
+theorem Mem.heap_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} (l : Loc) :
+    (m.recordAt block off len kind).heap l = m.heap l := by simp [Mem.heap, Mem.recordAt]
+
 theorem Mem.heap_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hn : o + bs.size ≤ blk.bytes.size) (l : Loc) :
     (m.write b blk o bs).heap l =

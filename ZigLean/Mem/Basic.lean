@@ -63,6 +63,92 @@ structure Block where
   addr : Nat
   deriving Repr
 
+/-! ## Threads (`ZigLean/Mem/Thread.lean`, `docs/std-models.md` §Thread model)
+
+Fork-join only: `std.Thread.spawn`/`.join`. Thread 0 is the thread the top-level call runs on;
+every other id is a spawned thread, in spawn order. `Mem.clocks`/`Mem.threads` are indexed by
+`ThreadId` and always the same size. -/
+
+abbrev ThreadId := Nat
+
+/-- A Lamport vector clock: component `i` is how many of thread `i`'s own recorded accesses the
+clock's owner has observed (its own, plus every other thread's up to the last fork/join edge
+with it). -/
+abbrev VClock := Array Nat
+
+namespace VClock
+
+def get (c : VClock) (i : ThreadId) : Nat := c.getD i 0
+
+/-- Bump `t`'s own component: one more of `t`'s own accesses. -/
+def bump (c : VClock) (t : ThreadId) : VClock :=
+  let c := if t < c.size then c else c ++ Array.replicate (t + 1 - c.size) 0
+  c.set! t (c.get t + 1)
+
+/-- Component-wise max: what a thread adopts when it observes another (a join edge). -/
+def merge (a b : VClock) : VClock :=
+  (Array.range (Nat.max a.size b.size)).map fun i => Nat.max (a.get i) (b.get i)
+
+/-- `a` happened-before-or-equal `b`: every component of `a` is `≤` the same component of `b`. -/
+def le (a b : VClock) : Bool :=
+  (Array.range (Nat.max a.size b.size)).all fun i => Nat.ble (a.get i) (b.get i)
+
+/-- Neither happened-before the other: two accesses with concurrent clocks are a race candidate
+if their byte ranges overlap (`recordAccess`). -/
+def concurrent (a b : VClock) : Bool := !le a b && !le b a
+
+end VClock
+
+/-- `std.builtin.AtomicRmwOp` groups whose op commutes with itself, for the model's race check
+(`docs/generated-code.md` §Atomics and threads). Never `Xchg` or `Nand` (they don't commute),
+and never mixed groups. `Air2Lean.Check.lean`'s `Func.rmwResultUnused` and `Emit.lean`'s
+`rmwGroup?` decide, per call site, whether a concrete unused-result RMW gets one of these. -/
+inductive RmwGroup where
+  | addSub | or | and | xor | min | max
+  deriving BEq, Repr, Inhabited
+
+/-- One memory access, for the race check. `atomicWrite`'s `commute`: `some g` only for an
+eligible, result-unused RMW (`RmwGroup`); a plain atomic store or a used-result RMW is
+`atomicWrite none`. -/
+inductive AccessKind where
+  | read
+  | write
+  | atomicRead
+  | atomicWrite (commute : Option RmwGroup)
+  deriving Repr, Inhabited
+
+def AccessKind.isWrite : AccessKind → Bool
+  | .write | .atomicWrite _ => true
+  | _ => false
+
+/-- `none`: `a` and `b`, both touching the same bytes with concurrent clocks, do not race.
+`some e`: they do, and `e` is the `Zig.Error` the later access throws (`docs/generated-code.md`
+§Atomics and threads): a non-atomic write racing with anything is `.illegal`; two atomics (or an
+atomic and a non-atomic write... no, see above) that don't commute is `.nondet`. -/
+def racePair (a b : AccessKind) : Option Error :=
+  match a, b with
+  | .read, .read | .read, .atomicRead | .atomicRead, .read | .atomicRead, .atomicRead => none
+  | .atomicWrite (some g1), .atomicWrite (some g2) => if g1 == g2 then none else some .nondet
+  | .write, _ | _, .write => some .illegal
+  | _, _ => some .nondet
+
+/-- Who spawned thread `id` (the parent thread's own `ThreadId` at the time), and whether
+`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. -/
+structure ThreadRec where
+  spawner : ThreadId
+  joined : Bool
+  deriving Repr, Inhabited
+
+/-- One recorded access, kept so a later overlapping access can check it for a race. -/
+structure FootprintEntry where
+  tid : ThreadId
+  clock : VClock
+  block : BlockId
+  off : Nat
+  len : Nat
+  kind : AccessKind
+  deriving Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -71,6 +157,14 @@ structure Mem where
   allocs : Nat := 0
   /-- The allocation that fails: allocation number `failAt` (from 0), or none. -/
   failAt : Option Nat := none
+  /-- The thread that is running right now. -/
+  current : ThreadId := 0
+  /-- `clocks[t]`: thread `t`'s own vector clock. Same size as `threads`. -/
+  clocks : Array VClock := #[#[]]
+  /-- `threads[t]`: bookkeeping for thread `t`, `t > 0` (`ZigLean/Mem/Thread.lean`). -/
+  threads : Array ThreadRec := #[{ spawner := 0, joined := true }]
+  /-- Every access recorded so far, across every thread. -/
+  footprint : Array FootprintEntry := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -99,13 +193,40 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
 def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
 
-def loadBytes (p : Ptr) (n align : Nat) : MemM (Array Byte) := do
-  let (_, blk, o) ← (← get).access p n align
+/-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
+`block`/`off`/`len` with a concurrent clock and does not commute with `kind` (`racePair`); `none`
+if every overlapping concurrent entry commutes. `Array.findSome?` searches in order, so this
+matches recording the accesses one at a time and stopping at the first conflict. -/
+def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off len : Nat)
+    (kind : AccessKind) : Option Error :=
+  fp.findSome? fun e =>
+    if e.block == block && off < e.off + e.len && e.off < off + len &&
+        VClock.concurrent e.clock clock then racePair e.kind kind else none
+
+/-- Record one access at `block`/`off`/`len` by the current thread (`ZigLean/Mem/Thread.lean`),
+checking it against every earlier overlapping access from a concurrent thread (`racePair`, via
+`raceAt`). Throws the race's error before recording anything. -/
+def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Unit := do
+  let m ← get
+  let t := m.current
+  let clock := VClock.bump (m.clocks[t]!) t
+  match raceAt m.footprint clock block off len kind with
+  | some err => throw err
+  | none =>
+    set { m with
+      clocks := m.clocks.set! t clock,
+      footprint := m.footprint.push { tid := t, clock, block, off, len, kind } }
+
+def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Array Byte) := do
+  let (b, blk, o) ← (← get).access p n align
+  recordAccess b o n kind
   pure (blk.bytes.extract o (o + n))
 
-def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) : MemM Unit := do
+def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) : MemM Unit := do
   let m ← get
   let (b, blk, o) ← m.access p bs.size align
+  recordAccess b o bs.size kind
+  let m ← get
   set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
 
 /-- A new block of `size` undefined bytes. -/

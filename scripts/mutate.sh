@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mutation testing for the differential test's panic-kind comparison (docs/generated-code.md
-# §Panics). Each mutation below must make scripts/diff.sh FAIL (exit 1, mismatch>0); this script
+# §Panics). Each mutation below must make scripts/diff.sh FAIL (exit 1, and mismatch>0 or a changed pinned count); this script
 # exits 0 only if every mutation was detected. Guards against a diff test that always passes.
 # Each mutation runs diff.sh over its own example only, so a mismatch elsewhere cannot count as
 # a detection.
@@ -49,6 +49,14 @@
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
+# (k) Lean-runtime mutation, threads: `RmwOp.group` (ZigLean/Mem/Thread.lean) puts `Xchg` in the
+#     `Xor` commuting group. `xchgRace`'s two concurrent, unused-result swaps then commute: the
+#     model computes a value instead of throwing `.nondet` -- tests/diff/threads/nondet.txt's
+#     pinned count (300) drops to 0.
+# (l) Lean-runtime mutation, threads: `recordAccess` (ZigLean/Mem/Basic.lean) never checks for a
+#     race (`raceAt`'s result is ignored; every access is recorded as race-free). `race` and
+#     `xchgRace` then both return a value instead of throwing `.illegal`/`.nondet` --
+#     tests/diff/threads/unspecified.txt and nondet.txt's pinned counts both drop to 0.
 #
 # Usage: mutate.sh
 # Env:
@@ -56,7 +64,8 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers (f), slices (g), lists (h), asm for (i), vectors (j))
+#                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
+#                         threads (k)/(l))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -91,6 +100,7 @@ mem_lean="ZigLean/Mem/Basic.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
 asm_zig="tests/diff/asm/asm.zig"
 vec_lean="ZigLean/Vec.lean"
+thread_lean="ZigLean/Mem/Thread.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -101,6 +111,7 @@ mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
 alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
 asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
+thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -111,6 +122,7 @@ cp "$mem_lean" "$mem_backup"
 cp "$alloc_lean" "$alloc_backup"
 cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
+cp "$thread_lean" "$thread_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -128,8 +140,9 @@ cleanup() {
   cp "$alloc_backup" "$alloc_lean"
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
+  cp "$thread_backup" "$thread_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$alloc_backup" "$asm_backup" "$vec_backup"
+    "$mem_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -177,14 +190,17 @@ run_and_report() {
     rm -f "$out"
     exit 1
   fi
-  local mismatch
+  local mismatch counts
   mismatch=$(echo "$total_line" | sed -n 's/.*mismatch=\([0-9]*\).*/\1/p')
+  # A pinned `unspecified`/`nondet` count that changed is a detection too (threads: a mutation
+  # that removes a race result changes no value, only the count).
+  counts=$(grep -c '^\(UNSPECIFIED\|NONDET\) COUNT' "$out" || true)
   rm -f "$out"
-  if [ "$status" -ne 0 ] && [ "${mismatch:-0}" -gt 0 ]; then
-    echo "$label: detected (exit=$status mismatch=$mismatch)"
+  if [ "$status" -ne 0 ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; then
+    echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=1
   else
-    echo "$label: NOT detected (exit=$status mismatch=$mismatch)"
+    echo "$label: NOT detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=0
   fi
 }
@@ -353,6 +369,39 @@ else
   run_and_report "mutation (j)" vectors
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$vec_backup" "$vec_lean"
+fi
+
+echo "== mutation (k): RmwOp.group puts Xchg in the Xor commuting group (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (k): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/| \.xor => some \.xor/| .xor | .xchg => some .xor/' "$thread_lean"
+  sed -i.bak 's/| \.xchg | \.nand => none/| .nand => none/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '| .xor | .xchg => some .xor' "$thread_lean" || {
+    echo "error: mutation (k): sed did not change RmwOp.group" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (k)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (l): recordAccess never checks for a race (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (l): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/match raceAt m.footprint clock block off len kind with/match (none : Option Error) with/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q 'match (none : Option Error) with' "$mem_lean" || {
+    echo "error: mutation (l): sed did not change recordAccess" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (l)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$mem_backup" "$mem_lean"
 fi
 
 [ "$all_detected" -eq 1 ]
