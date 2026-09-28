@@ -9,6 +9,12 @@
 # Env:
 #   AIR2LEAN_OPTIMIZE     Build optimize mode. Default: ReleaseFast.
 #   AIR2LEAN_CACHE        Download cache dir (tarballs only). Default: $HOME/.cache/air2lean
+#   AIR2LEAN_LLVM         1: build with LLVM (the compiler can then also build programs). Needs
+#                         LLVM, Clang and LLD of this Zig's LLVM version (versions.toml `llvm`)
+#                         and cmake. Default: 0, no LLVM, and lock.sh locks the compiler to
+#                         AIR dumps only.
+#   AIR2LEAN_LLVM_PREFIX  AIR2LEAN_LLVM=1: `;`-separated install prefixes of LLVM, Clang and LLD.
+#                         Default: Homebrew's llvm@<N> and lld@<N>.
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -31,6 +37,8 @@ host_version=$(zig version)
 url=$("$script_dir/toml-get.sh" "[\"$version\"]" url)
 sha256=$("$script_dir/toml-get.sh" "[\"$version\"]" sha256)
 hook_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" hook)
+llvm=${AIR2LEAN_LLVM:-0}
+case "$llvm" in 0 | 1) ;; *) echo "error: AIR2LEAN_LLVM must be 0 or 1, not '$llvm'" >&2; exit 1 ;; esac
 hook_file="$script_dir/$hook_rel"
 exporter="$script_dir/air-json/json.zig"
 [ -f "$hook_file" ] || { echo "error: hook patch not found: $hook_file" >&2; exit 1; }
@@ -75,16 +83,49 @@ cp "$exporter" "$src_dir/src/Air/json.zig"
 echo "applying $hook_file" >&2
 (cd "$src_dir" && patch -p1 < "$hook_file")
 
+# With LLVM: cmake only configures (it writes build/config.h with the LLVM, Clang and LLD
+# libraries it found); the host zig builds, as without LLVM. No cmake build: that bootstraps
+# the compiler from C and takes much longer.
+llvm_flags=(-Denable-llvm=false)
+if [ "$llvm" = 1 ]; then
+  command -v cmake >/dev/null 2>&1 || { echo "error: AIR2LEAN_LLVM=1 needs cmake" >&2; exit 1; }
+  llvm_version=$("$script_dir/toml-get.sh" "[\"$version\"]" llvm)
+  llvm_prefix=${AIR2LEAN_LLVM_PREFIX:-}
+  if [ -z "$llvm_prefix" ]; then
+    command -v brew >/dev/null 2>&1 || {
+      echo "error: AIR2LEAN_LLVM=1 without Homebrew needs AIR2LEAN_LLVM_PREFIX" >&2; exit 1; }
+    llvm_prefix=
+    for f in "llvm@$llvm_version" "lld@$llvm_version"; do
+      # brew --prefix prints the path also when the formula is not installed.
+      d=$(brew --prefix "$f")
+      [ -d "$d" ] || { echo "error: $f is not installed (brew install $f)" >&2; exit 1; }
+      llvm_prefix="${llvm_prefix:+$llvm_prefix;}$d"
+    done
+  fi
+  echo "configuring LLVM $llvm_version from $llvm_prefix" >&2
+  cmake -S "$src_dir" -B "$src_dir/build" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$llvm_prefix" >&2
+  llvm_flags=(-Denable-llvm=true -Dconfig_h="$src_dir/build/config.h")
+fi
+
 # No -Dno-lib: the build installs lib/ into the prefix alongside the binary, so the
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.
 # -Dcpu=baseline: the default is the build machine's CPU, and CI restores a cached build on
 # other runners; a newer CPU's instructions then crash it ("Illegal instruction").
-echo "building zig $version ($optimize) -> $abs_prefix" >&2
+echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
 (cd "$src_dir" && zig build \
   -Doptimize="$optimize" \
   -Dcpu=baseline \
   -Ddebug-extensions=true \
-  -Denable-llvm=false \
+  "${llvm_flags[@]}" \
   --prefix "$abs_prefix")
+
+# Without LLVM, the compiler only writes AIR (lock.sh has the reason). With LLVM, remove the
+# compiler of an earlier build without LLVM that lock.sh left in the prefix.
+if [ "$llvm" = 1 ]; then
+  rm -f "$abs_prefix/bin/zig-unlocked"
+else
+  "$script_dir/lock.sh" "$abs_prefix"
+fi
 
 echo "done: $abs_prefix/bin/zig" >&2
