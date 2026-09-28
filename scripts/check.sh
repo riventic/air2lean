@@ -13,7 +13,8 @@
 #   AIR2LEAN_CI           If 1: fail when the committed translation differs from the new translator
 #                         output: tests/golden/<version>/<ex>/Gen.lean if it exists, else
 #                         Proofs/<Ex>/Gen.lean.
-#   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/.
+#   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/
+#                         (not `asm` on a host that is not x86_64).
 #                         Also forwarded (via the environment) to scripts/diff.sh at the end.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
@@ -35,7 +36,12 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   exit 1
 }
 
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+# The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
+# (examples/asm/asm.zig).
+examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
+  if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
+  printf '%s ' "${d%/}"
+done)}
 restore_gen=""
 
 for ex in $examples; do

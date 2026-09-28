@@ -973,14 +973,20 @@ structure AsmDef where
   outputWidth : Option Nat
   deriving BEq
 
+/-- The identity of an asm op: the source template, the ordered constraint list and the operand
+widths. -/
+def asmKey (source : String) (constraints : Array String) (inputWidths : Array Nat)
+    (outputWidth : Option Nat) : String :=
+  s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
+    {inputWidths.toList}\u0001{outputWidth}"
+
 /-- The generated Lean name of the `opaque` def for an asm op: `airAsm_<hash>`, `<hash>` a small
 FNV-1a hash of the source template, the ordered constraint list and the operand widths. Not
 Lean's own `hash`: this only needs to be stable within one generation run (the toolchain is
-pinned), and a hand-rolled hash keeps that independent of a core implementation detail. -/
-def asmDefName (source : String) (constraints : Array String) (inputWidths : Array Nat)
-    (outputWidth : Option Nat) : String :=
-  let key := s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
-    {inputWidths.toList}\u0001{outputWidth}"
+pinned), and a hand-rolled hash keeps that independent of a core implementation detail.
+`collectAsmOps` removes duplicates by the full `asmKey`, not by this name: two different asm ops
+with the same hash give two `opaque` defs of one name, a Lean build error, never one shared def. -/
+def asmDefName (key : String) : String :=
   let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
     (h ^^^ c.val) * 0x01000193
   s!"airAsm_{h}"
@@ -993,7 +999,7 @@ def asmValBits (f : Func) (v : Val) : Nat :=
   | .inst id => ((f.allInsts.find? (·.id == id)).map fun i => tyBits i.ty).getD 0
   | v => (v.constTy?.map tyBits).getD 0
 
-/-- Every distinct asm op in `funcs`, in first-seen order (`asmDefName` gives the identity). -/
+/-- Every distinct asm op in `funcs`, in first-seen order (`asmKey` gives the identity). -/
 def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut seen : Array String := #[]
   let mut defs : Array AsmDef := #[]
@@ -1003,10 +1009,10 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let outputWidth := if outputs.isEmpty then none else some (asmValBits f (.inst i.id))
         let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-        let name := asmDefName source constraints inputWidths outputWidth
-        if !seen.contains name then
-          seen := seen.push name
-          defs := defs.push { name, inputWidths, outputWidth }
+        let key := asmKey source constraints inputWidths outputWidth
+        if !seen.contains key then
+          seen := seen.push key
+          defs := defs.push { name := asmDefName key, inputWidths, outputWidth }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
@@ -1353,7 +1359,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- kind).
     let unused := if rmwResultUnused fc.allInsts inst.id then "true" else "false"
     let expr := s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v} \
-      (Zig.RmwOp.group {opTerm} {unused})"
+      (Zig.RmwOp.group {opTerm} {signed} {unused})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmpxchg _weak ptr expected new _succ _fail =>
     -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
@@ -1467,12 +1473,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
   | .asm source _ _ outputs inputs =>
-    -- Same identity as `collectAsmOps`/`asmDefName`: this must name the very `opaque` def that
+    -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
     -- pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
     let outputWidth := if outputs.isEmpty then none else some (fc.tyBits inst.ty)
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmDefName source constraints inputWidths outputWidth
+    let name := asmDefName (asmKey source constraints inputWidths outputWidth)
     let args := inputs.toList.map fun i => rv i.ref.get!
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
     let (env, l) := bindLet fc env inst.id s!"pure ({call})"

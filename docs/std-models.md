@@ -45,10 +45,10 @@ The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`),
 | Rule | |
 |---|---|
 | `spawn(config, f, args)` | Runs `f args` eagerly, as a new thread forked from the caller. Never fails: the `SpawnConfig`'s stack size and allocator have no observable effect. `args` (the `.{...}` tuple) must have exactly 1 field (`Check.lean`) — one argument only. |
-| `join(handle)` | Runs to completion (it already did, at `spawn`). Requires `handle` to be joined by the same thread that spawned it, and not already joined; anything else throws `.illegal`. |
+| `join(handle)` | Runs to completion (it already did, at `spawn`). Requires `handle` to be joined by the same thread that spawned it, and not already joined; anything else throws `.illegal`. A thread that returns with a handle it did not join throws `.illegal`: `spawn` checks this for a spawned thread, the diff test's runner (`renderThread`) for the main thread when the top-level function returns. |
 | Happens-before | A Lamport vector clock per thread (`Zig.VClock`), bumped at every `spawn`/`join`. `spawn` bumps the parent's clock and gives the child a copy; `join` merges the joined thread's clock into the caller's. Two accesses are concurrent when neither clock is `≤` the other. |
 | Footprint | Every access (`Mem.footprint`) is a byte range, a kind (plain read/write, atomic read/write, with the atomic write's commuting group if any), and the clock at the time. |
-| Race check | Two concurrent accesses to the same bytes, at least one a non-atomic write, is `.illegal`. A concurrent atomic access with a write is `.nondet`, except two atomic RMWs of the same op group (`docs/generated-code.md` §Atomics and threads) on the same location, width and signedness, both with an unused result — those commute, so they never race. |
+| Race check | Two concurrent accesses to the same bytes, at least one a non-atomic write, is `.illegal`. A concurrent atomic access with a write is `.nondet`, except two atomic RMWs of the same op group (`docs/generated-code.md` §Atomics and threads) on the same bytes (so the same width), `Min`/`Max` also with the same signedness, both with an unused result — those commute, so they never race. |
 
 `Thread.spawn`'s eager run does not change which accesses are concurrent: concurrency is a property of the vector clocks, not of physical execution order.
 

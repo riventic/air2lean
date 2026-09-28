@@ -29,14 +29,18 @@
 # Usage: diff.sh
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
-#   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/.
+#   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
+#                       (not `asm` on a host that is not x86_64, as in check.sh).
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 zig_bin=${AIR2LEAN_ZIG:-zig}
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
+  if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
+  printf '%s ' "${d%/}"
+done)}
 
 # The names of an example's functions are the names of its input files (layout convention).
 functions_of() {

@@ -8,9 +8,8 @@
 //!
 //! x86_64 only: `.{ .cc = true }` is a clobber literal of x86(_64)'s own `Clobbers` struct
 //! (`std.builtin.assembly.Clobbers`), which other targets do not have a matching field for, so
-//! this file fails to compile there. Exclude it with `AIR2LEAN_EXAMPLES` on such a host
-//! (`docs/floats.md`'s `AIR2LEAN_EXAMPLES` precedent for a target-specific example); CI's
-//! `ubuntu-24.04` runners are natively x86_64, so the full matrix legs need no exclusion.
+//! this file fails to compile there. `scripts/check.sh`'s default example list skips it on such
+//! a host; CI's `ubuntu-24.04` runners are natively x86_64, so they check it.
 
 const std = @import("std");
 

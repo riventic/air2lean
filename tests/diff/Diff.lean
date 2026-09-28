@@ -756,9 +756,11 @@ def runLists : IO Unit := do
 
 /-- `renderOk` for a `Zig.MemM` function with no buffer/allocator args (`examples/threads`): runs
 it from a fresh `mem0`, then discards the final memory. A model rejection (`.illegal`, a
-non-atomic race; `.nondet`, a non-commuting concurrent atomic op) is the outer `Zig.Error`, the
-same as `renderOk`'s (docs/std-models.md §Thread model). -/
+non-atomic race; `.nondet`, a non-commuting concurrent atomic op; `.illegal`, a thread that the
+main thread did not join before the function returned) is the outer `Zig.Error`, the same as
+`renderOk`'s (docs/std-models.md §Thread model). -/
 def renderThread {α : Type} (m0 : Zig.Mem) (r : Zig.MemM α) (payload : α → String) : String :=
+  let r := do let v ← r; Zig.Thread.checkJoinedByChild 0; pure v
   match (r.run m0).run with
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"

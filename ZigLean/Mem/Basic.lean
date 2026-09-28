@@ -101,10 +101,13 @@ end VClock
 
 /-- `std.builtin.AtomicRmwOp` groups whose op commutes with itself, for the model's race check
 (`docs/generated-code.md` §Atomics and threads). Never `Xchg` or `Nand` (they don't commute),
-and never mixed groups. `Air2Lean.Check.lean`'s `Func.rmwResultUnused` and `Emit.lean`'s
-`rmwGroup?` decide, per call site, whether a concrete unused-result RMW gets one of these. -/
+and never mixed groups. `Air2Lean/Memory.lean`'s `rmwResultUnused` and `Zig.RmwOp.group`
+decide, per call site, whether a concrete unused-result RMW gets one of these. -/
 inductive RmwGroup where
-  | addSub | or | and | xor | min | max
+  | addSub | or | and | xor
+  /-- `Min`/`Max` carry the signedness: a signed and an unsigned `Min` on the same bytes do not
+  commute. -/
+  | min (signed : Bool) | max (signed : Bool)
   deriving BEq, Repr, Inhabited
 
 /-- One memory access, for the race check. `atomicWrite`'s `commute`: `some g` only for an
@@ -123,12 +126,15 @@ def AccessKind.isWrite : AccessKind → Bool
 
 /-- `none`: `a` and `b`, both touching the same bytes with concurrent clocks, do not race.
 `some e`: they do, and `e` is the `Zig.Error` the later access throws (`docs/generated-code.md`
-§Atomics and threads): a non-atomic write racing with anything is `.illegal`; two atomics (or an
-atomic and a non-atomic write... no, see above) that don't commute is `.nondet`. -/
-def racePair (a b : AccessKind) : Option Error :=
+§Atomics and threads): a non-atomic write racing with anything is `.illegal`; any other pair
+with a write that does not commute is `.nondet`. `sameRange`: `a` and `b` cover the same bytes. -/
+def racePair (a b : AccessKind) (sameRange : Bool) : Option Error :=
   match a, b with
   | .read, .read | .read, .atomicRead | .atomicRead, .read | .atomicRead, .atomicRead => none
-  | .atomicWrite (some g1), .atomicWrite (some g2) => if g1 == g2 then none else some .nondet
+  -- Two RMWs of one group commute only on the same bytes (so the same width): a 1-byte and a
+  -- 4-byte `Add` on overlapping bytes give different results in the two orders (the carry).
+  | .atomicWrite (some g1), .atomicWrite (some g2) =>
+    if g1 == g2 && sameRange then none else some .nondet
   | .write, _ | _, .write => some .illegal
   | _, _ => some .nondet
 
@@ -201,7 +207,8 @@ def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off l
     (kind : AccessKind) : Option Error :=
   fp.findSome? fun e =>
     if e.block == block && off < e.off + e.len && e.off < off + len &&
-        VClock.concurrent e.clock clock then racePair e.kind kind else none
+        VClock.concurrent e.clock clock then racePair e.kind kind (e.off == off && e.len == len)
+    else none
 
 /-- Record one access at `block`/`off`/`len` by the current thread (`ZigLean/Mem/Thread.lean`),
 checking it against every earlier overlapping access from a concurrent thread (`racePair`, via

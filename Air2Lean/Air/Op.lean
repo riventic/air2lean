@@ -203,8 +203,8 @@ inductive LibmOp where
   deriving Repr, Inhabited, BEq
 
 /-- `std.builtin.AtomicOrder`. Within one thread every atomic op is sequentially consistent
-(`docs/generated-code.md` §Atomics and threads); the ordering only matters for `Check.lean`'s
-race classification. -/
+(`docs/generated-code.md` §Atomics and threads): the translator reads the ordering and
+otherwise ignores it. -/
 inductive AtomicOrder where
   | unordered | monotonic | acquire | release | acqRel | seqCst
   deriving Repr, Inhabited, BEq

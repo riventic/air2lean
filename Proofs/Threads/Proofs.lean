@@ -63,9 +63,9 @@ theorem noRace_addSub {cb : BlockId} {S : VClock} {m : Mem}
   rw [Array.findSome?_eq_none_iff]
   intro e he
   by_cases hbeq : e.block = cb
-  · obtain ⟨-, -, hk⟩ := hinv e he hbeq
+  · obtain ⟨ho, hl, hk⟩ := hinv e he hbeq
     rcases hk with hk | hk
-    · simp only [hbeq, hk, racePair]
+    · simp only [hbeq, ho, hl, hk, racePair]
       split
       · decide
       · rfl
@@ -180,5 +180,12 @@ theorem bump_step {S : VClock} {cb : BlockId} {t : ThreadId} {m : Mem} {blk : Bl
     rw [ht]
     rw [Array.getElem!_set!_self m.clocks t _ hbound]
     exact VClock.le_trans hSle (VClock.le_bump _ _)
+
+/-! Two RMWs of one group commute only on the same bytes, and a signed and an unsigned `Min`
+are two groups (`racePair`, `RmwOp.group`). -/
+example : racePair (.atomicWrite (some .addSub)) (.atomicWrite (some .addSub)) true = none := rfl
+example : racePair (.atomicWrite (some .addSub)) (.atomicWrite (some .addSub)) false =
+    some .nondet := rfl
+example : (RmwOp.group .min true true == RmwOp.group .min false true) = false := rfl
 
 end Zig

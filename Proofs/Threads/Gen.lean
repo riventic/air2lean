@@ -94,7 +94,7 @@ def bump.loop4 (p0 : Zig.Ptr) : Zig.MM bumpLocals bumpExit := do
       let i12 ← Zig.load (Zig.Ptr) 8 i11
       match ← ((do
         let i14 ← pure (i12.add 0)
-        let i15 ← Zig.atomicRmw Zig.RmwOp.add false 4 i14 (1 : BitVec 32) (Zig.RmwOp.group Zig.RmwOp.add true)
+        let i15 ← Zig.atomicRmw Zig.RmwOp.add false 4 i14 (1 : BitVec 32) (Zig.RmwOp.group Zig.RmwOp.add false true)
         pure (.br13 i15)) : Zig.MM bumpLocals bumpExit) with
       | .br13 v13 => (do
         let i17 ← pure ((← get).i)
@@ -348,7 +348,7 @@ def swapFlag (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     let i4 ← Zig.load (BitVec 32) 4 i3
     match ← ((do
       let i6 ← pure (i2.add 0)
-      let i7 ← Zig.atomicRmw Zig.RmwOp.xchg false 4 i6 i4 (Zig.RmwOp.group Zig.RmwOp.xchg true)
+      let i7 ← Zig.atomicRmw Zig.RmwOp.xchg false 4 i6 i4 (Zig.RmwOp.group Zig.RmwOp.xchg false true)
       pure (.br5 i7)) : Zig.MM swapFlagLocals swapFlagExit) with
     | .br5 v5 => (do
       pure .ret)
