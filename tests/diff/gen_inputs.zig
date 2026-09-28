@@ -127,6 +127,9 @@ pub fn main() !void {
 
     // The vector coverage generators run last, so the earlier inputs stay the same.
     try genVectorCoverage(rng);
+    // The layout generators run last, so every earlier input stays the same.
+    try compat.makePath("tests/diff/layout/inputs");
+    try genLayout(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2169,6 +2172,112 @@ fn genVectorCoverage(rng: std.Random) !void {
             try w.writeAll("[");
             try writeFloatSlice(w, f32, &vecF(rng, n));
             try w.writeAll("]\n");
+        }
+    }
+}
+
+// -- layout (examples/layout) -------------------------------------------------------------
+//
+// Every function here uses memory: an input line is `{"bufs":[…],"args":[…]}` (same protocol
+// as pointers, above). `ptrFromAddr`'s address argument has no buffer at all: it is a wide
+// (quoted) usize, always crafted to panic (`castToNull`/`incorrectAlignment`) — a non-panicking
+// `@ptrFromInt` needs a real allocation to read back, so it is tested instead through
+// `ptrRoundTrip`, which round-trips a real buffer pointer.
+
+fn openLayout(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/layout/inputs/" ++ name ++ ".jsonl");
+}
+
+fn genLayout(rng: std.Random) !void {
+    // addrEq(a, b: *const u32): same pattern as pointers' `same` — two buffers, the same
+    // pointer, or two offsets of one buffer.
+    {
+        var file = try openLayout("addrEq");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeTwoPtrs(writer, rng, i % 3);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // ptrRoundTrip(p: *u32): one buffer, one aligned offset.
+    {
+        var file = try openLayout("ptrRoundTrip");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // ptrFromAddr(a: usize): no buffers; every address panics (0, or not a multiple of 4).
+    {
+        var file = try openLayout("ptrFromAddr");
+        defer file.close();
+        const writer = file.writer();
+        const fixed = [_]u64{ 0, 1, 2, 3, 5, 6, 7, std.math.maxInt(u64), std.math.maxInt(u64) - 2 };
+        var n: usize = 0;
+        for (fixed) |a| {
+            try writer.print("{{\"bufs\":[],\"args\":[\"{d}\"]}}\n", .{a});
+            n += 1;
+        }
+        while (n < N) : (n += 1) {
+            // Half null, half a random address whose low 2 bits are not both 0.
+            const a: u64 = if (n % 2 == 0) 0 else blk: {
+                var v = rng.int(u64);
+                if (v % 4 == 0) v +%= 1;
+                break :blk v;
+            };
+            try writer.print("{{\"bufs\":[],\"args\":[\"{d}\"]}}\n", .{a});
+        }
+    }
+    // asConst/dropConst/asVolatile(p: *u32): one buffer, one aligned offset (same pattern as
+    // pointers' `dueOf`, without the two-job choice).
+    inline for (.{ "asConst", "dropConst", "asVolatile" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // align4(p: *align(1) u32): one 8-byte buffer, an offset 0..4 — half aligned to 4
+    // (succeeds), half not (panics `incorrectAlignment`).
+    {
+        var file = try openLayout("align4");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            const off: usize = if (i % 2 == 0) 4 * rng.uintLessThan(usize, 2) else 1 + rng.uintLessThan(usize, 3);
+            try writePtr(writer, 0, off);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // parentOfX/parentOfY(p: *u32): a 12-byte buffer (room for 3 u32 slots at 0, 4, 8).
+    // parentOfX's offset can be any of the 3 (offset - 0 never underflows); parentOfY's must be
+    // 4 or 8 (offset - 4 must stay >= 0).
+    {
+        var file = try openLayout("parentOfX");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 12)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 3));
+            try writer.writeAll("]}\n");
+        }
+    }
+    {
+        var file = try openLayout("parentOfY");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 12)});
+            try writePtr(writer, 0, 4 * (1 + rng.uintLessThan(usize, 2)));
+            try writer.writeAll("]}\n");
         }
     }
 }

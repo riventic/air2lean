@@ -70,7 +70,7 @@ def valueOperands (op : Op) : Array Val :=
   | .shuffle a b mask =>
     #[a] ++ (match b with | some v => #[v] | none => #[]) ++
       mask.filterMap fun l => match l with | .value v => some v | _ => none
-  | .bitcast _ | .fieldPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
+  | .bitcast _ | .fieldPtr .. | .fieldParentPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
   | .atomicLoad .. => #[]
   | .atomicStore _ v _ => #[v]
   | .atomicRmw _ _ _ v => #[v]
@@ -201,7 +201,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
       match i.op with
-      | .load p | .store p _ | .fieldPtr p _ | .retLoad p => p.pointsToMem
+      | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
       | _ => false
 
 /-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only

@@ -254,15 +254,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         subset (M19)"
     pure line
   | .bitcast (.inst a) =>
-    -- `@intFromPtr`: a pointer to an integer needs addresses in the model (M20).
-    let isPtr (t : TyId) : Bool := match cx.types[t]? with
-      | some (.ptr ..) => true
+    -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
+    -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
+    -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
+    -- (`?*T`) is `Option Zig.Ptr` in the model, so a bitcast to/from it would need an
+    -- unwrap/wrap `Emit.lean` does not have.
+    let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
     match cx.instTys.find? (·.1 == a) with
     | some (_, aty) =>
-      if isPtr aty && !isPtr ty then
-        throw s!"{fnName}: near line {line}: `@intFromPtr` (a pointer to an integer) is outside the subset (M20)"
+      if isOptPtr aty || isOptPtr ty then
+        throw s!"{fnName}: near line {line}: a bitcast of an optional pointer (`?*T`) is \
+          outside the subset (M20)"
       pure line
     | none => pure line
   | .abs _ =>
@@ -286,6 +290,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
     checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+    pure line
+  | .fieldParentPtr fieldPtr _ =>
+    -- `@fieldParentPtr` on a place would need to walk back up the place's own field path
+    -- (`Emit.lean`'s `FCtx.computePlaces`), which is outside the subset for now (M20); it needs a
+    -- real memory pointer, whose parent struct's offsets the model must know.
+    if let .inst b := fieldPtr then
+      if cx.places.contains b then
+        cx.fail line "`@fieldParentPtr` from a local's own place is outside the subset (M20)"
+    let _ ← cx.memPtrTy line fieldPtr
+    let some (.ptr _ _ parent) := cx.types[ty]?
+      | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
+    checkMemTy fnName cx.types cx.layouts line parent
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
   | .ptrAdd _ _ _ | .elemPtr _ _ =>
@@ -373,8 +389,8 @@ partial def Val.ptrOther? (v : Val) : Option String :=
 /-- The pointer operands that `valueOperands` leaves out. -/
 def ptrOperands (op : Op) : Array Val :=
   match op with
-  | .load p | .store p _ | .fieldPtr p _ | .retLoad p | .sliceFieldPtr _ p | .bitcast p
-  | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
+  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
+  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 

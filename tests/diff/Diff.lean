@@ -14,6 +14,7 @@ import Proofs.Lists.Gen
 import Proofs.Threads.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
+import Proofs.Layout.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -730,6 +731,23 @@ def runPointers : IO Unit := do
   processMem ex m0 "addDown"
     (fun g a => return Pointers.addDown (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
 
+def runLayout : IO Unit := do
+  let ex := "layout"
+  let m0 := Layout.mem0
+  let ptrRes (size : Nat) (m : Zig.Mem) (p : Zig.Ptr) := ptrStr m0.blocks.size m p size
+  processMem ex m0 "addrEq" (fun g a => return Layout.addrEq (← ptrOf g a[0]!) (← ptrOf g a[1]!))
+    fun _ b => if b then "1" else "0"
+  processMem ex m0 "ptrRoundTrip" (fun g a => return Layout.ptrRoundTrip (← ptrOf g a[0]!))
+    (ptrRes 4)
+  processMem ex m0 "ptrFromAddr"
+    (fun _ a => return Layout.ptrFromAddr (bv 64 (← getWideInt a[0]!))) (ptrRes 4)
+  processMem ex m0 "asConst" (fun g a => return Layout.asConst (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "dropConst" (fun g a => return Layout.dropConst (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "asVolatile" (fun g a => return Layout.asVolatile (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "align4" (fun g a => return Layout.align4 (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "parentOfX" (fun g a => return Layout.parentOfX (← ptrOf g a[0]!)) (ptrRes 8)
+  processMem ex m0 "parentOfY" (fun g a => return Layout.parentOfY (← ptrOf g a[0]!)) (ptrRes 8)
+
 /-- A pure function in the memory protocol (no buffers). -/
 def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
 
@@ -945,4 +963,6 @@ def main : IO Unit := do
     DiffTest.runBswap32
     DiffTest.runPopcnt64
     DiffTest.runLzcnt64
+
+  run "layout" DiffTest.runLayout
 

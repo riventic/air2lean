@@ -417,7 +417,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(10);
+        try w.j.write(11);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -597,6 +597,12 @@ const W = struct {
             .struct_field_ptr, .struct_field_val => {
                 const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
                 try w.writeArgs(&.{extra.struct_operand});
+                try w.field("index");
+                try w.j.write(extra.field_index);
+            },
+            .field_parent_ptr => {
+                const extra = w.air.extraData(Air.FieldParentPtr, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{extra.field_ptr});
                 try w.field("index");
                 try w.j.write(extra.field_index);
             },

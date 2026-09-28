@@ -136,7 +136,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
-  | some "memcpyAlias" => some ".panic"
+  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -305,6 +305,9 @@ inductive Op where
   | alloc
   /-- `struct_field_ptr*`: the pointer to field `index` of the struct or union at `base`. -/
   | fieldPtr (base : Val) (index : Nat)
+  /-- `field_parent_ptr` (`@fieldParentPtr`): the pointer to the struct that has `fieldPtr` at
+  field `index` (`fieldPtr` minus that field's byte offset). -/
+  | fieldParentPtr (fieldPtr : Val) (index : Nat)
   /-- `set_union_tag`: make `tag`'s field active in the union at `ptr` (its payload undefined). -/
   | setUnionTag (ptr : Val) (tag : Val)
   /-- `ret_load`: return the value at `ptr` (the `ret_ptr` local). -/

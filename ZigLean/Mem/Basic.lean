@@ -340,6 +340,18 @@ def ptrAddr (p : Ptr) : MemM Int := do
     | some blk => pure (blk.addr + p.off)
     | none => throw .illegal
 
+/-- The pointer to address `n`: inside the block whose byte range covers `n`, at the matching
+offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still counts (its
+`addr` does not change on `free`), so the pointer this returns can still be a dangling one; the
+existing liveness check in `Mem.access` catches a later access through it. Round-trips with
+`ptrAddr`: `ptrFromAddr (← ptrAddr p) = p` for `p` inside its block's bytes. -/
+def ptrFromAddr (n : Nat) : MemM Ptr := do
+  let m ← get
+  match m.blocks.zipIdx.findSome? fun (blk, b) =>
+      if blk.addr ≤ n ∧ n < blk.addr + blk.bytes.size then some (b, blk.addr) else none with
+  | some (b, addr) => pure ⟨some b, (n : Int) - (addr : Int)⟩
+  | none => pure ⟨none, n⟩
+
 /-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. Two blocks have the order of their
 addresses in the model, which can differ from the compiled code. -/
 def ptrLt (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) < (← ptrAddr b)))

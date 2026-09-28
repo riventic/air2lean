@@ -425,6 +425,12 @@ def FCtx.isFloatTy (fc : FCtx) (tid : TyId) : Bool :=
 between the int and float `ZigLean` functions. -/
 def FCtx.isFloat (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .float _ => true | _ => false
 
+def FCtx.isPtrTy (fc : FCtx) (tid : TyId) : Bool := match fc.tyOfId tid with | .ptr .. => true | _ => false
+
+/-- Is `v`'s type a (non-optional) pointer? A `bitcast` to/from an int (`@intFromPtr`,
+`@ptrFromInt`) picks this side by it (M20). -/
+def FCtx.isPtr (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .ptr .. => true | _ => false
+
 /-- `"Rt"` in `compiler-rt` mode: the model ops that differ from IEEE on the reference target
 (`Zig.Float.divRt`, `fmaRtChk`, …; `docs/floats.md` §`--float-semantics`). -/
 def FCtx.rtSuffix (fc : FCtx) : String :=
@@ -676,6 +682,13 @@ def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
   | _ => 0
 
+/-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
+(`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
+def FCtx.fieldOffsetOfPtrTy (fc : FCtx) (ptrTy : TyId) (idx : Nat) : Nat :=
+  match fc.tyOfId ptrTy with
+  | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+  | _ => 0
+
 /-- The item type of the slice, many-pointer or array pointer `v`. -/
 def FCtx.itemTyId (fc : FCtx) (v : Val) : TyId :=
   ((fc.valTyId? v).bind (itemTy fc.types)).getD 0
@@ -864,6 +877,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .unionInit _ a => #[a]
   | .alloc => #[]
   | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
+  | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
   | .setUnionTag .. => #[]
   | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
   | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
@@ -1225,6 +1239,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
+    let srcPtr := fc.isPtr a
+    let dstPtr := fc.isPtrTy inst.ty
+    if srcPtr && !dstPtr then
+      -- `@intFromPtr`.
+      let expr := s!"Zig.callM (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if !srcPtr && dstPtr then
+      -- `@ptrFromInt`.
+      let expr := s!"Zig.callM (Zig.ptrFromAddr ({rv a}).toNat)"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     let srcFloat := fc.isFloat a
     let dstFloat := fc.isFloatTy inst.ty
     let expr :=
@@ -1318,6 +1343,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .fieldPtr base idx =>
     if fc.isMemPtr base then
       let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {fc.fieldOffset base idx})"
+      (env, some l)
+    else (env, none)
+  | .fieldParentPtr fieldPtr idx =>
+    if fc.isMemPtr fieldPtr then
+      let off := fc.fieldOffsetOfPtrTy inst.ty idx
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
