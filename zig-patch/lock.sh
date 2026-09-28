@@ -27,9 +27,15 @@ real="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/zig-unlocked"
 case "${1:-}" in
   version | env | targets | help | -h | --help) exec "$real" "$@" ;;
   build-obj | build-exe | build-lib | test)
+    # The last emit flag wins in zig, so refuse every -femit-bin.
+    no_bin=0
     for a in "$@"; do
-      if [ "$a" = -fno-emit-bin ]; then exec "$real" "$@"; fi
-    done ;;
+      case "$a" in
+        -fno-emit-bin) no_bin=1 ;;
+        -femit-bin*) no_bin=0; break ;;
+      esac
+    done
+    if [ "$no_bin" = 1 ]; then exec "$real" "$@"; fi ;;
 esac
 echo "error: this patched zig has no LLVM and only writes AIR (build-obj -fno-emit-bin)." >&2
 echo "Build and run programs with a stock zig, or rebuild this one with AIR2LEAN_LLVM=1" >&2

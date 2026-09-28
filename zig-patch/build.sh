@@ -38,7 +38,7 @@ url=$("$script_dir/toml-get.sh" "[\"$version\"]" url)
 sha256=$("$script_dir/toml-get.sh" "[\"$version\"]" sha256)
 hook_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" hook)
 llvm=${AIR2LEAN_LLVM:-0}
-llvm_version=$("$script_dir/toml-get.sh" "[\"$version\"]" llvm)
+case "$llvm" in 0 | 1) ;; *) echo "error: AIR2LEAN_LLVM must be 0 or 1, not '$llvm'" >&2; exit 1 ;; esac
 hook_file="$script_dir/$hook_rel"
 exporter="$script_dir/air-json/json.zig"
 [ -f "$hook_file" ] || { echo "error: hook patch not found: $hook_file" >&2; exit 1; }
@@ -89,11 +89,18 @@ echo "applying $hook_file" >&2
 llvm_flags=(-Denable-llvm=false)
 if [ "$llvm" = 1 ]; then
   command -v cmake >/dev/null 2>&1 || { echo "error: AIR2LEAN_LLVM=1 needs cmake" >&2; exit 1; }
+  llvm_version=$("$script_dir/toml-get.sh" "[\"$version\"]" llvm)
   llvm_prefix=${AIR2LEAN_LLVM_PREFIX:-}
   if [ -z "$llvm_prefix" ]; then
     command -v brew >/dev/null 2>&1 || {
       echo "error: AIR2LEAN_LLVM=1 without Homebrew needs AIR2LEAN_LLVM_PREFIX" >&2; exit 1; }
-    llvm_prefix="$(brew --prefix "llvm@$llvm_version");$(brew --prefix "lld@$llvm_version")"
+    llvm_prefix=
+    for f in "llvm@$llvm_version" "lld@$llvm_version"; do
+      # brew --prefix prints the path also when the formula is not installed.
+      d=$(brew --prefix "$f")
+      [ -d "$d" ] || { echo "error: $f is not installed (brew install $f)" >&2; exit 1; }
+      llvm_prefix="${llvm_prefix:+$llvm_prefix;}$d"
+    done
   fi
   echo "configuring LLVM $llvm_version from $llvm_prefix" >&2
   cmake -S "$src_dir" -B "$src_dir/build" -DCMAKE_BUILD_TYPE=Release \
@@ -113,8 +120,11 @@ echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
   "${llvm_flags[@]}" \
   --prefix "$abs_prefix")
 
-# Without LLVM, the compiler only writes AIR (lock.sh has the reason).
-if [ "$llvm" != 1 ]; then
+# Without LLVM, the compiler only writes AIR (lock.sh has the reason). With LLVM, remove the
+# compiler of an earlier build without LLVM that lock.sh left in the prefix.
+if [ "$llvm" = 1 ]; then
+  rm -f "$abs_prefix/bin/zig-unlocked"
+else
   "$script_dir/lock.sh" "$abs_prefix"
 fi
 
