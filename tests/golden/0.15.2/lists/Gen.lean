@@ -28,7 +28,7 @@ instance : Zig.Enc array_list_Aligned_u32_null where
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
   -- 0: a constant
-  (Zig.Enc.encode ((#v[] : Vector (BitVec 32) 0) : Vector (BitVec 32) 0), 4)]
+  (Zig.Enc.encode ((#v[] : Vector (BitVec 32) 0) : Vector (BitVec 32) 0), 4, .constGlobal)]
 
 structure array_list_Aligned_u32_null_growCapacityLocals where
   new : BitVec 64
