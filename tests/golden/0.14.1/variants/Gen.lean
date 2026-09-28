@@ -3,41 +3,6 @@ import ZigLean
 
 namespace Variants
 
-inductive Prio where
-  | low
-  | mid
-  | high
-  deriving Repr, Inhabited, DecidableEq
-
-def Prio.toBits : Prio → BitVec 8
-  | .low => (-(1 : BitVec 8))
-  | .mid => (0 : BitVec 8)
-  | .high => (5 : BitVec 8)
-
-def Prio.ofInt? (v : Int) : Option Prio :=
-  if v = -1 then some .low else if v = 0 then some .mid else if v = 5 then some .high else none
-
-def Prio.isNamed (_ : Prio) : Bool := true
-
-structure Code where
-  bits : BitVec 8
-  deriving Repr, Inhabited, DecidableEq
-
-def Code.ok : Code := ⟨(0 : BitVec 8)⟩
-def Code.warn : Code := ⟨(1 : BitVec 8)⟩
-
-def Code.toBits (e : Code) : BitVec 8 := e.bits
-
-def Code.ofInt? (v : Int) : Option Code :=
-  if 0 ≤ v ∧ v ≤ 255 then some ⟨BitVec.ofInt 8 v⟩ else none
-
-def Code.isNamed (e : Code) : Bool := e.bits == (0 : BitVec 8) || e.bits == (1 : BitVec 8)
-
-structure Rect where
-  w : BitVec 32
-  h : BitVec 32
-  deriving Repr, Inhabited, DecidableEq
-
 inductive ShapeTag where
   | circle
   | rect
@@ -55,6 +20,11 @@ def ShapeTag.ofInt? (v : Int) : Option ShapeTag :=
   if v = 0 then some .circle else if v = 1 then some .rect else if v = 2 then some .square else if v = 3 then some .empty else none
 
 def ShapeTag.isNamed (_ : ShapeTag) : Bool := true
+
+structure Rect where
+  w : BitVec 32
+  h : BitVec 32
+  deriving Repr, Inhabited, DecidableEq
 
 inductive Shape where
   | circle (v : BitVec 32)
@@ -117,6 +87,22 @@ def Shape.setTag_empty : Shape → Shape
   | .empty => .empty
   | _ => .empty
 
+inductive Prio where
+  | low
+  | mid
+  | high
+  deriving Repr, Inhabited, DecidableEq
+
+def Prio.toBits : Prio → BitVec 8
+  | .low => (-(1 : BitVec 8))
+  | .mid => (0 : BitVec 8)
+  | .high => (5 : BitVec 8)
+
+def Prio.ofInt? (v : Int) : Option Prio :=
+  if v = -1 then some .low else if v = 0 then some .mid else if v = 5 then some .high else none
+
+def Prio.isNamed (_ : Prio) : Bool := true
+
 inductive Light where
   | red
   | yellow
@@ -132,6 +118,20 @@ def Light.ofInt? (v : Int) : Option Light :=
   if v = 0 then some .red else if v = 1 then some .yellow else if v = 2 then some .green else none
 
 def Light.isNamed (_ : Light) : Bool := true
+
+structure Code where
+  bits : BitVec 8
+  deriving Repr, Inhabited, DecidableEq
+
+def Code.ok : Code := ⟨(0 : BitVec 8)⟩
+def Code.warn : Code := ⟨(1 : BitVec 8)⟩
+
+def Code.toBits (e : Code) : BitVec 8 := e.bits
+
+def Code.ofInt? (v : Int) : Option Code :=
+  if 0 ≤ v ∧ v ≤ 255 then some ⟨BitVec.ofInt 8 v⟩ else none
+
+def Code.isNamed (e : Code) : Bool := e.bits == (0 : BitVec 8) || e.bits == (1 : BitVec 8)
 
 structure nextLocals where
   deriving Inhabited

@@ -150,6 +150,10 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
       | _ => pure ()
   -- Depth-first: a type after its dependencies. Zig types cannot contain themselves by value,
   -- and `Check.lean` rejects a pointer inside a type; `open` still keeps a cycle finite.
+  -- `found`'s own order follows the AIR type table, which the compiler does not dump in a
+  -- stable order across runs; sort by name first so two types with no dependency on each
+  -- other still come out in the same relative order every time.
+  found := found.qsort (·.zigName < ·.zigName)
   let mut done : Array String := #[]
   let mut «open» : Array String := #[]
   let mut order : Array NamedType := #[]

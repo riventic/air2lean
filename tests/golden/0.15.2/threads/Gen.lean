@@ -25,22 +25,6 @@ instance : Zig.Enc RaceCtx where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.flag), (8, Zig.Enc.encode v.val)]
   decode bs := do pure { flag := ← Zig.Enc.decodeAt bs 0, val := ← Zig.Enc.decodeAt bs 8 }
 
-structure mem_Allocator_VTable where
-  alloc : Zig.Ptr
-  resize : Zig.Ptr
-  remap : Zig.Ptr
-  free : Zig.Ptr
-  deriving Repr, Inhabited, DecidableEq
-
-structure Thread_PosixThreadImpl where
-  handle : Zig.Ptr
-  deriving Repr, Inhabited, DecidableEq
-
-structure Thread_SpawnConfig where
-  stack_size : BitVec 64
-  allocator : Option (Zig.Allocator)
-  deriving Repr, Inhabited, DecidableEq
-
 structure CounterCtx where
   counter : Zig.Ptr
   n : BitVec 32
@@ -51,6 +35,13 @@ instance : Zig.Enc CounterCtx where
   align := 8
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.counter), (8, Zig.Enc.encode v.n)]
   decode bs := do pure { counter := ← Zig.Enc.decodeAt bs 0, n := ← Zig.Enc.decodeAt bs 8 }
+
+structure mem_Allocator_VTable where
+  alloc : Zig.Ptr
+  resize : Zig.Ptr
+  remap : Zig.Ptr
+  free : Zig.Ptr
+  deriving Repr, Inhabited, DecidableEq
 
 inductive builtin_AtomicOrder where
   | unordered
@@ -83,6 +74,15 @@ instance : Zig.Enc atomic_Value_u32 where
   align := 4
   encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.raw)]
   decode bs := do pure { raw := ← Zig.Enc.decodeAt bs 0 }
+
+structure Thread_SpawnConfig where
+  stack_size : BitVec 64
+  allocator : Option (Zig.Allocator)
+  deriving Repr, Inhabited, DecidableEq
+
+structure Thread_PosixThreadImpl where
+  handle : Zig.Ptr
+  deriving Repr, Inhabited, DecidableEq
 
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals []

@@ -3,17 +3,6 @@ import ZigLean
 
 namespace Lists
 
-structure Node where
-  val : BitVec 32
-  next : Option (Zig.Ptr)
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Enc Node where
-  size := 16
-  align := 8
-  encode v := Zig.Enc.fields 16 [(8, Zig.Enc.encode v.val), (0, Zig.Enc.encode v.next)]
-  decode bs := do pure { val := ← Zig.Enc.decodeAt bs 8, next := ← Zig.Enc.decodeAt bs 0 }
-
 structure mem_Allocator_VTable where
   alloc : Zig.Ptr
   resize : Zig.Ptr
@@ -26,6 +15,17 @@ instance : Zig.Enc mem_Allocator_VTable where
   align := 8
   encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.alloc), (8, Zig.Enc.encode v.resize), (16, Zig.Enc.encode v.remap), (24, Zig.Enc.encode v.free)]
   decode bs := do pure { alloc := ← Zig.Enc.decodeAt bs 0, resize := ← Zig.Enc.decodeAt bs 8, remap := ← Zig.Enc.decodeAt bs 16, free := ← Zig.Enc.decodeAt bs 24 }
+
+structure Node where
+  val : BitVec 32
+  next : Option (Zig.Ptr)
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Node where
+  size := 16
+  align := 8
+  encode v := Zig.Enc.fields 16 [(8, Zig.Enc.encode v.val), (0, Zig.Enc.encode v.next)]
+  decode bs := do pure { val := ← Zig.Enc.decodeAt bs 8, next := ← Zig.Enc.decodeAt bs 0 }
 
 structure array_list_Aligned_u32_null where
   items : Zig.Slice
