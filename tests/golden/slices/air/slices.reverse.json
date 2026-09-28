@@ -1,5 +1,5 @@
 {
- "schema": 10,
+ "schema": 11,
  "zig_version": "0.15.2",
  "name": "slices.reverse",
  "params": [

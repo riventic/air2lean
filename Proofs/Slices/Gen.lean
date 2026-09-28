@@ -15,7 +15,7 @@ def Color.toBits : Color → BitVec 2
   | .blue => (2 : BitVec 2)
 
 def Color.ofInt? (v : Int) : Option Color :=
-  if v = 0 then some .red else if v = 1 then some .green else if v = 2 then some .blue else none
+  if v = 0 then Option.some .red else if v = 1 then Option.some .green else if v = 2 then Option.some .blue else Option.none
 
 def Color.isNamed (_ : Color) : Bool := true
 

@@ -1304,11 +1304,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
     let srcPtr := fc.isPtr a
     let dstPtr := fc.isPtrTy inst.ty
-    if srcPtr && !dstPtr then
+    let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
+    if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
       let expr := s!"Zig.callM (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
-    else if !srcPtr && dstPtr then
+    else if isInt (fc.valTy a) && dstPtr then
       -- `@ptrFromInt`.
       let expr := s!"Zig.callM (Zig.ptrFromAddr ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)

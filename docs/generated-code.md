@@ -101,7 +101,7 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 ## Memory
 
-`ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, or `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block). A `Zig.Ptr` is a block and a byte offset.
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), or `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers). A `Zig.Ptr` is a block and a byte offset.
 
 A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
@@ -133,7 +133,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 
-`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A load that reads an `undef` byte of the value throws `.unspecified`; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Unions and error unions in memory, and an array with a sentinel as one value, are outside the subset (M20).
+`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A load that reads an `undef` byte of the value throws `.unspecified`; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. An array with a sentinel as one value is outside the subset. Packed structs, tagged unions and error unions in memory: §Casts, layout and function pointers.
 
 `@memset`, `@memcpy`, `@memmove` and `Zig.readSlice` do nothing for 0 items, also through a pointer that is not valid. `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
 
@@ -155,7 +155,28 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   ...
 ```
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global is not read-only in the model: without `@constCast` (M20), Zig code cannot write it. `threadlocal` and `extern` globals are outside the subset.
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global is not read-only in the model: a write through `@constCast` is illegal behaviour in Zig, but the model does not throw `.illegal` for it. `threadlocal` and `extern` globals are outside the subset.
+
+### Casts, layout and function pointers
+
+| Zig | AIR | Lean |
+|---|---|---|
+| `@intFromPtr(p)` | `bitcast` pointer → integer | `Zig.ptrAddr p` (the block's address plus the offset) |
+| `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
+| `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
+| `@fieldParentPtr("f", p)` | `field_parent_ptr` | `p.add (-offset)` |
+| `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits` |
+| `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
+
+A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool` or a packed struct; other fields are outside the subset. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. A host integer of 3, 5, 6 or 7 bytes is outside the subset.
+
+An **`extern` struct** uses the exporter's field offsets, as every struct does.
+
+A **tagged union** in memory has its tag and the active field's payload at the compiler's offsets: the part with the larger alignment first, the tag if the alignments are equal (`Check.lean`'s `unionLayout`). The translator compares the resulting size and alignment with the exporter's. A tag value without a name throws `.illegal`. A bare union (in `ReleaseSafe` it has a hidden safety tag), an `extern` union and a `packed` union are outside the subset in memory.
+
+An **error union** `E!T` in memory is `Zig.Enc (Except Zig.ErrName T)` (`ZigLean/Mem/Enc.lean`): a 2-byte error code and the payload, the payload first if its alignment is more than 2. The compiler numbers the errors per compilation, so the model does not know the code of an error. The code of error `e` is the 2 bytes `errFrag e 0`, `errFrag e 1`; 0 is no error; any other integer code throws `.unspecified`. The differential test compares an `errFrag` byte as a wildcard. `is_err_ptr`, `unwrap_errunion_payload_ptr`, `unwrap_errunion_err_ptr` and `errunion_payload_ptr_set` are `Zig.errIsErrAt`, `Zig.errPayloadPtr`, `Zig.errCodeAt` and `Zig.errSetOk`.
+
+A **function pointer** points to a 1-byte global block of its function in `mem0`. Only the functions whose address the program takes (a global whose initial value is a function) have a block. The call graph and the memory analysis count each of them as a callee of every indirect call through a pointer of its type.
 
 ### Atomics and threads
 

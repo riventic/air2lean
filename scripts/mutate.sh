@@ -57,6 +57,10 @@
 #     race (`raceAt`'s result is ignored; every access is recorded as race-free). `race` and
 #     `xchgRace` then both return a value instead of throwing `.illegal`/`.nondet` --
 #     tests/diff/threads/unspecified.txt and nondet.txt's pinned counts both drop to 0.
+# (m) Emitter-output mutation, layout: the generated `Zig.Packed Flags 8` instance
+#     (Proofs/Layout/Gen.lean) reads `ready` from bit 1 and `err` from bit 0 in `ofBits` (two
+#     fields swapped). `byteToFlags`, `isOk` and the `@bitCast` round trip in `setMode` then
+#     differ from Zig.
 #
 # Usage: mutate.sh
 # Env:
@@ -65,7 +69,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l))
+#                         threads (k)/(l), layout (m))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -93,6 +97,7 @@ has_example() {
 gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
 variants_gen="Proofs/Variants/Gen.lean"
+layout_gen="Proofs/Layout/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
@@ -104,6 +109,7 @@ thread_lean="ZigLean/Mem/Thread.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
+layout_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-layout-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
@@ -115,6 +121,7 @@ thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
+cp "$layout_gen" "$layout_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
@@ -133,6 +140,7 @@ cleanup() {
   cp "$gen_backup" "$gen_file"
   cp "$options_backup" "$options_gen"
   cp "$variants_backup" "$variants_gen"
+  cp "$layout_backup" "$layout_gen"
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
@@ -141,7 +149,7 @@ cleanup() {
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
-  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
+  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
     "$mem_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
@@ -279,9 +287,9 @@ echo "== mutation (e): Light.ofInt? accepts the unnamed value 3 (emitter output)
 if ! has_example variants; then
   echo "mutation (e): skipped (AIR2LEAN_EXAMPLES excludes variants)"
 else
-  sed -i.bak 's/else if v = 2 then some .green else none/else if v = 2 then some .green else if v = 3 then some .red else none/' "$variants_gen"
+  sed -i.bak 's/else if v = 2 then Option.some .green else Option.none/else if v = 2 then Option.some .green else if v = 3 then Option.some .red else Option.none/' "$variants_gen"
   rm -f "$variants_gen.bak"
-  grep -q 'if v = 3 then some .red' "$variants_gen" || {
+  grep -q 'if v = 3 then Option.some .red' "$variants_gen" || {
     echo "error: mutation (e): sed did not change Light.ofInt?" >&2
     exit 1
   }
@@ -402,6 +410,22 @@ else
   run_and_report "mutation (l)" threads
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$mem_backup" "$mem_lean"
+fi
+
+echo "== mutation (m): Flags.ofBits swaps ready and err (emitter output) ==" >&2
+if ! has_example layout; then
+  echo "mutation (m): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/ready := Zig.Packed.get b 0, err := Zig.Packed.get b 1,/ready := Zig.Packed.get b 1, err := Zig.Packed.get b 0,/' "$layout_gen"
+  rm -f "$layout_gen.bak"
+  grep -q 'ready := Zig.Packed.get b 1, err := Zig.Packed.get b 0,' "$layout_gen" || {
+    echo "error: mutation (m): sed did not change Flags.ofBits" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (m)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$layout_backup" "$layout_gen"
 fi
 
 [ "$all_detected" -eq 1 ]

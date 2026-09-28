@@ -1,5 +1,5 @@
 {
- "schema": 10,
+ "schema": 11,
  "zig_version": "0.16.0",
  "name": "lists.sum",
  "params": [

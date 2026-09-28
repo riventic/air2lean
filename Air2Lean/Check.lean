@@ -298,16 +298,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
-    -- (`?*T`) is `Option Zig.Ptr` in the model, so a bitcast to/from it would need an
-    -- unwrap/wrap `Emit.lean` does not have.
+    -- (`?*T`) is `Option Zig.Ptr` in the model: a bitcast to another optional pointer (a
+    -- `@constCast`) is a no-op, and one from a pointer is Lean's coercion `Zig.Ptr → Option
+    -- Zig.Ptr`. Any other bitcast to or from it would need an unwrap/wrap `Emit.lean` does not
+    -- have.
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
     match cx.instTys.find? (·.1 == a) with
     | some (_, aty) =>
-      if isOptPtr aty || isOptPtr ty then
-        throw s!"{fnName}: near line {line}: a bitcast of an optional pointer (`?*T`) is \
-          outside the subset (M20)"
+      let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
+      if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
+        throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
+          another type is outside the subset"
       -- A packed struct is a bitcast of its backing integer only (`Zig.Packed`). A bitcast of
       -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
       -- (`@ptrCast`), it is a load of other bytes.
