@@ -11,6 +11,7 @@ import Proofs.Variants.Gen
 import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
 import Proofs.Lists.Gen
+import Proofs.Threads.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -642,6 +643,36 @@ def runLists : IO Unit := do
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
 
+/-- `renderOk` for a `Zig.MemM` function with no buffer/allocator args (`examples/threads`): runs
+it from a fresh `mem0`, then discards the final memory. A model rejection (`.illegal`, a
+non-atomic race; `.nondet`, a non-commuting concurrent atomic op) is the outer `Zig.Error`, the
+same as `renderOk`'s (docs/std-models.md §Thread model). -/
+def renderThread {α : Type} (m0 : Zig.Mem) (r : Zig.MemM α) (payload : α → String) : String :=
+  match (r.run m0).run with
+  | none => "{\"diverge\":true}"
+  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
+  | some (.ok (v, _)) => "{\"ok\":" ++ payload v ++ "}"
+
+def runParallelCounter : IO Unit :=
+  processFile "threads" "parallelCounter" fun j => do
+    let items ← getArr j
+    let n ← getInt items[0]!
+    pure (renderThread Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false))
+
+def runRace : IO Unit :=
+  processFile "threads" "race" fun j => do
+    let items ← getArr j
+    let a ← getInt items[0]!
+    let b ← getInt items[1]!
+    pure (renderThread Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false))
+
+def runXchgRace : IO Unit :=
+  processFile "threads" "xchgRace" fun j => do
+    let items ← getArr j
+    let a ← getInt items[0]!
+    let b ← getInt items[1]!
+    pure (renderThread Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false))
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -707,6 +738,11 @@ def main : IO Unit := do
   run "slices" DiffTest.runSlices
 
   run "lists" DiffTest.runLists
+
+  run "threads" do
+    DiffTest.runParallelCounter
+    DiffTest.runRace
+    DiffTest.runXchgRace
 
   run "floats" do
     DiffTest.runLerp

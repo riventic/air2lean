@@ -26,14 +26,16 @@ theorem counter_init : ∃ h hF, Heap.Disjoint h hF ∧ mem0.heap = h ∪ hF ∧
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :
     Triple (pts counter 4 x) bump (fun r => ⌜r = x + 1⌝ ∗ pts counter 4 (x + 1)) := by
   apply Triple.of_run
-  intro m hP hF hd hm hp
-  have hl := pts_load_run hp hm (by decide)
-  obtain ⟨m', hs, h', hd', hm', hp'⟩ := pts_store_run hp hm hd (by decide) (x + 1#32)
-  have hl' := pts_load_run hp' hm' (by decide)
+  intro m hP hF hd hm hp hst
+  -- `bump` reads the counter, writes it, reads it again: each step mutates memory (`recordAt`),
+  -- so it runs on the previous step's output memory.
+  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
+  obtain ⟨mB, hs, hstB, h', hd', hmB, hp'⟩ := pts_store_run hp hmA hd (by decide) hstA (x + 1#32)
+  obtain ⟨mC, hl', hmC, hstC⟩ := pts_load_run hp' hmB (by decide) hstB
   have hov : x.uaddOverflow 1#32 = false := by
     have : x.toNat + 1 < 4294967296 := hx
     simp [BitVec.uaddOverflow]; omega
-  refine ⟨x + 1, m', h', ?_, hd', hm', sep_lift.mpr ⟨rfl, hp'⟩⟩
+  refine ⟨x + 1, mC, h', ?_, hd', hmC, sep_lift.mpr ⟨rfl, hp'⟩, hstC⟩
   simp only [StateT.run, counter, pure, ExceptT.pure, ExceptT.mk] at hl hs hl'
   simp [bump, zig_unfold, Zig.add, hl, hs, hl', hov]
 
@@ -45,10 +47,10 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
     Triple (arr sl.ptr vs) (copyWithin sl d s n)
       (fun _ => arr sl.ptr (copyItems vs d.toNat s.toNat n.toNat)) := by
   apply Triple.of_run
-  intro m hP hF hdj hm hp
-  obtain ⟨m', hr, h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp hm
-    hdj (by decide) (by decide) (by decide) hd hs
-  refine ⟨(), m', h', ?_, hd', hm', hp'⟩
+  intro m hP hF hdj hm hp hst
+  obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp
+    hm hdj (by decide) (by decide) (by decide) hd hs hst
+  refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
   have hl := sl.len.isLt
   have hdo : d.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
   have hso : s.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
@@ -66,10 +68,10 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :
     Triple (arr sl.ptr vs) (fill sl v) (fun _ => arr sl.ptr (List.replicate vs.length v)) := by
   apply Triple.of_run
-  intro m hP hF hd hm hp
-  obtain ⟨m', hr, h', hd', hm', hp'⟩ := arr_memset_run (a := 1) (n := sl.len) hp hm hd (by decide)
-    (by decide) hlen v
-  refine ⟨(), m', h', ?_, hd', hm', hp'⟩
+  intro m hP hF hd hm hp hst
+  obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memset_run (a := 1) (n := sl.len) hp hm hd
+    (by decide) (by decide) hlen hst v
+  refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
   simp only [StateT.run] at hr
   simp [fill, zig_unfold, hr]
 
@@ -88,9 +90,9 @@ def revMeas (s : reverseLocals) : Nat := s.j.toNat + 1 - s.i.toNat
 
 theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length)
     (hF : Heap) (s : reverseLocals) (m : Mem) (h : Heap) (hd : Heap.Disjoint h hF)
-    (hm : m.heap = h ∪ hF) (hi : revInv sl.ptr vs s h) :
+    (hm : m.heap = h ∪ hF) (hi : revInv sl.ptr vs s h) (hst : m.SingleThread) :
     ∃ e s' m' h', ((reverse.loop15 sl).run s).run m = pure ((e, s'), m') ∧
-      Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧
+      Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
       (if reverse.again15 e then revInv sl.ptr vs s' h' ∧ revMeas s' < revMeas s
        else e = .br14 ∧ arr sl.ptr vs.reverse h') := by
   obtain ⟨ws, hw, hwl, hij, hk⟩ := hi
@@ -98,20 +100,26 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
   · have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
     have e4 : Enc.size (BitVec 32) = 4 := rfl
-    have l1 := arr_load_run (a := 4) (i := s.i) hw hm (by decide) (by decide) (by decide) hin
-    have l2 := arr_load_run (a := 4) (i := s.j) hw hm (by decide) (by decide) (by decide) hjn
-    obtain ⟨m₁, s₁, h₁, hd₁, hm₁, hw₁⟩ :=
-      arr_store_run (a := 4) (i := s.i) hw hm hd (by decide) (by decide) (by decide) hin ws[s.j.toNat]
-    obtain ⟨m₂, s₂, h₂, hd₂, hm₂, hw₂⟩ :=
+    -- `reverse.loop15` reads item `i`, reads item `j`, writes item `i`, writes item `j`: each
+    -- step mutates memory (`recordAt`), so it runs on the previous step's output memory.
+    obtain ⟨mA, l1, hmA, hstA⟩ :=
+      arr_load_run (a := 4) (i := s.i) hw hm (by decide) (by decide) (by decide) hin hst
+    obtain ⟨mB, l2, hmB, hstB⟩ :=
+      arr_load_run (a := 4) (i := s.j) hw hmA (by decide) (by decide) (by decide) hjn hstA
+    obtain ⟨m₁, s₁, hst₁, h₁, hd₁, hm₁, hw₁⟩ :=
+      arr_store_run (a := 4) (i := s.i) hw hmB hd (by decide) (by decide) (by decide) hin hstB
+        ws[s.j.toNat]
+    obtain ⟨m₂, s₂, hst₂, h₂, hd₂, hm₂, hw₂⟩ :=
       arr_store_run (a := 4) (i := s.j) hw₁ hm₁ hd₁ (by decide) (by decide) (by decide)
-        (by simpa using hjn) ws[s.i.toNat]
+        (by simpa using hjn) hst₁ ws[s.i.toNat]
     rw [e4] at l1 l2 s₁ s₂
     simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at l1 l2 s₁ s₂
     have hil : s.i.toNat < sl.len.toNat := by omega
     have hjl : s.j.toNat < sl.len.toNat := by omega
     have hio : s.i.uaddOverflow 1#64 = false := by simp [BitVec.uaddOverflow]; omega
     have hjo : s.j.usubOverflow 1#64 = false := by simp [BitVec.usubOverflow]; omega
-    refine ⟨.rep15, { { s with i := s.i + 1#64 } with j := s.j - 1#64 }, m₂, h₂, ?_, hd₂, hm₂, ?_⟩
+    refine ⟨.rep15, { { s with i := s.i + 1#64 } with j := s.j - 1#64 }, m₂, h₂, ?_, hd₂, hm₂, hst₂,
+      ?_⟩
     · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, Zig.add, Zig.sub, hlt, hil, hjl, l1, l2,
         s₁, s₂, hio, hjo]
     · have hi1 : (s.i + 1#64).toNat = s.i.toNat + 1 := by
@@ -139,7 +147,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
               omega
             simp only [this]
       · simp only [revMeas, hi1, hj1]; omega
-  · refine ⟨.br14, s, m, h, ?_, hd, hm, ?_⟩
+  · refine ⟨.br14, s, m, h, ?_, hd, hm, hst, ?_⟩
     · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, hlt]
     · simp only [reverse.again15, Bool.false_eq_true, ↓reduceIte, true_and]
       have : ws = vs.reverse := by
@@ -158,12 +166,12 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
 theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
     Triple (arr sl.ptr vs) (reverse sl) (fun _ => arr sl.ptr vs.reverse) := by
   apply Triple.of_run
-  intro m hP hF hd hm hp
+  intro m hP hF hd hm hp hst
   by_cases hn : vs.length = 0
   · have hv : vs = [] := List.eq_nil_of_length_eq_zero hn
     subst hv
     have h0 : sl.len = 0#64 := by apply BitVec.eq_of_toNat_eq; simp [hlen]
-    refine ⟨(), m, hP, ?_, hd, hm, hp⟩
+    refine ⟨(), m, hP, ?_, hd, hm, hp, hst⟩
     simp [reverse, zig_unfold, h0]
   · let s₀ : reverseLocals := { ({ (default : reverseLocals) with i := 0#64 }) with j := sl.len - 1#64 }
     have hj0 : (sl.len - 1#64).toNat = vs.length - 1 := by
@@ -174,12 +182,13 @@ theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
       · intro k hk
         have : ¬ (k < (0#64 : BitVec 64).toNat ∨ vs.length - 1 < k) := by simp; omega
         simp only [s₀, hj0]; rw [ite_eq_right_of_eq_false _ _ (eq_false this)]
-    obtain ⟨e, s', m', h', hr, hd', hm', he, hpost⟩ :=
+    obtain ⟨e, s', m', h', hr, hd', hm', ⟨he, hpost⟩, hst'⟩ :=
       loop_sep_spec (reverse.loop15 sl) reverse.again15 (revInv sl.ptr vs) revMeas
         (fun e _ h => e = .br14 ∧ arr sl.ptr vs.reverse h) hF
-        (fun s m h hd hm hi => reverse_step sl vs hlen hF s m h hd hm hi) s₀ m hP hd hm hinit
+        (fun s m h hd hm hi hst => reverse_step sl vs hlen hF s m h hd hm hi hst)
+        s₀ m hP hd hm hinit hst
     subst he
-    refine ⟨(), m', h', ?_, hd', hm', hpost⟩
+    refine ⟨(), m', h', ?_, hd', hm', hpost, hst'⟩
     have hne : ¬ sl.len = 0#64 := by
       intro h; apply hn; rw [← hlen, h]; rfl
     have hso : sl.len.usubOverflow 1#64 = false := by

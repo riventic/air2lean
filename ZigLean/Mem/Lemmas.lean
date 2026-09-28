@@ -69,23 +69,202 @@ theorem extract_writeBytes_disjoint (a : Array Byte) (o : Nat) (bs : Array Byte)
       · omega
     · congr 1; omega
 
+/-- `recordAccess` at `block`/`off`/`len`/`kind` succeeds (does not race) on `m`, and its effect:
+bumps the current thread's clock and appends the footprint entry, leaving `blocks` untouched. A
+`NoRace` hypothesis is a precondition on every lemma below that composes a load or a store, the
+same way `Mem.access`'s own success is (`access_eq`/`access_of`) — it is not derived from an
+invariant on `Mem` (an arbitrary `Mem` value has no such invariant), so a caller composing several
+accesses in one thread (no concurrent access to the same bytes, the common case for the example
+proofs) discharges it directly at each step. -/
+def NoRace (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind) : Prop :=
+  raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+
+theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
+    (hnr : NoRace m block off len kind) :
+    (recordAccess block off len kind).run m = pure ((), { m with
+      clocks := m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current),
+      footprint := m.footprint.push
+        { tid := m.current, clock := VClock.bump (m.clocks[m.current]!) m.current,
+          block, off, len, kind } }) := by
+  unfold recordAccess NoRace at *
+  simp only [get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set, StateT.set,
+    MonadStateOf.set, pure, StateT.pure, StateT.run, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont, liftM, monadLift, MonadLift.monadLift, StateT.lift, Option.bind_some, hnr]
+
+/-- The memory after a race-free `recordAccess` at `block`/`off`/`len`/`kind` on `m`
+(`recordAccess_run`). -/
+def Mem.recordAt (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind) : Mem :=
+  { m with
+    clocks := m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current),
+    footprint := m.footprint.push
+      { tid := m.current, clock := VClock.bump (m.clocks[m.current]!) m.current,
+        block, off, len, kind } }
+
+/-! ## Single-thread executions
+
+A per-call-site `NoRace` hypothesis is the general obligation (`NoRace`'s own doc comment), but a
+program that never spawns a thread (all of `M17`'s example proofs) discharges it uniformly: no
+other thread ever runs, so no footprint entry can be concurrent with the current access. -/
+
+theorem VClock.le_iff {a b : VClock} : VClock.le a b = true ↔ ∀ i, a.get i ≤ b.get i := by
+  unfold VClock.le
+  constructor
+  · intro h i
+    by_cases hi : i < Nat.max a.size b.size
+    · have h' := (Array.all_eq_true.mp h) i (by simpa using hi)
+      rw [Array.getElem_range (by simpa using hi)] at h'
+      exact Nat.ble_eq.mp h'
+    · have hmax : Nat.max a.size b.size ≤ i := Nat.not_lt.mp hi
+      have ha : a.size ≤ i := Nat.le_trans (Nat.le_max_left _ _) hmax
+      have hb : b.size ≤ i := Nat.le_trans (Nat.le_max_right _ _) hmax
+      simp [VClock.get, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none ha,
+        Array.getElem?_eq_none hb]
+  · intro h
+    apply Array.all_eq_true.mpr
+    intro i hi
+    rw [Array.getElem_range (by simpa using hi)]
+    exact Nat.ble_eq.mpr (h i)
+
+theorem VClock.le_refl (c : VClock) : VClock.le c c = true := VClock.le_iff.mpr fun _ => Nat.le_refl _
+
+theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VClock.le b c = true) :
+    VClock.le a c = true :=
+  VClock.le_iff.mpr fun i => Nat.le_trans (VClock.le_iff.mp hab i) (VClock.le_iff.mp hbc i)
+
+/-- The padding a bump to `t` may append does not change any component already in `c`, and (if it
+extends the array) leaves every new component but `t` itself at `0`. -/
+theorem VClock.get_pad (c : VClock) (t i : ThreadId) (h : i ≠ t) :
+    ((if t < c.size then c else c ++ Array.replicate (t + 1 - c.size) 0) : VClock).get i =
+      c.get i := by
+  unfold VClock.get
+  by_cases ht : t < c.size
+  · simp [ht]
+  · simp only [ht, ↓reduceIte, Array.getD_eq_getD_getElem?, Array.getElem?_append]
+    by_cases hi : i < c.size
+    · simp [hi]
+    · simp only [hi, ↓reduceIte, Array.getElem?_replicate]
+      rw [Array.getElem?_eq_none (Nat.le_of_not_lt hi)]
+      split <;> rfl
+
+/-- Bumping `t`'s own component leaves every other component as-is. -/
+theorem VClock.get_bump_ne (c : VClock) (t i : ThreadId) (h : i ≠ t) :
+    (VClock.bump c t).get i = c.get i := by
+  unfold VClock.bump VClock.get
+  rw [Array.getD_eq_getD_getElem?, Array.set!_eq_setIfInBounds,
+    Array.getElem?_setIfInBounds_ne (Ne.symm h), ← Array.getD_eq_getD_getElem?]
+  exact VClock.get_pad c t i h
+
+/-- Bumping `t`'s own component increases it by one.
+
+`t : Nat`, not `ThreadId`: mixing the `ThreadId` abbrev into arithmetic on `c.size` (a bare `Nat`)
+makes Lean's binop elaborator pick inconsistent (though defeq) instance paths across the
+expression, so `omega` fails to relate the hypotheses to the goal — see the sibling helper
+`have`s below, which hit exactly this if stated over `ThreadId`. -/
+theorem VClock.get_bump_self (c : VClock) (t : Nat) :
+    (VClock.bump c t).get t = c.get t + 1 := by
+  unfold VClock.bump VClock.get
+  rw [Array.getD_eq_getD_getElem?, Array.set!_eq_setIfInBounds]
+  by_cases ht : t < c.size
+  · simp only [ht, ↓reduceIte]
+    rw [Array.getElem?_setIfInBounds_self_of_lt ht, Option.getD_some]
+  · have hge : c.size ≤ t := Nat.le_of_not_lt ht
+    have hpad : (c ++ Array.replicate (t + 1 - c.size) 0 : VClock).size = t + 1 := by
+      simp only [Array.size_append, Array.size_replicate]; omega
+    have hsize : t < (c ++ Array.replicate (t + 1 - c.size) 0 : VClock).size := by omega
+    simp only [ht, ↓reduceIte]
+    rw [Array.getElem?_setIfInBounds_self_of_lt hsize, Option.getD_some]
+    congr 1
+    rw [Array.getD_eq_getD_getElem?, Array.getElem?_append]
+    simp only [ht, ↓reduceIte, Array.getElem?_replicate]
+    have hlt : t - c.size < t + 1 - c.size := by omega
+    rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_none hge]
+    simp [hlt]
+
+/-- Bumping only ever increases (or leaves unchanged) every component. -/
+theorem VClock.le_bump (c : VClock) (t : ThreadId) : VClock.le c (VClock.bump c t) = true := by
+  apply VClock.le_iff.mpr
+  intro i
+  by_cases hi : i = t
+  · subst hi; rw [VClock.get_bump_self]; omega
+  · rw [VClock.get_bump_ne c t i hi]; exact Nat.le_refl _
+
+/-- Every recorded access was made by `m`'s current thread, and its clock is dominated by the
+current thread's own (present) clock. True of the initial memory (empty footprint), and preserved
+by every race-free access on the same thread (`singleThread_recordAt`) — so a program that never
+spawns another thread carries this as a standing invariant, discharging `NoRace` for free at every
+step (`noRace_of_singleThread`) instead of a bespoke hypothesis per call site. The bound on
+`current` is carried alongside so `recordAt`'s `set!` provably lands on a real slot. -/
+def Mem.SingleThread (m : Mem) : Prop :=
+  m.current < m.clocks.size ∧
+    ∀ e ∈ m.footprint, e.tid = m.current ∧ VClock.le e.clock (m.clocks[m.current]!) = true
+
+theorem singleThread_empty {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clocks.size) :
+    m.SingleThread := ⟨hc, by simp [hf]⟩
+
+theorem noRace_of_singleThread {m : Mem} (h : m.SingleThread) (block off len : Nat)
+    (kind : AccessKind) : NoRace m block off len kind := by
+  unfold NoRace raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro e he
+  have ⟨_, hle⟩ := h.2 e he
+  have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
+  simp [racePair, VClock.concurrent, hle']
+
+theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
+    (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
+  have hbump : (m.recordAt block off len kind).clocks[(m.recordAt block off len kind).current]! =
+      VClock.bump (m.clocks[m.current]!) m.current := by
+    show (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current))[m.current]! = _
+    exact Array.getElem!_set!_self m.clocks m.current _ h.1
+  refine ⟨?_, ?_⟩
+  · show m.current < (m.clocks.set! m.current _).size
+    rw [Array.size_set!]; exact h.1
+  · intro e he
+    unfold Mem.recordAt at he
+    simp only [Array.mem_push] at he
+    rcases he with he | rfl
+    · have ⟨htid, hle⟩ := h.2 e he
+      refine ⟨htid, ?_⟩
+      rw [hbump]
+      exact VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
+    · refine ⟨rfl, ?_⟩
+      rw [hbump]
+      exact VClock.le_refl _
+
 theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
-    (h : m.access p n a = pure (b, blk, o)) :
-    (loadBytes p n a).run m = pure (blk.bytes.extract o (o + n), m) := by
-  simp [loadBytes, h, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, pure,
-    StateT.pure, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.pure,
-    ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+    {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n kind) :
+    (loadBytes p n a kind).run m =
+      pure (blk.bytes.extract o (o + n), m.recordAt b o n kind) := by
+  unfold loadBytes recordAccess NoRace at *
+  simp only [h, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set, StateT.set,
+    MonadStateOf.set, pure, StateT.pure, StateT.run, liftM, monadLift, MonadLift.monadLift,
+    StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some, hnr,
+    Mem.recordAt]
 
 /-- The memory after writing `bs` at offset `o` of block `b` (`storeBytes`). -/
 def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) : Mem :=
   { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
 
+/-- `.write` only touches `blocks`, never `current`/`clocks`/`footprint`, so it preserves
+`SingleThread`. -/
+theorem singleThread_write {m : Mem} (h : m.SingleThread) (b : BlockId) (blk : Block) (o : Nat)
+    (bs : Array Byte) : (m.write b blk o bs).SingleThread := h
+
+/-- `.access` only looks at `blocks`, never at `current`/`clocks`/`threads`/`footprint`, so a
+race-free `recordAccess` (`Mem.recordAt`) never changes what a further access sees. -/
+theorem access_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} {q : Ptr}
+    {n' a' : Nat} : (m.recordAt block off len kind).access q n' a' = m.access q n' a' := by
+  simp [Mem.access, Mem.recordAt]
+
 theorem storeBytes_run {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b : BlockId}
-    {blk : Block} {o : Nat} (h : m.access p bs.size a = pure (b, blk, o)) :
-    (storeBytes p a bs).run m = pure ((), m.write b blk o bs) := by
-  simp [storeBytes, Mem.write, h, get, getThe, MonadStateOf.get, StateT.get, set, StateT.set,
-    MonadStateOf.set, bind, StateT.bind, pure, StateT.run, liftM, monadLift,
-    MonadLift.monadLift, StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+    {blk : Block} {o : Nat} {kind : AccessKind} (h : m.access p bs.size a = pure (b, blk, o))
+    (hnr : NoRace m b o bs.size kind) :
+    (storeBytes p a bs kind).run m = pure ((), (m.recordAt b o bs.size kind).write b blk o bs) := by
+  unfold storeBytes recordAccess NoRace at *
+  simp only [h, Mem.write, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set,
+    StateT.set, MonadStateOf.set, pure, StateT.pure, StateT.run, liftM, monadLift,
+    MonadLift.monadLift, StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
+    Option.bind_some, hnr, Mem.recordAt]
 
 /-- After a write to block `b`, an access to `b` sees the new bytes, at the same offset. -/
 theorem access_write_same {m : Mem} {p q : Ptr} {a n' a' : Nat} {bs : Array Byte} {b : BlockId}
@@ -119,47 +298,80 @@ class LawfulEnc (α : Type) [Enc α] : Prop where
   size_encode : ∀ v : α, (Enc.encode v).size = Enc.size α
   decode_encode : ∀ v : α, Enc.decode (Enc.encode v) = pure v
 
+/-- `NoRace` only reads `footprint`/`clocks`/`current`, none of which `Mem.write` touches. -/
+theorem noRace_write {m : Mem} {b' : BlockId} {blk' : Block} {o' : Nat} {bs : Array Byte}
+    {block : BlockId} {off len : Nat} {kind : AccessKind} :
+    NoRace (m.write b' blk' o' bs) block off len kind ↔ NoRace m block off len kind := Iff.rfl
+
 theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId} {blk : Block}
     {o : Nat} {v : α} (h : m.access p (Enc.size α) a = pure (b, blk, o))
-    (hv : Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v) :
-    (load α a p).run m = pure (v, m) := by
-  simp only [load, StateT.run_bind, loadBytes_run h]
+    (hv : Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v)
+    (hnr : NoRace m b o (Enc.size α) .read) :
+    (load α a p).run m = pure (v, m.recordAt b o (Enc.size α) .read) := by
+  simp only [load, StateT.run_bind, loadBytes_run h hnr]
   simp [hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     liftM, monadLift, MonadLift.monadLift, StateT.lift]
 
 theorem store_run {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId}
-    {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o)) :
-    (store a p v).run m = pure ((), m.write b blk o (Enc.encode v)) := by
-  rw [← LawfulEnc.size_encode v] at h
-  exact storeBytes_run h
+    {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hnr : NoRace m b o (Enc.size α) .write) :
+    (store a p v).run m = pure ((), (m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)) := by
+  rw [show Enc.size α = (Enc.encode v).size from (LawfulEnc.size_encode v).symm] at h hnr ⊢
+  exact storeBytes_run h hnr
 
-/-- After a store at `p`, a load of the same type at `p` gives the stored value. -/
+/-- After `store_run`, an access to the same block sees the new bytes, at its own offset (which
+may differ from the store's, e.g. two disjoint fields of one struct). Composes `access_recordAt`
+(the `recordAt` layer is invisible to `.access`) with `access_write_same`, matching `store_run`'s
+conclusion memory exactly. -/
+theorem access_store_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p q : Ptr} {a n' a' : Nat}
+    {b : BlockId} {blk : Block} {o o' : Nat} (v : α)
+    (hp : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hq : m.access q n' a' = pure (b, blk, o')) :
+    ((m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)).access q n' a' =
+      pure (b, { blk with bytes := writeBytes blk.bytes o (Enc.encode v) }, o') := by
+  have hp' := hp
+  rw [show Enc.size α = (Enc.encode v).size from (LawfulEnc.size_encode v).symm] at hp'
+  exact access_write_same (access_recordAt.trans hp') (access_recordAt.trans hq)
+
+/-- After `store_run`, an access to another block is unaffected. -/
+theorem access_store_other {α : Type} [Enc α] {m : Mem} {p q : Ptr} {a n' a' : Nat}
+    {b c : BlockId} {blk blk' : Block} {o o' : Nat} (v : α)
+    (hp : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hq : m.access q n' a' = pure (c, blk', o')) (hbc : b ≠ c) :
+    ((m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)).access q n' a' =
+      pure (c, blk', o') :=
+  access_write_other (access_recordAt.trans hq) hbc
+
+/-- After a store at `p`, a load of the same type at `p` gives the stored value. `hnr`: the load,
+on the memory after the store, does not race (a caller composing accesses in one thread discharges
+it, `NoRace`; the store's own race-freedom, if any, is the caller's `store_run`). -/
 theorem load_store_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a a' : Nat}
     {b : BlockId} {blk : Block} {o : Nat} (v : α)
     (h : m.access p (Enc.size α) a = pure (b, blk, o))
-    (h' : m.access p (Enc.size α) a' = pure (b, blk, o)) :
+    (h' : m.access p (Enc.size α) a' = pure (b, blk, o))
+    (hnr : NoRace (m.write b blk o (Enc.encode v)) b o (Enc.size α) .read) :
     (load α a' p).run (m.write b blk o (Enc.encode v)) =
-      pure (v, m.write b blk o (Enc.encode v)) := by
+      pure (v, (m.write b blk o (Enc.encode v)).recordAt b o (Enc.size α) .read) := by
   have hw := h
   rw [← LawfulEnc.size_encode v] at hw
   have h0 := (access_eq h).2.2.2.1
   have hn := (access_eq h).2.2.2.2.1
   have ho := (access_eq h).2.2.2.2.2.2
-  apply load_run (access_write_same hw h')
   have hx := extract_writeBytes blk.bytes o (Enc.encode v) (by rw [LawfulEnc.size_encode v]; omega)
   rw [LawfulEnc.size_encode v] at hx
-  simp only [hx, LawfulEnc.decode_encode]
+  exact load_run (access_write_same hw h') (by simp only [hx, LawfulEnc.decode_encode]) hnr
 
 /-- A store at `p` does not change a load at `q` in another block, or at a range of the same
-block that does not overlap. -/
+block that does not overlap. `hnr`: the load does not race (as in `load_store_same`). -/
 theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Mem} {p q : Ptr}
     {a a' : Nat} {b c : BlockId} {blk blk' : Block} {o o' : Nat} (v : α) {w : β}
     (hp : m.access p (Enc.size α) a = pure (b, blk, o))
     (hq : m.access q (Enc.size β) a' = pure (c, blk', o'))
     (hd : b ≠ c ∨ o + Enc.size α ≤ o' ∨ o' + Enc.size β ≤ o)
-    (hw : Enc.decode (blk'.bytes.extract o' (o' + Enc.size β)) = pure w) :
+    (hw : Enc.decode (blk'.bytes.extract o' (o' + Enc.size β)) = pure w)
+    (hnr : NoRace (m.write b blk o (Enc.encode v)) c o' (Enc.size β) .read) :
     (load β a' q).run (m.write b blk o (Enc.encode v)) =
-      pure (w, m.write b blk o (Enc.encode v)) := by
+      pure (w, (m.write b blk o (Enc.encode v)).recordAt c o' (Enc.size β) .read) := by
   by_cases hbc : b = c
   · subst hbc
     have hd' : o + Enc.size α ≤ o' ∨ o' + Enc.size β ≤ o := hd.resolve_left (· rfl)
@@ -168,7 +380,7 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
     subst hblk
     have hpw := hp
     rw [← LawfulEnc.size_encode v] at hpw
-    apply load_run (access_write_same hpw hq)
+    apply load_run (access_write_same hpw hq) _ hnr
     have h0 := (access_eq hp).2.2.2.1
     have h0' := (access_eq hq).2.2.2.1
     have hn := (access_eq hp).2.2.2.2.1
@@ -178,31 +390,26 @@ theorem load_store_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Me
     rw [extract_writeBytes_disjoint _ _ _ _ _ (by rw [LawfulEnc.size_encode v]; omega) (by omega)
       (by rw [LawfulEnc.size_encode v]; omega)]
     exact hw
-  · exact load_run (access_write_other hq hbc) hw
+  · exact load_run (access_write_other hq hbc) hw hnr
 
 /-! ## Pointer-level form -/
 
-/-- The memory after `storeBytes p _ bs` (when the access succeeds). -/
-def Mem.writeAt (m : Mem) (p : Ptr) (bs : Array Byte) : Mem :=
-  match p.block with
-  | some b => match m.blocks[b]? with
-    | some blk => m.write b blk p.off.toNat bs
-    | none => m
-  | none => m
+-- `Mem.writeAt`/`store_run'`/`load_writeAt_same`/`load_writeAt_other` (the "load unchanges
+-- memory" idiom) were dropped with M22: a load now also records a footprint entry, so callers
+-- (`Proofs/Pointers/Proofs.lean`) compose `load_run`/`store_run`/`load_store_same`/
+-- `load_store_other` directly, threading each step's own `NoRace` hypothesis and output memory.
 
-theorem writeAt_eq {m : Mem} {p : Ptr} {n a : Nat} {bs : Array Byte} {b : BlockId} {blk : Block}
-    {o : Nat} (h : m.access p n a = pure (b, blk, o)) : m.writeAt p bs = m.write b blk o bs := by
-  obtain ⟨hb, hblk, -, -, -, -, rfl⟩ := access_eq h
-  simp [Mem.writeAt, hb, hblk]
-
-/-- A load that succeeds does not change the memory, and its access succeeds. -/
+/-- Inverts a successful `load`: the access succeeds, the decode gives `v`, and the resulting
+memory is the input with the read recorded (`Mem.recordAt`). -/
 theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     (h : (load α a p).run m = pure (v, m')) :
-    m' = m ∧ ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
-      Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v := by
-  simp only [load, loadBytes, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-    StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind, ExceptT.mk,
-    pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont] at h
+    ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
+      Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
+      m' = m.recordAt b o (Enc.size α) .read := by
+  simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
+    MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
+    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set, StateT.set,
+    MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
   generalize hacc : m.access p (Enc.size α) a = r at h
   match r, hacc, h with
   | none, _, h => simp at h
@@ -210,46 +417,23 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
   | some (.ok (b, blk, o)), hacc, h =>
     simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hd : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
-    match d, hd, h with
-    | none, _, h => simp at h
-    | some (.error _), _, h =>
-      simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
-    | some (.ok w), hd, h =>
-      simp only [ExceptT.bindCont, Option.bind_some] at h
-      obtain ⟨rfl, rfl⟩ := h
-      exact ⟨rfl, b, blk, o, rfl, hd⟩
-
-theorem store_run' {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {u : α}
-    (hp : (load α a p).run m = pure (u, m)) (v : α) :
-    (store a p v).run m = pure ((), m.writeAt p (Enc.encode v)) := by
-  obtain ⟨-, b, blk, o, h, -⟩ := load_inv hp
-  rw [store_run v h, writeAt_eq h]
-
-/-- After a store at `p`, a load at `p` gives the stored value. -/
-theorem load_writeAt_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {u : α}
-    (hp : (load α a p).run m = pure (u, m)) (v : α) :
-    (load α a p).run (m.writeAt p (Enc.encode v)) = pure (v, m.writeAt p (Enc.encode v)) := by
-  obtain ⟨-, b, blk, o, h, -⟩ := load_inv hp
-  rw [writeAt_eq h]
-  exact load_store_same v h h
-
-/-- A store at `p` does not change a load at `q` whose bytes do not overlap. -/
-theorem load_writeAt_other {α β : Type} [Enc α] [LawfulEnc α] [Enc β] {m : Mem} {p q : Ptr}
-    {a a' : Nat} {u : α} {w : β} (hp : (load α a p).run m = pure (u, m))
-    (hq : (load β a' q).run m = pure (w, m))
-    (hd : p.block ≠ q.block ∨ p.off + Enc.size α ≤ q.off ∨ q.off + Enc.size β ≤ p.off) (v : α) :
-    (load β a' q).run (m.writeAt p (Enc.encode v)) = pure (w, m.writeAt p (Enc.encode v)) := by
-  obtain ⟨-, b, blk, o, h, -⟩ := load_inv hp
-  obtain ⟨-, c, blk', o', h', hw⟩ := load_inv hq
-  rw [writeAt_eq h]
-  obtain ⟨hb, -, -, h0, -, -, rfl⟩ := access_eq h
-  obtain ⟨hc, -, -, h0', -, -, rfl⟩ := access_eq h'
-  apply load_store_other v h h' _ hw
-  rcases hd with hd | hd | hd
-  · left; intro hbc; subst hbc; exact hd (hb.trans hc.symm)
-  · right; left; omega
-  · right; right; omega
+    generalize hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o
+      (Enc.size α) .read = r at h
+    match r, hr, h with
+    | some _, _, h =>
+      simp only [Option.bind_some, ExceptT.bindCont, Function.comp] at h; cases h
+    | none, hr, h =>
+      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk,
+        Mem.recordAt] at h
+      generalize hd2 : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
+      match d, hd2, h with
+      | none, _, h => simp at h
+      | some (.error _), _, h =>
+        simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
+      | some (.ok w), hd2, h =>
+        simp only [ExceptT.bindCont, Option.bind_some] at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact ⟨b, blk, o, rfl, hd2, rfl⟩
 
 instance : LawfulEnc (BitVec 32) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]

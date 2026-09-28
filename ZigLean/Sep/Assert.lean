@@ -129,14 +129,16 @@ theorem bytesAt_access (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {q :
       simp [getElem!_pos, show k + i < bs.size by omega]
 
 /-- A store of `bs'` (`0 < bs'.size`) at `q`, a part of the bytes that `h` owns, succeeds if its
-address is aligned. After it, the owned bytes are `writeBytes bs k bs'`, and the frame `hF` is
-unchanged. -/
+address is aligned and `m` is single-threaded (`hst`, so the access cannot race:
+`noRace_of_singleThread`). After it, the owned bytes are `writeBytes bs k bs'`, the frame `hF` is
+unchanged, and the result is itself single-threaded. -/
 theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k) (hn : 0 < bs'.size)
-    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) :
-    ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hst : m.SingleThread) :
+    ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access hb hm hq hn hk ha
+  have hnr' := noRace_of_singleThread hst b (p.off.toNat + k) bs'.size AccessKind.write
   obtain ⟨hqb, -, hl, hq0, hbound, -, -⟩ := access_eq hacc
   obtain ⟨b', hpb, h0, hown⟩ := id hb
   have hbb : b' = b := by
@@ -150,11 +152,14 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
   have hws := writeBytes_size bs k bs' hk
   have hqo : q.off.toNat = p.off.toNat + k := by subst hq; simp [Ptr.add]; omega
   have hpbq := hpb
-  generalize ho : p.off.toNat = o at hown hqo ha hacc
+  generalize ho : p.off.toNat = o at hown hqo ha hacc hnr'
   let h' : Heap := fun l =>
     if l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
     then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S, K⟩ else none
-  refine ⟨_, storeBytes_run hacc, h', ?_, ?_, ⟨b', hpb, h0, fun l => by simp only [h', ho]⟩⟩
+  refine ⟨_, storeBytes_run hacc hnr',
+    singleThread_write (singleThread_recordAt hst b' (o + k) bs'.size AccessKind.write) b' blk
+      (o + k) bs',
+    h', ?_, ?_, ⟨b', hpb, h0, fun l => by simp only [h', ho]⟩⟩
   · intro l
     by_cases hc : l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
     · right
@@ -163,7 +168,8 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
     · left; simp [h', hc]
   · funext ⟨x, y⟩
     have hbsz : o + k + bs'.size ≤ blk.bytes.size := by rw [← hqo]; omega
-    rw [Mem.heap_write hblk hl hbsz]
+    have hblk_r : (m.recordAt b' (o + k) bs'.size AccessKind.write).blocks[b']? = some blk := hblk
+    rw [Mem.heap_write hblk_r hl hbsz, Mem.heap_recordAt]
     have hmx := congrFun hm (x, y)
     simp only [Heap.union_apply] at hmx ⊢
     rw [hown (x, y)] at hmx

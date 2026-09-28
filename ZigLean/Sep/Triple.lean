@@ -59,26 +59,30 @@ theorem Ptr.elem_eq (p : Ptr) (size : Nat) (i : BitVec 64) :
   simp [Ptr.elem, Ptr.add]
 
 theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap = h ∪ hF)
-    (hn : 0 < Enc.size T) : (load T a p).run m = pure (v, m) := by
+    (hn : 0 < Enc.size T) (hst : m.SingleThread) :
+    ∃ m', (load T a p).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧ m'.SingleThread := by
   obtain ⟨A, S, K, bs, ha, hs, hv, hb⟩ := hp
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (q := p) (k := 0) (n := Enc.size T) (a := a) hb hm (by simp [Ptr.add])
       hn (by omega) (by simpa using ha)
-  apply load_run (by simpa using hacc)
   simp only [Nat.add_zero] at hx
-  rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]
-  exact hv
+  have hv' : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
+    rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
+  refine ⟨_, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  · exact singleThread_recordAt hst _ _ _ _
 
 theorem pts_store_run [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h)
-    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (w : T) :
-    ∃ m', (store a p w).run m = pure ((), m') ∧
+    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (hst : m.SingleThread)
+    (w : T) :
+    ∃ m', (store a p w).run m = pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ pts p a w h' := by
   obtain ⟨A, S, K, bs, ha, hs, -, hb⟩ := hp
   have hw := LawfulEnc.size_encode w
-  obtain ⟨m', hrun, h', hd', hm', hb'⟩ :=
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
     bytesAt_store (q := p) (k := 0) (a := a) (bs' := Enc.encode w) hb hm hd (by simp [Ptr.add])
-      (by omega) (by omega) (by simpa using ha)
-  refine ⟨m', hrun, h', hd', hm', A, S, K, _, ha, ?_, ?_, hb'⟩
+      (by omega) (by omega) (by simpa using ha) hst
+  refine ⟨m', hrun, hst', h', hd', hm', A, S, K, _, ha, ?_, ?_, hb'⟩
   · rw [writeBytes_all (by omega)]; exact hw
   · rw [writeBytes_all (by omega)]; exact LawfulEnc.decode_encode w
 
@@ -92,30 +96,36 @@ theorem item_aligned {A o a i : Nat} (hA : (A + o) % Enc.align T = 0) (ha : a �
 
 theorem arr_load_run {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64} (hp : arr p vs h)
     (hm : m.heap = h ∪ hF) (hn : 0 < Enc.size T) (ha : a ∣ Enc.align T)
-    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
-    (load T a (p.elem (Enc.size T) i)).run m = pure (vs[i.toNat], m) := by
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (hst : m.SingleThread) :
+    ∃ m', (load T a (p.elem (Enc.size T) i)).run m = pure (vs[i.toNat], m') ∧ m'.heap = h ∪ hF ∧
+      m'.SingleThread := by
   obtain ⟨A, S, K, bs, hA, hsz, hv, hb⟩ := hp
   have hk : Enc.size T * i.toNat + Enc.size T ≤ bs.size := by
     rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (k := Enc.size T * i.toNat) (n := Enc.size T) (a := a) hb hm
       (Ptr.elem_eq p _ i) hn hk (item_aligned hA ha hs)
-  apply load_run hacc
-  rw [hx]; exact hv _ hi
+  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + Enc.size T * i.toNat)
+      (p.off.toNat + Enc.size T * i.toNat + Enc.size T)) = pure vs[i.toNat] := by
+    rw [hx]; exact hv _ hi
+  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  · exact singleThread_recordAt hst _ _ _ _
 
 theorem arr_store_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64}
     (hp : arr p vs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
-    (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (w : T) :
-    ∃ m', (store a (p.elem (Enc.size T) i) w).run m = pure ((), m') ∧
+    (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length)
+    (hst : m.SingleThread) (w : T) :
+    ∃ m', (store a (p.elem (Enc.size T) i) w).run m = pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ arr p (vs.set i.toNat w) h' := by
   obtain ⟨A, S, K, bs, hA, hsz, hv, hb⟩ := hp
   have hw := LawfulEnc.size_encode w
   have hk : Enc.size T * i.toNat + (Enc.encode w).size ≤ bs.size := by
     rw [hsz, hw, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
-  obtain ⟨m', hrun, h', hd', hm', hb'⟩ :=
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
     bytesAt_store (k := Enc.size T * i.toNat) (a := a) (bs' := Enc.encode w) hb hm hd
-      (Ptr.elem_eq p _ i) (by omega) hk (item_aligned hA ha hs)
-  refine ⟨m', hrun, h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
+      (Ptr.elem_eq p _ i) (by omega) hk (item_aligned hA ha hs) hst
+  refine ⟨m', hrun, hst', h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
   · rw [writeBytes_size _ _ _ hk, hsz, List.length_set]
   · intro j hj
     rw [List.length_set] at hj
@@ -163,11 +173,11 @@ theorem Array.extract_flatten_replicate {α : Type} (x : Array α) (n j : Nat) (
 
 theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitVec 64}
     (hp : arr p vs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
-    (ha : a ∣ Enc.align T) (hn' : n.toNat = vs.length) (w : T) :
-    ∃ m', (memset a p n (some w)).run m = pure ((), m') ∧
+    (ha : a ∣ Enc.align T) (hn' : n.toNat = vs.length) (hst : m.SingleThread) (w : T) :
+    ∃ m', (memset a p n (some w)).run m = pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ arr p (List.replicate vs.length w) h' := by
   by_cases h0 : n.toNat = 0
-  · refine ⟨m, ?_, h, hd, hm, ?_⟩
+  · refine ⟨m, ?_, hst, h, hd, hm, ?_⟩
     · simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
     · have : vs = [] := List.eq_nil_of_length_eq_zero (by omega)
       subst this; exact hp
@@ -182,10 +192,10 @@ theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitV
   have hp0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
   obtain ⟨b, blk, hacc, -, -, -, -⟩ := bytesAt_access (q := p) (k := 0) (n := bs'.size) (a := a)
     hb hm hp0 hpos (by omega) ha0
-  obtain ⟨m', hrun, h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := a) (bs' := bs') hb
-    hm hd hp0 hpos (by omega) ha0
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := a)
+    (bs' := bs') hb hm hd hp0 hpos (by omega) ha0 hst
   rw [writeBytes_all (by omega)] at hb'
-  refine ⟨m', ?_, h', hd', hm', A, S, K, bs', hA, by simp [hs'], ?_, hb'⟩
+  refine ⟨m', ?_, hst', h', hd', hm', A, S, K, bs', hA, by simp [hs'], ?_, hb'⟩
   · have e : n.toNat * Enc.size T = bs'.size := by rw [hs', hn', Nat.mul_comm]
     simp only [StateT.run] at hrun
     simp only [memset, h0, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
@@ -203,14 +213,15 @@ def copyItems {T : Type} (vs : List T) (d s len : Nat) : List T :=
 theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (hp : arr p vs h)
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
     (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T)
-    (hdn : d.toNat + n.toNat ≤ vs.length) (hsn : s.toNat + n.toNat ≤ vs.length) :
+    (hdn : d.toNat + n.toNat ≤ vs.length) (hsn : s.toNat + n.toNat ≤ vs.length)
+    (hst : m.SingleThread) :
     ∃ m', (memmove (Enc.size T) a a (p.elem (Enc.size T) d) (p.elem (Enc.size T) s) n).run m =
-        pure ((), m') ∧
+        pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧
         arr p (copyItems vs d.toNat s.toNat n.toNat) h' := by
   have hlen : (copyItems vs d.toNat s.toNat n.toNat).length = vs.length := by simp [copyItems]
   by_cases h0 : n.toNat = 0
-  · refine ⟨m, ?_, h, hd, hm, ?_⟩
+  · refine ⟨m, ?_, hst, h, hd, hm, ?_⟩
     · simp [memmove, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
     · have : copyItems vs d.toNat s.toNat n.toNat = vs := by
         apply List.ext_getElem hlen; intro j _ _; simp [copyItems, h0]; omega
@@ -227,10 +238,22 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
     (n := (Enc.size T) * n.toNat) (a := a) hb hm (Ptr.elem_eq p _ s) hpos hsk (item_aligned hA ha hs)
   let src := bs.extract ((Enc.size T) * s.toNat) ((Enc.size T) * s.toNat + (Enc.size T) * n.toNat)
   have hsrc : src.size = (Enc.size T) * n.toNat := by simp [src]; omega
-  obtain ⟨m', hrun, h', hd', hm', hb'⟩ := bytesAt_store (k := (Enc.size T) * d.toNat) (a := a) (bs' := src)
-    hb hm hd (Ptr.elem_eq p _ d) (by omega) (by omega) (item_aligned hA ha hs)
-  refine ⟨m', ?_, h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
-  · have hl := loadBytes_run hacc₂
+  -- `memmove` reads `src` before it writes `dst`, and the read (`loadBytes_run`) mutates memory via
+  -- `Mem.recordAt` under M22. So the write step must be proved against the memory *after* the read,
+  -- not against `m` directly (heap and `SingleThread` both carry across `recordAt`, access doesn't
+  -- change at all).
+  have hm2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+      AccessKind.read).heap = h ∪ hF := by
+    funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  have hst2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+      AccessKind.read).SingleThread :=
+    singleThread_recordAt hst b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+      AccessKind.read
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (k := (Enc.size T) * d.toNat) (a := a)
+    (bs' := src) hb hm2 hd (Ptr.elem_eq p _ d) (by omega) (by omega) (item_aligned hA ha hs) hst2
+  refine ⟨m', ?_, hst', h', hd', hm', A, S, K, _, hA, ?_, ?_, hb'⟩
+  · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst b₂
+      (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat) AccessKind.read)
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun
     simp only [memmove, h0, ↓reduceIte, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
@@ -276,13 +299,17 @@ end Lemmas
 
 /-! ## Triples -/
 
-/-- `Triple P c Q` (module doc). -/
+/-- `Triple P c Q` (module doc). `m.SingleThread` is a precondition and, on a return, a guarantee
+about the result memory: every rule below carries it through, so a caller that never spawns a
+thread (all `M17`/`M22`-example proofs before `Threads`) never re-derives it, and every `NoRace`
+obligation a memory-operation lemma needs is `noRace_of_singleThread` for free. -/
 def Triple {α : Type} (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
-  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP →
+  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.SingleThread →
     match (c.run m).run with
     | none => True
     | some (.error _) => False
-    | some (.ok (v, m')) => ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ
+    | some (.ok (v, m')) =>
+      ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.SingleThread
 
 
 namespace Triple
@@ -291,45 +318,46 @@ variable {α β : Type} {P P' R : Assn} {Q Q' : α → Assn} {c : MemM α}
 
 /-- A triple from the run: `c` returns, and the post-condition holds. -/
 theorem of_run
-    (h : ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP →
-      ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ) :
+    (h : ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.SingleThread →
+      ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧
+        m'.SingleThread) :
     Triple P c Q := by
-  intro m hP hF hd hm hp
-  obtain ⟨v, m', hQ, hr, hd', hm', hq⟩ := h m hP hF hd hm hp
-  rw [hr]; exact ⟨hQ, hd', hm', hq⟩
+  intro m hP hF hd hm hp hs
+  obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := h m hP hF hd hm hp hs
+  rw [hr]; exact ⟨hQ, hd', hm', hq, hs'⟩
 
 theorem conseq (ht : Triple P c Q) (hp : ∀ h, P' h → P h) (hq : ∀ v h, Q v h → Q' v h) :
     Triple P' c Q' := by
-  intro m hP hF hd hm hp'
-  have := ht m hP hF hd hm (hp _ hp')
+  intro m hP hF hd hm hp' hs
+  have := ht m hP hF hd hm (hp _ hp') hs
   split at this
   · trivial
   · exact this
-  · obtain ⟨hQ, a, b, c⟩ := this; exact ⟨hQ, a, b, hq _ _ c⟩
+  · obtain ⟨hQ, a, b, c, s⟩ := this; exact ⟨hQ, a, b, hq _ _ c, s⟩
 
 /-- The frame rule: a part of the memory that `c` does not own stays unchanged. -/
 theorem frame (ht : Triple P c Q) : Triple (P ∗ R) c (fun v => Q v ∗ R) := by
-  intro m hPR hF hd hm ⟨hP, hR, hPd, hPR', hp, hr⟩
+  intro m hPR hF hd hm ⟨hP, hR, hPd, hPR', hp, hr⟩ hs
   subst hPR'
   obtain ⟨hPF, hRF⟩ := Heap.disjoint_union_left.mp hd
   have hd' : Heap.Disjoint hP (hR ∪ hF) := Heap.disjoint_union_right.mpr ⟨hPd, hPF⟩
   have hm' : m.heap = hP ∪ (hR ∪ hF) := by rw [hm, Heap.union_assoc]
-  have := ht m hP (hR ∪ hF) hd' hm' hp
+  have := ht m hP (hR ∪ hF) hd' hm' hp hs
   split at this
   · trivial
   · exact this
-  · obtain ⟨hQ, hQd, hmQ, hq⟩ := this
+  · obtain ⟨hQ, hQd, hmQ, hq, hs'⟩ := this
     obtain ⟨hQR, hQF⟩ := Heap.disjoint_union_right.mp hQd
     exact ⟨hQ ∪ hR, Heap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [hmQ, Heap.union_assoc],
-      hQ, hR, hQR, rfl, hq, hr⟩
+      ⟨hQ, hR, hQR, rfl, hq, hr⟩, hs'⟩
 
 theorem ret (v : α) : Triple (Q v) (pure v : MemM α) (Q) :=
-  of_run fun m hP _ hd hm hq => ⟨v, m, hP, rfl, hd, hm, hq⟩
+  of_run fun m hP _ hd hm hq hs => ⟨v, m, hP, rfl, hd, hm, hq, hs⟩
 
 theorem bind {R : β → Assn} {f : α → MemM β} (hc : Triple P c Q) (hf : ∀ v, Triple (Q v) (f v) R) :
     Triple (P) (c >>= f) (R) := by
-  intro m hP hF hd hm hp
-  have h1 := hc m hP hF hd hm hp
+  intro m hP hF hd hm hp hs
+  have h1 := hc m hP hF hd hm hp hs
   simp only [StateT.run_bind, ExceptT.run_bind]
   revert h1
   cases (c.run m).run with
@@ -339,17 +367,17 @@ theorem bind {R : β → Assn} {f : α → MemM β} (hc : Triple P c Q) (hf : �
     | error e => intro h1; exact h1.elim
     | ok r =>
       obtain ⟨v, m'⟩ := r
-      rintro ⟨hQ, hd', hm', hq⟩
-      exact hf v m' hQ hF hd' hm' hq
+      rintro ⟨hQ, hd', hm', hq, hs'⟩
+      exact hf v m' hQ hF hd' hm' hq hs'
 
 theorem ex {γ : Type} {P : γ → Assn} (h : ∀ x, Triple (P x) c Q) : Triple (Assn.ex P) c Q := by
-  intro m hP hF hd hm ⟨x, hp⟩
-  exact h x m hP hF hd hm hp
+  intro m hP hF hd hm ⟨x, hp⟩ hs
+  exact h x m hP hF hd hm hp hs
 
 theorem lift {φ : Prop} (h : φ → Triple P c Q) : Triple (⌜φ⌝ ∗ P) c Q := by
-  intro m hP hF hd hm hp
+  intro m hP hF hd hm hp hs
   obtain ⟨hφ, hp⟩ := sep_lift.mp hp
-  exact h hφ m hP hF hd hm hp
+  exact h hφ m hP hF hd hm hp hs
 
 end Triple
 
@@ -359,14 +387,15 @@ variable {T : Type} [Enc T]
 
 theorem Triple.load {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
     Triple (pts p a v) (load T a p) (fun r => ⌜r = v⌝ ∗ pts p a v) :=
-  Triple.of_run fun _ hP _ hd hm hp =>
-    ⟨v, _, hP, pts_load_run hp hm hn, hd, hm, sep_lift.mpr ⟨rfl, hp⟩⟩
+  Triple.of_run fun _ hP _ hd hm hp hs => by
+    obtain ⟨m', hr, hheap, hst'⟩ := pts_load_run hp hm hn hs
+    exact ⟨v, m', hP, hr, hd, hheap, sep_lift.mpr ⟨rfl, hp⟩, hst'⟩
 
 theorem Triple.store [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
     Triple (pts p a v) (store a p w) (fun _ => pts p a w) :=
-  Triple.of_run fun _ _ _ hd hm hp => by
-    obtain ⟨m', hr, h', hd', hm', hp'⟩ := pts_store_run hp hm hd hn w
-    exact ⟨(), m', h', hr, hd', hm', hp'⟩
+  Triple.of_run fun _ _ _ hd hm hp hs => by
+    obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := pts_store_run hp hm hd hn hs w
+    exact ⟨(), m', h', hr, hd', hm', hp', hst'⟩
 
 end Rules
 

@@ -25,7 +25,7 @@ def isTerminating (op : Op) : Bool :=
   match op with
   | .br .. | .«repeat» .. | .ret .. | .unreach | .trap | .condBr .. | .switchBr .. => true
   | .retLoad _ => true
-  | .call (.func _ noreturn) _ => noreturn
+  | .call (.func _ noreturn ..) _ => noreturn
   | _ => false
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
@@ -87,6 +87,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
     let parts := (fields.map (fun fid => emitTy structNames types types[fid]!)).toList
     if parts.isEmpty then "Unit" else String.intercalate " × " parts
   | .allocator => "Zig.Allocator"
+  | .thread => "Zig.ThreadId"
   | .other name => name
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
@@ -428,7 +429,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     | .int _ b => s!"(0#{b})"
     | .bool => "false"
     | _ => "default"
-  | .func name _ => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
+  | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
   | .optSome _ v => s!"(some {fc.resolveVal env v})"
   | .err _ name => name.quote
@@ -469,7 +470,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
-  | .func name noreturn =>
+  | .func name noreturn .. =>
     (noreturn, (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name)
   | _ => (false, "panic! \"air2lean: indirect calls are outside the subset\"")
 
@@ -687,6 +688,21 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .free => s!"Zig.Allocator.free {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
 
+/-- A call to the fork-join thread model (`ZigLean/Mem/Thread.lean`), a `Zig.MemM` term.
+`.spawn`: `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, resolved through
+`funcNames` like an ordinary callee; `args[1]` is the args tuple, applied to it directly
+(`Check.lean`'s `checkThreadSpawn` requires exactly one field, so `rv` of the tuple is already
+the one Lean argument, not a genuine `Prod`). `.join`: `args[0]` is the `Thread` handle. -/
+def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
+    (args : Array Val) : String :=
+  let rv := fc.resolveVal env
+  match fn with
+  | .spawn =>
+    let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
+    let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
+    s!"Zig.Thread.spawn ({target} {rv (args[1]?.getD .void)})"
+  | .join => s!"Zig.Thread.join {rv (args[0]?.getD .void)}"
+
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
 def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
@@ -807,6 +823,10 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
   | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
   | .store p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
+  | .atomicLoad p _ => if fc.isMemPtr p then #[p] else #[]
+  | .atomicStore p v _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
+  | .atomicRmw _ _ p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
+  | .cmpxchg _ p expected new _ _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[expected, new]
   | .sliceFieldPtr _ p => if fc.isMemPtr p then #[p] else #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy a b => #[a, b]
@@ -815,7 +835,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
   | .aggregateInit elems => elems
-  | .call callee args => match callee with | .func _ true => #[] | _ => args
+  | .call callee args => match callee with | .func _ true .. => #[] | _ => args
   | .block _ => #[]
   | .loop _ => #[]
   | .br target v => match fc.targetTy target with | .void => #[] | _ => #[v]
@@ -1139,6 +1159,34 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .undef _ => (env, some s!"Zig.storeUndef ({ty}) {align} {rv ptr}")
       | _ => (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
     else (env, some (fc.storePlace ptr (rv v)))
+  | .atomicLoad ptr _order =>
+    let bits := fc.tyBits inst.ty
+    let expr := s!"Zig.atomicLoad (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .atomicStore ptr v _order =>
+    (env, some s!"Zig.atomicStore {fc.ptrAlign ptr} {rv ptr} {rv v}")
+  | .atomicRmw op _order ptr v =>
+    -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
+    -- `Zig.RmwOp` (the model, `ZigLean/Mem/Thread.lean`).
+    let opName := match op with
+      | .xchg => "xchg" | .add => "add" | .sub => "sub" | .and => "and" | .nand => "nand"
+      | .or => "or" | .xor => "xor" | .max => "max" | .min => "min"
+    let opTerm := s!"Zig.RmwOp.{opName}"
+    let signed := if fc.tySigned inst.ty then "true" else "false"
+    -- `rmwResultUnused` (`Air2Lean.Memory.lean`), not `fc.isReferenced`: a call to a
+    -- generic/inline std function like `fetchAdd` always wraps its body in a `dbg_inline_block`
+    -- that closes with a `br` carrying the call's result, so the RMW's own id is always
+    -- "referenced" by that closing `br` even when the caller discards the call
+    -- (`docs/std-models.md` §Thread model: only an unused commuting RMW may race with its own
+    -- kind).
+    let unused := if rmwResultUnused fc.allInsts inst.id then "true" else "false"
+    let expr := s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v} \
+      (Zig.RmwOp.group {opTerm} {unused})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .cmpxchg _weak ptr expected new _succ _fail =>
+    -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
+    let expr := s!"Zig.cmpxchg {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
     let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -1203,6 +1251,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let items := ", ".intercalate (elems.map rv).toList
       let (env, l) := bindLet fc env inst.id s!"pure (#v[{items}] : {fc.emitTyOf inst.ty})"
       (env, some l)
+    | .tuple _ =>
+      -- `Thread.spawn`'s `args` tuple (`docs/std-models.md` §Thread model) is the only source of
+      -- a tuple-typed `aggregate_init` in the subset: positional, no field names.
+      let items := ", ".intercalate (elems.map rv).toList
+      let term := if elems.isEmpty then "()" else s!"({items})"
+      let (env, l) := bindLet fc env inst.id s!"pure {term}"
+      (env, some l)
     | _ =>
     let sname := fc.emitTyOf inst.ty
     let fnames := fc.structFieldNamesFor (fc.tyOfId inst.ty)
@@ -1212,13 +1267,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .call callee args =>
     let (isNoreturn, cexpr) := fc.resolveCallee callee
-    let allocFn := match callee with | .func name _ => allocFn? name | _ => none
+    let allocFn := match callee with | .func name .. => allocFn? name | _ => none
+    let threadFn := match callee with | .func name .. => threadFn? name | _ => none
     if let some fn := allocFn then
       let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.allocCall env fn args inst.ty})"
       (env, some l)
+    else if let some fn := threadFn then
+      let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.threadCall env fn callee args})"
+      (env, some l)
     else if isNoreturn then (env, none)
     else
-      let memCallee := match callee with | .func name _ => fc.memFuncs.contains name | _ => false
+      let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
       -- A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`).
       let arg (a : Val) : String :=
         if fc.mem && !memCallee && fc.isSlice a then
@@ -1600,7 +1659,12 @@ def dedupNames (a : Array String) : Array String :=
 
 def calleesOf (allNames : Array String) (f : Func) : Array String :=
   dedupNames (f.allInsts.filterMap fun i => match i.op with
-    | .call (.func nm _) _ => if allNames.contains nm then some nm else none
+    -- `spawnFn`: the function `Thread.spawn` runs, not `Thread.spawn` itself (which has no AIR
+    -- and is not in `allNames`) — a spawned function must still be emitted before its spawner.
+    | .call (.func nm _ (some spawnFn)) _ =>
+      if allNames.contains spawnFn then some spawnFn
+      else if allNames.contains nm then some nm else none
+    | .call (.func nm ..) _ => if allNames.contains nm then some nm else none
     | _ => none)
 
 /-- DFS post-order over the call graph: a callee before its caller, except inside a cycle. -/

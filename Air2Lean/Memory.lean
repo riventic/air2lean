@@ -9,7 +9,9 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
   field, or the length or item pointer of a slice), or a `bitcast` of a place. A place whose `alloc` does not escape stays a `Locals` field.
 * An `alloc` **escapes** if one of its places is used other than as the pointer operand of
   `load`, `store`, `struct_field_ptr`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr`, `bitcast`,
-  `set_union_tag`, `ret_load`, or in `dbg`. An escaping `alloc` is a stack block in memory.
+  `set_union_tag`, `ret_load`, an atomic op, or in `dbg`. An escaping `alloc` is a stack block in
+  memory. A place passed to `Thread.spawn` escapes (it is not in this list), so a variable shared
+  with a spawned thread is a memory block subject to the race check (`ZigLean/Mem/Thread.lean`).
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
   pointer constant and no memory op (`memoryOp`, which includes a call to the allocator model),
@@ -64,6 +66,10 @@ def valueOperands (op : Op) : Array Val :=
   | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
   | .mulAdd a b c => #[a, b, c]
   | .bitcast _ | .fieldPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
+  | .atomicLoad .. => #[]
+  | .atomicStore _ v _ => #[v]
+  | .atomicRmw _ _ _ v => #[v]
+  | .cmpxchg _ _ expected new _ _ => #[expected, new]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy a b => #[a, b]
   | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
@@ -129,12 +135,45 @@ def allocFn? (name : String) : Option AllocFn :=
   | "mem.Allocator.remap" => some .remap
   | _ => none
 
+/-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
+inductive ThreadFn where
+  | spawn | join
+  deriving BEq, Repr
+
+/-- The `Thread` function that the function `name` is an instance of
+(`Thread.spawn__anon_<n>`, `Thread.join`). -/
+def threadFn? (name : String) : Option ThreadFn :=
+  match (name.splitOn "__anon_").head! with
+  | "Thread.spawn" => some .spawn
+  | "Thread.join" => some .join
+  | _ => none
+
+/-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
+model): `Check.lean` rejects a call to one of these, with this reason. -/
+def rejectedThreadFn? (name : String) : Option String :=
+  let base := (name.splitOn "__anon_").head!
+  if base == "Thread.detach" then
+    some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
+  else if base == "Thread.yield" then
+    some "Thread.yield is outside the model: there is no scheduler to yield to"
+  else if base == "Thread.spinLoopHint" then
+    some "Thread.spinLoopHint is outside the model (a spin-wait on a flag diverges, \
+      `docs/std-models.md` §Thread model)"
+  else if base.startsWith "Thread.Futex." then
+    some "std.Thread.Futex is outside the fork-join subset"
+  else if base.startsWith "Thread.Mutex." || base.startsWith "Mutex." then
+    some "std.Thread.Mutex is outside the fork-join subset"
+  else if base.startsWith "Thread.Condition." then
+    some "std.Thread.Condition is outside the fork-join subset"
+  else none
+
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
   match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
-  | .call (.func name _) _ => (allocFn? name).isSome
+  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
+  | .call (.func name ..) _ => (allocFn? name).isSome || (threadFn? name).isSome
   | _ => false
 
 /-- A constant that points into memory. -/
@@ -153,9 +192,27 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
       | .load p | .store p _ | .fieldPtr p _ | .retLoad p => p.pointsToMem
       | _ => false
 
+/-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only
+forwards it as the block's own value: a call to a generic/inline std function (e.g. `fetchAdd`)
+always wraps its body in a `dbg_inline_block` that closes with a `br` carrying the call's
+result, even when the caller discards it (`_ = ctx.counter.fetchAdd(...)`) — so `id` (the RMW
+itself) is always referenced by that closing `br`, and the real "is it discarded" question is
+whether the block's own id (the `br`'s target) is read afterward. -/
+partial def valueUsed (allInsts : Array Inst) (id : InstId) : Bool :=
+  allInsts.any fun i =>
+    (valueOperands i.op).contains (.inst id) &&
+    match i.op with
+    | .br target _ => valueUsed allInsts target
+    | _ => true
+
+/-- Is the result of the atomic RMW at `id` (in `allInsts`, `Func.allInsts` or `FCtx.allInsts`)
+unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model, `Emit.lean`'s
+`rmwGroup?`)? -/
+def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
+
 def Func.callees (f : Func) : Array String :=
   f.allInsts.filterMap fun i => match i.op with
-    | .call (.func nm false) _ => some nm
+    | .call (.func nm false ..) _ => some nm
     | _ => none
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller

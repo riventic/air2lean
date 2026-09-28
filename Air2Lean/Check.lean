@@ -63,7 +63,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       recur t
     fields.forM fun (_, fty) => recur fty
   | .tuple fields => fields.forM recur
-  | .int .. | .bool | .void | .noreturn | .allocator => pure ()
+  | .int .. | .bool | .void | .noreturn | .allocator | .thread => pure ()
 
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
@@ -82,6 +82,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some (.ptr "slice" ..) => pure (16, 8)
   | some (.ptr ..) => pure (8, 8)
   | some .allocator => pure (16, 8)
+  | some .thread => pure (8, 8)
   | some (.optional c) =>
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
@@ -173,6 +174,17 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- An atomic op's pointee must be an integer (`docs/std-models.md` §Thread model: the subset
+does not model a float, bool, enum or pointer atomic). -/
+def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  let some pty := cx.valTy? ptr
+    | cx.fail line "an atomic op through a value that is not a pointer"
+  let some c := ptrChild cx.types pty
+    | cx.fail line "an atomic op through a value that is not a pointer"
+  match cx.types[c]? with
+  | some (.int ..) => pure ()
+  | _ => cx.fail line "an atomic op on a non-integer type is outside the subset (M22)"
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -225,6 +237,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
   | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr _ => cx.memAccess line ptr; pure line
+  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
     if let .inst b := base then
       if cx.places.contains b then return line
@@ -247,7 +263,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     pure line
   | .call callee _ =>
     match callee with
-    | .func name true =>
+    | .func name true .. =>
       if (panicErrorFor? name).isNone then
         throw s!"{fnName}: near line {line}: noreturn callee '{name}' is not a known \
           panic-handler function (docs/generated-code.md §Panics)"
@@ -288,7 +304,8 @@ partial def Val.ptrOther? (v : Val) : Option String :=
 def ptrOperands (op : Op) : Array Val :=
   match op with
   | .load p | .store p _ | .fieldPtr p _ | .retLoad p | .sliceFieldPtr _ p | .bitcast p
-  | .setUnionTag p _ => #[p]
+  | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
+  | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
@@ -360,22 +377,45 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
     if l.sentinel && (fn == .free || fn == .remap) then
       throw s!"{f.name}: a free of a slice with a sentinel is outside the subset"
 
+/-- A call to `Thread.spawn`: `args[1]` (the `.{...}` args tuple) must have exactly one field.
+`Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),
+so `Emit.lean` needs the callee applied to exactly one Lean term; a 0- or 2+-field args tuple is
+outside the subset (v1, `docs/std-models.md` §Thread model). -/
+def checkThreadSpawn (f : Func) (args : Array Val) : Except String Unit := do
+  let tyOf (v : Val) : Option TyId := match v with
+    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+    | v => v.constTy?
+  let some argsTy := args[1]?.bind tyOf
+    | throw s!"{f.name}: a call to Thread.spawn has no args-tuple type"
+  match f.types[argsTy]? with
+  | some (.tuple fields) =>
+    if fields.size != 1 then
+      throw s!"{f.name}: Thread.spawn's args tuple has {fields.size} fields; only exactly 1 is \
+        in the subset (v1, docs/std-models.md §Thread model)"
+  | _ => throw s!"{f.name}: Thread.spawn's second argument is not a tuple"
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
-function or has a model (`allocFn?`). -/
+function or has a model (`allocFn?`, `threadFn?`). -/
 def checkProgram (funcs : Array Func) : Except String Unit := do
   let mem := memoryFunctions funcs
   let names := funcs.map (·.name)
   for f in funcs do
     for i in f.allInsts do
-      if let .call (.func callee false) args := i.op then
+      if let .call (.func callee false ..) args := i.op then
         unless names.contains callee do
+          if let some reason := rejectedThreadFn? callee then
+            throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           match allocFn? callee with
           | some fn => checkAllocCall f fn args i.ty
           | none =>
-            throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
-              name to the example's `filter` file, docs/std-models.md)"
+            match threadFn? callee with
+            | some .spawn => checkThreadSpawn f args
+            | some .join => pure ()
+            | none =>
+              throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
+                name to the example's `filter` file, docs/std-models.md)"
   for f in funcs do
     if mem.contains f.name then
       let insts := f.allInsts
@@ -388,7 +428,7 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
       for i in insts do
         let items := match i.op with
           | .sliceElemVal s _ => (sliceItem s).toArray
-          | .call (.func callee _) args =>
+          | .call (.func callee ..) args =>
             if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
