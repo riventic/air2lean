@@ -327,15 +327,16 @@ pub fn parseFloatHex(comptime T: type, s: []const u8) T {
 /// `tests/diff/gen_inputs.zig` writes, and docs/air-json.md's `elems` shape). A float lane is
 /// `parseFloatHex`'s hex string; an int lane is a bare JSON integer, positive or negative.
 pub fn vectorFromJson(comptime n: usize, comptime T: type, v: std.json.Value) @Vector(n, T) {
-    var result: @Vector(n, T) = undefined;
+    // An array, then one conversion: 0.16.0 has no store to a vector lane at a runtime index.
+    var lanes: [n]T = undefined;
     for (v.array.items, 0..) |item, i| {
-        result[i] = switch (@typeInfo(T)) {
+        lanes[i] = switch (@typeInfo(T)) {
             .float => parseFloatHex(T, item.string),
             .int => @intCast(item.integer),
             else => @compileError("vectorFromJson: unsupported lane type " ++ @typeName(T)),
         };
     }
-    return result;
+    return lanes;
 }
 
 /// Runs `func(args)` in a forked child; the child never returns to this function on the parent
