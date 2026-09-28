@@ -80,13 +80,14 @@ scripts/mutate.sh      # a changed function must fail a test
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
 | enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
-| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | inline asm, threads, atomics |
+| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | threads, atomics |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | unions and error unions in memory |
 | `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
+| inline asm, register operands only, as opaque functions (x86_64 only) | |
 
 Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 

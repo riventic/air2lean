@@ -86,6 +86,13 @@ def valueOperands (op : Op) : Array Val :=
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
+  -- Only the inputs are read as values (like `call`'s args); an output's `ref` (if present) is a
+  -- place the result stores to, like `store`'s pointer operand, so it is excluded here.
+  | .asm _ _ _ _ inputs =>
+    inputs.foldl (init := #[]) fun acc i =>
+      match i.ref with
+      | some v => acc.push v
+      | none => acc
 
 /-- The `alloc`s of `f` that escape. -/
 def escapingAllocs (f : Func) : Array InstId :=

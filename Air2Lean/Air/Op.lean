@@ -151,6 +151,14 @@ inductive ShuffleLane where
   | value (v : Val)
   deriving Repr, Inhabited, BEq
 
+/-- One `outputs`/`inputs` entry of an `Op.asm` (`docs/air-json.md`). `ref` is `none` only for
+an output that is the asm expression's own result (`=r` with no operand). -/
+structure AsmOperand where
+  constraint : String
+  name : String
+  ref : Option Val
+  deriving Repr, Inhabited, BEq
+
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
 inductive Mode where
   | checked  -- overflow ⇒ `throw .overflow` (`add`, `add_safe`)
@@ -332,6 +340,13 @@ inductive Op where
   | line (n : Nat)
   /-- `dbg_var_*`, `dbg_empty_stmt`: no effect. `name` is kept for readable output. -/
   | dbg (name : Option String) (v : Option Val)
+  /-- `assembly`: register-operand-only inline asm (M21). Translated as a call to an `opaque`
+  Lean function keyed by a hash of `source` and the operand constraints
+  (`docs/generated-code.md` §asm); a proof knows nothing about it beyond what the caller
+  states. `Check.lean` accepts only a register constraint (`=r`, `r`, `{reg}`, `={reg}`), no
+  `"memory"` clobber, and at most one result output (an `=r`/`={reg}` output with no `ref`). -/
+  | asm (source : String) (isVolatile : Bool) (clobbers : Array String)
+      (outputs inputs : Array AsmOperand)
 
 structure SwitchCase where
   items : Array Val

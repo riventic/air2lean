@@ -18,6 +18,9 @@
   `arg` has no ZIR parameter index (a running count of `arg`s gives the same value in the
   subset); `Value.fmtValue` takes `{}`, not `{f}`; no `int_from_float_safe` tag; no `memmove`
   tag; a resolved global has no `is_const` (a `var` has a `variable` value; `Compat.navInfo`).
+- No inline asm support (M21): `assembly` is always written `"unsupported": true` there. 0.14.1
+  has no `Air.unwrapAsm` and a different `assembly` extra-data layout (`Compat.unwrapAsm`'s doc
+  comment); the `asm` example is excluded from the 0.14.1 CI leg.
 - Hook (`hook.patch`): after `analyzeFnBodyInner` in `src/Zcu/PerThread.zig`, as in 0.15.2.
 
 ## Build

@@ -107,6 +107,12 @@ pub fn main() !void {
     // The lists generators run last, so the earlier inputs stay the same.
     try genLists(rng);
 
+    // The asm generators run after every earlier one, so the earlier inputs stay the same.
+    try compat.makePath("tests/diff/asm/inputs");
+    try genBswap32(rng);
+    try genPopcnt64(rng);
+    try genLzcnt64(rng);
+
     // The vectors generators run last, so every earlier input stays the same.
     try genFDot(rng);
     try genUDotWrap(rng);
@@ -1694,6 +1700,67 @@ fn genLists(rng: std.Random) !void {
             try writeSlice(writer, 0, 0, n);
             try writer.writeAll("]}\n");
         }
+    }
+}
+
+// --- examples/asm ------------------------------------------------------------------------
+
+/// bswap32(x: u32) -> u32. Edges: 4 over edgesU(u32), then random fill.
+fn genBswap32(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/asm/inputs", "bswap32");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    for (edgesU(u32)) |a| {
+        try writer.print("[{d}]\n", .{a});
+        n += 1;
+    }
+    while (n < N) : (n += 1) {
+        try writer.print("[{d}]\n", .{rng.int(u32)});
+    }
+}
+
+/// popcnt64(x: u64) -> u64. u64 is wide (>= 64-bit): quoted decimal, same rule as the
+/// int-argument floatconv functions above. Edges: 4 over edgesU(u64), plus every single-bit
+/// value, then random fill.
+fn genPopcnt64(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/asm/inputs", "popcnt64");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    for (edgesU(u64)) |a| {
+        try writeIntArgLine(writer, u64, a, true);
+        n += 1;
+    }
+    for (0..64) |bit| {
+        try writeIntArgLine(writer, u64, @as(u64, 1) << @intCast(bit), true);
+        n += 1;
+    }
+    while (n < N) : (n += 1) {
+        try writeIntArgLine(writer, u64, rng.int(u64), true);
+    }
+}
+
+/// lzcnt64(x: u64) -> u64. Wide, same quoting as popcnt64 above. Edges: 4 over edgesU(u64), plus
+/// every single-bit value (the boundary each leading-zero count changes at), then random fill.
+fn genLzcnt64(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/asm/inputs", "lzcnt64");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    for (edgesU(u64)) |a| {
+        try writeIntArgLine(writer, u64, a, true);
+        n += 1;
+    }
+    for (0..64) |bit| {
+        try writeIntArgLine(writer, u64, @as(u64, 1) << @intCast(bit), true);
+        n += 1;
+    }
+    while (n < N) : (n += 1) {
+        try writeIntArgLine(writer, u64, rng.int(u64), true);
     }
 }
 
