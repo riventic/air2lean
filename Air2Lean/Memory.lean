@@ -218,8 +218,8 @@ partial def valueUsed (allInsts : Array Inst) (id : InstId) : Bool :=
     | _ => true
 
 /-- Is the result of the atomic RMW at `id` (in `allInsts`, `Func.allInsts` or `FCtx.allInsts`)
-unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model, `Emit.lean`'s
-`rmwGroup?`)? -/
+unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model,
+`Zig.RmwOp.group`)? -/
 def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
 
 def Func.callees (f : Func) : Array String :=

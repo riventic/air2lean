@@ -163,7 +163,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 |---|---|
 | `atomic_load` | `Zig.atomicLoad align p` |
 | `atomic_store_unordered`/`monotonic`/`release`/`seq_cst` | `Zig.atomicStore align p v` (the ordering is decoded and otherwise ignored: the model is sequentially consistent, [std-models.md](std-models.md) §Thread model) |
-| `atomic_rmw` | `Zig.atomicRmw op signed align p v commute` (`op`: `Zig.RmwOp`; `commute`: `Zig.RmwOp.group op unused`, `some` only for a result-unused RMW of a commuting op) |
+| `atomic_rmw` | `Zig.atomicRmw op signed align p v commute` (`op`: `Zig.RmwOp`; `commute`: `Zig.RmwOp.group op signed unused`, `some` only for a result-unused RMW of a commuting op) |
 | `cmpxchg_weak`, `cmpxchg_strong` | `Zig.cmpxchg align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
 | `call` of `Thread.spawn(config, f, args)` | `Zig.Thread.spawn (f args)` — the already-applied call, run eagerly as a new thread |
 | `call` of `Thread.join(handle)` | `Zig.Thread.join handle` |
@@ -175,7 +175,7 @@ Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.ato
 | Earlier access | New access | Result |
 |---|---|---|
 | `.read`/`.atomicRead` | `.read`/`.atomicRead` | no race |
-| `.atomicWrite (some g1)` | `.atomicWrite (some g2)`, `g1 = g2` | no race (they commute) |
+| `.atomicWrite (some g1)` | `.atomicWrite (some g2)`, `g1 = g2`, the same byte range | no race (they commute) |
 | any `.write` | anything | `.illegal` |
 | anything else (an atomic access racing with a write, or two non-commuting atomics) | | `.nondet` |
 

@@ -56,16 +56,17 @@ inductive RmwOp where
   deriving BEq, Repr, Inhabited
 
 /-- The commuting group of `op` (`RmwGroup`, `ZigLean/Mem/Basic.lean`'s `racePair`): `none` when
-the RMW's own result is used (`unused = false`) or `op` never commutes (`Xchg`, `Nand`). -/
-def RmwOp.group (op : RmwOp) (unused : Bool) : Option RmwGroup :=
+the RMW's own result is used (`unused = false`) or `op` never commutes (`Xchg`, `Nand`).
+`signed`: the operand's signedness (`Min`/`Max` only, as in `RmwOp.apply`). -/
+def RmwOp.group (op : RmwOp) (signed unused : Bool) : Option RmwGroup :=
   if !unused then none else
   match op with
   | .add | .sub => some .addSub
   | .or => some .or
   | .and => some .and
   | .xor => some .xor
-  | .min => some .min
-  | .max => some .max
+  | .min => some (.min signed)
+  | .max => some (.max signed)
   | .xchg | .nand => none
 
 /-- The value at the pointee after `op` on the old value `old` with operand `v`: integers of `n`
@@ -120,10 +121,10 @@ def cmpxchg {n : Nat} (align : Nat) (p : Ptr) (expected new : BitVec n) :
 
 namespace Thread
 
-/-- `.illegal`: thread `t` finished without joining every thread that `t` itself spawned. A
-documented narrower check than "before the top-level function returns": only enforced for a
-spawned thread's own body, not for the outermost (main) thread — every example in this subset
-joins within the same function that spawns (`docs/std-models.md` §Thread model). -/
+/-- `.illegal`: thread `t` finished without joining every thread that `t` itself spawned.
+`spawn` checks it for each spawned thread; for the main thread (`t = 0`), the caller of the
+top-level function checks it (`tests/diff/Diff.lean`'s `renderThread`, `docs/std-models.md`
+§Thread model). -/
 def checkJoinedByChild (t : ThreadId) : MemM Unit := do
   let m ← get
   if m.threads.any (fun r => r.spawner == t && !r.joined) then throw .illegal
