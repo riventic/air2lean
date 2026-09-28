@@ -78,6 +78,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .ptr "slice" .. => "Zig.Slice"
   | .ptr .. => "Zig.Ptr"
   | .array len child => s!"Vector ({emitTy structNames types types[child]!}) {len}"
+  | .vector len child => s!"Zig.Vec ({emitTy structNames types types[child]!}) {len}"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
   | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
   | .errorSet _ => "Zig.ErrName"
@@ -457,6 +458,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     match fc.tyOfId tid with
     -- The sentinel is not an item of the value.
     | .array len _ => s!"(#v[{items (elems.extract 0 len)}] : {fc.emitTyOf tid})"
+    -- A vector has no sentinel (`docs/air-json.md`'s `elems`).
+    | .vector len _ => s!"((⟨#v[{items (elems.extract 0 len)}]⟩) : {fc.emitTyOf tid})"
     | .struct _ _ fields =>
       let assigns := (fields.zip elems).toList.map fun ((f, _), e) =>
         s!"{mangleField f} := {fc.resolveVal env e}"
@@ -785,6 +788,11 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sqrt a => #[a]
   | .libm _ a => #[a]
   | .mulAdd a b c => #[a, b, c]
+  | .splat a | .reduce _ a => #[a]
+  | .select pred a b => #[pred, a, b]
+  | .shuffle a b mask =>
+    #[a] ++ (match b with | some v => #[v] | none => #[]) ++
+      mask.filterMap fun l => match l with | .value v => some v | _ => none
   | .floatConv a => #[a]
   | .floatFromInt a => #[a]
   | .intFromFloat _ a => #[a]
@@ -969,21 +977,42 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .arith op mode a b =>
     -- A float operand always has `mode = .checked`: `Check.lean` rejects the other modes.
     let expr :=
-      if fc.isFloat a then
-        let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
-        s!"pure ({f} {rv a} {rv b})"
-      else
-        let sgn := if fc.valSigned a then "true" else "false"
-        match op, mode with
-        | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
-        | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
-        | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
-        | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
-        | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
-        | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
-        | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
-        | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
-        | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
+      match fc.tyOfId inst.ty with
+      | .vector _ child =>
+        -- Lane-wise: the same scalar function the non-vector case below calls, lifted by
+        -- `Zig.Vec.map2`/`map2M` (`ZigLean/Vec.lean`).
+        if fc.isFloatTy child then
+          let f := match op with
+            | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+          s!"pure (Zig.Vec.map2 {f} {rv a} {rv b})"
+        else
+          let sgn := if fc.tySigned child then "true" else "false"
+          match op, mode with
+          | .add, .checked => s!"Zig.Vec.map2M (Zig.add {sgn}) {rv a} {rv b}"
+          | .add, .wrap => s!"pure (Zig.Vec.map2 Zig.addWrap {rv a} {rv b})"
+          | .add, .sat => s!"pure (Zig.Vec.map2 (Zig.addSat {sgn}) {rv a} {rv b})"
+          | .sub, .checked => s!"Zig.Vec.map2M (Zig.sub {sgn}) {rv a} {rv b}"
+          | .sub, .wrap => s!"pure (Zig.Vec.map2 Zig.subWrap {rv a} {rv b})"
+          | .sub, .sat => s!"pure (Zig.Vec.map2 (Zig.subSat {sgn}) {rv a} {rv b})"
+          | .mul, .checked => s!"Zig.Vec.map2M (Zig.mul {sgn}) {rv a} {rv b}"
+          | .mul, .wrap => s!"pure (Zig.Vec.map2 Zig.mulWrap {rv a} {rv b})"
+          | .mul, .sat => s!"pure (Zig.Vec.map2 (Zig.mulSat {sgn}) {rv a} {rv b})"
+      | _ =>
+        if fc.isFloat a then
+          let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+          s!"pure ({f} {rv a} {rv b})"
+        else
+          let sgn := if fc.valSigned a then "true" else "false"
+          match op, mode with
+          | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
+          | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
+          | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
+          | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
+          | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
+          | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
+          | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
+          | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
+          | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .div op a b =>
     let expr :=
@@ -1028,6 +1057,51 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+  | .splat a =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
+  | .select pred a b =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
+    (env, some l)
+  | .reduce op a =>
+    -- The vector's element type dispatches to the same scalar function `.arith`'s int/float
+    -- branches call. Zig's integer `.Add`/`.Mul` reduce wraps (`docs/floats.md` has no analogous
+    -- note for ints: wrapping is safe because integer `+`/`*` stay associative under wraparound).
+    let child := match fc.valTy a with | .vector _ c => c | _ => 0
+    let expr :=
+      if fc.isFloatTy child then
+        match op with
+        | .add => s!"pure (Zig.Vec.reduce Zig.Float.add {rv a})"
+        | .mul => s!"pure (Zig.Vec.reduce Zig.Float.mul {rv a})"
+        | .min => s!"Zig.Vec.reduceM Zig.Float.minChk {rv a}"
+        | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
+        | .and | .or | .xor =>
+          "(panic! \"air2lean: bitwise @reduce of a float vector\")"
+      else
+        let sgn := if fc.tySigned child then "true" else "false"
+        match op with
+        | .and => s!"pure (Zig.Vec.reduce (· &&& ·) {rv a})"
+        | .or => s!"pure (Zig.Vec.reduce (· ||| ·) {rv a})"
+        | .xor => s!"pure (Zig.Vec.reduce (· ^^^ ·) {rv a})"
+        | .min => s!"pure (Zig.Vec.reduce (Zig.min {sgn}) {rv a})"
+        | .max => s!"pure (Zig.Vec.reduce (Zig.max {sgn}) {rv a})"
+        | .add => s!"pure (Zig.Vec.reduce Zig.addWrap {rv a})"
+        | .mul => s!"pure (Zig.Vec.reduce Zig.mulWrap {rv a})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .shuffle a b mask =>
+    -- The mask is comptime-known: pick each lane directly into a `Zig.Vec` literal instead of a
+    -- runtime shuffle function (`ZigLean/Vec.lean`).
+    let laneText (lane : ShuffleLane) : String :=
+      match lane with
+      | .a idx => s!"{rv a}.lanes[{idx}]!"
+      | .b idx =>
+        match b with
+        | some bv => s!"{rv bv}.lanes[{idx}]!"
+        | none => "(panic! \"air2lean: shuffle mask reads 'b' with no second source\")"
+      | .undef => "default"
+      | .value v => rv v
+    let items := ", ".intercalate (mask.map laneText).toList
+    let (env, l) := bindLet fc env inst.id s!"pure ((⟨#v[{items}]⟩ : {fc.emitTyOf inst.ty}))"
+    (env, some l)
   | .bit op a b =>
     let f := match op with | .and => "&&&" | .or => "|||" | .xor => "^^^"
     let (env, l) := bindLet fc env inst.id s!"pure ({rv a} {f} {rv b})"; (env, some l)
@@ -1263,6 +1337,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     | .array .. =>
       let items := ", ".intercalate (elems.map rv).toList
       let (env, l) := bindLet fc env inst.id s!"pure (#v[{items}] : {fc.emitTyOf inst.ty})"
+      (env, some l)
+    | .vector .. =>
+      let items := ", ".intercalate (elems.map rv).toList
+      let (env, l) := bindLet fc env inst.id s!"pure ((⟨#v[{items}]⟩ : {fc.emitTyOf inst.ty}))"
       (env, some l)
     | _ =>
     let sname := fc.emitTyOf inst.ty

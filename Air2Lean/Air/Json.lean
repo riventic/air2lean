@@ -64,6 +64,11 @@ structure RawInst where
   name : Option String
   /-- `dbg_stmt`. -/
   line : Option Nat
+  /-- `reduce`'s (`std.builtin.ReduceOp`) or `cmp_vector`'s (`std.math.CompareOperator`) operator
+  name. -/
+  op : Option String
+  /-- `shuffle_one`, `shuffle_two` (0.15.2+), `shuffle` (0.14.1): the mask, in lane order. -/
+  mask : Array ShuffleLane
   /-- `assembly`. -/
   asm : Option RawAsm
   unsupported : Bool
@@ -126,6 +131,10 @@ def parseTy (j : Json) : Except String Ty := do
     let len ← (← j.getObjVal? "len").getNat?
     let child ← (← j.getObjVal? "child").getNat?
     return .array len child
+  | "vector" =>
+    let len ← (← j.getObjVal? "len").getNat?
+    let child ← (← j.getObjVal? "child").getNat?
+    return .vector len child
   | "optional" =>
     let child ← (← j.getObjVal? "child").getNat?
     return .optional child
@@ -314,6 +323,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       let s ← (← j.getObjVal? "val").getStr?
       parseLeafVal fnName tyId ty s
 
+/-- One lane of a shuffle mask: `{"a": i}`, `{"b": i}`, `{"u": true}`, or `{"v": Ref}`
+(`docs/air-json.md`). -/
+def parseMaskLane (fnName : String) (types : Array Ty) (j : Json) : Except String ShuffleLane := do
+  if let some aJ := optField j "a" then return .a (← aJ.getNat?)
+  else if let some bJ := optField j "b" then return .b (← bJ.getNat?)
+  else if (optField j "u").isSome then return .undef
+  else if let some vJ := optField j "v" then return .value (← parseVal fnName types vJ)
+  else throw s!"{fnName}: bad shuffle mask lane"
+
 /-- One `outputs`/`inputs` entry of an `assembly` instruction. -/
 def parseAsmOperand (fnName : String) (types : Array Ty) (j : Json) : Except String RawAsmOperand := do
   let constraint ← (← j.getObjVal? "constraint").getStr?
@@ -384,6 +402,13 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let line ← match optField j "line" with
     | some lj => some <$> lj.getNat?
     | none => pure none
+  let op ← match optField j "op" with
+    | some oj => some <$> oj.getStr?
+    | none => pure none
+  let mask ← match optField j "mask" with
+    | some (.arr a) => a.mapM (parseMaskLane fnName types)
+    | some _ => throw s!"{fnName}: inst {id}: 'mask' must be an array"
+    | none => pure #[]
   let asm ← match optField j "source" with
     | some _ => some <$> parseAsm fnName types j
     | none => pure none
@@ -391,7 +416,7 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
     | some (.bool b) => b
     | _ => false
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, asm, unsupported }
+           line, op, mask, asm, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?

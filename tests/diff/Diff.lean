@@ -11,6 +11,7 @@ import Proofs.Variants.Gen
 import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
 import Proofs.Lists.Gen
+import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 
 /-!
@@ -449,6 +450,72 @@ def runDot : IO Unit :=
     let ys ← (← getArr items[1]!).mapM (getFloat .f64)
     pure (renderOk (Floats.dot xs ys) floatStr)
 
+/-! ### vectors: every function takes/returns `@Vector(4, T)` (examples/vectors/vectors.zig) -/
+
+/-- A `@Vector(4, α)` from 4 already-parsed lanes, lane 0 first (Zig's lane order; matches
+`common.zig`'s `renderPayload` and `tests/diff/gen_inputs.zig`'s writer). -/
+def vec4 {α : Type} (a b c d : α) : Zig.Vec α 4 := ⟨#v[a, b, c, d]⟩
+
+/-- A `@Vector(4, uN/iN)` argument: a JSON array of 4 bare ints. -/
+def intVecOf (n : Nat) (j : Json) : IO (Zig.Vec (BitVec n) 4) := do
+  let items ← getArr j
+  pure (vec4 (bv n (← getInt items[0]!)) (bv n (← getInt items[1]!))
+    (bv n (← getInt items[2]!)) (bv n (← getInt items[3]!)))
+
+/-- A `@Vector(4, fN)` argument: a JSON array of 4 float-hex strings. -/
+def floatVecOf (fmt : Zig.FloatFmt) (j : Json) : IO (Zig.Vec (Zig.Float fmt) 4) := do
+  let items ← getArr j
+  pure (vec4 (← getFloat fmt items[0]!) (← getFloat fmt items[1]!)
+    (← getFloat fmt items[2]!) (← getFloat fmt items[3]!))
+
+/-- A `@Vector(4, uN/iN)` result: a JSON array of 4 ints, lane 0 first, matching
+`common.zig`'s `renderPayload` `.vector` case. -/
+def vecStr {n : Nat} (v : Zig.Vec (BitVec n) 4) : String :=
+  "[" ++ ",".intercalate (v.lanes.toArray.toList.map (natStr · false)) ++ "]"
+
+def renderVec {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
+  renderOk r vecStr
+
+def runFDot : IO Unit :=
+  processFile "vectors" "fDot" fun j => do
+    let items ← getArr j
+    let a ← floatVecOf .f32 items[0]!
+    let b ← floatVecOf .f32 items[1]!
+    pure (renderOk (Vectors.fDot a b) floatStr)
+
+def runUDotWrap : IO Unit :=
+  processFile "vectors" "uDotWrap" fun j => do
+    let items ← getArr j
+    let a ← intVecOf 32 items[0]!
+    let b ← intVecOf 32 items[1]!
+    pure (render (Vectors.uDotWrap a b) false)
+
+def runSatAdd : IO Unit :=
+  processFile "vectors" "satAdd" fun j => do
+    let items ← getArr j
+    let a ← intVecOf 32 items[0]!
+    let b ← intVecOf 32 items[1]!
+    pure (renderVec (Vectors.satAdd a b))
+
+def runMaxLane : IO Unit :=
+  processFile "vectors" "maxLane" fun j => do
+    let items ← getArr j
+    let v ← intVecOf 32 items[0]!
+    pure (renderSigned (Vectors.maxLane v))
+
+def runReverse : IO Unit :=
+  processFile "vectors" "reverse" fun j => do
+    let items ← getArr j
+    let v ← intVecOf 32 items[0]!
+    pure (renderVec (Vectors.reverse v))
+
+def runCheckedAdd : IO Unit :=
+  processFile "vectors" "checkedAdd" fun j => do
+    let items ← getArr j
+    let a ← intVecOf 32 items[0]!
+    let b ← intVecOf 32 items[1]!
+    pure (renderVec (Vectors.checkedAdd a b))
+
 /-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
 
 def lightOf (j : Json) : IO Variants.Light := do
@@ -787,6 +854,14 @@ def main : IO Unit := do
     DiffTest.runHypot2
     DiffTest.runCelsius
     DiffTest.runDot
+
+  run "vectors" do
+    DiffTest.runFDot
+    DiffTest.runUDotWrap
+    DiffTest.runSatAdd
+    DiffTest.runMaxLane
+    DiffTest.runReverse
+    DiffTest.runCheckedAdd
 
   run "asm" do
     DiffTest.runBswap32

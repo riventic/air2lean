@@ -81,8 +81,9 @@ scripts/mutate.sh      # a changed function must fail a test
 | local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
 | enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | threads, atomics |
-| structs and unions passed and returned by value | SIMD vectors |
+| structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | unions and error unions in memory |
+| `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |

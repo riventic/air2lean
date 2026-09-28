@@ -224,8 +224,9 @@ pub const panic = struct {
 /// `0`/`1` for bool, `null`/inner for `?T`, `{"err":"name"}`/inner for `E!T`, `"0x<bits>"` (or
 /// `"nan"`) for a float leaf (docs/floats.md's diff protocol — every NaN, tested with `v != v`,
 /// never bits, collapses to the one string `"nan"`), the tag value for an enum, and objects for
-/// a union and a struct (below). Recurses on `T`'s shape, so `?T`/`E!T`
-/// nesting composes without new cases (no example needs it today).
+/// a union and a struct (below), and a JSON array (lane 0 first) for a `@Vector(n, T)`.
+/// Recurses on `T`'s shape, so `?T`/`E!T` nesting composes without new cases (no example needs
+/// it today).
 fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !void {
     switch (@typeInfo(T)) {
         .optional => {
@@ -276,6 +277,15 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
             }
             try writer.writeAll("}");
         },
+        // `@Vector(n, T)`: a JSON array of `n` lanes, lane 0 first (Zig's lane order).
+        .vector => |vi| {
+            try writer.writeAll("[");
+            inline for (0..vi.len) |i| {
+                if (i > 0) try writer.writeAll(",");
+                try renderPayload(vi.child, writer, quote_wide, v[i]);
+            }
+            try writer.writeAll("]");
+        },
         .void => try writer.writeAll("null"),
         // A pointer into the input buffers is `{"buf":<index>,"off":<offset>}`, a slice also has
         // `"len"`. A pointer to other memory (a global) is `{"bytes":"<hex>"}`: the bytes of the
@@ -311,6 +321,22 @@ pub fn parseFloatHex(comptime T: type, s: []const u8) T {
     const width = @bitSizeOf(T);
     const bits = std.fmt.parseInt(std.meta.Int(.unsigned, width), s[2..], 16) catch unreachable;
     return @bitCast(bits);
+}
+
+/// Parses a `@Vector(n, T)` diff-protocol input: a JSON array of `n` lanes (the same shape
+/// `tests/diff/gen_inputs.zig` writes, and docs/air-json.md's `elems` shape). A float lane is
+/// `parseFloatHex`'s hex string; an int lane is a bare JSON integer, positive or negative.
+pub fn vectorFromJson(comptime n: usize, comptime T: type, v: std.json.Value) @Vector(n, T) {
+    // An array, then one conversion: 0.16.0 has no store to a vector lane at a runtime index.
+    var lanes: [n]T = undefined;
+    for (v.array.items, 0..) |item, i| {
+        lanes[i] = switch (@typeInfo(T)) {
+            .float => parseFloatHex(T, item.string),
+            .int => @intCast(item.integer),
+            else => @compileError("vectorFromJson: unsupported lane type " ++ @typeName(T)),
+        };
+    }
+    return lanes;
 }
 
 /// Runs `func(args)` in a forked child; the child never returns to this function on the parent

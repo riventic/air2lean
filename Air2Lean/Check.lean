@@ -1,5 +1,6 @@
 import Air2Lean.Memory
 import ZigLean.Mem.Enc
+import ZigLean.Vec
 
 /-!
 # Subset checker
@@ -64,6 +65,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     | "one" | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
   | .array _ child => recur child
+  | .vector _ child => recur child
   | .optional child => recur child
   | .errorUnion set payload => do
     recur set
@@ -113,6 +115,12 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
       throw "an array with a sentinel as one value"
     let (s, a) ← modelLayout types layouts c
     pure (len * s, a)
+  | some (.vector len c) =>
+    match types[c]? with
+    | some (.int ..) | some (.float _) =>
+      let (s, _) ← modelLayout types layouts c
+      pure (Zig.vecLayout len s, Zig.vecLayout len s)
+    | _ => throw "a vector of a type other than an integer or float (M19)"
   | some (.enum _ tag _ _) =>
     let _ ← modelLayout types layouts tag
     exported
@@ -216,10 +224,22 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
-    -- operand with a wrapping or saturating mode (Zig has none today) instead of guessing.
+    -- operand (scalar or a vector of floats) with a wrapping or saturating mode (Zig has none
+    -- today) instead of guessing.
     if mode != .checked then
-      if let some (.float _) := cx.types[ty]? then
+      let elemTy := match cx.types[ty]? with
+        | some (.vector _ c) => cx.types[c]?
+        | t => t
+      if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
+    pure line
+  | .cmp .. =>
+    -- `cmp_vector`/`cmp_vector_optimized` normalize into this same `.cmp` (`Normalize.lean`), but
+    -- `Emit.lean`'s `.cmp` case has no vector-comparison path (no `Zig.Vec Bool n` support):
+    -- reject here instead of a confusing type error in the generated Lean's `lake build`.
+    if let some (.vector ..) := cx.types[ty]? then
+      throw s!"{fnName}: near line {line}: a vector comparison (`cmp_vector`) is outside the \
+        subset (M19)"
     pure line
   | .bitcast (.inst a) =>
     -- `@intFromPtr`: a pointer to an integer needs addresses in the model (M20).
