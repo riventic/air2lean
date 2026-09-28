@@ -40,6 +40,7 @@ pub fn main() !void {
     try compat.makePath("tests/diff/pointers/inputs");
     try compat.makePath("tests/diff/slices/inputs");
     try compat.makePath("tests/diff/lists/inputs");
+    try compat.makePath("tests/diff/vectors/inputs");
 
     var prng = std.Random.DefaultPrng.init(seed);
     const rng = prng.random();
@@ -105,6 +106,14 @@ pub fn main() !void {
 
     // The lists generators run last, so the earlier inputs stay the same.
     try genLists(rng);
+
+    // The vectors generators run last, so every earlier input stays the same.
+    try genFDot(rng);
+    try genUDotWrap(rng);
+    try genSatAdd(rng);
+    try genMaxLane(rng);
+    try genReverse(rng);
+    try genCheckedAdd(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -1685,5 +1694,255 @@ fn genLists(rng: std.Random) !void {
             try writeSlice(writer, 0, 0, n);
             try writer.writeAll("]}\n");
         }
+    }
+}
+
+// --- examples/vectors --------------------------------------------------------------------
+
+fn openOutV(comptime name: []const u8) !compat.OutFile {
+    return openOutIn("tests/diff/vectors/inputs", name);
+}
+
+/// Writes `xs` as a JSON array of float-hex tokens, e.g. `["0x..","0x.."]` (any length).
+fn writeFloatSlice(writer: anytype, comptime T: type, xs: []const T) !void {
+    try writer.writeAll("[");
+    for (xs, 0..) |x, i| {
+        if (i != 0) try writer.writeAll(",");
+        try floatHexToken(writer, T, x);
+    }
+    try writer.writeAll("]");
+}
+
+/// fDot(a, b: @Vector(4, f32)) -> f32. Edges: `edgesF(f32)` strided per lane (a different
+/// prime stride per lane decorrelates the 4 positions across combos), then random fill.
+fn genFDot(rng: std.Random) !void {
+    var file = try openOutV("fDot");
+    defer file.close();
+    const writer = file.writer();
+
+    const edges = edgesF(f32);
+    const e = edges.len;
+    var n: usize = 0;
+    while (n < 150) : (n += 1) {
+        const a = [4]f32{ edges[n % e], edges[(n / 3) % e], edges[(n / 7) % e], edges[(n / 11) % e] };
+        const b = [4]f32{ edges[(n / 5) % e], edges[(n / 13) % e], edges[n % e], edges[(n / 17) % e] };
+        try writer.writeAll("[");
+        try writeFloatSlice(writer, f32, &a);
+        try writer.writeAll(",");
+        try writeFloatSlice(writer, f32, &b);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        var a: [4]f32 = undefined;
+        var b: [4]f32 = undefined;
+        for (0..4) |i| {
+            a[i] = if (i % 2 == 0) randFiniteBits(rng, f32) else randExpValue(rng, f32, rng.boolean());
+            b[i] = if (i % 2 == 0) randFiniteBits(rng, f32) else randExpValue(rng, f32, rng.boolean());
+        }
+        try writer.writeAll("[");
+        try writeFloatSlice(writer, f32, &a);
+        try writer.writeAll(",");
+        try writeFloatSlice(writer, f32, &b);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// uDotWrap(a, b: @Vector(4, u32)) -> u32 (wrapping mul, wrapping-add reduce; never panics).
+/// Edges: `edgesU(u32)` strided per lane (values that push both the per-lane product and the
+/// accumulated sum past u32's range), then random fill.
+fn genUDotWrap(rng: std.Random) !void {
+    var file = try openOutV("uDotWrap");
+    defer file.close();
+    const writer = file.writer();
+
+    const edges = edgesU(u32);
+    const e = edges.len;
+    var n: usize = 0;
+    while (n < 100) : (n += 1) {
+        const a = [4]u32{ edges[n % e], edges[(n / 2) % e], edges[(n / 3) % e], edges[(n / 5) % e] };
+        const b = [4]u32{ edges[(n / 7) % e], edges[n % e], edges[(n / 11) % e], edges[(n / 13) % e] };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        const a = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        const b = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// satAdd(a, b: @Vector(4, u32)) -> @Vector(4, u32) (saturating; never panics). Edges: for
+/// each lane position, `a`'s lane is `maxInt` and `b`'s is a small positive value so only that
+/// lane saturates (the others add ordinary small values); then `edgesU(u32)` strided combos;
+/// then random fill.
+fn genSatAdd(rng: std.Random) !void {
+    var file = try openOutV("satAdd");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    for (0..4) |p| {
+        var a = [4]u32{ 0, 1, 2, 3 };
+        var b = [4]u32{ 4, 5, 6, 7 };
+        a[p] = std.math.maxInt(u32);
+        b[p] = 10;
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+        n += 1;
+    }
+    const edges = edgesU(u32);
+    const e = edges.len;
+    while (n < 100) : (n += 1) {
+        const a = [4]u32{ edges[n % e], edges[(n / 2) % e], edges[(n / 3) % e], edges[(n / 5) % e] };
+        const b = [4]u32{ edges[(n / 7) % e], edges[n % e], edges[(n / 11) % e], edges[(n / 13) % e] };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        const a = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        const b = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// maxLane(v: @Vector(4, i32)) -> i32 (`@reduce(.Max)`). Edges: for each lane position `p`, a
+/// vector whose unique maximum (i32's `maxInt`) sits at `p` and the other 3 lanes hold
+/// distinct smaller values — this is exactly what a fold that drops the last lane
+/// (scripts/mutate.sh mutation (i)) gets wrong when `p = 3`. Then `edgesI(i32)` strided
+/// combos, then random fill.
+fn genMaxLane(rng: std.Random) !void {
+    var file = try openOutV("maxLane");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    const fillers = [_]i32{ std.math.minInt(i32), -1, 0, std.math.minInt(i32) + 1 };
+    for (0..4) |p| {
+        var v = [4]i32{ fillers[0], fillers[1], fillers[2], fillers[3] };
+        v[p] = std.math.maxInt(i32);
+        try writer.writeAll("[");
+        try writeIntSlice(writer, i32, &v);
+        try writer.writeAll("]\n");
+        n += 1;
+    }
+    const edges = edgesI(i32);
+    const e = edges.len;
+    while (n < 150) : (n += 1) {
+        const v = [4]i32{ edges[n % e], edges[(n / 2) % e], edges[(n / 3) % e], edges[(n / 5) % e] };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, i32, &v);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        const v = [4]i32{ rng.int(i32), rng.int(i32), rng.int(i32), rng.int(i32) };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, i32, &v);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// reverse(v: @Vector(4, u32)) -> @Vector(4, u32) (`@shuffle`; never panics). Edges:
+/// `edgesU(u32)` strided combos, then random fill.
+fn genReverse(rng: std.Random) !void {
+    var file = try openOutV("reverse");
+    defer file.close();
+    const writer = file.writer();
+
+    const edges = edgesU(u32);
+    const e = edges.len;
+    var n: usize = 0;
+    while (n < 100) : (n += 1) {
+        const v = [4]u32{ edges[n % e], edges[(n / 2) % e], edges[(n / 3) % e], edges[(n / 5) % e] };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &v);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        const v = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &v);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// checkedAdd(a, b: @Vector(4, u32)) -> @Vector(4, u32) (checked; panics if any lane
+/// overflows). Edges: no overflow; overflow in exactly one lane, for each of the 4 positions
+/// (the shape the milestone brief asks for); overflow in every lane; then `edgesU(u32)`
+/// strided combos and random fill (both draw from values spanning the full range, so some
+/// combos overflow and some do not).
+fn genCheckedAdd(rng: std.Random) !void {
+    var file = try openOutV("checkedAdd");
+    defer file.close();
+    const writer = file.writer();
+
+    var n: usize = 0;
+    {
+        const a = [4]u32{ 0, 1, 2, 3 };
+        const b = [4]u32{ 4, 5, 6, 7 };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+        n += 1;
+    }
+    for (0..4) |p| {
+        var a = [4]u32{ 0, 1, 2, 3 };
+        var b = [4]u32{ 4, 5, 6, 7 };
+        a[p] = std.math.maxInt(u32);
+        b[p] = 1;
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+        n += 1;
+    }
+    {
+        const a = [4]u32{ std.math.maxInt(u32), std.math.maxInt(u32), std.math.maxInt(u32), std.math.maxInt(u32) };
+        const b = [4]u32{ 1, 1, 1, 1 };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+        n += 1;
+    }
+    const edges = edgesU(u32);
+    const e = edges.len;
+    while (n < 100) : (n += 1) {
+        const a = [4]u32{ edges[n % e], edges[(n / 2) % e], edges[(n / 3) % e], edges[(n / 5) % e] };
+        const b = [4]u32{ edges[(n / 7) % e], edges[n % e], edges[(n / 11) % e], edges[(n / 13) % e] };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
+    }
+    while (n < N) : (n += 1) {
+        const a = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        const b = [4]u32{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+        try writer.writeAll("[");
+        try writeIntSlice(writer, u32, &a);
+        try writer.writeAll(",");
+        try writeIntSlice(writer, u32, &b);
+        try writer.writeAll("]\n");
     }
 }

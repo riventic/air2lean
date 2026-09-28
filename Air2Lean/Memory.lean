@@ -63,6 +63,11 @@ def valueOperands (op : Op) : Array Val :=
   -- A place has no optional-payload path: the local becomes a stack block.
   | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
   | .mulAdd a b c => #[a, b, c]
+  | .splat a | .reduce _ a => #[a]
+  | .select pred a b => #[pred, a, b]
+  | .shuffle a b mask =>
+    #[a] ++ (match b with | some v => #[v] | none => #[]) ++
+      mask.filterMap fun l => match l with | .value v => some v | _ => none
   | .bitcast _ | .fieldPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
   | .memset a b | .memcpy a b => #[a, b]

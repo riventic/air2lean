@@ -34,7 +34,10 @@ mutual
 
 /-- The AIR tag table, shared by every supported version. -/
 partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op := do
-  -- Fast-math float tags (the exporter also marks these `unsupported`): a specific message.
+  -- Fast-math tags (float ops, `reduce_optimized`, `cmp_vector_optimized`): a specific message.
+  -- Most of these the exporter also marks `unsupported`; `reduce_optimized`/`cmp_vector_optimized`
+  -- decode fully (same shape as `reduce`/`cmp_vector`) but are rejected here regardless, since
+  -- fast-math permits reassociation the model does not claim to match.
   if raw.tag.endsWith "_optimized" then
     throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag})"
   if raw.unsupported then
@@ -99,6 +102,32 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "cmp_neq" => let (a, b) ← arg2 fnName raw; return .cmp .ne a b
   | "cmp_gte" => let (a, b) ← arg2 fnName raw; return .cmp .ge a b
   | "cmp_gt" => let (a, b) ← arg2 fnName raw; return .cmp .gt a b
+  | "cmp_vector" =>
+    let (a, b) ← arg2 fnName raw
+    let some opName := raw.op
+      | throw s!"{fnName}: inst {raw.id}: 'cmp_vector' needs 'op'"
+    let op ← match opName with
+      | "lt" => pure .lt | "lte" => pure .le | "eq" => pure .eq
+      | "gte" => pure .ge | "gt" => pure .gt | "neq" => pure .ne
+      | other => throw s!"{fnName}: inst {raw.id}: unknown compare op '{other}'"
+    return .cmp op a b
+  | "splat" => let a ← arg1 fnName raw; return .splat a
+  | "select" =>
+    let (a, b, pred) ← arg3 fnName raw
+    return .select pred a b
+  | "reduce" =>
+    let a ← arg1 fnName raw
+    let some opName := raw.op
+      | throw s!"{fnName}: inst {raw.id}: 'reduce' needs 'op'"
+    let op ← match opName with
+      | "And" => pure .and | "Or" => pure .or | "Xor" => pure .xor
+      | "Min" => pure .min | "Max" => pure .max | "Add" => pure .add | "Mul" => pure .mul
+      | other => throw s!"{fnName}: inst {raw.id}: unknown reduce op '{other}'"
+    return .reduce op a
+  | "shuffle_one" | "shuffle_two" | "shuffle" =>
+    let some a := raw.args[0]?
+      | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs at least 1 arg"
+    return .shuffle a raw.args[1]? raw.mask
   | "bool_and" => let (a, b) ← arg2 fnName raw; return .boolAnd a b
   | "bool_or" => let (a, b) ← arg2 fnName raw; return .boolOr a b
   | "intcast" | "intcast_safe" => let a ← arg1 fnName raw; return .intCast a
