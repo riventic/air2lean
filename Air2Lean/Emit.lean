@@ -213,12 +213,25 @@ def tagLit (bits : Nat) (v : Int) : String :=
 
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
-def emitEnc (s : NamedType) : String :=
+def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   let n := s.leanName
   let size := s.layout.size.getD 0
   let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
                s!"  align := {s.layout.align.getD 1}"]
   match s.ty with
+  | .union _ _ (some tag) fields =>
+    -- The tag and the active field's payload at `unionOffsets` (M20).
+    let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2))).getD (0, 0)
+    let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
+    let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
+    let enc := fields.toList.map fun (f, id) =>
+      if isVoid id then s!"    | .{mangleField f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag)]"
+      else s!"    | .{mangleField f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag), ({po}, Zig.Enc.encode x)]"
+    let dec := fields.toList.map fun (f, id) =>
+      if isVoid id then s!"    | .{mangleField f} => pure .{mangleField f}"
+      else s!"    | .{mangleField f} => pure (.{mangleField f} (← Zig.Enc.decodeAt bs {po}))"
+    String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
+      ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
     -- Its backing integer (`Zig.Packed`).
     let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
@@ -256,7 +269,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     if exhaustive then
       let ctors := fields.toList.map fun (f, _) => s!"  | {mangleField f}"
       let toBits := fields.toList.map fun (f, v) => s!"  | .{mangleField f} => {tagLit bits v}"
-      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then some .{mangleField f} else {acc}") "none"
+      -- `Option.none`: in the namespace of `{n}`, a field named `none` would be `{n}.none`.
+      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then Option.some .{mangleField f} else {acc}") "Option.none"
       String.intercalate "\n"
         ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
           s!"def {n}.toBits : {n} → BitVec {bits}"] ++ toBits ++ ["",
@@ -270,7 +284,7 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
           ++ named ++ ["",
           s!"def {n}.toBits (e : {n}) : BitVec {bits} := e.bits", "",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=",
-          s!"  if {lo} ≤ v ∧ v ≤ {hi} then some ⟨BitVec.ofInt {bits} v⟩ else none", "",
+          s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
           s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}"])
   | .union _ _ tag fields =>
     let tagName := match tag.bind (s.srcTypes[·]?) with
@@ -325,7 +339,11 @@ partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array St
   | some (.struct name _ fs) =>
     if acc.contains name then acc else fs.foldl (fun a (_, t) => memNamed types layouts a t) (acc.push name)
   | some (.enum name ..) => if acc.contains name then acc else acc.push name
+  | some (.union name _ tag fs) =>
+    if acc.contains name then acc
+    else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts) (acc.push name)
   | some (.optional c) | some (.array _ c) => memNamed types layouts acc c
+  | some (.errorUnion _ c) => memNamed types layouts acc c
   | _ => acc
 
 /-- The named types that get a `Zig.Enc` instance: those that a pointer of a function that uses
@@ -343,7 +361,7 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
 def emitNamed (structNames : Array (String × String)) (encNames : Array String)
     (s : NamedType) : String :=
   let body := emitNamedType structNames s
-  if encNames.contains s.zigName then s!"{body}\n\n{emitEnc s}" else body
+  if encNames.contains s.zigName then s!"{body}\n\n{emitEnc structNames s}" else body
 
 /-! ## Float semantics mode (`--float-semantics`, `docs/floats.md` §Semantics) -/
 
@@ -704,6 +722,9 @@ def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
     -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
     -- not a bit-pointer.
     | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
+    -- Every field of a tagged union is its payload.
+    | .union _ _ (some tag) fields =>
+      ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
     | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
   | _ => 0
 
@@ -914,7 +935,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
   | .setUnionTag .. => #[]
   | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
-  | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
+  | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
   | .store p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
   | .atomicLoad p _ => if fc.isMemPtr p then #[p] else #[]
   | .atomicStore p v _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
@@ -1352,6 +1373,18 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | ct => s!"Zig.optSetSome ({emitTy fc.structNames fc.types ct}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p =>
+    -- `Zig.errIsErrAt` & co. (`ZigLean/Mem/Enc.lean`) take the payload type.
+    let payload := match fc.pointeeOf p with
+      | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+      | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
+    let expr := match inst.op with
+      | .isErrPtr true _ => s!"Zig.errIsErrAt ({payload}) {rv p}"
+      | .isErrPtr false _ => s!"(!·) <$> Zig.errIsErrAt ({payload}) {rv p}"
+      | .errPayloadPtr true _ => s!"Zig.errSetOk ({payload}) {rv p}"
+      | .errPayloadPtr false _ => s!"pure (Zig.errPayloadPtr ({payload}) {rv p})"
+      | _ => s!"Zig.errCodeAt ({payload}) {rv p}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
   | .isNonErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
   | .errPayload a =>
@@ -1396,6 +1429,16 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
+    if fc.isMemPtr ptr then
+      -- Write the tag; the payload bytes stay (Zig).
+      match fc.pointeeOf ptr with
+      | .union _ _ (some tagTy) fields =>
+        let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2))).map (·.1)).getD 0
+        let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
+        let align := (fc.layouts[tagTy]?.bind (·.align)).getD 1
+        (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
+      | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
+    else
     match fc.unionFieldOfTag? (fc.pointeeOf ptr) tag with
     | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.setTag_{f} {old})"))
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")

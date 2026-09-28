@@ -1,5 +1,6 @@
 //! M20: casts (`@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`,
-//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs, function pointers.
+//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs, function pointers, and
+//! tagged unions and error unions in memory.
 
 pub const Point = struct {
     x: u32,
@@ -157,6 +158,63 @@ pub fn twice(sq: bool, x: u32) u32 {
     return applyTwice(if (sq) &square else &double, x);
 }
 
+pub const Rect = struct {
+    w: u16,
+    h: u16,
+};
+
+pub const Shape = union(enum) {
+    circle: u32,
+    rect: Rect,
+    none,
+};
+
+/// Store a circle at `p` (a tagged union store).
+pub fn setCircle(p: *Shape, r: u32) void {
+    p.* = .{ .circle = r };
+}
+
+/// `3 * r * r`, `w * h` or 0, wrapping (a tagged union load).
+pub fn shapeArea(p: *const Shape) u32 {
+    return switch (p.*) {
+        .circle => |r| 3 *% r *% r,
+        .rect => |q| @as(u32, q.w) *% q.h,
+        .none => 0,
+    };
+}
+
+/// Add 1 to the radius if `p` is a circle (a pointer to the active payload).
+pub fn growCircle(p: *Shape) void {
+    switch (p.*) {
+        .circle => |*r| r.* +%= 1,
+        else => {},
+    }
+}
+
+pub const ParseError = error{ Empty, TooBig };
+
+fn digit(c: u8) ParseError!u8 {
+    if (c == 0) return error.Empty;
+    if (c > 9) return error.TooBig;
+    return c;
+}
+
+/// Add 1 to the payload of `r`, if it has one.
+fn bump(r: *ParseError!u8) void {
+    if (r.*) |*v| v.* +%= 1 else |_| {}
+}
+
+/// `digit(c) + 1`, or 100 for `error.Empty` and 200 for `error.TooBig` (an error union in a
+/// memory block).
+pub fn bumpDigit(c: u8) u8 {
+    var r = digit(c);
+    bump(&r);
+    return r catch |e| switch (e) {
+        error.Empty => 100,
+        error.TooBig => 200,
+    };
+}
+
 comptime {
     _ = &addrEq;
     _ = &ptrRoundTrip;
@@ -178,4 +236,8 @@ comptime {
     _ = &bitsToFloat;
     _ = &applyOp;
     _ = &twice;
+    _ = &setCircle;
+    _ = &shapeArea;
+    _ = &growCircle;
+    _ = &bumpDigit;
 }

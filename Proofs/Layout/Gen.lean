@@ -3,6 +3,104 @@ import ZigLean
 
 namespace Layout
 
+inductive ShapeTag where
+  | circle
+  | rect
+  | none
+  deriving Repr, Inhabited, DecidableEq
+
+def ShapeTag.toBits : ShapeTag → BitVec 2
+  | .circle => (0 : BitVec 2)
+  | .rect => (1 : BitVec 2)
+  | .none => (2 : BitVec 2)
+
+def ShapeTag.ofInt? (v : Int) : Option ShapeTag :=
+  if v = 0 then Option.some .circle else if v = 1 then Option.some .rect else if v = 2 then Option.some .none else Option.none
+
+def ShapeTag.isNamed (_ : ShapeTag) : Bool := true
+
+instance : Zig.Enc ShapeTag where
+  size := 1
+  align := 1
+  encode v := Zig.Enc.encode v.toBits
+  decode bs := do
+    let b : BitVec 2 ← Zig.Enc.decode bs
+    match ShapeTag.ofInt? (Zig.val false b) with
+    | some v => pure v
+    | none => throw .illegal
+
+structure Rect where
+  w : BitVec 16
+  h : BitVec 16
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Rect where
+  size := 4
+  align := 2
+  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.w), (2, Zig.Enc.encode v.h)]
+  decode bs := do pure { w := ← Zig.Enc.decodeAt bs 0, h := ← Zig.Enc.decodeAt bs 2 }
+
+inductive Shape where
+  | circle (v : BitVec 32)
+  | rect (v : Rect)
+  | none
+  deriving Repr, Inhabited, DecidableEq
+
+def Shape.tag : Shape → ShapeTag
+  | .circle _ => .circle
+  | .rect _ => .rect
+  | .none => .none
+
+def Shape.get_circle : Shape → Zig.Result (BitVec 32)
+  | .circle v => pure v
+  | _ => throw .panic
+
+def Shape.modify_circle (g : BitVec 32 → BitVec 32) : Shape → Shape
+  | .circle v => .circle (g v)
+  | _ => .circle (g default)
+
+def Shape.setTag_circle : Shape → Shape
+  | .circle v => .circle v
+  | _ => .circle default
+
+def Shape.get_rect : Shape → Zig.Result (Rect)
+  | .rect v => pure v
+  | _ => throw .panic
+
+def Shape.modify_rect (g : Rect → Rect) : Shape → Shape
+  | .rect v => .rect (g v)
+  | _ => .rect (g default)
+
+def Shape.setTag_rect : Shape → Shape
+  | .rect v => .rect v
+  | _ => .rect default
+
+def Shape.get_none : Shape → Zig.Result (Unit)
+  | .none => pure ()
+  | _ => throw .panic
+
+def Shape.modify_none (_g : Unit → Unit) : Shape → Shape
+  | .none => .none
+  | _ => .none
+
+def Shape.setTag_none : Shape → Shape
+  | .none => .none
+  | _ => .none
+
+instance : Zig.Enc Shape where
+  size := 8
+  align := 4
+  encode v := match v with
+    | .circle x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .rect x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .none => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+  decode bs := do
+    let t : ShapeTag ← Zig.Enc.decodeAt bs 4
+    match t with
+    | .circle => pure (.circle (← Zig.Enc.decodeAt bs 0))
+    | .rect => pure (.rect (← Zig.Enc.decodeAt bs 0))
+    | .none => pure .none
+
 structure Point where
   x : BitVec 32
   y : BitVec 32
@@ -216,6 +314,104 @@ def bitsToFloat (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Zig.F32) := do
   match e with
   | .ret v => pure v
 
+structure bumpLocals where
+  deriving Inhabited
+
+inductive bumpExit where
+  | ret
+  | br1
+
+def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← Zig.load (Except Zig.ErrName (BitVec 8)) 2 p0
+      let i3 ← pure (Zig.isNonErr i2)
+      if i3 then (do
+        let i5 ← pure (Zig.errPayloadPtr (BitVec 8) p0)
+        let i6 ← Zig.load (BitVec 8) 1 i5
+        let i7 ← pure (Zig.addWrap i6 (1 : BitVec 8))
+        Zig.store (α := BitVec 8) 1 i5 i7
+        pure .br1)
+      else (do
+        let _i10 ← Zig.errCodeAt (BitVec 8) p0
+        pure .br1)) : Zig.MM bumpLocals bumpExit) with
+    | .br1 => (do
+      pure .ret)
+    | e => pure e) : Zig.MM bumpLocals bumpExit).run' (default : bumpLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure digitLocals where
+  deriving Inhabited
+
+inductive digitExit where
+  | ret (v : Except Zig.ErrName (BitVec 8))
+  | br1
+  | br6
+
+def digit (p0 : BitVec 8) : Zig.Result (Except Zig.ErrName (BitVec 8)) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0 == (0 : BitVec 8))
+      if i2 then (do
+        pure (.ret (.error "Empty" : Except Zig.ErrName (BitVec 8))))
+      else (do
+        pure .br1)) : Zig.M digitLocals digitExit) with
+    | .br1 => (do
+      match ← ((do
+        let i7 ← pure (Zig.gt false p0 (9 : BitVec 8))
+        if i7 then (do
+          pure (.ret (.error "TooBig" : Except Zig.ErrName (BitVec 8))))
+        else (do
+          pure .br6)) : Zig.M digitLocals digitExit) with
+      | .br6 => (do
+        let i11 ← pure ((.ok p0) : Except Zig.ErrName (BitVec 8))
+        pure (.ret i11))
+      | e => pure e)
+    | e => pure e) : Zig.M digitLocals digitExit).run' (default : digitLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure bumpDigitLocals where
+  r : Zig.Ptr
+  deriving Inhabited
+
+inductive bumpDigitExit where
+  | ret (v : BitVec 8)
+  | br7 (v : BitVec 8)
+
+def bumpDigit (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
+  let s1 ← Zig.allocStack 4 2
+  let e ← ((do
+    let i1 ← pure (← get).r
+    let i2 ← Zig.callR (digit p0)
+    Zig.store (α := Except Zig.ErrName (BitVec 8)) 2 i1 i2
+    let _i4 ← Zig.callM (bump i1)
+    let i5 ← Zig.load (Except Zig.ErrName (BitVec 8)) 2 i1
+    let i6 ← pure (Zig.isNonErr i5)
+    match ← ((do
+      if i6 then (do
+        let i9 ← Zig.callR (Zig.unwrapPayload i5)
+        pure (.br7 i9))
+      else (do
+        let i11 ← Zig.callR (Zig.unwrapErr i5)
+        if i11 == "Empty" then (do
+          pure (.br7 (100 : BitVec 8)))
+        else (do
+          if i11 == "TooBig" then (do
+            pure (.br7 (200 : BitVec 8)))
+          else (do
+            throw .panic)))) : Zig.MM bumpDigitLocals bumpDigitExit) with
+    | .br7 v7 => (do
+      pure (.ret v7))
+    | e => pure e) : Zig.MM bumpDigitLocals bumpDigitExit).run' { (default : bumpDigitLocals) with r := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure byteToFlagsLocals where
   deriving Inhabited
 
@@ -268,6 +464,42 @@ def floatBits (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM floatBitsLocals floatBitsExit).run' (default : floatBitsLocals)
   match e with
   | .ret v => pure v
+
+structure growCircleLocals where
+  deriving Inhabited
+
+inductive growCircleExit where
+  | ret
+  | br3
+  | br6
+
+def growCircle (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
+  let e ← ((do
+    let i1 ← Zig.load (Shape) 4 p0
+    let i2 ← pure (Shape.tag i1)
+    match ← ((do
+      if i2 == ShapeTag.circle then (do
+        let i12 ← pure (p0.add 0)
+        let i13 ← Zig.load (BitVec 32) 4 i12
+        let i14 ← pure (Zig.addWrap i13 (1 : BitVec 32))
+        Zig.store (α := BitVec 32) 4 i12 i14
+        pure .br3)
+      else (do
+        let i5 ← pure (ShapeTag.isNamed i2)
+        match ← ((do
+          if i5 then (do
+            pure .br6)
+          else (do
+            throw .panic)) : Zig.MM growCircleLocals growCircleExit) with
+        | .br6 => (do
+          pure .br3)
+        | e => pure e)) : Zig.MM growCircleLocals growCircleExit) with
+    | .br3 => (do
+      pure .ret)
+    | e => pure e) : Zig.MM growCircleLocals growCircleExit).run' (default : growCircleLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
 
 structure headerLenLocals where
   local1 : Zig.Slice
@@ -465,6 +697,21 @@ def readHeader (p0 : Zig.Slice) : Zig.MemM (Header) := do
   match e with
   | .ret v => pure v
 
+structure setCircleLocals where
+  deriving Inhabited
+
+inductive setCircleExit where
+  | ret
+
+def setCircle (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  let e ← ((do
+    Zig.store (α := ShapeTag) 1 (p0.add 4) ShapeTag.circle
+    let i3 ← pure (p0.add 0)
+    Zig.store (α := BitVec 32) 4 i3 p1
+    pure .ret) : Zig.MM setCircleLocals setCircleExit).run' (default : setCircleLocals)
+  match e with
+  | .ret => pure ()
+
 structure setModeLocals where
   f : Flags
   deriving Inhabited
@@ -482,6 +729,41 @@ def setMode (p0 : BitVec 8) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
     pure (.ret i8)) : Zig.M setModeLocals setModeExit).run' (default : setModeLocals)
   match e with
   | .ret v => pure v
+
+structure shapeAreaLocals where
+  deriving Inhabited
+
+inductive shapeAreaExit where
+  | ret (v : BitVec 32)
+  | br3 (v : BitVec 32)
+
+def shapeArea (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i1 ← Zig.load (Shape) 4 p0
+    let i2 ← pure (Shape.tag i1)
+    match ← ((do
+      match i2 with
+      | .circle => (do
+        let i7 ← Zig.callR (Shape.get_circle i1)
+        let i8 ← pure (Zig.mulWrap (3 : BitVec 32) i7)
+        let i9 ← pure (Zig.mulWrap i8 i7)
+        pure (.br3 i9))
+      | .rect => (do
+        let i11 ← Zig.callR (Shape.get_rect i1)
+        let i12 ← pure ((i11).w)
+        let i13 ← Zig.intCast false false 32 i12
+        let i14 ← pure ((i11).h)
+        let i15 ← Zig.intCast false false 32 i14
+        let i16 ← pure (Zig.mulWrap i13 i15)
+        pure (.br3 i16))
+      | .none => (do
+        pure (.br3 (0 : BitVec 32)))) : Zig.MM shapeAreaLocals shapeAreaExit) with
+    | .br3 v3 => (do
+      pure (.ret v3))
+    | e => pure e) : Zig.MM shapeAreaLocals shapeAreaExit).run' (default : shapeAreaLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 
 structure twiceLocals where
   deriving Inhabited

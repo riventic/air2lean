@@ -100,6 +100,19 @@ fn argTwice(_: []common.Buf, it: []std.json.Value) struct { bool, u32 } {
     return .{ it[0].bool, @intCast(it[1].integer) };
 }
 
+fn argSetCircle(b: []common.Buf, it: []std.json.Value) struct { *layout.Shape, u32 } {
+    return .{ ptr(*layout.Shape, b, it[0]), @intCast(it[1].integer) };
+}
+fn argShapeArea(b: []common.Buf, it: []std.json.Value) struct { *const layout.Shape } {
+    return .{ptr(*const layout.Shape, b, it[0])};
+}
+fn argGrowCircle(b: []common.Buf, it: []std.json.Value) struct { *layout.Shape } {
+    return .{ptr(*layout.Shape, b, it[0])};
+}
+fn argBumpDigit(_: []common.Buf, it: []std.json.Value) struct { u8 } {
+    return .{@intCast(it[0].integer)};
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -127,4 +140,8 @@ pub fn main() !void {
     try run(gpa, "bitsToFloat", layout.bitsToFloat, argBitsToFloat);
     try run(gpa, "applyOp", layout.applyOp, argApplyOp);
     try run(gpa, "twice", layout.twice, argTwice);
+    try run(gpa, "setCircle", layout.setCircle, argSetCircle);
+    try run(gpa, "shapeArea", layout.shapeArea, argShapeArea);
+    try run(gpa, "growCircle", layout.growCircle, argGrowCircle);
+    try run(gpa, "bumpDigit", layout.bumpDigit, argBumpDigit);
 }

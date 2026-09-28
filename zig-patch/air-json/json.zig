@@ -518,6 +518,7 @@ const W = struct {
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
             .is_named_enum_value, .is_null_ptr, .is_non_null_ptr, .tag_name, .error_name,
+            .is_err_ptr, .is_non_err_ptr,
             .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
             .trunc_float,
             => {
@@ -531,6 +532,7 @@ const W = struct {
             .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
             .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
             .optional_payload_ptr, .optional_payload_ptr_set, .splat,
+            .unwrap_errunion_payload_ptr, .unwrap_errunion_err_ptr, .errunion_payload_ptr_set,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
             .reduce, .reduce_optimized => {
                 const r = w.data(inst).reduce;

@@ -656,6 +656,8 @@ def byteStr : Zig.Byte → String
   | .int x => natToHex x.toNat 2
   | .undef => "??"
   | .ptrFrag .. => "pp"
+  -- The compiler numbers the errors per compilation: the model keeps the name (a wildcard).
+  | .errFrag .. => "??"
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
 a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a
@@ -779,6 +781,13 @@ def runLayout : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "twice"
     (fun _ a => return Layout.twice (← orFail a[0]!.getBool? "twice") (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "setCircle"
+    (fun g a => return Layout.setCircle (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex m0 "shapeArea" (fun g a => return Layout.shapeArea (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "growCircle" (fun g a => return Layout.growCircle (← ptrOf g a[0]!)) unitStr
+  processMem ex m0 "bumpDigit" (fun _ a => return Layout.bumpDigit (bv 8 (← getInt a[0]!)))
     fun _ v => natStr v false
 
 def runSlices : IO Unit := do

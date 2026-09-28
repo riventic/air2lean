@@ -62,8 +62,8 @@ def valueOperands (op : Op) : Array Val :=
   | .floatConv a | .floatFromInt a | .intFromFloat _ a | .isNull a | .isNonNull a
   | .optPayload a | .wrapOptional a | .isErr a | .isNonErr a | .errPayload a | .errCode a
   | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a => #[a]
-  -- A place has no optional-payload path: the local becomes a stack block.
-  | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
+  -- A place has no optional-payload or error-union path: the local becomes a stack block.
+  | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
   | .mulAdd a b c => #[a, b, c]
   | .splat a | .reduce _ a => #[a]
   | .select pred a b => #[pred, a, b]

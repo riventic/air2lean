@@ -94,6 +94,13 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .tuple fields => fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread => pure ()
 
+/-- The layout of a tagged union from the tag's and the payload's size and alignment (the
+largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
+the one with the larger alignment first, the tag if they are equal. -/
+def unionLayout (ts ta ps pa : Nat) : Nat × Nat × Nat × Nat :=
+  if ta ≥ pa then (0, Zig.alignUp ts pa, Zig.alignUp (Zig.alignUp ts pa + ps) ta, ta)
+  else (Zig.alignUp ps ta, 0, Zig.alignUp (Zig.alignUp ps ta + ts) pa, pa)
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
@@ -144,10 +151,32 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
       throw s!"struct '{name}' has no field offsets in the AIR file"
     exported
-  | some (.errorUnion ..) | some (.errorSet _) => throw "an error union or error set (M20)"
-  | some (.union name ..) => throw s!"union '{name}' (M20)"
+  | some (.errorUnion set payload) =>
+    -- `Zig.errUnionOffsets`: the error code is 2 bytes.
+    unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
+      throw "an error set that is not 2 bytes (`--error-limit`)"
+    let (s, a) ← modelLayout types layouts payload
+    pure (Zig.errUnionSize s a, Nat.max a 2)
+  | some (.errorSet _) => throw "an error set value (not in an error union)"
+  | some (.union name _ (some tag) fields) =>
+    let (ts, ta) ← modelLayout types layouts tag
+    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
+    let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+    pure (s, a)
+  | some (.union name ..) =>
+    throw s!"union '{name}' without a tag (a bare union has a hidden safety tag; an `extern` or \
+      `packed` union has no tag)"
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
+
+/-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
+`fields` in memory (`unionLayout`). -/
+def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId) :
+    Option (Nat × Nat) := do
+  let (ts, ta) ← (modelLayout types layouts tag).toOption
+  let fs ← fields.mapM fun t => (modelLayout types layouts t).toOption
+  let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+  pure (to, po)
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -299,11 +328,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     match cx.types[ty]? with
     | some (.int ..) => throw s!"{fnName}: near line {line}: integer @abs is outside the subset"
     | _ => pure line
-  | .setUnionTag ptr _ =>
-    if let .inst p := ptr then
-      if cx.places.contains p then return line
-    throw s!"{fnName}: near line {line}: `set_union_tag` through a pointer to memory (M16b)"
-  | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr => cx.memAccess line ptr; pure line
+  | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
+  | .errCodePtr ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr _ => cx.memAccess line ptr; pure line
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line

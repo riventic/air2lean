@@ -283,6 +283,14 @@ inductive Op where
   /-- `optional_payload_ptr` / `optional_payload_ptr_set` (`set = true`: the optional at `p`
   becomes non-null): the pointer to the payload of the optional at `p`. -/
   | optPayloadPtr (set : Bool) (p : Val)
+  /-- `is_err_ptr` (`isErr = true`) / `is_non_err_ptr`: does the error union at `p` hold an
+  error? -/
+  | isErrPtr (isErr : Bool) (p : Val)
+  /-- `unwrap_errunion_payload_ptr` / `errunion_payload_ptr_set` (`set = true`: the error union
+  at `p` gets no error): the pointer to the payload of the error union at `p`. -/
+  | errPayloadPtr (set : Bool) (p : Val)
+  /-- `unwrap_errunion_err_ptr`: the error of the error union at `p`. -/
+  | errCodePtr (p : Val)
   /-- `is_err`: does an error union hold an error? -/
   | isErr (a : Val)
   /-- `is_non_err`. -/

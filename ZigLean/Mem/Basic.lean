@@ -46,6 +46,9 @@ inductive Byte where
   | int (b : BitVec 8)
   /-- Byte `i` (little-endian) of the 8-byte pointer `p`. -/
   | ptrFrag (p : Ptr) (i : Fin 8)
+  /-- Byte `i` of the 2-byte code of the error `e`. The compiler numbers the errors per
+  compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
+  | errFrag (e : ErrName) (i : Fin 2)
   deriving DecidableEq, Repr, Inhabited
 
 inductive BlockKind where

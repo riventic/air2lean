@@ -135,6 +135,70 @@ instance {α : Type} {n : Nat} [Enc α] : Enc (Vector α n) where
       (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
     if h : xs.size = n then pure ⟨xs, h⟩ else throw .unspecified
 
+/-! ## Error unions -/
+
+/-- The 2 bytes of an error code (`anyerror` is `u16`): 0 for no error, else the name's
+`errFrag` bytes. -/
+def errBytes : Option ErrName → Array Byte
+  | none => #[.int 0, .int 0]
+  | some e => #[.errFrag e 0, .errFrag e 1]
+
+/-- The error of the 2 bytes of an error code: `none` for 0. A code that is not 0 and not an
+error of the model (e.g. bytes of a test input) throws `.unspecified`. -/
+def errOfBytes (bs : Array Byte) : Result (Option ErrName) :=
+  match (bs[0]? : Option Byte), (bs[1]? : Option Byte) with
+  | some (.int a), some (.int b) => if a = 0 ∧ b = 0 then pure none else throw .unspecified
+  | some (.errFrag e _), _ => if bs.extract 0 2 == errBytes (some e) then pure (some e) else throw .unspecified
+  | _, _ => throw .unspecified
+
+/-- The offsets of the error code and the payload in `E!T`, from the size and alignment of
+`T` (the compiler's rule): the payload first only if its alignment is more than 2. -/
+def errUnionOffsets (size align : Nat) : Nat × Nat :=
+  if align > 2 then (alignUp size 2, 0) else (0, alignUp 2 align)
+
+def errUnionSize (size align : Nat) : Nat :=
+  let (eo, po) := errUnionOffsets size align
+  alignUp (Nat.max (eo + 2) (po + size)) (Nat.max align 2)
+
+/-- `E!T`: the error code and the payload at `errUnionOffsets`. -/
+instance {α : Type} [Enc α] : Enc (Except ErrName α) where
+  size := errUnionSize (Enc.size α) (Enc.align α)
+  align := Nat.max (Enc.align α) 2
+  encode v :=
+    let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
+    let size := errUnionSize (Enc.size α) (Enc.align α)
+    match v with
+    | .ok x => writeBytes (writeBytes (Array.replicate size .undef) eo (errBytes none)) po (Enc.encode x)
+    | .error e => writeBytes (Array.replicate size .undef) eo (errBytes (some e))
+  decode bs := do
+    let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
+    match ← errOfBytes (bs.extract eo (eo + 2)) with
+    | none => .ok <$> Enc.decode (bs.extract po (po + Enc.size α))
+    | some e => pure (.error e)
+
+/-- `is_err_ptr`: does the error union `E!α` at `p` hold an error? -/
+def errIsErrAt (α : Type) [Enc α] (p : Ptr) : MemM Bool := do
+  let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
+  pure (← errOfBytes (← loadBytes (p.add eo) 2 2)).isSome
+
+/-- `unwrap_errunion_err_ptr`: the error of the error union `E!α` at `p`. Sema checks for an
+error first. -/
+def errCodeAt (α : Type) [Enc α] (p : Ptr) : MemM ErrName := do
+  let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
+  match ← errOfBytes (← loadBytes (p.add eo) 2 2) with
+  | some e => pure e
+  | none => throw .unspecified
+
+/-- `unwrap_errunion_payload_ptr`: the pointer to the payload of the error union `E!α` at `p`. -/
+def errPayloadPtr (α : Type) [Enc α] (p : Ptr) : Ptr :=
+  p.add (errUnionOffsets (Enc.size α) (Enc.align α)).2
+
+/-- `errunion_payload_ptr_set`: set the error code to 0 (no error), then the payload pointer. -/
+def errSetOk (α : Type) [Enc α] (p : Ptr) : MemM Ptr := do
+  let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
+  storeBytes (p.add eo) 2 (errBytes none)
+  pure (p.add po)
+
 /-! ## Structs: helpers for the generated instances -/
 
 /-- `size` bytes: each part at its offset, the rest (padding) undefined. -/

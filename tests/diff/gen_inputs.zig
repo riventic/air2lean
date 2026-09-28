@@ -2373,4 +2373,28 @@ fn genLayout(rng: std.Random) !void {
         const writer = file.writer();
         for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{s},{d}]}}\n", .{ if (i % 2 == 0) "true" else "false", edgyU32(rng) });
     }
+    // setCircle(p: *Shape, r: u32), shapeArea(p: *const Shape), growCircle(p: *Shape): `Shape`
+    // is 8 bytes (payload at 0, tag at 4), in a 12-byte buffer at offset 0 or 4. The tag byte
+    // is a valid tag (0..2), or 3 (no tag: illegal) in 1 line of 10.
+    inline for (.{ "setCircle", "shapeArea", "growCircle" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, 12);
+            const off = 4 * rng.uintLessThan(usize, 2);
+            b.b[off + 4] = if (i % 10 == 9) 3 else rng.uintLessThan(u8, 3);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, off);
+            if (comptime std.mem.eql(u8, name, "setCircle")) try writer.print(",{d}", .{edgyU32(rng)});
+            try writer.writeAll("]}\n");
+        }
+    }
+    // bumpDigit(c: u8): 0 (error.Empty), 1..9, 10..15 (error.TooBig).
+    {
+        var file = try openLayout("bumpDigit");
+        defer file.close();
+        const writer = file.writer();
+        for (0..16) |c| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{c});
+    }
 }
