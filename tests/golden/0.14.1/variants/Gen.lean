@@ -17,7 +17,7 @@ def ShapeTag.toBits : ShapeTag → BitVec 2
   | .empty => (3 : BitVec 2)
 
 def ShapeTag.ofInt? (v : Int) : Option ShapeTag :=
-  if v = 0 then some .circle else if v = 1 then some .rect else if v = 2 then some .square else if v = 3 then some .empty else none
+  if v = 0 then Option.some .circle else if v = 1 then Option.some .rect else if v = 2 then Option.some .square else if v = 3 then Option.some .empty else Option.none
 
 def ShapeTag.isNamed (_ : ShapeTag) : Bool := true
 
@@ -99,7 +99,7 @@ def Prio.toBits : Prio → BitVec 8
   | .high => (5 : BitVec 8)
 
 def Prio.ofInt? (v : Int) : Option Prio :=
-  if v = -1 then some .low else if v = 0 then some .mid else if v = 5 then some .high else none
+  if v = -1 then Option.some .low else if v = 0 then Option.some .mid else if v = 5 then Option.some .high else Option.none
 
 def Prio.isNamed (_ : Prio) : Bool := true
 
@@ -115,7 +115,7 @@ def Light.toBits : Light → BitVec 8
   | .green => (2 : BitVec 8)
 
 def Light.ofInt? (v : Int) : Option Light :=
-  if v = 0 then some .red else if v = 1 then some .yellow else if v = 2 then some .green else none
+  if v = 0 then Option.some .red else if v = 1 then Option.some .yellow else if v = 2 then Option.some .green else Option.none
 
 def Light.isNamed (_ : Light) : Bool := true
 
@@ -129,7 +129,7 @@ def Code.warn : Code := ⟨(1 : BitVec 8)⟩
 def Code.toBits (e : Code) : BitVec 8 := e.bits
 
 def Code.ofInt? (v : Int) : Option Code :=
-  if 0 ≤ v ∧ v ≤ 255 then some ⟨BitVec.ofInt 8 v⟩ else none
+  if 0 ≤ v ∧ v ≤ 255 then Option.some ⟨BitVec.ofInt 8 v⟩ else Option.none
 
 def Code.isNamed (e : Code) : Bool := e.bits == (0 : BitVec 8) || e.bits == (1 : BitVec 8)
 

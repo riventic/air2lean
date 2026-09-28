@@ -100,7 +100,7 @@ inductive divExact64Exit where
 
 def divExact64 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.divTruncRt p0 p1)
+    let i2 ← pure (Zig.Float.divTruncRt016 p0 p1)
     let i3 ← Zig.Float.floorChk i2
     let i4 ← pure (Zig.Float.eq i2 i3)
     match ← ((do
@@ -140,7 +140,7 @@ def op128 (p0 : BitVec 8) (p1 : Zig.F128) (p2 : Zig.F128) (p3 : Zig.F128) : Zig.
               pure (.br5 i12))
             else (do
               if p0 == (3 : BitVec 8) then (do
-                let i14 ← pure (Zig.Float.divRt p1 p2)
+                let i14 ← pure (Zig.Float.divRt016 p1 p2)
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
@@ -148,11 +148,11 @@ def op128 (p0 : BitVec 8) (p1 : Zig.F128) (p2 : Zig.F128) (p3 : Zig.F128) : Zig.
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
-                    let i18 ← pure (Zig.Float.divTruncRt p1 p2)
+                    let i18 ← pure (Zig.Float.divTruncRt016 p1 p2)
                     pure (.br5 i18))
                   else (do
                     if p0 == (6 : BitVec 8) then (do
-                      let i20 ← pure (Zig.Float.divFloorRt p1 p2)
+                      let i20 ← pure (Zig.Float.divFloorRt016 p1 p2)
                       pure (.br5 i20))
                     else (do
                       if p0 == (7 : BitVec 8) then (do
@@ -164,7 +164,7 @@ def op128 (p0 : BitVec 8) (p1 : Zig.F128) (p2 : Zig.F128) (p3 : Zig.F128) : Zig.
                           pure (.br5 i24))
                         else (do
                           if p0 == (9 : BitVec 8) then (do
-                            let i26 ← pure (Zig.Float.sqrtF128ViaF64 p1)
+                            let i26 ← pure (Zig.Float.sqrt p1)
                             pure (.br5 i26))
                           else (do
                             if p0 == (10 : BitVec 8) then (do
@@ -267,7 +267,7 @@ def op16 (p0 : BitVec 8) (p1 : Zig.F16) (p2 : Zig.F16) (p3 : Zig.F16) : Zig.Resu
               pure (.br5 i12))
             else (do
               if p0 == (3 : BitVec 8) then (do
-                let i14 ← pure (Zig.Float.divRt p1 p2)
+                let i14 ← pure (Zig.Float.divRt016 p1 p2)
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
@@ -275,11 +275,11 @@ def op16 (p0 : BitVec 8) (p1 : Zig.F16) (p2 : Zig.F16) (p3 : Zig.F16) : Zig.Resu
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
-                    let i18 ← pure (Zig.Float.divTruncRt p1 p2)
+                    let i18 ← pure (Zig.Float.divTruncRt016 p1 p2)
                     pure (.br5 i18))
                   else (do
                     if p0 == (6 : BitVec 8) then (do
-                      let i20 ← pure (Zig.Float.divFloorRt p1 p2)
+                      let i20 ← pure (Zig.Float.divFloorRt016 p1 p2)
                       pure (.br5 i20))
                     else (do
                       if p0 == (7 : BitVec 8) then (do
@@ -394,7 +394,7 @@ def op32 (p0 : BitVec 8) (p1 : Zig.F32) (p2 : Zig.F32) (p3 : Zig.F32) : Zig.Resu
               pure (.br5 i12))
             else (do
               if p0 == (3 : BitVec 8) then (do
-                let i14 ← pure (Zig.Float.divRt p1 p2)
+                let i14 ← pure (Zig.Float.divRt016 p1 p2)
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
@@ -402,11 +402,11 @@ def op32 (p0 : BitVec 8) (p1 : Zig.F32) (p2 : Zig.F32) (p3 : Zig.F32) : Zig.Resu
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
-                    let i18 ← pure (Zig.Float.divTruncRt p1 p2)
+                    let i18 ← pure (Zig.Float.divTruncRt016 p1 p2)
                     pure (.br5 i18))
                   else (do
                     if p0 == (6 : BitVec 8) then (do
-                      let i20 ← pure (Zig.Float.divFloorRt p1 p2)
+                      let i20 ← pure (Zig.Float.divFloorRt016 p1 p2)
                       pure (.br5 i20))
                     else (do
                       if p0 == (7 : BitVec 8) then (do
@@ -521,7 +521,7 @@ def op64 (p0 : BitVec 8) (p1 : Zig.F64) (p2 : Zig.F64) (p3 : Zig.F64) : Zig.Resu
               pure (.br5 i12))
             else (do
               if p0 == (3 : BitVec 8) then (do
-                let i14 ← pure (Zig.Float.divRt p1 p2)
+                let i14 ← pure (Zig.Float.divRt016 p1 p2)
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
@@ -529,11 +529,11 @@ def op64 (p0 : BitVec 8) (p1 : Zig.F64) (p2 : Zig.F64) (p3 : Zig.F64) : Zig.Resu
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
-                    let i18 ← pure (Zig.Float.divTruncRt p1 p2)
+                    let i18 ← pure (Zig.Float.divTruncRt016 p1 p2)
                     pure (.br5 i18))
                   else (do
                     if p0 == (6 : BitVec 8) then (do
-                      let i20 ← pure (Zig.Float.divFloorRt p1 p2)
+                      let i20 ← pure (Zig.Float.divFloorRt016 p1 p2)
                       pure (.br5 i20))
                     else (do
                       if p0 == (7 : BitVec 8) then (do
@@ -648,7 +648,7 @@ def op80 (p0 : BitVec 8) (p1 : Zig.F80) (p2 : Zig.F80) (p3 : Zig.F80) : Zig.Resu
               pure (.br5 i12))
             else (do
               if p0 == (3 : BitVec 8) then (do
-                let i14 ← pure (Zig.Float.divRt p1 p2)
+                let i14 ← pure (Zig.Float.divRt016 p1 p2)
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
@@ -656,11 +656,11 @@ def op80 (p0 : BitVec 8) (p1 : Zig.F80) (p2 : Zig.F80) (p3 : Zig.F80) : Zig.Resu
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
-                    let i18 ← pure (Zig.Float.divTruncRt p1 p2)
+                    let i18 ← pure (Zig.Float.divTruncRt016 p1 p2)
                     pure (.br5 i18))
                   else (do
                     if p0 == (6 : BitVec 8) then (do
-                      let i20 ← pure (Zig.Float.divFloorRt p1 p2)
+                      let i20 ← pure (Zig.Float.divFloorRt016 p1 p2)
                       pure (.br5 i20))
                     else (do
                       if p0 == (7 : BitVec 8) then (do
