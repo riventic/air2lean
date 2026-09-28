@@ -23,12 +23,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Full jobs: every example, the float probe, the diff test and the proofs. The mutation
-          # test runs once, on the default version.
+          # Full jobs: every example, the float probe, the diff test and the proofs.
           - zig: "0.16.0"
             examples: ""
             full: true
-            mutate: true
+            mutate: false
           - zig: "0.15.2"
             examples: ""
             full: true
@@ -42,6 +41,12 @@ jobs:
             examples: "basic recursion options floatops floats errors variants pointers"
             full: false
             mutate: false
+          # The mutation test, on the default version, in its own job: it runs in parallel
+          # with the full jobs. scripts/mutate.sh builds all it needs.
+          - zig: "0.16.0"
+            examples: ""
+            full: false
+            mutate: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -112,6 +117,7 @@ jobs:
         run: lake build
 
       - name: Golden AIR, translate, build, differential test
+        if: ${{ !matrix.mutate }}
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
