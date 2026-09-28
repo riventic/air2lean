@@ -125,6 +125,9 @@ fn argNumRoundTrip(_: []common.Buf, it: []std.json.Value) struct { bool, u32 } {
 fn argWordByte(_: []common.Buf, it: []std.json.Value) struct { u32, u2 } {
     return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
 }
+fn argWordHalf(_: []common.Buf, it: []std.json.Value) struct { u32 } {
+    return .{@intCast(it[0].integer)};
+}
 fn argSetHalf(b: []common.Buf, it: []std.json.Value) struct { *layout.Word, u16 } {
     return .{ ptr(*layout.Word, b, it[0]), @intCast(it[1].integer) };
 }
@@ -173,6 +176,7 @@ pub fn main() !void {
     try run(gpa, "numInt", layout.numInt, argNumInt);
     try run(gpa, "numRoundTrip", layout.numRoundTrip, argNumRoundTrip);
     try run(gpa, "wordByte", layout.wordByte, argWordByte);
+    try run(gpa, "wordHalf", layout.wordHalf, argWordHalf);
     try run(gpa, "setHalf", layout.setHalf, argSetHalf);
     try run(gpa, "regSigned", layout.regSigned, argRegSigned);
     try run(gpa, "setRegFlags", layout.setRegFlags, argSetRegFlags);

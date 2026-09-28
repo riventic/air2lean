@@ -247,9 +247,19 @@ pub const Word = extern union {
     bytes: [4]u8,
 };
 
-/// Byte `i` of `v`, little-endian (`v` in `int`, read through `bytes`).
+
+fn wordOf(v: u32) Word {
+    return .{ .int = v };
+}
+
+/// The low half of `v` (a `Word` returned by value, read through `half`).
+pub fn wordHalf(v: u32) u16 {
+    return wordOf(v).half;
+}
+
+/// Byte `i` of `v`, little-endian (`v` in `int`, read through `bytes` of a local).
 pub fn wordByte(v: u32, i: u2) u8 {
-    var w: Word = .{ .int = v };
+    var w = wordOf(v);
     const p: *Word = &w;
     return p.bytes[i];
 }
@@ -319,6 +329,7 @@ comptime {
     _ = &numInt;
     _ = &numRoundTrip;
     _ = &wordByte;
+    _ = &wordHalf;
     _ = &setHalf;
     _ = &regSigned;
     _ = &setRegFlags;

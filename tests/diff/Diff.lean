@@ -800,6 +800,8 @@ def runLayout : IO Unit := do
   processMem ex m0 "wordByte"
     (fun _ a => return Layout.wordByte (bv 32 (← getInt a[0]!)) (bv 2 (← getInt a[1]!)))
     fun _ v => natStr v false
+  processMem ex m0 "wordHalf" (fun _ a => return pureMem (Layout.wordHalf (bv 32 (← getInt a[0]!))))
+    fun _ v => natStr v false
   processMem ex m0 "setHalf"
     (fun g a => return Layout.setHalf (← ptrOf g a[0]!) (bv 16 (← getInt a[1]!)))
     fun _ v => natStr v false

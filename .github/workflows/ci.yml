@@ -38,7 +38,7 @@ jobs:
           # diff harness; the stale-Gen.lean
           # check shows the translation is the one that the full jobs test.
           - zig: "0.14.1"
-            examples: "basic recursion options floatops floats errors variants pointers"
+            examples: "basic recursion options floatops floats errors variants pointers layout"
             full: false
             mutate: false
           # The mutation test, on the default version, in its own job: it runs in parallel

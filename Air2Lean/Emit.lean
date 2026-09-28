@@ -215,9 +215,10 @@ def tagLit (bits : Nat) (v : Int) : String :=
 union (`ZigLean/Union.lean`). -/
 def rawUnionNs (layout : String) : String := if layout == "packed" then "Zig.PackedU" else "Zig.Raw"
 
-/-- `union_init` of an `extern` or `packed` union `u` (`size` bytes) with the field value `v`. -/
-def rawUnionInit (u layout : String) (size : Nat) (v : String) : String :=
-  s!"(⟨{rawUnionNs layout}.init {size} {v}⟩ : {u})"
+/-- `union_init` of an `extern` or `packed` union `u` (`size` bytes) with the value `v` of the
+field type `t`. -/
+def rawUnionInit (u layout : String) (size : Nat) (v t : String) : String :=
+  s!"(⟨{rawUnionNs layout}.init {size} ({v} : {t})⟩ : {u})"
 
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
@@ -558,9 +559,11 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     let u := fc.emitTyOf tid
     match fc.tyOfId tid with
     | .union _ layout none fields =>
-      if idx < fields.size then
+      match fields[idx]? with
+      | some (_, fty) =>
         rawUnionInit u layout ((fc.layouts[tid]?.bind (·.size)).getD 0) (fc.resolveVal env p)
-      else "default"
+          (fc.emitTyOf fty)
+      | none => "default"
     | .union _ _ _ fields =>
       match fields[idx]? with
       | some (f, fty) =>
@@ -1451,8 +1454,9 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .unionInit idx a =>
     let expr := match fc.tyOfId inst.ty, fc.unionField? (fc.tyOfId inst.ty) idx with
-      | .union _ layout none _, some (u, _, _) =>
-        s!"pure {rawUnionInit u layout ((fc.layouts[inst.ty]?.bind (·.size)).getD 0) (rv a)}"
+      | .union _ layout none fields, some (u, _, _) =>
+        let t := ((fields[idx]?).map fun (_, fty) => fc.emitTyOf fty).getD "Unit"
+        s!"pure {rawUnionInit u layout ((fc.layouts[inst.ty]?.bind (·.size)).getD 0) (rv a) t}"
       | _, some (u, f, true) => s!"pure {u}.{mangleField f}"
       | _, some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
       | _, none => "(panic! \"air2lean: union_init of a non-union type\")"

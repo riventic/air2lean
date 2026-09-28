@@ -80,7 +80,7 @@ Support matrix:
 |---|---|
 | 0.16.0 | supported, default |
 | 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
+| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers`, `layout` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.

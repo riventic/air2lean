@@ -84,8 +84,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .union name layout tag fields =>
     match tag with
     | none =>
-      -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). A bare union without a tag is not
-      -- `ReleaseSafe` (the exporter writes its hidden tag, `safety_tag`).
+      -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
+      -- has a hidden tag (`safety_tag`), so it is never here.
       unless layout == "extern" || layout == "packed" do
         throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
           subset"

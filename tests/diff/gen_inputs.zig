@@ -2456,6 +2456,13 @@ fn genLayout(rng: std.Random) !void {
             try writer.print(",{d}]}}\n", .{rng.int(u8)});
         }
     }
+    // wordHalf(v: u32).
+    {
+        var file = try openLayout("wordHalf");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{edgyU32(rng)});
+    }
     // writeTable(i: usize, v: u32): 0..2 (a write to a `const` global), 3..4 (out of bounds).
     {
         var file = try openLayout("writeTable");

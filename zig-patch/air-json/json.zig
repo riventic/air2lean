@@ -168,12 +168,16 @@ const Compat = struct {
         };
     }
 
-    /// The hidden tag of a bare union (`ReleaseSafe`): the tag type if the layout has a tag but
-    /// the union is not a `union(enum)`. 0.16.0 renamed `unionTagTypeSafety` to
-    /// `unionTagTypeRuntime`.
+    /// The hidden tag of a bare union (`ReleaseSafe`): the tag type if the union has a safety
+    /// tag. 0.16.0 has no `unionTagTypeSafety`; its `unionTagTypeRuntime` is null for a tag
+    /// without runtime bits (one field), where 0.14.1 and 0.15.2 give the `u0` tag.
     fn unionSafetyTag(zcu: *Zcu, ty: Type) ?Type {
         if (ty.unionTagType(zcu) != null) return null;
-        return if (v16) ty.unionTagTypeRuntime(zcu) else ty.unionTagTypeSafety(zcu);
+        if (v16) {
+            const u = zcu.intern_pool.loadUnionType(ty.toIntern());
+            return if (u.tag_usage == .safety) Type.fromInterned(u.enum_tag_type) else null;
+        }
+        return ty.unionTagTypeSafety(zcu);
     }
 
     const NavInfo = struct {
