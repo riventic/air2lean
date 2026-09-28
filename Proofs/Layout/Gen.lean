@@ -33,6 +33,19 @@ instance : Zig.Enc Flags where
     let b : BitVec 8 ← Zig.Enc.decode bs
     pure (Zig.Packed.ofBits b)
 
+structure Header where
+  magic : BitVec 32
+  len : BitVec 16
+  kind : BitVec 8
+  flags : Flags
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Header where
+  size := 8
+  align := 4
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.magic), (4, Zig.Enc.encode v.len), (6, Zig.Enc.encode v.kind), (7, Zig.Enc.encode v.flags)]
+  decode bs := do pure { magic := ← Zig.Enc.decodeAt bs 0, len := ← Zig.Enc.decodeAt bs 4, kind := ← Zig.Enc.decodeAt bs 6, flags := ← Zig.Enc.decodeAt bs 7 }
+
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
 
@@ -105,6 +118,21 @@ def asVolatile (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+structure bitsToFloatLocals where
+  deriving Inhabited
+
+inductive bitsToFloatExit where
+  | ret (v : Zig.F32)
+
+def bitsToFloat (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Zig.F32) := do
+  let e ← ((do
+    let i2 ← pure (p0)
+    Zig.store (α := BitVec 32) 4 i2 p1
+    let i4 ← Zig.load (Zig.F32) 4 p0
+    pure (.ret i4)) : Zig.MM bitsToFloatLocals bitsToFloatExit).run' (default : bitsToFloatLocals)
+  match e with
+  | .ret v => pure v
+
 structure byteToFlagsLocals where
   deriving Inhabited
 
@@ -143,6 +171,62 @@ def flagsToByte (p0 : Flags) : Zig.Result (BitVec 8) := do
     pure (.ret i1)) : Zig.M flagsToByteLocals flagsToByteExit).run' (default : flagsToByteLocals)
   match e with
   | .ret v => pure v
+
+structure floatBitsLocals where
+  deriving Inhabited
+
+inductive floatBitsExit where
+  | ret (v : BitVec 32)
+
+def floatBits (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (p0)
+    let i2 ← Zig.load (BitVec 32) 4 i1
+    pure (.ret i2)) : Zig.MM floatBitsLocals floatBitsExit).run' (default : floatBitsLocals)
+  match e with
+  | .ret v => pure v
+
+structure headerLenLocals where
+  local1 : Zig.Slice
+  deriving Inhabited
+
+inductive headerLenExit where
+  | ret (v : Option (BitVec 16))
+  | br4
+  | br15
+
+def headerLen (p0 : Zig.Slice) : Zig.MemM (Option (BitVec 16)) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := p0 })
+    match ← ((do
+      let i6 ← pure (((← get).local1).len)
+      let i7 ← pure (i6)
+      let i8 ← pure (Zig.lt false i7 (8 : BitVec 64))
+      if i8 then (do
+        pure (.ret none))
+      else (do
+        pure .br4)) : Zig.MM headerLenLocals headerLenExit) with
+    | .br4 => (do
+      let i13 ← pure (((← get).local1).ptr)
+      let i14 ← pure (i13)
+      match ← ((do
+        let i16 ← pure (i14.add 0)
+        let i17 ← Zig.load (BitVec 32) 1 i16
+        let i18 ← pure (i17 != (1280461121 : BitVec 32))
+        if i18 then (do
+          pure (.ret none))
+        else (do
+          pure .br15)) : Zig.MM headerLenLocals headerLenExit) with
+      | .br15 => (do
+        let i22 ← pure (i14.add 4)
+        let i23 ← Zig.load (BitVec 16) 1 i22
+        let i24 ← pure (some i23)
+        pure (.ret i24))
+      | e => pure e)
+    | e => pure e) : Zig.MM headerLenLocals headerLenExit).run' (default : headerLenLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 
 structure incCountLocals where
   deriving Inhabited
@@ -280,6 +364,23 @@ def ptrRoundTrip (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+structure readHeaderLocals where
+  local1 : Zig.Slice
+  deriving Inhabited
+
+inductive readHeaderExit where
+  | ret (v : Header)
+
+def readHeader (p0 : Zig.Slice) : Zig.MemM (Header) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := p0 })
+    let i5 ← pure (((← get).local1).ptr)
+    let i6 ← pure (i5)
+    let i7 ← Zig.load (Header) 1 i6
+    pure (.ret i7)) : Zig.MM readHeaderLocals readHeaderExit).run' (default : readHeaderLocals)
+  match e with
+  | .ret v => pure v
 
 structure setModeLocals where
   f : Flags

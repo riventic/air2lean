@@ -765,6 +765,15 @@ def runLayout : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "incCount" (fun g a => return Layout.incCount (← ptrOf g a[0]!)) unitStr
   processMem ex m0 "isOk" (fun g a => return Layout.isOk (← ptrOf g a[0]!)) fun _ b => b01 b
+  let headerStr (m : Zig.Mem) (h : Layout.Header) : String :=
+    s!"\{\"magic\":{h.magic.toNat},\"len\":{h.len.toNat},\"kind\":{h.kind.toNat},\"flags\":{flagsStr m h.flags}}"
+  processMem ex m0 "headerLen" (fun g a => return Layout.headerLen (← sliceOf g a[0]!))
+    fun _ v => optStr v false
+  processMem ex m0 "readHeader" (fun g a => return Layout.readHeader (← sliceOf g a[0]!)) headerStr
+  processMem ex m0 "floatBits" (fun g a => return Layout.floatBits (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "bitsToFloat"
+    (fun g a => return Layout.bitsToFloat (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) fun _ v => floatStr v
 
 def runSlices : IO Unit := do
   let ex := "slices"

@@ -1,5 +1,5 @@
 //! M20: casts (`@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`,
-//! `@alignCast`), `@fieldParentPtr`, and `packed` structs.
+//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs.
 
 pub const Point = struct {
     x: u32,
@@ -90,6 +90,43 @@ pub fn isOk(p: *const Flags) bool {
     return p.ready and !p.err;
 }
 
+/// A message header in C layout: 8 bytes, `len` at offset 4.
+pub const Header = extern struct {
+    magic: u32,
+    len: u16,
+    kind: u8,
+    flags: Flags,
+};
+
+/// The payload length in the header at the start of `bytes`, or `null` if `bytes` is too short
+/// or the magic number is wrong (`@ptrCast` of a byte pointer to an `extern struct`).
+pub fn headerLen(bytes: []const u8) ?u16 {
+    if (bytes.len < @sizeOf(Header)) return null;
+    const h: *align(1) const Header = @ptrCast(bytes.ptr);
+    if (h.magic != 0x4C52_4941) return null;
+    return h.len;
+}
+
+/// The whole header at the start of `bytes` (a load of an `extern struct` through a byte
+/// pointer).
+pub fn readHeader(bytes: []const u8) Header {
+    const h: *align(1) const Header = @ptrCast(bytes.ptr);
+    return h.*;
+}
+
+/// The bits of the `f32` at `p`, read through a `*const u32` (`@ptrCast`).
+pub fn floatBits(p: *const f32) u32 {
+    const q: *const u32 = @ptrCast(p);
+    return q.*;
+}
+
+/// Store `bits` at `p` as a `u32`, then read it back as an `f32`.
+pub fn bitsToFloat(p: *f32, bits: u32) f32 {
+    const q: *u32 = @ptrCast(p);
+    q.* = bits;
+    return p.*;
+}
+
 comptime {
     _ = &addrEq;
     _ = &ptrRoundTrip;
@@ -105,4 +142,8 @@ comptime {
     _ = &setMode;
     _ = &incCount;
     _ = &isOk;
+    _ = &headerLen;
+    _ = &readHeader;
+    _ = &floatBits;
+    _ = &bitsToFloat;
 }

@@ -2307,4 +2307,56 @@ fn genLayout(rng: std.Random) !void {
             try writer.writeAll("]}\n");
         }
     }
+    // headerLen(bytes: []const u8): a buffer of 0..12 bytes, half with the magic number at the
+    // slice start; the slice starts at 0..2 and runs to the buffer end.
+    {
+        var file = try openLayout("headerLen");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, rng.uintAtMost(usize, 12));
+            const off = rng.uintAtMost(usize, @min(2, b.len));
+            if (i % 2 == 0 and b.len - off >= 4) b.setU32(off, 0x4C52_4941);
+            try writeBufs(writer, &.{b});
+            try writeSlice(writer, 0, off, b.len - off);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // readHeader(bytes: []const u8): 8..12 bytes, an 8-byte slice at 0..len-8 (never too short).
+    {
+        var file = try openLayout("readHeader");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            const b = Bytes.random(rng, 8 + rng.uintAtMost(usize, 4));
+            try writeBufs(writer, &.{b});
+            try writeSlice(writer, 0, rng.uintAtMost(usize, b.len - 8), 8);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // floatBits(p: *const f32): an 8-byte buffer, offset 0 or 4.
+    {
+        var file = try openLayout("floatBits");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // bitsToFloat(p: *f32, bits: u32): as floatBits, and the bits of an edge float (NaN, inf,
+    // subnormal, ±0) or random bits.
+    {
+        var file = try openLayout("bitsToFloat");
+        defer file.close();
+        const writer = file.writer();
+        const e = edgesF(f32);
+        for (0..N) |i| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            const bits: u32 = if (i < e.len) @bitCast(e[i]) else rng.int(u32);
+            try writer.print(",{d}]}}\n", .{bits});
+        }
+    }
 }

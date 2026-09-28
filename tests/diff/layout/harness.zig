@@ -83,6 +83,16 @@ fn argIsOk(b: []common.Buf, it: []std.json.Value) struct { *const layout.Flags }
     return .{ptr(*const layout.Flags, b, it[0])};
 }
 
+fn argHeader(b: []common.Buf, it: []std.json.Value) struct { []const u8 } {
+    return .{common.sliceArg([]const u8, b, it[0])};
+}
+fn argFloatBits(b: []common.Buf, it: []std.json.Value) struct { *const f32 } {
+    return .{ptr(*const f32, b, it[0])};
+}
+fn argBitsToFloat(b: []common.Buf, it: []std.json.Value) struct { *f32, u32 } {
+    return .{ ptr(*f32, b, it[0]), @intCast(it[1].integer) };
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -104,4 +114,8 @@ pub fn main() !void {
     try run(gpa, "setMode", layout.setMode, argSetMode);
     try run(gpa, "incCount", layout.incCount, argIncCount);
     try run(gpa, "isOk", layout.isOk, argIsOk);
+    try run(gpa, "headerLen", layout.headerLen, argHeader);
+    try run(gpa, "readHeader", layout.readHeader, argHeader);
+    try run(gpa, "floatBits", layout.floatBits, argFloatBits);
+    try run(gpa, "bitsToFloat", layout.bitsToFloat, argBitsToFloat);
 }
