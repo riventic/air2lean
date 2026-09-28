@@ -1,5 +1,5 @@
 {
- "schema": 7,
+ "schema": 8,
  "zig_version": "0.16.0",
  "name": "variants.scale",
  "params": [

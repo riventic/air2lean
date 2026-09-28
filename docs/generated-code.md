@@ -25,6 +25,7 @@
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[N]T` | `Vector T' N` |
+| `@Vector(N, T)` (`T` an integer or a float) | `Zig.Vec T' N` (`ZigLean/Vec.lean`) |
 | `[]const T` in a pure function (§Memory) | `Array T'` |
 | `[]T`, `[:s]T`; `[]const T` in a function that uses memory | `Zig.Slice` (an item pointer and a `BitVec 64` length; §Memory) |
 | `*T`, `*const T`, `[*]T`, `[*:s]T`, `*[N]T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
@@ -62,6 +63,30 @@ Zig keeps the payload bytes when the tag changes, and the Zig versions write a u
 A `switch` on an exhaustive enum that names every value becomes a `match` with one arm per case and no `else` arm (its `corruptSwitch` panic cannot happen). Any other `switch` is an `if` chain.
 
 A union without a tag (bare, `extern`, `packed`) is outside the subset.
+
+### Vectors
+
+`Zig.Vec T' N` (`ZigLean/Vec.lean`) wraps a `Vector T' N`; `.lanes` is the only field. Lane 0 is
+first. AIR op → generated code:
+
+| AIR op | Generated code |
+|---|---|
+| `add`/`sub`/`mul`, checked/wrapping/saturating | `Zig.Vec.map2M`/`Zig.Vec.map2`, lane-wise, the same scalar function as the non-vector case |
+| `splat` | `Zig.Vec.splat` |
+| `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
+| `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
+| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
+
+A float `reduce`'s lane order is exactly Zig's (`Vec.reduce_four`-style, lane 0 first for a
+4-lane vector) — float addition is not associative, so a proof about a float `reduce` states this
+order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s `fDot_body`).
+
+Vector `div`, `@min`/`@max`, `@addWithOverflow`-family ops, bitwise/`@shlExact`-family ops, `-`
+(negation) and `~` (bitwise not) are not translated (`vectors.zig` does not use them; `Emit.lean`
+has no vector-specific case for any of them, so one would emit a scalar function call on
+`Zig.Vec`-typed arguments — a `lake build` type error, not a silent miscompile). A vector
+comparison (`cmp_vector`) and a vector of a type other than an integer or float are rejected
+explicitly (`Check.lean`).
 
 ### Places
 

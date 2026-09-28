@@ -24,8 +24,9 @@
 | M16b | Slices `[]T`, many-pointers, sentinel pointers, arrays (`Vector`) in memory; `@memset`, `@memcpy`, `@memmove`; globals and string literals (`mem0`); `@tagName`, `@errorName`; `Zig.readSlice` for a pure callee; JSON schema 6 (pointer, slice and aggregate constants, globals table); `Canon.lean` item reads and always-true checks; `slices` example (20 functions, 6000 diff inputs) with proofs | done |
 | M17 | Separation logic (`ZigLean/Sep/`): heaps, `∗`, `pts`, `arr`, `Triple` with the frame rule; rules for load, store, `@memmove`, `@memset`, `alloc`, `free`, loops (`loop_sep_spec`); `docs/proofs.md`; proofs `swap` (also `swap(p, p)`), `reverse` (a loop invariant), `copyWithin` (overlapping ranges), `fill`, the global counter. A tactic that reorders `∗` is not done: the proofs reorder heaps with `Heap.union_assoc` and `Heap.union_left_comm` | done |
 | M18 | Allocator model (`ZigLean/Mem/Alloc.lean`: `create`, `destroy`, `alloc`, `alignedAlloc`, `free`, `dupe`, `remap`; allocation `failAt` fails; `remap` always fails); std code translated through `examples/<ex>/filter` (`ArrayListUnmanaged`); `docs/std-models.md`; `TestAllocator` in the diff test, with the live allocations after each call; JSON schema 7 (`ZIG_AIR_JSON_FILTER` list, `no_fields`); heap cells with the block kind; `loop_sep_ghost`; `lists` example (4 functions, 1200 diff inputs) with proofs `push`, `reverse` (a linked list), `freeAll` (no bytes owned after it). `append` has no proof: its `@memcpy` alias check needs an address fact (every block ends below `Mem.nextAddr`) that no assertion can state | done |
+| M19 | SIMD `@Vector(N, T)` over integers and floats (`Zig.Vec`, `ZigLean/Vec.lean`): `splat`, `select`, `shuffle` (comptime mask, a `Zig.Vec` literal), `reduce` (`.Add`/`.Mul`/`.And`/`.Or`/`.Xor`/`.Min`/`.Max`, `Zig.Vec.reduce`/`reduceM`), lane-wise `add`/`sub`/`mul` (checked/wrapping/saturating, `Zig.Vec.map2`/`map2M`); JSON schema 8 (`vecLayout`); `vectors` example (6 functions, 1800 diff inputs, 0 mismatches) with proofs: `uDotWrap`'s full scalar spec (the explicit 4-term wrapping sum), `maxLane`'s domination property, `satAdd`'s per-lane spec, `reverse`'s exact shuffle, `fDot`'s scaffolding reduction only (float addition is not associative, so no scalar-sum claim). `checkedAdd` has no proof: its `Vec.map2M` short-circuit needs `Vector.mapM`'s internal recursion | done |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches; a `Zig.memmove` that writes one byte too few gives 188 mismatches; an allocation that never fails at `Mem.failAt` gives 311 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion, a changed memory write and a changed allocation failure.
+Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches; a `Zig.memmove` that writes one byte too few gives 188 mismatches; an allocation that never fails at `Mem.failAt` gives 311 mismatches; a `Zig.Vec.reduce` that drops the last lane gives 371 mismatches. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion, a changed memory write, a changed allocation failure and a changed reduction.
 
 ## Next
 
@@ -33,7 +34,6 @@ v1: the rest of the language, one milestone per PR.
 
 | # | Milestone |
 |---|---|
-| M19 | SIMD `@Vector` |
 | M20 | `@ptrCast`, `packed`/`extern` layout, function pointers; unions and error unions in memory (moved from M16b: their layout needs the tag and payload offsets) |
 | M21 | Inline asm with register operands only, as opaque functions |
 | M22 | Atomics, fork-join threads with a data-race check |
@@ -99,8 +99,9 @@ Support matrix:
 | `if`, `switch`, `while`, `for` | allocators, heap |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | `@ptrCast`, packed layout |
 | read-only slices `[]const T` in a pure function | inline asm, threads, atomics |
-| structs by value | SIMD vectors, `async` |
+| structs by value | `async` |
 | calls, recursion | unions and error unions in memory (M20) |
+| `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | unions without a tag |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |

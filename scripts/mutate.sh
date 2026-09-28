@@ -40,6 +40,9 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
+# (i) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
+#     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
+#     last lane, so an input whose max is in that lane disagrees with Zig.
 #
 # Usage: mutate.sh
 # Env:
@@ -47,7 +50,7 @@
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the default patched zig. Default: 0.16.0 (same as check.sh).
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
-#                         pointers for (f), slices for (g), lists for (h))
+#                         pointers for (f), slices for (g), lists for (h), vectors for (i))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -80,6 +83,7 @@ lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
+vec_lean="ZigLean/Vec.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -88,6 +92,7 @@ lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
 alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
+vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -96,6 +101,7 @@ cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
 cp "$mem_lean" "$mem_backup"
 cp "$alloc_lean" "$alloc_backup"
+cp "$vec_lean" "$vec_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -111,8 +117,9 @@ cleanup() {
   cp "$round_backup" "$round_lean"
   cp "$mem_backup" "$mem_lean"
   cp "$alloc_backup" "$alloc_lean"
+  cp "$vec_backup" "$vec_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$alloc_backup"
+    "$mem_backup" "$alloc_backup" "$vec_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -304,6 +311,22 @@ else
   run_and_report "mutation (h)" lists
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$alloc_backup" "$alloc_lean"
+fi
+
+echo "== mutation (i): Vec.reduce drops the last lane (Lean runtime) ==" >&2
+if ! has_example vectors; then
+  echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
+else
+  sed -i.bak 's/(v\.lanes\.toArray\.extract 1 n)\.foldl f v\.lanes\.toArray\[0\]!/(v.lanes.toArray.extract 1 (n - 1)).foldl f v.lanes.toArray[0]!/' "$vec_lean"
+  rm -f "$vec_lean.bak"
+  grep -q 'extract 1 (n - 1)).foldl f' "$vec_lean" || {
+    echo "error: mutation (i): sed did not change Vec.reduce" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (i)" vectors
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$vec_backup" "$vec_lean"
 fi
 
 [ "$all_detected" -eq 1 ]
