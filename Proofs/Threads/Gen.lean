@@ -36,41 +36,6 @@ instance : Zig.Enc CounterCtx where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.counter), (8, Zig.Enc.encode v.n)]
   decode bs := do pure { counter := ← Zig.Enc.decodeAt bs 0, n := ← Zig.Enc.decodeAt bs 8 }
 
-structure mem_Allocator_VTable where
-  alloc : Zig.Ptr
-  resize : Zig.Ptr
-  remap : Zig.Ptr
-  free : Zig.Ptr
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Enc mem_Allocator_VTable where
-  size := 32
-  align := 8
-  encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.alloc), (8, Zig.Enc.encode v.resize), (16, Zig.Enc.encode v.remap), (24, Zig.Enc.encode v.free)]
-  decode bs := do pure { alloc := ← Zig.Enc.decodeAt bs 0, resize := ← Zig.Enc.decodeAt bs 8, remap := ← Zig.Enc.decodeAt bs 16, free := ← Zig.Enc.decodeAt bs 24 }
-
-inductive builtin_AtomicOrder where
-  | unordered
-  | monotonic
-  | acquire
-  | release
-  | acq_rel
-  | seq_cst
-  deriving Repr, Inhabited, DecidableEq
-
-def builtin_AtomicOrder.toBits : builtin_AtomicOrder → BitVec 3
-  | .unordered => (0 : BitVec 3)
-  | .monotonic => (1 : BitVec 3)
-  | .acquire => (2 : BitVec 3)
-  | .release => (3 : BitVec 3)
-  | .acq_rel => (4 : BitVec 3)
-  | .seq_cst => (5 : BitVec 3)
-
-def builtin_AtomicOrder.ofInt? (v : Int) : Option builtin_AtomicOrder :=
-  if v = 0 then some .unordered else if v = 1 then some .monotonic else if v = 2 then some .acquire else if v = 3 then some .release else if v = 4 then some .acq_rel else if v = 5 then some .seq_cst else none
-
-def builtin_AtomicOrder.isNamed (_ : builtin_AtomicOrder) : Bool := true
-
 structure atomic_Value_u32 where
   raw : BitVec 32
   deriving Repr, Inhabited, DecidableEq
@@ -84,10 +49,6 @@ instance : Zig.Enc atomic_Value_u32 where
 structure Thread_SpawnConfig where
   stack_size : BitVec 64
   allocator : Option (Zig.Allocator)
-  deriving Repr, Inhabited, DecidableEq
-
-structure Thread_PosixThreadImpl where
-  handle : Zig.Ptr
   deriving Repr, Inhabited, DecidableEq
 
 /-- The memory at program start: block `k` is global `k`. -/

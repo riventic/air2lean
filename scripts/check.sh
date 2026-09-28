@@ -44,9 +44,13 @@ for ex in $examples; do
   Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
   # One golden set for every Zig version (tests/golden/<ex>/air/). A file in
   # tests/golden/<version>/<ex>/air/ replaces the shared file of the same name for that version
-  # only (PLAN.md §Zig version support).
+  # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
+  # `uname -s` in lower case) replaces it on that host OS only: std code that the compiler picks
+  # by OS (`std.Thread`'s implementation) is in the type table. The translation does not change
+  # (the translator emits only the types that the code uses).
   golden_dir="tests/golden/$ex/air"
   version_dir="tests/golden/$zig_version/$ex/air"
+  os_dir="tests/golden/$zig_version/$ex/air-$(uname -s | tr '[:upper:]' '[:lower:]')"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   trap 'rm -rf "$air_dir" "$cmp_dir"' EXIT
@@ -66,13 +70,13 @@ for ex in $examples; do
     exit 1
   fi
 
-  echo "== $ex: checking against golden ($golden_dir, then $version_dir) ==" >&2
+  echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
   # Each file names the Zig version that wrote it; compare everything else. The number of a
   # generic std instance (`sentinelMismatch__anon_5800`) depends on how much std code the
   # compiler analyses, which differs by host OS in 0.16.0; the translator ignores it
   # (`panicErrorFor?`), so the comparison ignores it too.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
-  for f in "$golden_dir"/*.json "$version_dir"/*.json; do
+  for f in "$golden_dir"/*.json "$version_dir"/*.json "$os_dir"/*.json; do
     if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/golden/${f##*/}"; fi
   done
   for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/new/${f##*/}"; done
@@ -82,6 +86,7 @@ for ex in $examples; do
     echo "$diff_output" >&2
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
     echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
+    echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
     exit 1
   fi
 

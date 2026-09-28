@@ -116,25 +116,6 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
-      # TEMPORARY debug step: dump the threads AIR-JSON as this runner produces it and upload it,
-      # so the golden files (host-OS-dependent for Thread.spawn/.join, see PR discussion) can be
-      # copied from the artifact instead of hand-reconstructed from a log diff. Remove before
-      # merge.
-      - name: Debug dump threads AIR
-        if: matrix.full
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/threads-air-dump
-          ZIG_AIR_JSON_DIR=/tmp/threads-air-dump ZIG_AIR_JSON_FILTER="threads." \
-            zig-air-${{ matrix.zig }}/bin/zig build-obj -fno-emit-bin -OReleaseSafe \
-            -fno-error-tracing examples/threads/threads.zig
-      - name: Upload threads AIR dump
-        if: matrix.full
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: threads-air-${{ matrix.zig }}
-          path: /tmp/threads-air-dump
-
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

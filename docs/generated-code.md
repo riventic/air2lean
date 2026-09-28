@@ -38,6 +38,8 @@
 | error set (`error{A, B}`, `anyerror`) | `Zig.ErrName` (`abbrev ErrName := String`; an error's identity is its name) |
 | `std.mem.Allocator` | `Zig.Allocator` (the allocator model, [std-models.md](std-models.md)) |
 
+The file gets a named type (struct, enum, union) only if a function uses it: through a parameter, the result, an instruction, a constant or a global, directly or through the types that these name (`usedTys`). The AIR type table also has types that no code uses, for example the fields of `std.Thread`, which differ by host OS. They are not in the file, so the translation is the same on every host.
+
 ### Enums and unions
 
 Each enum `E` also gets:
@@ -280,7 +282,7 @@ One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>
 |---|---|
 | `examples/<ex>/<ex>.zig` | The Zig source under test |
 | `examples/<ex>/filter` | Optional: more name prefixes to translate, one per line (std code; [std-models.md](std-models.md)) |
-| `tests/golden/<v>/<ex>/air/` | Golden AIR-JSON, checked by `scripts/check.sh` |
+| `tests/golden/<ex>/air/` | Golden AIR-JSON, checked by `scripts/check.sh`; per-version overrides in `tests/golden/<v>/<ex>/air/`, per-OS overrides in `tests/golden/<v>/<ex>/air-<os>/` (`uname -s` in lower case). The Linux files come from CI: the Mac cannot write them |
 | `Proofs/<Ex>/Gen.lean` | Committed translator output (`--namespace <Ex> --prefix <ex>.`) |
 | `tests/diff/<ex>/inputs/<fn>.jsonl` | Generated inputs, one file per function (`tests/diff/gen_inputs.zig`) |
 | `tests/diff/<ex>/harness.zig` | Per-function dispatch only: imports `<ex>` + `common`, forks, writes `tests/diff/out/zig/<ex>/<fn>.jsonl` |

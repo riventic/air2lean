@@ -132,11 +132,44 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .tuple fs => fs.flatMap go
   | _ => #[]
 
-/-- Every named type of `funcs`, each after the named types its fields use. -/
+/-- The types that `ty` names directly. -/
+def childTys (ty : Ty) : Array TyId :=
+  match ty with
+  | .ptr _ _ c | .array _ c | .vector _ c | .optional c => #[c]
+  | .errorUnion s p => #[s, p]
+  | .struct _ _ fs => fs.map (·.2)
+  | .enum _ t _ _ => #[t]
+  | .union _ _ t fs => t.toArray ++ fs.map (·.2)
+  | .tuple fs => fs
+  | _ => #[]
+
+/-- The types of `f` that its translation uses: those of the parameters, the result, each
+instruction, each constant operand and each global, and every type that these name. A type that
+is only in the file's type table is not used: `std.Thread`'s fields (its implementation, which
+differs by host OS) are behind the model type `Zig.ThreadId`, which has no children. -/
+def usedTys (f : Func) : Array Bool := Id.run do
+  let insts := f.allInsts
+  let consts := insts.flatMap fun i => (valueOperands i.op).filterMap Val.constTy?
+  let mut used := Array.replicate f.types.size false
+  let mut todo : List TyId :=
+    (f.params ++ #[f.ret] ++ insts.map (·.ty) ++ consts ++ f.globals.map (·.ty)).toList
+  while !todo.isEmpty do
+    match todo with
+    | [] => pure ()
+    | id :: rest =>
+      todo := rest
+      if used[id]?.getD true then continue
+      used := used.set! id true
+      todo := ((f.types[id]?.map childTys).getD #[]).toList ++ todo
+  return used
+
+/-- Every named type that `funcs` use (`usedTys`), each after the named types its fields use. -/
 def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id.run do
   let mut found : Array NamedType := #[]
   for f in funcs do
+    let used := usedTys f
     for (ty, i) in f.types.zipIdx do
+      if !used[i]?.getD false then continue
       match ty with
       | .struct name .. | .enum name .. | .union name .. =>
         let entry : NamedType := { zigName := name, leanName := namedLeanName prefix_ name, ty,

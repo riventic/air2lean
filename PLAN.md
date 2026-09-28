@@ -68,7 +68,7 @@ Supported: **0.16.0** (default), **0.15.2** and **0.14.1** (matrix below). The d
 | Canonical form | `Air2Lean/Air/Canon.lean`: rewrites the AIR patterns that differ between versions for the same code, and numbers instructions without debug instructions | — |
 | Normalizer | `Air2Lean/Air/Normalize.lean`: one tag table → internal `Op` | a version case only for a subset tag that differs (none today) |
 | Checker, emitter, `ZigLean` | work only on `Op` | the float ops whose result differs by version: `FCtx.zigVersion` in `Emit.lean` picks the def (`docs/floats.md` §Per-version differences) |
-| AIR goldens | `tests/golden/<ex>/air/` | a file in `tests/golden/<version>/<ex>/air/` replaces the shared file of that name |
+| AIR goldens | `tests/golden/<ex>/air/` | a file in `tests/golden/<version>/<ex>/air/` replaces the shared file of that name; a file in `tests/golden/<version>/<ex>/air-<os>/` replaces it on that host OS only (`std.Thread` is OS-specific std code) |
 | Translation | `Proofs/<Ex>/Gen.lean` (the default version's) | `tests/golden/<version>/<ex>/Gen.lean` where it differs |
 | Proofs | `Proofs/<Ex>/Proofs.lean`, built in every full CI job against that version's translation | — |
 | Float probe | `tests/floatprobe/expected.txt` | `expected.<version>.txt`: only the lines that differ |

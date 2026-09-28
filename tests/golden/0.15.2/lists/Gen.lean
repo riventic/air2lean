@@ -3,19 +3,6 @@ import ZigLean
 
 namespace Lists
 
-structure mem_Allocator_VTable where
-  alloc : Zig.Ptr
-  resize : Zig.Ptr
-  remap : Zig.Ptr
-  free : Zig.Ptr
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Enc mem_Allocator_VTable where
-  size := 32
-  align := 8
-  encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.alloc), (8, Zig.Enc.encode v.resize), (16, Zig.Enc.encode v.remap), (24, Zig.Enc.encode v.free)]
-  decode bs := do pure { alloc := ← Zig.Enc.decodeAt bs 0, resize := ← Zig.Enc.decodeAt bs 8, remap := ← Zig.Enc.decodeAt bs 16, free := ← Zig.Enc.decodeAt bs 24 }
-
 structure Node where
   val : BitVec 32
   next : Option (Zig.Ptr)
