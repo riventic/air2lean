@@ -236,17 +236,46 @@ unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model
 `Zig.RmwOp.group`)? -/
 def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
 
-def Func.callees (f : Func) : Array String :=
-  f.allInsts.filterMap fun i => match i.op with
+/-- A function type. The exporter writes it as `other`, with the name `fn (…) …`; it is only
+behind a pointer (M20). -/
+def isFnTy (t : Ty) : Bool := match t with | .other n => n.startsWith "fn (" | _ => false
+
+/-- The functions whose address the program takes, as `(function type name, function name)`:
+the globals whose initial value is a function. An indirect call through a pointer to that type
+can call only these (M20). -/
+def fnRefs (funcs : Array Func) : Array (String × String) :=
+  funcs.foldl (init := #[]) fun acc f => f.globals.foldl (init := acc) fun acc g =>
+    match g.init, f.types[g.ty]? with
+    | some (.func nm ..), some (.other tn) => if acc.contains (tn, nm) then acc else acc.push (tn, nm)
+    | _, _ => acc
+
+/-- The function type name of the indirect callee `id` (a pointer to a function). -/
+def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
+  let i ← f.allInsts.find? (·.id == id)
+  let .ptr _ _ c ← f.types[i.ty]? | none
+  let .other tn ← f.types[c]? | none
+  pure tn
+
+/-- The functions that an indirect call in `f` can call (`fnRefs`). -/
+def Func.indirectCallees (f : Func) (refs : Array (String × String)) : Array String :=
+  f.allInsts.flatMap fun i => match i.op with
+    | .call (.inst v) _ => match f.calleeFnTy? v with
+      | some tn => refs.filterMap fun (t, nm) => if t == tn then some nm else none
+      | none => #[]
+    | _ => #[]
+
+def Func.callees (f : Func) (refs : Array (String × String)) : Array String :=
+  f.allInsts.filterMap (fun i => match i.op with
     | .call (.func nm false ..) _ => some nm
-    | _ => none
+    | _ => none) ++ f.indirectCallees refs
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller
 of such a function, up to a fixpoint. -/
 partial def memoryFunctions (funcs : Array Func) : Array String :=
+  let refs := fnRefs funcs
   let rec go (mem : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
-      if !mem.contains f.name && f.callees.any mem.contains then some f.name else none
+      if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
   go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
 

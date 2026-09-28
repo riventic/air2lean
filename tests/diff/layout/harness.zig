@@ -93,6 +93,13 @@ fn argBitsToFloat(b: []common.Buf, it: []std.json.Value) struct { *f32, u32 } {
     return .{ ptr(*f32, b, it[0]), @intCast(it[1].integer) };
 }
 
+fn argApplyOp(_: []common.Buf, it: []std.json.Value) struct { usize, u32 } {
+    return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
+}
+fn argTwice(_: []common.Buf, it: []std.json.Value) struct { bool, u32 } {
+    return .{ it[0].bool, @intCast(it[1].integer) };
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -118,4 +125,6 @@ pub fn main() !void {
     try run(gpa, "readHeader", layout.readHeader, argHeader);
     try run(gpa, "floatBits", layout.floatBits, argFloatBits);
     try run(gpa, "bitsToFloat", layout.bitsToFloat, argBitsToFloat);
+    try run(gpa, "applyOp", layout.applyOp, argApplyOp);
+    try run(gpa, "twice", layout.twice, argTwice);
 }

@@ -2359,4 +2359,18 @@ fn genLayout(rng: std.Random) !void {
             try writer.print(",{d}]}}\n", .{bits});
         }
     }
+    // applyOp(i: usize, x: u32): `i` in 0..4 (3 and 4 are out of bounds), an edge or random `x`.
+    {
+        var file = try openLayout("applyOp");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ i % 5, edgyU32(rng) });
+    }
+    // twice(sq: bool, x: u32).
+    {
+        var file = try openLayout("twice");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{s},{d}]}}\n", .{ if (i % 2 == 0) "true" else "false", edgyU32(rng) });
+    }
 }

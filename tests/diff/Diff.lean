@@ -774,6 +774,12 @@ def runLayout : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "bitsToFloat"
     (fun g a => return Layout.bitsToFloat (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) fun _ v => floatStr v
+  processMem ex m0 "applyOp"
+    (fun _ a => return Layout.applyOp (bv 64 (← getInt a[0]!)) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "twice"
+    (fun _ a => return Layout.twice (← orFail a[0]!.getBool? "twice") (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
 
 def runSlices : IO Unit := do
   let ex := "slices"

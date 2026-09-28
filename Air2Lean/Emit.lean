@@ -404,6 +404,9 @@ structure FCtx where
   /-- The block of each global of `Func.globals`: its index in the program's globals
   (`emitGlobals`). -/
   globalIds : Array Nat := #[]
+  /-- The functions whose address the program takes (`fnRefs`), as `(function type name,
+  function name, block)`: an indirect call compares its pointer with these blocks. -/
+  fnBlocks : Array (String × String × Nat) := #[]
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -1535,6 +1538,19 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.threadCall env fn callee args})"
       (env, some l)
     else if isNoreturn then (env, none)
+    else if let .inst p := callee then
+      -- An indirect call: the function whose block the pointer points to, at offset 0 (M20).
+      let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
+        | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
+        | _ => ""
+      let argStr := String.intercalate " " (args.map rv).toList
+      let arms := (fc.fnBlocks.filter (·.1 == tn)).toList.map fun (_, nm, b) =>
+        let lean := (fc.funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
+        let term := s!"{lean} {argStr}"
+        let call := if fc.memFuncs.contains nm then s!"Zig.callM ({term})" else fc.liftR term
+        s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
+      let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
+      (env, some l)
     else
       let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
       -- A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`).
@@ -1774,8 +1790,9 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
-    (memFuncs : Array String) (globalIds : Array Nat) : FuncParts :=
-  let fc := mkFCtx f structNames funcNames floatSemantics memFuncs globalIds
+    (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat)) :
+    FuncParts :=
+  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds with fnBlocks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts
@@ -1816,6 +1833,8 @@ longer: the sentinel is its last item. `undefined` is undefined bytes. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
   match fc.tyOfId g.ty, g.init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
+  -- A function: one byte, so that its pointer has a block (an indirect call, M20).
+  | _, some (.func ..), _ => "#[.undef]"
   | _, some (.undef _), _ | _, none, _ => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
   | .array _ c, some (.agg _ elems), true =>
     let t := s!"Vector ({emitTy fc.structNames fc.types (fc.tyOfId c)}) {elems.size}"
@@ -1927,18 +1946,20 @@ def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : B
 def dedupNames (a : Array String) : Array String :=
   a.foldl (fun acc x => if acc.contains x then acc else acc.push x) #[]
 
-def calleesOf (allNames : Array String) (f : Func) : Array String :=
-  dedupNames (f.allInsts.filterMap fun i => match i.op with
+def calleesOf (allNames : Array String) (refs : Array (String × String)) (f : Func) :
+    Array String :=
+  let direct := f.allInsts.filterMap fun i => match i.op with
     -- `spawnFn`: the function `Thread.spawn` runs, not `Thread.spawn` itself (which has no AIR
     -- and is not in `allNames`) — a spawned function must still be emitted before its spawner.
     | .call (.func nm _ (some spawnFn)) _ =>
       if allNames.contains spawnFn then some spawnFn
       else if allNames.contains nm then some nm else none
     | .call (.func nm ..) _ => if allNames.contains nm then some nm else none
-    | _ => none)
+    | _ => none
+  dedupNames (direct ++ (f.indirectCallees refs).filter allNames.contains)
 
 /-- DFS post-order over the call graph: a callee before its caller, except inside a cycle. -/
-partial def topoVisit (funcs : Array Func) (allNames : Array String)
+partial def topoVisit (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
     (vo : Array String × Array Func) (name : String) : Array String × Array Func :=
   let (visited, order) := vo
   if visited.contains name then (visited, order)
@@ -1947,23 +1968,23 @@ partial def topoVisit (funcs : Array Func) (allNames : Array String)
     match funcs.find? (·.name == name) with
     | none => (visited, order)
     | some f =>
-      let callees := calleesOf allNames f
-      let (visited, order) := callees.foldl (topoVisit funcs allNames) (visited, order)
+      let callees := calleesOf allNames refs f
+      let (visited, order) := callees.foldl (topoVisit funcs allNames refs) (visited, order)
       (visited, order.push f)
 
 def topoOrder (funcs : Array Func) : Array Func :=
   let allNames := funcs.map (·.name)
-  (allNames.foldl (topoVisit funcs allNames) (#[], #[])).2
+  (allNames.foldl (topoVisit funcs allNames (fnRefs funcs)) (#[], #[])).2
 
 /-- Every function name reachable from `name` by one or more calls. -/
-partial def reachable (funcs : Array Func) (allNames : Array String) (name : String) :
-    Array String :=
+partial def reachable (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
+    (name : String) : Array String :=
   let rec go (seen : Array String) (todo : List String) : Array String :=
     match todo with
     | [] => seen
     | n :: rest =>
       let next := match funcs.find? (·.name == n) with
-        | some f => (calleesOf allNames f).toList.filter (!seen.contains ·)
+        | some f => (calleesOf allNames refs f).toList.filter (!seen.contains ·)
         | none => []
       go (seen ++ next.toArray) (rest ++ next)
   go #[] [name]
@@ -1973,7 +1994,7 @@ partial def reachable (funcs : Array Func) (allNames : Array String) (name : Str
 component is `true` if the group is recursive (more than one function, or a self-call). -/
 def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
   let allNames := funcs.map (·.name)
-  let reach := allNames.map fun n => (n, reachable funcs allNames n)
+  let reach := allNames.map fun n => (n, reachable funcs allNames (fnRefs funcs) n)
   let reaches (a b : String) : Bool :=
     ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
   let order := topoOrder funcs
@@ -2016,9 +2037,11 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
+  let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
+    (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
-      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f)
+      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

@@ -47,7 +47,13 @@ instance : Zig.Enc Header where
   decode bs := do pure { magic := ← Zig.Enc.decodeAt bs 0, len := ← Zig.Enc.decodeAt bs 4, kind := ← Zig.Enc.decodeAt bs 6, flags := ← Zig.Enc.decodeAt bs 7 }
 
 /-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+  -- 0: layout.double
+  (#[.undef], 1),
+  -- 1: layout.square
+  (#[.undef], 1),
+  -- 2: layout.succ
+  (#[.undef], 1)]
 
 structure addrEqLocals where
   deriving Inhabited
@@ -90,6 +96,83 @@ def align4 (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+structure doubleLocals where
+  deriving Inhabited
+
+inductive doubleExit where
+  | ret (v : BitVec 32)
+
+def double (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (Zig.mulWrap p0 (2 : BitVec 32))
+    pure (.ret i1)) : Zig.M doubleLocals doubleExit).run' (default : doubleLocals)
+  match e with
+  | .ret v => pure v
+
+structure squareLocals where
+  deriving Inhabited
+
+inductive squareExit where
+  | ret (v : BitVec 32)
+
+def square (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (Zig.mulWrap p0 p0)
+    pure (.ret i1)) : Zig.M squareLocals squareExit).run' (default : squareLocals)
+  match e with
+  | .ret v => pure v
+
+structure succLocals where
+  deriving Inhabited
+
+inductive succExit where
+  | ret (v : BitVec 32)
+
+def succ (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (Zig.addWrap p0 (1 : BitVec 32))
+    pure (.ret i1)) : Zig.M succLocals succExit).run' (default : succLocals)
+  match e with
+  | .ret v => pure v
+
+structure applyOpLocals where
+  deriving Inhabited
+
+inductive applyOpExit where
+  | ret (v : BitVec 32)
+  | br3
+
+def applyOp (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i2 ← pure (Zig.lt false p0 (3 : BitVec 64))
+    match ← ((do
+      if i2 then (do
+        pure .br3)
+      else (do
+        throw .outOfBounds)) : Zig.MM applyOpLocals applyOpExit) with
+    | .br3 => (do
+      let _i8 ← Zig.callR (Zig.vindex (#v[(⟨some 0, 0⟩ : Zig.Ptr), (⟨some 1, 0⟩ : Zig.Ptr), (⟨some 2, 0⟩ : Zig.Ptr)] : Vector (Zig.Ptr) 3) p0)
+      let i9 ← (if _i8 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if _i8 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if _i8 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
+      pure (.ret i9))
+    | e => pure e) : Zig.MM applyOpLocals applyOpExit).run' (default : applyOpLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure applyTwiceLocals where
+  deriving Inhabited
+
+inductive applyTwiceExit where
+  | ret (v : BitVec 32)
+
+def applyTwice (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i2 ← (if p0 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if p0 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if p0 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
+    let i3 ← (if p0 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double i2) else if p0 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square i2) else if p0 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ i2) else throw .illegal)
+    pure (.ret i3)) : Zig.MM applyTwiceLocals applyTwiceExit).run' (default : applyTwiceLocals)
+  match e with
+  | .ret v => pure v
 
 structure asConstLocals where
   deriving Inhabited
@@ -399,5 +482,27 @@ def setMode (p0 : BitVec 8) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
     pure (.ret i8)) : Zig.M setModeLocals setModeExit).run' (default : setModeLocals)
   match e with
   | .ret v => pure v
+
+structure twiceLocals where
+  deriving Inhabited
+
+inductive twiceExit where
+  | ret (v : BitVec 32)
+  | br2 (v : Zig.Ptr)
+
+def twice (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    match ← ((do
+      if p0 then (do
+        pure (.br2 (⟨some 1, 0⟩ : Zig.Ptr)))
+      else (do
+        pure (.br2 (⟨some 0, 0⟩ : Zig.Ptr)))) : Zig.MM twiceLocals twiceExit) with
+    | .br2 v2 => (do
+      let i6 ← Zig.callM (applyTwice v2 p1)
+      pure (.ret i6))
+    | e => pure e) : Zig.MM twiceLocals twiceExit).run' (default : twiceLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 
 end Layout

@@ -1,5 +1,5 @@
 //! M20: casts (`@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`,
-//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs.
+//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs, function pointers.
 
 pub const Point = struct {
     x: u32,
@@ -127,6 +127,36 @@ pub fn bitsToFloat(p: *f32, bits: u32) f32 {
     return p.*;
 }
 
+fn double(x: u32) u32 {
+    return x *% 2;
+}
+
+fn square(x: u32) u32 {
+    return x *% x;
+}
+
+fn succ(x: u32) u32 {
+    return x +% 1;
+}
+
+/// A global table of function pointers.
+const ops = [_]*const fn (u32) u32{ &double, &square, &succ };
+
+/// `ops[i](x)` (an indirect call; panics if `i` is out of bounds).
+pub fn applyOp(i: usize, x: u32) u32 {
+    return ops[i](x);
+}
+
+/// `f(f(x))`: `f` is a runtime function pointer.
+fn applyTwice(f: *const fn (u32) u32, x: u32) u32 {
+    return f(f(x));
+}
+
+/// `square(square(x))` if `sq`, else `double(double(x))`.
+pub fn twice(sq: bool, x: u32) u32 {
+    return applyTwice(if (sq) &square else &double, x);
+}
+
 comptime {
     _ = &addrEq;
     _ = &ptrRoundTrip;
@@ -146,4 +176,6 @@ comptime {
     _ = &readHeader;
     _ = &floatBits;
     _ = &bitsToFloat;
+    _ = &applyOp;
+    _ = &twice;
 }

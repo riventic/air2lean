@@ -64,7 +64,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8, 16)"
     let _ := isConst
     match size with
-    | "one" | "many" | "slice" => recur child
+    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20).
+    | "one" => if (types[child]?.map isFnTy).getD false then pure () else recur child
+    | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
   | .array _ child => recur child
   | .vector _ child => recur child
@@ -348,7 +350,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
           panic-handler function (docs/generated-code.md §Panics)"
       pure line
     | .func .. => pure line
-    | _ => throw s!"{fnName}: near line {line}: an indirect call is outside the subset (M20)"
+    -- A pointer to a function (`checkTy`): `Emit.lean` dispatches on the address-taken
+    -- functions of its type (`fnRefs`).
+    | .inst _ => pure line
+    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant is outside \
+        the subset"
   | .block body | .loop body => checkInsts cx line body
   | .condBr _ thenBody elseBody => do
     let _ ← checkInsts cx line thenBody
@@ -428,6 +434,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
   if let some k := init.ptrOther? then
     throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
+  -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
+  if let .func .. := init then return
   let ty := match f.types[g.ty]?, f.layouts[g.ty]? with
     | some (.array _ c), some l => if l.sentinel then c else g.ty
     | _, _ => g.ty
