@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mutation testing for the differential test's panic-kind comparison (docs/generated-code.md
-# §Panics). Each mutation below must make scripts/diff.sh FAIL (exit 1, mismatch>0); this script
+# §Panics). Each mutation below must make scripts/diff.sh FAIL (exit 1, and mismatch>0 or a changed pinned count); this script
 # exits 0 only if every mutation was detected. Guards against a diff test that always passes.
 # Each mutation runs diff.sh over its own example only, so a mismatch elsewhere cannot count as
 # a detection.
@@ -190,14 +190,17 @@ run_and_report() {
     rm -f "$out"
     exit 1
   fi
-  local mismatch
+  local mismatch counts
   mismatch=$(echo "$total_line" | sed -n 's/.*mismatch=\([0-9]*\).*/\1/p')
+  # A pinned `unspecified`/`nondet` count that changed is a detection too (threads: a mutation
+  # that removes a race result changes no value, only the count).
+  counts=$(grep -c '^\(UNSPECIFIED\|NONDET\) COUNT' "$out" || true)
   rm -f "$out"
-  if [ "$status" -ne 0 ] && [ "${mismatch:-0}" -gt 0 ]; then
-    echo "$label: detected (exit=$status mismatch=$mismatch)"
+  if [ "$status" -ne 0 ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; then
+    echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=1
   else
-    echo "$label: NOT detected (exit=$status mismatch=$mismatch)"
+    echo "$label: NOT detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=0
   fi
 }

@@ -72,14 +72,15 @@ for ex in $examples; do
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
   # Each file names the Zig version that wrote it; compare everything else. The number of a
-  # generic std instance (`sentinelMismatch__anon_5800`) depends on how much std code the
-  # compiler analyses, which differs by host OS in 0.16.0; the translator ignores it
-  # (`panicErrorFor?`), so the comparison ignores it too.
+  # generic std instance (`sentinelMismatch__anon_5800`) or of a std type without a name
+  # (`Thread.Completion__enum_1614`) depends on how much std code the compiler analyses, which
+  # differs by run and host OS in 0.16.0; the translator ignores the first (`panicErrorFor?`) and
+  # does not emit the second (`usedTys`), so the comparison ignores both.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   for f in "$golden_dir"/*.json "$version_dir"/*.json "$os_dir"/*.json; do
-    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/golden/${f##*/}"; fi
+    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/golden/${f##*/}"; fi
   done
-  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g' >"$cmp_dir/new/${f##*/}"; done
+  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/new/${f##*/}"; done
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
     echo "error: AIR output for $ex does not match its golden files" >&2
