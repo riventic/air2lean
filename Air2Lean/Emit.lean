@@ -715,17 +715,19 @@ def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
 /-- The byte offset of field `idx` of the struct that the pointer `base` points to. -/
+def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
+  match fc.tyOfId c with
+  -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
+  -- not a bit-pointer.
+  | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
+  -- Every field of a tagged union is its payload.
+  | .union _ _ (some tag) fields =>
+    ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
+  | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+
 def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   match fc.valTy base with
-  | .ptr _ _ c =>
-    match fc.tyOfId c with
-    -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
-    -- not a bit-pointer.
-    | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
-    -- Every field of a tagged union is its payload.
-    | .union _ _ (some tag) fields =>
-      ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
-    | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+  | .ptr _ _ c => fc.fieldOffsetIn c idx
   | _ => 0
 
 /-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
@@ -735,7 +737,7 @@ def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (�
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
 def FCtx.fieldOffsetOfPtrTy (fc : FCtx) (ptrTy : TyId) (idx : Nat) : Nat :=
   match fc.tyOfId ptrTy with
-  | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+  | .ptr _ _ c => fc.fieldOffsetIn c idx
   | _ => 0
 
 /-- The item type of the slice, many-pointer or array pointer `v`. -/
@@ -774,6 +776,13 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
         {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
     else s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
   | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+
+/-- A call argument. A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`). -/
+def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
+  if fc.mem && !memCallee && fc.isSlice a then
+    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
+    s!"(← Zig.callM (Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}))"
+  else fc.resolveVal env a
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -1379,12 +1388,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let payload := match fc.pointeeOf p with
       | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
       | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
+    let a := fc.ptrAlign p
     let expr := match inst.op with
-      | .isErrPtr true _ => s!"Zig.errIsErrAt ({payload}) {rv p}"
-      | .isErrPtr false _ => s!"(!·) <$> Zig.errIsErrAt ({payload}) {rv p}"
-      | .errPayloadPtr true _ => s!"Zig.errSetOk ({payload}) {rv p}"
+      | .isErrPtr true _ => s!"Zig.errIsErrAt ({payload}) {a} {rv p}"
+      | .isErrPtr false _ => s!"(!·) <$> Zig.errIsErrAt ({payload}) {a} {rv p}"
+      | .errPayloadPtr true _ => s!"Zig.errSetOk ({payload}) {a} {rv p}"
       | .errPayloadPtr false _ => s!"pure (Zig.errPayloadPtr ({payload}) {rv p})"
-      | _ => s!"Zig.errCodeAt ({payload}) {rv p}"
+      | _ => s!"Zig.errCodeAt ({payload}) {a} {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
   | .isNonErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
@@ -1425,7 +1435,9 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
     if fc.isMemPtr fieldPtr then
-      let off := fc.fieldOffsetOfPtrTy inst.ty idx
+      -- A bit-pointer points to the host integer: the parent's own address.
+      let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
+      let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
       let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
       (env, some l)
     else (env, none)
@@ -1436,7 +1448,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .union _ _ (some tagTy) fields =>
         let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2))).map (·.1)).getD 0
         let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
-        let align := (fc.layouts[tagTy]?.bind (·.align)).getD 1
+        let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
         (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
       | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
     else
@@ -1587,23 +1599,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
         | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
         | _ => ""
-      let argStr := String.intercalate " " (args.map rv).toList
       let arms := (fc.fnBlocks.filter (·.1 == tn)).toList.map fun (_, nm, b) =>
         let lean := (fc.funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-        let term := s!"{lean} {argStr}"
-        let call := if fc.memFuncs.contains nm then s!"Zig.callM ({term})" else fc.liftR term
+        let memCallee := fc.memFuncs.contains nm
+        let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
+        let call := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
         s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
       let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
       (env, some l)
     else
       let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
-      -- A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`).
-      let arg (a : Val) : String :=
-        if fc.mem && !memCallee && fc.isSlice a then
-          let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
-          s!"(← Zig.callM (Zig.readSlice ({item}) {fc.itemAlign a} {rv a}))"
-        else rv a
-      let term := s!"{cexpr} {String.intercalate " " (args.map arg).toList}"
+      let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
       let expr := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
       let (env, l) := bindLet fc env inst.id expr
       (env, some l)

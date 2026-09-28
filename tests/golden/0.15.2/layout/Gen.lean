@@ -333,7 +333,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
         Zig.store (α := BitVec 8) 1 i5 i7
         pure .br1)
       else (do
-        let _i10 ← Zig.errCodeAt (BitVec 8) p0
+        let _i10 ← Zig.errCodeAt (BitVec 8) 2 p0
         pure .br1)) : Zig.MM bumpLocals bumpExit) with
     | .br1 => (do
       pure .ret)

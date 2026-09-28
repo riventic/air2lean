@@ -333,7 +333,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
         Zig.store (α := BitVec 8) 1 i5 i7
         pure .br1)
       else (do
-        let _i10 ← Zig.errCodeAt (BitVec 8) p0
+        let _i10 ← Zig.errCodeAt (BitVec 8) 2 p0
         pure .br1)) : Zig.MM bumpLocals bumpExit) with
     | .br1 => (do
       pure .ret)
@@ -502,39 +502,41 @@ def growCircle (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   | _ => throw .panic
 
 structure headerLenLocals where
+  local1 : Zig.Slice
   deriving Inhabited
 
 inductive headerLenExit where
   | ret (v : Option (BitVec 16))
-  | br1
-  | br10
+  | br4
+  | br15
 
 def headerLen (p0 : Zig.Slice) : Zig.MemM (Option (BitVec 16)) := do
   let e ← ((do
+    modify (fun s => { s with local1 := p0 })
     match ← ((do
-      let i2 ← pure p0.len
-      let i3 ← pure (i2)
-      let i4 ← pure (Zig.lt false i3 (8 : BitVec 64))
-      if i4 then (do
+      let i6 ← pure (((← get).local1).len)
+      let i7 ← pure (i6)
+      let i8 ← pure (Zig.lt false i7 (8 : BitVec 64))
+      if i8 then (do
         pure (.ret none))
       else (do
-        pure .br1)) : Zig.MM headerLenLocals headerLenExit) with
-    | .br1 => (do
-      let i8 ← pure p0.ptr
-      let i9 ← pure (i8)
+        pure .br4)) : Zig.MM headerLenLocals headerLenExit) with
+    | .br4 => (do
+      let i13 ← pure (((← get).local1).ptr)
+      let i14 ← pure (i13)
       match ← ((do
-        let i11 ← pure (i9.add 0)
-        let i12 ← Zig.load (BitVec 32) 1 i11
-        let i13 ← pure (i12 != (1280461121 : BitVec 32))
-        if i13 then (do
+        let i16 ← pure (i14.add 0)
+        let i17 ← Zig.load (BitVec 32) 1 i16
+        let i18 ← pure (i17 != (1280461121 : BitVec 32))
+        if i18 then (do
           pure (.ret none))
         else (do
-          pure .br10)) : Zig.MM headerLenLocals headerLenExit) with
-      | .br10 => (do
-        let i17 ← pure (i9.add 4)
-        let i18 ← Zig.load (BitVec 16) 1 i17
-        let i19 ← pure (some i18)
-        pure (.ret i19))
+          pure .br15)) : Zig.MM headerLenLocals headerLenExit) with
+      | .br15 => (do
+        let i22 ← pure (i14.add 4)
+        let i23 ← Zig.load (BitVec 16) 1 i22
+        let i24 ← pure (some i23)
+        pure (.ret i24))
       | e => pure e)
     | e => pure e) : Zig.MM headerLenLocals headerLenExit).run' (default : headerLenLocals)
   match e with
@@ -592,7 +594,8 @@ inductive parentOfXExit where
 def parentOfX (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
     let i1 ← pure (p0.add (-(0 : Int)))
-    pure (.ret i1)) : Zig.MM parentOfXLocals parentOfXExit).run' (default : parentOfXLocals)
+    let i2 ← pure (i1)
+    pure (.ret i2)) : Zig.MM parentOfXLocals parentOfXExit).run' (default : parentOfXLocals)
   match e with
   | .ret v => pure v
 
@@ -605,7 +608,8 @@ inductive parentOfYExit where
 def parentOfY (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
     let i1 ← pure (p0.add (-(4 : Int)))
-    pure (.ret i1)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
+    let i2 ← pure (i1)
+    pure (.ret i2)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
   match e with
   | .ret v => pure v
 
@@ -677,6 +681,7 @@ def ptrRoundTrip (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   | _ => throw .panic
 
 structure readHeaderLocals where
+  local1 : Zig.Slice
   deriving Inhabited
 
 inductive readHeaderExit where
@@ -684,10 +689,11 @@ inductive readHeaderExit where
 
 def readHeader (p0 : Zig.Slice) : Zig.MemM (Header) := do
   let e ← ((do
-    let i1 ← pure p0.ptr
-    let i2 ← pure (i1)
-    let i3 ← Zig.load (Header) 1 i2
-    pure (.ret i3)) : Zig.MM readHeaderLocals readHeaderExit).run' (default : readHeaderLocals)
+    modify (fun s => { s with local1 := p0 })
+    let i5 ← pure (((← get).local1).ptr)
+    let i6 ← pure (i5)
+    let i7 ← Zig.load (Header) 1 i6
+    pure (.ret i7)) : Zig.MM readHeaderLocals readHeaderExit).run' (default : readHeaderLocals)
   match e with
   | .ret v => pure v
 

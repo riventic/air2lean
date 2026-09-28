@@ -61,7 +61,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     -- `hostSize` (`Zig.loadBits`).
     if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
       throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
-        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8, 16)"
+        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
     let _ := isConst
     match size with
     -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20).
@@ -334,7 +334,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
   | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
   | .errCodePtr ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
-  | .store ptr _ => cx.memAccess line ptr; pure line
+  | .store ptr v =>
+    cx.memAccess line ptr
+    -- `Zig.storeBits` has no undefined bits: `undefined` would clobber the host's other fields.
+    if let .undef _ := v then
+      if let some pty := cx.valTy? ptr then
+        if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+          cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
+    pure line
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line

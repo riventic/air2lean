@@ -176,16 +176,16 @@ instance {α : Type} [Enc α] : Enc (Except ErrName α) where
     | none => .ok <$> Enc.decode (bs.extract po (po + Enc.size α))
     | some e => pure (.error e)
 
-/-- `is_err_ptr`: does the error union `E!α` at `p` hold an error? -/
-def errIsErrAt (α : Type) [Enc α] (p : Ptr) : MemM Bool := do
+/-- `is_err_ptr`: does the error union `E!α` at `p` (alignment `align`) hold an error? -/
+def errIsErrAt (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Bool := do
   let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
-  pure (← errOfBytes (← loadBytes (p.add eo) 2 2)).isSome
+  pure (← errOfBytes (← loadBytes (p.add eo) 2 (Nat.min align 2))).isSome
 
-/-- `unwrap_errunion_err_ptr`: the error of the error union `E!α` at `p`. Sema checks for an
+/-- `unwrap_errunion_err_ptr`: the error of the error union `E!α` at `p` (alignment `align`). Sema checks for an
 error first. -/
-def errCodeAt (α : Type) [Enc α] (p : Ptr) : MemM ErrName := do
+def errCodeAt (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM ErrName := do
   let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
-  match ← errOfBytes (← loadBytes (p.add eo) 2 2) with
+  match ← errOfBytes (← loadBytes (p.add eo) 2 (Nat.min align 2)) with
   | some e => pure e
   | none => throw .unspecified
 
@@ -194,9 +194,9 @@ def errPayloadPtr (α : Type) [Enc α] (p : Ptr) : Ptr :=
   p.add (errUnionOffsets (Enc.size α) (Enc.align α)).2
 
 /-- `errunion_payload_ptr_set`: set the error code to 0 (no error), then the payload pointer. -/
-def errSetOk (α : Type) [Enc α] (p : Ptr) : MemM Ptr := do
+def errSetOk (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
   let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
-  storeBytes (p.add eo) 2 (errBytes none)
+  storeBytes (p.add eo) (Nat.min align 2) (errBytes none)
   pure (p.add po)
 
 /-! ## Structs: helpers for the generated instances -/
