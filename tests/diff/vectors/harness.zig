@@ -1,5 +1,5 @@
 //! vectors's differential-test dispatch (examples/vectors/vectors.zig: fDot, uDotWrap, satAdd,
-//! maxLane, reverse, checkedAdd). Shared runner code (fork/panic/render/JSONL plumbing) lives in
+//! maxLane, reverse, checkedAdd, and the coverage functions splatAdd .. twiceInMem). Shared runner code (fork/panic/render/JSONL plumbing) lives in
 //! tests/diff/common.zig; see its doc comment for the build command and protocol.
 //!
 //! Every function here takes one or two `@Vector(4, T)` args; `common.vectorFromJson` parses
@@ -31,6 +31,17 @@ extern fn satAdd(a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
 extern fn maxLane(v: @Vector(4, i32)) i32;
 extern fn reverse(v: @Vector(4, u32)) @Vector(4, u32);
 extern fn checkedAdd(a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
+extern fn splatAdd(v: @Vector(4, u32), s: u32) @Vector(4, u32);
+extern fn pick(m: @Vector(4, bool), a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
+extern fn interleave(a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
+extern fn andLanes(v: @Vector(4, u32)) u32;
+extern fn orLanes(v: @Vector(4, u32)) u32;
+extern fn xorLanes(v: @Vector(4, u32)) u32;
+extern fn minLane(v: @Vector(4, i32)) i32;
+extern fn uMinLane(v: @Vector(4, u32)) u32;
+extern fn fMin(v: @Vector(4, f32)) f32;
+extern fn fMax(v: @Vector(4, f32)) f32;
+extern fn twiceInMem(v: @Vector(4, u32)) @Vector(4, u32);
 
 // This is the compilation's root module (see the build command above), so this governs
 // vectors.zig too — Zig picks the panic override by shape on the root module, not per-module.
@@ -100,6 +111,25 @@ fn runCheckedAdd(gpa: std.mem.Allocator) !void {
     }.call);
 }
 
+/// The coverage functions: each argument is one JSON item, parsed by its type.
+fn runArgs(gpa: std.mem.Allocator, comptime name: []const u8, comptime func: anytype) !void {
+    try common.forEachLine(gpa, "vectors", name, struct {
+        fn call(_: std.mem.Allocator, items: []std.json.Value, writer: anytype) !void {
+            const Args = std.meta.ArgsTuple(@TypeOf(func));
+            var args: Args = undefined;
+            inline for (@typeInfo(Args).@"struct".fields, 0..) |f, i| {
+                args[i] = switch (@typeInfo(f.type)) {
+                    .vector => |v| common.vectorFromJson(v.len, v.child, items[i]),
+                    .int => @intCast(items[i].integer),
+                    else => @compileError("runArgs: unsupported argument " ++ @typeName(f.type)),
+                };
+            }
+            const outcome = try common.forkCall(Args, args, func, false);
+            try common.writeResult(writer, outcome);
+        }
+    }.call);
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -113,4 +143,15 @@ pub fn main() !void {
     try runMaxLane(gpa);
     try runReverse(gpa);
     try runCheckedAdd(gpa);
+    try runArgs(gpa, "splatAdd", splatAdd);
+    try runArgs(gpa, "pick", pick);
+    try runArgs(gpa, "interleave", interleave);
+    try runArgs(gpa, "andLanes", andLanes);
+    try runArgs(gpa, "orLanes", orLanes);
+    try runArgs(gpa, "xorLanes", xorLanes);
+    try runArgs(gpa, "minLane", minLane);
+    try runArgs(gpa, "uMinLane", uMinLane);
+    try runArgs(gpa, "fMin", fMin);
+    try runArgs(gpa, "fMax", fMax);
+    try runArgs(gpa, "twiceInMem", twiceInMem);
 }

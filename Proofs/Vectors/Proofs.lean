@@ -12,7 +12,9 @@ is exactly the thing that would make such a claim wrong. `maxLane` gets the prop
 one (`scripts/mutate.sh`'s mutation (i) drops it). `satAdd` gets its per-lane spec. `reverse`
 is a pure shuffle, exact by unfolding. `checkedAdd` has no proof here: characterizing its
 `Vec.map2M` short-circuit on the first overflowing lane needs `Vector.mapM`'s internal
-`go` recursion, out of scope for this milestone.
+`go` recursion, out of scope for this milestone. The coverage functions: `interleave` (a
+two-vector shuffle) is exact, `pick` (`@select`) and `splatAdd` get their per-lane spec,
+`xorLanes` its 4-lane fold; the other reduce kinds and `twiceInMem` have only the diff test.
 
 Local helper lemmas about `Zig.Vec` and `BitVec.sle` are named to move into
 `ZigLean/Vec.lean` / a general `BitVec` lemmas file later (same convention as
@@ -149,3 +151,34 @@ theorem satAdd_lane (a b : Zig.Vec (BitVec 32) 4) (i : Nat) (hi : i < 4) :
   unfold satAdd
   simp only [zig_unfold]
   exact ⟨_, rfl, Zig.Vec.map2_getElem _ a b i hi⟩
+
+/-! ### The coverage functions (`splatAdd` .. `twiceInMem`) -/
+
+/-- `interleave` takes lanes `a[0], b[0], a[1], b[3]`: a mask entry `~i` selects lane `i` of
+the second vector. -/
+theorem interleave_spec (a b : Zig.Vec (BitVec 32) 4) :
+    interleave a b =
+      pure (⟨#v[a.lanes[0]!, b.lanes[0]!, a.lanes[1]!, b.lanes[3]!]⟩ : Zig.Vec (BitVec 32) 4) := by
+  unfold interleave
+  simp only [zig_unfold]
+
+/-- `pick`'s lane `i` is `a`'s lane where the mask is true, else `b`'s. -/
+theorem pick_lane (m : Zig.Vec Bool 4) (a b : Zig.Vec (BitVec 32) 4) (i : Nat) (hi : i < 4) :
+    ∃ r, pick m a b = pure r ∧ r.lanes[i] = if m.lanes[i] then a.lanes[i] else b.lanes[i] := by
+  unfold pick
+  simp only [zig_unfold]
+  exact ⟨_, rfl, by simp [Zig.Vec.select]⟩
+
+/-- `splatAdd` adds the same scalar to every lane (wrapping). -/
+theorem splatAdd_lane (v : Zig.Vec (BitVec 32) 4) (s : BitVec 32) (i : Nat) (hi : i < 4) :
+    ∃ r, splatAdd v s = pure r ∧ r.lanes[i] = Zig.addWrap v.lanes[i] s := by
+  unfold splatAdd
+  simp only [zig_unfold]
+  exact ⟨_, rfl, by rw [Zig.Vec.map2_getElem _ v _ i hi]; simp [Zig.Vec.splat]⟩
+
+/-- `xorLanes` folds all 4 lanes with xor, the last lane too. -/
+theorem xorLanes_spec (v : Zig.Vec (BitVec 32) 4) :
+    xorLanes v = pure (v.lanes[0] ^^^ v.lanes[1] ^^^ v.lanes[2] ^^^ v.lanes[3]) := by
+  unfold xorLanes
+  simp only [zig_unfold]
+  rw [Zig.Vec.reduce_four]

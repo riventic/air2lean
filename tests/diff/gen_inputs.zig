@@ -124,6 +124,9 @@ pub fn main() !void {
     // The threads generators run last, so the earlier inputs stay the same.
     try compat.makePath("tests/diff/threads/inputs");
     try genThreads(rng);
+
+    // The vector coverage generators run last, so the earlier inputs stay the same.
+    try genVectorCoverage(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2052,4 +2055,120 @@ fn genThreads(rng: std.Random) !void {
     try genThreadsCounter(rng);
     try genThreadsRace(rng, "race");
     try genThreadsRace(rng, "xchgRace");
+}
+
+// --- examples/vectors: coverage of the other vector ops ------------------------------------
+
+/// One `@Vector(4, u32)` of edge values (`edgesU`) for the first lines, then random. Line `n`
+/// picks a different edge per lane.
+fn vecU(rng: std.Random, n: usize) [4]u32 {
+    const e = edgesU(u32);
+    if (n < 64) return .{ e[n % 4], e[(n / 4) % 4], e[(n / 16) % 4], e[(n / 2) % 4] };
+    // Small values in some lines, so And/Min see equal and near lanes.
+    if (n % 3 == 0) return .{ rng.uintLessThan(u32, 8), rng.uintLessThan(u32, 8), rng.uintLessThan(u32, 8), rng.uintLessThan(u32, 8) };
+    return .{ rng.int(u32), rng.int(u32), rng.int(u32), rng.int(u32) };
+}
+
+fn vecI(rng: std.Random, n: usize) [4]i32 {
+    const e = edgesI(i32);
+    if (n < 64) return .{ e[n % 7], e[(n / 7) % 7], e[(n / 3) % 7], e[(n / 5) % 7] };
+    return .{ rng.int(i32), rng.int(i32), rng.int(i32), rng.int(i32) };
+}
+
+/// Float edges (NaN, +-0, +-inf, subnormals: `edgesF`) strided per lane, then random.
+fn vecF(rng: std.Random, n: usize) [4]f32 {
+    const e = edgesF(f32);
+    const l = e.len;
+    if (n < 150) return .{ e[n % l], e[(n / 3) % l], e[(n / 7) % l], e[(n / 11) % l] };
+    var a: [4]f32 = undefined;
+    for (0..4) |i| a[i] = if (i % 2 == 0) randFiniteBits(rng, f32) else randExpValue(rng, f32, rng.boolean());
+    return a;
+}
+
+fn writeBoolSlice(writer: anytype, xs: []const bool) !void {
+    try writer.writeAll("[");
+    for (xs, 0..) |x, i| {
+        if (i != 0) try writer.writeAll(",");
+        try writer.writeAll(if (x) "true" else "false");
+    }
+    try writer.writeAll("]");
+}
+
+/// splatAdd, pick, interleave, andLanes, orLanes, xorLanes, minLane, uMinLane, fMin, fMax,
+/// twiceInMem: N lines each.
+fn genVectorCoverage(rng: std.Random) !void {
+    {
+        var file = try openOutV("splatAdd");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            const s: u32 = if (n < 64) edgesU(u32)[n % 4] else rng.int(u32);
+            try w.print(",{d}]\n", .{s});
+        }
+    }
+    {
+        var file = try openOutV("pick");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            // Lines 0..15: every mask.
+            const bits: u4 = if (n < 16) @intCast(n) else rng.int(u4);
+            var m: [4]bool = undefined;
+            for (0..4) |i| m[i] = (bits >> @intCast(i)) & 1 == 1;
+            try w.writeAll("[");
+            try writeBoolSlice(w, &m);
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &vecU(rng, n + 7));
+            try w.writeAll("]\n");
+        }
+    }
+    {
+        var file = try openOutV("interleave");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            // Distinct lanes in every line, so a lane taken from the wrong vector or index shows.
+            const a = [4]u32{ @intCast(4 * n), @intCast(4 * n + 1), @intCast(4 * n + 2), @intCast(4 * n + 3) };
+            const b = if (n < 100) [4]u32{ a[0] + 100000, a[1] + 100000, a[2] + 100000, a[3] + 100000 } else vecU(rng, n);
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &a);
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &b);
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "andLanes", "orLanes", "xorLanes", "uMinLane", "twiceInMem" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll("]\n");
+        }
+    }
+    {
+        var file = try openOutV("minLane");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, i32, &vecI(rng, n));
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "fMin", "fMax" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeFloatSlice(w, f32, &vecF(rng, n));
+            try w.writeAll("]\n");
+        }
+    }
 }
