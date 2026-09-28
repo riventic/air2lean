@@ -1,2 +1,3 @@
 growCircle 30
 shapeArea 30
+writeTable 3

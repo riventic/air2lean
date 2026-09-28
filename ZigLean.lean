@@ -6,4 +6,5 @@ import ZigLean.Loop
 import ZigLean.Mem
 import ZigLean.Packed
 import ZigLean.Simp
+import ZigLean.Union
 import ZigLean.Vec

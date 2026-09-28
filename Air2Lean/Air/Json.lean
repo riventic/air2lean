@@ -178,7 +178,9 @@ def parseTy (j : Json) : Except String Ty := do
     let name ← (← j.getObjVal? "name").getStr?
     if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
-    let tag ← match optField j "tag" with
+    -- A bare union's hidden tag (`safety_tag`) is a tag like the one of a `union(enum)`: the
+    -- layout, the ops and the safety checks are the same.
+    let tag ← match optField j "tag" <|> optField j "safety_tag" with
       | some tj => some <$> tj.getNat?
       | none => pure none
     let fieldsJ ← (← j.getObjVal? "fields").getArr?
@@ -302,11 +304,13 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       | other => throw s!"{fnName}: 'enum' constant of unexpected type {repr other}"
     else if let some uvalJ := optField j "uval" then
       match ty with
-      | .union _ _ (some _) fields =>
+      | .union _ _ _ fields =>
         -- The active field is the tag enum constant's position among the union fields; the
-        -- tag enum lists its names in the same order (`docs/air-json.md`).
+        -- tag enum lists its names in the same order (`docs/air-json.md`). An `extern` or
+        -- `packed` union constant has a `utag` too, unless the compiler made it from bytes.
         let some tagJ := optField j "utag"
-          | throw s!"{fnName}: tagged union constant without 'utag'"
+          | throw s!"{fnName}: union constant without 'utag' (an `extern` or `packed` union \
+              constant without an active field is outside the subset)"
         let .enumTag tagTy v ← parseVal fnName types tagJ
           | throw s!"{fnName}: union constant: 'utag' is not an enum constant"
         let some (.enum _ _ _ tagFields) := types[tagTy]?

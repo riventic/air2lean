@@ -1,0 +1,217 @@
+import Proofs.Layout.Gen
+import ZigLean.Sep.Triple
+import ZigLean.Simp
+
+/-!
+# Unions and error unions in memory (`examples/layout/layout.zig`)
+
+`Num` is a bare union: in `ReleaseSafe` it has a hidden tag, so the translator makes it a tagged
+union. Its encoding reads back as itself (`LawfulEnc Num`), `setNum` writes a value and
+`numInt` reads it back. `bump` adds 1 to the payload of an error union in memory
+(`LawfulEnc (Except ErrName α)`, `ZigLean/Mem/Lemmas.lean`). A write to the `const` global
+`table` throws `.illegal`. The `extern` union facts are general: `Zig.Raw.get_init`,
+`Zig.Raw.get_set` (`ZigLean/Mem/Lemmas.lean`).
+-/
+
+open Layout Zig
+
+/-- The hidden tag of `Num`: its `BitVec 1`. -/
+instance : LawfulEnc NumTag where
+  size_encode v := LawfulEnc.size_encode (α := BitVec 1) v.toBits
+  decode_encode v := by
+    have h : ∀ w : BitVec 1, (Enc.decode (Enc.encode w) : Result (BitVec 1)) = pure w :=
+      LawfulEnc.decode_encode
+    show (do
+      let b : BitVec 1 ← Enc.decode (Enc.encode v.toBits)
+      match NumTag.ofInt? (Zig.val false b) with
+      | some v => pure v
+      | none => throw .illegal : Result NumTag) = pure v
+    rw [h]
+    cases v <;> rfl
+
+/-- The bytes of `Enc.fields 8 [(4, t), (0, x)]`: the tag `t` at 4, the payload `x` at 0. -/
+theorem fields_num {t x : Array Byte} (ht : t.size = 1) (hx : x.size ≤ 4) :
+    (Enc.fields 8 [(4, t), (0, x)]).size = 8 ∧
+      (Enc.fields 8 [(4, t), (0, x)]).extract 4 (4 + t.size) = t ∧
+      (Enc.fields 8 [(4, t), (0, x)]).extract 0 (0 + x.size) = x := by
+  have h1 : (writeBytes (Array.replicate 8 Byte.undef) 4 t).size = 8 := by
+    rw [writeBytes_size _ _ _ (by simp; omega)]; simp
+  simp only [Enc.fields, List.foldl]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [writeBytes_size _ _ _ (by omega), h1]
+  · rw [extract_writeBytes_disjoint _ _ _ _ _ (by omega) (by omega) (by omega)]
+    exact extract_writeBytes _ 4 t (by simp; omega)
+  · exact extract_writeBytes _ 0 x (by omega)
+
+/-- The bare union `Num` in memory: the hidden tag at byte 4, the payload at byte 0. -/
+instance : LawfulEnc Num where
+  size_encode v := by
+    cases v with
+    | int x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
+        (by rw [LawfulEnc.size_encode x]; decide)).1
+    | small x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
+        (by rw [LawfulEnc.size_encode x]; decide)).1
+  decode_encode v := by
+    cases v with
+    | int x =>
+      obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .int)
+        (by rw [LawfulEnc.size_encode x]; decide)
+      rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
+      show (do
+        let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 4
+        match t with
+        | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0))
+        | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.int x)
+      simp only [Enc.decodeAt]
+      rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
+    | small x =>
+      obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .small)
+        (by rw [LawfulEnc.size_encode x]; decide)
+      rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
+      show (do
+        let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 4
+        match t with
+        | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0))
+        | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.small x)
+      simp only [Enc.decodeAt]
+      rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
+
+/-- The payload of a `Num` that holds `int`. -/
+theorem Num.decode_int {bs : Array Byte} {x : BitVec 32} (h : (Enc.decode bs : Result Num) = pure (Num.int x)) :
+    (Enc.decodeAt bs 0 : Result (BitVec 32)) = pure x := by
+  change (do
+    let t : NumTag ← Enc.decodeAt bs 4
+    match t with
+    | .int => pure (Num.int (← Enc.decodeAt bs 0))
+    | .small => pure (Num.small (← Enc.decodeAt bs 0)) : Result Num) = _ at h
+  generalize (Enc.decodeAt bs 4 : Result NumTag) = rt at h
+  generalize (Enc.decodeAt bs 0 : Result (BitVec 32)) = rx at h ⊢
+  generalize (Enc.decodeAt bs 0 : Result (BitVec 8)) = ry at h
+  match rt, rx, ry, h with
+  | some (.ok .int), some (.ok v), _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h; cases h; rfl
+  | some (.ok .int), some (.error _), _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | some (.ok .int), none, _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | some (.ok .small), _, some (.ok _), h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | some (.ok .small), _, some (.error _), h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | some (.ok .small), _, none, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | some (.error _), _, _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+  | none, _, _, h => simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+
+/-- `numInt` reads the payload of a `Num` that holds `int`. -/
+theorem numInt_spec (p : Ptr) (x : BitVec 32) :
+    Triple (pts p 4 (Num.int x)) (numInt p) (fun r => ⌜r = x⌝ ∗ pts p 4 (Num.int x)) := by
+  apply Triple.of_run
+  intro m hP hF hd hm hp hst
+  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
+  obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := id hp
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 0) (k := 0) (n := 4) (a := 4)
+    hb hmA (by simp [Ptr.add]) (by decide) (by rw [hs]; decide) (by simpa using ha)
+  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 0) (p.off.toNat + 0 + Enc.size (BitVec 32))) =
+      pure x := by
+    rw [show Enc.size (BitVec 32) = 4 from rfl, hx]; exact Num.decode_int hv
+  have hl2 := load_run (α := BitVec 32) hacc hv' (noRace_of_singleThread hstA _ _ _ _)
+  refine ⟨x, mA.recordAt b (p.off.toNat + 0) (Enc.size (BitVec 32)) .read, hP, ?_, hd, ?_,
+    sep_lift.mpr ⟨rfl, hp⟩, singleThread_recordAt hstA _ _ _ _⟩
+  · simp only [StateT.run] at hl hl2
+    simp [numInt, zig_unfold, hl, hl2, Num.tag]
+  · funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
+
+/-- A `Num` from its tag and payload bytes. -/
+theorem Num.decode_of_int {bs : Array Byte} {x : BitVec 32}
+    (ht : (Enc.decodeAt bs 4 : Result NumTag) = pure .int)
+    (hx : (Enc.decodeAt bs 0 : Result (BitVec 32)) = pure x) :
+    (Enc.decode bs : Result Num) = pure (Num.int x) := by
+  change (do
+    let t : NumTag ← Enc.decodeAt bs 4
+    match t with
+    | .int => pure (Num.int (← Enc.decodeAt bs 0))
+    | .small => pure (Num.small (← Enc.decodeAt bs 0)) : Result Num) = _
+  rw [ht, hx]; rfl
+
+/-- `setNum p true x` writes the tag `int` and the payload `x`: the old value does not matter. -/
+theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
+    Triple (pts p 4 n) (setNum p true x) (fun _ => pts p 4 (Num.int x)) := by
+  apply Triple.of_run
+  intro m hP hF hd hm hp hst
+  obtain ⟨A, S, K, bs, ha, hs, -, hb, hK⟩ := hp
+  have hs8 : bs.size = 8 := hs
+  have ht1 : (Enc.encode NumTag.int).size = 1 := LawfulEnc.size_encode _
+  have hx4 : (Enc.encode x).size = 4 := LawfulEnc.size_encode x
+  obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
+    (bs' := Enc.encode NumTag.int) hb hm hd rfl (by omega) (by omega) (Nat.mod_one _) hst hK
+  have hs₁ : (writeBytes bs 4 (Enc.encode NumTag.int)).size = 8 := by
+    rw [writeBytes_size _ _ _ (by omega), hs8]
+  obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
+    (bs' := Enc.encode x) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (by simpa using ha) hst₁ hK
+  refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
+  · have e₁ : (store 1 (p.add 4) NumTag.int).run m = pure ((), m₁) := hr₁
+    have e₂ : (store 4 (p.add 0) x).run m₁ = pure ((), m₂) := hr₂
+    simp only [StateT.run] at e₁ e₂
+    simp [setNum, zig_unfold, e₁, e₂]
+  · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
+  · apply Num.decode_of_int
+    · have e := extract_writeBytes_disjoint (writeBytes bs 4 (Enc.encode NumTag.int)) 0
+        (Enc.encode x) 4 1 (by omega) (by omega) (by omega)
+      have e' := extract_writeBytes bs 4 (Enc.encode NumTag.int) (by omega)
+      rw [ht1] at e'
+      simp only [Enc.decodeAt]
+      rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e, e']
+      exact LawfulEnc.decode_encode _
+    · have e := extract_writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)
+        (by omega)
+      rw [hx4] at e
+      simp only [Enc.decodeAt]
+      rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e]
+      exact LawfulEnc.decode_encode x
+
+/-- `bump` adds 1 to the payload of an error union in memory (`ParseError!u8`: the error code
+at 0, the payload at 2). -/
+theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
+    Triple (pts p 2 (Except.ok x : Except ErrName (BitVec 8))) (bump p)
+      (fun _ => pts p 2 (Except.ok (x + 1) : Except ErrName (BitVec 8))) := by
+  apply Triple.of_run
+  intro m hP hF hd hm hp hst
+  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
+  obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
+  have hs4 : bs.size = 4 := hs
+  have hpo : (errUnionOffsets (Enc.size (BitVec 8)) (Enc.align (BitVec 8))).2 = 2 := by decide
+  have heo : (errUnionOffsets (Enc.size (BitVec 8)) (Enc.align (BitVec 8))).1 = 0 := by decide
+  obtain ⟨hcode, hpay⟩ := errUnion_decode_ok hv
+  rw [hpo] at hpay
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 2) (k := 2) (n := 1) (a := 1)
+    hb hmA rfl (by decide) (by omega) (Nat.mod_one _)
+  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 2) (p.off.toNat + 2 + Enc.size (BitVec 8))) =
+      pure x := by
+    rw [show Enc.size (BitVec 8) = 1 from rfl, hx]; exact hpay
+  have hl2 := load_run (α := BitVec 8) hacc hv' (noRace_of_singleThread hstA _ _ _ _)
+  have hmB : (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read).heap = hP ∪ hF := by funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
+  have hx1 : (Enc.encode (x + 1)).size = 1 := LawfulEnc.size_encode _
+  obtain ⟨mC, hr₃, hstC, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p.add 2) (k := 2) (a := 1)
+    (bs' := Enc.encode (x + 1)) hb hmB hd rfl (by omega) (by omega) (Nat.mod_one _)
+    (singleThread_recordAt hstA _ _ _ _) hK
+  refine ⟨(), mC, h₃, ?_, hd₃, hm₃, ⟨A, S, K, _, ha, ?_, ?_, hb₃, hK⟩, hstC⟩
+  · have e₃ : (store 1 (p.add 2) (x + 1#8)).run
+        (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read) = pure ((), mC) := hr₃
+    simp only [StateT.run] at hl hl2 e₃
+    have hpp : errPayloadPtr (BitVec 8) p = p.add 2 := by simp [errPayloadPtr, hpo]
+    simp [bump, zig_unfold, hl, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
+  · rw [writeBytes_size _ _ _ (by omega)]; exact hs
+  · have := errUnion_decode_setPayload (bs := bs) (x + 1) hs hcode
+    rwa [hpo] at this
+
+/-- A write to the `const` table through `@constCast` throws `.illegal`: its block (3) is
+read-only. -/
+theorem writeTable_illegal (i : BitVec 64) (v : BitVec 32) (h : i.toNat < 3) :
+    (writeTable i v).run mem0 = throw .illegal := by
+  have hb : mem0.blocks[3]? = some ⟨Enc.encode (#v[(10 : BitVec 32), (20 : BitVec 32),
+      (30 : BitVec 32)] : Vector (BitVec 32) 3), 4, .constGlobal, true, 4104⟩ := by
+    simp [mem0, Mem.ofGlobals, Mem.addGlobal, alignUp]
+  have hacc : mem0.access ((⟨some 3, 0⟩ : Ptr).elem 4 i) (Enc.size (BitVec 32)) 4 =
+      pure (3, _, ((⟨some 3, 0⟩ : Ptr).elem 4 i).off.toNat) :=
+    access_of rfl hb rfl (by simp [Ptr.elem, Ptr.add]; omega)
+      (by simp [Ptr.elem, Ptr.add, Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign,
+        alignUp]; omega)
+      (by simp [Ptr.elem, Ptr.add]; omega)
+  have hst := store_constGlobal v hacc rfl
+  simp only [StateT.run] at hst
+  simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst]

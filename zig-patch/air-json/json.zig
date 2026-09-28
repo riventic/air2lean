@@ -168,6 +168,14 @@ const Compat = struct {
         };
     }
 
+    /// The hidden tag of a bare union (`ReleaseSafe`): the tag type if the layout has a tag but
+    /// the union is not a `union(enum)`. 0.16.0 renamed `unionTagTypeSafety` to
+    /// `unionTagTypeRuntime`.
+    fn unionSafetyTag(zcu: *Zcu, ty: Type) ?Type {
+        if (ty.unionTagType(zcu) != null) return null;
+        return if (v16) ty.unionTagTypeRuntime(zcu) else ty.unionTagTypeSafety(zcu);
+    }
+
     const NavInfo = struct {
         ty: InternPool.Index,
         is_const: bool,
@@ -1302,6 +1310,9 @@ const W = struct {
                 const names_ty = ty.unionTagTypeHypothetical(zcu);
                 if (ty.unionTagType(zcu)) |tag_ty| {
                     try w.field("tag");
+                    try w.writeTypeRef(tag_ty);
+                } else if (Compat.unionSafetyTag(zcu, ty)) |tag_ty| {
+                    try w.field("safety_tag");
                     try w.writeTypeRef(tag_ty);
                 }
                 try w.field("fields");

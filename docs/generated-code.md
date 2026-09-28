@@ -64,7 +64,7 @@ Zig keeps the payload bytes when the tag changes, and the Zig versions write a u
 
 A `switch` on an exhaustive enum that names every value becomes a `match` with one arm per case and no `else` arm (its `corruptSwitch` panic cannot happen). Any other `switch` is an `if` chain.
 
-A union without a tag (bare, `extern`, `packed`) is outside the subset.
+A bare union has a hidden tag in `ReleaseSafe` (the exporter's `safety_tag`): it is a tagged union, and a read of a field that is not active panics (`inactiveUnionField`). An `extern` or `packed` union is its bytes (§Casts, layout and function pointers).
 
 ### Vectors
 
@@ -155,7 +155,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   ...
 ```
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global is not read-only in the model: a write through `@constCast` is illegal behaviour in Zig, but the model does not throw `.illegal` for it. `threadlocal` and `extern` globals are outside the subset.
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` and `extern` globals are outside the subset.
 
 ### Casts, layout and function pointers
 
@@ -172,9 +172,11 @@ A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` inst
 
 An **`extern` struct** uses the exporter's field offsets, as every struct does.
 
-A **tagged union** in memory has its tag and the active field's payload at the compiler's offsets: the part with the larger alignment first, the tag if the alignments are equal (`Check.lean`'s `unionLayout`). The translator compares the resulting size and alignment with the exporter's. A tag value without a name throws `.illegal`. A bare union (in `ReleaseSafe` it has a hidden safety tag), an `extern` union and a `packed` union are outside the subset in memory.
+A **tagged union** in memory has its tag and the active field's payload at the compiler's offsets: the part with the larger alignment first, the tag if the alignments are equal (`Check.lean`'s `unionLayout`). The translator compares the resulting size and alignment with the exporter's. A tag value without a name throws `.illegal`. A bare union is a tagged union (§Enums and unions).
 
 An **error union** `E!T` in memory is `Zig.Enc (Except Zig.ErrName T)` (`ZigLean/Mem/Enc.lean`): a 2-byte error code and the payload, the payload first if its alignment is more than 2. The compiler numbers the errors per compilation, so the model does not know the code of an error. The code of error `e` is the 2 bytes `errFrag e 0`, `errFrag e 1`; 0 is no error; any other integer code throws `.unspecified`. The differential test compares an `errFrag` byte as a wildcard. `is_err_ptr`, `unwrap_errunion_payload_ptr`, `unwrap_errunion_err_ptr` and `errunion_payload_ptr_set` are `Zig.errIsErrAt`, `Zig.errPayloadPtr`, `Zig.errCodeAt` and `Zig.errSetOk`.
+
+An **`extern` or `packed` union** is a Lean `structure` with the one field `bytes : Vector Zig.Byte n` (`n`: its size; `ZigLean/Union.lean`). Every field starts at byte 0. `U.get_f` reads field `f` from the first bytes; `U.modify_f` writes it and keeps the bytes after it. An `extern` field is its `Zig.Enc` encoding (`Zig.Raw`): a read that meets an `undef` byte throws `.unspecified`. A `packed` field is its `Zig.Packed` bits at bit 0 (`Zig.PackedU`); in 0.16.0 all fields have the same bit width. The model has undefined bytes, not undefined bits: a `packed` write keeps the bits above the field in its last byte, or makes them 0 if that byte is `undef`. A `packed` union as a field of a packed struct, and an `extern` or `packed` union constant without an active field, are outside the subset.
 
 A **function pointer** points to a 1-byte global block of its function in `mem0`. Only the functions whose address the program takes (a global whose initial value is a function) have a block. The call graph and the memory analysis count each of them as a callee of every indirect call through a pointer of its type.
 

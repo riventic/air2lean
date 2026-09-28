@@ -55,6 +55,9 @@ inductive BlockKind where
   | stack
   | heap
   | global
+  /-- A `const` global, a string literal or a function: read-only. A write to it (through
+  `@constCast`) throws `.illegal`. -/
+  | constGlobal
   deriving DecidableEq, Repr
 
 structure Block where
@@ -198,6 +201,11 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
       if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0
       then pure (b, blk, p.off.toNat) else throw .illegal
 
+/-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/
+def Mem.accessW (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) := do
+  let r ← m.access p n align
+  if r.2.1.kind = .constGlobal then throw .illegal else pure r
+
 /-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`). -/
 def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
@@ -234,7 +242,7 @@ def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Arr
 
 def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) : MemM Unit := do
   let m ← get
-  let (b, blk, o) ← m.access p bs.size align
+  let (b, blk, o) ← m.accessW p bs.size align
   recordAccess b o bs.size kind
   let m ← get
   set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
@@ -362,16 +370,17 @@ def ptrLe (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) ≤ (← p
 
 /-! ## Globals -/
 
-/-- `m` with one more global block: `bytes` at the next free address, aligned to `align`. -/
-def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) : Mem :=
+/-- `m` with one more global block: `bytes` at the next free address, aligned to `align`.
+`kind`: `.global` for a `var`, `.constGlobal` for anything else. -/
+def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) (kind : BlockKind) : Mem :=
   let addr := alignUp m.nextAddr align
-  { blocks := m.blocks.push { bytes, align, kind := .global, live := true, addr }
+  { blocks := m.blocks.push { bytes, align, kind, live := true, addr }
     nextAddr := addr + bytes.size + 1 }
 
-/-- The memory at program start: block `k` is global `k`, with its initial bytes and
-alignment. -/
-def Mem.ofGlobals (gs : List (Array Byte × Nat)) : Mem :=
-  gs.foldl (fun m (bs, a) => m.addGlobal bs a) {}
+/-- The memory at program start: block `k` is global `k`, with its initial bytes, alignment
+and kind. -/
+def Mem.ofGlobals (gs : List (Array Byte × Nat × BlockKind)) : Mem :=
+  gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) {}
 
 /-! ## Calls -/
 

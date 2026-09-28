@@ -47,11 +47,13 @@ set_option maxHeartbeats 800000 in
 /-- `swap` exchanges two `u32` values whose bytes do not overlap. If `p = q`, the value stays
 (forced by `hxv`/`hyv`: the same block/offset decodes to one value). `NoRace` for the two reads
 (`hnr1`/`hnr2`) and the two writes (`hnr3`/`hnr4`) — the four ops `swap` performs — is an explicit
-hypothesis, as everywhere in this file (`ZigLean/Mem/Lemmas.lean`'s `NoRace`). Four branches, each
+hypothesis, as everywhere in this file (`ZigLean/Mem/Lemmas.lean`'s `NoRace`); so is that neither
+block is a `const` global (`hK`/`hK'`, a write to one throws `.illegal`). Four branches, each
 composing several `Enc.size (BitVec 32)`-vs-`4` defeq checks, need more than the default budget. -/
 theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk blk' : Block}
     {o o' : Nat}
     (hp : m.access p 4 4 = pure (b, blk, o)) (hq : m.access q 4 4 = pure (c, blk', o'))
+    (hK : blk.kind ≠ .constGlobal) (hK' : blk'.kind ≠ .constGlobal)
     (hxv : Enc.decode (blk.bytes.extract o (o + 4)) = pure x)
     (hyv : Enc.decode (blk'.bytes.extract o' (o' + 4)) = pure y)
     (hd : p = q ∨ p.block ≠ q.block ∨ p.off + 4 ≤ q.off ∨ q.off + 4 ≤ p.off)
@@ -81,7 +83,7 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
     access_recordAt.trans (access_recordAt.trans hp)
   have hq₂ : ((m.recordAt b o 4 .read).recordAt c o' 4 .read).access q 4 4 = pure (c, blk', o') :=
     access_recordAt.trans hq₁
-  have h₁ := store_run y hp₂ hnr3
+  have h₁ := store_run y hp₂ hK hnr3
   have hyw : Enc.decode
       (({ blk with bytes := writeBytes blk.bytes o (Enc.encode y) } : Block).bytes.extract
         o (o + 4)) = pure y := decode_writeBytes32 blk.bytes o y (by omega)
@@ -94,7 +96,7 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
       have h := hxv.symm.trans hyv; injection h with h; injection h
     subst hxy
     have hp₃ := access_store_same x hp₂ hp₂
-    have h₂ := store_run x hp₃ hnr4
+    have h₂ := store_run x hp₃ hK hnr4
     have hbx : (writeBytes blk.bytes o (Enc.encode x)).size = blk.bytes.size :=
       writeBytes_size blk.bytes o (Enc.encode x) (by rw [LawfulEnc.size_encode x]; omega)
     exact ⟨_, _, _, swap_run hx hy h₁ h₂, access_store_same x hp₃ hp₃,
@@ -117,7 +119,7 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
       subst hblk
       have hp₃ := access_store_same y hp₂ hp₂
       have hq₃ := access_store_same y hp₂ hq₂
-      have h₂ := store_run x hq₃ hnr4
+      have h₂ := store_run x hq₃ hK hnr4
       refine ⟨_, _, _, swap_run hx hy h₁ h₂, access_store_same x hq₃ hp₃, ?_,
         access_store_same x hq₃ hq₃, ?_⟩
       · have hby : (writeBytes blk.bytes o (Enc.encode y)).size = blk.bytes.size :=
@@ -133,7 +135,7 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
       -- (`access_store_other`), so the two reads-back are independent.
       have hq₃ := access_store_other y hp₂ hq₂ hbc
       have hp₃ := access_store_same y hp₂ hp₂
-      have h₂ := store_run x hq₃ hnr4
+      have h₂ := store_run x hq₃ hK' hnr4
       refine ⟨_, _, _, swap_run hx hy h₁ h₂, access_store_other x hq₃ hp₃ (Ne.symm hbc), hyw,
         access_store_same x hq₃ hq₃, decode_writeBytes32 blk'.bytes o' x (by omega)⟩
 
@@ -165,7 +167,7 @@ theorem maxPtr_spec {m₁ : Mem} (p q : Ptr) (m : Mem) (x y : BitVec 32)
 /-- `delay` adds `d` to the job's `duration` (at offset 0). `NoRace` for the read (`hnr1`) and the
 write (`hnr2`) is an explicit hypothesis, as in `swap_spec`. -/
 theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Block} {o : Nat}
-    (hj : m.access (j.add 0) 4 4 = pure (b, blk, o))
+    (hj : m.access (j.add 0) 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hxv : Enc.decode (blk.bytes.extract o (o + 4)) = pure x) (h : x.toNat + d.toNat < 2 ^ 32)
     (hnr1 : NoRace m b o 4 .read) (hnr2 : NoRace (m.recordAt b o 4 .read) b o 4 .write) :
     ∃ m' blk', (delay j d).run m = pure ((), m') ∧
@@ -179,7 +181,7 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
   rw [hsz] at hx
   have hj₁ : (m.recordAt b o 4 .read).access (j.add 0) 4 4 = pure (b, blk, o) :=
     access_recordAt.trans hj
-  have hs := store_run (x + d) hj₁ hnr2
+  have hs := store_run (x + d) hj₁ hK hnr2
   refine ⟨_, _, ?_, access_store_same (x + d) hj₁ hj₁, decode_writeBytes32 blk.bytes o (x + d) ?_⟩
   · simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx hs
     have hno : ¬ 2 ^ 32 ≤ x.toNat + d.toNat := by omega

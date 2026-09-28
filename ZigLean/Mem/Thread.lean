@@ -90,7 +90,7 @@ with it as a whole, not with a separate read-phase and write-phase). Returns the
 the op. `commute`: `RmwOp.group`. -/
 def atomicRmw {n : Nat} (op : RmwOp) (signed : Bool) (align : Nat) (p : Ptr) (v : BitVec n)
     (commute : Option RmwGroup) : MemM (BitVec n) := do
-  let (b, blk, o) ← (← get).access p (intSize n) align
+  let (b, blk, o) ← (← get).accessW p (intSize n) align
   let old ← intOfBytes n (blk.bytes.extract o (o + intSize n))
   recordAccess b o (intSize n) (.atomicWrite commute)
   let m ← get
@@ -105,7 +105,7 @@ success (the store happened), `some` of the current value on failure. A successf
 reads, `.atomicRead`. -/
 def cmpxchg {n : Nat} (align : Nat) (p : Ptr) (expected new : BitVec n) :
     MemM (Option (BitVec n)) := do
-  let (b, blk, o) ← (← get).access p (intSize n) align
+  let (b, blk, o) ← (← get).accessW p (intSize n) align
   let old ← intOfBytes n (blk.bytes.extract o (o + intSize n))
   if old = expected then
     recordAccess b o (intSize n) (.atomicWrite none)

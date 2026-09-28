@@ -113,6 +113,31 @@ fn argBumpDigit(_: []common.Buf, it: []std.json.Value) struct { u8 } {
     return .{@intCast(it[0].integer)};
 }
 
+fn argSetNum(b: []common.Buf, it: []std.json.Value) struct { *layout.Num, bool, u32 } {
+    return .{ ptr(*layout.Num, b, it[0]), it[1].bool, @intCast(it[2].integer) };
+}
+fn argNumInt(b: []common.Buf, it: []std.json.Value) struct { *const layout.Num } {
+    return .{ptr(*const layout.Num, b, it[0])};
+}
+fn argNumRoundTrip(_: []common.Buf, it: []std.json.Value) struct { bool, u32 } {
+    return .{ it[0].bool, @intCast(it[1].integer) };
+}
+fn argWordByte(_: []common.Buf, it: []std.json.Value) struct { u32, u2 } {
+    return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
+}
+fn argSetHalf(b: []common.Buf, it: []std.json.Value) struct { *layout.Word, u16 } {
+    return .{ ptr(*layout.Word, b, it[0]), @intCast(it[1].integer) };
+}
+fn argRegSigned(_: []common.Buf, it: []std.json.Value) struct { u8 } {
+    return .{@intCast(it[0].integer)};
+}
+fn argSetRegFlags(b: []common.Buf, it: []std.json.Value) struct { *layout.Reg, layout.Flags } {
+    return .{ ptr(*layout.Reg, b, it[0]), flagsOf(@intCast(it[1].integer)) };
+}
+fn argWriteTable(_: []common.Buf, it: []std.json.Value) struct { usize, u32 } {
+    return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -144,4 +169,12 @@ pub fn main() !void {
     try run(gpa, "shapeArea", layout.shapeArea, argShapeArea);
     try run(gpa, "growCircle", layout.growCircle, argGrowCircle);
     try run(gpa, "bumpDigit", layout.bumpDigit, argBumpDigit);
+    try run(gpa, "setNum", layout.setNum, argSetNum);
+    try run(gpa, "numInt", layout.numInt, argNumInt);
+    try run(gpa, "numRoundTrip", layout.numRoundTrip, argNumRoundTrip);
+    try run(gpa, "wordByte", layout.wordByte, argWordByte);
+    try run(gpa, "setHalf", layout.setHalf, argSetHalf);
+    try run(gpa, "regSigned", layout.regSigned, argRegSigned);
+    try run(gpa, "setRegFlags", layout.setRegFlags, argSetRegFlags);
+    try run(gpa, "writeTable", layout.writeTable, argWriteTable);
 }

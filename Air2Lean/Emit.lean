@@ -211,6 +211,14 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
 def tagLit (bits : Nat) (v : Int) : String :=
   if v < 0 then s!"(-({(-v).toNat} : BitVec {bits}))" else s!"({v.toNat} : BitVec {bits})"
 
+/-- The `Zig.Raw` (`extern`) or `Zig.PackedU` (`packed`) namespace of an `extern` or `packed`
+union (`ZigLean/Union.lean`). -/
+def rawUnionNs (layout : String) : String := if layout == "packed" then "Zig.PackedU" else "Zig.Raw"
+
+/-- `union_init` of an `extern` or `packed` union `u` (`size` bytes) with the field value `v`. -/
+def rawUnionInit (u layout : String) (size : Nat) (v : String) : String :=
+  s!"(⟨{rawUnionNs layout}.init {size} {v}⟩ : {u})"
+
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
 def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
@@ -219,6 +227,10 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
                s!"  align := {s.layout.align.getD 1}"]
   match s.ty with
+  | .union _ _ none _ =>
+    -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`).
+    String.intercalate "\n" (head ++
+      ["  encode v := v.bytes.toArray", s!"  decode bs := pure ⟨Zig.Raw.ofArray {size} bs⟩"])
   | .union _ _ (some tag) fields =>
     -- The tag and the active field's payload at `unionOffsets` (M20).
     let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2))).getD (0, 0)
@@ -286,6 +298,18 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
           s!"def {n}.ofInt? (v : Int) : Option {n} :=",
           s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
           s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}"])
+  | .union _ layout none fields =>
+    -- `extern`, `packed`: the bytes; every field at byte 0 (`ZigLean/Union.lean`).
+    let size := s.layout.size.getD 0
+    let ns := rawUnionNs layout
+    let perField := fields.toList.flatMap fun (f, id) =>
+      let t := tyStr id
+      ["", s!"def {n}.get_{f} (u : {n}) : Zig.Result ({t}) := {ns}.get ({t}) u.bytes", "",
+       s!"def {n}.modify_{f} (g : {t} → {t}) (u : {n}) : {n} :=",
+       s!"  ⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"]
+    String.intercalate "\n"
+      ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
+        "  deriving Repr, Inhabited, DecidableEq"] ++ perField)
   | .union _ _ tag fields =>
     let tagName := match tag.bind (s.srcTypes[·]?) with
       | some t => emitTy structNames s.srcTypes t
@@ -347,9 +371,14 @@ partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array St
   | _ => acc
 
 /-- The named types that get a `Zig.Enc` instance: those that a pointer of a function that uses
-memory can point to, and the types of the globals. A pure function never has one, so v0 translations do not change. -/
+memory can point to, the types of the globals, and every `extern` or `packed` union with its
+field types. A v0 function never has one, so v0 translations do not change. -/
 def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :=
   funcs.foldl (init := #[]) fun acc f =>
+    -- An `extern` or `packed` union reads its fields with `Zig.Enc`, also in a pure function.
+    let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
+      | .union _ _ none _ => memNamed f.types f.layouts acc id
+      | _ => acc
     if !memFuncs.contains f.name then acc
     else
       let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts acc g.ty) acc
@@ -528,6 +557,10 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .unionVal tid idx p =>
     let u := fc.emitTyOf tid
     match fc.tyOfId tid with
+    | .union _ layout none fields =>
+      if idx < fields.size then
+        rawUnionInit u layout ((fc.layouts[tid]?.bind (·.size)).getD 0) (fc.resolveVal env p)
+      else "default"
     | .union _ _ _ fields =>
       match fields[idx]? with
       | some (f, fty) =>
@@ -723,6 +756,8 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
   -- Every field of a tagged union is its payload.
   | .union _ _ (some tag) fields =>
     ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
+  -- Every field of an `extern` or `packed` union is at offset 0.
+  | .union _ _ none _ => 0
   | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
 
 def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
@@ -1415,10 +1450,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.tag {rv a})"
     (env, some l)
   | .unionInit idx a =>
-    let expr := match fc.unionField? (fc.tyOfId inst.ty) idx with
-      | some (u, f, true) => s!"pure {u}.{mangleField f}"
-      | some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
-      | none => "(panic! \"air2lean: union_init of a non-union type\")"
+    let expr := match fc.tyOfId inst.ty, fc.unionField? (fc.tyOfId inst.ty) idx with
+      | .union _ layout none _, some (u, _, _) =>
+        s!"pure {rawUnionInit u layout ((fc.layouts[inst.ty]?.bind (·.size)).getD 0) (rv a)}"
+      | _, some (u, f, true) => s!"pure {u}.{mangleField f}"
+      | _, some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
+      | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .alloc =>
     if fc.escaping.contains inst.id then
@@ -1874,6 +1911,8 @@ structure ProgGlobal where
   /-- The initial bytes, a term of type `Array Zig.Byte`. -/
   bytes : String
   align : Nat
+  /-- A `var`: a writable block. Anything else is read-only (`Zig.BlockKind.constGlobal`). -/
+  isVar : Bool := false
 
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
@@ -1923,7 +1962,7 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
       | continue
     let some g := f.globals.find? (·.name == some n) | continue
     out := out.push { label := n, bytes := (mkFc f ids[k]!.2).globalBytes g,
-                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1 }
+                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -1972,7 +2011,7 @@ def nameBytes (s : String) : String :=
 /-- `mem0`: the memory at program start, one block per global. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
   let lines := gs.toList.zipIdx.map fun (g, k) =>
-    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align})"
+    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align}, {if g.isVar then ".global" else ".constGlobal"})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
   s!"/-- The memory at program start: block `k` is global `k`. -/\n\
     def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"

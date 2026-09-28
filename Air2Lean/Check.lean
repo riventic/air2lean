@@ -84,8 +84,14 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .union name layout tag fields =>
     match tag with
     | none =>
-      throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
-        subset (only a tagged `union(enum)`)"
+      -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). A bare union without a tag is not
+      -- `ReleaseSafe` (the exporter writes its hidden tag, `safety_tag`).
+      unless layout == "extern" || layout == "packed" do
+        throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
+          subset"
+      if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
+        throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
+          integer, a `bool` or a packed struct: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
@@ -163,9 +169,12 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
     pure (s, a)
-  | some (.union name ..) =>
-    throw s!"union '{name}' without a tag (a bare union has a hidden safety tag; an `extern` or \
-      `packed` union has no tag)"
+  | some (.union name layout none fields) =>
+    unless layout == "extern" || layout == "packed" do
+      throw s!"union '{name}' ({layout}) without a tag"
+    for (_, fty) in fields do
+      let _ ← modelLayout types layouts fty
+    exported
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
 
@@ -483,6 +492,10 @@ def check (f : Func) : Except String Unit := do
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
   checkTy f.name f.types f.layouts 0 f.ret
+  -- An `extern` or `packed` union is its bytes, also as a value: the model must encode it.
+  for (t, id) in f.types.zipIdx do
+    if let .union _ _ none _ := t then
+      checkMemTy f.name f.types f.layouts 0 id
   let insts := f.allInsts
   let escaping := escapingAllocs f
   let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p

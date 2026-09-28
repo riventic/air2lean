@@ -1,11 +1,14 @@
 import ZigLean.Mem.Enc
+import ZigLean.Union
 import ZigLean.Simp
 
 /-!
 # Lemmas about memory
 
 The run of `loadBytes`/`storeBytes` when the access succeeds, what a store does to other
-accesses, and the `u32` round trip. `M17` builds separation logic on these.
+accesses, and that a store to a `const` global throws `.illegal`. The round trips
+(`LawfulEnc`) of some integer widths and of error unions, and a field read of an `extern` union.
+`M17` builds separation logic on these.
 -/
 
 namespace Zig
@@ -258,10 +261,11 @@ theorem access_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} {q :
 
 theorem storeBytes_run {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b : BlockId}
     {blk : Block} {o : Nat} {kind : AccessKind} (h : m.access p bs.size a = pure (b, blk, o))
-    (hnr : NoRace m b o bs.size kind) :
+    (hK : blk.kind ≠ .constGlobal) (hnr : NoRace m b o bs.size kind) :
     (storeBytes p a bs kind).run m = pure ((), (m.recordAt b o bs.size kind).write b blk o bs) := by
+  have hw : m.accessW p bs.size a = pure (b, blk, o) := by simp [Mem.accessW, h, hK]
   unfold storeBytes recordAccess NoRace at *
-  simp only [h, Mem.write, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set,
+  simp only [hw, Mem.write, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set,
     StateT.set, MonadStateOf.set, pure, StateT.pure, StateT.run, liftM, monadLift,
     MonadLift.monadLift, StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     Option.bind_some, hnr, Mem.recordAt]
@@ -314,10 +318,20 @@ theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId
 
 theorem store_run {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId}
     {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
-    (hnr : NoRace m b o (Enc.size α) .write) :
+    (hK : blk.kind ≠ .constGlobal) (hnr : NoRace m b o (Enc.size α) .write) :
     (store a p v).run m = pure ((), (m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)) := by
   rw [show Enc.size α = (Enc.encode v).size from (LawfulEnc.size_encode v).symm] at h hnr ⊢
-  exact storeBytes_run h hnr
+  exact storeBytes_run h hK hnr
+
+/-- A store to a `const` global throws `.illegal` (`Mem.accessW`). -/
+theorem store_constGlobal {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat}
+    {b : BlockId} {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
+    (hK : blk.kind = .constGlobal) : (store a p v).run m = throw .illegal := by
+  rw [show Enc.size α = (Enc.encode v).size from (LawfulEnc.size_encode v).symm] at h
+  simp [store, storeBytes, Mem.accessW, h, hK, StateT.run, bind, StateT.bind, get, getThe,
+    MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, pure,
+    ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, throw, throwThe,
+    MonadExceptOf.throw]
 
 /-- After `store_run`, an access to the same block sees the new bytes, at its own offset (which
 may differ from the store's, e.g. two disjoint fields of one struct). Composes `access_recordAt`
@@ -459,6 +473,42 @@ instance : LawfulEnc (BitVec 8) where
     simp only [BitVec.toNat_ofNat]
     omega
 
+instance : LawfulEnc (BitVec 16) where
+  size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
+  decode_encode v := by
+    have hr : Array.range 2 = #[0, 1] := by decide
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
+      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    congr 2
+    apply BitVec.eq_of_toNat_eq
+    have := v.isLt
+    simp only [Nat.shiftRight_eq_div_pow, BitVec.toNat_ofNat]
+    omega
+
+instance : LawfulEnc (BitVec 2) where
+  size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
+  decode_encode v := by
+    have hr : Array.range 1 = #[0] := by decide
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
+      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    congr 2
+    apply BitVec.eq_of_toNat_eq
+    have := v.isLt
+    simp only [BitVec.toNat_ofNat]
+    omega
+
+instance : LawfulEnc (BitVec 1) where
+  size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
+  decode_encode v := by
+    have hr : Array.range 1 = #[0] := by decide
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
+      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    congr 2
+    apply BitVec.eq_of_toNat_eq
+    have := v.isLt
+    simp only [BitVec.toNat_ofNat]
+    omega
+
 /-- `?*T`: `null` is 8 zero bytes, and pointer bytes are never zero bytes. -/
 instance : LawfulEnc (Option Ptr) where
   size_encode v := by cases v <;> simp [Enc.encode, Enc.size]
@@ -471,5 +521,176 @@ instance : LawfulEnc (Option Ptr) where
       intro h
       have := congrArg (·[0]?) h
       simp at this
+
+/-! ## Error unions -/
+
+theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
+  unfold alignUp
+  split
+  · omega
+  · have h1 := Nat.div_add_mod (n + a - 1) a
+    have h2 := Nat.mod_lt (n + a - 1) (by omega : a > 0)
+    rw [Nat.mul_comm] at h1
+    omega
+
+/-- The error code and the payload of `E!T` do not overlap, and both are inside it. -/
+theorem errUnion_bounds (s a : Nat) :
+    (errUnionOffsets s a).1 + 2 ≤ errUnionSize s a ∧
+      (errUnionOffsets s a).2 + s ≤ errUnionSize s a ∧
+      ((errUnionOffsets s a).1 + 2 ≤ (errUnionOffsets s a).2 ∨
+        (errUnionOffsets s a).2 + s ≤ (errUnionOffsets s a).1) := by
+  have hd : (errUnionOffsets s a).1 + 2 ≤ (errUnionOffsets s a).2 ∨
+      (errUnionOffsets s a).2 + s ≤ (errUnionOffsets s a).1 := by
+    unfold errUnionOffsets
+    split
+    · right; simpa using le_alignUp s 2
+    · left; simpa using le_alignUp 2 a
+  have hsz : errUnionSize s a =
+      alignUp (Max.max ((errUnionOffsets s a).1 + 2) ((errUnionOffsets s a).2 + s)) (Nat.max a 2) := by
+    unfold errUnionSize
+    generalize errUnionOffsets s a = r
+    obtain ⟨eo, po⟩ := r
+    rfl
+  rw [hsz]
+  have hS := le_alignUp (Max.max ((errUnionOffsets s a).1 + 2) ((errUnionOffsets s a).2 + s))
+    (Nat.max a 2)
+  have := Nat.le_max_left ((errUnionOffsets s a).1 + 2) ((errUnionOffsets s a).2 + s)
+  have := Nat.le_max_right ((errUnionOffsets s a).1 + 2) ((errUnionOffsets s a).2 + s)
+  exact ⟨by omega, by omega, hd⟩
+
+/-- `E!T` in memory: an error union reads back as itself. -/
+instance {α : Type} [Enc α] [LawfulEnc α] : LawfulEnc (Except ErrName α) where
+  size_encode v := by
+    obtain ⟨h1, h2, -⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
+    have hx : ∀ x : α, (Enc.encode x).size = Enc.size α := LawfulEnc.size_encode
+    simp only [Enc.encode, Enc.size]
+    generalize errUnionSize (Enc.size α) (Enc.align α) = S at h1 h2 ⊢
+    generalize errUnionOffsets (Enc.size α) (Enc.align α) = r at h1 h2 ⊢
+    obtain ⟨eo, po⟩ := r
+    have he : ∀ e, (errBytes e).size = 2 := by intro e; cases e <;> rfl
+    cases v with
+    | error e => simp only; rw [writeBytes_size _ _ _ (by simp [he]; omega)]; simp
+    | ok x =>
+      simp only
+      rw [writeBytes_size _ _ _ (by rw [writeBytes_size _ _ _ (by simp [he]; omega), hx]; simp; omega),
+        writeBytes_size _ _ _ (by simp [he]; omega)]
+      simp
+  decode_encode v := by
+    obtain ⟨h1, h2, hd⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
+    have hxs : ∀ x : α, (Enc.encode x).size = Enc.size α := LawfulEnc.size_encode
+    simp only [Enc.encode, Enc.decode]
+    generalize errUnionSize (Enc.size α) (Enc.align α) = S at h1 h2 ⊢
+    generalize errUnionOffsets (Enc.size α) (Enc.align α) = r at h1 h2 hd ⊢
+    obtain ⟨eo, po⟩ := r
+    simp only at h1 h2 hd ⊢
+    have he : ∀ e, (errBytes e).size = 2 := by intro e; cases e <;> rfl
+    cases v with
+    | error e =>
+      have hx := extract_writeBytes (Array.replicate S .undef) eo (errBytes (some e))
+        (by simp [he]; omega)
+      rw [he] at hx
+      simp only [hx]
+      simp [errOfBytes, errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+        ExceptT.bindCont]
+    | ok x =>
+      have ha1 : (writeBytes (Array.replicate S Byte.undef) eo (errBytes none)).size = S := by
+        rw [writeBytes_size _ _ _ (by simp [he]; omega)]; simp
+      have hw := extract_writeBytes (writeBytes (Array.replicate S Byte.undef) eo (errBytes none))
+        po (Enc.encode x) (by rw [ha1, hxs]; omega)
+      rw [hxs] at hw
+      have hc := extract_writeBytes_disjoint
+        (writeBytes (Array.replicate S Byte.undef) eo (errBytes none)) po (Enc.encode x) eo 2
+        (by rw [ha1, hxs]; omega) (by omega) (by rw [hxs]; omega)
+      have hc' := extract_writeBytes (Array.replicate S Byte.undef) eo (errBytes none)
+        (by simp [he]; omega)
+      rw [he] at hc'
+      simp only [hw, hc, hc', LawfulEnc.decode_encode x]
+      simp [errOfBytes, errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+        ExceptT.bindCont, Functor.map, ExceptT.map]
+
+/-- The bytes of an error union that holds a payload: the error code is 0, and the payload
+bytes decode to the payload. -/
+theorem errUnion_decode_ok {α : Type} [Enc α] {bs : Array Byte} {x : α}
+    (h : (Enc.decode bs : Result (Except ErrName α)) = pure (.ok x)) :
+    errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+        ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure none ∧
+      (Enc.decode (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).2
+        ((errUnionOffsets (Enc.size α) (Enc.align α)).2 + Enc.size α)) : Result α) = pure x := by
+  simp only [Enc.decode] at h
+  generalize errUnionOffsets (Enc.size α) (Enc.align α) = r at h ⊢
+  obtain ⟨eo, po⟩ := r
+  simp only at h ⊢
+  generalize errOfBytes (bs.extract eo (eo + 2)) = re at h ⊢
+  generalize (Enc.decode (bs.extract po (po + Enc.size α)) : Result α) = rd at h ⊢
+  match re, rd, h with
+  | some (.ok none), some (.ok y), h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Functor.map,
+      ExceptT.map] at h
+    cases h; exact ⟨rfl, rfl⟩
+  | some (.ok none), some (.error _), h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Functor.map,
+      ExceptT.map] at h <;> cases h
+  | some (.ok none), none, h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Functor.map,
+      ExceptT.map] at h <;> cases h
+  | some (.ok (some _)), _, h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure] at h <;> cases h
+  | some (.error _), _, h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure] at h <;> cases h
+  | none, _, h =>
+    simp [bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h <;> cases h
+
+/-- A payload write to an error union that holds a payload: it then holds the new payload. -/
+theorem errUnion_decode_setPayload {α : Type} [Enc α] [LawfulEnc α] {bs : Array Byte} (y : α)
+    (hs : bs.size = errUnionSize (Enc.size α) (Enc.align α))
+    (h : errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+        ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure none) :
+    (Enc.decode (writeBytes bs (errUnionOffsets (Enc.size α) (Enc.align α)).2 (Enc.encode y)) :
+      Result (Except ErrName α)) = pure (.ok y) := by
+  obtain ⟨h1, h2, hd⟩ := errUnion_bounds (Enc.size α) (Enc.align α)
+  have hy := LawfulEnc.size_encode y
+  simp only [Enc.decode]
+  generalize errUnionSize (Enc.size α) (Enc.align α) = S at hs h1 h2
+  generalize errUnionOffsets (Enc.size α) (Enc.align α) = r at h h1 h2 hd ⊢
+  obtain ⟨eo, po⟩ := r
+  simp only at h h1 h2 hd ⊢
+  have hw := extract_writeBytes bs po (Enc.encode y) (by omega)
+  rw [hy] at hw
+  rw [extract_writeBytes_disjoint _ _ _ _ _ (by omega) (by omega) (by omega), h, hw,
+    LawfulEnc.decode_encode y]
+  rfl
+
+/-! ## `extern` unions (`ZigLean/Union.lean`) -/
+
+/-- The first `k` bytes of `Raw.ofArray n bs` are the first `k` bytes of `bs`, if `bs` has them. -/
+theorem Raw.extract_ofArray {n k : Nat} {bs : Array Byte} (hk : k ≤ n) (hb : k ≤ bs.size) :
+    (Raw.ofArray n bs).toArray.extract 0 k = bs.extract 0 k := by
+  apply Array.ext
+  · simp; omega
+  · intro i h1 h2
+    simp only [Array.size_extract, Vector.size_toArray] at h1
+    simp only [Array.getElem_extract, Raw.ofArray, Vector.toArray_ofFn, Array.getElem_ofFn,
+      Nat.zero_add, Array.getD, dite_eq_left (show i < bs.size by omega)]
+    rfl
+
+/-- An `extern` union: a read of the field that `union_init` wrote gives its value. -/
+theorem Raw.get_init {α : Type} [Enc α] [LawfulEnc α] (n : Nat) (v : α) (h : Enc.size α ≤ n) :
+    Raw.get α (Raw.init n v) = pure v := by
+  have hs := LawfulEnc.size_encode v
+  simp only [Raw.get, Raw.init]
+  rw [Raw.extract_ofArray h (by omega), ← hs, Array.extract_size]
+  exact LawfulEnc.decode_encode v
+
+/-- An `extern` union: a read of the field that a field write wrote gives its value. -/
+theorem Raw.get_set {α : Type} [Enc α] [LawfulEnc α] {n : Nat} (u : Vector Byte n) (v : α)
+    (h : Enc.size α ≤ n) : Raw.get α (Raw.set u v) = pure v := by
+  have hs := LawfulEnc.size_encode v
+  have hw : (writeBytes u.toArray 0 (Enc.encode v)).extract 0 (0 + (Enc.encode v).size) = Enc.encode v :=
+    extract_writeBytes _ 0 _ (by simp; omega)
+  simp only [Raw.get, Raw.set]
+  rw [Raw.extract_ofArray h (by rw [writeBytes_size _ _ _ (by simp; omega)]; simp; omega), ← hs]
+  simp only [Nat.zero_add] at hw
+  rw [hw]
+  exact LawfulEnc.decode_encode v
 
 end Zig

@@ -1,6 +1,7 @@
 //! M20: casts (`@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`,
-//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs, function pointers, and
-//! tagged unions and error unions in memory.
+//! `@alignCast`), `@fieldParentPtr`, `packed` and `extern` structs, function pointers, tagged,
+//! bare, `extern` and `packed` unions and error unions in memory, and a write to a `const`
+//! global.
 
 pub const Point = struct {
     x: u32,
@@ -215,6 +216,80 @@ pub fn bumpDigit(c: u8) u8 {
     };
 }
 
+/// A bare union. In `ReleaseSafe` it has a hidden tag: a read of a field that is not active
+/// panics.
+pub const Num = union {
+    int: u32,
+    small: u8,
+};
+
+/// Store `v` in `p.int` if `big`, else its low byte in `p.small`.
+pub fn setNum(p: *Num, big: bool, v: u32) void {
+    p.* = if (big) .{ .int = v } else .{ .small = @truncate(v) };
+}
+
+/// `p.int` (panics if `small` is active).
+pub fn numInt(p: *const Num) u32 {
+    return p.int;
+}
+
+/// `setNum`, then `numInt`: `v` if `big`, else a panic.
+pub fn numRoundTrip(big: bool, v: u32) u32 {
+    var n: Num = undefined;
+    setNum(&n, big, v);
+    return numInt(&n);
+}
+
+/// An `extern` union: all fields start at byte 0, and a read of a field reads those bytes.
+pub const Word = extern union {
+    int: u32,
+    half: u16,
+    bytes: [4]u8,
+};
+
+/// Byte `i` of `v`, little-endian (`v` in `int`, read through `bytes`).
+pub fn wordByte(v: u32, i: u2) u8 {
+    var w: Word = .{ .int = v };
+    const p: *Word = &w;
+    return p.bytes[i];
+}
+
+/// Write `v` to `p.half`, then read `p.int`: the two high bytes do not change.
+pub fn setHalf(p: *Word, v: u16) u32 {
+    p.half = v;
+    return p.int;
+}
+
+/// A `packed` union: every field has the same bit width and starts at bit 0.
+pub const Reg = packed union {
+    raw: u8,
+    signed: i8,
+    flags: Flags,
+};
+
+/// `v` as an `i8` (`v` in `raw`, read through `signed`).
+pub fn regSigned(v: u8) i8 {
+    const r: Reg = .{ .raw = v };
+    return r.signed;
+}
+
+/// Write `f` to `p.flags`, then read `p.raw`.
+pub fn setRegFlags(p: *Reg, f: Flags) u8 {
+    p.flags = f;
+    return p.raw;
+}
+
+/// A `const` global: its block is read-only.
+const table = [_]u32{ 10, 20, 30 };
+
+/// Write `v` to `table[i]` through `@constCast`: illegal behaviour (the model throws
+/// `.illegal`).
+pub fn writeTable(i: usize, v: u32) u32 {
+    const p: *u32 = @constCast(&table[i]);
+    p.* = v;
+    return table[i];
+}
+
 comptime {
     _ = &addrEq;
     _ = &ptrRoundTrip;
@@ -240,4 +315,12 @@ comptime {
     _ = &shapeArea;
     _ = &growCircle;
     _ = &bumpDigit;
+    _ = &setNum;
+    _ = &numInt;
+    _ = &numRoundTrip;
+    _ = &wordByte;
+    _ = &setHalf;
+    _ = &regSigned;
+    _ = &setRegFlags;
+    _ = &writeTable;
 }

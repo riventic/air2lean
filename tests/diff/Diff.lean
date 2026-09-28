@@ -789,6 +789,28 @@ def runLayout : IO Unit := do
   processMem ex m0 "growCircle" (fun g a => return Layout.growCircle (← ptrOf g a[0]!)) unitStr
   processMem ex m0 "bumpDigit" (fun _ a => return Layout.bumpDigit (bv 8 (← getInt a[0]!)))
     fun _ v => natStr v false
+  processMem ex m0 "setNum" (fun g a => do
+    return Layout.setNum (← ptrOf g a[0]!) (← orFail a[1]!.getBool? "setNum") (bv 32 (← getInt a[2]!)))
+    unitStr
+  processMem ex m0 "numInt" (fun g a => return Layout.numInt (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "numRoundTrip" (fun _ a => do
+    return Layout.numRoundTrip (← orFail a[0]!.getBool? "numRoundTrip") (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "wordByte"
+    (fun _ a => return Layout.wordByte (bv 32 (← getInt a[0]!)) (bv 2 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "setHalf"
+    (fun g a => return Layout.setHalf (← ptrOf g a[0]!) (bv 16 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "regSigned"
+    (fun _ a => return pureMem (Layout.regSigned (bv 8 (← getInt a[0]!)))) fun _ v => toString v.toInt
+  processMem ex m0 "setRegFlags"
+    (fun g a => return Layout.setRegFlags (← ptrOf g a[0]!) (flagsOf (← getInt a[1]!).toNat))
+    fun _ v => natStr v false
+  processMem ex m0 "writeTable"
+    (fun _ a => return Layout.writeTable (bv 64 (← getInt a[0]!)) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
 
 def runSlices : IO Unit := do
   let ex := "slices"

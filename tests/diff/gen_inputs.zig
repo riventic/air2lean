@@ -2397,4 +2397,70 @@ fn genLayout(rng: std.Random) !void {
         const writer = file.writer();
         for (0..16) |c| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{c});
     }
+    // setNum(p: *Num, big: bool, v: u32) and numInt(p: *const Num): one 8-byte buffer (the
+    // payload at 0, the hidden tag at 4); the tag byte is 0, 1 or, one time in 10, 2 (invalid).
+    inline for (.{ "setNum", "numInt" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, 8);
+            b.b[4] = if (i % 10 == 9) 2 else rng.uintLessThan(u8, 2);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, 0);
+            if (comptime std.mem.eql(u8, name, "setNum"))
+                try writer.print(",{},{d}", .{ rng.boolean(), edgyU32(rng) });
+            try writer.writeAll("]}\n");
+        }
+    }
+    // numRoundTrip(big: bool, v: u32).
+    {
+        var file = try openLayout("numRoundTrip");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{},{d}]}}\n", .{ rng.boolean(), edgyU32(rng) });
+    }
+    // wordByte(v: u32, i: u2).
+    {
+        var file = try openLayout("wordByte");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ edgyU32(rng), rng.uintLessThan(u8, 4) });
+    }
+    // setHalf(p: *Word, v: u16): one 8-byte buffer, an aligned offset.
+    {
+        var file = try openLayout("setHalf");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u16)});
+        }
+    }
+    // regSigned(v: u8): every byte.
+    {
+        var file = try openLayout("regSigned");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |v| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{v});
+    }
+    // setRegFlags(p: *Reg, f: Flags): one 2-byte buffer, both offsets; `f` as its byte.
+    {
+        var file = try openLayout("setRegFlags");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u8)});
+        }
+    }
+    // writeTable(i: usize, v: u32): 0..2 (a write to a `const` global), 3..4 (out of bounds).
+    {
+        var file = try openLayout("writeTable");
+        defer file.close();
+        const writer = file.writer();
+        for (0..5) |i| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ i, edgyU32(rng) });
+    }
 }

@@ -22,19 +22,19 @@ def Color.isNamed (_ : Color) : Bool := true
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
   -- 0: slices.counter
-  (Zig.Enc.encode ((0 : BitVec 32) : BitVec 32), 4),
+  (Zig.Enc.encode ((0 : BitVec 32) : BitVec 32), 4, .global),
   -- 1: a constant
-  (Zig.Enc.encode (#v[(104 : BitVec 8), (101 : BitVec 8), (108 : BitVec 8), (108 : BitVec 8), (111 : BitVec 8), (44 : BitVec 8), (32 : BitVec 8), (119 : BitVec 8), (111 : BitVec 8), (114 : BitVec 8), (108 : BitVec 8), (100 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 13), 1),
+  (Zig.Enc.encode (#v[(104 : BitVec 8), (101 : BitVec 8), (108 : BitVec 8), (108 : BitVec 8), (111 : BitVec 8), (44 : BitVec 8), (32 : BitVec 8), (119 : BitVec 8), (111 : BitVec 8), (114 : BitVec 8), (108 : BitVec 8), (100 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 13), 1, .constGlobal),
   -- 2: the name of Color.red
-  (Zig.Enc.encode (#v[114, 101, 100, 0] : Vector (BitVec 8) 4), 1),
+  (Zig.Enc.encode (#v[114, 101, 100, 0] : Vector (BitVec 8) 4), 1, .constGlobal),
   -- 3: the name of Color.green
-  (Zig.Enc.encode (#v[103, 114, 101, 101, 110, 0] : Vector (BitVec 8) 6), 1),
+  (Zig.Enc.encode (#v[103, 114, 101, 101, 110, 0] : Vector (BitVec 8) 6), 1, .constGlobal),
   -- 4: the name of Color.blue
-  (Zig.Enc.encode (#v[98, 108, 117, 101, 0] : Vector (BitVec 8) 5), 1),
+  (Zig.Enc.encode (#v[98, 108, 117, 101, 0] : Vector (BitVec 8) 5), 1, .constGlobal),
   -- 5: the name of error.Empty
-  (Zig.Enc.encode (#v[69, 109, 112, 116, 121, 0] : Vector (BitVec 8) 6), 1),
+  (Zig.Enc.encode (#v[69, 109, 112, 116, 121, 0] : Vector (BitVec 8) 6), 1, .constGlobal),
   -- 6: the name of error.TooLong
-  (Zig.Enc.encode (#v[84, 111, 111, 76, 111, 110, 103, 0] : Vector (BitVec 8) 8), 1)]
+  (Zig.Enc.encode (#v[84, 111, 111, 76, 111, 110, 103, 0] : Vector (BitVec 8) 8), 1, .constGlobal)]
 
 def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   match e with
