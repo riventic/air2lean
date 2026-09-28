@@ -5,3 +5,4 @@ import ZigLean.Lemmas
 import ZigLean.Loop
 import ZigLean.Mem
 import ZigLean.Simp
+import ZigLean.Vec

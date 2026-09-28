@@ -25,6 +25,7 @@
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[N]T` | `Vector T' N` |
+| `@Vector(N, T)` (`T` an integer or a float) | `Zig.Vec T' N` (`ZigLean/Vec.lean`) |
 | `[]const T` in a pure function (§Memory) | `Array T'` |
 | `[]T`, `[:s]T`; `[]const T` in a function that uses memory | `Zig.Slice` (an item pointer and a `BitVec 64` length; §Memory) |
 | `*T`, `*const T`, `[*]T`, `[*:s]T`, `*[N]T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
@@ -62,6 +63,30 @@ Zig keeps the payload bytes when the tag changes, and the Zig versions write a u
 A `switch` on an exhaustive enum that names every value becomes a `match` with one arm per case and no `else` arm (its `corruptSwitch` panic cannot happen). Any other `switch` is an `if` chain.
 
 A union without a tag (bare, `extern`, `packed`) is outside the subset.
+
+### Vectors
+
+`Zig.Vec T' N` (`ZigLean/Vec.lean`) wraps a `Vector T' N`; `.lanes` is the only field. Lane 0 is
+first. AIR op → generated code:
+
+| AIR op | Generated code |
+|---|---|
+| `add`/`sub`/`mul`, checked/wrapping/saturating | `Zig.Vec.map2M`/`Zig.Vec.map2`, lane-wise, the same scalar function as the non-vector case |
+| `splat` | `Zig.Vec.splat` |
+| `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
+| `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
+| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
+
+A float `reduce`'s lane order is exactly Zig's (`Vec.reduce_four`-style, lane 0 first for a
+4-lane vector) — float addition is not associative, so a proof about a float `reduce` states this
+order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s `fDot_body`).
+
+Vector `div`, `@min`/`@max`, `@addWithOverflow`-family ops, bitwise/`@shlExact`-family ops, `-`
+(negation) and `~` (bitwise not) are not translated (`vectors.zig` does not use them; `Emit.lean`
+has no vector-specific case for any of them, so one would emit a scalar function call on
+`Zig.Vec`-typed arguments — a `lake build` type error, not a silent miscompile). A vector
+comparison (`cmp_vector`) and a vector of a type other than an integer or float are rejected
+explicitly (`Check.lean`).
 
 ### Places
 
@@ -219,6 +244,33 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 
 `tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` or `illegal` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0). A Lean `nondet` matches any Zig line the same way, pinned in `tests/diff/<ex>/nondet.txt` instead — a racing input is expected to hit it, and the count is fixed so a new race the check does not catch shows up as a changed count.
+
+## Inline asm
+
+M21 (register operands only, x86_64): one `opaque` per distinct (source template, ordered constraint list, operand widths) tuple — a proof gets only what the caller states about an op, no built-in axiom for what it computes (`Air2Lean/Air/Op.lean`'s `.asm` doc comment). Two occurrences with the same source, constraints and widths share one opaque; the name is `airAsm_<hash>`, a hash of that tuple (`Air2Lean/Emit.lean`'s `asmDefName` — not Lean's own `hash`, just stable within one generation run). `Check.lean` rejects a memory or immediate constraint, so every operand is a register, hence a plain `BitVec`; the opaque is `BitVec` in, `BitVec` out (`Unit` for no output). An input may also carry a matching constraint (`0`) tying it to the sole output register — the standard idiom for a register-modify-in-place instruction (`bswap32`'s `bswap`, which both reads and writes one register); still a register operand, so the opaque's shape does not change:
+
+```lean
+opaque airAsm_3500345798 (i0 : BitVec 32) : BitVec 32   -- bswap32: one input, one output, both 32 bits
+
+def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (airAsm_3500345798 p0)
+    pure (.ret i1)) : Zig.M bswap32Locals bswap32Exit).run' (default : bswap32Locals)
+  match e with
+  | .ret v => pure v
+```
+
+`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
+
+### Differential-test implementation
+
+`Asm.airAsm_*` has no defining equation to run — that is M21's whole point — so `tests/diff/asm/asm.zig` gives the diff test one, the same role `tests/diff/libm/libm.zig` plays for `ZigLean/Float/Libm.lean`'s transcendental ops: one `export fn air2lean_asm_<op>` per op, reimplementing `examples/asm/asm.zig`'s behaviour with ordinary Zig builtins (`@byteSwap`, `@popCount`, `@clz`) instead of the inline asm itself — the diff test needs behavioural equivalence, not instruction equivalence, and a builtin-based archive builds on every host, not only x86_64. Built into `air2lean_asm.a` by `scripts/diff.sh` and linked into `difftest` (`tests/diff/lakefile.toml`'s `moreLinkArgs`).
+
+Wiring an already-imported opaque to an `@[extern]` archive function needs `@[csimp]`, not `@[implemented_by]`: both attributes refuse to attach to a declaration from an already-imported module (`Asm.airAsm_*` lives in `Proofs/Asm/Gen.lean`, imported by `tests/diff/Diff.lean`), but `@[csimp]` tags a fresh theorem instead (`@Asm.airAsm_3500345798 = @airAsm_3500345798_impl`, one per op, in `Diff.lean`) and swaps `f` for `g` in compiled code only, never in the kernel. The theorem needs a real proof, and none exists (again, M21's point) — `Diff.lean` uses `sorry` for it, the one place in the repo that assumes rather than proves; confined to `tests/diff/`, outside `scripts/no-sorry.sh`'s scope (`ZigLean`, `Proofs`).
+
+`@[csimp]` only redirects references *compiled after* the theorem — `Asm.bswap32` (and `lzcnt64`, `popcnt64`) are compiled once, inside `Proofs/Asm/Gen.lean`, long before `Diff.lean`'s theorems exist, so a call through the generated wrapper never sees the swap and stays on the opaque's `Inhabited`-default placeholder. `Diff.lean`'s `runBswap32`/`runLzcnt64`/`runPopcnt64` call `Asm.airAsm_*` directly instead, bypassing the wrapper: those calls compile after the theorems, so the swap applies.
+
+Mutation (i) (`scripts/mutate.sh`) mutates this archive (`air2lean_asm_bswap32` returns its input unchanged), not a Lean file: there is no Lean-side equation to mutate for an opaque, so this is the only way to confirm the comparison against `examples/asm/asm.zig`'s real inline asm is live, not vacuous.
 
 ## Differential test
 

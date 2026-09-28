@@ -1,0 +1,79 @@
+{
+ "schema": 10,
+ "zig_version": "0.16.0",
+ "name": "asm.popcnt64",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "assembly",
+   "ty": 0,
+   "source": "popcnt %[x], %[ret]",
+   "volatile": false,
+   "clobbers": [],
+   "outputs": [
+    {
+     "constraint": "=r",
+     "name": "ret"
+    }
+   ],
+   "inputs": [
+    {
+     "constraint": "r",
+     "name": "x",
+     "ref": {
+      "inst": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

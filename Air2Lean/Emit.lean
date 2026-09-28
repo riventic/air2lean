@@ -78,6 +78,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .ptr "slice" .. => "Zig.Slice"
   | .ptr .. => "Zig.Ptr"
   | .array len child => s!"Vector ({emitTy structNames types types[child]!}) {len}"
+  | .vector len child => s!"Zig.Vec ({emitTy structNames types types[child]!}) {len}"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
   | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
   | .errorSet _ => "Zig.ErrName"
@@ -462,6 +463,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     match fc.tyOfId tid with
     -- The sentinel is not an item of the value.
     | .array len _ => s!"(#v[{items (elems.extract 0 len)}] : {fc.emitTyOf tid})"
+    -- A vector has no sentinel (`docs/air-json.md`'s `elems`).
+    | .vector len _ => s!"((⟨#v[{items (elems.extract 0 len)}]⟩) : {fc.emitTyOf tid})"
     | .struct _ _ fields =>
       let assigns := (fields.zip elems).toList.map fun ((f, _), e) =>
         s!"{mangleField f} := {fc.resolveVal env e}"
@@ -805,6 +808,11 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sqrt a => #[a]
   | .libm _ a => #[a]
   | .mulAdd a b c => #[a, b, c]
+  | .splat a | .reduce _ a => #[a]
+  | .select pred a b => #[pred, a, b]
+  | .shuffle a b mask =>
+    #[a] ++ (match b with | some v => #[v] | none => #[]) ++
+      mask.filterMap fun l => match l with | .value v => some v | _ => none
   | .floatConv a => #[a]
   | .floatFromInt a => #[a]
   | .intFromFloat _ a => #[a]
@@ -855,6 +863,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .trap => #[]
   | .line _ => #[]
   | .dbg _ _ => #[]
+  -- `Check.lean` accepts only the no-`ref` output convention, so only the inputs carry a `ref`.
+  | .asm _ _ _ _ inputs => inputs.filterMap (·.ref)
 
 /-- Ids referenced inside `body` (recursively) that are defined outside it: the free variables
 of a loop body, i.e. what its extracted top-level def must take as parameters. -/
@@ -916,6 +926,65 @@ its own. -/
 def FCtx.ascribedDo (fc : FCtx) (body : String) : String :=
   s!"({doBlock body} : {fc.monad} {fc.localsName} {fc.exitName})"
 
+/-! ## Inline asm (M21) -/
+
+/-- One distinct asm op across the whole program (`docs/generated-code.md` §asm): the generated
+`opaque` def's name and `BitVec` widths. Two occurrences share a def when their source, ordered
+constraint list (outputs then inputs) and operand widths all match — width is not part of the
+brief's stated key (a hash of template and constraints), but two different-width asm exprs
+sharing a name would give one of them the wrong `BitVec` width, so width is folded into the
+identity here too. -/
+structure AsmDef where
+  name : String
+  inputWidths : Array Nat
+  outputWidth : Option Nat
+  deriving BEq
+
+/-- The generated Lean name of the `opaque` def for an asm op: `airAsm_<hash>`, `<hash>` a small
+FNV-1a hash of the source template, the ordered constraint list and the operand widths. Not
+Lean's own `hash`: this only needs to be stable within one generation run (the toolchain is
+pinned), and a hand-rolled hash keeps that independent of a core implementation detail. -/
+def asmDefName (source : String) (constraints : Array String) (inputWidths : Array Nat)
+    (outputWidth : Option Nat) : String :=
+  let key := s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
+    {inputWidths.toList}\u0001{outputWidth}"
+  let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
+    (h ^^^ c.val) * 0x01000193
+  s!"airAsm_{h}"
+
+/-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
+`Check.lean` accepts only register (so integer) operands. -/
+def asmValBits (f : Func) (v : Val) : Nat :=
+  let tyBits (tid : TyId) : Nat := match f.types[tid]? with | some (.int _ b) => b | _ => 0
+  match v with
+  | .inst id => ((f.allInsts.find? (·.id == id)).map fun i => tyBits i.ty).getD 0
+  | v => (v.constTy?.map tyBits).getD 0
+
+/-- Every distinct asm op in `funcs`, in first-seen order (`asmDefName` gives the identity). -/
+def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
+  let mut seen : Array String := #[]
+  let mut defs : Array AsmDef := #[]
+  for f in funcs do
+    for i in f.allInsts do
+      if let .asm source _ _ outputs inputs := i.op then
+        let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
+        let outputWidth := if outputs.isEmpty then none else some (asmValBits f (.inst i.id))
+        let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
+        let name := asmDefName source constraints inputWidths outputWidth
+        if !seen.contains name then
+          seen := seen.push name
+          defs := defs.push { name, inputWidths, outputWidth }
+  return defs
+
+/-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
+to its output's `BitVec` (`Unit` for no output). A proof can use only what the caller states
+about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
+doc comment). -/
+def emitAsmDef (d : AsmDef) : String :=
+  let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
+  let ret := match d.outputWidth with | some w => s!"BitVec {w}" | none => "Unit"
+  s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
+
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
 effect stays; the `_` prefix stops Lean's unused-variable warning. -/
 def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : String) :
@@ -932,21 +1001,42 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .arith op mode a b =>
     -- A float operand always has `mode = .checked`: `Check.lean` rejects the other modes.
     let expr :=
-      if fc.isFloat a then
-        let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
-        s!"pure ({f} {rv a} {rv b})"
-      else
-        let sgn := if fc.valSigned a then "true" else "false"
-        match op, mode with
-        | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
-        | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
-        | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
-        | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
-        | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
-        | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
-        | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
-        | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
-        | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
+      match fc.tyOfId inst.ty with
+      | .vector _ child =>
+        -- Lane-wise: the same scalar function the non-vector case below calls, lifted by
+        -- `Zig.Vec.map2`/`map2M` (`ZigLean/Vec.lean`).
+        if fc.isFloatTy child then
+          let f := match op with
+            | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+          s!"pure (Zig.Vec.map2 {f} {rv a} {rv b})"
+        else
+          let sgn := if fc.tySigned child then "true" else "false"
+          match op, mode with
+          | .add, .checked => s!"Zig.Vec.map2M (Zig.add {sgn}) {rv a} {rv b}"
+          | .add, .wrap => s!"pure (Zig.Vec.map2 Zig.addWrap {rv a} {rv b})"
+          | .add, .sat => s!"pure (Zig.Vec.map2 (Zig.addSat {sgn}) {rv a} {rv b})"
+          | .sub, .checked => s!"Zig.Vec.map2M (Zig.sub {sgn}) {rv a} {rv b}"
+          | .sub, .wrap => s!"pure (Zig.Vec.map2 Zig.subWrap {rv a} {rv b})"
+          | .sub, .sat => s!"pure (Zig.Vec.map2 (Zig.subSat {sgn}) {rv a} {rv b})"
+          | .mul, .checked => s!"Zig.Vec.map2M (Zig.mul {sgn}) {rv a} {rv b}"
+          | .mul, .wrap => s!"pure (Zig.Vec.map2 Zig.mulWrap {rv a} {rv b})"
+          | .mul, .sat => s!"pure (Zig.Vec.map2 (Zig.mulSat {sgn}) {rv a} {rv b})"
+      | _ =>
+        if fc.isFloat a then
+          let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+          s!"pure ({f} {rv a} {rv b})"
+        else
+          let sgn := if fc.valSigned a then "true" else "false"
+          match op, mode with
+          | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
+          | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
+          | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
+          | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
+          | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
+          | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
+          | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
+          | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
+          | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .div op a b =>
     let expr :=
@@ -991,6 +1081,51 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+  | .splat a =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
+  | .select pred a b =>
+    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
+    (env, some l)
+  | .reduce op a =>
+    -- The vector's element type dispatches to the same scalar function `.arith`'s int/float
+    -- branches call. Zig's integer `.Add`/`.Mul` reduce wraps (`docs/floats.md` has no analogous
+    -- note for ints: wrapping is safe because integer `+`/`*` stay associative under wraparound).
+    let child := match fc.valTy a with | .vector _ c => c | _ => 0
+    let expr :=
+      if fc.isFloatTy child then
+        match op with
+        | .add => s!"pure (Zig.Vec.reduce Zig.Float.add {rv a})"
+        | .mul => s!"pure (Zig.Vec.reduce Zig.Float.mul {rv a})"
+        | .min => s!"Zig.Vec.reduceM Zig.Float.minChk {rv a}"
+        | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
+        | .and | .or | .xor =>
+          "(panic! \"air2lean: bitwise @reduce of a float vector\")"
+      else
+        let sgn := if fc.tySigned child then "true" else "false"
+        match op with
+        | .and => s!"pure (Zig.Vec.reduce (· &&& ·) {rv a})"
+        | .or => s!"pure (Zig.Vec.reduce (· ||| ·) {rv a})"
+        | .xor => s!"pure (Zig.Vec.reduce (· ^^^ ·) {rv a})"
+        | .min => s!"pure (Zig.Vec.reduce (Zig.min {sgn}) {rv a})"
+        | .max => s!"pure (Zig.Vec.reduce (Zig.max {sgn}) {rv a})"
+        | .add => s!"pure (Zig.Vec.reduce Zig.addWrap {rv a})"
+        | .mul => s!"pure (Zig.Vec.reduce Zig.mulWrap {rv a})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .shuffle a b mask =>
+    -- The mask is comptime-known: pick each lane directly into a `Zig.Vec` literal instead of a
+    -- runtime shuffle function (`ZigLean/Vec.lean`).
+    let laneText (lane : ShuffleLane) : String :=
+      match lane with
+      | .a idx => s!"{rv a}.lanes[{idx}]!"
+      | .b idx =>
+        match b with
+        | some bv => s!"{rv bv}.lanes[{idx}]!"
+        | none => "(panic! \"air2lean: shuffle mask reads 'b' with no second source\")"
+      | .undef => "default"
+      | .value v => rv v
+    let items := ", ".intercalate (mask.map laneText).toList
+    let (env, l) := bindLet fc env inst.id s!"pure ((⟨#v[{items}]⟩ : {fc.emitTyOf inst.ty}))"
+    (env, some l)
   | .bit op a b =>
     let f := match op with | .and => "&&&" | .or => "|||" | .xor => "^^^"
     let (env, l) := bindLet fc env inst.id s!"pure ({rv a} {f} {rv b})"; (env, some l)
@@ -1262,6 +1397,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let term := if elems.isEmpty then "()" else s!"({items})"
       let (env, l) := bindLet fc env inst.id s!"pure {term}"
       (env, some l)
+    | .vector .. =>
+      let items := ", ".intercalate (elems.map rv).toList
+      let (env, l) := bindLet fc env inst.id s!"pure ((⟨#v[{items}]⟩ : {fc.emitTyOf inst.ty}))"
+      (env, some l)
     | _ =>
     let sname := fc.emitTyOf inst.ty
     let fnames := fc.structFieldNamesFor (fc.tyOfId inst.ty)
@@ -1294,6 +1433,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
+  | .asm source _ _ outputs inputs =>
+    -- Same identity as `collectAsmOps`/`asmDefName`: this must name the very `opaque` def that
+    -- pass emitted, or the call below resolves to nothing.
+    let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
+    let outputWidth := if outputs.isEmpty then none else some (fc.tyBits inst.ty)
+    let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
+    let name := asmDefName source constraints inputWidths outputWidth
+    let args := inputs.toList.map fun i => rv i.ref.get!
+    let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
+    let (env, l) := bindLet fc env inst.id s!"pure ({call})"
+    (env, some l)
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 mutual
@@ -1734,6 +1884,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
   let memFuncs := memoryFunctions funcs
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
+  let asmStr := (collectAsmOps funcs).toList.map emitAsmDef
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
@@ -1762,6 +1913,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     else
       String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   String.intercalate "\n\n"
-    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ globalsStr ++ funcsStr ++ [s!"end {ns}"])
+    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ funcsStr ++
+      [s!"end {ns}"])
 
 end Air2Lean

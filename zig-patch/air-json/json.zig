@@ -116,6 +116,19 @@ const Compat = struct {
         return if (v14) false else tag == .memmove;
     }
 
+    /// `@shuffle` on 0.14.1: one `shuffle` tag, mask is a comptime `@Vector(mask_len, i32)`
+    /// (`Air.Shuffle`). 0.15.2+ split it into `shuffle_one` (single source) and `shuffle_two`
+    /// (two sources), each with a runtime-decodable mask (`unwrapShuffleOne`/`unwrapShuffleTwo`).
+    fn isShuffle14(tag: Air.Inst.Tag) bool {
+        return if (v14) tag == .shuffle else false;
+    }
+    fn isShuffleOne(tag: Air.Inst.Tag) bool {
+        return if (v14) false else tag == .shuffle_one;
+    }
+    fn isShuffleTwo(tag: Air.Inst.Tag) bool {
+        return if (v14) false else tag == .shuffle_two;
+    }
+
     /// Is the layout of `ty` known, so that `abiSize`, `abiAlignment` and `structFieldOffset`
     /// are valid? Those functions assert it. 0.16.0 sets `want_layout` right before it resolves
     /// a container layout (`PerThread.ensureTypeLayoutUpToDate`); before 0.16.0 the container
@@ -125,6 +138,7 @@ const Compat = struct {
         return switch (ip.indexToKey(ty.toIntern())) {
             .int_type, .ptr_type, .simple_type, .error_set_type, .inferred_error_set_type => true,
             .array_type => |a| hasLayout(zcu, Type.fromInterned(a.child)),
+            .vector_type => |v| hasLayout(zcu, Type.fromInterned(v.child)),
             .opt_type => |c| hasLayout(zcu, Type.fromInterned(c)),
             .error_union_type => |eu| hasLayout(zcu, Type.fromInterned(eu.payload_type)),
             .tuple_type => |t| for (t.types.get(ip)) |f| {
@@ -216,7 +230,116 @@ const Compat = struct {
             },
         };
     }
+
+    /// The `assembly` AIR instruction, normalized. 0.16.0 has a convenience `Air.unwrapAsm`;
+    /// 0.15.2 has no such helper, and its extra-data order differs (outputs, inputs, output
+    /// constraint/name pairs, input constraint/name pairs, source — 0.16.0 instead puts the
+    /// source right after inputs, before either constraint/name block). Not called for 0.14.1:
+    /// M21 does not support inline asm there.
+    const AsmData = struct {
+        outputs: []const Air.Inst.Ref,
+        inputs: []const Air.Inst.Ref,
+        /// `constraint\0name\0` pairs, u32-padded, one per output, in `outputs` order.
+        output_names: []const u32,
+        /// Same, one per input, in `inputs` order.
+        input_names: []const u32,
+        source: []const u8,
+        clobbers: InternPool.Index,
+        is_volatile: bool,
+    };
+
+    fn unwrapAsm(air: *const Air, inst: Air.Inst.Index) AsmData {
+        if (v16) {
+            const u = air.unwrapAsm(inst);
+            return .{
+                .outputs = u.outputs,
+                .inputs = u.inputs,
+                .output_names = u.output_constraint_names,
+                .input_names = u.input_constraint_names,
+                .source = u.source,
+                .clobbers = u.clobbers,
+                .is_volatile = u.is_volatile,
+            };
+        }
+        const ty_pl = air.instructions.items(.data)[@intFromEnum(inst)].ty_pl;
+        const asm_extra = air.extraData(Air.Asm, ty_pl.payload);
+        const outputs_len = asm_extra.data.flags.outputs_len;
+        const inputs_len = asm_extra.data.inputs_len;
+        var i = asm_extra.end;
+        const outputs: []const Air.Inst.Ref = @ptrCast(extra(air)[i..][0..outputs_len]);
+        i += outputs_len;
+        const inputs: []const Air.Inst.Ref = @ptrCast(extra(air)[i..][0..inputs_len]);
+        i += inputs_len;
+        const output_names_start = i;
+        for (0..outputs_len) |_| i += asmNamePairLen(extra(air)[i..]);
+        const input_names_start = i;
+        for (0..inputs_len) |_| i += asmNamePairLen(extra(air)[i..]);
+        const source_start = i;
+        return .{
+            .outputs = outputs,
+            .inputs = inputs,
+            .output_names = extra(air)[output_names_start..input_names_start],
+            .input_names = extra(air)[input_names_start..source_start],
+            .source = std.mem.sliceAsBytes(extra(air)[source_start..])[0..asm_extra.data.source_len],
+            .clobbers = asm_extra.data.clobbers,
+            .is_volatile = asm_extra.data.flags.is_volatile,
+        };
+    }
+
+    /// The clobbered register/flag names of a comptime `std.builtin.assembly.Clobbers` value.
+    /// 0.16.0 stores it as a packed integer (`Value.toBigInt`); 0.15.2 as an aggregate of
+    /// per-field `bool_true`/`bool_false` (`InternPool.Key.Aggregate`).
+    fn writeClobbers(w: *W, clobbers: InternPool.Index) Error!void {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        try w.j.beginArray();
+        if (v16) {
+            const clobbers_val: Value = .fromInterned(clobbers);
+            const clobbers_ty = clobbers_val.typeOf(zcu);
+            var buf: Value.BigIntSpace = undefined;
+            const bigint = clobbers_val.toBigInt(&buf, zcu);
+            const limb_bits = @bitSizeOf(std.math.big.Limb);
+            for (0..clobbers_ty.structFieldCount(zcu)) |field_index| {
+                if (field_index / limb_bits >= bigint.limbs.len) continue;
+                const bit: u1 = @truncate(bigint.limbs[field_index / limb_bits] >> @intCast(field_index % limb_bits));
+                if (bit == 0) continue;
+                try w.j.write(clobbers_ty.structFieldName(field_index, zcu).toSlice(ip).?);
+            }
+        } else {
+            const aggregate = ip.indexToKey(clobbers).aggregate;
+            const struct_type: Type = .fromInterned(aggregate.ty);
+            switch (aggregate.storage) {
+                .elems => |elems| for (elems, 0..) |elem, field_index| {
+                    if (elem != .bool_true) continue;
+                    try w.j.write(struct_type.structFieldName(field_index, zcu).toSlice(ip).?);
+                },
+                .repeated_elem => |elem| if (elem == .bool_true) {
+                    for (0..struct_type.structFieldCount(zcu)) |field_index|
+                        try w.j.write(struct_type.structFieldName(field_index, zcu).toSlice(ip).?);
+                },
+                else => {},
+            }
+        }
+        try w.j.endArray();
+    }
 };
+
+/// The u32-word length of one `constraint\0name\0` pair (padded: even an exact 4-byte fit still
+/// uses the next word for the terminator). Shared layout in every version.
+fn asmNamePairLen(words: []const u32) usize {
+    const bytes = std.mem.sliceAsBytes(words);
+    const constraint = std.mem.sliceTo(bytes, 0);
+    const name = std.mem.sliceTo(bytes[constraint.len + 1 ..], 0);
+    return (constraint.len + name.len + (2 + 3)) / 4;
+}
+
+/// One `constraint\0name\0` pair read from the start of `words`, and its u32-word length.
+fn readAsmNamePair(words: []const u32) struct { constraint: []const u8, name: []const u8, len: usize } {
+    const bytes = std.mem.sliceAsBytes(words);
+    const constraint = std.mem.sliceTo(bytes, 0);
+    const name = std.mem.sliceTo(bytes[constraint.len + 1 ..], 0);
+    return .{ .constraint = constraint, .name = name, .len = asmNamePairLen(words) };
+}
 
 const Error = Compat.WriteError || Allocator.Error;
 
@@ -294,7 +417,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(8);
+        try w.j.write(10);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -407,8 +530,25 @@ const W = struct {
             .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
             .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
             .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
-            .optional_payload_ptr, .optional_payload_ptr_set,
+            .optional_payload_ptr, .optional_payload_ptr_set, .splat,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
+            .reduce, .reduce_optimized => {
+                const r = w.data(inst).reduce;
+                try w.writeArgs(&.{r.operand});
+                try w.field("op");
+                try w.j.write(@tagName(r.operation));
+            },
+            .cmp_vector, .cmp_vector_optimized => {
+                const extra = w.air.extraData(Air.VectorCmp, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{ extra.lhs, extra.rhs });
+                try w.field("op");
+                try w.j.write(@tagName(extra.compareOperator()));
+            },
+            .select => {
+                const pl_op = w.data(inst).pl_op;
+                const b = w.air.extraData(Air.Bin, pl_op.payload).data;
+                try w.writeArgs(&.{ b.lhs, b.rhs, pl_op.operand });
+            },
             .union_init => {
                 const extra = w.air.extraData(Air.UnionInit, w.data(inst).ty_pl.payload).data;
                 try w.writeArgs(&.{extra.init});
@@ -531,18 +671,97 @@ const W = struct {
                 try w.field("line");
                 try w.j.write(d.line + 1);
             },
+            .assembly => if (Compat.v14) {
+                // M21: no inline asm support for 0.14.1.
+                try w.field("unsupported");
+                try w.j.write(true);
+            } else {
+                try w.writeAsm(inst);
+            },
             .alloc, .ret_ptr, .unreach, .trap, .dbg_empty_stmt => {},
-            else => if (Compat.isNewTyOp(tag)) {
-                try w.writeArgs(&.{w.data(inst).ty_op.operand});
-            } else if (Compat.isNewBinOp(tag)) {
-                const b = w.data(inst).bin_op;
-                try w.writeArgs(&.{ b.lhs, b.rhs });
+            // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into `shuffle_one`
+            // (single source) and `shuffle_two` (two sources). The two forms use unrelated
+            // declarations (`Air.Shuffle` vs `unwrapShuffleOne`/`unwrapShuffleTwo`), so each
+            // is behind its own comptime-known `Compat.v14` branch (only the live Zig version's
+            // declarations are ever referenced).
+            else => if (!Compat.v14) {
+                if (tag == .shuffle_one) {
+                    const s = w.air.unwrapShuffleOne(zcu, inst);
+                    try w.writeArgs(&.{s.operand});
+                    try w.writeShuffleOneMask(s.mask);
+                } else if (tag == .shuffle_two) {
+                    const s = w.air.unwrapShuffleTwo(zcu, inst);
+                    try w.writeArgs(&.{ s.operand_a, s.operand_b });
+                    try w.writeShuffleTwoMask(s.mask);
+                } else if (Compat.isNewTyOp(tag)) {
+                    try w.writeArgs(&.{w.data(inst).ty_op.operand});
+                } else if (Compat.isNewBinOp(tag)) {
+                    const b = w.data(inst).bin_op;
+                    try w.writeArgs(&.{ b.lhs, b.rhs });
+                } else {
+                    try w.field("unsupported");
+                    try w.j.write(true);
+                }
+            } else if (tag == .shuffle) {
+                const extra = w.air.extraData(Air.Shuffle, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{ extra.a, extra.b });
+                try w.writeShuffle14Mask(extra);
             } else {
                 try w.field("unsupported");
                 try w.j.write(true);
             },
         }
         try w.j.endObject();
+    }
+
+    /// `assembly`: source, per-output/-input constraint+name+operand, clobbers, volatile.
+    /// An output whose operand is `.none` is the asm expression's own result (no `ref`).
+    fn writeAsm(w: *W, inst: Air.Inst.Index) Error!void {
+        const a = Compat.unwrapAsm(w.air, inst);
+        try w.field("source");
+        try w.j.write(a.source);
+        try w.field("volatile");
+        try w.j.write(a.is_volatile);
+        try w.field("clobbers");
+        try Compat.writeClobbers(w, a.clobbers);
+        try w.field("outputs");
+        try w.j.beginArray();
+        {
+            var names = a.output_names;
+            for (a.outputs) |ref| {
+                const pair = readAsmNamePair(names);
+                names = names[pair.len..];
+                try w.j.beginObject();
+                try w.field("constraint");
+                try w.j.write(pair.constraint);
+                try w.field("name");
+                try w.j.write(pair.name);
+                if (ref != .none) {
+                    try w.field("ref");
+                    try w.writeRef(ref);
+                }
+                try w.j.endObject();
+            }
+        }
+        try w.j.endArray();
+        try w.field("inputs");
+        try w.j.beginArray();
+        {
+            var names = a.input_names;
+            for (a.inputs) |ref| {
+                const pair = readAsmNamePair(names);
+                names = names[pair.len..];
+                try w.j.beginObject();
+                try w.field("constraint");
+                try w.j.write(pair.constraint);
+                try w.field("name");
+                try w.j.write(pair.name);
+                try w.field("ref");
+                try w.writeRef(ref);
+                try w.j.endObject();
+            }
+        }
+        try w.j.endArray();
     }
 
     /// Format into a string, then write it as an escaped JSON string.
@@ -571,6 +790,83 @@ const W = struct {
         try w.field("args");
         try w.j.beginArray();
         for (refs) |r| try w.writeRef(r);
+        try w.j.endArray();
+    }
+
+    /// A shuffle mask entry: `{"a": i}` (index into the first/only source), `{"b": i}` (index
+    /// into the second source), `{"u": true}` (undefined lane), or `{"v": Ref}` (comptime-known
+    /// value lane; `shuffle_one` only).
+    fn writeShuffleOneMask(w: *W, mask: []const Air.ShuffleOneMask) Error!void {
+        try w.field("mask");
+        try w.j.beginArray();
+        for (mask) |m| {
+            try w.j.beginObject();
+            switch (m.unwrap()) {
+                .elem => |idx| {
+                    try w.field("a");
+                    try w.j.write(idx);
+                },
+                .value => |ip_index| {
+                    try w.field("v");
+                    try w.writeRef(Air.internedToRef(ip_index));
+                },
+            }
+            try w.j.endObject();
+        }
+        try w.j.endArray();
+    }
+
+    fn writeShuffleTwoMask(w: *W, mask: []const Air.ShuffleTwoMask) Error!void {
+        try w.field("mask");
+        try w.j.beginArray();
+        for (mask) |m| {
+            try w.j.beginObject();
+            switch (m.unwrap()) {
+                .a_elem => |idx| {
+                    try w.field("a");
+                    try w.j.write(idx);
+                },
+                .b_elem => |idx| {
+                    try w.field("b");
+                    try w.j.write(idx);
+                },
+                .undef => {
+                    try w.field("u");
+                    try w.j.write(true);
+                },
+            }
+            try w.j.endObject();
+        }
+        try w.j.endArray();
+    }
+
+    /// 0.14.1's `shuffle`: the mask is a comptime `@Vector(mask_len, i32)`. A non-negative lane
+    /// indexes the first source; a negative lane `n` indexes the second source at `~n` (see
+    /// `codegen/llvm.zig`'s `airShuffle`, which undoes the same encoding). An undefined lane
+    /// has no `value`/`b` counterpart: it is always `{"u": true}`.
+    fn writeShuffle14Mask(w: *W, extra: Air.Shuffle) Error!void {
+        const zcu = w.pt.zcu;
+        const mask_val = Value.fromInterned(extra.mask);
+        try w.field("mask");
+        try w.j.beginArray();
+        for (0..extra.mask_len) |i| {
+            const elem = try mask_val.elemValue(w.pt, i);
+            try w.j.beginObject();
+            if (elem.isUndef(zcu)) {
+                try w.field("u");
+                try w.j.write(true);
+            } else {
+                const idx = elem.toSignedInt(zcu);
+                if (idx >= 0) {
+                    try w.field("a");
+                    try w.j.write(idx);
+                } else {
+                    try w.field("b");
+                    try w.j.write(~idx);
+                }
+            }
+            try w.j.endObject();
+        }
         try w.j.endArray();
     }
 
@@ -659,15 +955,22 @@ const W = struct {
                     try w.writeRef(Air.internedToRef(s.len));
                 },
                 .aggregate => |a| {
-                    // An array has its sentinel as the last element. A vector stays text.
+                    // An array has its sentinel as the last element; a vector has no sentinel.
                     const ty = Type.fromInterned(a.ty);
-                    const is_array = ty.zigTypeTag(zcu) == .array;
-                    if (is_array or ty.zigTypeTag(zcu) == .@"struct") {
-                        const len = if (is_array) ty.arrayLenIncludingSentinel(zcu) else ty.structFieldCount(zcu);
+                    const tag = ty.zigTypeTag(zcu);
+                    const is_array = tag == .array;
+                    const is_vector = tag == .vector;
+                    if (is_array or is_vector or tag == .@"struct") {
+                        const len = if (is_array)
+                            ty.arrayLenIncludingSentinel(zcu)
+                        else if (is_vector)
+                            ty.vectorLen(zcu)
+                        else
+                            ty.structFieldCount(zcu);
                         try w.field("elems");
                         try w.j.beginArray();
                         for (0..@intCast(len)) |i| {
-                            const elem = if (is_array) try val.elemValue(w.pt, i) else try val.fieldValue(w.pt, i);
+                            const elem = if (is_array or is_vector) try val.elemValue(w.pt, i) else try val.fieldValue(w.pt, i);
                             try w.writeRef(Air.internedToRef(elem.toIntern()));
                         }
                         try w.j.endArray();
@@ -861,6 +1164,13 @@ const W = struct {
                 try w.field("sentinel");
                 try w.j.write(ty.sentinel(zcu) != null);
             },
+            .vector => {
+                try w.j.write("vector");
+                try w.field("len");
+                try w.j.write(ty.vectorLen(zcu));
+                try w.field("child");
+                try w.writeTypeRef(ty.childType(zcu));
+            },
             .optional => {
                 try w.j.write("optional");
                 try w.field("child");
@@ -1001,8 +1311,8 @@ const W = struct {
         }
         // The size and alignment in bytes, for the types that can be in memory.
         const in_memory = switch (ty.zigTypeTag(zcu)) {
-            .int, .bool, .void, .float, .pointer, .array, .optional, .error_union, .error_set,
-            .@"struct", .@"enum", .@"union",
+            .int, .bool, .void, .float, .pointer, .array, .vector, .optional, .error_union,
+            .error_set, .@"struct", .@"enum", .@"union",
             => true,
             else => false,
         };

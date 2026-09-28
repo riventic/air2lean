@@ -25,6 +25,9 @@ inductive Ty where
   /-- `size`: `one`, `many`, `slice` or `c`. -/
   | ptr (size : String) (isConst : Bool) (child : TyId)
   | array (len : Nat) (child : TyId)
+  /-- `@Vector(len, child)`. Distinct from `array`: its ABI layout rounds the size up to a power
+  of 2 (`Check.lean`'s `modelLayout`, `ZigLean/Vec.lean`'s `Zig.Enc` instance). -/
+  | vector (len : Nat) (child : TyId)
   | optional (child : TyId)
   /-- `E!T`: `set` is the error set type, `payload` is `T`. -/
   | errorUnion (set payload : TyId)
@@ -137,6 +140,31 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
+/-- `std.builtin.ReduceOp`: `@reduce`'s operator. -/
+inductive ReduceOp where
+  | and | or | xor | min | max | add | mul
+  deriving Repr, Inhabited, BEq
+
+/-- One lane of a `@shuffle`'s mask: an index into the first (only, for a single-source shuffle)
+source (`a`), an index into the second source (`b`; two-source shuffle only), an undefined lane,
+or a comptime-known value (single-source shuffle only). Unifies 0.14.1's one `shuffle` tag (mask
+always `a`/`b`/`undef`) with 0.15.2+'s `shuffle_one` (mask `a`/`value`) and `shuffle_two` (mask
+`a`/`b`/`undef`) (`docs/air-json.md`). -/
+inductive ShuffleLane where
+  | a (idx : Nat)
+  | b (idx : Nat)
+  | undef
+  | value (v : Val)
+  deriving Repr, Inhabited, BEq
+
+/-- One `outputs`/`inputs` entry of an `Op.asm` (`docs/air-json.md`). `ref` is `none` only for
+an output that is the asm expression's own result (`=r` with no operand). -/
+structure AsmOperand where
+  constraint : String
+  name : String
+  ref : Option Val
+  deriving Repr, Inhabited, BEq
+
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
 inductive Mode where
   | checked  -- overflow ⇒ `throw .overflow` (`add`, `add_safe`)
@@ -196,6 +224,17 @@ inductive Op where
   | divFloat (a b : Val)
   | minMax (isMax : Bool) (a b : Val)
   | withOverflow (op : ArithOp) (a b : Val)
+  /-- `splat`: a vector with every lane equal to the scalar `a`. -/
+  | splat (a : Val)
+  /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
+  or `b` (false). -/
+  | select (pred a b : Val)
+  /-- `@reduce`: fold the vector `a` with `op` (`reduce_optimized` is outside the subset, like
+  every other `*_optimized` tag). -/
+  | reduce (op : ReduceOp) (a : Val)
+  /-- `@shuffle`: a vector built lane-wise from `mask` reading `a` and, for a two-source shuffle,
+  `b` (`none` for a single-source shuffle). -/
+  | shuffle (a : Val) (b : Option Val) (mask : Array ShuffleLane)
   | bit (op : BitOp) (a b : Val)
   /-- `not` on an integer (bitwise) or a `bool` (logical); `Emit` looks at the type. -/
   | not (a : Val)
@@ -325,6 +364,13 @@ inductive Op where
   | line (n : Nat)
   /-- `dbg_var_*`, `dbg_empty_stmt`: no effect. `name` is kept for readable output. -/
   | dbg (name : Option String) (v : Option Val)
+  /-- `assembly`: register-operand-only inline asm (M21). Translated as a call to an `opaque`
+  Lean function keyed by a hash of `source` and the operand constraints
+  (`docs/generated-code.md` §asm); a proof knows nothing about it beyond what the caller
+  states. `Check.lean` accepts only a register constraint (`=r`, `r`, `{reg}`, `={reg}`), no
+  `"memory"` clobber, and at most one result output (an `=r`/`={reg}` output with no `ref`). -/
+  | asm (source : String) (isVolatile : Bool) (clobbers : Array String)
+      (outputs inputs : Array AsmOperand)
 
 structure SwitchCase where
   items : Array Val
