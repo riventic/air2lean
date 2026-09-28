@@ -333,6 +333,7 @@ pub fn vectorFromJson(comptime n: usize, comptime T: type, v: std.json.Value) @V
         lanes[i] = switch (@typeInfo(T)) {
             .float => parseFloatHex(T, item.string),
             .int => @intCast(item.integer),
+            .bool => item.bool,
             else => @compileError("vectorFromJson: unsupported lane type " ++ @typeName(T)),
         };
     }

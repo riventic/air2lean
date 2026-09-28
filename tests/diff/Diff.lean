@@ -517,6 +517,45 @@ def runCheckedAdd : IO Unit :=
     let b ← intVecOf 32 items[1]!
     pure (renderVec (Vectors.checkedAdd a b))
 
+/-- A `@Vector(4, bool)` argument: a JSON array of 4 bools. -/
+def boolVecOf (j : Json) : IO (Zig.Vec Bool 4) := do
+  let items ← getArr j
+  let b (x : Json) : IO Bool := match x with
+    | .bool v => pure v
+    | _ => throw (IO.userError s!"not a bool: {x.compress}")
+  pure (vec4 (← b items[0]!) (← b items[1]!) (← b items[2]!) (← b items[3]!))
+
+/-- The coverage functions (`examples/vectors/vectors.zig` after `checkedAdd`). -/
+def runVectorCoverage : IO Unit := do
+  let ex := "vectors"
+  processFile ex "splatAdd" fun j => do
+    let items ← getArr j
+    pure (renderVec (Vectors.splatAdd (← intVecOf 32 items[0]!) (bv 32 (← getInt items[1]!))))
+  processFile ex "pick" fun j => do
+    let items ← getArr j
+    pure (renderVec (Vectors.pick (← boolVecOf items[0]!) (← intVecOf 32 items[1]!)
+      (← intVecOf 32 items[2]!)))
+  processFile ex "interleave" fun j => do
+    let items ← getArr j
+    pure (renderVec (Vectors.interleave (← intVecOf 32 items[0]!) (← intVecOf 32 items[1]!)))
+  processFile ex "andLanes" fun j => do
+    pure (render (Vectors.andLanes (← intVecOf 32 (← getArr j)[0]!)) false)
+  processFile ex "orLanes" fun j => do
+    pure (render (Vectors.orLanes (← intVecOf 32 (← getArr j)[0]!)) false)
+  processFile ex "xorLanes" fun j => do
+    pure (render (Vectors.xorLanes (← intVecOf 32 (← getArr j)[0]!)) false)
+  processFile ex "minLane" fun j => do
+    pure (renderSigned (Vectors.minLane (← intVecOf 32 (← getArr j)[0]!)))
+  processFile ex "uMinLane" fun j => do
+    pure (render (Vectors.uMinLane (← intVecOf 32 (← getArr j)[0]!)) false)
+  processFile ex "fMin" fun j => do
+    pure (renderOk (Vectors.fMin (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
+  processFile ex "fMax" fun j => do
+    pure (renderOk (Vectors.fMax (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
+  -- A memory function: run from `mem0`.
+  processFile ex "twiceInMem" fun j => do
+    pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' Vectors.mem0))
+
 /-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
 
 def lightOf (j : Json) : IO Variants.Light := do
@@ -898,6 +937,7 @@ def main : IO Unit := do
     DiffTest.runMaxLane
     DiffTest.runReverse
     DiffTest.runCheckedAdd
+    DiffTest.runVectorCoverage
 
   run "asm" do
     DiffTest.runBswap32

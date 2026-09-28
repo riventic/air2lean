@@ -1,0 +1,105 @@
+{
+ "schema": 10,
+ "zig_version": "0.16.0",
+ "name": "vectors.pick",
+ "params": [
+  0,
+  1,
+  1
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 1,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "select",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 2
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 5,
+   "abi_size": 16,
+   "abi_align": 16
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}
