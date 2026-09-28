@@ -29,6 +29,19 @@ applies `<version>/hook.patch`, builds with
 of the same version on `PATH`: `Compat` selects its branch by that version. `AIR2LEAN_OPTIMIZE` / `AIR2LEAN_CACHE` override
 the optimize mode and download cache dir.
 
+### With or without LLVM
+
+| | Default | `AIR2LEAN_LLVM=1` |
+|---|---|---|
+| What the compiler can do | write AIR only (`build-obj -fno-emit-bin`) | everything a stock zig can do, plus AIR |
+| Lock | yes: `lock.sh` puts a wrapper in `bin/zig` that refuses every other command; the compiler is `bin/zig-unlocked` | no |
+| Needs | a host `zig` | also cmake, and LLVM, Clang and LLD of the version in `versions.toml` (`llvm`: 19 for 0.14.1, 20 for 0.15.2, 21 for 0.16.0) |
+| Build | `zig build` | `cmake` configures only (writes `build/config.h`), then `zig build -Denable-llvm -Dconfig_h=…` |
+
+`AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.
+
+Why the lock: without LLVM, the compiler makes native code with Zig's own backends. On aarch64-macos that backend crashes at once (SIGBUS), also for a hello world, and each crash made macOS's crash reporter use tens of GB of memory. Build and run programs (for example `tests/diff/gen_inputs.zig`) with a stock `zig`.
+
 ## Porting to a new Zig version
 See PLAN.md §Zig version support.
 
