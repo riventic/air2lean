@@ -97,4 +97,15 @@ theorem Triple.destroy (a : Allocator) {p : Ptr} {A S : Nat} {bs : Array Byte} (
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.destroy, show ¬ S = 0 by omega, hr]
 
+/-- `free` of a `[:s]T` needs the whole block of `len + 1` items: the sentinel is in it. -/
+theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Array Byte}
+    (hS : bs.size = size * (s.len.toNat + 1)) (h0 : s.ptr.off = 0) (hpos : 0 < size) :
+    Triple (bytesAt s.ptr A (size * (s.len.toNat + 1)) .heap bs) (a.freeSentinel size s)
+      (fun _ => emp) :=
+  Triple.of_run fun _ _ hF hd hm hb hst => by
+    obtain ⟨m', hr, hm', hst'⟩ :=
+      rawFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
+    refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
+    simp [Allocator.freeSentinel, show ¬ size = 0 by omega, hr]
+
 end Zig

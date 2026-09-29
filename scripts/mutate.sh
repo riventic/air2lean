@@ -78,6 +78,9 @@
 # (r) Emitter-output mutation, slices: the generated constant `"xyz".*` in `sentinelArr`
 #     (Proofs/Slices/Gen.lean) has no sentinel item (`Vector (BitVec 8) 3`), as when the emitter
 #     drops the sentinel of a `[N:s]T` value. `sentinelArr(3)` then panics where Zig returns.
+# (s) Lean-runtime mutation, lists: `Allocator.freeSentinel` (ZigLean/Mem/Alloc.lean) frees `len`
+#     items, not `len + 1`: the free of `dupeZLen`'s `[:0]u8` then misses the sentinel byte and
+#     throws `.illegal` (a free that is not the whole block).
 #
 # Usage: mutate.sh
 # Env:
@@ -86,7 +89,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -531,6 +534,22 @@ else
   run_and_report "mutation (r)" slices
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$slices_backup" "$slices_gen"
+fi
+
+echo "== mutation (s): Allocator.freeSentinel frees len items, not len + 1 (Lean runtime) ==" >&2
+if ! has_example lists; then
+  echo "mutation (s): skipped (AIR2LEAN_EXAMPLES excludes lists)"
+else
+  sed -i.bak 's/^  if size = 0 then pure () else rawFree s\.ptr (size \* (s\.len\.toNat + 1))$/  if size = 0 then pure () else rawFree s.ptr (size * s.len.toNat)/' "$alloc_lean"
+  rm -f "$alloc_lean.bak"
+  grep -q 'rawFree s.ptr (size \* s.len.toNat)$' "$alloc_lean" || {
+    echo "error: mutation (s): sed did not change Allocator.freeSentinel" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (s)" lists
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$alloc_backup" "$alloc_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

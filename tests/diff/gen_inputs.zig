@@ -133,6 +133,7 @@ pub fn main() !void {
     // The vector op generators run last, so every earlier input stays the same.
     try genVectorOps(rng);
     try genSentinelArr(rng);
+    try genDupeZ(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2614,5 +2615,21 @@ fn genSentinelArr(rng: std.Random) !void {
     for (0..N) |i| {
         const x = if (i % 4 == 0) edgesU(u32)[rng.uintLessThan(usize, 4)] else rng.uintLessThan(u32, 6);
         try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{x});
+    }
+}
+
+/// dupeZLen(xs: []const u8): some bytes are 0; the one allocation fails in some inputs.
+fn genDupeZ(rng: std.Random) !void {
+    var file = try openLists("dupeZLen");
+    defer file.close();
+    const writer = file.writer();
+    for (0..N) |i| {
+        const n = rng.uintAtMost(usize, 24);
+        try writeBuf(writer, rng, n, 6);
+        try writeFailAt(writer, rng, i, 1);
+        try writer.writeAll(",");
+        const a = rng.uintAtMost(usize, n);
+        try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
+        try writer.writeAll("]}\n");
     }
 }

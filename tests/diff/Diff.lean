@@ -918,6 +918,8 @@ def runLists : IO Unit := do
     (fun _ x => do withFailAt x[0]! (Lists.sumRange a (bv 64 (← getInt x[1]!)))) wide (heap := true)
   processMem ex m0 "dupe" (fun g x => do withFailAt x[0]! (Lists.dupe a (← sliceOf g x[1]!)))
     (items 1) (heap := true)
+  processMem ex m0 "dupeZLen" (fun g x => do withFailAt x[0]! (Lists.dupeZLen a (← sliceOf g x[1]!)))
+    wide (heap := true)
   processMem ex m0 "evens" (fun g x => do withFailAt x[0]! (Lists.evens a (← sliceOf g x[1]!)))
     (items 4) (heap := true)
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))

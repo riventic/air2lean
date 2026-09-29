@@ -5,7 +5,7 @@ import Air2Lean.Air.Json
 /-!
 # Canonical AIR
 
-Four rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Five rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -30,7 +30,11 @@ supported version, so one translation (and the proofs over it) serves all versio
    with the same tag and operands as an earlier check in the same body, `0 <= x`, or `x <= x + y`
    after the `add` (it does not wrap), for unsigned `x` and `y`. For `s[a..][0..n]`, 0.15.2
    checks `a <= a + n`.
-4. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+4. `argRanks`. An `arg`'s `param` is the source index of the parameter, and it counts the
+   `comptime` parameters of a generic instance (`dupeSentinel(allocator, comptime T, m)` reads
+   `m` as `param 2`). The pass gives each `arg` the rank of its index among the `arg`s, so
+   `param` is the index of the runtime parameter (`p0, p1, …`).
+5. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -289,8 +293,17 @@ def renumber (f : RawFunc) : RawFunc :=
     some { (i.mapVals rv) with id := r i.id, target := i.target.map r }
   { f with body }
 
-/-- The four rewrites (module doc). -/
+/-- `argRanks` (module doc). -/
+def argRanks (f : RawFunc) : RawFunc :=
+  let ps := ((flatten f.body).filterMap fun i => if i.tag == "arg" then i.param else none)
+  let ranks := (ps.qsort (· < ·)).toList.eraseDups.toArray
+  let rank (p : Nat) : Nat := (ranks.idxOf? p).getD p
+  let body := rewriteBody (body := f.body) fun i =>
+    some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
+  { f with body }
+
+/-- The five rewrites (module doc). -/
 def canonicalize (f : RawFunc) : RawFunc :=
-  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies f)))
+  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies (argRanks f))))
 
 end Air2Lean.Raw

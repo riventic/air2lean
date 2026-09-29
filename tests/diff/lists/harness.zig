@@ -55,6 +55,7 @@ pub fn main() !void {
 
     try run(gpa, "sumRange", lists.sumRange, true, argUsize);
     try run(gpa, "dupe", lists.dupe, false, argBytes);
+    try run(gpa, "dupeZLen", lists.dupeZLen, false, argBytes);
     try run(gpa, "evens", lists.evens, false, argItems);
     try run(gpa, "listSum", lists.listSum, true, argItems);
 }

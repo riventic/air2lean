@@ -1,6 +1,7 @@
 import Air2Lean
 import Air2Lean.Check
 import Air2Lean.Emit
+import Air2Lean.Air.Anon
 
 /-!
 # CLI
@@ -8,7 +9,8 @@ import Air2Lean.Emit
 `air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>]` reads every `*.json` file in
 `<air-dir>` (`docs/air-json.md`), parses + normalizes + checks each into a `Func`
 (`Air2Lean/Air/{Json,Normalize}.lean`, `Air2Lean/Check.lean`), then emits them all as one Lean
-file (`Air2Lean/Emit.lean`) importing `ZigLean`, under `namespace <Ns>`.
+file (`Air2Lean/Emit.lean`) importing `ZigLean`, under `namespace <Ns>`. Before parsing, each
+`__anon_<n>` of a generic instance gets a stable number (`Air2Lean/Air/Anon.lean`).
 
 Exits 1 with a message on any error at any stage: a bad flag, an unparsable/unsupported AIR
 file, or a function outside the checked subset.
@@ -77,11 +79,11 @@ def main (args : List String) : IO UInt32 := do
     if jsonPaths.isEmpty then
       die s!"no *.json files found in {a.airDir}"
     else
+      let texts ← jsonPaths.mapM IO.FS.readFile
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for path in jsonPaths do
+      for (path, contents) in jsonPaths.zip (Anon.renumberAnon texts) do
         if err.isNone then
-          let contents ← IO.FS.readFile path
           match processOne contents with
           | .error e => err := some s!"{path}: {e}"
           | .ok f => funcs := funcs.push f

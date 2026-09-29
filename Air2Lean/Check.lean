@@ -508,7 +508,7 @@ def check (f : Func) : Except String Unit := do
   pure ()
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
-arguments and result have a known item size and `ptr_align`, and a slice that it frees has no
+arguments and result have a known item size and `ptr_align`, and a slice that it remaps has no
 sentinel. -/
 def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : Except String Unit := do
   let tyOf (v : Val) : Option TyId := match v with
@@ -525,8 +525,8 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
     unless known && l.ptrAlign.isSome do
       throw s!"{f.name}: a call to the allocator ({repr fn}) with pointer type {p}, which has \
         no item size or `ptr_align` in the AIR file"
-    if l.sentinel && (fn == .free || fn == .remap) then
-      throw s!"{f.name}: a free of a slice with a sentinel is outside the subset"
+    if l.sentinel && fn == .remap then
+      throw s!"{f.name}: a remap of a slice with a sentinel is outside the subset"
 
 /-- A call to `Thread.spawn`: `args[1]` (the `.{...}` args tuple) must have exactly one field.
 `Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),

@@ -842,7 +842,9 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
   | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
-  | .free => s!"Zig.Allocator.free {a} {argSize} {rv (arg 1)}"
+  | .free =>
+    let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
+    s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
 
 /-- A call to the fork-join thread model (`ZigLean/Mem/Thread.lean`), a `Zig.MemM` term.

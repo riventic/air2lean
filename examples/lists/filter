@@ -1,2 +1,4 @@
 array_list.Aligned(u32,null).
 debug.assert
+mem.Allocator.dupeZ
+mem.Allocator.dupeSentinel
