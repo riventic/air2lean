@@ -37,4 +37,5 @@ pub fn main() !void {
     try common.makePath("tests/diff/out/zig/sync");
 
     try run(gpa, "mutexCounter", sync.mutexCounter);
+    try run(gpa, "handoff", sync.handoff);
 }

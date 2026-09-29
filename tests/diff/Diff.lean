@@ -1041,6 +1041,7 @@ def runSync : IO Unit := do
     processConc "sync" name fun _ zig =>
       pure (searchSchedules (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
   one "mutexCounter" Sync.mutexCounter
+  one "handoff" Sync.handoff
 
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do

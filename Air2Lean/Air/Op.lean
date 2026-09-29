@@ -77,7 +77,7 @@ structure Layout where
 
 inductive Val where
   | inst (id : InstId)
-  /-- An integer constant. `ty` is an `int` type. -/
+  /-- An integer constant. `ty` is an `int` type, or a packed struct (its backing integer). -/
   | int (ty : TyId) (v : Int)
   /-- A float constant: the raw bit pattern (`docs/air-json.md`'s `fbits`). `ty` is a `float`
   type. -/

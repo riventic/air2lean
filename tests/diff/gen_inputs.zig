@@ -2732,7 +2732,7 @@ fn genAtomics() !void {
 /// sync: the `std.Io` argument only; 20 runs of each function.
 fn genSync() !void {
     try compat.makePath("tests/diff/sync/inputs");
-    inline for (.{"mutexCounter"}) |name| {
+    inline for (.{ "mutexCounter", "handoff" }) |name| {
         var file = try openOutIn("tests/diff/sync/inputs", name);
         defer file.close();
         const writer = file.writer();

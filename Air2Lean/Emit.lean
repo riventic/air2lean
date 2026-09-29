@@ -547,7 +547,12 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
 partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : String :=
   match v with
   | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD s!"(panic! \"air2lean: unbound inst {id}\")"
-  | .int tid n => tagLit (fc.tyBits tid) n
+  | .int tid n =>
+    match fc.tyOfId tid with
+    | .struct _ "packed" _ =>
+      let bits := (packedBits fc.types tid).getD 0
+      s!"(Zig.Packed.ofBits {tagLit bits n} : {fc.emitTyOf tid})"
+    | _ => tagLit (fc.tyBits tid) n
   | .float tid bits =>
     let n := match fc.tyOfId tid with | .float b => b | _ => 0
     s!"(Zig.Float.ofBits ({bits} : BitVec {n}) : {fc.emitTyOf tid})"
@@ -787,11 +792,11 @@ def orderTerm : AtomicOrder → String
   | .acqRel => "Zig.AtomicOrder.acqRel"
   | .seqCst => "Zig.AtomicOrder.seqCst"
 
-/-- An atomic op through `ptr` on an enum or a `bool`: the typed op (`Zig.atomicLoadAs`, …, on
+/-- An atomic op through `ptr` on an enum, a `bool` or a packed struct: the typed op (`Zig.atomicLoadAs`, …, on
 the value's `Zig.Packed` bits), not the integer op. -/
 def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
   match fc.pointeeOf ptr with
-  | .enum .. | .bool => true
+  | .enum .. | .bool | .struct _ "packed" _ => true
   | _ => false
 
 /-- The Lean type of the value that the pointer `v` points to. -/

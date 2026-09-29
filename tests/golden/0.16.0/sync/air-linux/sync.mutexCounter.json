@@ -144,7 +144,7 @@
    "ty": 12,
    "callee": {
     "ty": 13,
-    "func": "Thread.spawn__anon_389",
+    "func": "Thread.spawn__anon_395",
     "noreturn": false,
     "comptime_fn": "sync.work"
    },
