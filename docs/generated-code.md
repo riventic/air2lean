@@ -192,11 +192,13 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 
 | AIR | Lean |
 |---|---|
-| `atomic_load` | `Zig.yieldC` then `Zig.atomicLoad align p` |
-| `atomic_store_unordered`/`monotonic`/`release`/`seq_cst` | `Zig.yieldC` then `Zig.atomicStore align p v` (the ordering is decoded; every atomic write releases and every atomic read acquires, std-models.md §Thread model) |
-| `atomic_rmw` | `Zig.yieldC` then `Zig.atomicRmw op signed align p v` (`op`: `Zig.RmwOp`) |
-| `cmpxchg_weak`, `cmpxchg_strong` | `Zig.yieldC` then `Zig.cmpxchg align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
-| an atomic op on an enum or a `bool` | the same with `Zig.atomicLoadAs (T)`, `atomicStoreAs`, `atomicRmwAs`, `cmpxchgAs`: the op on the value's `Zig.Packed` bits |
+| `atomic_load` | `Zig.atomicLoadC (n := N) ord align p` |
+| `atomic_store_monotonic`/`release`/`seq_cst` | `Zig.atomicStoreC ord align p v` |
+| `atomic_rmw` | `Zig.atomicRmwC op signed ord align p v` (`op`: `Zig.RmwOp`) |
+| `cmpxchg_weak`, `cmpxchg_strong` | `Zig.cmpxchgC succ fail align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
+| an atomic op on an enum or a `bool` | the same with `Zig.atomicLoadAsC (T)`, `atomicStoreAsC`, `atomicRmwAsC`, `cmpxchgAsC`: the op on the value's `Zig.Packed` bits |
+
+`ord` is a `Zig.AtomicOrder` (`monotonic` is `.relaxed`; `unordered` is rejected). Each `*C` op is a `Zig.pickC` (the oracle picks the message to read or the place of the write, RC11, std-models.md §Thread model), then the op in `MemM` (`Zig.atomicLoadAt c …`).
 | `call` of `Thread.spawn(config, f, args)` | `Zig.spawnC (Tgt.f args)` |
 | `call` of `Thread.join(handle)` | `Zig.joinC handle` |
 

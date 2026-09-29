@@ -33,6 +33,10 @@ inductive SyncOp (Tgt : Type) where
   | yield
   /-- A choice of the oracle: a number `< k` (`k = 0`: no choice, `0`). -/
   | choose (k : Nat)
+  /-- A choice of the oracle among `count m` options, from the memory `m` when the thread goes
+  on: the message that an atomic read reads, or the place of an atomic write
+  (`ZigLean/Mem/Thread.lean`). -/
+  | pick (count : Mem → Nat)
   /-- `Thread.spawn` of `t`. -/
   | spawn (t : Tgt)
   /-- `Thread.join`: waits until thread `tid` ends. -/
@@ -40,7 +44,7 @@ inductive SyncOp (Tgt : Type) where
 
 /-- The response of the scheduler to a sync op. -/
 def SyncOp.Resp {Tgt : Type} : SyncOp Tgt → Type
-  | .choose _ => Nat
+  | .choose _ | .pick _ => Nat
   | .spawn _ => ThreadId
   | .yield | .join _ => Unit
 

@@ -349,6 +349,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
           cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
     pure line
+  | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
+    cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line

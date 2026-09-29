@@ -110,6 +110,9 @@ def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat �
   | ⟨_, .choose n, k⟩ =>
     let (c, s) := s.choose o n
     settle t s (k c s.mem)
+  | ⟨_, .pick count, k⟩ =>
+    let (c, s) := s.choose o (count s.mem)
+    settle t s (k c s.mem)
   | ⟨_, .spawn tgt, k⟩ =>
     let (child, s) ← s.onMem Thread.fork
     -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.

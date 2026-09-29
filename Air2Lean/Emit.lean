@@ -778,6 +778,14 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
 
+/-- The Lean term of an atomic ordering (`Zig.AtomicOrder`; `Check.lean` rejects `unordered`). -/
+def orderTerm : AtomicOrder → String
+  | .unordered | .monotonic => "Zig.AtomicOrder.relaxed"
+  | .acquire => "Zig.AtomicOrder.acquire"
+  | .release => "Zig.AtomicOrder.release"
+  | .acqRel => "Zig.AtomicOrder.acqRel"
+  | .seqCst => "Zig.AtomicOrder.seqCst"
+
 /-- An atomic op through `ptr` on an enum or a `bool`: the typed op (`Zig.atomicLoadAs`, …, on
 the value's `Zig.Packed` bits), not the integer op. -/
 def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
@@ -1599,17 +1607,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
     else (env, some (fc.storePlace ptr (rv v)))
-  -- An atomic op is a sync op: `Zig.yieldC` lets another thread run first
-  -- (`ZigLean/Conc/Call.lean`).
-  | .atomicLoad ptr _order =>
+  -- An atomic op is a sync op: the oracle picks the message or the place, and another thread can
+  -- run first (`ZigLean/Conc/Call.lean`).
+  | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAs ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
-      else s!"Zig.atomicLoad (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
-    let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
-  | .atomicStore ptr v _order =>
-    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAs" else "Zig.atomicStore"
-    (env, some s!"Zig.yieldC\n{f} {fc.ptrAlign ptr} {rv ptr} {rv v}")
-  | .atomicRmw op _order ptr v =>
+    let o := orderTerm order
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .atomicStore ptr v order =>
+    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
+    (env, some s!"{f} {orderTerm order} {fc.ptrAlign ptr} {rv ptr} {rv v}")
+  | .atomicRmw op order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
     -- `Zig.RmwOp` (the model, `ZigLean/Mem/Thread.lean`).
     let opName := match op with
@@ -1617,14 +1626,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .or => "or" | .xor => "xor" | .max => "max" | .min => "min"
     let opTerm := s!"Zig.RmwOp.{opName}"
     let signed := if fc.tySigned inst.ty then "true" else "false"
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAs {opTerm} {fc.ptrAlign ptr} {rv ptr} {rv v}"
-      else s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v}"
-    let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
-  | .cmpxchg _weak ptr expected new _succ _fail =>
+    let o := orderTerm order
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .cmpxchg _weak ptr expected new succ fail =>
     -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
-    let f := if fc.atomicTyped ptr then "Zig.cmpxchgAs" else "Zig.cmpxchg"
-    let expr := s!"{f} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
-    let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
+    let f := if fc.atomicTyped ptr then "Zig.cmpxchgAsC" else "Zig.cmpxchgC"
+    let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
     let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)

@@ -55,13 +55,16 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (t) | every `Mode` value is valid in a packed struct | 128 mismatches |
 | (u) | a `bool` vector in memory has its lanes in reverse bit order | 220 mismatches |
 | (v) | `cmpxchgAs` compares with the new value | 20 mismatches |
+| (w) | an acquire read adopts no clock | proof build (`mp_sees_data`) |
+| (x) | a write goes only at the end | proof build (`twoPlusTwoW_weak`) |
 
 ## Next
 
 | # | Milestone |
 |---|---|
 | T1 | Threads that take turns (`ZigLean/Conc/`): the monad `ConcM` (a tree of sync ops with `CCPO`/`MonoBind`), the scheduler `Zig.Sched.run` over an oracle, concurrent functions in `Emit.lean` (`Tgt`, `dispatch`, a `yield` before each atomic op), the race rule (two atomic accesses never race; release/acquire clocks per location), the diff test's search over schedules. `Zig.Error.nondet` is gone. |
-| T2–T6 | RC11 memory model, waits and the std sync primitives (`Mutex`, `Condition`, …), proofs over all schedules, concurrent separation logic, docs. |
+| T2 | RC11 (`ZigLean/Mem/Thread.lean`): per atomic location the writes in modification order; a read reads a message not older than its happens-before and its own reads; a write can go before newer messages; RMWs stay right after what they read; only acquire/release give happens-before edges (release sequences). `seq_cst` = `acq_rel` (no SC order: more results, never fewer). Each atomic op is one `pick` of the oracle. Example `atomics` (message passing, store buffering, 2+2W, a lock-free stack); proofs of the weak results under concrete schedules; mutations (w), (x) detected by the proof build. |
+| T3–T6 | Waits and the std sync primitives (`Mutex`, `Condition`, …), proofs over all schedules, concurrent separation logic, docs. |
 
 ## Decisions
 

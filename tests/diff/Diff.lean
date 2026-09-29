@@ -12,6 +12,7 @@ import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
 import Proofs.Lists.Gen
 import Proofs.Threads.Gen
+import Proofs.Atomics.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 import Proofs.Layout.Gen
@@ -997,11 +998,15 @@ def processConc (ex name : String) (step : Json → String → IO String) : IO U
     let i ← k.modifyGet fun i => (i, i + 1)
     step j (zig[i]?.getD "")
 
-/-- One concurrent top-level call under the schedule `o`, from `m0`. -/
-def runConc {α : Type} (m0 : Zig.Mem) (main : Zig.ConcM Threads.Tgt α) (payload : α → String)
-    (o : Nat → Nat) : String × Array Nat :=
-  let (r, opts) := Zig.Sched.runTrace Threads.dispatch scheduleFuel o main m0
+/-- One concurrent top-level call under the schedule `o`, from `m0`; `dispatch` runs the
+program's spawn targets. -/
+def runConcWith {Tgt α : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
+    (main : Zig.ConcM Tgt α) (payload : α → String) (o : Nat → Nat) : String × Array Nat :=
+  let (r, opts) := Zig.Sched.runTrace dispatch scheduleFuel o main m0
   (renderOut r payload, opts)
+
+def runConc {α : Type} (m0 : Zig.Mem) (main : Zig.ConcM Threads.Tgt α) (payload : α → String) :=
+  runConcWith Threads.dispatch m0 main payload
 
 def runParallelCounter : IO Unit :=
   processConc "threads" "parallelCounter" fun j zig => do
@@ -1019,6 +1024,16 @@ def runRace : IO Unit :=
 def runClaimOnce : IO Unit :=
   processConc "threads" "claimOnce" fun _ zig => do
     pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+
+def runAtomics : IO Unit := do
+  let one (name : String) (f : Zig.ConcM Atomics.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "atomics" name fun _ zig =>
+      pure (searchSchedules (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
+  one "mpRelAcq" Atomics.mpRelAcq
+  one "mpRelaxed" Atomics.mpRelaxed
+  one "sbRelaxed" Atomics.sbRelaxed
+  one "twoPlusTwoW" Atomics.twoPlusTwoW
+  one "stackPush" Atomics.stackPush
 
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do
@@ -1137,6 +1152,8 @@ def main : IO Unit := do
     DiffTest.runRace
     DiffTest.runXchgRace
     DiffTest.runClaimOnce
+
+  run "atomics" DiffTest.runAtomics
 
   run "floats" do
     DiffTest.runLerp

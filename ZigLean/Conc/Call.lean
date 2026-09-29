@@ -1,13 +1,14 @@
 import ZigLean.Conc.Basic
 import ZigLean.Basic
+import ZigLean.Mem.Thread
 
 /-!
 # Calls and sync ops in a concurrent function
 
 `Zig.CM Tgt σ α`: the body monad of a concurrent function, its locals over `ConcM`. The lifts
 of calls to the other function kinds (`callMC`, `callRC`), the sync ops that `Emit.lean` writes
-(`yieldC` before each atomic op, `spawnC`, `joinC`), and the lemmas that `partial_fixpoint` needs
-to see through them (as `ZigLean/Mem/Basic.lean` has for `MM`).
+(each atomic op: a `pick` of the oracle, then the op in `MemM`; `spawnC`, `joinC`), and the lemmas
+that `partial_fixpoint` needs to see through them (as `ZigLean/Mem/Basic.lean` has for `MM`).
 -/
 
 namespace Zig
@@ -26,8 +27,50 @@ variable {Tgt σ α : Type}
 /-- A call from a concurrent function to a pure function. -/
 @[inline] def callRC (r : Result α) : CM Tgt σ α := StateT.lift (ConcM.liftMem (StateT.lift r))
 
-/-- Another thread can run first: before each atomic op. -/
-def yieldC : CM Tgt σ Unit := StateT.lift (discard (ConcM.sync (Tgt := Tgt) .yield))
+/-- A choice of the oracle among `count m` options (`SyncOp.pick`): another thread can run
+first. -/
+def pickC (count : Mem → Nat) : CM Tgt σ Nat := StateT.lift (ConcM.sync (Tgt := Tgt) (.pick count))
+
+/-! ### Atomic ops: the oracle picks the message or the place (`ZigLean/Mem/Thread.lean`) -/
+
+def atomicLoadC {n : Nat} (ord : AtomicOrder) (align : Nat) (p : Ptr) : CM Tgt σ (BitVec n) := do
+  let c ← pickC (loadCount n ord align p)
+  callMC (atomicLoadAt c ord align p)
+
+def atomicStoreC {n : Nat} (ord : AtomicOrder) (align : Nat) (p : Ptr) (v : BitVec n) :
+    CM Tgt σ Unit := do
+  let c ← pickC (storeCount n ord align p)
+  callMC (atomicStoreAt c ord align p v)
+
+def atomicRmwC {n : Nat} (op : RmwOp) (signed : Bool) (ord : AtomicOrder) (align : Nat) (p : Ptr)
+    (v : BitVec n) : CM Tgt σ (BitVec n) := do
+  let c ← pickC (rmwCount n ord align p)
+  callMC (atomicRmwAt c op signed ord align p v)
+
+def cmpxchgC {n : Nat} (succ fail : AtomicOrder) (align : Nat) (p : Ptr) (expected new : BitVec n) :
+    CM Tgt σ (Option (BitVec n)) := do
+  let c ← pickC (casCount n succ align p expected)
+  callMC (cmpxchgAt c succ fail align p expected new)
+
+def atomicLoadAsC (α : Type) {n : Nat} [Packed α n] (ord : AtomicOrder) (align : Nat) (p : Ptr) :
+    CM Tgt σ α := do
+  let c ← pickC (loadCount n ord align p)
+  callMC (atomicLoadAs α c ord align p)
+
+def atomicStoreAsC {α : Type} {n : Nat} [Packed α n] (ord : AtomicOrder) (align : Nat) (p : Ptr)
+    (v : α) : CM Tgt σ Unit := do
+  let c ← pickC (storeCount n ord align p)
+  callMC (atomicStoreAs c ord align p v)
+
+def atomicRmwAsC {α : Type} {n : Nat} [Packed α n] (op : RmwOp) (ord : AtomicOrder) (align : Nat)
+    (p : Ptr) (v : α) : CM Tgt σ α := do
+  let c ← pickC (rmwCount n ord align p)
+  callMC (atomicRmwAs c op ord align p v)
+
+def cmpxchgAsC {α : Type} {n : Nat} [Packed α n] (succ fail : AtomicOrder) (align : Nat) (p : Ptr)
+    (expected new : α) : CM Tgt σ (Option α) := do
+  let c ← pickC (casCount n succ align p (Packed.toBits expected))
+  callMC (cmpxchgAs c succ fail align p expected new)
 
 /-- `Thread.spawn` of the target `t`: never fails (`docs/std-models.md` §Thread model). -/
 def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do

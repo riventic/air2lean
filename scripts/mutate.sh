@@ -87,6 +87,13 @@
 #     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
 # (v) Lean-runtime mutation, threads: `cmpxchgAs` (ZigLean/Mem/Thread.lean) compares with the
 #     new value, not the expected one. In `claimOnce` no thread wins the claim.
+# (w) Lean-runtime mutation, atomics: `acquireClock` (ZigLean/Mem/Thread.lean) adopts no clock:
+#     an acquire read gives no happens-before edge. Detected by the proof build: in
+#     `mp_sees_data` (Proofs/Atomics/Proofs.lean) the data read after the flag is then a race.
+# (x) Lean-runtime mutation, atomics: `writeSlots` offers only the end: a relaxed write never
+#     goes before a newer message. Detected by the proof build: `twoPlusTwoW_weak` needs it.
+#     A weak-memory result is rare on real hardware, so the diff test seldom sees one; the
+#     proofs show each one under a fixed schedule.
 #
 # Usage: mutate.sh
 # Env:
@@ -95,7 +102,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -218,6 +225,18 @@ translate_mutated() {
 # detected (mismatch=N)" and sets $detected (1/0). A diff.sh crash with no TOTAL line at all (not
 # even a mismatch report) is a broken test setup, not an undetected mutation, so that case
 # aborts the whole script instead.
+# proof_report <label> <module>: `lake build <module>` fails with the mutation (a detection).
+proof_report() {
+  local label=$1 mod=$2
+  if lake build "$mod" >/dev/null 2>&1; then
+    echo "$label: NOT detected (lake build $mod succeeded)"
+    detected=0
+  else
+    echo "$label: detected (lake build $mod failed)"
+    detected=1
+  fi
+}
+
 run_and_report() {
   local label=$1 ex=$2
   local out
@@ -601,6 +620,38 @@ else
   }
 
   run_and_report "mutation (v)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (w): an acquire read adopts no clock (Lean runtime, proof build) ==" >&2
+if ! has_example atomics; then
+  echo "mutation (w): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
+else
+  sed -i.bak 's/^  { m with clocks := m.clocks.set! m.current (VClock.merge (m.clocks\[m.current\]!) c) }$/  { m with clocks := m.clocks.set! m.current (m.clocks[m.current]!) }/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^  { m with clocks := m.clocks.set! m.current (m.clocks\[m.current\]!) }$' "$thread_lean" || {
+    echo "error: mutation (w): sed did not change acquireClock" >&2
+    exit 1
+  }
+
+  proof_report "mutation (w)" Proofs.Atomics.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (x): a write goes only at the end (Lean runtime, proof build) ==" >&2
+if ! has_example atomics; then
+  echo "mutation (x): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
+else
+  sed -i.bak 's/^  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n || !l.hasRmwAfter (p - 1)$/  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q 'filter fun p => p == n$' "$thread_lean" || {
+    echo "error: mutation (x): sed did not change writeSlots" >&2
+    exit 1
+  }
+
+  proof_report "mutation (x)" Proofs.Atomics.Proofs
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi

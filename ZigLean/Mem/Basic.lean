@@ -148,6 +148,42 @@ structure FootprintEntry where
   kind : AccessKind
   deriving Repr, Inhabited
 
+/-- The ordering of an atomic op (`std.builtin.AtomicOrder`; `unordered` is outside the
+subset). -/
+inductive AtomicOrder where
+  | relaxed | acquire | release | acqRel | seqCst
+  deriving DecidableEq, Repr, Inhabited
+
+def AtomicOrder.isAcq : AtomicOrder → Bool
+  | .acquire | .acqRel | .seqCst => true
+  | _ => false
+
+def AtomicOrder.isRel : AtomicOrder → Bool
+  | .release | .acqRel | .seqCst => true
+  | _ => false
+
+/-- One write to an atomic location (RC11, `ZigLean/Mem/Thread.lean`). -/
+structure Msg where
+  id : Nat
+  bytes : Array Byte
+  /-- The writer's clock at the write: the write happened before a thread whose clock is `≥`
+  it. -/
+  clock : VClock
+  /-- The clock that an acquire read of this message adopts: the writer's clock for a release
+  write, joined along a release sequence (the RMWs after it); empty otherwise. -/
+  relClock : VClock
+  /-- For an RMW: the id of the message it read. It stays right after that message. -/
+  rmwOf : Option Nat := none
+  deriving Repr, Inhabited
+
+/-- An atomic location: its writes in modification order. -/
+structure ALoc where
+  block : BlockId
+  off : Nat
+  len : Nat
+  msgs : Array Msg
+  deriving Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -164,9 +200,12 @@ structure Mem where
   threads : Array ThreadRec := #[{ spawner := 0, joined := true }]
   /-- Every access recorded so far, across every thread. -/
   footprint : Array FootprintEntry := #[]
-  /-- The release clock of each atomic location `(block, offset)`: the clock that an atomic read
-  of it adopts (`ZigLean/Mem/Thread.lean`). -/
-  relClocks : Array (BlockId × Nat × VClock) := #[]
+  /-- The atomic locations (RC11, `ZigLean/Mem/Thread.lean`). -/
+  atomics : Array ALoc := #[]
+  /-- `(t, loc, id)`: the last message of atomic location `loc` that thread `t` read or wrote. -/
+  seen : Array (ThreadId × Nat × Nat) := #[]
+  /-- The id of the next message. -/
+  nextMsg : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

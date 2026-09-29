@@ -27,41 +27,167 @@ instance : Enc ThreadId where
   encode tid := Enc.encode (BitVec.ofNat 64 tid)
   decode bs := do pure (← (Enc.decode bs : Result (BitVec 64))).toNat
 
-/-! ## Atomics
+/-! ## Atomics (RC11)
 
-An atomic access never races with another atomic access (`racePair`): the scheduler orders them.
-Happens-before across threads through atomics: an atomic write releases, an atomic read acquires.
-The location's release clock (`Mem.relClocks`) is the clock of its last atomic store, joined
-with the clock of each RMW after it (the release sequence); a read merges it into the reader's
-clock. So a plain access before the write and a plain access after the read do not race.
+The memory model of atomics is RC11, in the operational form without promises (the model under
+iRC11). An atomic location (`ALoc`) keeps its writes (`Msg`) in modification order; the block's
+bytes are those of the last one. At each atomic op the oracle picks (`SyncOp.pick`, the options
+from `*Count`):
+
+- A read reads any message that is not older than a message that happened before it (its clock
+  is `≤` the reader's) and not older than a message the thread read or wrote before
+  (`Mem.seen`). Option 0 is the newest.
+- A write goes to any place after those messages, but not between an RMW and the message it
+  read. Option 0 is the end.
+- An RMW reads a message that has no RMW after it yet, and goes right after it.
+- A `seq_cst` op has the rule of `acq_rel`: the model has no global SC order. So it allows more
+  results than RC11 (a proof never depends on a result that RC11 forbids), but a proof that needs
+  the SC order (store buffering, Dekker) does not go through.
+- An acquire read adopts the message's release clock (`Msg.relClock`): the writer's clock for a
+  release write, joined along the RMWs after it. That is the only happens-before edge of atomics.
+
+A plain write to an atomic location (the value before the first atomic op, or a write after a
+join) becomes a message at the next atomic op (`locIdx`); a race with it is `.illegal`, so it
+happened before. Two atomic accesses never race (`racePair`). An atomic location with an overlap
+of another size throws `.unspecified`.
+
+**Trusted assumption** (`docs/std-models.md` §Thread model): the compiled code has no load
+buffering (RC11); LLVM does not promise that for relaxed atomics.
 -/
 
-/-- The current thread adopts the release clock of the atomic location `(b, o)`. -/
-def acquireAt (b : BlockId) (o : Nat) : MemM Unit := modify fun m =>
-  match m.relClocks.find? (fun e => e.1 == b && e.2.1 == o) with
-  | some (_, _, c) => { m with clocks := m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) c) }
-  | none => m
+/-- The clock of the last plain write to the bytes `o..o+len` of block `b` (`#[]`: none, the
+value from before every thread). -/
+def plainClock (m : Mem) (b : BlockId) (o len : Nat) : VClock :=
+  ((m.footprint.filter fun e => e.block == b && e.kind == .write && o < e.off + e.len &&
+    e.off < o + len).back?.map (·.clock)).getD #[]
 
-/-- The atomic location `(b, o)` gets the current thread's clock: it replaces the release clock
-(a store), or joins it (an RMW: the release sequence goes on). -/
-def releaseAt (b : BlockId) (o : Nat) (rmw : Bool) : MemM Unit := modify fun m =>
-  let own := m.clocks[m.current]!
-  let old := (m.relClocks.find? (fun e => e.1 == b && e.2.1 == o)).map (·.2.2)
-  let c := if rmw then VClock.merge (old.getD #[]) own else own
-  { m with relClocks := (m.relClocks.filter (fun e => !(e.1 == b && e.2.1 == o))).push (b, o, c) }
+/-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
+bytes as its first message; a plain write since the last message becomes a message. -/
+def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
+  let m ← get
+  let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
+  match m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
+  | some i =>
+    let l := m.atomics[i]!
+    if l.len != len then throw .unspecified
+    let last := (l.msgs.back?.map (·.bytes)).getD #[]
+    let (msgs, next) := if last == cur then (l.msgs, m.nextMsg) else
+      (l.msgs.push { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] },
+       m.nextMsg + 1)
+    set { m with atomics := m.atomics.set! i { l with msgs }, nextMsg := next }
+    pure i
+  | none =>
+    if m.atomics.any (fun l => l.block == b && o < l.off + l.len && l.off < o + len) then
+      throw .unspecified
+    let first : Msg := { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] }
+    set { m with atomics := m.atomics.push { block := b, off := o, len, msgs := #[first] },
+                 nextMsg := m.nextMsg + 1 }
+    pure m.atomics.size
 
-/-- `atomic_load`: `.atomicRead`, then acquire. -/
-def atomicLoad {n : Nat} (align : Nat) (p : Ptr) : MemM (BitVec n) := do
-  let (b, _, o) ← (← get).access p (intSize n) align
-  let v ← intOfBytes n (← loadBytes p (intSize n) align .atomicRead)
-  acquireAt b o
-  pure v
+/-- The position of message `id` of `l`. -/
+def ALoc.pos (l : ALoc) (id : Nat) : Option Nat := l.msgs.findIdx? (·.id == id)
 
-/-- `atomic_store_*`: `.atomicWrite`, then release. -/
-def atomicStore {n : Nat} (align : Nat) (p : Ptr) (v : BitVec n) : MemM Unit := do
+/-- Message `p` of `l` has an RMW right after it that read it. -/
+def ALoc.hasRmwAfter (l : ALoc) (p : Nat) : Bool :=
+  match l.msgs[p + 1]?, l.msgs[p]? with
+  | some x, some y => x.rmwOf == some y.id
+  | _, _ => false
+
+/-- The oldest position that the current thread can read at location `li`: the newest message
+that happened before it, or that it read or wrote before. -/
+def floorPos (m : Mem) (li : Nat) : Nat :=
+  let l := m.atomics[li]!
+  let c := m.clocks[m.current]!
+  let hb := l.msgs.zipIdx.foldl (fun a (x, i) => if VClock.le x.clock c then Nat.max a i else a) 0
+  let own := match m.seen.find? (fun (t, j, _) => t == m.current && j == li) with
+    | some (_, _, id) => (l.pos id).getD 0
+    | none => 0
+  Nat.max hb own
+
+/-- The positions that a read can read, newest first. `rmw`: only a message without an RMW after
+it. -/
+def readOpts (m : Mem) (li : Nat) (rmw : Bool) : Array Nat :=
+  let l := m.atomics[li]!
+  let n := l.msgs.size
+  let f := floorPos m li
+  ((Array.range (n - f)).map fun k => n - 1 - k).filter fun p => !rmw || !l.hasRmwAfter p
+
+/-- The places (the index of the new message) that a write can take, the end first. -/
+def writeSlots (m : Mem) (li : Nat) : Array Nat :=
+  let l := m.atomics[li]!
+  let n := l.msgs.size
+  let f := floorPos m li
+  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n || !l.hasRmwAfter (p - 1)
+
+/-- The current thread has read or written message `id` of location `li`. -/
+def observe (li id : Nat) : MemM Unit := modify fun m =>
+  { m with seen := (m.seen.filter fun (t, j, _) => !(t == m.current && j == li)).push (m.current, li, id) }
+
+/-- An acquire: the current thread adopts the clock `c`. -/
+def acquireClock (c : VClock) : MemM Unit := modify fun m =>
+  { m with clocks := m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) c) }
+
+/-- Put `msg` at place `p` of location `li`; at the end it is also the block's bytes. -/
+def insertMsg (li p : Nat) (msg : Msg) : MemM Unit := modify fun m =>
+  let l := m.atomics[li]!
+  let m := { m with atomics := m.atomics.set! li { l with msgs := l.msgs.insertIdxIfInBounds p msg },
+                    nextMsg := m.nextMsg + 1 }
+  if p == l.msgs.size then
+    match m.blocks[l.block]? with
+    | some blk => { m with blocks := m.blocks.set! l.block { blk with bytes := writeBytes blk.bytes l.off msg.bytes } }
+    | none => m
+  else m
+
+/-- The options of an op at `p` (`MemM` run on a copy): `1` if the op throws first. -/
+def optCount (x : MemM (Array Nat)) (m : Mem) : Nat :=
+  match (x.run m).run with
+  | some (.ok (a, _)) => a.size
+  | _ => 1
+
+/-- An atomic read of `n` bits at `p`: the access, the race record, the location, the options. -/
+def loadPrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (rmw : Bool) :
+    MemM (Nat × Array Nat) := do
+  let m ← get
+  let (b, _, o) ← (if rmw then m.accessW p (intSize n) align else m.access p (intSize n) align)
+  recordAccess b o (intSize n) (if rmw then .atomicWrite else .atomicRead)
+  let li ← locIdx b o (intSize n)
+  pure (li, readOpts (← get) li rmw)
+
+def loadCount (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : Mem → Nat :=
+  optCount ((·.2) <$> loadPrep n ord align p false)
+
+/-- `atomic_load`: option `c` of `loadCount`. -/
+def atomicLoadAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) :
+    MemM (BitVec n) := do
+  let (li, opts) ← loadPrep n ord align p false
+  let some pos := opts[c]? | throw .illegal
+  let msg := (← get).atomics[li]!.msgs[pos]!
+  observe li msg.id
+  if ord.isAcq then acquireClock msg.relClock
+  intOfBytes n msg.bytes
+
+def storePrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : MemM (Nat × Array Nat) := do
   let (b, _, o) ← (← get).accessW p (intSize n) align
-  storeBytes p align (padTo (intSize n) (intBytes v)) .atomicWrite
-  releaseAt b o false
+  recordAccess b o (intSize n) .atomicWrite
+  let li ← locIdx b o (intSize n)
+  pure (li, writeSlots (← get) li)
+
+def storeCount (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : Mem → Nat :=
+  optCount ((·.2) <$> storePrep n ord align p)
+
+/-- `atomic_store_*`: place `c` of `storeCount`. -/
+def atomicStoreAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (v : BitVec n) :
+    MemM Unit := do
+  let (li, slots) ← storePrep n ord align p
+  let some slot := slots[c]? | throw .illegal
+  let m ← get
+  let cl := m.clocks[m.current]!
+  let id := m.nextMsg
+  let msg : Msg :=
+    { id := id, bytes := padTo (intSize n) (intBytes v), clock := cl,
+      relClock := (if ord.isRel then cl else #[]) }
+  insertMsg li slot msg
+  observe li id
 
 /-- `std.builtin.AtomicRmwOp`, restricted to the integer subset (`docs/std-models.md` §Thread
 model: no float or `bool` RMW). -/
@@ -84,40 +210,64 @@ def RmwOp.apply (op : RmwOp) (signed : Bool) {n : Nat} (old v : BitVec n) : BitV
   | .max => Zig.max signed old v
   | .min => Zig.min signed old v
 
-/-- `atomic_rmw`: one indivisible read-modify-write, as a single footprint entry covering both
-the read and the write. Acquires, then releases into the release sequence. Returns the value
-before the op. -/
-def atomicRmw {n : Nat} (op : RmwOp) (signed : Bool) (align : Nat) (p : Ptr) (v : BitVec n) :
-    MemM (BitVec n) := do
-  let (b, blk, o) ← (← get).accessW p (intSize n) align
-  let old ← intOfBytes n (blk.bytes.extract o (o + intSize n))
-  recordAccess b o (intSize n) .atomicWrite
-  acquireAt b o
+def rmwCount (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : Mem → Nat :=
+  optCount ((·.2) <$> loadPrep n ord align p true)
+
+/-- An RMW that read message `pos` of location `li`: the new message right after it, in the
+release sequence of the message it read. -/
+def rmwWrite {n : Nat} (li pos : Nat) (ord : AtomicOrder) (rd : Msg) (new : BitVec n) : MemM Unit := do
+  if ord.isAcq then acquireClock rd.relClock
   let m ← get
-  let new := op.apply signed old v
-  set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o (padTo (intSize n) (intBytes new)) } }
-  releaseAt b o true
+  let cl := m.clocks[m.current]!
+  let id := m.nextMsg
+  let msg : Msg :=
+    { id := id, bytes := padTo (intSize n) (intBytes new), clock := cl,
+      relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id }
+  insertMsg li (pos + 1) msg
+  observe li id
+
+/-- `atomic_rmw`: option `c` of `rmwCount`. Returns the value before the op. -/
+def atomicRmwAt {n : Nat} (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder) (align : Nat)
+    (p : Ptr) (v : BitVec n) : MemM (BitVec n) := do
+  let (li, opts) ← loadPrep n ord align p true
+  let some pos := opts[c]? | throw .illegal
+  let rd := (← get).atomics[li]!.msgs[pos]!
+  let old ← intOfBytes n rd.bytes
+  rmwWrite li pos ord rd (op.apply signed old v)
   pure old
 
-/-- `cmpxchg_weak`/`cmpxchg_strong`: the model never fails spuriously, so both compile to this
-(`Air2Lean.Op.cmpxchg`'s `weak` flag makes no difference here). Zig's convention: `none` on
-success (the store happened), `some` of the current value on failure. A success is an RMW; a
-failure only reads. -/
-def cmpxchg {n : Nat} (align : Nat) (p : Ptr) (expected new : BitVec n) :
-    MemM (Option (BitVec n)) := do
-  let (b, blk, o) ← (← get).accessW p (intSize n) align
-  let old ← intOfBytes n (blk.bytes.extract o (o + intSize n))
+/-- A strong `cmpxchg` reads a message; one with the value `expected` must be one without an RMW
+after it (the write goes right after it). -/
+def casPrep (n : Nat) (align : Nat) (p : Ptr) (expected : BitVec n) :
+    MemM (Nat × Array Nat) := do
+  let (b, _, o) ← (← get).accessW p (intSize n) align
+  recordAccess b o (intSize n) .atomicWrite
+  let li ← locIdx b o (intSize n)
+  let m ← get
+  let l := m.atomics[li]!
+  let opts := (readOpts m li false).filter fun pos =>
+    !(l.hasRmwAfter pos && match (intOfBytes n l.msgs[pos]!.bytes).run with
+      | some (.ok v) => v == expected
+      | _ => false)
+  pure (li, opts)
+
+def casCount (n : Nat) (succ : AtomicOrder) (align : Nat) (p : Ptr) (expected : BitVec n) : Mem → Nat :=
+  optCount ((·.2) <$> casPrep n align p expected)
+
+/-- `cmpxchg_weak`/`cmpxchg_strong`: option `c` of `casCount`. The model never fails
+spuriously. `none` on success (the store happened), `some` of the value read on failure. -/
+def cmpxchgAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : Ptr)
+    (expected new : BitVec n) : MemM (Option (BitVec n)) := do
+  let (li, opts) ← casPrep n align p expected
+  let some pos := opts[c]? | throw .illegal
+  let rd := (← get).atomics[li]!.msgs[pos]!
+  let old ← intOfBytes n rd.bytes
   if old = expected then
-    recordAccess b o (intSize n) .atomicWrite
-    acquireAt b o
-    let m ← get
-    set { m with blocks :=
-      m.blocks.set! b { blk with bytes := writeBytes blk.bytes o (padTo (intSize n) (intBytes new)) } }
-    releaseAt b o true
+    rmwWrite li pos succ rd new
     pure none
   else
-    recordAccess b o (intSize n) .atomicRead
-    acquireAt b o
+    observe li rd.id
+    if fail.isAcq then acquireClock rd.relClock
     pure (some old)
 
 /-! ### Atomics on an enum or a `bool`
@@ -126,21 +276,23 @@ The integer op on the value's bits (`Zig.Packed`: an enum is its tag integer). A
 with `Packed.ofBits?`: a tag value without a name of an exhaustive enum is `.illegal`, as for any
 enum load. Zig allows only `Xchg` of the RMW ops on these types. -/
 
-def atomicLoadAs (α : Type) {n : Nat} [Packed α n] (align : Nat) (p : Ptr) : MemM α := do
-  let b ← atomicLoad (n := n) align p
+def atomicLoadAs (α : Type) {n : Nat} [Packed α n] (c : Nat) (ord : AtomicOrder) (align : Nat)
+    (p : Ptr) : MemM α := do
+  let b ← atomicLoadAt (n := n) c ord align p
   StateT.lift (Packed.ofBits? b)
 
-def atomicStoreAs {α : Type} {n : Nat} [Packed α n] (align : Nat) (p : Ptr) (v : α) : MemM Unit :=
-  atomicStore align p (Packed.toBits v)
+def atomicStoreAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (ord : AtomicOrder) (align : Nat)
+    (p : Ptr) (v : α) : MemM Unit :=
+  atomicStoreAt c ord align p (Packed.toBits v)
 
-def atomicRmwAs {α : Type} {n : Nat} [Packed α n] (op : RmwOp) (align : Nat) (p : Ptr) (v : α) :
-    MemM α := do
-  let b ← atomicRmw op false align p (Packed.toBits v)
+def atomicRmwAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (op : RmwOp) (ord : AtomicOrder)
+    (align : Nat) (p : Ptr) (v : α) : MemM α := do
+  let b ← atomicRmwAt c op false ord align p (Packed.toBits v)
   StateT.lift (Packed.ofBits? b)
 
-def cmpxchgAs {α : Type} {n : Nat} [Packed α n] (align : Nat) (p : Ptr) (expected new : α) :
-    MemM (Option α) := do
-  match ← cmpxchg align p (Packed.toBits expected) (Packed.toBits new) with
+def cmpxchgAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (succ fail : AtomicOrder) (align : Nat)
+    (p : Ptr) (expected new : α) : MemM (Option α) := do
+  match ← cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with
   | none => pure none
   | some b => some <$> StateT.lift (Packed.ofBits? b)
 

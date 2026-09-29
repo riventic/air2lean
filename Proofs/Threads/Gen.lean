@@ -167,8 +167,7 @@ def bump.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt bumpLocals bumpExit := do
       let i12 ← Zig.load (Zig.Ptr) 8 i11
       match ← ((do
         let i14 ← pure (i12.add 0)
-        Zig.yieldC
-        let i15 ← Zig.atomicRmw Zig.RmwOp.add false 4 i14 (1 : BitVec 32)
+        let i15 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 4 i14 (1 : BitVec 32)
         pure (.br13 i15)) : Zig.CM Tgt bumpLocals bumpExit) with
       | .br13 _v13 => (do
         let i17 ← pure ((← get).i)
@@ -210,8 +209,7 @@ def claim (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
       let i3 ← Zig.load (Zig.Ptr) 8 i2
       match ← ((do
         let i5 ← pure (i3.add 0)
-        Zig.yieldC
-        let i6 ← Zig.cmpxchgAs 4 i5 Phase.idle Phase.busy
+        let i6 ← Zig.cmpxchgAsC Zig.AtomicOrder.acqRel Zig.AtomicOrder.acquire 4 i5 Phase.idle Phase.busy
         pure (.br4 i6)) : Zig.CM Tgt claimLocals claimExit) with
       | .br4 v4 => (do
         let i8 ← pure ((v4).isNone)
@@ -220,8 +218,7 @@ def claim (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
           let i11 ← Zig.load (Zig.Ptr) 8 i10
           match ← ((do
             let i13 ← pure (i11.add 0)
-            Zig.yieldC
-            let i14 ← Zig.atomicRmw Zig.RmwOp.add false 4 i13 (1 : BitVec 32)
+            let i14 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.relaxed 4 i13 (1 : BitVec 32)
             pure (.br12 i14)) : Zig.CM Tgt claimLocals claimExit) with
           | .br12 _v12 => (do
             pure .br1)
@@ -286,15 +283,13 @@ def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i27 ← pure (i3)
         match ← ((do
           let i29 ← pure (i27.add 0)
-          Zig.yieldC
-          let i30 ← Zig.atomicLoad (n := 32) 4 i29
+          let i30 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i29
           pure (.br28 i30)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
         | .br28 v28 => (do
           let i32 ← pure (i0)
           match ← ((do
             let i34 ← pure (i32.add 0)
-            Zig.yieldC
-            let i35 ← Zig.atomicLoadAs (Phase) 4 i34
+            let i35 ← Zig.atomicLoadAsC (Phase) Zig.AtomicOrder.seqCst 4 i34
             pure (.br33 i35)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
           | .br33 v33 => (do
             let i37 ← pure (Phase.toBits v33)
@@ -435,8 +430,7 @@ def parallelCounter (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
           let i67 ← pure (i1)
           match ← ((do
             let i69 ← pure (i67.add 0)
-            Zig.yieldC
-            let i70 ← Zig.atomicLoad (n := 32) 4 i69
+            let i70 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i69
             pure (.br68 i70)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
           | .br68 v68 => (do
             let i72 ← pure ((.ok v68) : Except Zig.ErrName (BitVec 32))
@@ -539,8 +533,7 @@ def swapFlag (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     let i4 ← Zig.load (BitVec 32) 4 i3
     match ← ((do
       let i6 ← pure (i2.add 0)
-      Zig.yieldC
-      let i7 ← Zig.atomicRmw Zig.RmwOp.xchg false 4 i6 i4
+      let i7 ← Zig.atomicRmwC Zig.RmwOp.xchg false Zig.AtomicOrder.seqCst 4 i6 i4
       pure (.br5 i7)) : Zig.CM Tgt swapFlagLocals swapFlagExit) with
     | .br5 _v5 => (do
       pure .ret)
@@ -600,8 +593,7 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
         let i31 ← pure (i2)
         match ← ((do
           let i33 ← pure (i31.add 0)
-          Zig.yieldC
-          let i34 ← Zig.atomicLoad (n := 32) 4 i33
+          let i34 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i33
           pure (.br32 i34)) : Zig.CM Tgt xchgRaceLocals xchgRaceExit) with
         | .br32 v32 => (do
           let i36 ← pure ((.ok v32) : Except Zig.ErrName (BitVec 32))
