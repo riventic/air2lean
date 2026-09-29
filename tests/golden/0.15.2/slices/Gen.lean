@@ -567,16 +567,14 @@ def second (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
 
 structure sentinelArrLocals where
   x : Zig.Ptr
-  local15 : Zig.Ptr
   deriving Inhabited
 
 inductive sentinelArrExit where
   | ret (v : BitVec 8)
-  | br20
+  | br17
 
 def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s1 ← Zig.allocStack 5 1
-  let s15 ← Zig.allocStack 5 1
   let e ← ((do
     let i1 ← pure (← get).x
     let i2 ← pure (i1.add 0)
@@ -592,27 +590,22 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
     let i12 ← pure (i1.add 4)
     Zig.store (α := BitVec 8) 1 i12 (7 : BitVec 8)
     let i14 ← Zig.load (Tag) 1 i1
-    let i15 ← pure (← get).local15
-    Zig.store (α := Tag) 1 i15 i14
-    let i17 ← pure (i15)
-    let i18 ← pure (i17.add 0)
-    let i19 ← pure (Zig.le false p0 (3 : BitVec 64))
+    let i15 ← pure ((i14).name)
+    let i16 ← pure (Zig.le false p0 (3 : BitVec 64))
     match ← ((do
-      if i19 then (do
-        pure .br20)
+      if i16 then (do
+        pure .br17)
       else (do
         throw .outOfBounds)) : Zig.MM sentinelArrLocals sentinelArrExit) with
-    | .br20 => (do
-      let i25 ← Zig.callM (Zig.load (BitVec 8) 1 (i18.elem 1 p0))
-      let i26 ← Zig.callR (Zig.vindex (#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 4) p0)
-      let i27 ← pure (Zig.addWrap i25 i26)
-      let i28 ← pure (i17.add 4)
-      let i29 ← Zig.load (BitVec 8) 1 i28
-      let i30 ← pure (Zig.addWrap i27 i29)
-      pure (.ret i30))
-    | e => pure e) : Zig.MM sentinelArrLocals sentinelArrExit).run' { (default : sentinelArrLocals) with x := s1, local15 := s15 }
+    | .br17 => (do
+      let i22 ← Zig.callR (Zig.vindex i15 p0)
+      let i23 ← Zig.callR (Zig.vindex (#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 4) p0)
+      let i24 ← pure (Zig.addWrap i22 i23)
+      let i25 ← pure ((i14).n)
+      let i26 ← pure (Zig.addWrap i24 i25)
+      pure (.ret i26))
+    | e => pure e) : Zig.MM sentinelArrLocals sentinelArrExit).run' { (default : sentinelArrLocals) with x := s1 }
   Zig.free s1
-  Zig.free s15
   match e with
   | .ret v => pure v
   | _ => throw .panic

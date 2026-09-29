@@ -75,6 +75,9 @@
 # (q) Lean-runtime mutation, vectors: `Zig.mod` (ZigLean/Basic.lean) throws `.panic` for a
 #     negative divisor (the old model; Sema checks only `b ≠ 0`). `sMod` and `vMod` then
 #     fail where Zig returns the floored modulo.
+# (r) Emitter-output mutation, slices: the generated constant `"xyz".*` in `sentinelArr`
+#     (Proofs/Slices/Gen.lean) has no sentinel item (`Vector (BitVec 8) 3`), as when the emitter
+#     drops the sentinel of a `[N:s]T` value. `sentinelArr(3)` then panics where Zig returns.
 #
 # Usage: mutate.sh
 # Env:
@@ -83,7 +86,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -112,6 +115,7 @@ gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
 variants_gen="Proofs/Variants/Gen.lean"
 layout_gen="Proofs/Layout/Gen.lean"
+slices_gen="Proofs/Slices/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
@@ -125,6 +129,7 @@ gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
 layout_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-layout-gen.XXXXXX")
+slices_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-slices-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
@@ -138,6 +143,7 @@ cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
 cp "$layout_gen" "$layout_backup"
+cp "$slices_gen" "$slices_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
@@ -158,6 +164,7 @@ cleanup() {
   cp "$options_backup" "$options_gen"
   cp "$variants_backup" "$variants_gen"
   cp "$layout_backup" "$layout_gen"
+  cp "$slices_backup" "$slices_gen"
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
@@ -167,7 +174,7 @@ cleanup() {
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
-  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
+  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
     "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
@@ -508,6 +515,22 @@ else
   run_and_report "mutation (q)" vectors
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$basic_backup" "$basic_lean"
+fi
+
+echo "== mutation (r): a [3:0]u8 constant without its sentinel item (emitter output) ==" >&2
+if ! has_example slices; then
+  echo "mutation (r): skipped (AIR2LEAN_EXAMPLES excludes slices)"
+else
+  sed -i.bak 's/(#v\[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)\] : Vector (BitVec 8) 4)/(#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8)] : Vector (BitVec 8) 3)/' "$slices_gen"
+  rm -f "$slices_gen.bak"
+  grep -q '(122 : BitVec 8)\] : Vector (BitVec 8) 3)' "$slices_gen" || {
+    echo "error: mutation (r): sed did not change the constant" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (r)" slices
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$slices_backup" "$slices_gen"
 fi
 
 [ "$all_detected" -eq 1 ]

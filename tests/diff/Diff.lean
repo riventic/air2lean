@@ -894,6 +894,8 @@ def runSlices : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "localArr" (fun _ a => return Slices.localArr (bv 64 (← getInt a[0]!)))
     fun _ v => natStr v false
+  processMem ex m0 "sentinelArr" (fun _ a => return Slices.sentinelArr (bv 64 (← getInt a[0]!)))
+    fun _ v => natStr v false
   processMem ex m0 "lenOr" (fun g a => do
       let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
       return Slices.lenOr s) fun _ v => natStr v true

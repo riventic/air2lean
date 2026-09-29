@@ -132,6 +132,7 @@ pub fn main() !void {
     try genLayout(rng);
     // The vector op generators run last, so every earlier input stays the same.
     try genVectorOps(rng);
+    try genSentinelArr(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2601,5 +2602,17 @@ fn genVectorOps(rng: std.Random) !void {
             try writeIntSlice(w, i32, &a);
             try w.writeAll("]\n");
         }
+    }
+}
+
+/// sentinelArr(i): `i = 3` reads the sentinel; `i > 3` panics. Last, so that the shared `rng`
+/// stream of every earlier generator does not change.
+fn genSentinelArr(rng: std.Random) !void {
+    var file = try openSlices("sentinelArr");
+    defer file.close();
+    const writer = file.writer();
+    for (0..N) |i| {
+        const x = if (i % 4 == 0) edgesU(u32)[rng.uintLessThan(usize, 4)] else rng.uintLessThan(u32, 6);
+        try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{x});
     }
 }

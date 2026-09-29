@@ -77,7 +77,8 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
     if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else "Zig.Slice"
   | .ptr "slice" .. => "Zig.Slice"
   | .ptr .. => "Zig.Ptr"
-  | .array len child => s!"Vector ({emitTy structNames types types[child]!}) {len}"
+  | .array len child s =>
+    s!"Vector ({emitTy structNames types types[child]!}) {len + if s then 1 else 0}"
   | .vector len child => s!"Zig.Vec ({emitTy structNames types types[child]!}) {len}"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
   | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
@@ -127,7 +128,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .struct _ _ fields | .union _ _ none fields => fields.flatMap (go ·.2)
   | .union _ _ (some tag) fields => go tag ++ fields.flatMap (go ·.2)
   | .enum .. => #[]
-  | .ptr "slice" _ c | .array _ c | .optional c => go c
+  | .ptr "slice" _ c | .array _ c _ | .optional c => go c
   | .errorUnion _ p => go p
   | .tuple fs => fs.flatMap go
   | _ => #[]
@@ -135,7 +136,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
-  | .ptr _ _ c | .array _ c | .vector _ c | .optional c => #[c]
+  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
   | .errorUnion s p => #[s, p]
   | .struct _ _ fs => fs.map (·.2)
   | .enum _ t _ _ => #[t]
@@ -367,7 +368,7 @@ partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array St
   | some (.union name _ tag fs) =>
     if acc.contains name then acc
     else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts) (acc.push name)
-  | some (.optional c) | some (.array _ c) => memNamed types layouts acc c
+  | some (.optional c) | some (.array _ c _) => memNamed types layouts acc c
   | some (.errorUnion _ c) => memNamed types layouts acc c
   | _ => acc
 
@@ -574,8 +575,9 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .agg tid elems =>
     let items (xs : Array Val) := ", ".intercalate (xs.map (fc.resolveVal env)).toList
     match fc.tyOfId tid with
-    -- The sentinel is not an item of the value.
-    | .array len _ => s!"(#v[{items (elems.extract 0 len)}] : {fc.emitTyOf tid})"
+    -- A sentinel is the last item of the value (`Ty.array`).
+    | .array len _ s =>
+      s!"(#v[{items (elems.extract 0 (len + if s then 1 else 0))}] : {fc.emitTyOf tid})"
     -- A vector has no sentinel (`docs/air-json.md`'s `elems`).
     | .vector len _ => s!"((⟨#v[{items (elems.extract 0 len)}]⟩) : {fc.emitTyOf tid})"
     | .struct _ _ fields =>
@@ -798,7 +800,7 @@ def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
 def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
-    | .array len _ => (rv, s!"({len} : BitVec 64)")
+    | .array len .. => (rv, s!"({len} : BitVec 64)")
     | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
 
 /-- `v` is a pointer to memory: not a place. -/
@@ -2014,18 +2016,14 @@ structure ProgGlobal where
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 
-/-- The initial bytes of global `g` of `fc`'s function. An array with a sentinel is one item
-longer: the sentinel is its last item. `undefined` is undefined bytes. -/
+/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
-  match fc.tyOfId g.ty, g.init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
+  match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
-  | _, some (.func ..), _ => "#[.undef]"
-  | _, some (.undef _), _ | _, none, _ => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
-  | .array _ c, some (.agg _ elems), true =>
-    let t := s!"Vector ({emitTy fc.structNames fc.types (fc.tyOfId c)}) {elems.size}"
-    encodeTerm s!"#v[{", ".intercalate (elems.map (fc.resolveVal #[])).toList}]" t
-  | _, some init, _ => encodeTerm (fc.resolveVal #[] init) ty
+  | some (.func ..) => "#[.undef]"
+  | some (.undef _) | none => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
+  | some init => encodeTerm (fc.resolveVal #[] init) ty
 
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with

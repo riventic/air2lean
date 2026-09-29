@@ -131,7 +131,7 @@ fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.ptr ..) | some .allocator => true
-  | some (.array _ c) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
+  | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
   | _ => false

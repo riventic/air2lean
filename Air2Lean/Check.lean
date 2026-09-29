@@ -68,7 +68,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     | "one" => if (types[child]?.map isFnTy).getD false then pure () else recur child
     | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
-  | .array _ child => recur child
+  | .array _ child _ => recur child
   | .vector _ child => recur child
   | .optional child => recur child
   | .errorUnion set payload => do
@@ -132,11 +132,9 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     | _ =>
       let (s, a) ← modelLayout types layouts c
       pure (Zig.alignUp (s + 1) a, a)
-  | some (.array len c) =>
-    if (layouts[id]?.map (·.sentinel)).getD false then
-      throw "an array with a sentinel as one value"
+  | some (.array len c sentinel) =>
     let (s, a) ← modelLayout types layouts c
-    pure (len * s, a)
+    pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
     match types[c]? with
     | some (.int ..) | some (.float _) =>
@@ -246,7 +244,7 @@ def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String 
 def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   match types[pty]? with
   | some (.ptr "one" _ c) => match types[c]? with
-    | some (.array _ e) => some e
+    | some (.array _ e _) => some e
     | _ => none
   | some (.ptr _ _ c) => some c
   | _ => none
@@ -470,11 +468,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
     throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
-  let ty := match f.types[g.ty]?, f.layouts[g.ty]? with
-    | some (.array _ c), some l => if l.sentinel then c else g.ty
-    | _, _ => g.ty
-  checkTy f.name f.types f.layouts 0 ty
-  checkMemTy f.name f.types f.layouts 0 ty
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
