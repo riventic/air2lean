@@ -109,44 +109,27 @@ def concurrent (a b : VClock) : Bool := !le a b && !le b a
 
 end VClock
 
-/-- `std.builtin.AtomicRmwOp` groups whose op commutes with itself, for the model's race check
-(`docs/generated-code.md` §Atomics and threads). Never `Xchg` or `Nand` (they don't commute),
-and never mixed groups. `Air2Lean/Memory.lean`'s `rmwResultUnused` and `Zig.RmwOp.group`
-decide, per call site, whether a concrete unused-result RMW gets one of these. -/
-inductive RmwGroup where
-  | addSub | or | and | xor
-  /-- `Min`/`Max` carry the signedness: a signed and an unsigned `Min` on the same bytes do not
-  commute. -/
-  | min (signed : Bool) | max (signed : Bool)
-  deriving BEq, Repr, Inhabited
-
-/-- One memory access, for the race check. `atomicWrite`'s `commute`: `some g` only for an
-eligible, result-unused RMW (`RmwGroup`); a plain atomic store or a used-result RMW is
-`atomicWrite none`. -/
+/-- One memory access, for the race check. -/
 inductive AccessKind where
   | read
   | write
   | atomicRead
-  | atomicWrite (commute : Option RmwGroup)
-  deriving Repr, Inhabited
+  | atomicWrite
+  deriving Repr, Inhabited, DecidableEq
 
 def AccessKind.isWrite : AccessKind → Bool
-  | .write | .atomicWrite _ => true
+  | .write | .atomicWrite => true
+  | _ => false
+
+def AccessKind.isAtomic : AccessKind → Bool
+  | .atomicRead | .atomicWrite => true
   | _ => false
 
 /-- `none`: `a` and `b`, both touching the same bytes with concurrent clocks, do not race.
-`some e`: they do, and `e` is the `Zig.Error` the later access throws (`docs/generated-code.md`
-§Atomics and threads): a non-atomic write racing with anything is `.illegal`; any other pair
-with a write that does not commute is `.nondet`. `sameRange`: `a` and `b` cover the same bytes. -/
-def racePair (a b : AccessKind) (sameRange : Bool) : Option Error :=
-  match a, b with
-  | .read, .read | .read, .atomicRead | .atomicRead, .read | .atomicRead, .atomicRead => none
-  -- Two RMWs of one group commute only on the same bytes (so the same width): a 1-byte and a
-  -- 4-byte `Add` on overlapping bytes give different results in the two orders (the carry).
-  | .atomicWrite (some g1), .atomicWrite (some g2) =>
-    if g1 == g2 && sameRange then none else some .nondet
-  | .write, _ | _, .write => some .illegal
-  | _, _ => some .nondet
+`some .illegal`: a data race (C11): at least one is a write and at least one is not atomic. Two
+atomic accesses never race: the scheduler orders them (`ZigLean/Conc/Sched.lean`). -/
+def racePair (a b : AccessKind) : Option Error :=
+  if (a.isWrite || b.isWrite) && !(a.isAtomic && b.isAtomic) then some .illegal else none
 
 /-- Who spawned thread `id` (the parent thread's own `ThreadId` at the time), and whether
 `Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. -/
@@ -181,6 +164,9 @@ structure Mem where
   threads : Array ThreadRec := #[{ spawner := 0, joined := true }]
   /-- Every access recorded so far, across every thread. -/
   footprint : Array FootprintEntry := #[]
+  /-- The release clock of each atomic location `(block, offset)`: the clock that an atomic read
+  of it adopts (`ZigLean/Mem/Thread.lean`). -/
+  relClocks : Array (BlockId × Nat × VClock) := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -215,14 +201,14 @@ def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
 
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
-`block`/`off`/`len` with a concurrent clock and does not commute with `kind` (`racePair`); `none`
-if every overlapping concurrent entry commutes. `Array.findSome?` searches in order, so this
-matches recording the accesses one at a time and stopping at the first conflict. -/
+`block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
+entry races. `Array.findSome?` searches in order, so this matches recording the accesses one at a
+time and stopping at the first conflict. -/
 def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off len : Nat)
     (kind : AccessKind) : Option Error :=
   fp.findSome? fun e =>
     if e.block == block && off < e.off + e.len && e.off < off + len &&
-        VClock.concurrent e.clock clock then racePair e.kind kind (e.off == off && e.len == len)
+        VClock.concurrent e.clock clock then racePair e.kind kind
     else none
 
 /-- Record one access at `block`/`off`/`len` by the current thread (`ZigLean/Mem/Thread.lean`),
