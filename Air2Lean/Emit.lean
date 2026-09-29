@@ -1026,8 +1026,9 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .trap => #[]
   | .line _ => #[]
   | .dbg _ _ => #[]
-  -- `Check.lean` accepts only the no-`ref` output convention, so only the inputs carry a `ref`.
-  | .asm _ _ _ _ inputs => inputs.filterMap (·.ref)
+  -- An lvalue output's `ref` is a pointer, used as `store`'s pointer.
+  | .asm _ _ _ outputs inputs =>
+    outputs.filterMap (fun o => o.ref.filter fc.isMemPtr) ++ inputs.filterMap (·.ref)
 
 /-- Ids referenced inside `body` (recursively) that are defined outside it: the free variables
 of a loop body, i.e. what its extracted top-level def must take as parameters. -/
@@ -1100,15 +1101,21 @@ identity here too. -/
 structure AsmDef where
   name : String
   inputWidths : Array Nat
-  outputWidth : Option Nat
+  /-- The width of each output, in output order. -/
+  outputWidths : Array Nat
   deriving BEq
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
-widths. -/
+widths. One output or none keeps the text of an `Option` width, so the names of those ops do not
+change. -/
 def asmKey (source : String) (constraints : Array String) (inputWidths : Array Nat)
-    (outputWidth : Option Nat) : String :=
+    (outputWidths : Array Nat) : String :=
+  let outs := match outputWidths.toList with
+    | [] => "none"
+    | [w] => s!"(some {w})"
+    | ws => s!"{ws}"
   s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
-    {inputWidths.toList}\u0001{outputWidth}"
+    {inputWidths.toList}\u0001{outs}"
 
 /-- The generated Lean name of the `opaque` def for an asm op: `airAsm_<hash>`, `<hash>` a small
 FNV-1a hash of the source template, the ordered constraint list and the operand widths. Not
@@ -1129,6 +1136,17 @@ def asmValBits (f : Func) (v : Val) : Nat :=
   | .inst id => ((f.allInsts.find? (·.id == id)).map fun i => tyBits i.ty).getD 0
   | v => (v.constTy?.map tyBits).getD 0
 
+/-- The bit width of each output of an asm op: the result (no `ref`) has the instruction's type
+`resTy`; an lvalue output has its pointer's child type. -/
+def asmOutputWidths (types : Array Ty) (tyOf : Val → Option TyId) (resTy : TyId)
+    (outputs : Array AsmOperand) : Array Nat :=
+  let tyBits (tid : TyId) : Nat := match types[tid]? with | some (.int _ b) => b | _ => 0
+  outputs.map fun o => match o.ref with
+    | none => tyBits resTy
+    | some r => ((tyOf r).bind fun p => match types[p]? with
+        | some (.ptr _ _ c) => some (tyBits c)
+        | _ => none).getD 0
+
 /-- Every distinct asm op in `funcs`, in first-seen order (`asmKey` gives the identity). -/
 def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut seen : Array String := #[]
@@ -1137,21 +1155,25 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
     for i in f.allInsts do
       if let .asm source _ _ outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
-        let outputWidth := if outputs.isEmpty then none else some (asmValBits f (.inst i.id))
+        let tyOf (v : Val) : Option TyId := match v with
+          | .inst id => (f.allInsts.find? (·.id == id)).map (·.ty)
+          | v => v.constTy?
+        let outputWidths := asmOutputWidths f.types tyOf i.ty outputs
         let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-        let key := asmKey source constraints inputWidths outputWidth
+        let key := asmKey source constraints inputWidths outputWidths
         if !seen.contains key then
           seen := seen.push key
-          defs := defs.push { name := asmDefName key, inputWidths, outputWidth }
+          defs := defs.push { name := asmDefName key, inputWidths, outputWidths }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
-to its output's `BitVec` (`Unit` for no output). A proof can use only what the caller states
+to its output's `BitVec` (`Unit` for no output; a tuple in output order for more than one). A proof can use only what the caller states
 about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
 doc comment). -/
 def emitAsmDef (d : AsmDef) : String :=
   let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
-  let ret := match d.outputWidth with | some w => s!"BitVec {w}" | none => "Unit"
+  let ret := if d.outputWidths.isEmpty then "Unit"
+    else " × ".intercalate (d.outputWidths.toList.map fun w => s!"BitVec {w}")
   s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
@@ -1697,13 +1719,32 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
     -- pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
-    let outputWidth := if outputs.isEmpty then none else some (fc.tyBits inst.ty)
+    let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmDefName (asmKey source constraints inputWidths outputWidth)
+    let name := asmDefName (asmKey source constraints inputWidths outputWidths)
     let args := inputs.toList.map fun i => rv i.ref.get!
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
-    let (env, l) := bindLet fc env inst.id s!"pure ({call})"
-    (env, some l)
+    if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
+      let (env, l) := bindLet fc env inst.id s!"pure ({call})"
+      (env, some l)
+    else
+      -- The tuple of the outputs; output `k` of `n` is `.2.….2.1` (`k` times `.2`), the last one
+      -- without the `.1`. The result output binds the instruction; each lvalue output is a
+      -- store through its pointer, as `store`.
+      let t := s!"a{inst.id}"
+      let n := outputs.size
+      let proj (k : Nat) : String :=
+        t ++ String.join (List.replicate k ".2") ++ (if k + 1 < n then ".1" else "")
+      let (env, lines) := outputs.toList.zipIdx.foldl (init := (env, [s!"let {t} := {call}"]))
+        fun (env, ls) (o, k) => match o.ref with
+          | none =>
+            let (env, l) := bindLet fc env inst.id s!"pure {proj k}"
+            (env, ls ++ [l])
+          | some ptr =>
+            if fc.isMemPtr ptr then
+              (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {proj k}"])
+            else (env, ls ++ [fc.storePlace ptr (proj k)])
+      (env, some ("\n".intercalate lines))
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 

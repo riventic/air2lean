@@ -56,10 +56,12 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       elseBody := rewriteBody g i.elseBody,
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
 
-/-- `i` with `f` applied to each value operand (not to nested bodies). -/
+/-- `i` with `f` applied to each value operand (not to nested bodies), asm operands included. -/
 def RawInst.mapVals (f : Val → Val) (i : RawInst) : RawInst :=
+  let op (o : RawAsmOperand) : RawAsmOperand := { o with ref := o.ref.map f }
   { i with
     args := i.args.map f, callee := i.callee.map f,
+    asm := i.asm.map fun a => { a with outputs := a.outputs.map op, inputs := a.inputs.map op },
     cases := i.cases.map fun c =>
       { c with items := c.items.map f, ranges := c.ranges.map fun (a, b) => (f a, f b) } }
 
@@ -67,7 +69,8 @@ def RawInst.mapVals (f : Val → Val) (i : RawInst) : RawInst :=
 def RawInst.uses (i : RawInst) : Array InstId :=
   let ids (v : Val) : Array InstId := match v with | .inst id => #[id] | _ => #[]
   i.args.flatMap ids ++ (i.callee.map ids).getD #[] ++
-    i.cases.flatMap fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b
+    i.cases.flatMap (fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b) ++
+    (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o => (o.ref.map ids).getD #[]).getD #[]
 
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||

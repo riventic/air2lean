@@ -52,6 +52,17 @@ fn runLzcnt64(gpa: std.mem.Allocator) !void {
     }.call);
 }
 
+fn runDivmod(gpa: std.mem.Allocator) !void {
+    try common.forEachLine(gpa, "asm", "divmod", struct {
+        fn call(_: std.mem.Allocator, items: []std.json.Value, writer: anytype) !void {
+            const a: u32 = @intCast(items[0].integer);
+            const b: u32 = @intCast(items[1].integer);
+            const outcome = try common.forkCall(std.meta.ArgsTuple(@TypeOf(asm_ex.divmod)), .{ a, b }, asm_ex.divmod, true);
+            try common.writeResult(writer, outcome);
+        }
+    }.call);
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -62,4 +73,5 @@ pub fn main() !void {
     try runBswap32(gpa);
     try runPopcnt64(gpa);
     try runLzcnt64(gpa);
+    try runDivmod(gpa);
 }

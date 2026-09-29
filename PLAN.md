@@ -120,7 +120,7 @@ Support matrix:
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
-| inline asm with register operands only, as an opaque function (x86_64) | asm with a memory operand, a named or read-write output, or a `"memory"` clobber |
+| inline asm with register operands only, as an opaque function (x86_64); more than one output (lvalue outputs are stores) | asm with a memory operand, a read-write output (`+r`), or a `"memory"` clobber |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to a lane of a `bool` vector (the AIR file has no lane index) |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |

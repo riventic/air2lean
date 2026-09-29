@@ -73,6 +73,7 @@ f80/f128 hi/lo split. -/
 @[extern "air2lean_asm_bswap32"] private opaque asmBswap32 : UInt32 → UInt32
 @[extern "air2lean_asm_popcnt64"] private opaque asmPopcnt64 : UInt64 → UInt64
 @[extern "air2lean_asm_lzcnt64"] private opaque asmLzcnt64 : UInt64 → UInt64
+@[extern "air2lean_asm_divmod32"] private opaque asmDivmod32 : UInt32 → UInt32 → UInt64
 
 private def airAsm_3500345798_impl (x : BitVec 32) : BitVec 32 :=
   (asmBswap32 (.ofBitVec x)).toBitVec
@@ -83,6 +84,12 @@ private def airAsm_3884223243_impl (x : BitVec 64) : BitVec 64 :=
 private def airAsm_4040357768_impl (x : BitVec 64) : BitVec 64 :=
   (asmPopcnt64 (.ofBitVec x)).toBitVec
 
+/-- Two outputs: the archive packs them in one `UInt64` (quotient low, remainder high). -/
+private def airAsm_2482283570_impl (a b : BitVec 32) : BitVec 32 × BitVec 32 :=
+  let r := (asmDivmod32 (.ofBitVec a) (.ofBitVec b)).toBitVec
+  (r.extractLsb' 0 32, r.extractLsb' 32 32)
+
+@[csimp] theorem airAsm_2482283570_eq : @Asm.airAsm_2482283570 = @airAsm_2482283570_impl := sorry
 @[csimp] theorem airAsm_3500345798_eq : @Asm.airAsm_3500345798 = @airAsm_3500345798_impl := sorry
 @[csimp] theorem airAsm_3884223243_eq : @Asm.airAsm_3884223243 = @airAsm_3884223243_impl := sorry
 @[csimp] theorem airAsm_4040357768_eq : @Asm.airAsm_4040357768 = @airAsm_4040357768_impl := sorry
@@ -997,6 +1004,17 @@ def runLzcnt64 : IO Unit :=
     let x ← getWideInt items[0]!
     pure (render (pure (Asm.airAsm_3884223243 (bv 64 x)) : Zig.Result (BitVec 64)) true)
 
+-- The right side of `Proofs/Asm/Proofs.lean`'s `divmod_spec`, from the opaque's two outputs:
+-- the test checks the asm op, the proof checks the translation around it (the tuple and the
+-- store to `rem`).
+def runDivmod : IO Unit :=
+  processFile "asm" "divmod" fun j => do
+    let items ← getArr j
+    let a := bv 32 (← getInt items[0]!)
+    let b := bv 32 (← getInt items[1]!)
+    let (q, r) := Asm.airAsm_2482283570 a b
+    pure (render (pure (r.setWidth 64 <<< 32 ||| q.setWidth 64) : Zig.Result (BitVec 64)) true)
+
 end DiffTest
 
 /-- Runs the examples named in `AIR2LEAN_EXAMPLES` (space-separated, the same variable as
@@ -1089,6 +1107,7 @@ def main : IO Unit := do
     DiffTest.runBswap32
     DiffTest.runPopcnt64
     DiffTest.runLzcnt64
+    DiffTest.runDivmod
 
   run "layout" DiffTest.runLayout
 

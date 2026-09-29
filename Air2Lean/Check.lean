@@ -13,12 +13,12 @@ encode (`modelLayout`), a pointer constant without a global, and a global that i
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
-An `assembly` instruction (M21) is accepted only when every operand is a register constraint
-(`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint tying it to the sole
-output register (`0`; valid only because at most one output is ever allowed here), there is no
-`"memory"` clobber, and at most one output is present and it is the asm expression's own result
-(`ref = none`) — anything else (a memory operand, a named/read-write output, a `"memory"`
-clobber) is outside the subset.
+An `assembly` instruction (M21) is accepted only when every operand is an integer with a
+register constraint (`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint that
+names an output (`0`, `1`, …), and there is no `"memory"` clobber. At most one output is the asm
+expression's own result (`ref = none`); every other output is an lvalue output, a store through
+its pointer `ref`. Anything else (a memory operand, a read-write output, a `"memory"` clobber)
+is outside the subset.
 -/
 
 namespace Air2Lean
@@ -29,11 +29,12 @@ def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=" then c.drop 1 else c
   body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
 
-/-- Is `c` a matching constraint on an input, tying it to output operand `0` — the register a
-register-modify-in-place instruction (`bswap`) both reads and writes? Always `0`: `checkInst`
-already rejects more than one output, so `0` is the only output index that can ever exist. -/
-def isMatchingConstraint (c : String) : Bool :=
-  c == "0"
+/-- Is `c` a matching constraint on an input, tying it to output operand `k < outputs` — the
+register a register-modify-in-place instruction (`bswap`) both reads and writes? -/
+def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
+  match c.toNat? with
+  | some k => k < outputs
+  | none => false
 
 /-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
 `allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
@@ -416,21 +417,30 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
     if clobbers.contains "memory" then
       throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21)"
-    if outputs.size > 1 then
-      throw s!"{fnName}: near line {line}: an asm expression with more than one output is \
-        outside the subset (M21)"
-    if let some o := outputs[0]? then
-      if o.ref.isSome then
-        throw s!"{fnName}: near line {line}: an asm output other than the expression's own \
-          result is outside the subset (M21)"
-      if !isRegisterConstraint o.constraint then
+    -- One output can be the expression's own result (`-> T`, no `ref`); every other output
+    -- is a store through its pointer `ref` (an lvalue output).
+    for o in outputs do
+      if !isRegisterConstraint o.constraint || !o.constraint.startsWith "=" then
         throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
-          register constraint (M21)"
-      if !isIntTy ty then
+          register output constraint (M21)"
+      let outTy ← match o.ref with
+        | none => pure ty
+        | some r =>
+          let some pty := cx.valTy? r
+            | cx.fail line s!"asm output '{o.name}': operand has no known type"
+          let some c := ptrChild cx.types pty
+            | cx.fail line s!"asm output '{o.name}' is not a pointer"
+          if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+            cx.fail line s!"asm output '{o.name}' is a bit-pointer"
+          cx.memAccess line r
+          pure c
+      if !isIntTy outTy then
         throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+    if (outputs.filter (·.ref.isNone)).size > 1 then
+      cx.fail line "an asm expression with two result outputs (malformed input in the AIR file)"
     for i in inputs do
       if !(isRegisterConstraint i.constraint ||
-          (outputs.size == 1 && isMatchingConstraint i.constraint)) then
+          isMatchingConstraint outputs.size i.constraint) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
           register or matching constraint (M21)"
       let some r := i.ref

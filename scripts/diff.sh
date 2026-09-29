@@ -135,8 +135,8 @@ echo "== libm self-check ==" >&2
 "$build_dir/libm_selfcheck"
 
 echo "== building asm archive ==" >&2
-# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's 3 ops with ordinary Zig builtins
-# (@byteSwap/@popCount/@clz) instead of inline asm, so it builds on any host, unlike the example
+# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's ops with ordinary Zig builtins
+# (@byteSwap/@popCount/@clz, `/` and `%`) instead of inline asm, so it builds on any host, unlike the example
 # itself (x86_64 only). No compiler_rt dependency (unlike libm): these are plain integer ops.
 mkdir -p tests/diff/out/asm
 "$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \

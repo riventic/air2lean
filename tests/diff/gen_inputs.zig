@@ -136,6 +136,7 @@ pub fn main() !void {
     try genDupeZ(rng);
     try genCtl();
     try genVecMem(rng);
+    try genDivmod(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2685,5 +2686,23 @@ fn genVecMem(rng: std.Random) !void {
             try writePtr(writer, 0, 0);
             try writer.print(",{d}]}}\n", .{edgyU32(rng)});
         }
+    }
+}
+
+/// divmod(a: u32, b: u32): `b > 0` (0 is a CPU fault). Edges of `a` with small and large `b`.
+fn genDivmod(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/asm/inputs", "divmod");
+    defer file.close();
+    const writer = file.writer();
+    var n: usize = 0;
+    for (edgesU(u32)) |a| {
+        for ([_]u32{ 1, 2, 7, 0xffff_ffff }) |b| {
+            try writer.print("[{d},{d}]\n", .{ a, b });
+            n += 1;
+        }
+    }
+    while (n < N) : (n += 1) {
+        const b = if (n % 2 == 0) rng.intRangeAtMost(u32, 1, 100) else rng.intRangeAtMost(u32, 1, 0xffff_ffff);
+        try writer.print("[{d},{d}]\n", .{ rng.int(u32), b });
     }
 }

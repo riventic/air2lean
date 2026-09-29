@@ -291,6 +291,18 @@ def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
 ```
 
+**More than one output.** Each output is a register output (`=r`, `={reg}`) of an integer. At most one is the expression's result (`-> T`); every other one is an lvalue output: the asm writes it to its operand, a pointer. The opaque then returns a tuple of all outputs, in output order. The translation binds the result output, and writes each lvalue output with the code of a `store` (a local's field, or `Zig.store` through a pointer). A matching input constraint (`"1"`) can name any output. `examples/asm/asm.zig`'s `divmod` (`divl`: the quotient is the result, the remainder goes to the local `rem`):
+
+```lean
+opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
+
+    let a4 := airAsm_2482283570 p0 p1
+    let i4 ← pure a4.1
+    modify (fun s => { s with rem := a4.2 })
+```
+
+A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
+
 `volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
 
 ### Differential-test implementation

@@ -35,10 +35,24 @@ pub fn lzcnt64(x: u64) u64 {
     );
 }
 
+/// Quotient and remainder of one `divl`: two outputs, the second an lvalue output (a store to
+/// `rem`). `b = 0` is a CPU fault, not a Zig panic: the diff test has no such input.
+pub fn divmod(a: u32, b: u32) u64 {
+    var rem: u32 = undefined;
+    const q = asm ("xorl %%edx, %%edx\n\tdivl %[b]"
+        : [q] "={eax}" (-> u32),
+          [r] "={edx}" (rem),
+        : [a] "{eax}" (a),
+          [b] "r" (b),
+    );
+    return (@as(u64, rem) << 32) | q;
+}
+
 comptime {
     _ = &bswap32;
     _ = &popcnt64;
     _ = &lzcnt64;
+    _ = &divmod;
 }
 
 test "bswap32" {
