@@ -694,4 +694,43 @@ theorem Raw.get_set {α : Type} [Enc α] [LawfulEnc α] {n : Nat} (u : Vector By
   rw [hw]
   exact LawfulEnc.decode_encode v
 
+/-! ## Loops in a memory function
+
+`Zig.loop` over `MM` (locals over `MemM`): the same rules as `loop_run`/`loop_spec`
+(`ZigLean/Loop.lean`), with the memory as a second state. -/
+
+/-- One unfolding of a loop over `MM`. -/
+theorem loop_run_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (s : σ) (m : Mem) :
+    ((loop body again).run s).run m =
+      (do let ((e, s'), m') ← (body.run s).run m
+          if again e then ((loop body again).run s').run m' else pure ((e, s'), m')) := by
+  conv => lhs; rw [loop]
+  simp only [StateT.run, bind, StateT.bind]
+  congr 1
+  funext p
+  rcases p with ⟨⟨e, s'⟩, m'⟩
+  cases again e <;> rfl
+
+/-- `loop_spec` over `MM`: an invariant on the locals and the memory, a measure that each
+repeating iteration makes smaller, and a post-condition on the exit that ends the loop. -/
+theorem loop_spec_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool)
+    (inv : σ → Mem → Prop) (meas : σ → Mem → Nat) (post : ε → σ → Mem → Prop)
+    (step : ∀ s m, inv s m → ∃ e s' m', (body.run s).run m = pure ((e, s'), m') ∧
+      (if again e then inv s' m' ∧ meas s' m' < meas s m else post e s' m')) :
+    ∀ s m, inv s m → ∃ e s' m', ((loop body again).run s).run m = pure ((e, s'), m') ∧
+      post e s' m' := by
+  intro s m
+  induction h : meas s m using Nat.strongRecOn generalizing s m with
+  | _ n ih =>
+    intro hs
+    obtain ⟨e, s', m', hrun, hnext⟩ := step s m hs
+    rw [loop_run_mm, hrun]
+    cases ha : again e
+    · simp only [ha, Bool.false_eq_true, ↓reduceIte] at hnext
+      exact ⟨e, s', m', by simp [ha], hnext⟩
+    · simp only [ha, ↓reduceIte] at hnext
+      obtain ⟨hinv, hlt⟩ := hnext
+      obtain ⟨e', s'', m'', hr, hpost⟩ := ih (meas s' m') (h ▸ hlt) s' m' rfl hinv
+      exact ⟨e', s'', m'', by simp [ha, hr], hpost⟩
+
 end Zig
