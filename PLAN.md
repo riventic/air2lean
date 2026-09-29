@@ -29,15 +29,32 @@
 | M22 | Atomics (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`; JSON schema 10: `order`, `op`, `success_order`, `failure_order`) restricted to integer pointees; fork-join threads (`ZigLean/Mem/Thread.lean`: `Zig.Thread.spawn`/`join`, eager run, vector clocks, per-access footprint, race check giving `.illegal` for a non-atomic write race or `.nondet` for a non-commuting atomic race; `docs/std-models.md` §Thread model, `docs/generated-code.md` §Atomics and threads); rejects `Thread.detach`/`.yield`/`.spinLoopHint`/`Futex.*`/`Mutex.*`/`Condition.*` with a reason; `threads` example (`bump`, `parallelCounter`) with pinned `nondet`/`unspecified` counts for two racing functions (`tests/diff/threads/`); two new `mutate.sh` mutations, (k) and (l) (let `Xchg` commute; disable the race check). Proof: `Proofs/Threads/Proofs.lean`'s `bump_step` — one atomic-RMW step is race-free and keeps the counter invariant, sorry-free. The induction over `bump.loop4`'s variable iteration count and the 4-thread `spawn`/`join` composition needed for the full "counter = 4·n" theorem are not done: no proof in this repo reasons about a variable-bound loop over `Zig.MM` locals, and that induction is a bigger proof-engineering task than the rest of this milestone. The model itself is unaffected — it is checked by the diff test against real compiled/executed threaded Zig code, like every other example | done (proof scope cut, above) |
 | M20 | Casts, layout and function pointers (`docs/generated-code.md` §Casts, layout and function pointers): `@intFromPtr`, `@ptrFromInt` (`castToNull`, `incorrectAlignment`), `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; packed structs (`Zig.Packed`, `ZigLean/Packed.lean`) with `@bitCast` to the backing integer and bit-pointers (`Zig.loadBits`/`storeBits`); `extern` structs; tagged unions in memory (`Check.lean`'s `unionLayout`); error unions in memory (`Zig.Enc (Except Zig.ErrName α)`, error codes as `Byte.errFrag`); function pointers (a 1-byte block per address-taken function, an indirect call dispatches on it); JSON schema 11 (`field_parent_ptr`, error-union pointer tags, a bit-pointer's `bit_offset`). bare unions (the exporter's `safety_tag`: a tagged union); `extern` and `packed` unions as bytes (`ZigLean/Union.lean`), with `union_init` and the 0.16.0 `bitcast` to a `packed` union; the padding bits of a `uN` with `N % 8 ≠ 0` undefined (`Byte.part`); `const` globals read-only (`Zig.BlockKind.constGlobal`: a write throws `.illegal`). `layout` example with proofs (packed round trip, `setMode`, `headerLen`, indirect calls; `Proofs/Layout/Mem.lean`: `Num` round trip, `setNum`, `numInt`, error-union `bump`, `writeTable` throws `.illegal`; in `ZigLean/Mem/Lemmas.lean` the error-union round trip and the `extern` union field read) and mutations (m), (n), (o), (p) | done |
 
-Mutation check (`scripts/mutate.sh`): a `*` changed to `*%` in `scale` gives 279 mismatches; `Zig.add` throwing `.panic` in place of `.overflow` gives 166 mismatches; `orelse xs.len` changed to `orelse 0` in `findOr` gives 144 mismatches; ties-to-even changed to ties-away in the float rounding gives 77 mismatches; a generated `Light.ofInt?` that accepts the unnamed value 3 gives 1 mismatch; a `Zig.store` that writes one byte too few gives 1101 mismatches; a `Zig.memmove` that writes one byte too few gives 188 mismatches; an allocation that never fails at `Mem.failAt` gives 311 mismatches; a `Zig.Vec.reduce` that drops the last lane gives 371 mismatches; a generated `Flags.ofBits` that swaps two packed fields gives 787 mismatches. A `Mem.accessW` that does not check for a `const` global changes the pinned `.illegal` count of `writeTable` from 3 to 0. So the tester sees a changed result, a changed panic kind, a changed rounding rule, a changed enum conversion, a changed memory write, a changed allocation failure, a changed reduction, a changed packed layout and a missing read-only check.
+Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change a diff result or a pinned count.
+
+| # | Mutation | Detected by |
+|---|---|---|
+| (a) | `*` → `*%` in `scale` | 279 mismatches |
+| (b) | `Zig.add` throws `.panic`, not `.overflow` | 166 mismatches |
+| (c) | `orelse xs.len` → `orelse 0` in `findOr` | 144 mismatches |
+| (d) | float rounding ties away from zero | 77 mismatches |
+| (e) | `Light.ofInt?` accepts the unnamed value 3 | 1 mismatch |
+| (f) | `Zig.store` writes one byte too few | 1101 mismatches |
+| (g) | `Zig.memmove` writes one byte too few | 188 mismatches |
+| (h) | an allocation never fails at `Mem.failAt` | 311 mismatches |
+| (i) | the asm `bswap32` returns its input | 298 mismatches |
+| (j) | `Zig.Vec.reduce` drops the last lane | 1083 mismatches |
+| (k) | `Xchg` in the `Xor` commuting group | 1 pinned count |
+| (l) | no data-race check | 2 pinned counts |
+| (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
+| (n) | no read-only check for a `const` global | 1 pinned count |
+| (o) | every `Byte.part` rejected | 3 pinned counts |
+| (p) | a set bit above an `N`-bit integer accepted | 1 pinned count |
 
 ## Next
 
-v1: the rest of the language, one milestone per PR.
-
 | # | Milestone |
 |---|---|
-| M23 | Upstream the AIR export; v1.0.0 |
+| M23 | Docs for v1 (this table, README, `docs/`); tag v1.0.0 after approval. The AIR export is not sent upstream. |
 
 ## Decisions
 
@@ -70,7 +87,7 @@ Supported: **0.16.0** (default), **0.15.2** and **0.14.1** (matrix below). The d
 | Checker, emitter, `ZigLean` | work only on `Op` | the float ops whose result differs by version: `FCtx.zigVersion` in `Emit.lean` picks the def (`docs/floats.md` §Per-version differences) |
 | AIR goldens | `tests/golden/<ex>/air/` | a file in `tests/golden/<version>/<ex>/air/` replaces the shared file of that name; a file in `tests/golden/<version>/<ex>/air-<os>/` replaces it on that host OS only (`std.Thread` is OS-specific std code) |
 | Translation | `Proofs/<Ex>/Gen.lean` (the default version's) | `tests/golden/<version>/<ex>/Gen.lean` where it differs |
-| Proofs | `Proofs/<Ex>/Proofs.lean`, built in every full CI job against that version's translation | — |
+| Proofs | `Proofs/<Ex>/*.lean`, built in each CI job (not the mutation job) against that version's translation | — |
 | Float probe | `tests/floatprobe/expected.txt` | `expected.<version>.txt`: only the lines that differ |
 | CI | one job per version (`.github/workflows/ci.yml`) | — |
 
@@ -80,7 +97,7 @@ Support matrix:
 |---|---|
 | 0.16.0 | supported, default |
 | 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers`, `layout` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override); the diff test runs in the 0.16.0 and 0.15.2 jobs. |
+| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers`, `layout` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have; `lists` uses `ArrayListUnmanaged`, another type in 0.14.1, `docs/std-models.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override) and builds the proofs against it; its std cannot build the diff harness, so the diff test runs in the 0.16.0 and 0.15.2 jobs. |
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.
@@ -96,11 +113,13 @@ Support matrix:
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping, saturating arithmetic | |
-| `if`, `switch`, `while`, `for` | allocators, heap |
+| `if`, `switch`, `while`, `for` | |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | |
 | read-only slices `[]const T` in a pure function; atomics on an integer pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) with a data-race check | |
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
+| `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
+| inline asm with register operands only, as an opaque function (x86_64) | asm with a memory operand, a named or read-write output, or a `"memory"` clobber |
 | `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
