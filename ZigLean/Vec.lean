@@ -39,6 +39,21 @@ instance {α : Type} {n : Nat} [Enc α] : Enc (Vec α n) where
       (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
     if h : xs.size = n then pure ⟨⟨xs, h⟩⟩ else throw .unspecified
 
+/-- The ABI size and alignment of `@Vector(n, bool)`: its lanes are bits, so `⌈n / 8⌉` bytes,
+rounded up to a power of 2 (`Check.lean`'s `modelLayout`). -/
+def boolVecLayout (n : Nat) : Nat := ceilPow2 ((n + 7) / 8)
+
+/-- `@Vector(n, bool)` in memory: lane `i` is bit `i`, as the `uN` of its `n` bits (`intBytes`:
+the bits above `n` in the last byte are padding). -/
+instance (priority := high) {n : Nat} : Enc (Vec Bool n) where
+  size := boolVecLayout n
+  align := boolVecLayout n
+  encode v := padTo (boolVecLayout n) (intBytes ((List.range n).foldl
+    (fun acc i => if v.lanes.toArray[i]! then acc ||| (1#n <<< i) else acc) 0#n))
+  decode bs := do
+    let b ← intOfBytes n (bs.extract 0 ((n + 7) / 8))
+    pure ⟨Vector.ofFn fun i => b.getLsbD i⟩
+
 /-- A vector with every lane `a` (`splat`). -/
 def Vec.splat {α : Type} {n : Nat} (a : α) : Vec α n := ⟨Vector.replicate n a⟩
 

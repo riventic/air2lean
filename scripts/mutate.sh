@@ -84,6 +84,8 @@
 # (t) Emitter-output mutation, layout: the generated `Zig.Packed Mode 2` instance
 #     (Proofs/Layout/Gen.lean) calls every value `valid`, as when the emitter drops the check of
 #     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
+# (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) puts lane
+#     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
 #
 # Usage: mutate.sh
 # Env:
@@ -92,7 +94,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -569,6 +571,22 @@ else
   run_and_report "mutation (t)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$layout_backup" "$layout_gen"
+fi
+
+echo "== mutation (u): a bool vector in memory has its lanes in reverse bit order (Lean runtime) ==" >&2
+if ! has_example layout; then
+  echo "mutation (u): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/then acc ||| (1#n <<< i) else acc) 0#n))$/then acc ||| (1#n <<< (n - 1 - i)) else acc) 0#n))/' "$vec_lean"
+  rm -f "$vec_lean.bak"
+  grep -q '(1#n <<< (n - 1 - i))' "$vec_lean" || {
+    echo "error: mutation (u): sed did not change the Vec Bool encoding" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (u)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$vec_backup" "$vec_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

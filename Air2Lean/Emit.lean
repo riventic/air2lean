@@ -810,7 +810,7 @@ def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
 def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
-    | .array len .. => (rv, s!"({len} : BitVec 64)")
+    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec 64)")
     | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
 
 /-- `v` is a pointer to memory: not a place. -/

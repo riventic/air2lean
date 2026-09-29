@@ -86,8 +86,15 @@ A float `reduce`'s lane order is exactly Zig's (`Vec.reduce_four`-style, lane 0 
 order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s `fDot_body`).
 
 Sema writes the safety checks of a vector op (division by zero, overflow) as a `cmp_vector` and
-a `reduce` of the `bool` vector, before the op. A vector in memory of a type other than an
-integer or a float is rejected (`Check.lean`'s `modelLayout`).
+a `reduce` of the `bool` vector, before the op.
+
+In memory, a vector of integers or floats is its lanes, as an array, with the size rounded up
+to a power of 2 (`vecLayout`). A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
+size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
+are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
+A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of an integer or float vector is
+an item pointer, as for an array. A lane pointer of a `bool` vector is outside the subset: the
+lane is a bit, and the AIR file has no lane index (the pointer type's `vector_index`).
 
 ### Places
 

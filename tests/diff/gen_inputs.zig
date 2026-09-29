@@ -135,6 +135,7 @@ pub fn main() !void {
     try genSentinelArr(rng);
     try genDupeZ(rng);
     try genCtl();
+    try genVecMem(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2648,5 +2649,41 @@ fn genCtl() !void {
         defer file.close();
         const writer = file.writer();
         for (0..256) |b| try writer.print("{{\"bufs\":[[{d}]],\"args\":[{{\"buf\":0,\"off\":0}}]}}\n", .{b});
+    }
+}
+
+/// maskStore(p: *@Vector(4, bool), a: u32), maskCount(p), laneSet(r: *@Vector(4, u32), x: u32).
+fn genVecMem(rng: std.Random) !void {
+    {
+        var file = try openLayout("maskStore");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 1)});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{rng.int(u32)});
+        }
+    }
+    {
+        // Half of the bytes have no set padding bit (the high 4 bits).
+        var file = try openLayout("maskCount");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const b = if (i % 2 == 0) rng.uintLessThan(u8, 16) else rng.int(u8);
+            try writer.print("{{\"bufs\":[[{d}]],\"args\":[", .{b});
+            try writePtr(writer, 0, 0);
+            try writer.writeAll("]}\n");
+        }
+    }
+    {
+        var file = try openLayout("laneSet");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 16)});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{edgyU32(rng)});
+        }
     }
 }

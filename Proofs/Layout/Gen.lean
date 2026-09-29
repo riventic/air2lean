@@ -858,6 +858,23 @@ def isOk (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+structure laneSetLocals where
+  deriving Inhabited
+
+inductive laneSetExit where
+  | ret (v : BitVec 32)
+
+def laneSet (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i2 ← pure (p0.elem 4 (2 : BitVec 64))
+    Zig.store (α := BitVec 32) 4 i2 p1
+    let i4 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (1 : BitVec 64)))
+    let i5 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (2 : BitVec 64)))
+    let i6 ← pure (Zig.addWrap i4 i5)
+    pure (.ret i6)) : Zig.MM laneSetLocals laneSetExit).run' (default : laneSetLocals)
+  match e with
+  | .ret v => pure v
+
 structure lowByteLocals where
   local1 : Zig.Ptr
   deriving Inhabited
@@ -875,6 +892,58 @@ def lowByte (p0 : Word) : Zig.MemM (BitVec 8) := do
     let i5 ← Zig.callM (Zig.load (BitVec 8) 1 (i4.elem 1 (0 : BitVec 64)))
     pure (.ret i5)) : Zig.MM lowByteLocals lowByteExit).run' { (default : lowByteLocals) with local1 := s1 }
   Zig.free s1
+  match e with
+  | .ret v => pure v
+
+structure maskCountLocals where
+  deriving Inhabited
+
+inductive maskCountExit where
+  | ret (v : BitVec 32)
+
+def maskCount (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i1 ← Zig.load (Zig.Vec (Bool) 4) 1 p0
+    let i2 ← pure (Zig.Vec.select i1 ((⟨#v[(1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4) ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4))
+    let i3 ← pure (Zig.Vec.reduce Zig.addWrap i2)
+    pure (.ret i3)) : Zig.MM maskCountLocals maskCountExit).run' (default : maskCountLocals)
+  match e with
+  | .ret v => pure v
+
+structure maskStoreLocals where
+  local2 : Zig.Ptr
+  deriving Inhabited
+
+inductive maskStoreExit where
+  | ret (v : BitVec 32)
+
+def maskStore (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let s2 ← Zig.allocStack 16 16
+  let e ← ((do
+    let i2 ← pure (← get).local2
+    let i3 ← pure (i2.elem 4 (0 : BitVec 64))
+    let i4 ← pure (p1 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i3 i4
+    let i6 ← pure (i2.elem 4 (1 : BitVec 64))
+    let i7 ← pure (Zig.shr false p1 (8 : BitVec 5))
+    let i8 ← pure (i7 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i6 i8
+    let i10 ← pure (i2.elem 4 (2 : BitVec 64))
+    let i11 ← pure (Zig.shr false p1 (16 : BitVec 5))
+    let i12 ← pure (i11 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i10 i12
+    let i14 ← pure (i2.elem 4 (3 : BitVec 64))
+    let i15 ← pure (Zig.shr false p1 (24 : BitVec 5))
+    Zig.store (α := BitVec 32) 4 i14 i15
+    let i17 ← pure (i2)
+    let i18 ← Zig.load (Zig.Vec (BitVec 32) 4) 16 i17
+    let i19 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.gt false x0 x1)) i18 ((⟨#v[(127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4)
+    Zig.store (α := Zig.Vec (Bool) 4) 1 p0 i19
+    let i21 ← Zig.load (Zig.Vec (Bool) 4) 1 p0
+    let i22 ← pure (Zig.Vec.select i21 ((⟨#v[(1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4) ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4))
+    let i23 ← pure (Zig.Vec.reduce Zig.addWrap i22)
+    pure (.ret i23)) : Zig.MM maskStoreLocals maskStoreExit).run' { (default : maskStoreLocals) with local2 := s2 }
+  Zig.free s2
   match e with
   | .ret v => pure v
 

@@ -42,6 +42,13 @@ theorem ctlSum_illegal (b : BitVec 8) (h : b.extractLsb' 1 2 = 3) : ctlSum b = t
     rw [Bool.eq_false_iff]; intro hv; exact (Ctl.valid_iff b).mp hv h
   simp [ctlSum, zig_unfold, Packed.ofBits?, hv]
 
+/-- A `@Vector(4, bool)` in memory is one byte: lane `i` is bit `i`, the high 4 bits are
+padding (`Byte.part 4`). -/
+theorem boolVec4_bytes (a b c d : Bool) :
+    Enc.encode (⟨#v[a, b, c, d]⟩ : Vec Bool 4) =
+      #[.part 4 (BitVec.ofNat 8 (a.toNat + 2 * b.toNat + 4 * c.toNat + 8 * d.toNat))] := by
+  cases a <;> cases b <;> cases c <;> cases d <;> decide +kernel
+
 /-- `setMode` replaces bits 2 and 3 of `b` with `m` and keeps the other bits. -/
 theorem setMode_spec (b : BitVec 8) (m : BitVec 2) :
     setMode b m = pure ((b &&& 0xF3#8) ||| (m.setWidth 8 <<< 2)) := by

@@ -808,6 +808,14 @@ def runLayout : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "ctlMode" (fun g a => return Layout.ctlMode (← ptrOf g a[0]!))
     fun _ v => natStr v false
+  processMem ex m0 "maskStore"
+    (fun g a => return Layout.maskStore (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "maskCount" (fun g a => return Layout.maskCount (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "laneSet"
+    (fun g a => return Layout.laneSet (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
   let headerStr (m : Zig.Mem) (h : Layout.Header) : String :=
     s!"\{\"magic\":{h.magic.toNat},\"len\":{h.len.toNat},\"kind\":{h.kind.toNat},\"flags\":{flagsStr m h.flags}}"
   processMem ex m0 "headerLen" (fun g a => return Layout.headerLen (← sliceOf g a[0]!))

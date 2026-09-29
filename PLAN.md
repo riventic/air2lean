@@ -121,7 +121,7 @@ Support matrix:
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
 | inline asm with register operands only, as an opaque function (x86_64) | asm with a memory operand, a named or read-write output, or a `"memory"` clobber |
-| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a vector in memory of a type other than an integer or float |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to a lane of a `bool` vector (the AIR file has no lane index) |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |

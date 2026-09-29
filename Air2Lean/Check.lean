@@ -140,7 +140,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     | some (.int ..) | some (.float _) =>
       let (s, _) ← modelLayout types layouts c
       pure (Zig.vecLayout len s, Zig.vecLayout len s)
-    | _ => throw "a vector of a type other than an integer or float (M19)"
+    | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
+    | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
     let _ ← modelLayout types layouts tag
     exported
@@ -245,6 +246,9 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   match types[pty]? with
   | some (.ptr "one" _ c) => match types[c]? with
     | some (.array _ e _) => some e
+    -- The lanes of a vector of integers or floats are bytes, as the items of an array. A lane
+    -- of a `bool` vector is a bit (`CheckCtx.itemAccess`).
+    | some (.vector _ e) => if types[e]? == some .bool then none else some e
     | _ => none
   | some (.ptr _ _ c) => some c
   | _ => none
@@ -264,6 +268,11 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   let pty ← cx.memPtrTy line ptr
+  if let some (.ptr "one" _ c) := cx.types[pty]? then
+    if let some (.vector _ e) := cx.types[c]? then
+      if cx.types[e]? == some .bool then
+        cx.fail line "a pointer to a lane of a `bool` vector is outside the subset (the lane is a \
+          bit, and the AIR file has no lane index)"
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
   checkMemTy cx.fnName cx.types cx.layouts line e
