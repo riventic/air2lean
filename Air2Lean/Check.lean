@@ -27,7 +27,7 @@ namespace Air2Lean
 named register in braces — either alone or with a leading `=` (write-only) marker. -/
 def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=" then c.drop 1 else c
-  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.length > 2)
+  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
 
 /-- Is `c` a matching constraint on an input, tying it to output operand `0` — the register a
 register-modify-in-place instruction (`bswap`) both reads and writes? Always `0`: `checkInst`
@@ -164,7 +164,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let (s, a) ← modelLayout types layouts payload
     pure (Zig.errUnionSize s a, Nat.max a 2)
   | some (.errorSet _) => throw "an error set value (not in an error union)"
-  | some (.union name _ (some tag) fields) =>
+  | some (.union _ _ (some tag) fields) =>
     let (ts, ta) ← modelLayout types layouts tag
     let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)

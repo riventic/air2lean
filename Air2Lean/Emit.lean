@@ -1702,7 +1702,8 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
           let restStr := emitStmts fc env rest
           s!"match ← {inner} with\n| .br{inst.id} => {doBlock restStr}\n| e => pure e"
         | _ =>
-          let vname := s!"v{inst.id}"
+          -- `_v<id>` if nothing reads the block's result (Lean's unused-variable linter).
+          let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
           let restStr := emitStmts fc (env.push (inst.id, vname)) rest
           s!"match ← {inner} with\n| .br{inst.id} {vname} => {doBlock restStr}\n| e => pure e"
       | .loop body =>
@@ -1880,7 +1881,7 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   -- `«at»` (a keyword) gives `atLocals`.
-  let plain := (leanName.stripPrefix "«").stripSuffix "»"
+  let plain := ((leanName.dropPrefix "«").dropSuffix "»").toString
   let allocs := collectAllocs f.types allInsts
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
