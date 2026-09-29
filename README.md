@@ -71,6 +71,8 @@ scripts/no-sorry.sh    # no sorry/admit/native_decide
 scripts/mutate.sh      # a changed function must fail a test
 ```
 
+The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts the float results that differ by target as `host=N`, not as mismatches: `tests/diff/<ex>/host.txt` lists those functions. CI (x86_64-linux) checks them.
+
 ## Scope
 
 | In | Out |
