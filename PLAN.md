@@ -43,8 +43,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (h) | an allocation never fails at `Mem.failAt` | 311 mismatches |
 | (i) | the asm `bswap32` returns its input | 298 mismatches |
 | (j) | `Zig.Vec.reduce` drops the last lane | 1083 mismatches |
-| (k) | `Xchg` in the `Xor` commuting group | 1 pinned count |
-| (l) | no data-race check | 2 pinned counts |
+| (k) | two atomic accesses race | 2 pinned counts |
+| (l) | no data-race check | 1 pinned count |
 | (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
 | (n) | no read-only check for a `const` global | 1 pinned count |
 | (o) | every `Byte.part` rejected | 4 pinned counts |
@@ -59,7 +59,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 
 | # | Milestone |
 |---|---|
-| M23 | Docs for v1 (this table, README, `docs/`); tag v1.0.0 after approval. The AIR export is not sent upstream. |
+| T1 | Threads that take turns (`ZigLean/Conc/`): the monad `ConcM` (a tree of sync ops with `CCPO`/`MonoBind`), the scheduler `Zig.Sched.run` over an oracle, concurrent functions in `Emit.lean` (`Tgt`, `dispatch`, a `yield` before each atomic op), the race rule (two atomic accesses never race; release/acquire clocks per location), the diff test's search over schedules. `Zig.Error.nondet` is gone. |
+| T2–T6 | RC11 memory model, waits and the std sync primitives (`Mutex`, `Condition`, …), proofs over all schedules, concurrent separation logic, docs. |
 
 ## Decisions
 

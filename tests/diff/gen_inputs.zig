@@ -2047,8 +2047,8 @@ fn genThreadsCounter(rng: std.Random) !void {
 
 /// race(a: u32, b: u32) -> u32 and xchgRace(a: u32, b: u32) -> u32: both race two threads on
 /// one shared location without an ordering between them (a plain write, an atomic swap). The
-/// model rejects every call (`.illegal`/`.nondet`, docs/std-models.md §Thread model) regardless
-/// of `a`/`b`, so the values only need to exercise the full u32 range.
+/// model gives `.illegal` for race (a data race) and `a` or `b` for xchgRace (by the schedule),
+/// so the values only need to exercise the full u32 range.
 fn genThreadsRace(rng: std.Random, comptime name: []const u8) !void {
     var file = try openOutIn("tests/diff/threads/inputs", name);
     defer file.close();

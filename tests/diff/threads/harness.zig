@@ -8,10 +8,10 @@
 //!
 //! parallelCounter is race-free (an atomic `fetchAdd`): the Lean and Zig sides must agree on the
 //! exact value, `4 * itersPerThread`. race and xchgRace both race two threads on one shared
-//! location: the Lean side always rejects the call (`.illegal`/`.nondet`,
-//! docs/std-models.md §Thread model, tests/diff/threads/unspecified.txt and nondet.txt); real
-//! Zig performs the race with an OS-scheduler-dependent outcome that this harness reports as an
-//! ordinary "ok" value, which scripts/diff.sh matches against the pinned count.
+//! location: race's plain writes are a data race, so the Lean side throws `.illegal` for every
+//! input (tests/diff/threads/unspecified.txt); xchgRace's atomic swaps give `a` or `b`, and
+//! the Lean side searches the schedules for the one that real Zig reported
+//! (tests/diff/Diff.lean's `searchSchedules`, docs/std-models.md §Thread model).
 
 const std = @import("std");
 // Named modules, wired up on the command line (see scripts/diff.sh):

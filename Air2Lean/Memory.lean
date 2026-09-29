@@ -239,11 +239,6 @@ partial def valueUsed (allInsts : Array Inst) (id : InstId) : Bool :=
     | .br target _ => valueUsed allInsts target
     | _ => true
 
-/-- Is the result of the atomic RMW at `id` (in `allInsts`, `Func.allInsts` or `FCtx.allInsts`)
-unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model,
-`Zig.RmwOp.group`)? -/
-def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
-
 /-- A function type. The exporter writes it as `other`, with the name `fn (…) …`; it is only
 behind a pointer (M20). -/
 def isFnTy (t : Ty) : Bool := match t with | .other n => n.startsWith "fn (" | _ => false
@@ -286,5 +281,41 @@ partial def memoryFunctions (funcs : Array Func) : Array String :=
       if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
   go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
+
+/-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
+def Func.syncLocally (f : Func) : Bool :=
+  f.allInsts.any fun i => match i.op with
+    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
+    | .call (.func name ..) _ => (threadFn? name).isSome
+    | _ => false
+
+/-- The names of the concurrent functions in `funcs` (`Zig.ConcM`): the ones with a sync op,
+then every caller of such a function, up to a fixpoint. A concurrent function also uses memory
+(`memoryOp`). -/
+partial def concFunctions (funcs : Array Func) : Array String :=
+  let refs := fnRefs funcs
+  let rec go (conc : Array String) : Array String :=
+    let next := funcs.filterMap fun f =>
+      if !conc.contains f.name && (f.callees refs).any conc.contains then some f.name else none
+    if next.isEmpty then conc else go (conc ++ next)
+  go (funcs.filterMap fun f => if f.syncLocally then some f.name else none)
+
+/-- The spawn targets of `funcs`: each function that a `Thread.spawn` runs, with the type of its
+one argument (the args tuple's field), in first-use order. -/
+def spawnTargets (funcs : Array Func) : Array (String × Func × TyId) :=
+  funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
+    match i.op with
+    | .call (.func name _ (some sf)) args =>
+      if threadFn? name == some .spawn && !(acc.any (·.1 == sf)) then
+        let argTy := ((args[1]? : Option Val).bind fun v => match v with
+          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+          | v => v.constTy?).bind fun t => match f.types[t]? with
+            | some (.tuple fs) => fs[0]?
+            | _ => none
+        match argTy with
+        | some a => acc.push (sf, f, a)
+        | none => acc
+      else acc
+    | _ => acc
 
 end Air2Lean

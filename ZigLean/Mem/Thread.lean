@@ -3,27 +3,16 @@ import ZigLean.Mem.Enc
 /-!
 # Atomics and threads
 
-The model of `std.Thread.spawn`/`.join` (`docs/std-models.md` §Thread model), and of the AIR
-atomic ops (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`).
-Fork-join only: `Thread.detach`, `.yield`, `.spinLoopHint`, `Futex`, `Mutex` and `Condition` are
-outside the subset (`Air2Lean.Memory.lean`'s `rejectedThreadFn?`).
+The `MemM` part of the thread model (`docs/std-models.md` §Thread model): the AIR atomic ops
+(`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`), and the
+bookkeeping of a spawn and a join (`Thread.fork`, `Thread.join`, `checkJoinedByChild`). The
+scheduler (`ZigLean/Conc/Sched.lean`) calls the bookkeeping at a sync op; a concurrent function
+calls an atomic op after a `yield` (`ZigLean/Conc/Call.lean`).
 
-Every atomic op and RMW is sequentially consistent within one thread: the model does not weaken
-`unordered`/`monotonic`/`acquire`/`release`/`acq_rel` orderings, it only checks the ordering
-argument decodes (`Air2Lean.Air.Normalize.lean`'s `parseOrder`).
-
-The subset restricts an atomic op's pointee to an integer type (`Air2Lean.Check.lean`'s
-`atomicIntChild`): no float, `bool`, enum or pointer atomic.
-
-`Thread.spawn` runs the spawned function's body eagerly, inside `spawn` itself, not deferred to
-`join` — `Mem` cannot store a closure of type `MemM Unit` (strict positivity), and `Emit.lean`
-knows the concrete callee and its arguments at the call site, so it emits the already-applied
-call directly. Running it eagerly does not change which accesses are concurrent: that is a
-property of the vector clocks (`ZigLean.Mem.Basic`'s `VClock`), not of physical execution order.
-
-**Known limit**: a spin-wait on a flag that no thread the model has run yet has set does not
-terminate — the model's `loop` recursion (`ZigLean/Basic.lean`) returns `none` for it, the same
-as any other loop whose condition never becomes true (`docs/std-models.md` §Thread model).
+Every atomic op is sequentially consistent: the ordering argument decodes
+(`Air2Lean.Air.Normalize.lean`'s `parseOrder`), and every atomic write releases and every atomic
+read acquires. The subset restricts an atomic op's pointee to an integer type
+(`Air2Lean.Check.lean`'s `atomicIntChild`).
 -/
 
 namespace Zig
@@ -136,7 +125,7 @@ namespace Thread
 
 /-- `.illegal`: thread `t` finished without joining every thread that `t` itself spawned.
 `spawn` checks it for each spawned thread; for the main thread (`t = 0`), the caller of the
-top-level function checks it (`tests/diff/Diff.lean`'s `renderThread`, `docs/std-models.md`
+top-level function checks it when the main thread ends (`ZigLean/Conc/Sched.lean`, `docs/std-models.md`
 §Thread model). -/
 def checkJoinedByChild (t : ThreadId) : MemM Unit := do
   let m ← get
@@ -154,19 +143,6 @@ def fork : MemM ThreadId := do
     clocks := (m.clocks.set! parent parentClock).push parentClock
     threads := m.threads.push { spawner := parent, joined := false } }
   pure child
-
-/-- `std.Thread.spawn(config, f, args)`: `Emit.lean` emits the already-applied call `f args` as
-`body` (both are static at the call site), and runs it eagerly as a new thread forked from the
-current one. Never fails: `SpawnConfig`'s stack size and allocator have no observable effect in
-the model, so the result is always `.ok`. -/
-def spawn (body : MemM Unit) : MemM (Except ErrName ThreadId) := do
-  let parent := (← get).current
-  let child ← fork
-  modify fun m => { m with current := child }
-  body
-  checkJoinedByChild child
-  modify fun m => { m with current := parent }
-  pure (.ok child)
 
 /-- `std.Thread.join`: `tid` must have been spawned by the thread running this join, and not
 already joined — a handle joined by anyone else, or joined twice, throws `.illegal`. Merges the

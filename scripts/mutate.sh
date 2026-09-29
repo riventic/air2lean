@@ -49,14 +49,13 @@
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
-# (k) Lean-runtime mutation, threads: `RmwOp.group` (ZigLean/Mem/Thread.lean) puts `Xchg` in the
-#     `Xor` commuting group. `xchgRace`'s two concurrent, unused-result swaps then commute: the
-#     model computes a value instead of throwing `.nondet` -- tests/diff/threads/nondet.txt's
-#     pinned count (300) drops to 0.
+# (k) Lean-runtime mutation, threads: `racePair` (ZigLean/Mem/Basic.lean) makes two atomic
+#     accesses race, as the eager model did. `parallelCounter` and `xchgRace` then throw
+#     `.illegal` -- tests/diff/threads/unspecified.txt's pinned counts change.
 # (l) Lean-runtime mutation, threads: `recordAccess` (ZigLean/Mem/Basic.lean) never checks for a
-#     race (`raceAt`'s result is ignored; every access is recorded as race-free). `race` and
-#     `xchgRace` then both return a value instead of throwing `.illegal`/`.nondet` --
-#     tests/diff/threads/unspecified.txt and nondet.txt's pinned counts both drop to 0.
+#     race (`raceAt`'s result ignored; every access recorded race-free). `race` then returns a
+#     value instead of throwing `.illegal` -- tests/diff/threads/unspecified.txt's pinned count
+#     drops to 0.
 # (m) Emitter-output mutation, layout: the generated `Zig.Packed Flags 8` instance
 #     (Proofs/Layout/Gen.lean) reads `ready` from bit 1 and `err` from bit 0 in `ofBits` (two
 #     fields swapped). `byteToFlags`, `isOk` and the `@bitCast` round trip in `setMode` then
@@ -233,9 +232,9 @@ run_and_report() {
   fi
   local mismatch counts
   mismatch=$(echo "$total_line" | sed -n 's/.*mismatch=\([0-9]*\).*/\1/p')
-  # A pinned `unspecified`/`nondet` count that changed is a detection too (threads: a mutation
+  # A pinned `unspecified`/`capped` count that changed is a detection too (threads: a mutation
   # that removes a race result changes no value, only the count).
-  counts=$(grep -c '^\(UNSPECIFIED\|NONDET\) COUNT' "$out" || true)
+  counts=$(grep -c '^\(UNSPECIFIED\|CAPPED\) COUNT' "$out" || true)
   rm -f "$out"
   if [ "$status" -ne 0 ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; then
     echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
@@ -412,21 +411,20 @@ else
   cp "$vec_backup" "$vec_lean"
 fi
 
-echo "== mutation (k): RmwOp.group puts Xchg in the Xor commuting group (Lean runtime) ==" >&2
+echo "== mutation (k): two atomic accesses race (Lean runtime) ==" >&2
 if ! has_example threads; then
   echo "mutation (k): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
-  sed -i.bak 's/| \.xor => some \.xor/| .xor | .xchg => some .xor/' "$thread_lean"
-  sed -i.bak 's/| \.xchg | \.nand => none/| .nand => none/' "$thread_lean"
-  rm -f "$thread_lean.bak"
-  grep -q '| .xor | .xchg => some .xor' "$thread_lean" || {
-    echo "error: mutation (k): sed did not change RmwOp.group" >&2
+  sed -i.bak 's/^  if (a\.isWrite || b\.isWrite) \&\& !(a\.isAtomic \&\& b\.isAtomic) then some \.illegal else none$/  if a.isWrite || b.isWrite then some .illegal else none/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q '^  if a.isWrite || b.isWrite then some .illegal else none$' "$mem_lean" || {
+    echo "error: mutation (k): sed did not change racePair" >&2
     exit 1
   }
 
   run_and_report "mutation (k)" threads
   [ "$detected" -eq 1 ] || all_detected=0
-  cp "$thread_backup" "$thread_lean"
+  cp "$mem_backup" "$mem_lean"
 fi
 
 echo "== mutation (l): recordAccess never checks for a race (Lean runtime) ==" >&2

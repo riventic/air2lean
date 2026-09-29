@@ -65,9 +65,9 @@ fn swapFlag(ctx: *SwapCtx) void {
 }
 
 /// Two threads swap the same atomic `u32` without an ordering between them: `Xchg` never
-/// commutes with itself (`ZigLean/Mem/Thread.lean`'s `RmwOp.group`), so the model always throws
-/// `Zig.Error.nondet` (`docs/std-models.md` §Thread model); real Zig performs both swaps with an
-/// OS-scheduler-dependent outcome (`tests/diff/threads/nondet.txt`).
+/// The two swaps are atomic, so they do not race: the result is `a` or `b`, by the schedule
+/// (`docs/std-models.md` §Thread model); the diff test searches the schedules for the result
+/// that real Zig gave (`tests/diff/Diff.lean`'s `searchSchedules`).
 pub fn xchgRace(a: u32, b: u32) !u32 {
     var flag = std.atomic.Value(u32).init(0);
     var c1: SwapCtx = .{ .flag = &flag, .val = a };
