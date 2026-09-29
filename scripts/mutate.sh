@@ -81,6 +81,9 @@
 # (s) Lean-runtime mutation, lists: `Allocator.freeSentinel` (ZigLean/Mem/Alloc.lean) frees `len`
 #     items, not `len + 1`: the free of `dupeZLen`'s `[:0]u8` then misses the sentinel byte and
 #     throws `.illegal` (a free that is not the whole block).
+# (t) Emitter-output mutation, layout: the generated `Zig.Packed Mode 2` instance
+#     (Proofs/Layout/Gen.lean) calls every value `valid`, as when the emitter drops the check of
+#     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
 #
 # Usage: mutate.sh
 # Env:
@@ -89,7 +92,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -550,6 +553,22 @@ else
   run_and_report "mutation (s)" lists
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$alloc_backup" "$alloc_lean"
+fi
+
+echo "== mutation (t): every Mode value is valid in a packed struct (emitter output) ==" >&2
+if ! has_example layout; then
+  echo "mutation (t): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/^  valid b := (Mode\.ofInt? (Zig\.val false b))\.isSome$/  valid _ := true/' "$layout_gen"
+  rm -f "$layout_gen.bak"
+  grep -q '^  valid _ := true$' "$layout_gen" || {
+    echo "error: mutation (t): sed did not change the Mode instance" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (t)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$layout_backup" "$layout_gen"
 fi
 
 [ "$all_detected" -eq 1 ]

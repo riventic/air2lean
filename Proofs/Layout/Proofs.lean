@@ -25,6 +25,23 @@ theorem Flags.toBits_ofBits (b : BitVec 8) : Packed.toBits (Packed.ofBits b : Fl
   revert b
   decide
 
+/-- The packed round trip of `Ctl`, which has an enum field. -/
+theorem Ctl.ofBits_toBits (c : Ctl) : (Packed.ofBits (Packed.toBits c) : Ctl) = c := by
+  obtain ⟨o, md, l⟩ := c
+  cases md <;> revert o l <;> decide
+
+/-- A byte is a `Ctl` value if its mode bits (1 and 2) are not 3: `Mode` has no name for 3. -/
+theorem Ctl.valid_iff (b : BitVec 8) :
+    Packed.valid (α := Ctl) b = true ↔ b.extractLsb' 1 2 ≠ 3 := by
+  revert b
+  decide
+
+/-- `@bitCast` of a byte with mode 3 to `Ctl` is illegal behaviour. -/
+theorem ctlSum_illegal (b : BitVec 8) (h : b.extractLsb' 1 2 = 3) : ctlSum b = throw .illegal := by
+  have hv : Packed.valid (α := Ctl) b = false := by
+    rw [Bool.eq_false_iff]; intro hv; exact (Ctl.valid_iff b).mp hv h
+  simp [ctlSum, zig_unfold, Packed.ofBits?, hv]
+
 /-- `setMode` replaces bits 2 and 3 of `b` with `m` and keeps the other bits. -/
 theorem setMode_spec (b : BitVec 8) (m : BitVec 2) :
     setMode b m = pure ((b &&& 0xF3#8) ||| (m.setWidth 8 <<< 2)) := by

@@ -127,7 +127,7 @@ Support matrix:
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove`; an array with a sentinel `[N:s]T` as one value (`N+1` items) | |
 | globals (`var`, `const`; a write to a `const` global throws `.illegal`), string literals, `@tagName`, `@errorName` | |
-| `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool` or packed struct; a `packed` union in a packed struct |
+| `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool`, enum or packed struct; a `packed` union in a packed struct |
 
 ## Risks
 

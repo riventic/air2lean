@@ -92,6 +92,28 @@ pub fn isOk(p: *const Flags) bool {
     return p.ready and !p.err;
 }
 
+/// A mode of 2 bits: 3 has no name.
+pub const Mode = enum(u2) { off, low, high };
+
+/// A control byte with an enum field.
+pub const Ctl = packed struct(u8) {
+    on: bool,
+    mode: Mode,
+    level: u5,
+};
+
+/// The mode plus the level of `b` (`@bitCast` to a packed struct with an enum field). A mode of
+/// 3 has no name: illegal behaviour, not checked.
+pub fn ctlSum(b: u8) u8 {
+    const c: Ctl = @bitCast(b);
+    return @as(u8, @intFromEnum(c.mode)) + c.level;
+}
+
+/// The mode of `p.*`, read through a bit-pointer.
+pub fn ctlMode(p: *const Ctl) u8 {
+    return @intFromEnum(p.mode);
+}
+
 /// A packed struct of 6 bits: the high 2 bits of its byte are padding.
 pub const Pair = packed struct(u6) {
     lo: u3,
@@ -384,4 +406,6 @@ comptime {
     _ = &setNib;
     _ = &bumpPair;
     _ = &writeTable;
+    _ = &ctlSum;
+    _ = &ctlMode;
 }

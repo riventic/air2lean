@@ -30,6 +30,11 @@ def Color.ofInt? (v : Int) : Option Color :=
 
 def Color.isNamed (_ : Color) : Bool := true
 
+instance : Zig.Packed Color 2 where
+  toBits := Color.toBits
+  ofBits b := (Color.ofInt? (Zig.val false b)).getD default
+  valid b := (Color.ofInt? (Zig.val false b)).isSome
+
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
   -- 0: slices.counter

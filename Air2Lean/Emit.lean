@@ -251,7 +251,7 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
     String.intercalate "\n" (head ++
       ["  encode v := Zig.Enc.encode (Zig.Packed.toBits v)", "  decode bs := do",
-       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    pure (Zig.Packed.ofBits b)"])
+       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
       s!"({o}, Zig.Enc.encode v.{mangleField f})"
@@ -289,7 +289,12 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
         ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
           s!"def {n}.toBits : {n} → BitVec {bits}"] ++ toBits ++ ["",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=", s!"  {ofInt}", "",
-          s!"def {n}.isNamed (_ : {n}) : Bool := true"])
+          s!"def {n}.isNamed (_ : {n}) : Bool := true", "",
+          -- A field of a packed struct (`ZigLean/Packed.lean`): a tag value without a name is
+          -- not `valid`.
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits",
+          s!"  ofBits b := ({n}.ofInt? (Zig.val {signed} b)).getD default",
+          s!"  valid b := ({n}.ofInt? (Zig.val {signed} b)).isSome"])
     else
       let named := fields.toList.map fun (f, v) => s!"def {n}.{mangleField f} : {n} := ⟨{tagLit bits v}⟩"
       let isNamed := String.intercalate " || " (fields.toList.map fun (_, v) => s!"e.bits == {tagLit bits v}")
@@ -299,7 +304,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
           s!"def {n}.toBits (e : {n}) : BitVec {bits} := e.bits", "",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=",
           s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
-          s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}"])
+          s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}", "",
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits", "  ofBits b := ⟨b⟩"])
   | .union _ layout none fields =>
     -- `extern`, `packed`: the bytes; every field at byte 0 (`ZigLean/Union.lean`).
     let size := s.layout.size.getD 0
@@ -350,10 +356,14 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       s!"((Zig.Packed.toBits v.{mangleField f}).setWidth {bits} <<< {o})"
     let ofBits := (fields.toList.zip offs).map fun ((f, _), o) =>
       s!"{mangleField f} := Zig.Packed.get b {o}"
+    -- `valid`: the fields that can hold bits that are not a value (an enum, in any depth).
+    let valid := (fields.toList.zip offs).filterMap fun ((_, t), o) =>
+      if packedHasEnum s.srcTypes t then some s!"Zig.Packed.validAt ({tyStr t}) b {o}" else none
     String.intercalate "\n" (decl ++ ["",
       s!"instance : Zig.Packed {n} {bits} where",
       s!"  toBits v := {String.intercalate " ||| " toBits}",
-      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"])
+      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"] ++
+      (if valid.isEmpty then [] else [s!"  valid b := {String.intercalate " && " valid}"]))
   | _ => ""
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
@@ -1373,7 +1383,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A packed struct to its backing integer.
       let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
     else if isPacked (fc.tyOfId inst.ty) then
-      let expr := s!"pure (Zig.Packed.ofBits {rv a} : {fc.emitTyOf inst.ty})"
+      let expr := s!"Zig.Packed.ofBits? (α := {fc.emitTyOf inst.ty}) {rv a}"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
     let srcPtr := fc.isPtr a

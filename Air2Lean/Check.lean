@@ -78,7 +78,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .struct name layout fields =>
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
-        integer, a `bool` or a packed struct: outside the subset"
+        integer, a `bool`, an enum or a packed struct: outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
@@ -91,7 +91,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
           subset"
       if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
         throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
-          integer, a `bool` or a packed struct: outside the subset"
+          integer, a `bool`, an enum or a packed struct: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"

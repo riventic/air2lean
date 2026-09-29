@@ -1,3 +1,5 @@
+ctlMode 64
+ctlSum 64
 growCircle 30
 numInt 30
 shapeArea 30

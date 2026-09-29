@@ -134,6 +134,7 @@ pub fn main() !void {
     try genVectorOps(rng);
     try genSentinelArr(rng);
     try genDupeZ(rng);
+    try genCtl();
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2631,5 +2632,21 @@ fn genDupeZ(rng: std.Random) !void {
         const a = rng.uintAtMost(usize, n);
         try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
         try writer.writeAll("]}\n");
+    }
+}
+
+/// ctlSum(b: u8), ctlMode(p: *const Ctl): every byte (a mode of 3 has no name).
+fn genCtl() !void {
+    {
+        var file = try openLayout("ctlSum");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{b});
+    }
+    {
+        var file = try openLayout("ctlMode");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[[{d}]],\"args\":[{{\"buf\":0,\"off\":0}}]}}\n", .{b});
     }
 }

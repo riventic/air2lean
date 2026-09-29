@@ -83,6 +83,10 @@ fn argIsOk(b: []common.Buf, it: []std.json.Value) struct { *const layout.Flags }
     return .{ptr(*const layout.Flags, b, it[0])};
 }
 
+fn argCtlMode(b: []common.Buf, it: []std.json.Value) struct { *const layout.Ctl } {
+    return .{ptr(*const layout.Ctl, b, it[0])};
+}
+
 fn argHeader(b: []common.Buf, it: []std.json.Value) struct { []const u8 } {
     return .{common.sliceArg([]const u8, b, it[0])};
 }
@@ -174,6 +178,8 @@ pub fn main() !void {
     try run(gpa, "setMode", layout.setMode, argSetMode);
     try run(gpa, "incCount", layout.incCount, argIncCount);
     try run(gpa, "isOk", layout.isOk, argIsOk);
+    try run(gpa, "ctlSum", layout.ctlSum, argByteToFlags);
+    try run(gpa, "ctlMode", layout.ctlMode, argCtlMode);
     try run(gpa, "headerLen", layout.headerLen, argHeader);
     try run(gpa, "readHeader", layout.readHeader, argHeader);
     try run(gpa, "floatBits", layout.floatBits, argFloatBits);
