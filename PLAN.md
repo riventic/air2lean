@@ -59,6 +59,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (x) | a write goes only at the end | proof build (`twoPlusTwoW_weak`) |
 | (y) | a futex wait never blocks | proof build (`wait_alone_deadlock`) |
 | (z) | no deadlock check | proof build (`wait_alone_deadlock`) |
+| (aa) | an RMW can read a message with an RMW after it (a lost update) | proof build (`readOpts_chain`, which `parallelCounter_spec` needs) |
 
 ## Next
 
@@ -68,7 +69,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | T2 | RC11 (`ZigLean/Mem/Thread.lean`): per atomic location the writes in modification order; a read reads a message not older than its happens-before and its own reads; a write can go before newer messages; RMWs stay right after what they read; only acquire/release give happens-before edges (release sequences). `seq_cst` = `acq_rel` (no SC order: more results, never fewer). Each atomic op is one `pick` of the oracle. Example `atomics` (message passing, store buffering, 2+2W, a lock-free stack); proofs of the weak results under concrete schedules; mutations (w), (x) detected by the proof build. |
 | T3 | Waits (0.16.0): `std.Io` is `Zig.Io`; `Io.futexWait`/`futexWaitUncancelable`/`futexWake` are sync ops of the scheduler (a wait blocks until a wake at its address); `Zig.Error.deadlock` when no thread can go on. `Io.Mutex` is translated from its std code (atomics on its `enum(u32)` state). Example `sync` (0.16.0 only, `examples/<ex>/zig-versions`): a counter under `Io.Mutex`, 4 in all 6,522 schedules. Mutations (y), (z) detected by the proof build. |
 | T3b | `Io.Condition` and `Io.Event` translated from their std code (atomics on a packed struct; packed struct constants `.{ .f = v }`). `sync.handoff`: a hand-off through a condition and an event. |
-| T3c–T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex); proofs over all schedules; concurrent separation logic; docs. |
+| T4 (1) | Proofs over all schedules (`ZigLean/Conc/Logic.lean`): a protocol with a global invariant and a ghost value per thread (rely–guarantee), `run_sound` (partial correctness), `WP` rules for generated code and lemmas from a step's result back to the memory (`ZigLean/Conc/Lemmas.lean`). `parallelCounter n = 4 * n` under every schedule (`Proofs/Threads/Counter.lean`). |
+| T3c, T4 (2), T5, T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex). A proof that no run gives `.illegal` or `.deadlock`; assertions on what a thread has seen (release/acquire, relaxed); the mutex counter. Concurrent separation logic. Docs. |
 
 ## Decisions
 

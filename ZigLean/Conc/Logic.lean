@@ -22,7 +22,7 @@ invariant and ghost values.
 - **Join.** A `join` of thread `u` goes on only after `u` ended, so the thread learns `fin (G u)`.
 - **Partial correctness.** An error and "no result" satisfy every spec: the spec is about the
   results that a run gives. A proof that no run gives `.illegal` is a later step (`PLAN.md`
-  §T4).
+  §Next, T4 (2)).
 
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post

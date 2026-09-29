@@ -98,6 +98,11 @@
 #     Detected by the proof build: `wait_alone_deadlock` (Proofs/Sync/Proofs.lean).
 # (z) Lean-runtime mutation, sync: the scheduler's deadlock check is off (no result instead of
 #     `.deadlock`). Detected by the proof build: `wait_alone_deadlock`.
+# (aa) Lean-runtime mutation, threads: an RMW (ZigLean/Mem/Thread.lean's `readOpts`) can read any
+#     message, also one with an RMW after it: a lost update. Detected by the proof build:
+#     `readOpts_chain` (ZigLean/Conc/Lemmas.lean), which `parallelCounter_spec`
+#     (Proofs/Threads/Counter.lean) needs. The diff test does not see it: the newest message is
+#     still option 0.
 #
 # Usage: mutate.sh
 # Env:
@@ -106,7 +111,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -694,6 +699,22 @@ else
   proof_report "mutation (z)" Proofs.Sync.Proofs
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$sched_backup" "$sched_lean"
+fi
+
+echo "== mutation (aa): an RMW can read a message with an RMW after it (Lean runtime, proof build) ==" >&2
+if ! has_example threads; then
+  echo "mutation (aa): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/^  ((Array.range (n - f)).map fun k => n - 1 - k).filter fun p => !rmw || !l.hasRmwAfter p$/  ((Array.range (n - f)).map fun k => n - 1 - k).filter fun p => !rmw || true/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q 'filter fun p => !rmw || true$' "$thread_lean" || {
+    echo "error: mutation (aa): sed did not change readOpts" >&2
+    exit 1
+  }
+
+  proof_report "mutation (aa)" Proofs.Threads.Counter
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

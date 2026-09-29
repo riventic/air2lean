@@ -4,12 +4,12 @@ import ZigLean.Mem.Lemmas
 /-!
 # Proofs about `examples/atomics/atomics.zig`
 
-The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). A spec over all schedules is milestone T4
-(`PLAN.md`); this file shows that the model has the results that only a weak memory model
+The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). A spec over all schedules of these
+functions needs assertions on what a thread has seen (`PLAN.md` §Next, T4 (2)); this file shows that the model has the results that only a weak memory model
 explains, each under a concrete schedule (an oracle), and the result of the sequentially
 consistent schedule (the oracle always picks option 0: the newest message, the thread that is
 first). The kernel computes each run (`decide +kernel`); a function with a loop (`stackPush`) is
-defined by `partial_fixpoint`, which the kernel does not run, so its proof waits for T4.
+defined by `partial_fixpoint`, which the kernel does not run, so its proof waits for T4 (2).
 -/
 
 open Zig Atomics

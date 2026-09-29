@@ -73,12 +73,29 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 `mem0` holds one block per global. `Mem.heap_split` splits a live block off a memory as owned bytes; `counter_init` uses it to show that at program start the memory owns the counter with the value 0, and `bump_spec` is the triple of one `bump`.
 
+## Proofs over all schedules
+
+`ZigLean/Conc/Logic.lean` is a program logic for concurrent functions (`Zig.ConcM`, [docs/std-models.md](std-models.md) §Thread model). `Conc.Proto.run_sound`: every result of `Sched.run dispatch fuel o main m0`, for every oracle `o` and every `fuel`, satisfies `main`'s post. It is partial correctness: an error or no result satisfies every spec.
+
+| Part | What |
+|---|---|
+| Protocol (`Conc.Proto`) | A ghost value per thread (only the proof sees it); an invariant `inv G m` on the ghost values of all threads and the memory; the ghost value `init tgt` of a new thread; `fin g` of a thread that ended. |
+| One thread (`Proto.Safe`) | Rely–guarantee: at each stop the thread picks its new ghost value and shows `inv`; when it goes on, it knows only `inv` and its own ghost value. A run between two stops keeps the number of threads. A `join` of thread `u` gives `fin (G u)`. |
+| Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callRC`, `pickC`, `spawnC`, `joinC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
+| A step from its result | A step can fail (a race is `.illegal`), so the lemmas go from a result back to the memory: `load_ok`, `store_ok`, `storeUndef_ok`, `alloc_ok`, `free_ok`, `locIdx_found`/`locIdx_new`, `atomicRmwAt_ok`, `atomicLoadAt_ok`. |
+| RC11 at an RMW chain (`ALoc.Chain`) | An RMW reads only the newest message (`readOpts_chain`). A read whose clock is `≥` the newest message's clock reads only it (`readOpts_floor`, `le_floorPos`). |
+
+`Proofs/Threads/Counter.lean` proves `parallelCounter n = 4 * n` under every schedule. The invariant: the counter's messages are an RMW chain, and their number minus 1 is the sum of the threads' increments (their ghost values); each message's clock is `≤` the clock of some thread, and a thread that `main` joined has a clock `≤` `main`'s; each context holds the counter's address and `n`. After the 4 joins `main`'s clock is `≥` every message's clock, so its load reads the newest message.
+
+Not yet (`PLAN.md` §Next): a proof that no run gives `.illegal` or `.deadlock`; assertions on what a thread has seen, for release/acquire (message passing) and relaxed atomics.
+
 ## Proved examples
 
 | File | Theorems |
 |---|---|
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
+| `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule) |
 | `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed) |
 
 `append` of `ArrayListUnmanaged` has no proof. Its `@memcpy` alias check compares the addresses of the old and the new block. A proof of that check needs a fact that no assertion can state: every block ends below `Mem.nextAddr`.

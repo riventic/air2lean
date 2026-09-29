@@ -544,6 +544,12 @@ instance : LawfulEnc (Option Ptr) where
       have := congrArg (·[0]?) h
       simp at this
 
+instance : LawfulEnc Ptr where
+  size_encode p := by simp [Enc.encode, Enc.size]
+  decode_encode p := by
+    have hr : Array.finRange 8 = #[0, 1, 2, 3, 4, 5, 6, 7] := by decide
+    simp [Enc.encode, Enc.decode, hr, pure, ExceptT.pure, ExceptT.mk]
+
 /-! ## Error unions -/
 
 theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
