@@ -498,7 +498,7 @@ echo "== mutation (q): Zig.mod throws .panic for a negative divisor (Lean runtim
 if ! has_example vectors; then
   echo "mutation (q): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
 else
-  sed -i.bak 's/^  else if s then pure (a\.smod b)$/  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))/' "$basic_lean"
+  sed -i.bak 's/^  else if s then (if remOverflows a b then throw \.illegal else pure (a\.smod b))$/  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))/' "$basic_lean"
   rm -f "$basic_lean.bak"
   grep -q 'if b.toInt < 0 then throw .panic else pure (a.smod b)' "$basic_lean" || {
     echo "error: mutation (q): sed did not change Zig.mod" >&2

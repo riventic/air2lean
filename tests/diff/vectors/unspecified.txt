@@ -1,2 +1,4 @@
 fMax 5
 fMin 4
+sMod 1
+sRem 1
