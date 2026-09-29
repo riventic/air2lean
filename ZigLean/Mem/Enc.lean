@@ -24,18 +24,29 @@ def intAlign (n : Nat) : Nat :=
 /-- The ABI size of `uN`/`iN`: the byte count rounded up to the alignment. -/
 def intSize (n : Nat) : Nat := alignUp ((n + 7) / 8) (intAlign n)
 
-/-- The value bytes of `v`, little-endian; a partly used last byte has zero high bits. -/
+/-- The value bytes of `v`, little-endian. In a partly used last byte (`n % 8 ≠ 0`), only the
+low bits are defined (`Byte.part`): Zig stores a `uN` as its integer type, and the bits above
+are padding. -/
 def intBytes {n : Nat} (v : BitVec n) : Array Byte :=
-  (Array.range ((n + 7) / 8)).map fun i => .int ((v.toNat >>> (8 * i)) % 256 |> BitVec.ofNat 8)
+  (Array.range ((n + 7) / 8)).map fun i =>
+    let x := (v.toNat >>> (8 * i)) % 256 |> BitVec.ofNat 8
+    if n - 8 * i < 8 then .part (n - 8 * i) x else .int x
 
-/-- The integer in the first `(n + 7) / 8` bytes. An undefined byte or a pointer byte throws
-`.unspecified`. -/
+/-- Byte `i` of an `n`-bit integer: `.int`, or `.part m` if its `m` defined bits hold all of
+the integer's bits in this byte. -/
+def byteBits (n i : Nat) : Byte → Option (BitVec 8)
+  | .int x => some x
+  | .part m x => if n - 8 * i ≤ m then some x else none
+  | _ => none
+
+/-- The integer in the first `(n + 7) / 8` bytes. An undefined bit, a pointer byte or an error
+byte throws `.unspecified`. -/
 def intOfBytes (n : Nat) (bs : Array Byte) : Result (BitVec n) :=
-  (bs.extract 0 ((n + 7) / 8)).foldr (init := pure 0) fun b acc => do
+  (bs.extract 0 ((n + 7) / 8)).zipIdx.foldr (init := pure 0) fun (b, i) acc => do
     let hi ← acc
-    match b with
-    | .int x => pure (BitVec.ofNat n (x.toNat + 256 * hi.toNat))
-    | _ => throw .unspecified
+    match byteBits n i b with
+    | some x => pure (BitVec.ofNat n (x.toNat + 256 * hi.toNat))
+    | none => throw .unspecified
 
 /-- The bytes after the value bytes up to `size` are padding: undefined. -/
 def padTo (size : Nat) (bs : Array Byte) : Array Byte :=

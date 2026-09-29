@@ -92,6 +92,20 @@ pub fn isOk(p: *const Flags) bool {
     return p.ready and !p.err;
 }
 
+/// A packed struct of 6 bits: the high 2 bits of its byte are padding.
+pub const Pair = packed struct(u6) {
+    lo: u3,
+    hi: u3,
+};
+
+/// Store `bits` at `p`, add 1 to `p.hi`, wrapping, then read `p.lo` (bit-pointer accesses to a
+/// byte with undefined padding bits).
+pub fn bumpPair(p: *Pair, bits: u6) u3 {
+    p.* = @bitCast(bits);
+    p.hi +%= 1;
+    return p.lo;
+}
+
 /// A message header in C layout: 8 bytes, `len` at offset 4.
 pub const Header = extern struct {
     magic: u32,
@@ -289,6 +303,38 @@ pub fn setRegFlags(p: *Reg, f: Flags) u8 {
     return p.raw;
 }
 
+fn lowByte(w: Word) u8 {
+    return w.bytes[0];
+}
+
+/// The low byte of `v` (a `Word` built as a call argument: `union_init`).
+pub fn wordArg(v: u32) u8 {
+    return lowByte(.{ .int = v });
+}
+
+/// A `packed` union of 4-bit fields: the high 4 bits of its byte are padding.
+pub const Nib = packed union {
+    lo: u4,
+    signed: i4,
+};
+
+fn nibSigned(n: Nib) i4 {
+    return n.signed;
+}
+
+/// `v` as an `i4` (a `Nib` built as a call argument: `union_init` in 0.14.1 and 0.15.2,
+/// `bitcast` in 0.16.0).
+pub fn nibArg(v: u4) i4 {
+    return nibSigned(.{ .lo = v });
+}
+
+/// Write `v` to `p.lo`, then read `p.signed`. After the write, the high 4 bits of `p.*` are
+/// undefined.
+pub fn setNib(p: *Nib, v: u4) i4 {
+    p.lo = v;
+    return p.signed;
+}
+
 /// A `const` global: its block is read-only.
 const table = [_]u32{ 10, 20, 30 };
 
@@ -333,5 +379,9 @@ comptime {
     _ = &setHalf;
     _ = &regSigned;
     _ = &setRegFlags;
+    _ = &wordArg;
+    _ = &nibArg;
+    _ = &setNib;
+    _ = &bumpPair;
     _ = &writeTable;
 }

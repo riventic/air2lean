@@ -65,6 +65,9 @@
 #     `const` global. `writeTable` then writes to the read-only `table` and returns a value
 #     instead of throwing `.illegal`: tests/diff/layout/unspecified.txt's pinned count for it
 #     (3) drops to 0.
+# (o) Lean-runtime mutation, layout: `byteBits` (ZigLean/Mem/Enc.lean) rejects every `Byte.part`
+#     byte. `nibArg` and `setNib` then throw `.unspecified` for their `u4` fields instead of
+#     returning a value: tests/diff/layout/unspecified.txt expects 0 for them.
 #
 # Usage: mutate.sh
 # Env:
@@ -73,7 +76,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n))
+#                         threads (k)/(l), layout (m)/(n)/(o))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -106,6 +109,7 @@ basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
+enc_lean="ZigLean/Mem/Enc.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
 asm_zig="tests/diff/asm/asm.zig"
 vec_lean="ZigLean/Vec.lean"
@@ -118,6 +122,7 @@ basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
 mem_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-mem.XXXXXX")
+enc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-enc.XXXXXX")
 alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
 asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
@@ -130,6 +135,7 @@ cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
 cp "$mem_lean" "$mem_backup"
+cp "$enc_lean" "$enc_backup"
 cp "$alloc_lean" "$alloc_backup"
 cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
@@ -149,12 +155,13 @@ cleanup() {
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
   cp "$mem_backup" "$mem_lean"
+  cp "$enc_backup" "$enc_lean"
   cp "$alloc_backup" "$alloc_lean"
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -446,6 +453,22 @@ else
   run_and_report "mutation (n)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$mem_backup" "$mem_lean"
+fi
+
+echo "== mutation (o): byteBits rejects every Byte.part (Lean runtime) ==" >&2
+if ! has_example layout; then
+  echo "mutation (o): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/| \.part m x => if n - 8 \* i ≤ m then some x else none/| .part _ _ => none/' "$enc_lean"
+  rm -f "$enc_lean.bak"
+  grep -q '| .part _ _ => none' "$enc_lean" || {
+    echo "error: mutation (o): sed did not change byteBits" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (o)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$enc_backup" "$enc_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

@@ -12,9 +12,8 @@ makes it a tagged union.
 - `extern`: a field is its `Zig.Enc` encoding. A read decodes the first `Enc.size α` bytes: an
   undefined byte throws `.unspecified`.
 - `packed`: a field is its `Zig.Packed` bits at bit 0 of the backing integer. A read takes the
-  field's `w` bits from the first `(w + 7) / 8` bytes. A write keeps the bits above the field in
-  its last byte. If that byte is undefined, the bits above are 0: the model has undefined bytes,
-  not undefined bits.
+  field's `w` bits from the first `(w + 7) / 8` bytes. A write or `union_init` makes the bits
+  above the field in its last byte undefined (`intBytes`, `Byte.part`).
 -/
 
 namespace Zig
@@ -38,7 +37,7 @@ def Raw.set {α : Type} [Enc α] {n : Nat} (u : Vector Byte n) (v : α) : Vector
 
 /-! ## `packed` -/
 
-/-- `union_init` of a `packed` union: the field's bits, then undefined bytes. -/
+/-- `union_init` of a `packed` union: the field's bits, then undefined bits. -/
 def PackedU.init {α : Type} {w : Nat} [Packed α w] (n : Nat) (v : α) : Vector Byte n :=
   Raw.ofArray n (intBytes (Packed.toBits v))
 
@@ -46,20 +45,10 @@ def PackedU.init {α : Type} {w : Nat} [Packed α w] (n : Nat) (v : α) : Vector
 def PackedU.get (α : Type) {w : Nat} [Packed α w] {n : Nat} (u : Vector Byte n) : Result α := do
   pure (Packed.ofBits (← intOfBytes w u.toArray))
 
-/-- The last byte of a `w`-bit field: its `w % 8` low bits from `new`, the bits above from
-`old`. An undefined `old` gives 0 bits above. -/
-def PackedU.mergeLast (w : Nat) (old new : Byte) : Byte :=
-  match old, new with
-  | .int o, .int x => .int ((o &&& ~~~(BitVec.ofNat 8 (2 ^ (w % 8) - 1))) ||| x)
-  | _, _ => new
-
-/-- A field write of a `packed` union: the bits after the field do not change. -/
+/-- A field write of a `packed` union: the bytes after the field do not change. -/
 def PackedU.set {α : Type} {w : Nat} [Packed α w] {n : Nat} (u : Vector Byte n) (v : α) :
     Vector Byte n :=
-  let bs := intBytes (Packed.toBits v)
-  let k := bs.size - 1
-  let bs := if w % 8 = 0 then bs else bs.set! k (PackedU.mergeLast w (u.toArray.getD k .undef) bs[k]!)
-  Raw.ofArray n (writeBytes u.toArray 0 bs)
+  Raw.ofArray n (writeBytes u.toArray 0 (intBytes (Packed.toBits v)))
 
 /-- The value of a field for `modify_f`: `default` if the bytes are not a value (Zig: the
 field is undefined), as `modify_f` of a tagged union does for a field that is not active. -/

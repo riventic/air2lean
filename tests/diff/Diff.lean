@@ -658,6 +658,8 @@ def byteStr : Zig.Byte → String
   | .ptrFrag .. => "pp"
   -- The compiler numbers the errors per compilation: the model keeps the name (a wildcard).
   | .errFrag .. => "??"
+  -- Only the low `m` bits are defined: `?` for the high hex digit, and for the low one if `m < 4`.
+  | .part m x => if 4 ≤ m then "?" ++ natToHex (x.toNat % 16) 1 else "??"
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
 a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a
@@ -809,6 +811,16 @@ def runLayout : IO Unit := do
     (fun _ a => return pureMem (Layout.regSigned (bv 8 (← getInt a[0]!)))) fun _ v => toString v.toInt
   processMem ex m0 "setRegFlags"
     (fun g a => return Layout.setRegFlags (← ptrOf g a[0]!) (flagsOf (← getInt a[1]!).toNat))
+    fun _ v => natStr v false
+  processMem ex m0 "wordArg" (fun _ a => return Layout.wordArg (bv 32 (← getInt a[0]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "nibArg"
+    (fun _ a => return pureMem (Layout.nibArg (bv 4 (← getInt a[0]!)))) fun _ v => toString v.toInt
+  processMem ex m0 "setNib"
+    (fun g a => return Layout.setNib (← ptrOf g a[0]!) (bv 4 (← getInt a[1]!)))
+    fun _ v => toString v.toInt
+  processMem ex m0 "bumpPair"
+    (fun g a => return Layout.bumpPair (← ptrOf g a[0]!) (bv 6 (← getInt a[1]!)))
     fun _ v => natStr v false
   processMem ex m0 "writeTable"
     (fun _ a => return Layout.writeTable (bv 64 (← getInt a[0]!)) (bv 32 (← getInt a[1]!)))

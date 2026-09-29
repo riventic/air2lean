@@ -320,11 +320,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
-      -- A packed struct is a bitcast of its backing integer only (`Zig.Packed`). A bitcast of
+      -- A packed struct or union is a bitcast of its backing integer only (`Zig.Packed`,
+      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). A bitcast of
       -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
       -- (`@ptrCast`), it is a load of other bytes.
       let kind (t : TyId) : String := match cx.types[t]? with
-        | some (.struct _ "packed" _) => "packed"
+        | some (.struct _ "packed" _) | some (.union _ "packed" none _) => "packed"
         | some (.struct ..) | some (.array ..) | some (.union ..) | some (.tuple _) => "agg"
         | some (.int ..) => "int"
         | _ => "other"
@@ -333,7 +334,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       | "packed", "int" | "int", "packed" => pure line
       | "packed", _ | _, "packed" | "agg", _ | _, "agg" =>
         throw s!"{fnName}: near line {line}: a `@bitCast` of an aggregate other than a packed \
-          struct to or from an integer is outside the subset"
+          struct or union to or from an integer is outside the subset"
       | _, _ => pure line
     | none => pure line
   | .abs _ =>

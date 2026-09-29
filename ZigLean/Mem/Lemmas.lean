@@ -453,8 +453,8 @@ instance : LawfulEnc (BitVec 32) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 4 = #[0, 1, 2, 3] := by decide
-    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
-      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
+      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt
@@ -465,8 +465,8 @@ instance : LawfulEnc (BitVec 8) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 1 = #[0] := by decide
-    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
-      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
+      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt
@@ -477,8 +477,8 @@ instance : LawfulEnc (BitVec 16) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 2 = #[0, 1] := by decide
-    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
-      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
+      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt
@@ -489,8 +489,8 @@ instance : LawfulEnc (BitVec 2) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 1 = #[0] := by decide
-    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
-      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
+      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt
@@ -501,8 +501,8 @@ instance : LawfulEnc (BitVec 1) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 1 = #[0] := by decide
-    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, hr,
-      bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
+      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt

@@ -49,6 +49,10 @@ inductive Byte where
   /-- Byte `i` of the 2-byte code of the error `e`. The compiler numbers the errors per
   compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
   | errFrag (e : ErrName) (i : Fin 2)
+  /-- The low `m` bits of `b` are defined (`0 < m < 8`, `b`'s bits above are 0); the bits above
+  are undefined: the last byte of a `uN` with `N % 8 ≠ 0` (`intBytes`). A read that needs a
+  bit above `m` throws `.unspecified` (`intOfBytes`). -/
+  | part (m : Nat) (b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
 inductive BlockKind where

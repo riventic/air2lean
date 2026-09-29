@@ -2470,4 +2470,44 @@ fn genLayout(rng: std.Random) !void {
         const writer = file.writer();
         for (0..5) |i| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ i, edgyU32(rng) });
     }
+
+    // wordArg(v: u32).
+    {
+        var file = try openLayout("wordArg");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{edgyU32(rng)});
+    }
+
+    // nibArg(v: u4): every value.
+    {
+        var file = try openLayout("nibArg");
+        defer file.close();
+        const writer = file.writer();
+        for (0..16) |v| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{v});
+    }
+
+    // setNib(p: *Nib, v: u4): one 2-byte buffer, both offsets.
+    {
+        var file = try openLayout("setNib");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u4)});
+        }
+    }
+
+    // bumpPair(p: *Pair, bits: u6): one 2-byte buffer, both offsets.
+    {
+        var file = try openLayout("bumpPair");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u6)});
+        }
+    }
 }

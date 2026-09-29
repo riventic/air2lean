@@ -137,6 +137,18 @@ fn argRegSigned(_: []common.Buf, it: []std.json.Value) struct { u8 } {
 fn argSetRegFlags(b: []common.Buf, it: []std.json.Value) struct { *layout.Reg, layout.Flags } {
     return .{ ptr(*layout.Reg, b, it[0]), flagsOf(@intCast(it[1].integer)) };
 }
+fn argWordArg(_: []common.Buf, it: []std.json.Value) struct { u32 } {
+    return .{@intCast(it[0].integer)};
+}
+fn argNibArg(_: []common.Buf, it: []std.json.Value) struct { u4 } {
+    return .{@intCast(it[0].integer)};
+}
+fn argSetNib(b: []common.Buf, it: []std.json.Value) struct { *layout.Nib, u4 } {
+    return .{ ptr(*layout.Nib, b, it[0]), @intCast(it[1].integer) };
+}
+fn argBumpPair(b: []common.Buf, it: []std.json.Value) struct { *layout.Pair, u6 } {
+    return .{ ptr(*layout.Pair, b, it[0]), @intCast(it[1].integer) };
+}
 fn argWriteTable(_: []common.Buf, it: []std.json.Value) struct { usize, u32 } {
     return .{ @intCast(it[0].integer), @intCast(it[1].integer) };
 }
@@ -180,5 +192,9 @@ pub fn main() !void {
     try run(gpa, "setHalf", layout.setHalf, argSetHalf);
     try run(gpa, "regSigned", layout.regSigned, argRegSigned);
     try run(gpa, "setRegFlags", layout.setRegFlags, argSetRegFlags);
+    try run(gpa, "wordArg", layout.wordArg, argWordArg);
+    try run(gpa, "nibArg", layout.nibArg, argNibArg);
+    try run(gpa, "setNib", layout.setNib, argSetNib);
+    try run(gpa, "bumpPair", layout.bumpPair, argBumpPair);
     try run(gpa, "writeTable", layout.writeTable, argWriteTable);
 }

@@ -1342,7 +1342,19 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
     let isPacked (t : Ty) : Bool := match t with | .struct _ "packed" _ => true | _ => false
-    if isPacked (fc.valTy a) then
+    let isPackedU (t : Ty) : Bool := match t with | .union _ "packed" none _ => true | _ => false
+    if isPackedU (fc.valTy a) then
+      -- A packed union to its backing integer: the bits of its bytes.
+      let expr := s!"Zig.PackedU.get ({fc.emitTyOf inst.ty}) {rv a}.bytes"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if isPackedU (fc.tyOfId inst.ty) then
+      -- A backing integer to a packed union (0.16.0 `union_init`: every field has its width).
+      let size := (fc.layouts[inst.ty]?.bind (·.size)).getD 0
+      let u := fc.emitTyOf inst.ty
+      let (env, l) := bindLet fc env inst.id
+        s!"pure {rawUnionInit u "packed" size (rv a) (fc.emitValTy a)}"
+      (env, some l)
+    else if isPacked (fc.valTy a) then
       -- A packed struct to its backing integer.
       let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
     else if isPacked (fc.tyOfId inst.ty) then
