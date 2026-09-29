@@ -47,9 +47,13 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (l) | no data-race check | 2 pinned counts |
 | (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
 | (n) | no read-only check for a `const` global | 1 pinned count |
-| (o) | every `Byte.part` rejected | 3 pinned counts |
-| (p) | a set bit above an `N`-bit integer accepted | 1 pinned count |
+| (o) | every `Byte.part` rejected | 4 pinned counts |
+| (p) | a set bit above an `N`-bit integer accepted | 135 mismatches |
 | (q) | `Zig.mod` throws `.panic` for a negative divisor | 387 mismatches |
+| (r) | a `[3:0]u8` constant without its sentinel item | 32 mismatches |
+| (s) | `Allocator.freeSentinel` frees `len` items, not `len + 1` | 1 pinned count |
+| (t) | every `Mode` value is valid in a packed struct | 128 mismatches |
+| (u) | a `bool` vector in memory has its lanes in reverse bit order | 220 mismatches |
 
 ## Next
 
