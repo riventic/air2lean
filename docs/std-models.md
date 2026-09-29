@@ -63,6 +63,8 @@ The orderings: `monotonic` is relaxed; `unordered` is outside the subset (it has
 
 **Diff test.** The Lean side of a concurrent function searches the schedules depth-first (`tests/diff/Diff.lean`'s `searchSchedules`, at most `scheduleCap` runs) for the result that the compiled Zig gave. A schedule with a data race matches any Zig result (the program is undefined; `unspecified.txt`). A search that stops at the cap without Zig's result writes `Zig.Error.capped` (pinned per function in `tests/diff/<ex>/capped.txt`). A search that misses a schedule can only give a false mismatch.
 
+**Known limit (a plain write of the same value)**: a plain write to an atomic location becomes a message at the next atomic op only if it changed the bytes; a plain write of the value that the location already has makes no message, so a later read can read an older message than C11 allows. The model then has more results than RC11, never fewer.
+
 **Known limit (fairness)**: RC11 has no progress rule, so a retry loop (a `cmpxchg` loop, a spin-wait) can read the same old message at every turn; such a run ends only at the scheduler's fuel, with no result (as a loop that does not end). A proof of "`run o = .ok v` → `P v`" is not affected; the diff test's search finds the schedule that real hardware took.
 
 **Known limit**: a spin-wait on a flag that another thread sets goes on for every turn of the scheduler in which the other thread does not run: the search reaches a schedule that sets the flag, but a spin-wait without an atomic op in its loop never stops, and `Zig.loop` returns `none` for it.
