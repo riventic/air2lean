@@ -620,9 +620,9 @@ echo "== mutation (v): cmpxchgAs compares with the new value (Lean runtime) ==" 
 if ! has_example threads; then
   echo "mutation (v): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
-  sed -i.bak 's/^  match ← cmpxchg align p (Packed.toBits expected) (Packed.toBits new) with$/  match ← cmpxchg align p (Packed.toBits new) (Packed.toBits new) with/' "$thread_lean"
+  sed -i.bak 's/^  match ← cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with$/  match ← cmpxchgAt c succ fail align p (Packed.toBits new) (Packed.toBits new) with/' "$thread_lean"
   rm -f "$thread_lean.bak"
-  grep -q 'cmpxchg align p (Packed.toBits new) (Packed.toBits new) with' "$thread_lean" || {
+  grep -q 'cmpxchgAt c succ fail align p (Packed.toBits new) (Packed.toBits new) with' "$thread_lean" || {
     echo "error: mutation (v): sed did not change cmpxchgAs" >&2
     exit 1
   }
