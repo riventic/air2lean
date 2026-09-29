@@ -41,9 +41,9 @@ def Raw.set {α : Type} [Enc α] {n : Nat} (u : Vector Byte n) (v : α) : Vector
 def PackedU.init {α : Type} {w : Nat} [Packed α w] (n : Nat) (v : α) : Vector Byte n :=
   Raw.ofArray n (intBytes (Packed.toBits v))
 
-/-- A field read of a `packed` union. -/
+/-- A field read of a `packed` union: the low `w` bits of the backing integer (`trunc`). -/
 def PackedU.get (α : Type) {w : Nat} [Packed α w] {n : Nat} (u : Vector Byte n) : Result α := do
-  pure (Packed.ofBits (← intOfBytes w u.toArray))
+  pure (Packed.ofBits (← intOfBytes w u.toArray (trunc := true)))
 
 /-- A field write of a `packed` union: the bytes after the field do not change. -/
 def PackedU.set {α : Type} {w : Nat} [Packed α w] {n : Nat} (u : Vector Byte n) (v : α) :

@@ -489,8 +489,9 @@ instance : LawfulEnc (BitVec 2) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 1 = #[0] := by decide
+    have hl : v.toNat % 256 < 4 := by have := v.isLt; simp at this; omega
     simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
-      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+      hr, hl, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt
@@ -501,8 +502,9 @@ instance : LawfulEnc (BitVec 1) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
     have hr : Array.range 1 = #[0] := by decide
+    have hl : v.toNat % 256 < 2 := by have := v.isLt; simp at this; omega
     simp [Enc.encode, Enc.decode, intSize, intAlign, alignUp, padTo, intBytes, intOfBytes, byteBits,
-      hr, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+      hr, hl, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
     congr 2
     apply BitVec.eq_of_toNat_eq
     have := v.isLt

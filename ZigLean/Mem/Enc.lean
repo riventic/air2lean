@@ -33,18 +33,21 @@ def intBytes {n : Nat} (v : BitVec n) : Array Byte :=
     if n - 8 * i < 8 then .part (n - 8 * i) x else .int x
 
 /-- Byte `i` of an `n`-bit integer: `.int`, or `.part m` if its `m` defined bits hold all of
-the integer's bits in this byte. -/
-def byteBits (n i : Nat) : Byte → Option (BitVec 8)
-  | .int x => some x
-  | .part m x => if n - 8 * i ≤ m then some x else none
+the integer's bits in this byte. In the last byte of a `uN` with `N % 8 ≠ 0`, a bit above the
+integer that is set gives no value (LLVM: a load of `iN` that no `iN` store wrote is undefined),
+except if `trunc` (a bit-cast of a wider integer: a `packed` union field). -/
+def byteBits (n i : Nat) (trunc : Bool) : Byte → Option (BitVec 8)
+  | .int x => if !trunc ∧ n - 8 * i < 8 ∧ 2 ^ (n - 8 * i) ≤ x.toNat then none else some x
+  | .part m x =>
+    if n - 8 * i ≤ m ∧ (trunc ∨ x.toNat < 2 ^ (n - 8 * i)) then some x else none
   | _ => none
 
-/-- The integer in the first `(n + 7) / 8` bytes. An undefined bit, a pointer byte or an error
-byte throws `.unspecified`. -/
-def intOfBytes (n : Nat) (bs : Array Byte) : Result (BitVec n) :=
+/-- The integer in the first `(n + 7) / 8` bytes. An undefined bit, a pointer byte, an error
+byte, or (without `trunc`) a set bit above the integer throws `.unspecified`. -/
+def intOfBytes (n : Nat) (bs : Array Byte) (trunc : Bool := false) : Result (BitVec n) :=
   (bs.extract 0 ((n + 7) / 8)).zipIdx.foldr (init := pure 0) fun (b, i) acc => do
     let hi ← acc
-    match byteBits n i b with
+    match byteBits n i trunc b with
     | some x => pure (BitVec.ofNat n (x.toNat + 256 * hi.toNat))
     | none => throw .unspecified
 

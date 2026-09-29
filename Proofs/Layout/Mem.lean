@@ -137,32 +137,62 @@ theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
   have hs8 : bs.size = 8 := hs
   have ht1 : (Enc.encode NumTag.int).size = 1 := LawfulEnc.size_encode _
   have hx4 : (Enc.encode x).size = 4 := LawfulEnc.size_encode x
-  obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
-    (bs' := Enc.encode NumTag.int) hb hm hd rfl (by omega) (by omega) (Nat.mod_one _) hst hK
-  have hs₁ : (writeBytes bs 4 (Enc.encode NumTag.int)).size = 8 := by
-    rw [writeBytes_size _ _ _ (by omega), hs8]
-  obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
-    (bs' := Enc.encode x) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (by simpa using ha) hst₁ hK
-  refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
-  · have e₁ : (store 1 (p.add 4) NumTag.int).run m = pure ((), m₁) := hr₁
-    have e₂ : (store 4 (p.add 0) x).run m₁ = pure ((), m₂) := hr₂
-    simp only [StateT.run] at e₁ e₂
-    simp [setNum, zig_unfold, e₁, e₂]
-  · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
-  · apply Num.decode_of_int
-    · have e := extract_writeBytes_disjoint (writeBytes bs 4 (Enc.encode NumTag.int)) 0
-        (Enc.encode x) 4 1 (by omega) (by omega) (by omega)
-      have e' := extract_writeBytes bs 4 (Enc.encode NumTag.int) (by omega)
-      rw [ht1] at e'
-      simp only [Enc.decodeAt]
-      rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e, e']
-      exact LawfulEnc.decode_encode _
-    · have e := extract_writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)
-        (by omega)
-      rw [hx4] at e
-      simp only [Enc.decodeAt]
-      rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e]
-      exact LawfulEnc.decode_encode x
+  -- The compiler stores the tag and the payload in either order (disjoint bytes).
+  first
+  | -- Tag first (0.16.0, 0.15.2).
+      obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
+        (bs' := Enc.encode NumTag.int) hb hm hd rfl (by omega) (by omega) (Nat.mod_one _) hst hK
+      have hs₁ : (writeBytes bs 4 (Enc.encode NumTag.int)).size = 8 := by
+        rw [writeBytes_size _ _ _ (by omega), hs8]
+      obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
+        (bs' := Enc.encode x) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (by simpa using ha) hst₁ hK
+      refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
+      · have e₁ : (store 1 (p.add 4) NumTag.int).run m = pure ((), m₁) := hr₁
+        have e₂ : (store 4 (p.add 0) x).run m₁ = pure ((), m₂) := hr₂
+        simp only [StateT.run] at e₁ e₂
+        simp [setNum, zig_unfold, e₁, e₂]
+      · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
+      · apply Num.decode_of_int
+        · have e := extract_writeBytes_disjoint (writeBytes bs 4 (Enc.encode NumTag.int)) 0
+            (Enc.encode x) 4 1 (by omega) (by omega) (by omega)
+          have e' := extract_writeBytes bs 4 (Enc.encode NumTag.int) (by omega)
+          rw [ht1] at e'
+          simp only [Enc.decodeAt]
+          rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e, e']
+          exact LawfulEnc.decode_encode _
+        · have e := extract_writeBytes (writeBytes bs 4 (Enc.encode NumTag.int)) 0 (Enc.encode x)
+            (by omega)
+          rw [hx4] at e
+          simp only [Enc.decodeAt]
+          rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e]
+          exact LawfulEnc.decode_encode x
+  |   -- Payload first (0.14.1).
+    obtain ⟨m₁, hr₁, hst₁, h₁, hd₁, hm₁, hb₁⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 4)
+      (bs' := Enc.encode x) hb hm hd rfl (by omega) (by omega) (by simpa using ha) hst hK
+    have hs₁ : (writeBytes bs 0 (Enc.encode x)).size = 8 := by
+      rw [writeBytes_size _ _ _ (by omega), hs8]
+    obtain ⟨m₂, hr₂, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 4) (k := 4) (a := 1)
+      (bs' := Enc.encode NumTag.int) hb₁ hm₁ hd₁ rfl (by omega) (by omega) (Nat.mod_one _) hst₁ hK
+    refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
+    · have e₁ : (store 4 (p.add 0) x).run m = pure ((), m₁) := hr₁
+      have e₂ : (store 1 (p.add 4) NumTag.int).run m₁ = pure ((), m₂) := hr₂
+      simp only [StateT.run] at e₁ e₂
+      simp [setNum, zig_unfold, e₁, e₂]
+    · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
+    · apply Num.decode_of_int
+      · have e := extract_writeBytes (writeBytes bs 0 (Enc.encode x)) 4 (Enc.encode NumTag.int)
+          (by omega)
+        rw [ht1] at e
+        simp only [Enc.decodeAt]
+        rw [show (4 : Nat) + Enc.size NumTag = 4 + 1 from rfl, e]
+        exact LawfulEnc.decode_encode _
+      · have e := extract_writeBytes_disjoint (writeBytes bs 0 (Enc.encode x)) 4
+          (Enc.encode NumTag.int) 0 4 (by omega) (by omega) (by omega)
+        have e' := extract_writeBytes bs 0 (Enc.encode x) (by omega)
+        rw [hx4] at e'
+        simp only [Enc.decodeAt]
+        rw [show (0 : Nat) + Enc.size (BitVec 32) = 0 + 4 from rfl, e, e']
+        exact LawfulEnc.decode_encode x
 
 /-- `bump` adds 1 to the payload of an error union in memory (`ParseError!u8`: the error code
 at 0, the payload at 2). -/

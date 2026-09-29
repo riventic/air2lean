@@ -2398,7 +2398,8 @@ fn genLayout(rng: std.Random) !void {
         for (0..16) |c| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{c});
     }
     // setNum(p: *Num, big: bool, v: u32) and numInt(p: *const Num): one 8-byte buffer (the
-    // payload at 0, the hidden tag at 4); the tag byte is 0, 1 or, one time in 10, 2 (invalid).
+    // payload at 0, the hidden tag at 4); the tag byte is 0, 1 or, one time in 10, 2 (a set bit
+    // above the 1-bit tag: `.unspecified`).
     inline for (.{ "setNum", "numInt" }) |name| {
         var file = try openLayout(name);
         defer file.close();
