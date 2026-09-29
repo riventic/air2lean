@@ -122,7 +122,7 @@ Support matrix:
 | checked, wrapping, saturating arithmetic | |
 | `if`, `switch`, `while`, `for` | |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | |
-| read-only slices `[]const T` in a pure function; atomics on an integer pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) with a data-race check | |
+| read-only slices `[]const T` in a pure function; atomics on an integer, enum or `bool` pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) that take turns at sync ops, with a data-race check | |
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
