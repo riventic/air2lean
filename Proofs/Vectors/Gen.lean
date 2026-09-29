@@ -165,6 +165,52 @@ def reverse (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) :=
   match e with
   | .ret v => pure v
 
+structure sModLocals where
+  deriving Inhabited
+
+inductive sModExit where
+  | ret (v : BitVec 32)
+  | br3
+
+def sMod (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i2 ← pure (p1 != (0 : BitVec 32))
+    match ← ((do
+      if i2 then (do
+        pure .br3)
+      else (do
+        throw .divByZero)) : Zig.M sModLocals sModExit) with
+    | .br3 => (do
+      let i8 ← Zig.mod true p0 p1
+      pure (.ret i8))
+    | e => pure e) : Zig.M sModLocals sModExit).run' (default : sModLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure sRemLocals where
+  deriving Inhabited
+
+inductive sRemExit where
+  | ret (v : BitVec 32)
+  | br3
+
+def sRem (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i2 ← pure (p1 != (0 : BitVec 32))
+    match ← ((do
+      if i2 then (do
+        pure .br3)
+      else (do
+        throw .divByZero)) : Zig.M sRemLocals sRemExit) with
+    | .br3 => (do
+      let i8 ← Zig.rem true p0 p1
+      pure (.ret i8))
+    | e => pure e) : Zig.M sRemLocals sRemExit).run' (default : sRemLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure satAddLocals where
   deriving Inhabited
 
@@ -235,6 +281,196 @@ def uMinLane (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.Vec.reduce (Zig.min false) p0)
     pure (.ret i1)) : Zig.M uMinLaneLocals uMinLaneExit).run' (default : uMinLaneLocals)
+  match e with
+  | .ret v => pure v
+
+structure vAbsLocals where
+  deriving Inhabited
+
+inductive vAbsExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vAbs (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i1 ← Zig.Vec.mapM (fun x0 => pure (Zig.absInt true x0)) p0
+    pure (.ret i1)) : Zig.M vAbsLocals vAbsExit).run' (default : vAbsLocals)
+  match e with
+  | .ret v => pure v
+
+structure vBitsLocals where
+  deriving Inhabited
+
+inductive vBitsExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vBits (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.mapM (fun x0 => pure (~~~x0)) p1
+    let i3 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 &&& x1)) p0 i2
+    let i4 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 ||| x1)) p0 p1
+    let i5 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 ^^^ x1)) i3 i4
+    pure (.ret i5)) : Zig.M vBitsLocals vBitsExit).run' (default : vBitsLocals)
+  match e with
+  | .ret v => pure v
+
+structure vDivLocals where
+  deriving Inhabited
+
+inductive vDivExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+  | br6
+  | br13
+
+def vDiv (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 != x1)) p0 ((⟨#v[(-(2147483648 : BitVec 32)), (-(2147483648 : BitVec 32)), (-(2147483648 : BitVec 32)), (-(2147483648 : BitVec 32))]⟩) : Zig.Vec (BitVec 32) 4)
+    let i3 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 != x1)) p1 ((⟨#v[(-(1 : BitVec 32)), (-(1 : BitVec 32)), (-(1 : BitVec 32)), (-(1 : BitVec 32))]⟩) : Zig.Vec (BitVec 32) 4)
+    let i4 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 || x1)) i2 i3
+    let i5 ← pure (Zig.Vec.reduce (· && ·) i4)
+    match ← ((do
+      if i5 then (do
+        pure .br6)
+      else (do
+        throw .overflow)) : Zig.M vDivLocals vDivExit) with
+    | .br6 => (do
+      let i11 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 != x1)) p1 ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4)
+      let i12 ← pure (Zig.Vec.reduce (· && ·) i11)
+      match ← ((do
+        if i12 then (do
+          pure .br13)
+        else (do
+          throw .divByZero)) : Zig.M vDivLocals vDivExit) with
+      | .br13 => (do
+        let i18 ← Zig.Vec.map2M (fun x0 x1 => Zig.divTrunc true x0 x1) p0 p1
+        pure (.ret i18))
+      | e => pure e)
+    | e => pure e) : Zig.M vDivLocals vDivExit).run' (default : vDivLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure vLessLocals where
+  deriving Inhabited
+
+inductive vLessExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vLess (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.lt true x0 x1)) p0 p1
+    let i3 ← pure (Zig.Vec.select i2 p0 p1)
+    pure (.ret i3)) : Zig.M vLessLocals vLessExit).run' (default : vLessLocals)
+  match e with
+  | .ret v => pure v
+
+structure vMinMaxLocals where
+  deriving Inhabited
+
+inductive vMinMaxExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vMinMax (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.min true x0 x1)) p0 p1
+    let i3 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.max true x0 x1)) p0 p1
+    let i4 ← pure (Zig.Vec.map2 Zig.addWrap i2 i3)
+    pure (.ret i4)) : Zig.M vMinMaxLocals vMinMaxExit).run' (default : vMinMaxLocals)
+  match e with
+  | .ret v => pure v
+
+structure vModLocals where
+  deriving Inhabited
+
+inductive vModExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+  | br4
+
+def vMod (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 != x1)) p1 ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4)
+    let i3 ← pure (Zig.Vec.reduce (· && ·) i2)
+    match ← ((do
+      if i3 then (do
+        pure .br4)
+      else (do
+        throw .divByZero)) : Zig.M vModLocals vModExit) with
+    | .br4 => (do
+      let i9 ← Zig.Vec.map2M (fun x0 x1 => Zig.mod true x0 x1) p0 p1
+      pure (.ret i9))
+    | e => pure e) : Zig.M vModLocals vModExit).run' (default : vModLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure vNarrowLocals where
+  deriving Inhabited
+
+inductive vNarrowExit where
+  | ret (v : Zig.Vec (BitVec 16) 4)
+
+def vNarrow (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 16) 4) := do
+  let e ← ((do
+    let i1 ← Zig.Vec.mapM (fun x0 => Zig.intCast true true 16 x0) p0
+    pure (.ret i1)) : Zig.M vNarrowLocals vNarrowExit).run' (default : vNarrowLocals)
+  match e with
+  | .ret v => pure v
+
+structure vNegLocals where
+  deriving Inhabited
+
+inductive vNegExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vNeg (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i1 ← Zig.Vec.map2M (Zig.sub true) ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4) p0
+    pure (.ret i1)) : Zig.M vNegLocals vNegExit).run' (default : vNegLocals)
+  match e with
+  | .ret v => pure v
+
+structure vOverflowLocals where
+  deriving Inhabited
+
+inductive vOverflowExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vOverflow (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← (Zig.Vec.unzip <$> Zig.Vec.map2M (fun x0 x1 => pure (Zig.addWithOverflow false x0 x1)) p0 p1)
+    let i3 ← pure ((i2).1)
+    let i4 ← pure ((i2).2)
+    let i5 ← Zig.Vec.mapM (fun x0 => Zig.intCast false false 32 x0) i4
+    let i6 ← pure (Zig.Vec.map2 Zig.addWrap i3 i5)
+    pure (.ret i6)) : Zig.M vOverflowLocals vOverflowExit).run' (default : vOverflowLocals)
+  match e with
+  | .ret v => pure v
+
+structure vShiftLocals where
+  deriving Inhabited
+
+inductive vShiftExit where
+  | ret (v : Zig.Vec (BitVec 32) 4)
+
+def vShift (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
+  let e ← ((do
+    let i2 ← Zig.Vec.mapM (fun x0 => pure (Zig.trunc 5 x0)) p1
+    let i3 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.shl x0 x1)) p0 i2
+    let i4 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.shr false x0 x1)) p0 i2
+    let i5 ← Zig.Vec.map2M (fun x0 x1 => pure (x0 ||| x1)) i3 i4
+    pure (.ret i5)) : Zig.M vShiftLocals vShiftExit).run' (default : vShiftLocals)
+  match e with
+  | .ret v => pure v
+
+structure vToFloatLocals where
+  deriving Inhabited
+
+inductive vToFloatExit where
+  | ret (v : Zig.Vec (Zig.F32) 4)
+
+def vToFloat (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (Zig.F32) 4) := do
+  let e ← ((do
+    let i1 ← Zig.Vec.mapM (fun x0 => pure (Zig.Float.ofInt .f32 true x0)) p0
+    pure (.ret i1)) : Zig.M vToFloatLocals vToFloatExit).run' (default : vToFloatLocals)
   match e with
   | .ret v => pure v
 

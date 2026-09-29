@@ -295,14 +295,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
-  | .cmp .. =>
-    -- `cmp_vector`/`cmp_vector_optimized` normalize into this same `.cmp` (`Normalize.lean`), but
-    -- `Emit.lean`'s `.cmp` case has no vector-comparison path (no `Zig.Vec Bool n` support):
-    -- reject here instead of a confusing type error in the generated Lean's `lake build`.
-    if let some (.vector ..) := cx.types[ty]? then
-      throw s!"{fnName}: near line {line}: a vector comparison (`cmp_vector`) is outside the \
-        subset (M19)"
-    pure line
   | .bitcast (.inst a) =>
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
@@ -337,10 +329,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
           struct or union to or from an integer is outside the subset"
       | _, _ => pure line
     | none => pure line
-  | .abs _ =>
-    match cx.types[ty]? with
-    | some (.int ..) => throw s!"{fnName}: near line {line}: integer @abs is outside the subset"
-    | _ => pure line
   | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
   | .errCodePtr ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line

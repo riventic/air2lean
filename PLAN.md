@@ -49,6 +49,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (n) | no read-only check for a `const` global | 1 pinned count |
 | (o) | every `Byte.part` rejected | 3 pinned counts |
 | (p) | a set bit above an `N`-bit integer accepted | 1 pinned count |
+| (q) | `Zig.mod` throws `.panic` for a negative divisor | 387 mismatches |
 
 ## Next
 
@@ -120,7 +121,7 @@ Support matrix:
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
 | inline asm with register operands only, as an opaque function (x86_64) | asm with a memory operand, a named or read-write output, or a `"memory"` clobber |
-| `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a vector in memory of a type other than an integer or float |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |

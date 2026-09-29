@@ -86,7 +86,7 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 | atomics on an integer pointee, fork-join threads with a data-race check | |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
-| `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a vector in memory of a type other than an integer or float |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |

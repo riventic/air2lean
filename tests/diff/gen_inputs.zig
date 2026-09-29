@@ -130,6 +130,8 @@ pub fn main() !void {
     // The layout generators run last, so every earlier input stays the same.
     try compat.makePath("tests/diff/layout/inputs");
     try genLayout(rng);
+    // The vector op generators run last, so every earlier input stays the same.
+    try genVectorOps(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2509,6 +2511,95 @@ fn genLayout(rng: std.Random) !void {
             try writeBufs(writer, &.{Bytes.random(rng, 2)});
             try writePtr(writer, 0, rng.uintLessThan(usize, 2));
             try writer.print(",{d}]}}\n", .{rng.int(u6)});
+        }
+    }
+}
+
+// --- examples/vectors: the other lane-wise ops ---------------------------------------------
+
+/// Two `@Vector(4, i32)` per line: lines 0..48 pair every `edgesI` lane with every edge, so a
+/// lane of 0 (division by zero) and `minInt` with -1 (overflow) show up in each lane.
+fn writeVecPairI(w: anytype, rng: std.Random, n: usize) !void {
+    const e = edgesI(i32);
+    var b = vecI(rng, n + 3);
+    if (n < 49) b = .{ e[n % 7], e[(n / 7) % 7], e[(n + 3) % 7], e[(n / 7 + 2) % 7] };
+    try w.writeAll("[");
+    try writeIntSlice(w, i32, &vecI(rng, n));
+    try w.writeAll(",");
+    try writeIntSlice(w, i32, &b);
+    try w.writeAll("]\n");
+}
+
+/// vDiv .. vToFloat: N lines each.
+fn genVectorOps(rng: std.Random) !void {
+    inline for (.{ "vDiv", "vMod", "vMinMax", "vLess" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| try writeVecPairI(w, rng, n);
+    }
+    inline for (.{ "vBits", "vOverflow" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &vecU(rng, n + 5));
+            try w.writeAll("]\n");
+        }
+    }
+    {
+        var file = try openOutV("vShift");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            // Lines 0..31: every shift amount; later lines also set bits above the 5 used.
+            var s: [4]u32 = undefined;
+            for (0..4) |i| s[i] = if (n < 32) @intCast((n + 8 * i) % 32) else rng.int(u32);
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &s);
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "vNeg", "vAbs", "vToFloat" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, i32, &vecI(rng, n));
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "sRem", "sMod" }) |name| {
+        // Lines 0..48: every pair of `edgesI`; then random, with small divisors of both signs.
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        const e = edgesI(i32);
+        for (0..N) |n| {
+            const a: i32 = if (n < 49) e[n % 7] else rng.int(i32);
+            const b: i32 = if (n < 49) e[n / 7] else rng.intRangeAtMost(i32, -9, 9);
+            try w.print("[{d},{d}]\n", .{ a, b });
+        }
+    }
+    {
+        // Small values in some lines, so most lines fit in an `i16`.
+        var file = try openOutV("vNarrow");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            var a = vecI(rng, n);
+            if (n >= 64 and n % 2 == 0) {
+                for (0..4) |i| a[i] = rng.intRangeAtMost(i32, -40000, 40000);
+            }
+            try w.writeAll("[");
+            try writeIntSlice(w, i32, &a);
+            try w.writeAll("]\n");
         }
     }
 }

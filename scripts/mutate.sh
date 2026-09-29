@@ -72,6 +72,9 @@
 #     `N`-bit integer in its last byte (the old truncation). `numInt` then reads the tag byte 2
 #     of its 1-bit hidden tag as tag 0: tests/diff/layout/unspecified.txt's pinned count for it
 #     (30) drops to 0.
+# (q) Lean-runtime mutation, vectors: `Zig.mod` (ZigLean/Basic.lean) throws `.panic` for a
+#     negative divisor (the old model; Sema checks only `b ≠ 0`). `sMod` and `vMod` then
+#     fail where Zig returns the floored modulo.
 #
 # Usage: mutate.sh
 # Env:
@@ -80,7 +83,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -489,6 +492,22 @@ else
   run_and_report "mutation (p)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$enc_backup" "$enc_lean"
+fi
+
+echo "== mutation (q): Zig.mod throws .panic for a negative divisor (Lean runtime) ==" >&2
+if ! has_example vectors; then
+  echo "mutation (q): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
+else
+  sed -i.bak 's/^  else if s then pure (a\.smod b)$/  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))/' "$basic_lean"
+  rm -f "$basic_lean.bak"
+  grep -q 'if b.toInt < 0 then throw .panic else pure (a.smod b)' "$basic_lean" || {
+    echo "error: mutation (q): sed did not change Zig.mod" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (q)" vectors
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$basic_backup" "$basic_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

@@ -15,6 +15,8 @@ is a pure shuffle, exact by unfolding. `checkedAdd` has no proof here: character
 `go` recursion, out of scope for this milestone. The coverage functions: `interleave` (a
 two-vector shuffle) is exact, `pick` (`@select`) and `splatAdd` get their per-lane spec,
 `xorLanes` its 4-lane fold; the other reduce kinds and `twiceInMem` have only the diff test.
+The other lane-wise ops (`vDiv` .. `vToFloat`, `sRem`/`sMod`): `vMinMax` equals the lane-wise
+wrapping sum (`vMinMax_spec`); the others have only the diff test.
 
 Local helper lemmas about `Zig.Vec` and `BitVec.sle` are named to move into
 `ZigLean/Vec.lean` / a general `BitVec` lemmas file later (same convention as
@@ -77,6 +79,21 @@ theorem sle_max_right {n : Nat} (a b : BitVec n) : b.sle (Zig.max true a b) = tr
   next h =>
     simp only [BitVec.sle_iff_toInt_le] at h ⊢
     omega
+
+/-- `map2M` of a function that never throws is `map2` (`Emit.lean`'s lane-wise lift of an op
+that does not throw, e.g. `@min`). -/
+theorem Vec.map2M_pure {α β γ : Type} {n : Nat} (f : α → β → γ) (a : Vec α n) (b : Vec β n) :
+    Vec.map2M (fun x y => pure (f x y)) a b = pure (Vec.map2 f a b) := by
+  unfold Vec.map2M Vec.map2
+  rw [Vector.mapM_pure (f := fun p : α × β => f p.1 p.2), Vector.map_zip_eq_zipWith]
+  rfl
+
+/-- `@min(x, y) +% @max(x, y)` is `x +% y`: one of them is `x`, the other `y`. -/
+theorem addWrap_min_max {n : Nat} (s : Bool) (x y : BitVec n) :
+    Zig.addWrap (Zig.min s x y) (Zig.max s x y) = Zig.addWrap x y := by
+  unfold Zig.addWrap Zig.min Zig.max
+  cases s <;> simp only [Bool.false_eq_true, ↓reduceIte] <;> split <;>
+    first | rfl | exact BitVec.add_comm _ _
 
 end Zig
 
@@ -182,3 +199,18 @@ theorem xorLanes_spec (v : Zig.Vec (BitVec 32) 4) :
   unfold xorLanes
   simp only [zig_unfold]
   rw [Zig.Vec.reduce_four]
+
+/-! ### The other lane-wise ops (`vDiv` .. `vToFloat`) -/
+
+/-- `vMinMax` is the lane-wise wrapping sum: in each lane, `@min` and `@max` are the two
+operands (the lift applies the scalar op to each lane). -/
+theorem vMinMax_spec (a b : Zig.Vec (BitVec 32) 4) :
+    vMinMax a b = pure (Zig.Vec.map2 Zig.addWrap a b) := by
+  unfold vMinMax
+  rw [Zig.Vec.map2M_pure (Zig.min true), Zig.Vec.map2M_pure (Zig.max true)]
+  simp only [zig_unfold]
+  rcases a with ⟨a⟩; rcases b with ⟨b⟩
+  congr 2
+  simp only [Zig.Vec.map2, Zig.Vec.mk.injEq]
+  ext i hi
+  simp only [Vector.getElem_zipWith, Zig.addWrap_min_max]

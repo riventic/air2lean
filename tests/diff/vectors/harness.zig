@@ -42,6 +42,19 @@ extern fn uMinLane(v: @Vector(4, u32)) u32;
 extern fn fMin(v: @Vector(4, f32)) f32;
 extern fn fMax(v: @Vector(4, f32)) f32;
 extern fn twiceInMem(v: @Vector(4, u32)) @Vector(4, u32);
+extern fn vDiv(a: @Vector(4, i32), b: @Vector(4, i32)) @Vector(4, i32);
+extern fn vMod(a: @Vector(4, i32), b: @Vector(4, i32)) @Vector(4, i32);
+extern fn sRem(a: i32, b: i32) i32;
+extern fn sMod(a: i32, b: i32) i32;
+extern fn vMinMax(a: @Vector(4, i32), b: @Vector(4, i32)) @Vector(4, i32);
+extern fn vBits(a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
+extern fn vShift(a: @Vector(4, u32), s: @Vector(4, u32)) @Vector(4, u32);
+extern fn vNeg(a: @Vector(4, i32)) @Vector(4, i32);
+extern fn vAbs(a: @Vector(4, i32)) @Vector(4, u32);
+extern fn vLess(a: @Vector(4, i32), b: @Vector(4, i32)) @Vector(4, i32);
+extern fn vNarrow(a: @Vector(4, i32)) @Vector(4, i16);
+extern fn vOverflow(a: @Vector(4, u32), b: @Vector(4, u32)) @Vector(4, u32);
+extern fn vToFloat(a: @Vector(4, i32)) @Vector(4, f32);
 
 // This is the compilation's root module (see the build command above), so this governs
 // vectors.zig too — Zig picks the panic override by shape on the root module, not per-module.
@@ -154,4 +167,17 @@ pub fn main() !void {
     try runArgs(gpa, "fMin", fMin);
     try runArgs(gpa, "fMax", fMax);
     try runArgs(gpa, "twiceInMem", twiceInMem);
+    try runArgs(gpa, "vDiv", vDiv);
+    try runArgs(gpa, "vMod", vMod);
+    try runArgs(gpa, "sRem", sRem);
+    try runArgs(gpa, "sMod", sMod);
+    try runArgs(gpa, "vMinMax", vMinMax);
+    try runArgs(gpa, "vBits", vBits);
+    try runArgs(gpa, "vShift", vShift);
+    try runArgs(gpa, "vNeg", vNeg);
+    try runArgs(gpa, "vAbs", vAbs);
+    try runArgs(gpa, "vLess", vLess);
+    try runArgs(gpa, "vNarrow", vNarrow);
+    try runArgs(gpa, "vOverflow", vOverflow);
+    try runArgs(gpa, "vToFloat", vToFloat);
 }

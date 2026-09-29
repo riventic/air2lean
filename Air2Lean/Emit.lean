@@ -1147,8 +1147,9 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
   let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
   (env.push (id, name), s!"let {name} ← {expr}")
 
-/-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
-def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+/-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
+output line. `emitSimple` lifts it to vectors. -/
+def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   let rv := fc.resolveVal env
   match inst.op with
@@ -1255,6 +1256,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
         | .and | .or | .xor =>
           "(panic! \"air2lean: bitwise @reduce of a float vector\")"
+      else if fc.tyOfId child == .bool then
+        -- A `bool` vector: the safety checks of a vector op (`cmp_vector`, then `reduce .Or`).
+        match op with
+        | .and => s!"pure (Zig.Vec.reduce (· && ·) {rv a})"
+        | .or => s!"pure (Zig.Vec.reduce (· || ·) {rv a})"
+        | .xor => s!"pure (Zig.Vec.reduce (· ^^ ·) {rv a})"
+        | _ => "(panic! \"air2lean: arithmetic @reduce of a bool vector\")"
       else
         let sgn := if fc.tySigned child then "true" else "false"
         match op with
@@ -1295,7 +1303,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
       let (env, l) := bindLet fc env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
       (env, some l)
-  | .abs a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.abs {rv a})"; (env, some l)
+  | .abs a =>
+    let expr := if fc.isFloat a then s!"pure (Zig.Float.abs {rv a})"
+      else s!"pure (Zig.absInt {if fc.valSigned a then "true" else "false"} {rv a})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let expr := match op with
@@ -1680,6 +1691,75 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure ({call})"
     (env, some l)
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
+
+
+/-- A lane-wise op on vectors: its operands, and the same op with other operands. `arith`,
+`splat`, `select`, `reduce` and `shuffle` have their own vector cases in `emitScalar`. -/
+def laneOp? : Op → Option (Array Val × (Array Val → Op))
+  | .div o a b => some (#[a, b], fun v => .div o v[0]! v[1]!)
+  | .divFloat a b => some (#[a, b], fun v => .divFloat v[0]! v[1]!)
+  | .minMax m a b => some (#[a, b], fun v => .minMax m v[0]! v[1]!)
+  | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
+  | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
+  | .not a => some (#[a], fun v => .not v[0]!)
+  | .neg a => some (#[a], fun v => .neg v[0]!)
+  | .abs a => some (#[a], fun v => .abs v[0]!)
+  | .shift o a b => some (#[a, b], fun v => .shift o v[0]! v[1]!)
+  | .cmp o a b => some (#[a, b], fun v => .cmp o v[0]! v[1]!)
+  | .boolAnd a b => some (#[a, b], fun v => .boolAnd v[0]! v[1]!)
+  | .boolOr a b => some (#[a, b], fun v => .boolOr v[0]! v[1]!)
+  | .intCast a => some (#[a], fun v => .intCast v[0]!)
+  | .trunc a => some (#[a], fun v => .trunc v[0]!)
+  | .floatRound o a => some (#[a], fun v => .floatRound o v[0]!)
+  | .sqrt a => some (#[a], fun v => .sqrt v[0]!)
+  | .libm o a => some (#[a], fun v => .libm o v[0]!)
+  | .mulAdd a b c => some (#[a, b, c], fun v => .mulAdd v[0]! v[1]! v[2]!)
+  | .floatConv a => some (#[a], fun v => .floatConv v[0]!)
+  | .floatFromInt a => some (#[a], fun v => .floatFromInt v[0]!)
+  | .intFromFloat safe a => some (#[a], fun v => .intFromFloat safe v[0]!)
+  | _ => none
+
+/-- A lane-wise op on vectors (`laneOp?`): the scalar op's expression (`emitScalar`) on lane
+variables `x0`, `x1`, `x2`, in `Zig.Vec.mapM`/`map2M`/`map3M`. So each lane has the scalar
+semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of
+pairs: `Zig.Vec.unzip` makes the tuple of two vectors. `none` if `inst` is not such an op. -/
+def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Option (Array (InstId × String) × Option String) := do
+  let (vals, rebuild) ← laneOp? inst.op
+  let laneTy (t : TyId) : Option TyId := match fc.tyOfId t with | .vector _ c => some c | _ => none
+  -- The result's lane type: a vector's child, or the tuple of the lane types (`withOverflow`).
+  let (resTy, tupleTys) ← match fc.tyOfId inst.ty with
+    | .vector _ c => some (c, none)
+    | .tuple fs => do
+      let cs ← fs.mapM laneTy
+      some (0, some cs)
+    | _ => none
+  -- One fake instruction per operand: its lane type, bound to `x<k>`.
+  let base := (fc.allInsts.foldl (fun m i => max m i.id) 0) + 1
+  let mut fakes : Array Inst := #[]
+  for k in [0:vals.size] do
+    let t ← (fc.valTyId? vals[k]!).bind laneTy
+    fakes := fakes.push { id := base + k, ty := t, op := .arg 0 }
+  let fc' := { fc with allInsts := fc.allInsts ++ fakes }
+  let env' := env ++ fakes.mapIdx fun k f => (f.id, s!"x{k}")
+  -- `withOverflow`'s scalar result is the pair tuple; its type is only for the scalar emitter's
+  -- signedness and width lookups, which read the operands.
+  let scalarTy := match tupleTys with | some cs => cs[0]! | none => resTy
+  let scalar : Inst := { id := inst.id, ty := scalarTy, op := rebuild (fakes.map (.inst ·.id)) }
+  let (_, line?) := emitScalar fc' env' scalar
+  let line ← line?
+  let expr := (line.splitOn " ← ").drop 1 |> " ← ".intercalate
+  let params := String.intercalate " " ((List.range vals.size).map (s!"x{·}"))
+  let args := String.intercalate " " (vals.toList.map (fc.resolveVal env))
+  let fn := match vals.size with | 1 => "Zig.Vec.mapM" | 2 => "Zig.Vec.map2M" | _ => "Zig.Vec.map3M"
+  let lifted := s!"{fn} (fun {params} => {expr}) {args}"
+  let lifted := if tupleTys.isSome then s!"(Zig.Vec.unzip <$> {lifted})" else lifted
+  some (bindLet fc env inst.id lifted |> fun (e, l) => (e, some l))
+
+/-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
+def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Array (InstId × String) × Option String :=
+  (emitLaneWise fc env inst).getD (emitScalar fc env inst)
 
 mutual
 

@@ -84,6 +84,68 @@ export fn twiceInMem(v: @Vector(4, u32)) @Vector(4, u32) {
     return acc;
 }
 
+// The other lane-wise ops: each lane has the scalar op's semantics, and the safety checks
+// (division by zero, overflow, a lost `@intCast` bit) are per lane.
+
+const VU = @Vector(4, u32);
+const VI = @Vector(4, i32);
+
+export fn vDiv(a: VI, b: VI) VI {
+    return @divTrunc(a, b);
+}
+
+export fn vMod(a: VI, b: VI) VI {
+    return @mod(a, b);
+}
+
+/// The scalar ops of `vMod`, and `@rem`: a negative divisor is allowed (`@rem` has the sign of
+/// `a`, `@mod` the sign of `b`).
+export fn sRem(a: i32, b: i32) i32 {
+    return @rem(a, b);
+}
+
+export fn sMod(a: i32, b: i32) i32 {
+    return @mod(a, b);
+}
+
+export fn vMinMax(a: VI, b: VI) VI {
+    return @min(a, b) +% @max(a, b);
+}
+
+export fn vBits(a: VU, b: VU) VU {
+    return (a & ~b) ^ (a | b);
+}
+
+export fn vShift(a: VU, s: VU) VU {
+    const k: @Vector(4, u5) = @truncate(s);
+    return (a << k) | (a >> k);
+}
+
+export fn vNeg(a: VI) VI {
+    return -a;
+}
+
+export fn vAbs(a: VI) VU {
+    return @abs(a);
+}
+
+export fn vLess(a: VI, b: VI) VI {
+    return @select(i32, a < b, a, b);
+}
+
+export fn vNarrow(a: VI) @Vector(4, i16) {
+    return @intCast(a);
+}
+
+export fn vOverflow(a: VU, b: VU) VU {
+    const r = @addWithOverflow(a, b);
+    return r[0] +% @as(VU, r[1]);
+}
+
+export fn vToFloat(a: VI) @Vector(4, f32) {
+    return @floatFromInt(a);
+}
+
 test "coverage" {
     const V = @Vector(4, u32);
     try std.testing.expectEqual(@as(V, .{ 3, 4, 5, 6 }), splatAdd(.{ 1, 2, 3, 4 }, 2));

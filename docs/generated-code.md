@@ -77,18 +77,16 @@ first. AIR op → generated code:
 | `splat` | `Zig.Vec.splat` |
 | `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
 | `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
-| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
+| every other lane-wise op: `div_*`, `rem`, `mod`, `div_float`, `min`/`max`, `add_with_overflow` family, `bit_and`/`bit_or`/`xor`, `not`, `abs`, shifts, `cmp_vector`, `bool_and`/`bool_or`, `intcast`, `trunc`, float rounding, `sqrt`, libm ops, `mul_add`, float/int conversions | the scalar op's expression on lane variables in `Zig.Vec.mapM`/`map2M`/`map3M` (`Emit.lean`'s `emitLaneWise`): each lane has the scalar semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of pairs, and `Zig.Vec.unzip` makes the tuple |
+| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`; `bool` `.And`/`.Or`/`.Xor`, the safety checks of a vector op) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
 
 A float `reduce`'s lane order is exactly Zig's (`Vec.reduce_four`-style, lane 0 first for a
 4-lane vector) — float addition is not associative, so a proof about a float `reduce` states this
 order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s `fDot_body`).
 
-Vector `div`, `@min`/`@max`, `@addWithOverflow`-family ops, bitwise/`@shlExact`-family ops, `-`
-(negation) and `~` (bitwise not) are not translated (`vectors.zig` does not use them; `Emit.lean`
-has no vector-specific case for any of them, so one would emit a scalar function call on
-`Zig.Vec`-typed arguments — a `lake build` type error, not a silent miscompile). A vector
-comparison (`cmp_vector`) and a vector of a type other than an integer or float are rejected
-explicitly (`Check.lean`).
+Sema writes the safety checks of a vector op (division by zero, overflow) as a `cmp_vector` and
+a `reduce` of the `bool` vector, before the op. A vector in memory of a type other than an
+integer or a float is rejected (`Check.lean`'s `modelLayout`).
 
 ### Places
 

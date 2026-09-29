@@ -478,6 +478,14 @@ def vecStr {n : Nat} (v : Zig.Vec (BitVec n) 4) : String :=
 def renderVec {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
   renderOk r vecStr
 
+/-- A `@Vector(4, iN)` result: signed lanes. -/
+def renderVecS {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
+  renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map (toString ·.toInt)) ++ "]"
+
+/-- A `@Vector(4, fN)` result: float-hex lanes. -/
+def renderVecF {fmt : Zig.FloatFmt} (r : Zig.Result (Zig.Vec (Zig.Float fmt) 4)) : String :=
+  renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map floatStr) ++ "]"
+
 def runFDot : IO Unit :=
   processFile "vectors" "fDot" fun j => do
     let items ← getArr j
@@ -526,6 +534,16 @@ def boolVecOf (j : Json) : IO (Zig.Vec Bool 4) := do
     | _ => throw (IO.userError s!"not a bool: {x.compress}")
   pure (vec4 (← b items[0]!) (← b items[1]!) (← b items[2]!) (← b items[3]!))
 
+/-- `f` on the two `@Vector(4, u32/i32)` arguments of the line `j`. -/
+def pairI {α : Type} (f : Zig.Vec (BitVec 32) 4 → Zig.Vec (BitVec 32) 4 → α) (j : Json) :
+    IO α := do
+  let items ← getArr j
+  pure (f (← intVecOf 32 items[0]!) (← intVecOf 32 items[1]!))
+
+/-- `f` on the one `@Vector(4, u32/i32)` argument of the line `j`. -/
+def oneI {α : Type} (f : Zig.Vec (BitVec 32) 4 → α) (j : Json) : IO α := do
+  pure (f (← intVecOf 32 (← getArr j)[0]!))
+
 /-- The coverage functions (`examples/vectors/vectors.zig` after `checkedAdd`). -/
 def runVectorCoverage : IO Unit := do
   let ex := "vectors"
@@ -556,6 +574,23 @@ def runVectorCoverage : IO Unit := do
   -- A memory function: run from `mem0`.
   processFile ex "twiceInMem" fun j => do
     pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' Vectors.mem0))
+  processFile ex "vDiv" fun j => renderVecS <$> pairI Vectors.vDiv j
+  processFile ex "vMod" fun j => renderVecS <$> pairI Vectors.vMod j
+  processFile ex "sRem" fun j => do
+    let items ← getArr j
+    pure (renderSigned (Vectors.sRem (bv 32 (← getInt items[0]!)) (bv 32 (← getInt items[1]!))))
+  processFile ex "sMod" fun j => do
+    let items ← getArr j
+    pure (renderSigned (Vectors.sMod (bv 32 (← getInt items[0]!)) (bv 32 (← getInt items[1]!))))
+  processFile ex "vMinMax" fun j => renderVecS <$> pairI Vectors.vMinMax j
+  processFile ex "vBits" fun j => renderVec <$> pairI Vectors.vBits j
+  processFile ex "vShift" fun j => renderVec <$> pairI Vectors.vShift j
+  processFile ex "vNeg" fun j => renderVecS <$> oneI Vectors.vNeg j
+  processFile ex "vAbs" fun j => renderVec <$> oneI Vectors.vAbs j
+  processFile ex "vLess" fun j => renderVecS <$> pairI Vectors.vLess j
+  processFile ex "vNarrow" fun j => renderVecS <$> oneI Vectors.vNarrow j
+  processFile ex "vOverflow" fun j => renderVec <$> pairI Vectors.vOverflow j
+  processFile ex "vToFloat" fun j => renderVecF <$> oneI Vectors.vToFloat j
 
 /-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
 
