@@ -68,6 +68,10 @@
 # (o) Lean-runtime mutation, layout: `byteBits` (ZigLean/Mem/Enc.lean) rejects every `Byte.part`
 #     byte. `nibArg` and `setNib` then throw `.unspecified` for their `u4` fields instead of
 #     returning a value: tests/diff/layout/unspecified.txt expects 0 for them.
+# (p) Lean-runtime mutation, layout: `byteBits` (ZigLean/Mem/Enc.lean) accepts a set bit above an
+#     `N`-bit integer in its last byte (the old truncation). `numInt` then reads the tag byte 2
+#     of its 1-bit hidden tag as tag 0: tests/diff/layout/unspecified.txt's pinned count for it
+#     (30) drops to 0.
 #
 # Usage: mutate.sh
 # Env:
@@ -76,7 +80,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -459,14 +463,30 @@ echo "== mutation (o): byteBits rejects every Byte.part (Lean runtime) ==" >&2
 if ! has_example layout; then
   echo "mutation (o): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
-  sed -i.bak 's/| \.part m x => if n - 8 \* i ≤ m then some x else none/| .part _ _ => none/' "$enc_lean"
+  sed -i.bak 's/^    if n - 8 \* i ≤ m ∧ (trunc ∨ x\.toNat < 2 ^ (n - 8 \* i)) then some x else none$/    none/' "$enc_lean"
   rm -f "$enc_lean.bak"
-  grep -q '| .part _ _ => none' "$enc_lean" || {
+  grep -q '^    none$' "$enc_lean" || {
     echo "error: mutation (o): sed did not change byteBits" >&2
     exit 1
   }
 
   run_and_report "mutation (o)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$enc_backup" "$enc_lean"
+fi
+
+echo "== mutation (p): byteBits accepts a set bit above the integer (Lean runtime) ==" >&2
+if ! has_example layout; then
+  echo "mutation (p): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/| \.int x => if !trunc ∧ n - 8 \* i < 8 ∧ 2 ^ (n - 8 \* i) ≤ x\.toNat then none else some x/| .int x => some x/' "$enc_lean"
+  rm -f "$enc_lean.bak"
+  grep -q '| .int x => some x' "$enc_lean" || {
+    echo "error: mutation (p): sed did not change byteBits" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (p)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$enc_backup" "$enc_lean"
 fi

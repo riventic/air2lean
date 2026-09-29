@@ -35,8 +35,8 @@ jobs:
           # 0.14.1: `floatconv` is excluded (0.14.1 lowers `@intFromFloat` without the check,
           # zig-patch/0.14.1/TAGS.md), `slices` (no `@memmove`) and `lists` (its
           # `ArrayListUnmanaged` is another type, docs/std-models.md). Its std cannot build the
-          # diff harness; the stale-Gen.lean
-          # check shows the translation is the one that the full jobs test.
+          # diff harness; the stale-Gen.lean check shows the translation is the one that the
+          # full jobs test, and the proof step builds the proofs against it.
           - zig: "0.14.1"
             examples: "basic recursion options floatops floats errors variants pointers layout"
             full: false
@@ -124,8 +124,10 @@ jobs:
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
         run: scripts/check.sh
 
+      # After check.sh, Proofs/<Ex>/Gen.lean holds this version's translation: the proofs must
+      # hold for it too (0.14.1 has its own `layout`, `variants` and `floatops` translations).
       - name: Build proofs
-        if: matrix.full
+        if: ${{ !matrix.mutate }}
         run: lake build Proofs
 
       - name: Check for sorry/admit/native_decide
