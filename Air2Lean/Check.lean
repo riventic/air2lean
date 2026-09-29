@@ -254,16 +254,17 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
-/-- An atomic op's pointee must be an integer (`docs/std-models.md` §Thread model: the subset
-does not model a float, bool, enum or pointer atomic). -/
+/-- An atomic op's pointee must be an integer, an enum or a `bool` (`docs/std-models.md` §Thread
+model: the subset does not model a float or pointer atomic). -/
 def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   let some pty := cx.valTy? ptr
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
   match cx.types[c]? with
-  | some (.int ..) => pure ()
-  | _ => cx.fail line "an atomic op on a non-integer type is outside the subset (M22)"
+  | some (.int ..) | some (.enum ..) | some .bool => pure ()
+  | _ => cx.fail line "an atomic op on a type other than an integer, an enum or a `bool` is \
+      outside the subset"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/

@@ -1016,6 +1016,10 @@ def runRace : IO Unit :=
     let b ← getInt items[1]!
     pure (searchSchedules (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
+def runClaimOnce : IO Unit :=
+  processConc "threads" "claimOnce" fun _ zig => do
+    pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do
     let items ← getArr j
@@ -1132,6 +1136,7 @@ def main : IO Unit := do
     DiffTest.runParallelCounter
     DiffTest.runRace
     DiffTest.runXchgRace
+    DiffTest.runClaimOnce
 
   run "floats" do
     DiffTest.runLerp

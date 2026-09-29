@@ -42,6 +42,9 @@ fn argCounter(it: []std.json.Value) struct { u32 } {
 fn argRace(it: []std.json.Value) struct { u32, u32 } {
     return .{ int(u32, it[0]), int(u32, it[1]) };
 }
+fn argNone(_: []std.json.Value) std.meta.ArgsTuple(@TypeOf(threads.claimOnce)) {
+    return .{};
+}
 
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
@@ -53,4 +56,5 @@ pub fn main() !void {
     try run(gpa, "parallelCounter", threads.parallelCounter, argCounter);
     try run(gpa, "race", threads.race, argRace);
     try run(gpa, "xchgRace", threads.xchgRace, argRace);
+    try run(gpa, "claimOnce", threads.claimOnce, argNone);
 }

@@ -25,6 +25,37 @@ instance : Zig.Enc RaceCtx where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.flag), (8, Zig.Enc.encode v.val)]
   decode bs := do pure { flag := ← Zig.Enc.decodeAt bs 0, val := ← Zig.Enc.decodeAt bs 8 }
 
+inductive Phase where
+  | idle
+  | busy
+  | done
+  deriving Repr, Inhabited, DecidableEq
+
+def Phase.toBits : Phase → BitVec 32
+  | .idle => (0 : BitVec 32)
+  | .busy => (1 : BitVec 32)
+  | .done => (2 : BitVec 32)
+
+def Phase.ofInt? (v : Int) : Option Phase :=
+  if v = 0 then Option.some .idle else if v = 1 then Option.some .busy else if v = 2 then Option.some .done else Option.none
+
+def Phase.isNamed (_ : Phase) : Bool := true
+
+instance : Zig.Packed Phase 32 where
+  toBits := Phase.toBits
+  ofBits b := (Phase.ofInt? (Zig.val false b)).getD default
+  valid b := (Phase.ofInt? (Zig.val false b)).isSome
+
+instance : Zig.Enc Phase where
+  size := 4
+  align := 4
+  encode v := Zig.Enc.encode v.toBits
+  decode bs := do
+    let b : BitVec 32 ← Zig.Enc.decode bs
+    match Phase.ofInt? (Zig.val false b) with
+    | some v => pure v
+    | none => throw .illegal
+
 structure CounterCtx where
   counter : Zig.Ptr
   n : BitVec 32
@@ -36,11 +67,32 @@ instance : Zig.Enc CounterCtx where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.counter), (8, Zig.Enc.encode v.n)]
   decode bs := do pure { counter := ← Zig.Enc.decodeAt bs 0, n := ← Zig.Enc.decodeAt bs 8 }
 
+structure ClaimCtx where
+  phase : Zig.Ptr
+  wins : Zig.Ptr
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc ClaimCtx where
+  size := 16
+  align := 8
+  encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.phase), (8, Zig.Enc.encode v.wins)]
+  decode bs := do pure { phase := ← Zig.Enc.decodeAt bs 0, wins := ← Zig.Enc.decodeAt bs 8 }
+
 structure atomic_Value_u32 where
   raw : BitVec 32
   deriving Repr, Inhabited, DecidableEq
 
 instance : Zig.Enc atomic_Value_u32 where
+  size := 4
+  align := 4
+  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.raw)]
+  decode bs := do pure { raw := ← Zig.Enc.decodeAt bs 0 }
+
+structure atomic_Value_threads_Phase where
+  raw : Phase
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc atomic_Value_threads_Phase where
   size := 4
   align := 4
   encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.raw)]
@@ -56,9 +108,24 @@ def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
 
 /-- The spawn targets of the program. -/
 inductive Tgt where
+  | claim (a : Zig.Ptr)
   | bump (a : Zig.Ptr)
   | writeFlag (a : Zig.Ptr)
   | swapFlag (a : Zig.Ptr)
+
+structure atomic_Value_threads_Phase_initLocals where
+  local1 : atomic_Value_threads_Phase
+  deriving Inhabited
+
+inductive atomic_Value_threads_Phase_initExit where
+  | ret (v : atomic_Value_threads_Phase)
+
+def atomic_Value_threads_Phase_init (p0 : Phase) : Zig.Result (atomic_Value_threads_Phase) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := { s.local1 with raw := p0 } })
+    pure (.ret (← get).local1)) : Zig.M atomic_Value_threads_Phase_initLocals atomic_Value_threads_Phase_initExit).run' (default : atomic_Value_threads_Phase_initLocals)
+  match e with
+  | .ret v => pure v
 
 structure atomic_Value_u32_initLocals where
   local1 : atomic_Value_u32
@@ -125,6 +192,122 @@ def bump (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     | e => pure e) : Zig.CM Tgt bumpLocals bumpExit).run' (default : bumpLocals)
   match e with
   | .ret => pure ()
+  | _ => throw .panic
+
+structure claimLocals where
+  deriving Inhabited
+
+inductive claimExit where
+  | ret
+  | br4 (v : Option (Phase))
+  | br12 (v : BitVec 32)
+  | br1
+
+def claim (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0.add 0)
+      let i3 ← Zig.load (Zig.Ptr) 8 i2
+      match ← ((do
+        let i5 ← pure (i3.add 0)
+        Zig.yieldC
+        let i6 ← Zig.cmpxchgAs 4 i5 Phase.idle Phase.busy
+        pure (.br4 i6)) : Zig.CM Tgt claimLocals claimExit) with
+      | .br4 v4 => (do
+        let i8 ← pure ((v4).isNone)
+        if i8 then (do
+          let i10 ← pure (p0.add 8)
+          let i11 ← Zig.load (Zig.Ptr) 8 i10
+          match ← ((do
+            let i13 ← pure (i11.add 0)
+            Zig.yieldC
+            let i14 ← Zig.atomicRmw Zig.RmwOp.add false 4 i13 (1 : BitVec 32)
+            pure (.br12 i14)) : Zig.CM Tgt claimLocals claimExit) with
+          | .br12 _v12 => (do
+            pure .br1)
+          | e => pure e)
+        else (do
+          pure .br1))
+      | e => pure e) : Zig.CM Tgt claimLocals claimExit) with
+    | .br1 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt claimLocals claimExit).run' (default : claimLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure claimOnceLocals where
+  phase : Zig.Ptr
+  wins : Zig.Ptr
+  ctx : Zig.Ptr
+  deriving Inhabited
+
+inductive claimOnceExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+  | br28 (v : BitVec 32)
+  | br33 (v : Phase)
+
+def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s0 ← Zig.allocStack 4 4
+  let s3 ← Zig.allocStack 4 4
+  let s6 ← Zig.allocStack 16 8
+  let e ← ((do
+    let i0 ← pure (← get).phase
+    let i1 ← Zig.callRC (atomic_Value_threads_Phase_init Phase.idle)
+    Zig.store (α := atomic_Value_threads_Phase) 4 i0 i1
+    let i3 ← pure (← get).wins
+    let i4 ← Zig.callRC (atomic_Value_u32_init (0 : BitVec 32))
+    Zig.store (α := atomic_Value_u32) 4 i3 i4
+    let i6 ← pure (← get).ctx
+    let i7 ← pure (i6.add 0)
+    Zig.store (α := Zig.Ptr) 8 i7 i0
+    let i9 ← pure (i6.add 8)
+    Zig.store (α := Zig.Ptr) 8 i9 i3
+    let i11 ← pure (i6)
+    let i12 ← Zig.spawnC (Tgt.claim i11)
+    match i12 with
+    | .error _ => (do
+      let i14 ← Zig.callRC (Zig.unwrapErr i12)
+      let i15 ← pure (i14)
+      let i16 ← pure ((.error i15) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i16))
+    | .ok v13 => (do
+      let i18 ← pure (i6)
+      let i19 ← Zig.spawnC (Tgt.claim i18)
+      match i19 with
+      | .error _ => (do
+        let i21 ← Zig.callRC (Zig.unwrapErr i19)
+        let i22 ← pure (i21)
+        let i23 ← pure ((.error i22) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i23))
+      | .ok v20 => (do
+        let _i25 ← Zig.joinC v13
+        let _i26 ← Zig.joinC v20
+        let i27 ← pure (i3)
+        match ← ((do
+          let i29 ← pure (i27.add 0)
+          Zig.yieldC
+          let i30 ← Zig.atomicLoad (n := 32) 4 i29
+          pure (.br28 i30)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
+        | .br28 v28 => (do
+          let i32 ← pure (i0)
+          match ← ((do
+            let i34 ← pure (i32.add 0)
+            Zig.yieldC
+            let i35 ← Zig.atomicLoadAs (Phase) 4 i34
+            pure (.br33 i35)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
+          | .br33 v33 => (do
+            let i37 ← pure (Phase.toBits v33)
+            let i38 ← Zig.add false v28 i37
+            let i39 ← pure ((.ok i38) : Except Zig.ErrName (BitVec 32))
+            pure (.ret i39))
+          | e => pure e)
+        | e => pure e))) : Zig.CM Tgt claimOnceLocals claimOnceExit).run' { (default : claimOnceLocals) with phase := s0, wins := s3, ctx := s6 }
+  Zig.free s0
+  Zig.free s3
+  Zig.free s6
+  match e with
+  | .ret v => pure v
   | _ => throw .panic
 
 structure parallelCounterLocals where
@@ -433,6 +616,7 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
 
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
+  | .claim a => discard (claim a)
   | .bump a => discard (bump a)
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
   | .swapFlag a => discard (swapFlag a)

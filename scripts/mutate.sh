@@ -85,6 +85,8 @@
 #     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
 # (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) puts lane
 #     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
+# (v) Lean-runtime mutation, threads: `cmpxchgAs` (ZigLean/Mem/Thread.lean) compares with the
+#     new value, not the expected one. In `claimOnce` no thread wins the claim.
 #
 # Usage: mutate.sh
 # Env:
@@ -93,7 +95,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -585,6 +587,22 @@ else
   run_and_report "mutation (u)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$vec_backup" "$vec_lean"
+fi
+
+echo "== mutation (v): cmpxchgAs compares with the new value (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (v): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/^  match ← cmpxchg align p (Packed.toBits expected) (Packed.toBits new) with$/  match ← cmpxchg align p (Packed.toBits new) (Packed.toBits new) with/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q 'cmpxchg align p (Packed.toBits new) (Packed.toBits new) with' "$thread_lean" || {
+    echo "error: mutation (v): sed did not change cmpxchgAs" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (v)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

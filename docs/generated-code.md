@@ -196,6 +196,7 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 | `atomic_store_unordered`/`monotonic`/`release`/`seq_cst` | `Zig.yieldC` then `Zig.atomicStore align p v` (the ordering is decoded; every atomic write releases and every atomic read acquires, std-models.md §Thread model) |
 | `atomic_rmw` | `Zig.yieldC` then `Zig.atomicRmw op signed align p v` (`op`: `Zig.RmwOp`) |
 | `cmpxchg_weak`, `cmpxchg_strong` | `Zig.yieldC` then `Zig.cmpxchg align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
+| an atomic op on an enum or a `bool` | the same with `Zig.atomicLoadAs (T)`, `atomicStoreAs`, `atomicRmwAs`, `cmpxchgAs`: the op on the value's `Zig.Packed` bits |
 | `call` of `Thread.spawn(config, f, args)` | `Zig.spawnC (Tgt.f args)` |
 | `call` of `Thread.join(handle)` | `Zig.joinC handle` |
 

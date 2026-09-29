@@ -79,8 +79,36 @@ pub fn xchgRace(a: u32, b: u32) !u32 {
     return flag.load(.seq_cst);
 }
 
+/// A claim on a job: `idle` until one thread takes it.
+const Phase = enum(u32) { idle, busy, done };
+
+const ClaimCtx = struct {
+    phase: *std.atomic.Value(Phase),
+    wins: *std.atomic.Value(u32),
+};
+
+fn claim(ctx: *ClaimCtx) void {
+    if (ctx.phase.cmpxchgStrong(.idle, .busy, .acq_rel, .acquire) == null) {
+        _ = ctx.wins.fetchAdd(1, .monotonic);
+    }
+}
+
+/// Two threads try to claim one job (an atomic `cmpxchg` on an enum): exactly one wins, so the
+/// result is always `1 + @intFromEnum(.busy)` = 2.
+pub fn claimOnce() !u32 {
+    var phase = std.atomic.Value(Phase).init(.idle);
+    var wins = std.atomic.Value(u32).init(0);
+    var ctx: ClaimCtx = .{ .phase = &phase, .wins = &wins };
+    const h1 = try Thread.spawn(.{}, claim, .{&ctx});
+    const h2 = try Thread.spawn(.{}, claim, .{&ctx});
+    h1.join();
+    h2.join();
+    return wins.load(.seq_cst) + @intFromEnum(phase.load(.seq_cst));
+}
+
 comptime {
     _ = &parallelCounter;
     _ = &race;
     _ = &xchgRace;
+    _ = &claimOnce;
 }

@@ -15,6 +15,7 @@ atomic step, which T4 builds on:
   plain one (`noRace_of_atomic`).
 - One `atomicRmw` step: it gives the old value and writes the new one (`atomicRmw_run`), and a
   `u32` written that way reads back (`decode_writeBytes32'`).
+- An atomic op on an enum is the op on its tag (`Phase.ofBits_toBits`, `Phase.valid_toBits`).
 
 The diff test checks the concurrent functions against the compiled Zig over the schedules
 (`tests/diff/Diff.lean`'s `searchSchedules`).
@@ -72,6 +73,15 @@ theorem atomicRmw_run {n : Nat} {m : Mem} {op : RmwOp} {signed : Bool} {align : 
     MonadStateOf.set, pure, Mem.recordAt, acquireAt, releaseAt, modify, modifyGet,
     MonadStateOf.modifyGet, StateT.modifyGet]
   refine ⟨_, rfl, ?_, ?_⟩ <;> split <;> rfl
+
+/-- An atomic op on an enum is the integer op on its tag (`Zig.Packed`): every `Phase` value
+round-trips through its bits, and its bits are valid, so `cmpxchgAs` on `Phase` compares and
+writes exactly the tags. -/
+theorem Phase.ofBits_toBits (x : Phase) : (Packed.ofBits (Packed.toBits x) : Phase) = x := by
+  cases x <;> rfl
+
+theorem Phase.valid_toBits (x : Phase) : Packed.valid (α := Phase) (Packed.toBits x) = true := by
+  cases x <;> rfl
 
 /-- A `u32` written by an `atomicRmw` (`padTo (intSize 32) (intBytes v)` is `Enc.encode v` for
 `BitVec 32`, definitionally) reads back as itself. -/

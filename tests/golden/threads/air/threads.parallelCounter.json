@@ -540,7 +540,7 @@
            "ty": 20,
            "callee": {
             "ty": 21,
-            "func": "Thread.spawn__anon_379",
+            "func": "Thread.spawn__anon_385",
             "noreturn": false,
             "comptime_fn": "threads.bump"
            },
@@ -1623,7 +1623,7 @@
   },
   {
    "k": "other",
-   "name": "c.pthread_t__opaque_339"
+   "name": "c.pthread_t__opaque_345"
   }
  ]
 }

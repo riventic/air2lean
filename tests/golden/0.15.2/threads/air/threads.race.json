@@ -220,7 +220,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_811",
+    "func": "Thread.spawn__anon_817",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -368,7 +368,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_811",
+    "func": "Thread.spawn__anon_817",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -907,7 +907,7 @@
   },
   {
    "k": "other",
-   "name": "c.pthread_t__opaque_437"
+   "name": "c.pthread_t__opaque_443"
   },
   {
    "k": "ptr",

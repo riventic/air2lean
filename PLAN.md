@@ -43,7 +43,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (h) | an allocation never fails at `Mem.failAt` | 311 mismatches |
 | (i) | the asm `bswap32` returns its input | 298 mismatches |
 | (j) | `Zig.Vec.reduce` drops the last lane | 1083 mismatches |
-| (k) | two atomic accesses race | 2 pinned counts |
+| (k) | two atomic accesses race | 3 pinned counts |
 | (l) | no data-race check | 1 pinned count |
 | (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
 | (n) | no read-only check for a `const` global | 1 pinned count |
@@ -54,6 +54,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (s) | `Allocator.freeSentinel` frees `len` items, not `len + 1` | 1 pinned count |
 | (t) | every `Mode` value is valid in a packed struct | 128 mismatches |
 | (u) | a `bool` vector in memory has its lanes in reverse bit order | 220 mismatches |
+| (v) | `cmpxchgAs` compares with the new value | 20 mismatches |
 
 ## Next
 

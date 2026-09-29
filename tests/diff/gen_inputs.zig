@@ -137,6 +137,7 @@ pub fn main() !void {
     try genCtl();
     try genVecMem(rng);
     try genDivmod(rng);
+    try genClaim();
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2705,4 +2706,12 @@ fn genDivmod(rng: std.Random) !void {
         const b = if (n % 2 == 0) rng.intRangeAtMost(u32, 1, 100) else rng.intRangeAtMost(u32, 1, 0xffff_ffff);
         try writer.print("[{d},{d}]\n", .{ rng.int(u32), b });
     }
+}
+
+/// claimOnce(): no argument; 20 runs, each with the OS scheduler's own interleaving.
+fn genClaim() !void {
+    var file = try openOutIn("tests/diff/threads/inputs", "claimOnce");
+    defer file.close();
+    const writer = file.writer();
+    for (0..20) |_| try writer.writeAll("[]\n");
 }

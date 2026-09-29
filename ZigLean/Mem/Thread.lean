@@ -1,4 +1,5 @@
 import ZigLean.Mem.Enc
+import ZigLean.Packed
 
 /-!
 # Atomics and threads
@@ -118,6 +119,30 @@ def cmpxchg {n : Nat} (align : Nat) (p : Ptr) (expected new : BitVec n) :
     recordAccess b o (intSize n) .atomicRead
     acquireAt b o
     pure (some old)
+
+/-! ### Atomics on an enum or a `bool`
+
+The integer op on the value's bits (`Zig.Packed`: an enum is its tag integer). A load decodes
+with `Packed.ofBits?`: a tag value without a name of an exhaustive enum is `.illegal`, as for any
+enum load. Zig allows only `Xchg` of the RMW ops on these types. -/
+
+def atomicLoadAs (α : Type) {n : Nat} [Packed α n] (align : Nat) (p : Ptr) : MemM α := do
+  let b ← atomicLoad (n := n) align p
+  StateT.lift (Packed.ofBits? b)
+
+def atomicStoreAs {α : Type} {n : Nat} [Packed α n] (align : Nat) (p : Ptr) (v : α) : MemM Unit :=
+  atomicStore align p (Packed.toBits v)
+
+def atomicRmwAs {α : Type} {n : Nat} [Packed α n] (op : RmwOp) (align : Nat) (p : Ptr) (v : α) :
+    MemM α := do
+  let b ← atomicRmw op false align p (Packed.toBits v)
+  StateT.lift (Packed.ofBits? b)
+
+def cmpxchgAs {α : Type} {n : Nat} [Packed α n] (align : Nat) (p : Ptr) (expected new : α) :
+    MemM (Option α) := do
+  match ← cmpxchg align p (Packed.toBits expected) (Packed.toBits new) with
+  | none => pure none
+  | some b => some <$> StateT.lift (Packed.ofBits? b)
 
 /-! ## Fork-join threads -/
 

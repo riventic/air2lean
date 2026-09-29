@@ -778,6 +778,13 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
 
+/-- An atomic op through `ptr` on an enum or a `bool`: the typed op (`Zig.atomicLoadAs`, …, on
+the value's `Zig.Packed` bits), not the integer op. -/
+def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
+  match fc.pointeeOf ptr with
+  | .enum .. | .bool => true
+  | _ => false
+
 /-- The Lean type of the value that the pointer `v` points to. -/
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
@@ -1596,10 +1603,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   -- (`ZigLean/Conc/Call.lean`).
   | .atomicLoad ptr _order =>
     let bits := fc.tyBits inst.ty
-    let expr := s!"Zig.atomicLoad (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAs ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
+      else s!"Zig.atomicLoad (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
   | .atomicStore ptr v _order =>
-    (env, some s!"Zig.yieldC\nZig.atomicStore {fc.ptrAlign ptr} {rv ptr} {rv v}")
+    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAs" else "Zig.atomicStore"
+    (env, some s!"Zig.yieldC\n{f} {fc.ptrAlign ptr} {rv ptr} {rv v}")
   | .atomicRmw op _order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
     -- `Zig.RmwOp` (the model, `ZigLean/Mem/Thread.lean`).
@@ -1608,11 +1617,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .or => "or" | .xor => "xor" | .max => "max" | .min => "min"
     let opTerm := s!"Zig.RmwOp.{opName}"
     let signed := if fc.tySigned inst.ty then "true" else "false"
-    let expr := s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAs {opTerm} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
   | .cmpxchg _weak ptr expected new _succ _fail =>
     -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
-    let expr := s!"Zig.cmpxchg {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
+    let f := if fc.atomicTyped ptr then "Zig.cmpxchgAs" else "Zig.cmpxchg"
+    let expr := s!"{f} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some s!"Zig.yieldC\n{l}")
   | .sliceLen s =>
     let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
