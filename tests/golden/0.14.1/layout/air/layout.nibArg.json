@@ -1,0 +1,116 @@
+{
+ "schema": 11,
+ "zig_version": "0.14.1",
+ "name": "layout.nibArg",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "union_init",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ],
+   "index": 0
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 4,
+    "func": "layout.nibSigned",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "union",
+   "name": "layout.Nib",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "lo",
+     "ty": 0
+    },
+    {
+     "name": "signed",
+     "ty": 1
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (layout.Nib) i4"
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

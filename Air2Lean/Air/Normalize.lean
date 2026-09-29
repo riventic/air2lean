@@ -167,6 +167,11 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "is_non_null_ptr" => let a ← arg1 fnName raw; return .isNullPtr false a
   | "optional_payload_ptr" => let a ← arg1 fnName raw; return .optPayloadPtr false a
   | "optional_payload_ptr_set" => let a ← arg1 fnName raw; return .optPayloadPtr true a
+  | "is_err_ptr" => let a ← arg1 fnName raw; return .isErrPtr true a
+  | "is_non_err_ptr" => let a ← arg1 fnName raw; return .isErrPtr false a
+  | "unwrap_errunion_payload_ptr" => let a ← arg1 fnName raw; return .errPayloadPtr false a
+  | "errunion_payload_ptr_set" => let a ← arg1 fnName raw; return .errPayloadPtr true a
+  | "unwrap_errunion_err_ptr" => let a ← arg1 fnName raw; return .errCodePtr a
   | "is_err" => let a ← arg1 fnName raw; return .isErr a
   | "is_non_err" => let a ← arg1 fnName raw; return .isNonErr a
   | "unwrap_errunion_payload" => let a ← arg1 fnName raw; return .errPayload a
@@ -190,6 +195,11 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "struct_field_ptr_index_1" => let a ← arg1 fnName raw; return .fieldPtr a 1
   | "struct_field_ptr_index_2" => let a ← arg1 fnName raw; return .fieldPtr a 2
   | "struct_field_ptr_index_3" => let a ← arg1 fnName raw; return .fieldPtr a 3
+  | "field_parent_ptr" =>
+    let a ← arg1 fnName raw
+    let some idx := raw.index
+      | throw s!"{fnName}: inst {raw.id}: 'field_parent_ptr' needs 'index'"
+    return .fieldParentPtr a idx
   | "set_union_tag" => let (a, b) ← arg2 fnName raw; return .setUnionTag a b
   | "ret_load" => let a ← arg1 fnName raw; return .retLoad a
   | "load" => let a ← arg1 fnName raw; return .load a

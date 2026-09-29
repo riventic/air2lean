@@ -57,12 +57,16 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     let l := layouts[id]?.getD {}
     if l.allowzero then
       throw s!"{fnName}: near line {line}: an `allowzero` pointer is outside the subset"
-    if l.hostSize != 0 then
-      throw s!"{fnName}: near line {line}: a pointer to a packed struct field is outside the \
-        subset (M20)"
+    -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
+    -- `hostSize` (`Zig.loadBits`).
+    if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
+      throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
+        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
     let _ := isConst
     match size with
-    | "one" | "many" | "slice" => recur child
+    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20).
+    | "one" => if (types[child]?.map isFnTy).getD false then pure () else recur child
+    | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
   | .array _ child => recur child
   | .vector _ child => recur child
@@ -71,13 +75,23 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     recur set
     recur payload
   | .errorSet _ => pure ()
-  | .struct _ _ fields => fields.forM fun (_, fty) => recur fty
+  | .struct name layout fields =>
+    if layout == "packed" && (packedBits types id).isNone then
+      throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
+        integer, a `bool` or a packed struct: outside the subset"
+    fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
     match tag with
     | none =>
-      throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
-        subset (only a tagged `union(enum)`)"
+      -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
+      -- has a hidden tag (`safety_tag`), so it is never here.
+      unless layout == "extern" || layout == "packed" do
+        throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) is outside the \
+          subset"
+      if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
+        throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
+          integer, a `bool` or a packed struct: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
@@ -85,6 +99,13 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     fields.forM fun (_, fty) => recur fty
   | .tuple fields => fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread => pure ()
+
+/-- The layout of a tagged union from the tag's and the payload's size and alignment (the
+largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
+the one with the larger alignment first, the tag if they are equal. -/
+def unionLayout (ts ta ps pa : Nat) : Nat × Nat × Nat × Nat :=
+  if ta ≥ pa then (0, Zig.alignUp ts pa, Zig.alignUp (Zig.alignUp ts pa + ps) ta, ta)
+  else (Zig.alignUp ps ta, 0, Zig.alignUp (Zig.alignUp ps ta + ts) pa, pa)
 
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
@@ -126,16 +147,45 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let _ ← modelLayout types layouts tag
     exported
   | some (.struct name layout fields) =>
-    if layout == "packed" then throw s!"packed struct '{name}' (M20)"
+    if layout == "packed" then
+      -- Its backing integer (`Zig.Packed`).
+      let some bits := packedBits types id | throw s!"packed struct '{name}' with a field other \
+        than an integer, a `bool` or a packed struct"
+      return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
       let _ ← modelLayout types layouts fty
     if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
       throw s!"struct '{name}' has no field offsets in the AIR file"
     exported
-  | some (.errorUnion ..) | some (.errorSet _) => throw "an error union or error set (M20)"
-  | some (.union name ..) => throw s!"union '{name}' (M20)"
+  | some (.errorUnion set payload) =>
+    -- `Zig.errUnionOffsets`: the error code is 2 bytes.
+    unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
+      throw "an error set that is not 2 bytes (`--error-limit`)"
+    let (s, a) ← modelLayout types layouts payload
+    pure (Zig.errUnionSize s a, Nat.max a 2)
+  | some (.errorSet _) => throw "an error set value (not in an error union)"
+  | some (.union name _ (some tag) fields) =>
+    let (ts, ta) ← modelLayout types layouts tag
+    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
+    let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+    pure (s, a)
+  | some (.union name layout none fields) =>
+    unless layout == "extern" || layout == "packed" do
+      throw s!"union '{name}' ({layout}) without a tag"
+    for (_, fty) in fields do
+      let _ ← modelLayout types layouts fty
+    exported
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
+
+/-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
+`fields` in memory (`unionLayout`). -/
+def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId) :
+    Option (Nat × Nat) := do
+  let (ts, ta) ← (modelLayout types layouts tag).toOption
+  let fs ← fields.mapM fun t => (modelLayout types layouts t).toOption
+  let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+  pure (to, po)
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -254,28 +304,54 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         subset (M19)"
     pure line
   | .bitcast (.inst a) =>
-    -- `@intFromPtr`: a pointer to an integer needs addresses in the model (M20).
-    let isPtr (t : TyId) : Bool := match cx.types[t]? with
-      | some (.ptr ..) => true
+    -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
+    -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
+    -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
+    -- (`?*T`) is `Option Zig.Ptr` in the model: a bitcast to another optional pointer (a
+    -- `@constCast`) is a no-op, and one from a pointer is Lean's coercion `Zig.Ptr → Option
+    -- Zig.Ptr`. Any other bitcast to or from it would need an unwrap/wrap `Emit.lean` does not
+    -- have.
+    let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
     match cx.instTys.find? (·.1 == a) with
     | some (_, aty) =>
-      if isPtr aty && !isPtr ty then
-        throw s!"{fnName}: near line {line}: `@intFromPtr` (a pointer to an integer) is outside the subset (M20)"
-      pure line
+      let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
+      if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
+        throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
+          another type is outside the subset"
+      -- A packed struct or union is a bitcast of its backing integer only (`Zig.Packed`,
+      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). A bitcast of
+      -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
+      -- (`@ptrCast`), it is a load of other bytes.
+      let kind (t : TyId) : String := match cx.types[t]? with
+        | some (.struct _ "packed" _) | some (.union _ "packed" none _) => "packed"
+        | some (.struct ..) | some (.array ..) | some (.union ..) | some (.tuple _) => "agg"
+        | some (.int ..) => "int"
+        | _ => "other"
+      if aty == ty then return line
+      match kind aty, kind ty with
+      | "packed", "int" | "int", "packed" => pure line
+      | "packed", _ | _, "packed" | "agg", _ | _, "agg" =>
+        throw s!"{fnName}: near line {line}: a `@bitCast` of an aggregate other than a packed \
+          struct or union to or from an integer is outside the subset"
+      | _, _ => pure line
     | none => pure line
   | .abs _ =>
     match cx.types[ty]? with
     | some (.int ..) => throw s!"{fnName}: near line {line}: integer @abs is outside the subset"
     | _ => pure line
-  | .setUnionTag ptr _ =>
-    if let .inst p := ptr then
-      if cx.places.contains p then return line
-    throw s!"{fnName}: near line {line}: `set_union_tag` through a pointer to memory (M16b)"
-  | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr => cx.memAccess line ptr; pure line
+  | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
+  | .errCodePtr ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
-  | .store ptr _ => cx.memAccess line ptr; pure line
+  | .store ptr v =>
+    cx.memAccess line ptr
+    -- `Zig.storeBits` has no undefined bits: `undefined` would clobber the host's other fields.
+    if let .undef _ := v then
+      if let some pty := cx.valTy? ptr then
+        if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+          cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
+    pure line
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
@@ -286,6 +362,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
     checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+    pure line
+  | .fieldParentPtr fieldPtr _ =>
+    -- `@fieldParentPtr` on a place would need to walk back up the place's own field path
+    -- (`Emit.lean`'s `FCtx.computePlaces`), which is outside the subset for now (M20); it needs a
+    -- real memory pointer, whose parent struct's offsets the model must know.
+    if let .inst b := fieldPtr then
+      if cx.places.contains b then
+        cx.fail line "`@fieldParentPtr` from a local's own place is outside the subset (M20)"
+    let _ ← cx.memPtrTy line fieldPtr
+    let some (.ptr _ _ parent) := cx.types[ty]?
+      | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
+    checkMemTy fnName cx.types cx.layouts line parent
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
   | .ptrAdd _ _ _ | .elemPtr _ _ =>
@@ -308,7 +396,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
           panic-handler function (docs/generated-code.md §Panics)"
       pure line
     | .func .. => pure line
-    | _ => throw s!"{fnName}: near line {line}: an indirect call is outside the subset (M20)"
+    -- A pointer to a function (`checkTy`): `Emit.lean` dispatches on the address-taken
+    -- functions of its type (`fnRefs`).
+    | .inst _ => pure line
+    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant is outside \
+        the subset"
   | .block body | .loop body => checkInsts cx line body
   | .condBr _ thenBody elseBody => do
     let _ ← checkInsts cx line thenBody
@@ -373,8 +465,8 @@ partial def Val.ptrOther? (v : Val) : Option String :=
 /-- The pointer operands that `valueOperands` leaves out. -/
 def ptrOperands (op : Op) : Array Val :=
   match op with
-  | .load p | .store p _ | .fieldPtr p _ | .retLoad p | .sliceFieldPtr _ p | .bitcast p
-  | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
+  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
+  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
@@ -388,6 +480,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
   if let some k := init.ptrOther? then
     throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
+  -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
+  if let .func .. := init then return
   let ty := match f.types[g.ty]?, f.layouts[g.ty]? with
     | some (.array _ c), some l => if l.sentinel then c else g.ty
     | _, _ => g.ty
@@ -399,6 +493,10 @@ def check (f : Func) : Except String Unit := do
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
   checkTy f.name f.types f.layouts 0 f.ret
+  -- An `extern` or `packed` union is its bytes, also as a value: the model must encode it.
+  for (t, id) in f.types.zipIdx do
+    if let .union _ _ none _ := t then
+      checkMemTy f.name f.types f.layouts 0 id
   let insts := f.allInsts
   let escaping := escapingAllocs f
   let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p

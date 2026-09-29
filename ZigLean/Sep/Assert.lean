@@ -129,12 +129,13 @@ theorem bytesAt_access (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {q :
       simp [getElem!_pos, show k + i < bs.size by omega]
 
 /-- A store of `bs'` (`0 < bs'.size`) at `q`, a part of the bytes that `h` owns, succeeds if its
-address is aligned and `m` is single-threaded (`hst`, so the access cannot race:
-`noRace_of_singleThread`). After it, the owned bytes are `writeBytes bs k bs'`, the frame `hF` is
+address is aligned, `m` is single-threaded (`hst`, so the access cannot race:
+`noRace_of_singleThread`) and the block is not a `const` global (`hw`). After it, the owned bytes are `writeBytes bs k bs'`, the frame `hF` is
 unchanged, and the result is itself single-threaded. -/
 theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k) (hn : 0 < bs'.size)
-    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hst : m.SingleThread) :
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hst : m.SingleThread)
+    (hw : K ≠ .constGlobal) :
     ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧ m'.SingleThread ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access hb hm hq hn hk ha
@@ -156,7 +157,7 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
   let h' : Heap := fun l =>
     if l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
     then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S, K⟩ else none
-  refine ⟨_, storeBytes_run hacc hnr',
+  refine ⟨_, storeBytes_run hacc (hK ▸ hw) hnr',
     singleThread_write (singleThread_recordAt hst b' (o + k) bs'.size AccessKind.write) b' blk
       (o + k) bs',
     h', ?_, ?_, ⟨b', hpb, h0, fun l => by simp only [h', ho]⟩⟩

@@ -78,12 +78,12 @@ scripts/mutate.sh      # a changed function must fail a test
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
 | checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` and `extern` globals |
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
-| local `var`, also one whose address escapes | `@ptrCast`, `packed` layout |
-| enums (also non-exhaustive), tagged unions `union(enum)` | unions without a tag |
+| local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
+| enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays | |
 | atomics on an integer pointee, fork-join threads with a data-race check | |
 | structs and unions passed and returned by value | |
-| calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`) | unions and error unions in memory |
+| calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |

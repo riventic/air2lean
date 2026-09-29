@@ -1,0 +1,300 @@
+{
+ "schema": 11,
+ "zig_version": "0.14.1",
+ "name": "layout.setNum",
+ "params": [
+  0,
+  1,
+  2
+ ],
+ "ret": 3,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 2,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 5,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 2
+    },
+    {
+     "id": 16,
+     "tag": "cond_br",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 1
+      }
+     ],
+     "then": [
+      {
+       "id": 6,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 0
+        }
+       ]
+      },
+      {
+       "id": 7,
+       "tag": "store_safe",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 6
+        },
+        {
+         "inst": 2
+        }
+       ]
+      },
+      {
+       "id": 8,
+       "tag": "set_union_tag",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 0
+        },
+        {
+         "ty": 6,
+         "enum": "0"
+        }
+       ]
+      },
+      {
+       "id": 9,
+       "tag": "br",
+       "ty": 4,
+       "target": 4,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 10,
+       "tag": "struct_field_ptr_index_1",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 0
+        }
+       ]
+      },
+      {
+       "id": 11,
+       "tag": "dbg_stmt",
+       "ty": 3,
+       "line": 2
+      },
+      {
+       "id": 12,
+       "tag": "trunc",
+       "ty": 8,
+       "args": [
+        {
+         "inst": 2
+        }
+       ]
+      },
+      {
+       "id": 13,
+       "tag": "store_safe",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 10
+        },
+        {
+         "inst": 12
+        }
+       ]
+      },
+      {
+       "id": 14,
+       "tag": "set_union_tag",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 0
+        },
+        {
+         "ty": 6,
+         "enum": "1"
+        }
+       ]
+      },
+      {
+       "id": 15,
+       "tag": "br",
+       "ty": 4,
+       "target": 4,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "ret_safe",
+   "ty": 4,
+   "args": [
+    {
+     "ty": 3,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "enum",
+   "name": "@typeInfo(layout.Num).@\"union\".tag_type.?",
+   "tag": 10,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "int",
+     "value": "0"
+    },
+    {
+     "name": "small",
+     "value": "1"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "union",
+   "name": "layout.Num",
+   "layout": "auto",
+   "safety_tag": 6,
+   "fields": [
+    {
+     "name": "int",
+     "ty": 2
+    },
+    {
+     "name": "small",
+     "ty": 8
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

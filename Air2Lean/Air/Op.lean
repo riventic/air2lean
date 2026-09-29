@@ -66,6 +66,8 @@ structure Layout where
   allowzero : Bool := false
   /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
   hostSize : Nat := 0
+  /-- A bit-pointer: the first bit of its field in the host integer. -/
+  bitOffset : Nat := 0
   deriving Repr, Inhabited
 
 inductive Val where
@@ -136,7 +138,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
-  | some "memcpyAlias" => some ".panic"
+  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -281,6 +283,14 @@ inductive Op where
   /-- `optional_payload_ptr` / `optional_payload_ptr_set` (`set = true`: the optional at `p`
   becomes non-null): the pointer to the payload of the optional at `p`. -/
   | optPayloadPtr (set : Bool) (p : Val)
+  /-- `is_err_ptr` (`isErr = true`) / `is_non_err_ptr`: does the error union at `p` hold an
+  error? -/
+  | isErrPtr (isErr : Bool) (p : Val)
+  /-- `unwrap_errunion_payload_ptr` / `errunion_payload_ptr_set` (`set = true`: the error union
+  at `p` gets no error): the pointer to the payload of the error union at `p`. -/
+  | errPayloadPtr (set : Bool) (p : Val)
+  /-- `unwrap_errunion_err_ptr`: the error of the error union at `p`. -/
+  | errCodePtr (p : Val)
   /-- `is_err`: does an error union hold an error? -/
   | isErr (a : Val)
   /-- `is_non_err`. -/
@@ -305,6 +315,9 @@ inductive Op where
   | alloc
   /-- `struct_field_ptr*`: the pointer to field `index` of the struct or union at `base`. -/
   | fieldPtr (base : Val) (index : Nat)
+  /-- `field_parent_ptr` (`@fieldParentPtr`): the pointer to the struct that has `fieldPtr` at
+  field `index` (`fieldPtr` minus that field's byte offset). -/
+  | fieldParentPtr (fieldPtr : Val) (index : Nat)
   /-- `set_union_tag`: make `tag`'s field active in the union at `ptr` (its payload undefined). -/
   | setUnionTag (ptr : Val) (tag : Val)
   /-- `ret_load`: return the value at `ptr` (the `ret_ptr` local). -/

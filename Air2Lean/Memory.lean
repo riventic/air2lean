@@ -62,15 +62,15 @@ def valueOperands (op : Op) : Array Val :=
   | .floatConv a | .floatFromInt a | .intFromFloat _ a | .isNull a | .isNonNull a
   | .optPayload a | .wrapOptional a | .isErr a | .isNonErr a | .errPayload a | .errCode a
   | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a => #[a]
-  -- A place has no optional-payload path: the local becomes a stack block.
-  | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
+  -- A place has no optional-payload or error-union path: the local becomes a stack block.
+  | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
   | .mulAdd a b c => #[a, b, c]
   | .splat a | .reduce _ a => #[a]
   | .select pred a b => #[pred, a, b]
   | .shuffle a b mask =>
     #[a] ++ (match b with | some v => #[v] | none => #[]) ++
       mask.filterMap fun l => match l with | .value v => some v | _ => none
-  | .bitcast _ | .fieldPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
+  | .bitcast _ | .fieldPtr .. | .fieldParentPtr .. | .sliceFieldPtr .. | .load _ | .retLoad _ => #[]
   | .atomicLoad .. => #[]
   | .atomicStore _ v _ => #[v]
   | .atomicRmw _ _ _ v => #[v]
@@ -111,6 +111,20 @@ def escapingAllocs (f : Func) : Array InstId :=
         | some (_, r) => if acc.contains r then acc else acc.push r
         | none => acc
       | _ => acc
+
+/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, or another packed
+struct. `none` for every other type (outside the subset, M20). -/
+partial def packedBits (types : Array Ty) (id : TyId) : Option Nat :=
+  match types[id]? with
+  | some (.int _ bits) => some bits
+  | some .bool => some 1
+  | some (.struct _ "packed" fields) =>
+    fields.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedBits types t
+  | _ => none
+
+/-- The first bit of field `idx` of the packed struct `fields`: field 0 is at bit 0. -/
+def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : Nat) : Nat :=
+  (fields.extract 0 idx).foldl (fun acc (_, t) => acc + (packedBits types t).getD 0) 0
 
 /-- The type `id` contains a pointer (a slice too), through struct, tuple, union and array
 fields, optionals and error unions. -/
@@ -201,7 +215,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
       match i.op with
-      | .load p | .store p _ | .fieldPtr p _ | .retLoad p => p.pointsToMem
+      | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
       | _ => false
 
 /-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only
@@ -222,17 +236,46 @@ unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model
 `Zig.RmwOp.group`)? -/
 def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
 
-def Func.callees (f : Func) : Array String :=
-  f.allInsts.filterMap fun i => match i.op with
+/-- A function type. The exporter writes it as `other`, with the name `fn (…) …`; it is only
+behind a pointer (M20). -/
+def isFnTy (t : Ty) : Bool := match t with | .other n => n.startsWith "fn (" | _ => false
+
+/-- The functions whose address the program takes, as `(function type name, function name)`:
+the globals whose initial value is a function. An indirect call through a pointer to that type
+can call only these (M20). -/
+def fnRefs (funcs : Array Func) : Array (String × String) :=
+  funcs.foldl (init := #[]) fun acc f => f.globals.foldl (init := acc) fun acc g =>
+    match g.init, f.types[g.ty]? with
+    | some (.func nm ..), some (.other tn) => if acc.contains (tn, nm) then acc else acc.push (tn, nm)
+    | _, _ => acc
+
+/-- The function type name of the indirect callee `id` (a pointer to a function). -/
+def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
+  let i ← f.allInsts.find? (·.id == id)
+  let .ptr _ _ c ← f.types[i.ty]? | none
+  let .other tn ← f.types[c]? | none
+  pure tn
+
+/-- The functions that an indirect call in `f` can call (`fnRefs`). -/
+def Func.indirectCallees (f : Func) (refs : Array (String × String)) : Array String :=
+  f.allInsts.flatMap fun i => match i.op with
+    | .call (.inst v) _ => match f.calleeFnTy? v with
+      | some tn => refs.filterMap fun (t, nm) => if t == tn then some nm else none
+      | none => #[]
+    | _ => #[]
+
+def Func.callees (f : Func) (refs : Array (String × String)) : Array String :=
+  f.allInsts.filterMap (fun i => match i.op with
     | .call (.func nm false ..) _ => some nm
-    | _ => none
+    | _ => none) ++ f.indirectCallees refs
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller
 of such a function, up to a fixpoint. -/
 partial def memoryFunctions (funcs : Array Func) : Array String :=
+  let refs := fnRefs funcs
   let rec go (mem : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
-      if !mem.contains f.name && f.callees.any mem.contains then some f.name else none
+      if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
   go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
 

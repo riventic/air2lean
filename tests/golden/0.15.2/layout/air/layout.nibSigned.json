@@ -1,0 +1,91 @@
+{
+ "schema": 11,
+ "zig_version": "0.15.2",
+ "name": "layout.nibSigned",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "struct_field_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ],
+   "index": 1
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "union",
+   "name": "layout.Nib",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "lo",
+     "ty": 4
+    },
+    {
+     "name": "signed",
+     "ty": 1
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

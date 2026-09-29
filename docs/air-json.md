@@ -1,4 +1,4 @@
-# AIR JSON format (schema 10)
+# AIR JSON format (schema 11)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,7 +6,7 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 10,
+  "schema": 11,
   "zig_version": "0.15.2",
   "name": "basic.scale",
   "params": [0, 1],
@@ -34,7 +34,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5) |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9) |
 | `optional` | `child: id` |
@@ -43,9 +43,9 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5) |
 | `tuple` | `fields: [{ty: id, offset: int}]` |
 | `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
-| `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
+| `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `safety_tag: id` (the hidden tag enum of a bare union in a safe build; schema 11), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `struct`, `union` without known fields | `name`, `layout`, `no_fields: true` in place of the fields (schema 7). 0.16.0 knows the fields of a container only when its layout is wanted; a container that is only behind a pointer (`mem.Allocator.VTable`) can have none. The reader makes it `other`. |
-| `other` | `name: string` (printed type; not in the subset) |
+| `other` | `name: string` (printed type; not in the subset). A function type (`fn (u32) u32`) is `other`; a pointer to it is a function pointer (M20). |
 
 Schema 5: a type that can be in memory (`int`, `bool`, `void`, `float`, `ptr`, `array`, `vector`, `optional`, `error_union`, `error_set`, `struct`, `enum`, `union`) also has `abi_size: int` and `abi_align: int`, in bytes, if its layout is known when the file is written. A vector's ABI size and alignment round up to a power of 2 (`n * @sizeOf(child)`, then `ceilPow2`); no special-casing in the exporter, which reads `ty.abiSize`/`ty.abiAlignment` for every in-memory type the same way. 0.16.0 resolves a container layout only when some code needs it (`want_layout`); 0.14.1 and 0.15.2 keep a status per container type (`Compat.hasLayout`). A type that a function body loads, stores or takes a field pointer of always has its layout.
 
@@ -93,6 +93,8 @@ Float tags decoded as `bin_op`: `div_float`. As `un_op`: `sqrt sin cos tan exp e
 Vector tags (schema 9): `splat` is a `ty_op` (`args: [operand]`). `select` is `args: [lhs, rhs, pred]` (`pl_op` + `Air.Bin`: the predicate vector is the `pl_op` operand, written last). `reduce`/`reduce_optimized` are `args: [operand]` plus `op` (`std.builtin.ReduceOp` tag name). `cmp_vector`/`cmp_vector_optimized` are `args: [lhs, rhs]` plus `op` (`std.math.CompareOperator` tag name). `shuffle_one` (single source) and `shuffle_two` (two sources; 0.15.2+) have `args: [source]` or `args: [source_a, source_b]` plus `mask`: one entry per output lane, each `{"a": i}` (index into the first/only source), `{"b": i}` (index into the second source), `{"u": true}` (undefined lane), or `{"v": Ref}` (a comptime-known value lane; `shuffle_one` only). 0.14.1 has one `shuffle` tag instead, whose mask is a comptime `@Vector` of signed indices (negative for the second source); the exporter re-encodes it into the same four-shape mask so the reader never sees the version difference. Every `*_optimized` tag (float or vector) stays outside the subset: fast-math permits reassociation the translator does not claim to match, so the normalizer rejects any `_optimized` tag on sight, even one the exporter fully decoded (`reduce_optimized`, `cmp_vector_optimized`).
 
 `assembly` (schema 8; M21, register operands only): `source: string` (the asm template, verbatim), `volatile: bool`, `clobbers: [string]` (register/flag names), `outputs: [{constraint, name, ref}]` (`ref` is the output pointer; missing when the output is the asm expression's own result, `-> T`), `inputs: [{constraint, name, ref}]` (`ref` is the input operand). 0.14.1 has no inline asm support: `assembly` is always `"unsupported": true` there.
+
+Error-union pointer tags (schema 11), all with `args: [pointer]`: `is_err_ptr`, `is_non_err_ptr` (`un_op`), `unwrap_errunion_payload_ptr`, `unwrap_errunion_err_ptr`, `errunion_payload_ptr_set` (`ty_op`). `field_parent_ptr` (schema 11) is `args: [field pointer]` plus `index` (the field index, `Air.FieldParentPtr`).
 
 Atomic and thread tags (schema 10, `docs/generated-code.md` § Atomics and threads): `atomic_store_unordered`, `atomic_store_monotonic`, `atomic_store_release`, `atomic_store_seq_cst` are `bin_op` (the pointer, the value); the order is the tag name's suffix, not a separate field. `atomic_load` is `args: [pointer]` plus `order`. `atomic_rmw` is `args: [pointer, operand]` plus `op` and `order` (`Air.AtomicRmw`'s extra struct). `cmpxchg_weak`/`cmpxchg_strong` are `args: [pointer, expected, new]` plus `success_order` and `failure_order` (`Air.Cmpxchg`'s extra struct). `Thread.spawn`/`.join` are ordinary calls (`call*`), not AIR tags — the translator recognizes the callee name (`Air2Lean.Check.lean`'s `rejectedThreadFn?`; `docs/std-models.md` §Thread model).
 

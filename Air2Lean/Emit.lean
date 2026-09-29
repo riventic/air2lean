@@ -211,14 +211,46 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
 def tagLit (bits : Nat) (v : Int) : String :=
   if v < 0 then s!"(-({(-v).toNat} : BitVec {bits}))" else s!"({v.toNat} : BitVec {bits})"
 
+/-- The `Zig.Raw` (`extern`) or `Zig.PackedU` (`packed`) namespace of an `extern` or `packed`
+union (`ZigLean/Union.lean`). -/
+def rawUnionNs (layout : String) : String := if layout == "packed" then "Zig.PackedU" else "Zig.Raw"
+
+/-- `union_init` of an `extern` or `packed` union `u` (`size` bytes) with the value `v` of the
+field type `t`. -/
+def rawUnionInit (u layout : String) (size : Nat) (v t : String) : String :=
+  s!"(⟨{rawUnionNs layout}.init {size} ({v} : {t})⟩ : {u})"
+
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
-def emitEnc (s : NamedType) : String :=
+def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   let n := s.leanName
   let size := s.layout.size.getD 0
   let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
                s!"  align := {s.layout.align.getD 1}"]
   match s.ty with
+  | .union _ _ none _ =>
+    -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`).
+    String.intercalate "\n" (head ++
+      ["  encode v := v.bytes.toArray", s!"  decode bs := pure ⟨Zig.Raw.ofArray {size} bs⟩"])
+  | .union _ _ (some tag) fields =>
+    -- The tag and the active field's payload at `unionOffsets` (M20).
+    let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2))).getD (0, 0)
+    let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
+    let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
+    let enc := fields.toList.map fun (f, id) =>
+      if isVoid id then s!"    | .{mangleField f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag)]"
+      else s!"    | .{mangleField f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag), ({po}, Zig.Enc.encode x)]"
+    let dec := fields.toList.map fun (f, id) =>
+      if isVoid id then s!"    | .{mangleField f} => pure .{mangleField f}"
+      else s!"    | .{mangleField f} => pure (.{mangleField f} (← Zig.Enc.decodeAt bs {po}))"
+    String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
+      ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
+  | .struct _ "packed" fields =>
+    -- Its backing integer (`Zig.Packed`).
+    let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
+    String.intercalate "\n" (head ++
+      ["  encode v := Zig.Enc.encode (Zig.Packed.toBits v)", "  decode bs := do",
+       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    pure (Zig.Packed.ofBits b)"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
       s!"({o}, Zig.Enc.encode v.{mangleField f})"
@@ -250,7 +282,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     if exhaustive then
       let ctors := fields.toList.map fun (f, _) => s!"  | {mangleField f}"
       let toBits := fields.toList.map fun (f, v) => s!"  | .{mangleField f} => {tagLit bits v}"
-      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then some .{mangleField f} else {acc}") "none"
+      -- `Option.none`: in the namespace of `{n}`, a field named `none` would be `{n}.none`.
+      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then Option.some .{mangleField f} else {acc}") "Option.none"
       String.intercalate "\n"
         ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
           s!"def {n}.toBits : {n} → BitVec {bits}"] ++ toBits ++ ["",
@@ -264,8 +297,20 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
           ++ named ++ ["",
           s!"def {n}.toBits (e : {n}) : BitVec {bits} := e.bits", "",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=",
-          s!"  if {lo} ≤ v ∧ v ≤ {hi} then some ⟨BitVec.ofInt {bits} v⟩ else none", "",
+          s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
           s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}"])
+  | .union _ layout none fields =>
+    -- `extern`, `packed`: the bytes; every field at byte 0 (`ZigLean/Union.lean`).
+    let size := s.layout.size.getD 0
+    let ns := rawUnionNs layout
+    let perField := fields.toList.flatMap fun (f, id) =>
+      let t := tyStr id
+      ["", s!"def {n}.get_{f} (u : {n}) : Zig.Result ({t}) := {ns}.get ({t}) u.bytes", "",
+       s!"def {n}.modify_{f} (g : {t} → {t}) (u : {n}) : {n} :=",
+       s!"  ⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"]
+    String.intercalate "\n"
+      ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
+        "  deriving Repr, Inhabited, DecidableEq"] ++ perField)
   | .union _ _ tag fields =>
     let tagName := match tag.bind (s.srcTypes[·]?) with
       | some t => emitTy structNames s.srcTypes t
@@ -293,10 +338,21 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     String.intercalate "\n"
       ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
         s!"def {n}.tag : {n} → {tagName}"] ++ tagArms ++ perField)
-  | .struct _ _ fields =>
+  | .struct _ layout fields =>
     let fieldLines := (fields.map fun (fname, fty) => s!"  {mangleField fname} : {tyStr fty}").toList
-    String.intercalate "\n"
-      ([s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"])
+    let decl := [s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"]
+    if layout != "packed" then String.intercalate "\n" decl else
+    -- `Zig.Packed`: field 0 in the lowest bits (`ZigLean/Packed.lean`).
+    let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
+    let offs := (List.range fields.size).map (packedFieldBit s.srcTypes fields)
+    let toBits := (fields.toList.zip offs).map fun ((f, _), o) =>
+      s!"((Zig.Packed.toBits v.{mangleField f}).setWidth {bits} <<< {o})"
+    let ofBits := (fields.toList.zip offs).map fun ((f, _), o) =>
+      s!"{mangleField f} := Zig.Packed.get b {o}"
+    String.intercalate "\n" (decl ++ ["",
+      s!"instance : Zig.Packed {n} {bits} where",
+      s!"  toBits v := {String.intercalate " ||| " toBits}",
+      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"])
   | _ => ""
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
@@ -308,13 +364,22 @@ partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array St
   | some (.struct name _ fs) =>
     if acc.contains name then acc else fs.foldl (fun a (_, t) => memNamed types layouts a t) (acc.push name)
   | some (.enum name ..) => if acc.contains name then acc else acc.push name
+  | some (.union name _ tag fs) =>
+    if acc.contains name then acc
+    else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts) (acc.push name)
   | some (.optional c) | some (.array _ c) => memNamed types layouts acc c
+  | some (.errorUnion _ c) => memNamed types layouts acc c
   | _ => acc
 
 /-- The named types that get a `Zig.Enc` instance: those that a pointer of a function that uses
-memory can point to, and the types of the globals. A pure function never has one, so v0 translations do not change. -/
+memory can point to, the types of the globals, and every `extern` or `packed` union with its
+field types. A v0 function never has one, so v0 translations do not change. -/
 def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :=
   funcs.foldl (init := #[]) fun acc f =>
+    -- An `extern` or `packed` union reads its fields with `Zig.Enc`, also in a pure function.
+    let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
+      | .union _ _ none _ => memNamed f.types f.layouts acc id
+      | _ => acc
     if !memFuncs.contains f.name then acc
     else
       let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts acc g.ty) acc
@@ -326,7 +391,7 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
 def emitNamed (structNames : Array (String × String)) (encNames : Array String)
     (s : NamedType) : String :=
   let body := emitNamedType structNames s
-  if encNames.contains s.zigName then s!"{body}\n\n{emitEnc s}" else body
+  if encNames.contains s.zigName then s!"{body}\n\n{emitEnc structNames s}" else body
 
 /-! ## Float semantics mode (`--float-semantics`, `docs/floats.md` §Semantics) -/
 
@@ -387,6 +452,9 @@ structure FCtx where
   /-- The block of each global of `Func.globals`: its index in the program's globals
   (`emitGlobals`). -/
   globalIds : Array Nat := #[]
+  /-- The functions whose address the program takes (`fnRefs`), as `(function type name,
+  function name, block)`: an indirect call compares its pointer with these blocks. -/
+  fnBlocks : Array (String × String × Nat) := #[]
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -424,6 +492,12 @@ def FCtx.isFloatTy (fc : FCtx) (tid : TyId) : Bool :=
 /-- Is `v`'s type a float? Dispatches the shared ops (`add`/`div`/`min`/`max`/`cmp`/`neg`/…)
 between the int and float `ZigLean` functions. -/
 def FCtx.isFloat (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .float _ => true | _ => false
+
+def FCtx.isPtrTy (fc : FCtx) (tid : TyId) : Bool := match fc.tyOfId tid with | .ptr .. => true | _ => false
+
+/-- Is `v`'s type a (non-optional) pointer? A `bitcast` to/from an int (`@intFromPtr`,
+`@ptrFromInt`) picks this side by it (M20). -/
+def FCtx.isPtr (fc : FCtx) (v : Val) : Bool := match fc.valTy v with | .ptr .. => true | _ => false
 
 /-- `"Rt"` in `compiler-rt` mode: the model ops that differ from IEEE on the reference target
 (`Zig.Float.divRt`, `fmaRtChk`, …; `docs/floats.md` §`--float-semantics`). -/
@@ -484,6 +558,12 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .unionVal tid idx p =>
     let u := fc.emitTyOf tid
     match fc.tyOfId tid with
+    | .union _ layout none fields =>
+      match fields[idx]? with
+      | some (_, fty) =>
+        rawUnionInit u layout ((fc.layouts[tid]?.bind (·.size)).getD 0) (fc.resolveVal env p)
+          (fc.emitTyOf fty)
+      | none => "default"
     | .union _ _ _ fields =>
       match fields[idx]? with
       | some (f, fty) =>
@@ -671,9 +751,31 @@ def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
 /-- The byte offset of field `idx` of the struct that the pointer `base` points to. -/
+def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
+  match fc.tyOfId c with
+  -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
+  -- not a bit-pointer.
+  | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
+  -- Every field of a tagged union is its payload.
+  | .union _ _ (some tag) fields =>
+    ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
+  -- Every field of an `extern` or `packed` union is at offset 0.
+  | .union _ _ none _ => 0
+  | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+
 def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   match fc.valTy base with
-  | .ptr _ _ c => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
+  | .ptr _ _ c => fc.fieldOffsetIn c idx
+  | _ => 0
+
+/-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
+def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
+
+/-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
+(`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
+def FCtx.fieldOffsetOfPtrTy (fc : FCtx) (ptrTy : TyId) (idx : Nat) : Nat :=
+  match fc.tyOfId ptrTy with
+  | .ptr _ _ c => fc.fieldOffsetIn c idx
   | _ => 0
 
 /-- The item type of the slice, many-pointer or array pointer `v`. -/
@@ -705,7 +807,20 @@ def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
 
 /-- A load through a pointer to memory. -/
 def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
-  s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+  match fc.valTyId? ptr with
+  | some t =>
+    if fc.hostSize t != 0 then
+      s!"Zig.loadBits ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
+        {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
+    else s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+  | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+
+/-- A call argument. A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`). -/
+def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
+  if fc.mem && !memCallee && fc.isSlice a then
+    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
+    s!"(← Zig.callM (Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}))"
+  else fc.resolveVal env a
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -864,9 +979,10 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .unionInit _ a => #[a]
   | .alloc => #[]
   | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
+  | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
   | .setUnionTag .. => #[]
   | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
-  | .isNullPtr _ p | .optPayloadPtr _ p => #[p]
+  | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
   | .store p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
   | .atomicLoad p _ => if fc.isMemPtr p then #[p] else #[]
   | .atomicStore p v _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
@@ -1225,6 +1341,38 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
+    let isPacked (t : Ty) : Bool := match t with | .struct _ "packed" _ => true | _ => false
+    let isPackedU (t : Ty) : Bool := match t with | .union _ "packed" none _ => true | _ => false
+    if isPackedU (fc.valTy a) then
+      -- A packed union to its backing integer: the bits of its bytes.
+      let expr := s!"Zig.PackedU.get ({fc.emitTyOf inst.ty}) {rv a}.bytes"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if isPackedU (fc.tyOfId inst.ty) then
+      -- A backing integer to a packed union (0.16.0 `union_init`: every field has its width).
+      let size := (fc.layouts[inst.ty]?.bind (·.size)).getD 0
+      let u := fc.emitTyOf inst.ty
+      let (env, l) := bindLet fc env inst.id
+        s!"pure {rawUnionInit u "packed" size (rv a) (fc.emitValTy a)}"
+      (env, some l)
+    else if isPacked (fc.valTy a) then
+      -- A packed struct to its backing integer.
+      let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
+    else if isPacked (fc.tyOfId inst.ty) then
+      let expr := s!"pure (Zig.Packed.ofBits {rv a} : {fc.emitTyOf inst.ty})"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
+    let srcPtr := fc.isPtr a
+    let dstPtr := fc.isPtrTy inst.ty
+    let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
+    if srcPtr && isInt (fc.tyOfId inst.ty) then
+      -- `@intFromPtr`.
+      let expr := s!"Zig.callM (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if isInt (fc.valTy a) && dstPtr then
+      -- `@ptrFromInt`.
+      let expr := s!"Zig.callM (Zig.ptrFromAddr ({rv a}).toNat)"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     let srcFloat := fc.isFloat a
     let dstFloat := fc.isFloatTy inst.ty
     let expr :=
@@ -1285,6 +1433,19 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | ct => s!"Zig.optSetSome ({emitTy fc.structNames fc.types ct}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p =>
+    -- `Zig.errIsErrAt` & co. (`ZigLean/Mem/Enc.lean`) take the payload type.
+    let payload := match fc.pointeeOf p with
+      | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+      | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
+    let a := fc.ptrAlign p
+    let expr := match inst.op with
+      | .isErrPtr true _ => s!"Zig.errIsErrAt ({payload}) {a} {rv p}"
+      | .isErrPtr false _ => s!"(!·) <$> Zig.errIsErrAt ({payload}) {a} {rv p}"
+      | .errPayloadPtr true _ => s!"Zig.errSetOk ({payload}) {a} {rv p}"
+      | .errPayloadPtr false _ => s!"pure (Zig.errPayloadPtr ({payload}) {rv p})"
+      | _ => s!"Zig.errCodeAt ({payload}) {a} {rv p}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isErr {rv a})"; (env, some l)
   | .isNonErr a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.isNonErr {rv a})"; (env, some l)
   | .errPayload a =>
@@ -1304,10 +1465,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.tag {rv a})"
     (env, some l)
   | .unionInit idx a =>
-    let expr := match fc.unionField? (fc.tyOfId inst.ty) idx with
-      | some (u, f, true) => s!"pure {u}.{mangleField f}"
-      | some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
-      | none => "(panic! \"air2lean: union_init of a non-union type\")"
+    let expr := match fc.tyOfId inst.ty, fc.unionField? (fc.tyOfId inst.ty) idx with
+      | .union _ layout none fields, some (u, _, _) =>
+        let t := ((fields[idx]?).map fun (_, fty) => fc.emitTyOf fty).getD "Unit"
+        s!"pure {rawUnionInit u layout ((fc.layouts[inst.ty]?.bind (·.size)).getD 0) (rv a) t}"
+      | _, some (u, f, true) => s!"pure {u}.{mangleField f}"
+      | _, some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
+      | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .alloc =>
     if fc.escaping.contains inst.id then
@@ -1317,10 +1481,30 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else (env, none)
   | .fieldPtr base idx =>
     if fc.isMemPtr base then
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {fc.fieldOffset base idx})"
+      -- A bit-pointer points to the host integer: the base's own address.
+      let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {off})"
+      (env, some l)
+    else (env, none)
+  | .fieldParentPtr fieldPtr idx =>
+    if fc.isMemPtr fieldPtr then
+      -- A bit-pointer points to the host integer: the parent's own address.
+      let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
+      let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
+    if fc.isMemPtr ptr then
+      -- Write the tag; the payload bytes stay (Zig).
+      match fc.pointeeOf ptr with
+      | .union _ _ (some tagTy) fields =>
+        let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2))).map (·.1)).getD 0
+        let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
+        let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
+        (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
+      | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
+    else
     match fc.unionFieldOfTag? (fc.pointeeOf ptr) tag with
     | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.setTag_{f} {old})"))
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
@@ -1335,7 +1519,12 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match v with
       -- `undefined`: every byte of the value becomes undefined.
       | .undef _ => (env, some s!"Zig.storeUndef ({ty}) {align} {rv ptr}")
-      | _ => (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
+      | _ =>
+        let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+        if host != 0 then
+          let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
+          (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
+        else (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
     else (env, some (fc.storePlace ptr (rv v)))
   | .atomicLoad ptr _order =>
     let bits := fc.tyBits inst.ty
@@ -1458,15 +1647,22 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.threadCall env fn callee args})"
       (env, some l)
     else if isNoreturn then (env, none)
+    else if let .inst p := callee then
+      -- An indirect call: the function whose block the pointer points to, at offset 0 (M20).
+      let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
+        | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
+        | _ => ""
+      let arms := (fc.fnBlocks.filter (·.1 == tn)).toList.map fun (_, nm, b) =>
+        let lean := (fc.funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
+        let memCallee := fc.memFuncs.contains nm
+        let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
+        let call := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
+        s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
+      let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
+      (env, some l)
     else
       let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
-      -- A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`).
-      let arg (a : Val) : String :=
-        if fc.mem && !memCallee && fc.isSlice a then
-          let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
-          s!"(← Zig.callM (Zig.readSlice ({item}) {fc.itemAlign a} {rv a}))"
-        else rv a
-      let term := s!"{cexpr} {String.intercalate " " (args.map arg).toList}"
+      let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
       let expr := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
       let (env, l) := bindLet fc env inst.id expr
       (env, some l)
@@ -1697,8 +1893,9 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
-    (memFuncs : Array String) (globalIds : Array Nat) : FuncParts :=
-  let fc := mkFCtx f structNames funcNames floatSemantics memFuncs globalIds
+    (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat)) :
+    FuncParts :=
+  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds with fnBlocks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts
@@ -1730,6 +1927,8 @@ structure ProgGlobal where
   /-- The initial bytes, a term of type `Array Zig.Byte`. -/
   bytes : String
   align : Nat
+  /-- A `var`: a writable block. Anything else is read-only (`Zig.BlockKind.constGlobal`). -/
+  isVar : Bool := false
 
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
@@ -1739,6 +1938,8 @@ longer: the sentinel is its last item. `undefined` is undefined bytes. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
   match fc.tyOfId g.ty, g.init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
+  -- A function: one byte, so that its pointer has a block (an indirect call, M20).
+  | _, some (.func ..), _ => "#[.undef]"
   | _, some (.undef _), _ | _, none, _ => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
   | .array _ c, some (.agg _ elems), true =>
     let t := s!"Vector ({emitTy fc.structNames fc.types (fc.tyOfId c)}) {elems.size}"
@@ -1777,7 +1978,7 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
       | continue
     let some g := f.globals.find? (·.name == some n) | continue
     out := out.push { label := n, bytes := (mkFc f ids[k]!.2).globalBytes g,
-                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1 }
+                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -1826,7 +2027,7 @@ def nameBytes (s : String) : String :=
 /-- `mem0`: the memory at program start, one block per global. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
   let lines := gs.toList.zipIdx.map fun (g, k) =>
-    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align})"
+    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align}, {if g.isVar then ".global" else ".constGlobal"})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
   s!"/-- The memory at program start: block `k` is global `k`. -/\n\
     def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
@@ -1850,18 +2051,20 @@ def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : B
 def dedupNames (a : Array String) : Array String :=
   a.foldl (fun acc x => if acc.contains x then acc else acc.push x) #[]
 
-def calleesOf (allNames : Array String) (f : Func) : Array String :=
-  dedupNames (f.allInsts.filterMap fun i => match i.op with
+def calleesOf (allNames : Array String) (refs : Array (String × String)) (f : Func) :
+    Array String :=
+  let direct := f.allInsts.filterMap fun i => match i.op with
     -- `spawnFn`: the function `Thread.spawn` runs, not `Thread.spawn` itself (which has no AIR
     -- and is not in `allNames`) — a spawned function must still be emitted before its spawner.
     | .call (.func nm _ (some spawnFn)) _ =>
       if allNames.contains spawnFn then some spawnFn
       else if allNames.contains nm then some nm else none
     | .call (.func nm ..) _ => if allNames.contains nm then some nm else none
-    | _ => none)
+    | _ => none
+  dedupNames (direct ++ (f.indirectCallees refs).filter allNames.contains)
 
 /-- DFS post-order over the call graph: a callee before its caller, except inside a cycle. -/
-partial def topoVisit (funcs : Array Func) (allNames : Array String)
+partial def topoVisit (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
     (vo : Array String × Array Func) (name : String) : Array String × Array Func :=
   let (visited, order) := vo
   if visited.contains name then (visited, order)
@@ -1870,23 +2073,23 @@ partial def topoVisit (funcs : Array Func) (allNames : Array String)
     match funcs.find? (·.name == name) with
     | none => (visited, order)
     | some f =>
-      let callees := calleesOf allNames f
-      let (visited, order) := callees.foldl (topoVisit funcs allNames) (visited, order)
+      let callees := calleesOf allNames refs f
+      let (visited, order) := callees.foldl (topoVisit funcs allNames refs) (visited, order)
       (visited, order.push f)
 
 def topoOrder (funcs : Array Func) : Array Func :=
   let allNames := funcs.map (·.name)
-  (allNames.foldl (topoVisit funcs allNames) (#[], #[])).2
+  (allNames.foldl (topoVisit funcs allNames (fnRefs funcs)) (#[], #[])).2
 
 /-- Every function name reachable from `name` by one or more calls. -/
-partial def reachable (funcs : Array Func) (allNames : Array String) (name : String) :
-    Array String :=
+partial def reachable (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
+    (name : String) : Array String :=
   let rec go (seen : Array String) (todo : List String) : Array String :=
     match todo with
     | [] => seen
     | n :: rest =>
       let next := match funcs.find? (·.name == n) with
-        | some f => (calleesOf allNames f).toList.filter (!seen.contains ·)
+        | some f => (calleesOf allNames refs f).toList.filter (!seen.contains ·)
         | none => []
       go (seen ++ next.toArray) (rest ++ next)
   go #[] [name]
@@ -1896,7 +2099,7 @@ partial def reachable (funcs : Array Func) (allNames : Array String) (name : Str
 component is `true` if the group is recursive (more than one function, or a self-call). -/
 def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
   let allNames := funcs.map (·.name)
-  let reach := allNames.map fun n => (n, reachable funcs allNames n)
+  let reach := allNames.map fun n => (n, reachable funcs allNames (fnRefs funcs) n)
   let reaches (a b : String) : Bool :=
     ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
   let order := topoOrder funcs
@@ -1939,9 +2142,11 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
+  let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
+    (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
-      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f)
+      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

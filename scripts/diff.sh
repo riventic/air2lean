@@ -225,7 +225,7 @@ expected_ctor_for_zig_kind() {
     reachedUnreachable) echo unreachable ;;
     exactDivisionRemainder | unwrapNull | unwrapError | forLenMismatch | invalidEnumValue \
       | inactiveUnionField | corruptSwitch | sentinelMismatch | copyLenMismatch | memcpyAlias \
-      | panic) echo panic ;;
+      | castToNull | incorrectAlignment | panic) echo panic ;;
     *) echo "" ;;
   esac
 }

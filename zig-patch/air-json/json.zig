@@ -168,6 +168,18 @@ const Compat = struct {
         };
     }
 
+    /// The hidden tag of a bare union (`ReleaseSafe`): the tag type if the union has a safety
+    /// tag. 0.16.0 has no `unionTagTypeSafety`; its `unionTagTypeRuntime` is null for a tag
+    /// without runtime bits (one field), where 0.14.1 and 0.15.2 give the `u0` tag.
+    fn unionSafetyTag(zcu: *Zcu, ty: Type) ?Type {
+        if (ty.unionTagType(zcu) != null) return null;
+        if (v16) {
+            const u = zcu.intern_pool.loadUnionType(ty.toIntern());
+            return if (u.tag_usage == .safety) Type.fromInterned(u.enum_tag_type) else null;
+        }
+        return ty.unionTagTypeSafety(zcu);
+    }
+
     const NavInfo = struct {
         ty: InternPool.Index,
         is_const: bool,
@@ -417,7 +429,7 @@ const W = struct {
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(10);
+        try w.j.write(11);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("name");
@@ -518,6 +530,7 @@ const W = struct {
             },
             .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
             .is_named_enum_value, .is_null_ptr, .is_non_null_ptr, .tag_name, .error_name,
+            .is_err_ptr, .is_non_err_ptr,
             .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
             .trunc_float,
             => {
@@ -531,6 +544,7 @@ const W = struct {
             .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
             .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
             .optional_payload_ptr, .optional_payload_ptr_set, .splat,
+            .unwrap_errunion_payload_ptr, .unwrap_errunion_err_ptr, .errunion_payload_ptr_set,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
             .reduce, .reduce_optimized => {
                 const r = w.data(inst).reduce;
@@ -597,6 +611,12 @@ const W = struct {
             .struct_field_ptr, .struct_field_val => {
                 const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
                 try w.writeArgs(&.{extra.struct_operand});
+                try w.field("index");
+                try w.j.write(extra.field_index);
+            },
+            .field_parent_ptr => {
+                const extra = w.air.extraData(Air.FieldParentPtr, w.data(inst).ty_pl.payload).data;
+                try w.writeArgs(&.{extra.field_ptr});
                 try w.field("index");
                 try w.j.write(extra.field_index);
             },
@@ -1154,6 +1174,11 @@ const W = struct {
                 // A bit-pointer (`&packed_struct.field`): the size of its host integer in bytes.
                 try w.field("host_size");
                 try w.j.write(info.packed_offset.host_size);
+                // Its field's first bit in the host integer (schema 11).
+                if (info.packed_offset.host_size != 0) {
+                    try w.field("bit_offset");
+                    try w.j.write(info.packed_offset.bit_offset);
+                }
             },
             .array => {
                 try w.j.write("array");
@@ -1289,6 +1314,9 @@ const W = struct {
                 const names_ty = ty.unionTagTypeHypothetical(zcu);
                 if (ty.unionTagType(zcu)) |tag_ty| {
                     try w.field("tag");
+                    try w.writeTypeRef(tag_ty);
+                } else if (Compat.unionSafetyTag(zcu, ty)) |tag_ty| {
+                    try w.field("safety_tag");
                     try w.writeTypeRef(tag_ty);
                 }
                 try w.field("fields");

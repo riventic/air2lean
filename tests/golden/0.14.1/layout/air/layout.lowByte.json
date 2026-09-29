@@ -1,0 +1,137 @@
+{
+ "schema": 11,
+ "zig_version": "0.14.1",
+ "name": "layout.lowByte",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "struct_field_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ],
+   "index": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "array_elem_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 4,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "union",
+   "name": "layout.Word",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "int",
+     "ty": 6
+    },
+    {
+     "name": "half",
+     "ty": 7
+    },
+    {
+     "name": "bytes",
+     "ty": 3
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 1,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}

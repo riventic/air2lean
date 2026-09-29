@@ -89,7 +89,7 @@ theorem node_set_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Hea
   obtain ⟨h0, A, hA, hb⟩ := hn
   obtain ⟨m', hr, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
     (bs' := Enc.encode q') hb hm hd (by simp) (by rw [enc_next_size]; decide)
-    (by rw [enc_next_size, nodeBytes_size]; decide) (by simp [h0]; omega) hst
+    (by rw [enc_next_size, nodeBytes_size]; decide) (by simp [h0]; omega) hst (by decide)
   rw [nodeBytes_set_next] at hb'
   exact ⟨m', hr, hst', h', hd', hm', h0, A, hA, hb'⟩
 
@@ -201,12 +201,12 @@ theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
     obtain ⟨h0, A, hA, hb⟩ := hnew
     obtain ⟨m₂, hs₁, hst₂, h₂, hd₂, hm₂, hb₂⟩ := bytesAt_store (q := p.add 8) (k := 8) (a := 4)
       (bs' := Enc.encode v) hb hm₁ hd₁ (by simp) (by rw [enc_val_size]; decide)
-      (by rw [enc_val_size]; simp) (by simp [h0]; omega) hst₁
+      (by rw [enc_val_size]; simp) (by simp [h0]; omega) hst₁ (by decide)
     have hw : (writeBytes (Array.replicate 16 Byte.undef) 8 (Enc.encode v)).size = 16 := by
       rw [writeBytes_size _ _ _ (by rw [enc_val_size]; simp)]; simp
     obtain ⟨m₃, hs₂, hst₃, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
       (bs' := Enc.encode q) hb₂ hm₂ hd₂ (by simp) (by rw [enc_next_size]; decide)
-      (by rw [enc_next_size, hw]; decide) (by simp [h0]; omega) hst₂
+      (by rw [enc_next_size, hw]; decide) (by simp [h0]; omega) hst₂ (by decide)
     rw [nodeBytes_new] at hb₃
     refine ⟨.ok p, m₃, h₃, ?_, hd₃, hm₃, ⟨h0, A, hA, hb₃⟩, hst₃⟩
     simp only [StateT.run] at hs₁ hs₂

@@ -101,7 +101,7 @@ result is the old value. Mirrors `store_run`'s shape (`ZigLean/Mem/Lemmas.lean`)
 primitive that combines a read, a race check and a write into one atomic step. -/
 theorem atomicRmw_run {n : Nat} {m : Mem} {op : RmwOp} {signed : Bool} {align : Nat} {p : Ptr}
     {v : BitVec n} {commute : Option RmwGroup} {b : BlockId} {blk : Block} {o : Nat} {old : BitVec n}
-    (h : m.access p (intSize n) align = pure (b, blk, o))
+    (h : m.access p (intSize n) align = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hold : intOfBytes n (blk.bytes.extract o (o + intSize n)) = pure old)
     (hnr : NoRace m b o (intSize n) (.atomicWrite commute)) :
     (atomicRmw op signed align p v commute).run m =
@@ -109,8 +109,9 @@ theorem atomicRmw_run {n : Nat} {m : Mem} {op : RmwOp} {signed : Bool} {align : 
         (padTo (intSize n) (intBytes (op.apply signed old v)))) := by
   have hrec := recordAccess_run (block := b) (off := o) (len := intSize n)
     (kind := AccessKind.atomicWrite commute) hnr
+  have hw : m.accessW p (intSize n) align = pure (b, blk, o) := by simp [Mem.accessW, h, hK]
   simp only [atomicRmw, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-    h, liftM, monadLift, MonadLift.monadLift, StateT.lift, pure, StateT.pure, ExceptT.pure,
+    hw, liftM, monadLift, MonadLift.monadLift, StateT.lift, pure, StateT.pure, ExceptT.pure,
     ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some, hold]
   rw [show recordAccess b o (intSize n) (AccessKind.atomicWrite commute) m =
     pure ((), m.recordAt b o (intSize n) (AccessKind.atomicWrite commute)) from hrec]
@@ -136,7 +137,7 @@ running thread's own clock, the RMW succeeds, the counter's value goes from `v` 
 both facts are preserved for the next step. -/
 theorem bump_step {S : VClock} {cb : BlockId} {t : ThreadId} {m : Mem} {blk : Block} {v : BitVec 32}
     {cp : Ptr} (ht : m.current = t) (hbound : t < m.clocks.size)
-    (hacc : m.access cp 4 4 = pure (cb, blk, 0))
+    (hacc : m.access cp 4 4 = pure (cb, blk, 0)) (hK : blk.kind ≠ .constGlobal)
     (hval : intOfBytes 32 (blk.bytes.extract 0 4) = pure v)
     (hinv : CounterInv cb S m) (hSle : VClock.le S (m.clocks[t]!) = true) :
     ∃ blk', (atomicRmw RmwOp.add false 4 cp (1 : BitVec 32) (some .addSub)).run m =
@@ -155,7 +156,7 @@ theorem bump_step {S : VClock} {cb : BlockId} {t : ThreadId} {m : Mem} {blk : Bl
     apply noRace_addSub hinv
     rw [ht]; exact VClock.le_trans hSle (VClock.le_bump _ _)
   have hrun := atomicRmw_run (n := 32) (m := m) (op := .add) (signed := false) (align := 4)
-    (p := cp) (v := (1 : BitVec 32)) (commute := some .addSub) hacc hval hnr
+    (p := cp) (v := (1 : BitVec 32)) (commute := some .addSub) hacc hK hval hnr
   have h0 := (access_eq hacc).2.2.2.1
   have hn := (access_eq hacc).2.2.2.2.1
   refine ⟨{ blk with bytes := writeBytes blk.bytes 0 (padTo (intSize 32) (intBytes (v + 1))) },

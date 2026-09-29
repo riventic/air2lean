@@ -127,6 +127,9 @@ pub fn main() !void {
 
     // The vector coverage generators run last, so the earlier inputs stay the same.
     try genVectorCoverage(rng);
+    // The layout generators run last, so every earlier input stays the same.
+    try compat.makePath("tests/diff/layout/inputs");
+    try genLayout(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2169,6 +2172,342 @@ fn genVectorCoverage(rng: std.Random) !void {
             try w.writeAll("[");
             try writeFloatSlice(w, f32, &vecF(rng, n));
             try w.writeAll("]\n");
+        }
+    }
+}
+
+// -- layout (examples/layout) -------------------------------------------------------------
+//
+// Every function here uses memory: an input line is `{"bufs":[…],"args":[…]}` (same protocol
+// as pointers, above). `ptrFromAddr`'s address argument has no buffer at all: it is a wide
+// (quoted) usize, always crafted to panic (`castToNull`/`incorrectAlignment`) — a non-panicking
+// `@ptrFromInt` needs a real allocation to read back, so it is tested instead through
+// `ptrRoundTrip`, which round-trips a real buffer pointer.
+
+fn openLayout(comptime name: []const u8) !compat.OutFile {
+    return compat.OutFile.open("tests/diff/layout/inputs/" ++ name ++ ".jsonl");
+}
+
+fn genLayout(rng: std.Random) !void {
+    // addrEq(a, b: *const u32): same pattern as pointers' `same` — two buffers, the same
+    // pointer, or two offsets of one buffer.
+    {
+        var file = try openLayout("addrEq");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeTwoPtrs(writer, rng, i % 3);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // ptrRoundTrip(p: *u32): one buffer, one aligned offset.
+    {
+        var file = try openLayout("ptrRoundTrip");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // ptrFromAddr(a: usize): no buffers; every address panics (0, or not a multiple of 4).
+    {
+        var file = try openLayout("ptrFromAddr");
+        defer file.close();
+        const writer = file.writer();
+        const fixed = [_]u64{ 0, 1, 2, 3, 5, 6, 7, std.math.maxInt(u64), std.math.maxInt(u64) - 2 };
+        var n: usize = 0;
+        for (fixed) |a| {
+            try writer.print("{{\"bufs\":[],\"args\":[\"{d}\"]}}\n", .{a});
+            n += 1;
+        }
+        while (n < N) : (n += 1) {
+            // Half null, half a random address whose low 2 bits are not both 0.
+            const a: u64 = if (n % 2 == 0) 0 else blk: {
+                var v = rng.int(u64);
+                if (v % 4 == 0) v +%= 1;
+                break :blk v;
+            };
+            try writer.print("{{\"bufs\":[],\"args\":[\"{d}\"]}}\n", .{a});
+        }
+    }
+    // asConst/dropConst/asVolatile(p: *u32): one buffer, one aligned offset (same pattern as
+    // pointers' `dueOf`, without the two-job choice).
+    inline for (.{ "asConst", "dropConst", "asVolatile" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // align4(p: *align(1) u32): one 8-byte buffer, an offset 0..4 — half aligned to 4
+    // (succeeds), half not (panics `incorrectAlignment`).
+    {
+        var file = try openLayout("align4");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            const off: usize = if (i % 2 == 0) 4 * rng.uintLessThan(usize, 2) else 1 + rng.uintLessThan(usize, 3);
+            try writePtr(writer, 0, off);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // parentOfX/parentOfY(p: *u32): a 12-byte buffer (room for 3 u32 slots at 0, 4, 8).
+    // parentOfX's offset can be any of the 3 (offset - 0 never underflows); parentOfY's must be
+    // 4 or 8 (offset - 4 must stay >= 0).
+    {
+        var file = try openLayout("parentOfX");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 12)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 3));
+            try writer.writeAll("]}\n");
+        }
+    }
+    {
+        var file = try openLayout("parentOfY");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 12)});
+            try writePtr(writer, 0, 4 * (1 + rng.uintLessThan(usize, 2)));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // flagsToByte(f: Flags), byteToFlags(b: u8): every byte (both harnesses build `f` field by
+    // field from the byte, not with `@bitCast`).
+    inline for (.{ "flagsToByte", "byteToFlags" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{b});
+    }
+    // setMode(b: u8, m: u2): every pair.
+    {
+        var file = try openLayout("setMode");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| for (0..4) |m| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ b, m });
+    }
+    // incCount/isOk(p: *Flags): a 3-byte buffer, the flags at offset 0, 1 or 2 (the other
+    // bytes must not change).
+    inline for (.{ "incCount", "isOk" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 3)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 3));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // headerLen(bytes: []const u8): a buffer of 0..12 bytes, half with the magic number at the
+    // slice start; the slice starts at 0..2 and runs to the buffer end.
+    {
+        var file = try openLayout("headerLen");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, rng.uintAtMost(usize, 12));
+            const off = rng.uintAtMost(usize, @min(2, b.len));
+            if (i % 2 == 0 and b.len - off >= 4) b.setU32(off, 0x4C52_4941);
+            try writeBufs(writer, &.{b});
+            try writeSlice(writer, 0, off, b.len - off);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // readHeader(bytes: []const u8): 8..12 bytes, an 8-byte slice at 0..len-8 (never too short).
+    {
+        var file = try openLayout("readHeader");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            const b = Bytes.random(rng, 8 + rng.uintAtMost(usize, 4));
+            try writeBufs(writer, &.{b});
+            try writeSlice(writer, 0, rng.uintAtMost(usize, b.len - 8), 8);
+            try writer.writeAll("]}\n");
+        }
+    }
+    // floatBits(p: *const f32): an 8-byte buffer, offset 0 or 4.
+    {
+        var file = try openLayout("floatBits");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.writeAll("]}\n");
+        }
+    }
+    // bitsToFloat(p: *f32, bits: u32): as floatBits, and the bits of an edge float (NaN, inf,
+    // subnormal, ±0) or random bits.
+    {
+        var file = try openLayout("bitsToFloat");
+        defer file.close();
+        const writer = file.writer();
+        const e = edgesF(f32);
+        for (0..N) |i| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            const bits: u32 = if (i < e.len) @bitCast(e[i]) else rng.int(u32);
+            try writer.print(",{d}]}}\n", .{bits});
+        }
+    }
+    // applyOp(i: usize, x: u32): `i` in 0..4 (3 and 4 are out of bounds), an edge or random `x`.
+    {
+        var file = try openLayout("applyOp");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ i % 5, edgyU32(rng) });
+    }
+    // twice(sq: bool, x: u32).
+    {
+        var file = try openLayout("twice");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| try writer.print("{{\"bufs\":[],\"args\":[{s},{d}]}}\n", .{ if (i % 2 == 0) "true" else "false", edgyU32(rng) });
+    }
+    // setCircle(p: *Shape, r: u32), shapeArea(p: *const Shape), growCircle(p: *Shape): `Shape`
+    // is 8 bytes (payload at 0, tag at 4), in a 12-byte buffer at offset 0 or 4. The tag byte
+    // is a valid tag (0..2), or 3 (no tag: illegal) in 1 line of 10.
+    inline for (.{ "setCircle", "shapeArea", "growCircle" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, 12);
+            const off = 4 * rng.uintLessThan(usize, 2);
+            b.b[off + 4] = if (i % 10 == 9) 3 else rng.uintLessThan(u8, 3);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, off);
+            if (comptime std.mem.eql(u8, name, "setCircle")) try writer.print(",{d}", .{edgyU32(rng)});
+            try writer.writeAll("]}\n");
+        }
+    }
+    // bumpDigit(c: u8): 0 (error.Empty), 1..9, 10..15 (error.TooBig).
+    {
+        var file = try openLayout("bumpDigit");
+        defer file.close();
+        const writer = file.writer();
+        for (0..16) |c| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{c});
+    }
+    // setNum(p: *Num, big: bool, v: u32) and numInt(p: *const Num): one 8-byte buffer (the
+    // payload at 0, the hidden tag at 4); the tag byte is 0, 1 or, one time in 10, 2 (invalid).
+    inline for (.{ "setNum", "numInt" }) |name| {
+        var file = try openLayout(name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            var b = Bytes.random(rng, 8);
+            b.b[4] = if (i % 10 == 9) 2 else rng.uintLessThan(u8, 2);
+            try writeBufs(writer, &.{b});
+            try writePtr(writer, 0, 0);
+            if (comptime std.mem.eql(u8, name, "setNum"))
+                try writer.print(",{},{d}", .{ rng.boolean(), edgyU32(rng) });
+            try writer.writeAll("]}\n");
+        }
+    }
+    // numRoundTrip(big: bool, v: u32).
+    {
+        var file = try openLayout("numRoundTrip");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{},{d}]}}\n", .{ rng.boolean(), edgyU32(rng) });
+    }
+    // wordByte(v: u32, i: u2).
+    {
+        var file = try openLayout("wordByte");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ edgyU32(rng), rng.uintLessThan(u8, 4) });
+    }
+    // setHalf(p: *Word, v: u16): one 8-byte buffer, an aligned offset.
+    {
+        var file = try openLayout("setHalf");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 8)});
+            try writePtr(writer, 0, 4 * rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u16)});
+        }
+    }
+    // regSigned(v: u8): every byte.
+    {
+        var file = try openLayout("regSigned");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |v| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{v});
+    }
+    // setRegFlags(p: *Reg, f: Flags): one 2-byte buffer, both offsets; `f` as its byte.
+    {
+        var file = try openLayout("setRegFlags");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u8)});
+        }
+    }
+    // wordHalf(v: u32).
+    {
+        var file = try openLayout("wordHalf");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{edgyU32(rng)});
+    }
+    // writeTable(i: usize, v: u32): 0..2 (a write to a `const` global), 3..4 (out of bounds).
+    {
+        var file = try openLayout("writeTable");
+        defer file.close();
+        const writer = file.writer();
+        for (0..5) |i| try writer.print("{{\"bufs\":[],\"args\":[{d},{d}]}}\n", .{ i, edgyU32(rng) });
+    }
+
+    // wordArg(v: u32).
+    {
+        var file = try openLayout("wordArg");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{edgyU32(rng)});
+    }
+
+    // nibArg(v: u4): every value.
+    {
+        var file = try openLayout("nibArg");
+        defer file.close();
+        const writer = file.writer();
+        for (0..16) |v| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{v});
+    }
+
+    // setNib(p: *Nib, v: u4): one 2-byte buffer, both offsets.
+    {
+        var file = try openLayout("setNib");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u4)});
+        }
+    }
+
+    // bumpPair(p: *Pair, bits: u6): one 2-byte buffer, both offsets.
+    {
+        var file = try openLayout("bumpPair");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 2)});
+            try writePtr(writer, 0, rng.uintLessThan(usize, 2));
+            try writer.print(",{d}]}}\n", .{rng.int(u6)});
         }
     }
 }

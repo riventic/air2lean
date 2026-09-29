@@ -1,0 +1,352 @@
+{
+ "schema": 11,
+ "zig_version": "0.14.1",
+ "name": "layout.wordByte",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 5,
+   "tag": "call",
+   "ty": 5,
+   "callee": {
+    "ty": 6,
+    "func": "layout.wordOf",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "store",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "w"
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 10,
+   "tag": "dbg_var_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "p"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4
+  },
+  {
+   "id": 12,
+   "tag": "struct_field_ptr_index_2",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "load",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4
+  },
+  {
+   "id": 15,
+   "tag": "intcast",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "cmp_lt",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "ty": 9,
+     "val": "4"
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 20,
+     "tag": "cond_br",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 16
+      }
+     ],
+     "then": [
+      {
+       "id": 21,
+       "tag": "br",
+       "ty": 11,
+       "target": 19,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 17,
+       "tag": "call",
+       "ty": 11,
+       "callee": {
+        "ty": 12,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 15
+        },
+        {
+         "ty": 9,
+         "val": "4"
+        }
+       ]
+      },
+      {
+       "id": 18,
+       "tag": "unreach",
+       "ty": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "tag": "array_elem_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 13
+    },
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4
+  },
+  {
+   "id": 24,
+   "tag": "ret_safe",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 22
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "union",
+   "name": "layout.Word",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "int",
+     "ty": 0
+    },
+    {
+     "name": "half",
+     "ty": 13
+    },
+    {
+     "name": "bytes",
+     "ty": 8
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) layout.Word"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 2,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}

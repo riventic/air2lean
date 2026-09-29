@@ -14,6 +14,7 @@ import Proofs.Lists.Gen
 import Proofs.Threads.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
+import Proofs.Layout.Gen
 
 /-!
 # Differential-test Lean-side runner
@@ -655,6 +656,10 @@ def byteStr : Zig.Byte → String
   | .int x => natToHex x.toNat 2
   | .undef => "??"
   | .ptrFrag .. => "pp"
+  -- The compiler numbers the errors per compilation: the model keeps the name (a wildcard).
+  | .errFrag .. => "??"
+  -- Only the low `m` bits are defined: `?` for the high hex digit, and for the low one if `m < 4`.
+  | .part m x => if 4 ≤ m then "?" ++ natToHex (x.toNat % 16) 1 else "??"
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
 a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a
@@ -732,6 +737,94 @@ def runPointers : IO Unit := do
 
 /-- A pure function in the memory protocol (no buffers). -/
 def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
+
+def runLayout : IO Unit := do
+  let ex := "layout"
+  let m0 := Layout.mem0
+  let ptrRes (size : Nat) (m : Zig.Mem) (p : Zig.Ptr) := ptrStr m0.blocks.size m p size
+  processMem ex m0 "addrEq" (fun g a => return Layout.addrEq (← ptrOf g a[0]!) (← ptrOf g a[1]!))
+    fun _ b => if b then "1" else "0"
+  processMem ex m0 "ptrRoundTrip" (fun g a => return Layout.ptrRoundTrip (← ptrOf g a[0]!))
+    (ptrRes 4)
+  processMem ex m0 "ptrFromAddr"
+    (fun _ a => return Layout.ptrFromAddr (bv 64 (← getWideInt a[0]!))) (ptrRes 4)
+  processMem ex m0 "asConst" (fun g a => return Layout.asConst (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "dropConst" (fun g a => return Layout.dropConst (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "asVolatile" (fun g a => return Layout.asVolatile (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "align4" (fun g a => return Layout.align4 (← ptrOf g a[0]!)) (ptrRes 4)
+  processMem ex m0 "parentOfX" (fun g a => return Layout.parentOfX (← ptrOf g a[0]!)) (ptrRes 8)
+  processMem ex m0 "parentOfY" (fun g a => return Layout.parentOfY (← ptrOf g a[0]!)) (ptrRes 8)
+  -- `Flags` field by field from a byte (not `Zig.Packed.ofBits`, which is what the tests check).
+  let flagsOf (b : Nat) : Layout.Flags :=
+    { ready := b % 2 == 1, err := b / 2 % 2 == 1, mode := BitVec.ofNat 2 (b / 4), count := BitVec.ofNat 4 (b / 16) }
+  let b01 (b : Bool) := if b then "1" else "0"
+  let flagsStr (_ : Zig.Mem) (f : Layout.Flags) : String :=
+    s!"\{\"ready\":{b01 f.ready},\"err\":{b01 f.err},\"mode\":{f.mode.toNat},\"count\":{f.count.toNat}}"
+  processMem ex m0 "flagsToByte"
+    (fun _ a => return pureMem (Layout.flagsToByte (flagsOf (← getInt a[0]!).toNat))) fun _ v => natStr v false
+  processMem ex m0 "byteToFlags"
+    (fun _ a => return pureMem (Layout.byteToFlags (bv 8 (← getInt a[0]!)))) flagsStr
+  processMem ex m0 "setMode"
+    (fun _ a => return pureMem (Layout.setMode (bv 8 (← getInt a[0]!)) (bv 2 (← getInt a[1]!))))
+    fun _ v => natStr v false
+  processMem ex m0 "incCount" (fun g a => return Layout.incCount (← ptrOf g a[0]!)) unitStr
+  processMem ex m0 "isOk" (fun g a => return Layout.isOk (← ptrOf g a[0]!)) fun _ b => b01 b
+  let headerStr (m : Zig.Mem) (h : Layout.Header) : String :=
+    s!"\{\"magic\":{h.magic.toNat},\"len\":{h.len.toNat},\"kind\":{h.kind.toNat},\"flags\":{flagsStr m h.flags}}"
+  processMem ex m0 "headerLen" (fun g a => return Layout.headerLen (← sliceOf g a[0]!))
+    fun _ v => optStr v false
+  processMem ex m0 "readHeader" (fun g a => return Layout.readHeader (← sliceOf g a[0]!)) headerStr
+  processMem ex m0 "floatBits" (fun g a => return Layout.floatBits (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "bitsToFloat"
+    (fun g a => return Layout.bitsToFloat (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) fun _ v => floatStr v
+  processMem ex m0 "applyOp"
+    (fun _ a => return Layout.applyOp (bv 64 (← getInt a[0]!)) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "twice"
+    (fun _ a => return Layout.twice (← orFail a[0]!.getBool? "twice") (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "setCircle"
+    (fun g a => return Layout.setCircle (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
+  processMem ex m0 "shapeArea" (fun g a => return Layout.shapeArea (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "growCircle" (fun g a => return Layout.growCircle (← ptrOf g a[0]!)) unitStr
+  processMem ex m0 "bumpDigit" (fun _ a => return Layout.bumpDigit (bv 8 (← getInt a[0]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "setNum" (fun g a => do
+    return Layout.setNum (← ptrOf g a[0]!) (← orFail a[1]!.getBool? "setNum") (bv 32 (← getInt a[2]!)))
+    unitStr
+  processMem ex m0 "numInt" (fun g a => return Layout.numInt (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "numRoundTrip" (fun _ a => do
+    return Layout.numRoundTrip (← orFail a[0]!.getBool? "numRoundTrip") (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "wordByte"
+    (fun _ a => return Layout.wordByte (bv 32 (← getInt a[0]!)) (bv 2 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "wordHalf" (fun _ a => return pureMem (Layout.wordHalf (bv 32 (← getInt a[0]!))))
+    fun _ v => natStr v false
+  processMem ex m0 "setHalf"
+    (fun g a => return Layout.setHalf (← ptrOf g a[0]!) (bv 16 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "regSigned"
+    (fun _ a => return pureMem (Layout.regSigned (bv 8 (← getInt a[0]!)))) fun _ v => toString v.toInt
+  processMem ex m0 "setRegFlags"
+    (fun g a => return Layout.setRegFlags (← ptrOf g a[0]!) (flagsOf (← getInt a[1]!).toNat))
+    fun _ v => natStr v false
+  processMem ex m0 "wordArg" (fun _ a => return Layout.wordArg (bv 32 (← getInt a[0]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "nibArg"
+    (fun _ a => return pureMem (Layout.nibArg (bv 4 (← getInt a[0]!)))) fun _ v => toString v.toInt
+  processMem ex m0 "setNib"
+    (fun g a => return Layout.setNib (← ptrOf g a[0]!) (bv 4 (← getInt a[1]!)))
+    fun _ v => toString v.toInt
+  processMem ex m0 "bumpPair"
+    (fun g a => return Layout.bumpPair (← ptrOf g a[0]!) (bv 6 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "writeTable"
+    (fun _ a => return Layout.writeTable (bv 64 (← getInt a[0]!)) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
 
 def runSlices : IO Unit := do
   let ex := "slices"
@@ -945,4 +1038,6 @@ def main : IO Unit := do
     DiffTest.runBswap32
     DiffTest.runPopcnt64
     DiffTest.runLzcnt64
+
+  run "layout" DiffTest.runLayout
 
