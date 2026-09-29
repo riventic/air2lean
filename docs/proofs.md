@@ -22,7 +22,7 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 
 `Triple P c Q`: if `P` holds of a part of the memory, `c` does not throw; if `c` returns `v`, `Q v` holds of that part after it, and the rest of the memory (the frame) is unchanged. A program that does not terminate satisfies every triple (partial correctness).
 
-`Triple` also needs `Mem.SingleThread m` before `c` runs, and gives it back for the result memory. A program that never spawns a thread (`Proofs/Threads/` is the only one that does) gets this for free: `Triple.of_run` and every rule below thread it through, so a proof never states it. `ZigLean/Mem/Lemmas.lean` has the pieces: `singleThread_empty` (true at program start, from an empty footprint), `singleThread_write`/`singleThread_recordAt` (preserved by a write or a recorded access), `noRace_of_singleThread` (turns it into the `NoRace` a `*_run` lemma below needs).
+`Triple` also needs `Mem.SingleThread m` before `c` runs, and gives it back for the result memory. A program that never spawns a thread (`Proofs/Threads/`, `Proofs/Atomics/` and `Proofs/Sync/` do; §Proofs over all schedules) gets this for free: `Triple.of_run` and every rule below thread it through, so a proof never states it. `ZigLean/Mem/Lemmas.lean` has the pieces: `singleThread_empty` (true at program start, from an empty footprint), `singleThread_write`/`singleThread_recordAt` (preserved by a write or a recorded access), `noRace_of_singleThread` (turns it into the `NoRace` a `*_run` lemma below needs).
 
 | Rule | Statement |
 |---|---|

@@ -177,6 +177,16 @@ theorem intOfBytes_rmw (v : BitVec 32) :
 
 theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
 
+/-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
+theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
+    (hlt : a.toNat + 1 < 2 ^ w) : r.toNat = a.toNat + 1 := by
+  simp only [add, Bool.false_eq_true, ↓reduceIte] at h
+  split at h
+  · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
+  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+    rw [← h, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (a := 1) (by omega)]
+    exact Nat.mod_eq_of_lt hlt
+
 theorem getElem_of_eq {α : Type} {a b : Array α} (e : a = b) {u : Nat} (h : u < a.size) :
     a[u] = b[u]'(e ▸ h) := by subst e; rfl
 
@@ -723,17 +733,7 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     refine ⟨inv_size n hi₃' hi₄ (Conc.upd_ne _ _ (Nat.ne_of_lt (inv_kid n hi₃ hg₁).1)), ?_⟩
     refine WP.bind (WP.callRC fun i' hadd => ?_)
     have hlt' : s.i.toNat < n.toNat := by simpa [lt, BitVec.ult] using hlt
-    have hi' : i' = s.i + 1 := by
-      simp only [add, Bool.false_eq_true, ↓reduceIte] at hadd
-      split at hadd
-      · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at hadd
-      · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hadd
-        exact hadd.symm
-    have hin : i'.toNat = s.i.toNat + 1 := by
-      rw [hi', BitVec.toNat_add]
-      have := n.isLt
-      have h1 : (1 : BitVec 32).toNat = 1 := rfl
-      rw [h1]; exact Nat.mod_eq_of_lt (by omega)
+    have hin : i'.toNat = s.i.toNat + 1 := add_one_ok hadd (by have := n.isLt; omega)
     simp only [StateT.run_modify, StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     simp only [bump.again4, ↓reduceIte]
@@ -1232,16 +1232,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
     refine ⟨rfl, ?_⟩
     simp only [StateT.run_pure, pure_bind, StateT.run_bind]
     refine WP.bind (WP.callRC fun k' hadd => ?_)
-    have hk' : k' = s.local6 + 1 := by
-      simp only [add, Bool.false_eq_true, ↓reduceIte] at hadd
-      split at hadd
-      · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at hadd
-      · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hadd
-        exact hadd.symm
-    have hkn : k'.toNat = s.local6.toNat + 1 := by
-      rw [hk', BitVec.toNat_add]
-      have h1 : (1 : BitVec 64).toNat = 1 := rfl
-      rw [h1]; exact Nat.mod_eq_of_lt (by omega)
+    have hkn : k'.toNat = s.local6.toNat + 1 := add_one_ok hadd (by omega)
     simp only [StateT.run_modify, pure_bind]
     refine WP.pure' ?_
     simp only [parallelCounter.again9, ↓reduceIte]
@@ -1303,16 +1294,7 @@ theorem loop30_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     refine ⟨by obtain ⟨b, blk, o, -, -, rfl⟩ := Proto.store_ok hs₃; rfl, ?_⟩
     simp only [StateT.run_pure, pure_bind, StateT.run_bind]
     refine WP.bind (WP.callRC fun k' hadd => ?_)
-    have hk' : k' = s.local27 + 1 := by
-      simp only [add, Bool.false_eq_true, ↓reduceIte] at hadd
-      split at hadd
-      · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at hadd
-      · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hadd
-        exact hadd.symm
-    have hkn : k'.toNat = s.local27.toNat + 1 := by
-      rw [hk', BitVec.toNat_add]
-      have h1 : (1 : BitVec 64).toNat = 1 := rfl
-      rw [h1]; exact Nat.mod_eq_of_lt (by omega)
+    have hkn : k'.toNat = s.local27.toNat + 1 := add_one_ok hadd (by omega)
     simp only [StateT.run_modify, pure_bind]
     refine WP.pure' ?_
     simp only [parallelCounter.again30, ↓reduceIte]
@@ -1363,16 +1345,7 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     obtain ⟨htJ, hcur', hi'⟩ := inv_join n hi₂ hg₁ ⟨p, hp⟩ hj
     simp only [StateT.run_pure, pure_bind, StateT.run_bind]
     refine WP.bind (WP.callRC fun k' hadd => ?_)
-    have hk' : k' = s.local51 + 1 := by
-      simp only [add, Bool.false_eq_true, ↓reduceIte] at hadd
-      split at hadd
-      · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at hadd
-      · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hadd
-        exact hadd.symm
-    have hkn : k'.toNat = s.local51.toNat + 1 := by
-      rw [hk', BitVec.toNat_add]
-      have h1 : (1 : BitVec 64).toNat = 1 := rfl
-      rw [h1]; exact Nat.mod_eq_of_lt (by omega)
+    have hkn : k'.toNat = s.local51.toNat + 1 := add_one_ok hadd (by omega)
     simp only [StateT.run_modify, pure_bind]
     refine WP.pure' ?_
     simp only [parallelCounter.again54, ↓reduceIte]
