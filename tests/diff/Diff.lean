@@ -13,6 +13,7 @@ import Proofs.Slices.Gen
 import Proofs.Lists.Gen
 import Proofs.Threads.Gen
 import Proofs.Atomics.Gen
+import Proofs.Sync.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 import Proofs.Layout.Gen
@@ -1035,6 +1036,12 @@ def runAtomics : IO Unit := do
   one "twoPlusTwoW" Atomics.twoPlusTwoW
   one "stackPush" Atomics.stackPush
 
+def runSync : IO Unit := do
+  let one (name : String) (f : Zig.Io → Zig.ConcM Sync.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "sync" name fun _ zig =>
+      pure (searchSchedules (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
+  one "mutexCounter" Sync.mutexCounter
+
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do
     let items ← getArr j
@@ -1154,6 +1161,8 @@ def main : IO Unit := do
     DiffTest.runClaimOnce
 
   run "atomics" DiffTest.runAtomics
+
+  run "sync" DiffTest.runSync
 
   run "floats" do
     DiffTest.runLerp

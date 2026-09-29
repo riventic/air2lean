@@ -49,6 +49,9 @@ inductive Ty where
   /-- `std.Thread`: the model's `Zig.ThreadId` (`ZigLean/Mem/Thread.lean`). Its field (a
   platform-specific handle, e.g. `pthread_t`) is not translated. -/
   | thread
+  /-- `std.Io` (0.16.0): the model's `Zig.Io` (`ZigLean/Conc/Call.lean`). Its fields
+  (`userdata`, the `vtable`) are not translated. -/
+  | io
   | other (name : String)
   deriving Repr, Inhabited, BEq
 

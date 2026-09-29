@@ -138,7 +138,7 @@ def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : N
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr ..) | some .allocator => true
+  | some (.ptr ..) | some .allocator | some .io => true
   | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
@@ -172,6 +172,8 @@ def allocFn? (name : String) : Option AllocFn :=
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
+  | futexWait | futexWaitU | futexWake
   deriving BEq, Repr
 
 /-- The `Thread` function that the function `name` is an instance of
@@ -180,13 +182,18 @@ def threadFn? (name : String) : Option ThreadFn :=
   match (name.splitOn "__anon_").head! with
   | "Thread.spawn" => some .spawn
   | "Thread.join" => some .join
+  | "Io.futexWait" => some .futexWait
+  | "Io.futexWaitUncancelable" => some .futexWaitU
+  | "Io.futexWake" => some .futexWake
   | _ => none
 
 /-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
 model): `Check.lean` rejects a call to one of these, with this reason. -/
 def rejectedThreadFn? (name : String) : Option String :=
   let base := (name.splitOn "__anon_").head!
-  if base == "Thread.detach" then
+  if base == "Io.futexWaitTimeout" then
+    some "Io.futexWaitTimeout is outside the model: it has no clock"
+  else if base == "Thread.detach" then
     some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
   else if base == "Thread.yield" then
     some "Thread.yield is outside the model: there is no scheduler to yield to"

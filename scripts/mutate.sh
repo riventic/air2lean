@@ -94,6 +94,10 @@
 #     goes before a newer message. Detected by the proof build: `twoPlusTwoW_weak` needs it.
 #     A weak-memory result is rare on real hardware, so the diff test seldom sees one; the
 #     proofs show each one under a fixed schedule.
+# (y) Lean-runtime mutation, sync: a futex `wait` (ZigLean/Conc/Sched.lean) never blocks.
+#     Detected by the proof build: `wait_alone_deadlock` (Proofs/Sync/Proofs.lean).
+# (z) Lean-runtime mutation, sync: the scheduler's deadlock check is off (no result instead of
+#     `.deadlock`). Detected by the proof build: `wait_alone_deadlock`.
 #
 # Usage: mutate.sh
 # Env:
@@ -102,7 +106,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -141,6 +145,7 @@ alloc_lean="ZigLean/Mem/Alloc.lean"
 asm_zig="tests/diff/asm/asm.zig"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
+sched_lean="ZigLean/Conc/Sched.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -155,6 +160,7 @@ alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
 asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
+sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -169,6 +175,7 @@ cp "$alloc_lean" "$alloc_backup"
 cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
+cp "$sched_lean" "$sched_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -190,8 +197,9 @@ cleanup() {
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
+  cp "$sched_backup" "$sched_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -654,6 +662,38 @@ else
   proof_report "mutation (x)" Proofs.Atomics.Proofs
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (y): a futex wait never blocks (Lean runtime, proof build) ==" >&2
+if ! has_example sync; then
+  echo "mutation (y): skipped (AIR2LEAN_EXAMPLES excludes sync)"
+else
+  sed -i.bak 's/^        if v = e then .ok (.paused/        if false then .ok (.paused/' "$sched_lean"
+  rm -f "$sched_lean.bak"
+  grep -q '^        if false then .ok (.paused' "$sched_lean" || {
+    echo "error: mutation (y): sed did not change the futex wait" >&2
+    exit 1
+  }
+
+  proof_report "mutation (y)" Proofs.Sync.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$sched_backup" "$sched_lean"
+fi
+
+echo "== mutation (z): no deadlock check (Lean runtime, proof build) ==" >&2
+if ! has_example sync; then
+  echo "mutation (z): skipped (AIR2LEAN_EXAMPLES excludes sync)"
+else
+  sed -i.bak 's/^      (if s.anyRunning then some (.error .deadlock) else none, s.trace)$/      (none, s.trace)/' "$sched_lean"
+  rm -f "$sched_lean.bak"
+  grep -q '^      (none, s.trace)$' "$sched_lean" || {
+    echo "error: mutation (z): sed did not change the deadlock check" >&2
+    exit 1
+  }
+
+  proof_report "mutation (z)" Proofs.Sync.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$sched_backup" "$sched_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

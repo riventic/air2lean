@@ -99,7 +99,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       recur t
     fields.forM fun (_, fty) => recur fty
   | .tuple fields => fields.forM recur
-  | .int .. | .bool | .void | .noreturn | .allocator | .thread => pure ()
+  | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
 largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
@@ -126,6 +126,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some (.ptr ..) => pure (8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
+  | some .io => pure (16, 8)
   | some (.optional c) =>
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
@@ -586,6 +587,10 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
             match threadFn? callee with
             | some .spawn => checkThreadSpawn f args
             | some .join => pure ()
+            | some .futexWait | some .futexWaitU | some .futexWake =>
+              -- `(io, ptr, value)`: a `u32`-sized value (Zig asserts it), an enum or integer.
+              unless args.size == 3 do
+                throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 3"
             | none =>
               throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
                 name to the example's `filter` file, docs/std-models.md)"

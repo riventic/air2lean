@@ -149,6 +149,7 @@ def parseTy (j : Json) : Except String Ty := do
     let name ← (← j.getObjVal? "name").getStr?
     if name == "mem.Allocator" then return .allocator
     if name == "Thread" then return .thread
+    if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
     if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?

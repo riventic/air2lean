@@ -90,6 +90,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
     if parts.isEmpty then "Unit" else String.intercalate " × " parts
   | .allocator => "Zig.Allocator"
   | .thread => "Zig.ThreadId"
+  | .io => "Zig.Io"
   | .other name => name
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
@@ -905,6 +906,10 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     s!"Zig.spawnC (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
+  | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWake => s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/

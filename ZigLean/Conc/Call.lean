@@ -80,6 +80,36 @@ def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do
 /-- `Thread.join`: waits until thread `tid` ends. -/
 def joinC (tid : ThreadId) : CM Tgt σ Unit := StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.join tid)))
 
+/-! ### Futex (`std.Io`, 0.16.0; `docs/std-models.md` §Thread model) -/
+
+/-- `std.Io`: the model has one `Io`. Its fields (`userdata`, the `vtable` of function
+pointers) are not translated: the std code calls the futex through `Io.futexWait` and
+`Io.futexWake`, which are the model. -/
+structure Io where
+  deriving DecidableEq, Repr, Inhabited
+
+/-- 16 bytes, the size of `std.Io` (two pointers). -/
+instance : Enc Io where
+  size := 16
+  align := 8
+  encode _ := Array.replicate 16 (.int 0)
+  decode _ := pure ⟨⟩
+
+/-- `Io.futexWaitUncancelable(T, ptr, expected)`: the `u32` bits of `expected`. -/
+def futexWaitC {α : Type} {n : Nat} [Packed α n] (_ : Io) (p : Ptr) (expected : α) : CM Tgt σ Unit :=
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p ((Packed.toBits expected).setWidth 32))))
+
+/-- `Io.futexWait(T, ptr, expected)`: as `futexWaitC`; the model never cancels
+(`error.Canceled` does not happen). -/
+def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr) (expected : α) :
+    CM Tgt σ (Except ErrName Unit) := do
+  futexWaitC io p expected
+  pure (.ok ())
+
+/-- `Io.futexWake(T, ptr, max_waiters)`. -/
+def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
+
 section Monotone
 open Lean.Order
 

@@ -14,8 +14,12 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
 - **Threads.** Thread 0 is `main`. `spawn t` adds a thread that starts with `dispatch t` at its
   first turn; `join tid` can go on only when thread `tid` has ended. The clock and join rules are
   those of `ZigLean/Mem/Thread.lean` (`Thread.fork`, `Thread.join`, `checkJoinedByChild`).
+- **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
+  waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
+  edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
-  joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then.
+  joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then. If no
+  thread can go on and one has not ended, the run is `.deadlock`.
 - **Fuel.** `fuel` bounds the number of turns and the depth of each thread's run. Out of fuel is
   `none`, as a loop that does not end.
 
@@ -48,6 +52,10 @@ structure State (Tgt α : Type) where
   step : Nat
   /-- The number of options of each choice so far. -/
   trace : Array Nat
+  /-- The threads that wait at a futex, and the address, in the order they began to wait. -/
+  waiters : Array (ThreadId × Ptr) := #[]
+  /-- The threads that a `wake` woke: their `wait` goes on at their next turn. -/
+  woken : Array ThreadId := #[]
 
 /-- Thread `t` has ended. -/
 def State.isDone (s : State Tgt α) (t : ThreadId) : Bool :=
@@ -56,17 +64,23 @@ def State.isDone (s : State Tgt α) (t : ThreadId) : Bool :=
     | some .done => true
     | _ => false
 
-/-- The op that thread `t` waits at can go on now. -/
-def canGo (s : State Tgt α) : SyncOp Tgt → Bool
+/-- Thread `t`, which waits at the op, can go on now. -/
+def canGo (s : State Tgt α) (t : ThreadId) : SyncOp Tgt → Bool
   | .join tid => s.isDone tid
+  | .wait .. => !(s.waiters.any (·.1 == t))
   | _ => true
 
 /-- The threads that can go on, in thread order. -/
 def State.ready (s : State Tgt α) : Array ThreadId :=
-  let main := match s.main with | .paused p => if canGo s p.op then #[0] else #[] | .done => #[]
+  let main := match s.main with | .paused p => if canGo s 0 p.op then #[0] else #[] | .done => #[]
   main ++ (s.kids.zipIdx.filterMap fun (ts, i) => match ts with
-    | .paused p => if canGo s p.op then some (i + 1) else none
+    | .paused p => if canGo s (i + 1) p.op then some (i + 1) else none
     | .done => none)
+
+/-- A thread has not ended. -/
+def State.anyRunning (s : State Tgt α) : Bool :=
+  (match s.main with | .paused _ => true | .done => false) ||
+    s.kids.any fun ts => match ts with | .paused _ => true | .done => false
 
 /-- The next choice of the oracle among `n` options (`n = 0`: `0`, no choice). -/
 def State.choose (s : State Tgt α) (o : Nat → Nat) (n : Nat) : Nat × State Tgt α :=
@@ -121,6 +135,21 @@ def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat �
   | ⟨_, .join tid, k⟩ =>
     let ((), s) ← s.onMem (Thread.join tid)
     settle t s (k () s.mem)
+  | ⟨d, .wait ptr e, k⟩ =>
+    if s.woken.contains t then
+      settle t { s with woken := s.woken.erase t } (k () s.mem)
+    else
+      -- The kernel compares the value at `ptr`: the newest write (the block's bytes).
+      match (do let (_, blk, o) ← s.mem.access ptr 4 4; intOfBytes 32 (blk.bytes.extract o (o + 4))).run with
+      | some (.ok v) =>
+        if v = e then .ok (.paused ⟨d, .wait ptr e, k⟩, none, { s with waiters := s.waiters.push (t, ptr) })
+        else settle t s (k () s.mem)
+      | some (.error err) => .error (some err)
+      | none => .error none
+  | ⟨_, .wake ptr n, k⟩ =>
+    let woke := (s.waiters.filter (·.2 == ptr)).extract 0 n |>.map (·.1)
+    let s := { s with waiters := s.waiters.filter (fun w => !woke.contains w.1), woken := s.woken ++ woke }
+    settle t s (k () s.mem)
 
 /-- Up to `fuel` turns. -/
 def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt α → Out α × Array Nat
@@ -128,9 +157,7 @@ def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt
   | fuel + 1, s =>
     let ready := s.ready
     if ready.isEmpty then
-      -- Every thread that has not ended waits at a `join` of a thread that waits too. With
-      -- fork-join only this does not happen (a thread joins only threads it spawned).
-      (none, s.trace)
+      (if s.anyRunning then some (.error .deadlock) else none, s.trace)
     else
     let (i, s) := s.choose o ready.size
     let t := ready[i]!

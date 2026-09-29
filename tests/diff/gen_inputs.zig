@@ -139,6 +139,7 @@ pub fn main() !void {
     try genDivmod(rng);
     try genClaim();
     try genAtomics();
+    try genSync();
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2722,6 +2723,17 @@ fn genAtomics() !void {
     try compat.makePath("tests/diff/atomics/inputs");
     inline for (.{ "mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush" }) |name| {
         var file = try openOutIn("tests/diff/atomics/inputs", name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..20) |_| try writer.writeAll("[]\n");
+    }
+}
+
+/// sync: the `std.Io` argument only; 20 runs of each function.
+fn genSync() !void {
+    try compat.makePath("tests/diff/sync/inputs");
+    inline for (.{"mutexCounter"}) |name| {
+        var file = try openOutIn("tests/diff/sync/inputs", name);
         defer file.close();
         const writer = file.writer();
         for (0..20) |_| try writer.writeAll("[]\n");

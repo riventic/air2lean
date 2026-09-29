@@ -41,12 +41,17 @@ inductive SyncOp (Tgt : Type) where
   | spawn (t : Tgt)
   /-- `Thread.join`: waits until thread `tid` ends. -/
   | join (tid : ThreadId)
+  /-- A futex wait (`Io.futexWait`): if the `u32` at `p` is `expected`, the thread waits until a
+  `wake` at `p`; else it goes on. -/
+  | wait (p : Ptr) (expected : BitVec 32)
+  /-- A futex wake (`Io.futexWake`): up to `n` threads that wait at `p` go on. -/
+  | wake (p : Ptr) (n : Nat)
 
 /-- The response of the scheduler to a sync op. -/
 def SyncOp.Resp {Tgt : Type} : SyncOp Tgt → Type
   | .choose _ | .pick _ => Nat
   | .spawn _ => ThreadId
-  | .yield | .join _ => Unit
+  | .yield | .join _ | .wait .. | .wake .. => Unit
 
 /-- A run of a thread with at most `n` sync ops on each path. `leaf none`: no result. `sync op m
 k`: the thread stops at `op` with the memory `m`; `k` is the rest, from the response and the
