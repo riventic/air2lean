@@ -39,10 +39,14 @@ def Packed.set {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat)
 /-- The host integer of a bit-pointer, from its `hostSize` bytes at `p`. A packed struct whose
 backing integer is not `8 * hostSize` bits has undefined padding bits in its last byte
 (`Byte.part`, `intBytes`): they read as 0, because an access reads or writes only the field's
-bits. Also the last byte's kind, to write it back the same way. -/
-def loadHost (hostSize align : Nat) (p : Ptr) : MemM (BitVec (8 * hostSize) × Option Nat) := do
+bits, the bits below `fieldEnd`. A field bit that is undefined throws `.unspecified`. Also the
+last byte's kind, to write it back the same way. -/
+def loadHost (hostSize align fieldEnd : Nat) (p : Ptr) :
+    MemM (BitVec (8 * hostSize) × Option Nat) := do
   let bs ← loadBytes p (Enc.size (BitVec (8 * hostSize))) align
   let last := match (bs[hostSize - 1]? : Option Byte) with | some (.part m _) => some m | _ => none
+  if let some m := last then
+    if 8 * (hostSize - 1) + m < fieldEnd then throw .unspecified
   let bs := bs.modify (hostSize - 1) fun | .part _ x => .int x | b => b
   let host ← intOfBytes (8 * hostSize) bs
   pure (host, last)
@@ -50,14 +54,14 @@ def loadHost (hostSize align : Nat) (p : Ptr) : MemM (BitVec (8 * hostSize) × O
 /-- A load through a bit-pointer: the host integer is `hostSize` bytes at `p`. -/
 def loadBits (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr) :
     MemM α := do
-  let (host, _) ← loadHost hostSize align p
+  let (host, _) ← loadHost hostSize align (bitOffset + n) p
   pure (Packed.get host bitOffset)
 
 /-- A store through a bit-pointer: read the host integer, replace the field's bits, write it
 back. Undefined padding bits in the last byte stay undefined. -/
 def storeBits {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr)
     (v : α) : MemM Unit := do
-  let (host, last) ← loadHost hostSize align p
+  let (host, last) ← loadHost hostSize align (bitOffset + n) p
   let bs := Enc.encode (Packed.set host bitOffset v)
   let bs := match last, (bs[hostSize - 1]? : Option Byte) with
     | some m, some (.int x) => bs.set! (hostSize - 1) (.part m (x &&& BitVec.ofNat 8 (2 ^ m - 1)))
