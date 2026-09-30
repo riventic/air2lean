@@ -82,7 +82,7 @@ def main (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM IO.FS.readFile
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for (path, contents) in jsonPaths.zip (Anon.renumberAnon texts) do
+      for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
         if err.isNone then
           match processOne contents with
           | .error e => err := some s!"{path}: {e}"

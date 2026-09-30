@@ -24,6 +24,10 @@ another. After this, the same program gives the same names in every version and 
 if the compiler exports the same functions. The golden files of one example can come from two
 compiles (a per-version file replaces a shared one), so one function can have two numbers `n`
 there; with one instance per name, both still get `1`.
+
+A type without a name (`os.linux.timespec__struct_2872`, a `__enum_`, `__union_` or `__opaque_`)
+has such a number too, and the translator can use it as a Lean name; each of these markers gets
+the same renumbering, after the functions (`renumberAll`).
 -/
 
 namespace Air2Lean.Anon
@@ -32,9 +36,9 @@ namespace Air2Lean.Anon
 number `n` after it. -/
 abbrev Inst := String × String
 
-/-- Each `<name>__anon_<n>` in `s`, in text order. -/
-def anonInsts (s : String) : Array Inst := Id.run do
-  let parts := s.splitOn "__anon_"
+/-- Each `<name><marker><n>` in `s`, in text order. -/
+def anonInsts (s : String) (marker : String := "__anon_") : Array Inst := Id.run do
+  let parts := s.splitOn marker
   let mut out := #[]
   for (p, prev) in (parts.drop 1).zip parts do
     let digits := p.takeWhile Char.isDigit
@@ -42,32 +46,34 @@ def anonInsts (s : String) : Array Inst := Id.run do
     if !digits.isEmpty then out := out.push (base, digits.toString)
   out
 
-/-- `s` with each `<name>__anon_<n>` changed to `<name>__anon_<map (name, n)>` (unchanged if it
-has no entry). -/
-def rename (map : Std.HashMap Inst Nat) (s : String) : String := Id.run do
-  let parts := s.splitOn "__anon_"
+/-- `s` with each `<name><marker><n>` changed to `<name><marker><map (name, n)>` (unchanged if
+it has no entry). -/
+def rename (map : Std.HashMap Inst Nat) (s : String) (marker : String := "__anon_") : String :=
+  Id.run do
+  let parts := s.splitOn marker
   let mut out := parts.head!
   for (p, prev) in (parts.drop 1).zip parts do
     let digits := (p.takeWhile Char.isDigit).toString
     let rest := (p.drop digits.length).toString
     match map[(((prev.splitOn "\"").getLast!), digits)]? with
-    | some k => out := out ++ "__anon_" ++ toString k ++ rest
-    | none => out := out ++ "__anon_" ++ p
+    | some k => out := out ++ marker ++ toString k ++ rest
+    | none => out := out ++ marker ++ p
   out
 
 /-- The function name (the top-level `name`) of a JSON text; `""` if it has none. -/
 def fnName (text : String) : String :=
   ((Lean.Json.parse text).toOption.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
 
-/-- `texts`: the JSON text of each function. The same texts, renamed. -/
-def renumberAnon (texts : Array String) : Array String := Id.run do
+/-- `texts`: the JSON text of each function. The same texts, with the numbers after `marker`
+renamed. -/
+def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array String := Id.run do
   let names := texts.map fnName
   let byInst : Std.HashMap Inst Nat := names.zipIdx.foldl (init := {}) fun m (name, i) =>
-    match (anonInsts ("\"" ++ name)).back? with
+    match (anonInsts ("\"" ++ name) marker).back? with
     | some n => m.insert n i
     | none => m
   let sorted (xs : Array Nat) := xs.qsort (fun a b => names[a]! < names[b]!)
-  let isInst (i : Nat) := !(anonInsts names[i]!).isEmpty
+  let isInst (i : Nat) := !(anonInsts names[i]! marker).isEmpty
   let roots := sorted ((Array.range texts.size).filter (!isInst ·))
   let rest := sorted ((Array.range texts.size).filter isInst)
   let mut map : Std.HashMap Inst Nat := {}
@@ -85,7 +91,7 @@ def renumberAnon (texts : Array String) : Array String := Id.run do
     while h : qi < queue.size do
       let i := queue[qi]
       qi := qi + 1
-      for n in anonInsts texts[i]! do
+      for n in anonInsts texts[i]! marker do
         if !map.contains n then
           let k := count.getD n.1 0 + 1
           count := count.insert n.1 k
@@ -94,6 +100,10 @@ def renumberAnon (texts : Array String) : Array String := Id.run do
             if !seen.contains j then
               seen := seen.insert j
               queue := queue.push j
-  texts.map (rename map)
+  texts.map (rename map · marker)
+
+/-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
+def renumberAll (texts : Array String) : Array String :=
+  ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"].foldl (fun ts m => renumberAnon ts m) texts
 
 end Air2Lean.Anon

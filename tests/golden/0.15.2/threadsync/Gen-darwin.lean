@@ -3,19 +3,19 @@ import ZigLean
 
 namespace Threadsync
 
-structure c_timespec__struct_2607 where
+structure c_timespec__struct_1 where
   sec : BitVec 64
   nsec : BitVec 64
   deriving Repr, Inhabited, DecidableEq
 
-instance : Zig.Enc c_timespec__struct_2607 where
+instance : Zig.Enc c_timespec__struct_1 where
   size := 16
   align := 8
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.sec), (8, Zig.Enc.encode v.nsec)]
   decode bs := do pure { sec := ← Zig.Enc.decodeAt bs 0, nsec := ← Zig.Enc.decodeAt bs 8 }
 
 structure time_Instant where
-  timestamp : c_timespec__struct_2607
+  timestamp : c_timespec__struct_1
   deriving Repr, Inhabited, DecidableEq
 
 instance : Zig.Enc time_Instant where
