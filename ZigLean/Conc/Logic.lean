@@ -517,7 +517,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
     {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {s : Sched.State Tgt α}
     {G : ThreadId → γ} {p : Sched.Paused Tgt β} {ts : Sched.TS Tgt β} {ov : Option β}
     {s' : Sched.State Tgt α}
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hinv : P.inv G s.mem) (hsz : s.mem.threads.size = s.kids.size + 1)
     (hp : P.PausedOk t Q (G t) p)
@@ -581,7 +581,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
       · have : s.kids.size + 1 = child := by rw [hc]; simp only at hsz ⊢; omega
         rw [this, upd_self]
         intro G₁ m₁' hg hi
-        exact hdisp tgt g₀ hg₀ child G₁ m₁' _ hg hi
+        exact hdisp tgt g₀ hg₀ child G₁ m₁' _ (by rw [← this]; exact Nat.succ_pos _) hg hi
       · exact hr
   | join tid =>
     have hf : P.fin (G tid) := hdone tid hgo
@@ -846,7 +846,7 @@ theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → 
 /-- Up to `fuel` turns from a state that keeps the protocol: a result of `main` is `Good`. -/
 theorem go_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat)
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m) :
     ∀ (fuel : Nat) (s : Sched.State Tgt α) (G : ThreadId → γ), P.SInv QM s G →
@@ -975,7 +975,7 @@ run, under every schedule `o` and every `fuel`, is `Good`: an `ok` result satisf
 strict mode no run gives an error (no data race, no deadlock, no panic). -/
 theorem run_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
@@ -1019,7 +1019,7 @@ theorem run_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM T
 /-- Partial correctness: every `ok` result of a run satisfies `QM`. -/
 theorem run_sound {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
@@ -1032,7 +1032,7 @@ theorem run_sound {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM 
 /-- **No error.** In strict mode no run, under any schedule, gives an error. -/
 theorem run_safe {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ) (hstr : P.strict = true)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)

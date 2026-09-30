@@ -2276,7 +2276,7 @@ theorem main_spec (d : Nat) :
   congr 1
 
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt = some g) (u : ThreadId)
-    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hgu : G u = g) (hi : (proto n).inv G m) :
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (_ : 0 < u) (hgu : G u = g) (hi : (proto n).inv G m) :
     (proto n).WP u (dispatch tgt) ((proto n).QKid u) G { m with current := u } d := by
   cases tgt with
   | bump p =>

@@ -1529,24 +1529,24 @@ theorem upd_upd (G : ThreadId → Gh) (t : ThreadId) (a b : Gh) : upd (upd G t a
 theorem ptr_c16 : (cPtr.add 16).add 0 = mPtr := rfl
 
 /-- `lock`'s loop invariant: thread `t` does not hold the mutex. -/
-def lockInv (t k : Nat) (_ : Io_Mutex_lockUncancelableLocals) (G : ThreadId → Gh) (m : Mem)
-    (_ : Nat) : Prop :=
-  m.current = t ∧ Inv (upd G t (.work k .out)) m
+def lockInv (t k D : Nat) (_ : Io_Mutex_lockUncancelableLocals) (G : ThreadId → Gh) (m : Mem)
+    (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ Inv (upd G t (.work k .out)) m
 
 /-- `lock`'s loop ends when thread `t` holds the mutex. -/
-def lockPost (t k : Nat) (r : Io_Mutex_lockUncancelableExit × Io_Mutex_lockUncancelableLocals)
-    (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  r.1 = .br22 ∧ m.current = t ∧ Inv (upd G t (.work k .holds)) m
+def lockPost (t k D : Nat) (r : Io_Mutex_lockUncancelableExit × Io_Mutex_lockUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  r.1 = .br22 ∧ d < D ∧ m.current = t ∧ Inv (upd G t (.work k .holds)) m
 
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
-theorem loop23_body (t k : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals)
-    (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : lockInv t k s G m d) :
+theorem loop23_body (t k D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : lockInv t k D s G m d) :
     proto.WP t ((Io_Mutex_lockUncancelable.loop23 (cPtr.add 16) io).run s) (fun r G' m' d' =>
-      if Io_Mutex_lockUncancelable.again23 r.1 then lockInv t k r.2 G' m' d' ∧
+      if Io_Mutex_lockUncancelable.again23 r.1 then lockInv t k D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Mutex_lockUncancelableLocals) => 0) s)
-      else lockPost t k r G' m' d') G m d := by
-  obtain ⟨hc, hi⟩ := h
+      else lockPost t k D r G' m' d') G m d := by
+  obtain ⟨hD, hc, hi⟩ := h
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc, atomicRmwAsC]
   rw [show ((cPtr.add 16).add 0).add 0 = mPtr from rfl]
@@ -1562,7 +1562,7 @@ theorem loop23_body (t k : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals)
     simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     simp only [Io_Mutex_lockUncancelable.again23, Bool.false_eq_true, ↓reduceIte]
-    exact ⟨rfl, hc₂, hi₂⟩
+    exact ⟨rfl, by omega, hc₂, hi₂⟩
   · refine ⟨by rw [(thr_work hi₂.thr hg₁).1, hs₁], ?_⟩
     have hne : (r != Io_Mutex_State.unlocked) = true := by simpa using hr₂
     simp only [hne, ↓reduceIte, StateT.run_bind, bind_assoc]
@@ -1576,14 +1576,14 @@ theorem loop23_body (t k : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals)
       simp only [StateT.run_pure, pure_bind]
       refine WP.pure' ?_
       simp only [Io_Mutex_lockUncancelable.again23, ↓reduceIte]
-      exact ⟨⟨hc', hi'⟩, .inl (by omega)⟩
+      exact ⟨⟨by omega, hc', hi'⟩, .inl (by omega)⟩
     · simp only [↓reduceIte] at hs ⊢
       exact hs
 
 theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : Inv (upd G t (.work k .out)) m) (hc : m.current = t) :
     proto.WP t (Io_Mutex_lockUncancelable (cPtr.add 16) io)
-      (fun _ G' m' _ => m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d := by
+      (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d := by
   unfold Io_Mutex_lockUncancelable
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -1597,7 +1597,7 @@ theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat
     show t < _; rw [hs₁]; exact ht₁
   refine WP.bind (WP.callMC (fun e he => (cas_noErr hi₁' htl hcr e he).elim) fun r m₂ hr => ?_)
   -- the loop, from a state where `t` does not hold the mutex
-  have hloop : ∀ G₃ m₃ d₃, lockInv t k default G₃ m₃ d₃ →
+  have hloop : ∀ G₃ m₃ d₃, lockInv t k d default G₃ m₃ d₃ →
       proto.WP t ((do
           let __do_lift ← loop (Io_Mutex_lockUncancelable.loop23 (cPtr.add 16) io)
             Io_Mutex_lockUncancelable.again23
@@ -1605,24 +1605,24 @@ theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat
           | Io_Mutex_lockUncancelableExit.br22 => pure Io_Mutex_lockUncancelableExit.ret
           | e => pure e : CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit).run
           default)
-        (fun a G m d => proto.WP t (match a.1 with
+        (fun a G₄ m₄ d₄ => proto.WP t (match a.1 with
           | Io_Mutex_lockUncancelableExit.ret => pure ()
           | _ => throw Error.panic)
-          (fun _ G' m' _ => m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d)
+          (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G₄ m₄ d₄)
         G₃ m₃ d₃ := by
     intro G₃ m₃ d₃ h₃
     simp only [StateT.run_bind]
-    refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv t k) (fun _ => 0) (lockPost t k)
-      (loop23_body t k io) default G₃ m₃ d₃ h₃))
-    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hc', hi'⟩
+    refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv t k d) (fun _ => 0) (lockPost t k d)
+      (loop23_body t k d io) default G₃ m₃ d₃ h₃))
+    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hi'⟩
     simp only [StateT.run_pure]
     refine WP.pure' ?_
-    exact WP.pure' ⟨hc', hi'⟩
+    exact WP.pure' ⟨hd', hc', hi'⟩
   obtain ⟨hc₂, ⟨rfl, hi₂⟩ | ⟨hr₂, hi₂⟩⟩ := step_cas hi₁' hg₁ rfl hr
   · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
     simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
     refine WP.pure' ?_
-    exact WP.pure' ⟨hc₂, hi₂⟩
+    exact WP.pure' ⟨by omega, hc₂, hi₂⟩
   · refine ⟨by rw [(thr_work hi₂.thr hg₁).1, hs₁], ?_⟩
     obtain ⟨v, rfl, hv⟩ : ∃ v, r = some v ∧ (v = .locked_once ∨ v = .contended) := by
       rcases hr₂ with rfl | rfl
@@ -1634,7 +1634,7 @@ theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat
     simp only [StateT.run_pure, pure_bind]
     rcases hv with rfl | rfl
     · simp only [beq_iff_eq, reduceCtorEq, ↓reduceIte, pure_bind]
-      exact hloop G₁ m₂ k₁ ⟨hc₂, by rw [← hg₁, upd_same]; exact hi₂⟩
+      exact hloop G₁ m₂ k₁ ⟨by omega, hc₂, by rw [← hg₁, upd_same]; exact hi₂⟩
     · simp only [beq_self_eq_true, ↓reduceIte, StateT.run_bind, bind_assoc]
       refine WP.bind (WP.futexWaitC fun k₂ hk₂ => ⟨.work k .wait,
         hi₂.retag hg₁ rfl (by decide) (by decide) (.inl rfl), fun G₂ m₃ hg₂ hi₃ =>
@@ -1644,8 +1644,244 @@ theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat
       · simp only [Bool.false_eq_true, ↓reduceIte] at hs ⊢
         obtain ⟨hc', hi'⟩ := hs
         simp only [StateT.run_pure, pure_bind]
-        exact hloop G₂ m' k₂ ⟨hc', hi'⟩
+        exact hloop G₂ m' k₂ ⟨by omega, hc', hi'⟩
       · simp only [↓reduceIte] at hs ⊢
         exact hs
+
+/-! ## `unlock` -/
+
+theorem unlock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : Inv (upd G t (.work k .holds)) m) (hc : m.current = t) :
+    proto.WP t (Io_Mutex_unlock (cPtr.add 16) io)
+      (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧ Inv (upd G' t (.work k .out)) m') G m d := by
+  unfold Io_Mutex_unlock
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc, atomicRmwAsC]
+  rw [show ((cPtr.add 16).add 0).add 0 = mPtr from rfl]
+  refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.work k .holds, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hi₁' : Inv G₁ { m₁ with current := t } := hi₁.grow (grows_current _ _)
+  obtain ⟨hs₁, ht₁, hkk⟩ := thr_work hi₁'.thr hg₁
+  have htl : ({ m₁ with current := t } : Mem).current <
+      ({ m₁ with current := t } : Mem).threads.size := by
+    show t < _; rw [hs₁]; exact ht₁
+  refine WP.bind (WP.callMC (fun e he => (xchg_noErr hi₁' htl hcr e he).elim) fun r m₂ hr => ?_)
+  obtain ⟨hc₂, ⟨rfl, hi₂⟩ | ⟨rfl, hi₂⟩⟩ := step_unlock hi₁' hg₁ rfl hr
+  · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨by omega, hc₂, hi₂⟩
+  · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
+    simp only [StateT.run_bind, bind_assoc, pure_bind]
+    refine WP.bind (WP.futexWakeC fun k₂ hk₂ => ⟨.work k .wake, hi₂, fun G₂ m₃ hg₂ hi₃ m' hw => ?_⟩)
+    obtain ⟨hc', hi'⟩ := wake_step hi₃ hg₂ (by decide) hw
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨by omega, hc', hi'⟩
+
+theorem cntStore_noErr {G : ThreadId → Gh} {m : Mem} {t k : Nat} {v : BitVec 32} (hi : Inv G m)
+    (hg : G t = .work k .holds) (hc : m.current = t) (e : Error) :
+    ((store (α := BitVec 32) 4 (cPtr.add 20) v).run m).run ≠ some (.error e) := by
+  obtain ⟨hs2, ht2, -⟩ := thr_work hi.thr hg
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 20) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+  obtain ⟨blk₁, hblk₁, -, -, hk, -⟩ := hi.blk
+  rw [hblk₀] at hblk₁; cases hblk₁
+  have hacc : m.access (cPtr.add 20) (Enc.size (BitVec 32)) 4 = pure (0, blk₀, 20) := he₀
+  exact MemM.noErr_of_run (store_run v hacc (by rw [hk]; decide)
+    (noRace_cnt hi htl (hc ▸ ⟨k, hg⟩))) e
+
+/-- Each thread does at most 2 increments. -/
+theorem cnt_le {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) : (G 0).count ≤ 2 ∧ (G 1).count ≤ 2 := by
+  obtain ⟨-, -, ⟨-, h0, h1⟩ | ⟨-, -, h0, h1, -⟩⟩ := hi.thr
+  · rw [h0, h1 1 (by decide)]; exact ⟨by decide, by decide⟩
+  · refine ⟨?_, ?_⟩
+    · rcases h0 with h0 | ⟨k, ph, hk, h0⟩ <;> rw [h0] <;> simp only [Gh.count] <;> omega
+    · rcases h1 with h1 | ⟨k, ph, hk, h1⟩ <;> rw [h1] <;> simp only [Gh.count] <;> omega
+
+/-! ## `work` -/
+
+/-- `work`'s loop invariant: thread `t` did `local1` increments and does not hold the mutex. -/
+def workInv (t : Nat) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = t ∧ s.local1.toNat ≤ 2 ∧ Inv (upd G t (.work s.local1.toNat .out)) m
+
+/-- `work`'s loop ends after 2 increments. -/
+def workPost (t : Nat) (r : workExit × workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  r.1 = .br3 ∧ m.current = t ∧ Inv (upd G t (.work 2 .out)) m
+
+theorem loop4_body (t : Nat) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (h : workInv t s G m d) :
+    proto.WP t ((work.loop4 cPtr).run s) (fun r G' m' d' =>
+      if work.again4 r.1 then workInv t r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : workLocals) => 0) s)
+      else workPost t r G' m' d') G m d := by
+  obtain ⟨hc, hle, hi⟩ := h
+  unfold work.loop4
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  have hgt : (upd G t (.work s.local1.toNat .out)) t = .work s.local1.toNat .out := upd_self _ _ _
+  obtain ⟨hs2, ht2, -⟩ := thr_work hi.thr hgt
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  split
+  · rename_i hlt
+    have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
+    simp only [StateT.run_bind, bind_assoc]
+    rw [show cPtr.add 0 = cPtr from rfl]
+    -- the read of `io`
+    refine WP.bind (WP.liftM (fun e he => (io_noErr hi htl e he).elim) fun v m₁ hl => ?_)
+    obtain ⟨hc₁, hi₁⟩ := step_io hi (hc ▸ htl) hc hl
+    refine ⟨by rw [(thr_work hi₁.thr hgt).1, hs2], ?_⟩
+    -- `lock`
+    refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t s.local1.toNat v G m₁ d hi₁ hc₁)))
+    rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₂⟩
+    have hg₂ : (upd G₂ t (.work s.local1.toNat .holds)) t = .work s.local1.toNat .holds := upd_self _ _ _
+    obtain ⟨hs₂, -, -⟩ := thr_work hi₂.thr hg₂
+    have htl₂ : m₂.current < m₂.threads.size := by rw [hc₂, hs₂]; exact ht2
+    have hcl := cnt_le hi₂
+    -- the read of the counter
+    refine WP.bind (WP.liftM (fun e he => (cntLoad_noErr hi₂ (by rw [hc₂]; exact ⟨_, hg₂⟩) htl₂ e he).elim)
+      fun v₂ m₃ hl₃ => ?_)
+    obtain ⟨hc₃, rfl, hi₃⟩ := step_cntLoad hi₂ ⟨_, hg₂⟩ hc₂ hl₃
+    refine ⟨by rw [(thr_work hi₃.thr hg₂).1, hs₂], ?_⟩
+    have hsum : ((upd G₂ t (.work s.local1.toNat .holds)) 0).count +
+        ((upd G₂ t (.work s.local1.toNat .holds)) 1).count ≤ 3 := by
+      have hct : ((upd G₂ t (.work s.local1.toNat .holds)) t).count = s.local1.toNat := by
+        rw [upd_self]; rfl
+      rcases (by omega : t = 0 ∨ t = 1) with rfl | rfl <;> omega
+    generalize hS : ((upd G₂ t (.work s.local1.toNat .holds)) 0).count +
+        ((upd G₂ t (.work s.local1.toNat .holds)) 1).count = S at hsum
+    have hS32 : (BitVec.ofNat 32 S).toNat = S := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+    -- the add
+    refine WP.bind (WP.callRC (fun e he => (add_one_noErr (by rw [hS32]; omega) e he).elim)
+      fun v₃ hadd => ?_)
+    have hv₃ := add_one_ok hadd (by rw [hS32]; omega)
+    rw [hS32] at hv₃
+    have hv₃' : v₃ = BitVec.ofNat 32 (S + 1) := by
+      apply BitVec.eq_of_toNat_eq; rw [hv₃, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+    subst hv₃'
+    -- the store
+    refine WP.bind (WP.liftM (fun e he => (cntStore_noErr hi₃ hg₂ hc₃ e he).elim) fun _ m₄ hs₄ => ?_)
+    rw [← hS] at hs₄
+    obtain ⟨hc₄, hi₄⟩ := step_cntStore hi₃ hg₂ hlt' hc₃ hs₄
+    rw [upd_upd] at hi₄
+    have hg₄ : (upd G₂ t (.work (s.local1.toNat + 1) .holds)) t = .work (s.local1.toNat + 1) .holds :=
+      upd_self _ _ _
+    refine ⟨by rw [(thr_work hi₄.thr hg₄).1, (thr_work hi₃.thr hg₂).1], ?_⟩
+    -- the read of `io`
+    have htl₄ : m₄.current < m₄.threads.size := by rw [hc₄, (thr_work hi₄.thr hg₄).1]; exact ht2
+    refine WP.bind (WP.liftM (fun e he => (io_noErr hi₄ htl₄ e he).elim) fun v₅ m₅ hl₅ => ?_)
+    obtain ⟨hc₅, hi₅⟩ := step_io hi₄ (hc₄ ▸ htl₄) hc₄ hl₅
+    refine ⟨by rw [(thr_work hi₅.thr hg₄).1, (thr_work hi₄.thr hg₄).1], ?_⟩
+    -- `unlock`
+    refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t _ v₅ G₂ m₅ d₂ hi₅ hc₅)))
+    rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
+    simp only [StateT.run_pure, pure_bind]
+    -- the next repeat
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.callRC (fun e he =>
+      (add_one_noErr (a := s.local1) (by have := s.local1.isLt; omega) e he).elim) fun i24 hadd' => ?_)
+    have h24 := add_one_ok (a := s.local1) hadd' (by have := s.local1.isLt; omega)
+    simp only [StateT.run_modify, StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [work.again4, ↓reduceIte]
+    refine ⟨⟨hc₆, by simp only; omega, by simp only; rw [h24]; exact hi₆⟩, .inl (by omega)⟩
+  · rename_i hge
+    have hge' : ¬ s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hge
+    have heq : s.local1.toNat = 2 := by omega
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [work.again4, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨rfl, hc, heq ▸ hi⟩
+
+theorem work_spec (t : Nat) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : Inv (upd G t (.work 0 .out)) m) (hc : m.current = t) :
+    proto.WP t (work cPtr) (fun _ G' m' _ => m'.current = t ∧ Inv (upd G' t (.work 2 .out)) m')
+      G m d := by
+  unfold work
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (workInv t) (fun _ => 0) (workPost t) (loop4_body t) _ G m d
+    ⟨hc, by decide, by simpa using hi⟩))
+  rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hc', hi'⟩
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  exact WP.pure' ⟨hc', hi'⟩
+
+/-- A thread's end of `work` (2 increments, not in the mutex): the kid ends, `main` goes to its
+join. -/
+theorem Inv.retagEnd {G : ThreadId → Gh} {m : Mem} {t : Nat} {g : Gh} (hi : Inv G m)
+    (hg : G t = .work 2 .out) (hend : (t = 1 ∧ g = .fin) ∨ (t = 0 ∧ g = .joins)) :
+    Inv (upd G t g) m := by
+  obtain ⟨hs2, ht2, -⟩ := thr_work hi.thr hg
+  have hgc : g.count = 2 := by rcases hend with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> rfl
+  refine hi.congrG ?_ (count_upd (by rw [hg, hgc]; rfl)) (hold_upd ?_) (wakes_upd ?_) ?_
+  · obtain ⟨h0, hc, ⟨h1, -, -⟩ | ⟨-, hr, g0, g1, g2⟩⟩ := hi.thr
+    · omega
+    refine ⟨h0, hc, .inr ⟨hs2, hr, ?_, ?_, fun u hu => ?_⟩⟩
+    · rcases hend with ⟨rfl, -⟩ | ⟨rfl, rfl⟩
+      · rw [upd_ne _ _ (by decide)]; exact g0
+      · rw [upd_self]; exact .inl rfl
+    · rcases hend with ⟨rfl, rfl⟩ | ⟨rfl, -⟩
+      · rw [upd_self]; exact .inl rfl
+      · rw [upd_ne _ _ (by decide)]; exact g1
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu
+  · rw [Hold, hg]
+    constructor
+    · rintro ⟨_, h⟩; rcases hend with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> cases h
+    · rintro ⟨_, h⟩; cases h
+  · rw [Wakes, hg]
+    constructor
+    · rintro ⟨_, h⟩; rcases hend with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> cases h
+    · rintro ⟨_, h⟩; cases h
+  · intro w hw
+    obtain ⟨-, ⟨k₁, hk₁⟩, -⟩ := hi.fq.2 w hw
+    have hwt : w.1 ≠ t := fun e => by rw [e, hg] at hk₁; cases hk₁
+    exact ⟨k₁, by rw [upd_ne _ _ hwt]; exact hk₁⟩
+
+/-- Every thread was spawned by `main`: the kid joined its own threads (none). -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : Inv G m) (hu : 0 < u) :
+    joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, -, h⟩ := hi.thr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have h0' : ∀ h : 0 < m.threads.size, (m.threads[0]'h).spawner = 0 := by
+    intro h
+    rw [Array.getElem?_eq_getElem h] at h0
+    rw [Option.some.inj h0]
+  rcases h with ⟨h1, -, -⟩ | ⟨h2, ⟨r₁, hr₁, hsp, -⟩, -⟩
+  · have : i = 0 := by omega
+    subst this
+    rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+  · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+    · rw [Array.getElem?_eq_getElem hi'] at hr₁
+      rw [Option.some.inj hr₁, hsp] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+/-- The kid: `work` on the `Counter`, then its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | work p =>
+    simp only [proto] at hg
+    split at hg
+    · rename_i hp
+      subst hp
+      cases hg
+      show proto.WP u ((fun _ => ()) <$> work cPtr) _ G _ d
+      refine WP.map (WP.mono ?_ (work_spec u G _ d
+        (by rw [← hgu, upd_same]; exact (hi : Inv G m).grow (grows_current m u)) rfl))
+      rintro _ G' m' _ ⟨-, hi'⟩
+      have hu1 : u = 1 := by
+        have := (thr_work hi'.thr (upd_self _ _ _)).2.1; unfold ThreadId at *; omega
+      subst hu1
+      refine ⟨.fin, ?_, rfl, fun _ => joinedAll_kid hi' hu⟩
+      have := hi'.retagEnd (upd_self _ _ _) (.inl ⟨rfl, rfl⟩)
+      rwa [upd_upd] at this
+    · cases hg
+  | producer p => cases hg
 
 end Sync.MutexCounter
