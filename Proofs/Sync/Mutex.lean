@@ -1440,9 +1440,6 @@ theorem wait_ok {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {e : BitVec 32} (
 
 /-! ## `lock` -/
 
-theorem upd_upd (G : ThreadId → Gh) (t : ThreadId) (a b : Gh) : upd (upd G t a) t b = upd G t b := by
-  funext u; by_cases h : u = t <;> simp [upd, h]
-
 /-- `lock`'s loop invariant: thread `t` does not hold the mutex. -/
 def lockInv (t k D : Nat) (_ : Io_Mutex_lockUncancelableLocals) (G : ThreadId → Gh) (m : Mem)
     (d : Nat) : Prop :=

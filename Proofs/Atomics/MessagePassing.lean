@@ -754,4 +754,83 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} {g : Gh} (hi : Inv G m)
     fp := by intro e he; unfold FpOk; rw [h1]; exact hi.fp e he
     own := hi.own }
 
+/-- Every thread was spawned by `main`: the writer joined its own threads (none). -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : Inv G m) (hu : 0 < u) :
+    joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, -, h⟩ := hi.thr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have h0' : ∀ h : 0 < m.threads.size, (m.threads[0]'h).spawner = 0 := by
+    intro h
+    rw [Array.getElem?_eq_getElem h] at h0
+    rw [Option.some.inj h0]
+  rcases h with ⟨h1, -, -⟩ | ⟨h2, ⟨r₁, hr₁, hsp, -⟩, -⟩
+  · have : i = 0 := by omega
+    subst this
+    rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+  · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+    · rw [Array.getElem?_eq_getElem hi'] at hr₁
+      rw [Option.some.inj hr₁, hsp] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+/-- The writer (thread 1): the read of `data`'s pointer, the write of 42, the read of `flag`'s
+pointer, the release store of 1 (a stop), its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | mpWriter p =>
+    simp only [proto] at hg
+    split at hg
+    · rename_i hp
+      subst hp
+      cases hg
+      have hi₀ : Inv G { m with current := u } := (hi : Inv G m).grow (grows_current m u)
+      obtain ⟨hs2, hu2⟩ := thr_of hi₀.thr (.inr (.inr (.inl hgu)))
+      have hu1 : u = 1 := by unfold ThreadId at *; omega
+      subst hu1
+      show proto.WP 1 ((fun _ => ()) <$> mpWriter cPtr) _ G _ d
+      refine WP.map ?_
+      unfold mpWriter
+      refine WP.bind ?_
+      rw [StateT.run'_eq]
+      refine WP.map ?_
+      simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+      rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
+      have ht₀ : ({ m with current := 1 } : Mem).current < ({ m with current := 1 } : Mem).threads.size := by
+        show 1 < _; rw [hs2]; decide
+      -- the pointer to `data`
+      refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₀ ht₀ (by decide) (by decide) hi₀.ctx.1 e he).elim)
+        fun q m₁ hl => ?_)
+      obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ (by decide) (by decide) hi₀.ctx.1 hl ht₀
+      refine ⟨rfl, ?_⟩
+      -- the write of 42
+      refine WP.bind (WP.liftM (fun e he => (data_noErr hi₁ hgu rfl e he).elim) fun _ m₂ hs => ?_)
+      obtain ⟨hc₂, hth₂, hi₂⟩ := step_data hi₁ hgu rfl hs
+      refine ⟨by rw [hth₂], ?_⟩
+      rw [show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+      have ht₂ : m₂.current < m₂.threads.size := by rw [hc₂, hth₂]; exact ht₀
+      -- the pointer to `flag`
+      refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₂ ht₂ (by decide) (by decide) hi₂.ctx.2 e he).elim)
+        fun q m₃ hl => ?_)
+      obtain ⟨rfl, rfl, hi₃⟩ := step_ctx hi₂ (by decide) (by decide) hi₂.ctx.2 hl ht₂
+      refine ⟨rfl, ?_⟩
+      -- the release store of 1
+      simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc, atomicStoreC]
+      rw [show fPtr.add 0 = fPtr from rfl]
+      refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.wrote, hi₃, fun G₁ m₄ hg₁ hi₄ c hcr => ?_⟩)
+      have hi₄' : Inv G₁ { m₄ with current := 1 } := (hi₄ : Inv G₁ m₄).grow (grows_current _ _)
+      have ht₄ : ({ m₄ with current := 1 } : Mem).current < ({ m₄ with current := 1 } : Mem).threads.size := by
+        show 1 < _; rw [(thr_of hi₄'.thr (.inr (.inr (.inr (.inl hg₁))))).1]; decide
+      refine WP.bind (WP.callMC (fun e he => (flagStore_noErr hi₄' ht₄ hcr e he).elim) fun _ m₅ hs₅ => ?_)
+      obtain ⟨hth₅, hi₅⟩ := step_flag hi₄' hg₁ rfl hs₅
+      refine ⟨by rw [hth₅], ?_⟩
+      refine WP.pure' (WP.pure' ?_)
+      exact ⟨.fin, hi₅, rfl, fun _ => joinedAll_kid hi₅ (by decide)⟩
+    · cases hg
+  | mpWriterRelaxed p => cases hg
+  | sb p => cases hg
+  | push p => cases hg
+  | ww p => cases hg
+
 end Atomics.MP
