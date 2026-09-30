@@ -997,15 +997,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
 
 /-! ## `main`'s steps -/
 
-theorem getElem!_push {α : Type} [Inhabited α] (xs : Array α) (v : α) (u : Nat) :
-    (xs.push v)[u]! = if u < xs.size then xs[u]! else if u = xs.size then v else default := by
-  by_cases hu : u < xs.size
-  · rw [getElem!_pos _ u (by simp; omega), getElem!_pos xs u hu, Array.getElem_push_lt hu]
-    simp [hu]
-  · by_cases he : u = xs.size
-    · subst he; rw [getElem!_pos _ _ (by simp)]; simp
-    · rw [getElem!_neg _ u (by simp; omega)]; simp [hu, he]
-
 theorem fork_eq {m m' : Mem} {c : ThreadId}
     (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
     c = m.threads.size ∧ m' = { m with

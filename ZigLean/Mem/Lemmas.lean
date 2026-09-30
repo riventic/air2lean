@@ -134,6 +134,12 @@ theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VCl
     VClock.le a c = true :=
   VClock.le_iff.mpr fun i => Nat.le_trans (VClock.le_iff.mp hab i) (VClock.le_iff.mp hbc i)
 
+/-- The empty clock (`default`, a thread with no access yet) is below every clock. -/
+theorem VClock.le_default (c : VClock) : VClock.le default c = true :=
+  VClock.le_iff.mpr fun i => by
+    show (#[] : Array Nat).getD i 0 ≤ _
+    simp
+
 /-- A clock with one component above `b`'s is not below `b`. -/
 theorem VClock.le_eq_false {a b : VClock} {i : ThreadId} (h : b.get i < a.get i) :
     VClock.le a b = false := by

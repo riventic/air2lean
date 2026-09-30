@@ -1088,4 +1088,112 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : T
   | sb p => cases hg
   | ww p => cases hg
 
+/-! ## `main`: spawns and joins -/
+
+/-- A step of `main` that changes only the threads, the clocks (not smaller; a new thread above
+`main`'s old clock) and ghost values (no pusher gets or leaves `done` or `cas`). -/
+theorem Inv.frame {G G' : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hthr : ThrOk G' m')
+    (hjoin : JoinLe G' m')
+    (hdone : ∀ u, (u = 1 ∨ u = 2) → (G' u = .done ↔ G u = .done))
+    (hcas : ∀ u h, (u = 1 ∨ u = 2) → G' u = .cas h → G u = .cas h)
+    (hld : G 0 = .ld → G' 0 = .ld) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
+    (hf : m'.footprint = m.footprint) (hsz : m.threads.size ≤ m'.threads.size)
+    (hcl : ∀ k : Nat, VClock.le (m.clocks[k]!) (m'.clocks[k]!) = true)
+    (hnew : ∀ u < m'.threads.size, m.threads.size ≤ u → VClock.le (m.clocks[0]!) (m'.clocks[u]!) = true) :
+    Inv G' m' where
+  thr := hthr
+  b0 := hi.b0.congr hb
+  b1 := hi.b1.congr hb
+  b2 := hi.b2.congr hb
+  ctx := by intro u hu; unfold U32At; rw [curBytes_congr hb, curBytes_congr hb]; exact hi.ctx u hu
+  head := by
+    rcases hi.head with ⟨ha', hu, hn⟩ | ⟨l, ha', hlb, hlo, hll, hlast, hc, vs, hvs, hs, hv, hd, hnx, hclk⟩
+    · exact .inl ⟨ha ▸ ha', by unfold U32At; rw [curBytes_congr hb]; exact hu,
+        fun u h1 h2 => hn u h1 ((hdone u h1).mp h2)⟩
+    · refine .inr ⟨l, ha ▸ ha', hlb, hlo, hll, by rw [curBytes_congr hb]; exact hlast, hc, vs, hvs, hs, hv,
+        fun u h1 => (hdone u h1).trans (hd u h1), fun j hj => ?_,
+        fun j hj => VClock.le_trans (hclk j hj) (hcl _)⟩
+      unfold NextAt U32At; rw [curBytes_congr hb]; exact hnx j hj
+  casn := fun u h hu hc => by
+    unfold NextAt U32At; rw [curBytes_congr hb]; exact hi.casn u h hu (hcas u h hu hc)
+  join := hjoin
+  fp := by
+    intro e he
+    rw [hf] at he
+    rcases hi.fp e he with ⟨hk, hbf⟩ | h | h | ⟨h1, h2, h3, h4⟩ | h
+    · refine .inl ⟨hk, fun u hu => ?_⟩
+      have h0 : 0 < m.threads.size := (Array.getElem?_eq_some_iff.mp hi.thr.1).1
+      by_cases hu' : u < m.threads.size
+      · exact VClock.le_trans (hbf u hu') (hcl u)
+      · exact VClock.le_trans (hbf 0 h0) (hnew u hu (by omega))
+    · exact .inr (.inl h)
+    · exact .inr (.inr (.inl h))
+    · exact .inr (.inr (.inr (.inl ⟨h1, h2, h3, hld h4⟩)))
+    · exact .inr (.inr (.inr (.inr h)))
+  own := by
+    intro e he
+    rw [hf] at he
+    obtain ⟨h1, h2⟩ := hi.own e he
+    exact ⟨Nat.lt_of_lt_of_le h1 hsz, VClock.le_trans h2 (hcl _)⟩
+
+/-- The clocks after a fork of `main`. -/
+theorem fork_cl {m : Mem} (hc : m.current = 0) (k : Nat) :
+    VClock.le (m.clocks[k]!) (((m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
+      (VClock.bump (m.clocks[m.current]!) m.current))[k]!) = true := by
+  rw [hc, getElem!_push]
+  have hsz : (m.clocks.set! 0 (VClock.bump (m.clocks[0]!) 0)).size = m.clocks.size := by simp
+  rw [hsz]
+  by_cases hk : k < m.clocks.size
+  · simp only [hk, ↓reduceIte]
+    rw [getElem!_set!_ite]
+    split
+    · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+    · exact VClock.le_refl _
+  · rw [getElem!_neg m.clocks k hk]; exact VClock.le_default _
+
+theorem fork_new {m : Mem} (hc : m.current = 0) (hcs : m.clocks.size = m.threads.size) (r : ThreadRec)
+    (u : Nat) (hu : u < (m.threads.push r).size) (hge : m.threads.size ≤ u) :
+    VClock.le (m.clocks[0]!) (((m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
+      (VClock.bump (m.clocks[m.current]!) m.current))[u]!) = true := by
+  simp only [Array.size_push] at hu
+  have : u = m.clocks.size := by omega
+  subst this
+  rw [hc, getElem!_push]
+  have hsz : (m.clocks.set! 0 (VClock.bump (m.clocks[0]!) 0)).size = m.clocks.size := by simp
+  simp only [hsz, Nat.lt_irrefl, ↓reduceIte]
+  exact VClock.le_bump _ _
+
+/-- `main`'s first spawn: pusher 1 is thread 1. -/
+theorem inv_fork1 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m) (hg : G 0 = .pre)
+    (hc : m.current = 0) (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
+    c = 1 ∧ m'.current = 0 ∧ Inv (upd (upd G 1 (.start 1)) 0 .mid) m' := by
+  rw [fork_run] at h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  obtain ⟨h0, hcs, hthr⟩ := hi.thr
+  obtain ⟨hs1, -, hnone⟩ : m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none := by
+    rcases hthr with h | ⟨-, -, g0, -⟩ | ⟨-, -, -, -, h0'⟩
+    · exact h
+    · rw [hg] at g0; cases g0
+    · rcases h0' with ⟨g0, -⟩ | ⟨g0, -⟩ | ⟨g0, -⟩ <;> rw [hg] at g0 <;> cases g0
+  refine ⟨hs1, hc, hi.frame ?_ ?_ (fun u hu => ?_) (fun u x hu hx => ?_) (fun h => by rw [hg] at h; cases h)
+    rfl rfl rfl (by simp) (fork_cl hc) (fork_new hc hcs _)⟩
+  · refine ⟨by rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
+      by simp [hcs],
+      .inr (.inl ⟨by simp [hs1], ?_, by rw [upd_self], by rw [upd_ne _ _ (by decide), upd_self]; exact .inl rfl,
+        fun u hu => ?_⟩)⟩
+    · simp only [Array.getElem?_push, hs1]; simp [hc]
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+      exact hnone u (by unfold ThreadId at *; omega)
+  · exact ⟨fun h => (by rw [upd_self] at h; rcases h with h | h <;> cases h),
+      fun h => (by rw [upd_self] at h; cases h)⟩
+  · rw [upd_ne _ _ (by rcases hu with rfl | rfl <;> decide)]
+    rcases hu with rfl | rfl
+    · rw [upd_self, hnone 1 (by decide)]; exact ⟨fun h => (by cases h), fun h => (by cases h)⟩
+    · rw [upd_ne _ _ (by decide), hnone 2 (by decide)]
+  · rw [upd_ne _ _ (by rcases hu with rfl | rfl <;> decide)] at hx
+    rcases hu with rfl | rfl
+    · rw [upd_self] at hx; cases hx
+    · rw [upd_ne _ _ (by decide), hnone 2 (by decide)] at hx; cases hx
+
 end Atomics.Stack
