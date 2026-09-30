@@ -1974,4 +1974,290 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
     rw [ht0] at h2 ⊢
     exact VClock.le_trans h2 (hcl0 0 (by decide))
 
+/-- `main` before its spawn: block 0, no atomic location, no waiter, one thread; each access so
+far is `main`'s write to block 0. -/
+structure Pre (m : Mem) : Prop where
+  blk : BlkOk m
+  at0 : m.atomics = #[]
+  q : m.waiters = #[]
+  thr : m.threads = #[{ spawner := 0, joined := true }]
+  clk : m.clocks.size = 1
+  cur : m.current = 0
+  fp : ∀ e ∈ m.footprint, e.block = 0 ∧ e.kind = .write ∧ e.tid = 0 ∧
+    VClock.le e.clock (m.clocks[0]!) = true
+
+/-- The bytes of block 0 after a write of `bs` at `o`: `bs` there, the same elsewhere. -/
+theorem curBytes_write0 {m : Mem} {blk : Block} {o o' : Nat} {bs : Array Byte}
+    (hblk : m.blocks[0]? = some blk) (hsz : blk.bytes.size = 24) (hw : o + bs.size ≤ 24)
+    (ho' : o' + 4 ≤ 24) :
+    curBytes (m.write 0 blk o bs) 0 o' 4 =
+      if o' = o ∧ bs.size = 4 then bs else
+      if o + bs.size ≤ o' ∨ o' + 4 ≤ o then curBytes m 0 o' 4 else curBytes (m.write 0 blk o bs) 0 o' 4 := by
+  have hb' : (m.write 0 blk o bs).blocks[0]? = some { blk with bytes := writeBytes blk.bytes o bs } := by
+    simp only [Mem.write]
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+      (Array.getElem?_eq_some_iff.mp hblk).1]
+  split
+  · rename_i h
+    obtain ⟨rfl, h4⟩ := h
+    unfold curBytes; rw [hb']
+    simp only [Option.map_some, Option.getD_some]
+    have := extract_writeBytes blk.bytes o' bs (by rw [hsz]; exact hw)
+    rwa [h4] at this
+  · split
+    · rename_i _ hd
+      unfold curBytes; rw [hb', hblk]
+      simp only [Option.map_some, Option.getD_some]
+      exact extract_writeBytes_disjoint _ _ _ _ _ (by rw [hsz]; exact hw) (by rw [hsz]; exact ho') hd
+    · rfl
+
+theorem pre_noRace {m : Mem} (h : Pre m) (o n : Nat) : NoRace m 0 o n .write :=
+  noRace_of fun e he _ _ _ => .inl (by rw [h.cur]; exact (h.fp e he).2.2.2)
+
+/-- `main`'s plain write to block 0 before its spawn keeps `Pre`. -/
+theorem pre_write {m : Mem} {blk : Block} {o : Nat} {bs : Array Byte} (h : Pre m)
+    (hblk : m.blocks[0]? = some blk) (hw : o + bs.size ≤ 24) :
+    Pre ((m.recordAt 0 o bs.size .write).write 0 blk o bs) := by
+  obtain ⟨⟨blk₁, hblk₁, hl, hsz, hk, hadr⟩, hat, hq, ht, hc, hcur, hfp⟩ := h
+  rw [hblk] at hblk₁; cases hblk₁
+  have hb' : ((m.recordAt 0 o bs.size .write).write 0 blk o bs).blocks[0]? =
+      some { blk with bytes := writeBytes blk.bytes o bs } := by
+    simp only [Mem.write, Mem.recordAt]
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+      (Array.getElem?_eq_some_iff.mp hblk).1]
+  have hc0 : ((m.recordAt 0 o bs.size .write).write 0 blk o bs).clocks[0]! =
+      VClock.bump (m.clocks[0]!) 0 := by
+    simp only [Mem.write, Mem.recordAt, hcur]; rw [getElem!_set!]; simp [hc]
+  refine ⟨⟨_, hb', hl, by show (writeBytes blk.bytes o bs).size = 24; rw [writeBytes_size _ _ _ (by omega), hsz], hk, hadr⟩,
+    hat, hq, ht, by simp [Mem.write, Mem.recordAt, hc], hcur, fun e he => ?_⟩
+  simp only [Mem.write, Mem.recordAt, Array.mem_push] at he
+  rw [hc0]
+  rcases he with he | rfl
+  · obtain ⟨h1, h2, h3, h4⟩ := hfp e he
+    exact ⟨h1, h2, h3, VClock.le_trans h4 (VClock.le_bump _ _)⟩
+  · exact ⟨rfl, rfl, hcur, by rw [hcur]; exact VClock.le_refl _⟩
+
+/-- The start: before its spawn `main` holds the invariant with the ghost value `pre`. -/
+def G0 : ThreadId → Gh := fun u => if u = 0 then .pre else .none
+
+theorem pre_inv {m : Mem} (h : Pre m) (h16 : U32At m 16 0) (h20 : U32At m 20 0) : Inv G0 m := by
+  have hG : ∀ u, ¬ Hold G0 u := by
+    rintro u ⟨k, hk⟩; unfold G0 at hk; split at hk <;> cases hk
+  refine {
+    thr := ⟨by rw [h.thr]; rfl, by rw [h.clk, h.thr]; rfl, .inl ⟨by rw [h.thr]; rfl, rfl,
+      fun u hu => by
+        unfold G0; split
+        · rename_i h; unfold ThreadId at *; omega
+        · rfl⟩⟩
+    blk := h.blk
+    cnt := h20
+    word := ⟨0, by decide, h16, ⟨fun _ => hG, fun _ => rfl⟩⟩
+    one := fun u _ hu => absurd hu (hG u)
+    loc := .inl ⟨h.at0, h16⟩
+    fq := fq_nil h.q
+    fp := fun e he => ?_
+    own := fun e he => ?_ }
+  · obtain ⟨h1, h2, h3, h4⟩ := h.fp e he
+    refine ⟨h1, .inl ⟨h2, fun u hu => ?_⟩⟩
+    have : u = 0 := by rw [h.thr] at hu; unfold ThreadId at *; simp at hu; omega
+    rw [this]; exact h4
+  · obtain ⟨-, -, h3, h4⟩ := h.fp e he
+    rw [h3]
+    exact ⟨by rw [h.thr]; decide, h4⟩
+
+/-- `main`'s store to block 0 before its spawn: `Pre` holds after it, the bytes of other ranges
+stay, and the bytes it wrote are the value's encoding. -/
+theorem pre_store {α : Type} [Enc α] {m m' : Mem} {o a : Nat} {v : α} (h : Pre m)
+    (hsz : o + (Enc.encode v).size ≤ 24) (ha : a = 4 ∨ a = 8) (hoa : o % a = 0)
+    (hs : ((store a ⟨some 0, (o : Int)⟩ v).run m).run = some (.ok ((), m'))) :
+    Pre m' ∧ (∀ o', o' + 4 ≤ 24 → (o + (Enc.encode v).size ≤ o' ∨ o' + 4 ≤ o) →
+      curBytes m' 0 o' 4 = curBytes m 0 o' 4) ∧
+      ((Enc.encode v).size = 4 → curBytes m' 0 o 4 = Enc.encode v) := by
+  obtain ⟨b, blk, o₁, hacc, -, rfl⟩ := store_ok hs
+  obtain ⟨blk₀, hblk₀, hbs, he₀⟩ := acc0 (o := o) (n := (Enc.encode v).size) (a := a) h.blk
+    hsz ha hoa
+  rw [he₀] at hacc
+  cases hacc
+  have hw : o + (Enc.encode v).size ≤ 24 := hsz
+  refine ⟨pre_write h hblk₀ hw, fun o' ho' hd => ?_, fun h4 => ?_⟩
+  · have := curBytes_write0 (m := m.recordAt 0 o (Enc.encode v).size .write) (o' := o')
+      (by simpa [Mem.recordAt] using hblk₀) hbs hw ho'
+    rw [this]
+    split
+    · rename_i hx; exfalso; obtain ⟨rfl, h4⟩ := hx; omega
+    · rfl
+  · have := curBytes_write0 (m := m.recordAt 0 o (Enc.encode v).size .write) (o' := o)
+      (by simpa [Mem.recordAt] using hblk₀) hbs hw (by omega)
+    rw [this]; simp [h4]
+
+theorem pre_store_noErr {α : Type} [Enc α] {m : Mem} {o a : Nat} {v : α} (h : Pre m)
+    (hsz : o + (Enc.encode v).size ≤ 24) (ha : a = 4 ∨ a = 8) (hoa : o % a = 0) (e : Error) :
+    ((store a ⟨some 0, (o : Int)⟩ v).run m).run ≠ some (.error e) := by
+  obtain ⟨blk₀, hblk₀, hbs, he₀⟩ := acc0 (o := o) (n := (Enc.encode v).size) (a := a) h.blk
+    hsz ha hoa
+  obtain ⟨blk₁, hblk₁, -, -, hk, -⟩ := h.blk
+  rw [hblk₀] at hblk₁; cases hblk₁
+  have hr := storeBytes_run (m := m) (p := ⟨some 0, (o : Int)⟩) (a := a) (bs := Enc.encode v)
+    (kind := .write) he₀ (by rw [hk]; decide) (pre_noRace h _ _)
+  exact MemM.noErr_of_run (x := store a ⟨some 0, (o : Int)⟩ v) hr e
+
+/-- `main`'s join of the kid is possible: the kid is thread 1, spawned by `main`, not joined. -/
+theorem join_ok {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
+    ∃ m', ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')) := by
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj⟩, -⟩⟩ := hi.thr
+  · rw [h0] at hp; cases hp
+  · exact join_run (m := { m with current := 0 }) hr hs hj
+
+/-- After the join: the counter holds 4, `main`'s clock is above every access, and `main`
+joined every thread. -/
+theorem join_final {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .joins)
+    (h1 : G 1 = .fin) (hj : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m'))) :
+    m'.current = 0 ∧ BlkOk m' ∧ U32At m' 20 (BitVec.ofNat 32 4) ∧ NoRace m' 0 20 4 .read ∧
+      joinedAll 0 m' ∧ m'.threads.size = 2 := by
+  obtain ⟨rec, hr, hjf, rfl⟩ := join_eq hj
+  obtain ⟨h00, hcs, ⟨-, hp, -⟩ | ⟨hs2, -, -, -, -⟩⟩ := hi.thr
+  · rw [h0] at hp; cases hp
+  have hcnt := hi.cnt
+  rw [h0, h1] at hcnt
+  have hc2 : m.clocks.size = 2 := by rw [hcs, hs2]
+  have hcl : ∀ u < 2, VClock.le (m.clocks[u]!) (((m.clocks.set! 0
+      (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[1]!))))[0]!) = true := by
+    intro u hu
+    rw [getElem!_set!]
+    simp only [true_and, show 0 < m.clocks.size by omega, ↓reduceIte]
+    rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+    · exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+    · exact VClock.le_merge_right _ _
+  refine ⟨rfl, hi.blk, hcnt, ?_, ?_, by simp [hs2]⟩
+  · refine noRace_of fun e he _ _ _ => .inl ?_
+    obtain ⟨ht, hle⟩ := hi.own e he
+    exact VClock.le_trans hle (hcl e.tid (by rw [← hs2]; exact ht))
+  · intro r hrm hsp
+    obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hrm
+    simp only [Array.size_set!] at hi'
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hi'] at hsp ⊢
+    split
+    · rfl
+    · rename_i hne
+      have : i = 0 := by omega
+      subst this
+      rw [Array.getElem?_eq_getElem (by omega)] at h00
+      rw [Option.some.inj h00]
+
+/-- `main` at its join: two threads. -/
+theorem size_joins {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
+    m.threads.size = 2 := by
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨hs, -⟩⟩ := hi.thr
+  · rw [h0] at hp; cases hp
+  · exact hs
+
+theorem enc_io (io : Io) : (Enc.encode io).size = 16 := by
+  show (Array.replicate 16 _).size = 16; simp
+
+theorem enc_mutex : (Enc.encode ({ state := { raw := Io_Mutex_State.unlocked } } : Io_Mutex)).size = 4 := by
+  decide +kernel
+
+theorem enc_mutex_eq :
+    Enc.encode ({ state := { raw := Io_Mutex_State.unlocked } } : Io_Mutex) = Enc.encode (0 : BitVec 32) := by
+  decide +kernel
+
+theorem enc_mutex_val :
+    (intOfBytes 32 (Enc.encode ({ state := { raw := Io_Mutex_State.unlocked } } : Io_Mutex))).run =
+      some (.ok 0) := by
+  rw [enc_mutex_eq]; exact intOfBytes_rmw 0
+
+theorem main_spec (io : Io) (d : Nat) :
+    proto.WP 0 (mutexCounter io) QM G0 { mem0 with current := 0 } d := by
+  unfold mutexCounter
+  -- the `Counter`: block 0
+  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₁ ha₁ => ?_)
+  obtain ⟨rfl, hm₁⟩ := alloc_ok ha₁
+  refine ⟨by rw [hm₁], ?_⟩
+  have hp₁ : Pre m₁ := by
+    rw [hm₁]
+    exact ⟨⟨_, rfl, rfl, rfl, rfl, by decide⟩, rfl, rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+  have hs1 : (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr := rfl
+  rw [hs1]
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  rw [show cPtr.add 0 = ⟨some 0, ((0 : Nat) : Int)⟩ from rfl,
+    show cPtr.add 16 = ⟨some 0, ((16 : Nat) : Int)⟩ from rfl,
+    show cPtr.add 20 = ⟨some 0, ((20 : Nat) : Int)⟩ from rfl]
+  -- `io`, the mutex, the counter
+  refine WP.bind (WP.liftM (fun e he =>
+    (pre_store_noErr hp₁ (by rw [enc_io]; decide) (.inr rfl) rfl e he).elim) fun _ m₂ hs₂ => ?_)
+  obtain ⟨hp₂, -, -⟩ := pre_store hp₁ (by rw [enc_io]; decide) (.inr rfl) rfl hs₂
+  refine ⟨by rw [hp₂.thr, hp₁.thr], ?_⟩
+  refine WP.bind (WP.liftM (fun e he =>
+    (pre_store_noErr hp₂ (by rw [enc_mutex]; decide) (.inl rfl) rfl e he).elim) fun _ m₃ hs₃ => ?_)
+  obtain ⟨hp₃, -, h16₃⟩ := pre_store hp₂ (by rw [enc_mutex]; decide) (.inl rfl) rfl hs₃
+  refine ⟨by rw [hp₃.thr, hp₂.thr], ?_⟩
+  refine WP.bind (WP.liftM (fun e he =>
+    (pre_store_noErr hp₃ (by rw [enc4]; decide) (.inl rfl) rfl e he).elim) fun _ m₄ hs₄ => ?_)
+  obtain ⟨hp₄, hk₄, h20₄⟩ := pre_store hp₃ (by rw [enc4]; decide) (.inl rfl) rfl hs₄
+  refine ⟨by rw [hp₄.thr, hp₃.thr], ?_⟩
+  have hi₄ : Inv G0 m₄ := by
+    refine pre_inv hp₄ ?_ ?_
+    · unfold U32At; rw [hk₄ 16 (by decide) (.inr (by decide)), h16₃ enc_mutex]; exact enc_mutex_val
+    · unfold U32At; rw [h20₄ (enc4 0)]; exact intOfBytes_rmw 0
+  have hG0 : upd G0 0 .pre = G0 := by
+    funext u; unfold upd G0; split <;> simp_all
+  -- the spawn
+  refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₄, fun G₁ m₅ hg₁ hi₅ =>
+    ⟨.work 0 .out, by simp [proto], fun child m₆ hf => ?_⟩⟩)
+  obtain ⟨rfl, hi₆⟩ := inv_fork ((hi₅ : Inv G₁ m₅).grow (grows_current m₅ 0)) hg₁ rfl hf
+  have hc₆ : m₆.current = 0 := by
+    simp only [fork_run, Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+    rw [← hf.2]
+  simp only [StateT.run_bind, bind_assoc]
+  -- `work`
+  refine WP.bind (WP.callC (WP.mono ?_ (work_spec 0 _ m₆ k hi₆ hc₆)))
+  rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
+  -- the join
+  have hi₇' := hi₇.retagEnd (upd_self _ _ _) (.inr ⟨rfl, rfl⟩)
+  rw [upd_upd] at hi₇'
+  refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨.joins, hi₇', fun G₃ m₈ hg₃ hi₈ =>
+    ⟨fun _ => ⟨by decide, by rw [size_joins hi₈ hg₃]; decide, rfl⟩, fun hfin =>
+      ⟨fun _ => join_ok hi₈ hg₃, fun m₉ hj => ?_⟩⟩⟩)
+  obtain ⟨hc₉, hbk₉, h20₉, hnr₉, hj₉, hs₉⟩ := join_final hi₈ hg₃ hfin hj
+  -- the read of the counter
+  obtain ⟨blk₉, hblk₉, -, he₉⟩ := acc0 (o := 20) (n := 4) (a := 4) hbk₉ (by decide) (.inl rfl) rfl
+  have hdec : (Enc.decode (blk₉.bytes.extract 20 (20 + Enc.size (BitVec 32))) : Result (BitVec 32)) =
+      pure (BitVec.ofNat 32 4) := by
+    have := h20₉; unfold U32At curBytes at this; rw [hblk₉] at this; exact this
+  have hacc : m₉.access ⟨some 0, ((20 : Nat) : Int)⟩ (Enc.size (BitVec 32)) 4 = pure (0, blk₉, 20) := he₉
+  refine WP.bind (WP.liftM (fun e he => (MemM.noErr_of_run (load_run hacc hdec hnr₉) e he).elim)
+    fun v m₁₀ hl => ?_)
+  rw [load_run hacc hdec hnr₉] at hl
+  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
+    Except.ok.injEq, Prod.mk.injEq] at hl
+  obtain ⟨rfl, rfl⟩ := hl
+  refine ⟨rfl, ?_⟩
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  -- the free of the `Counter`
+  obtain ⟨blk₁, hblk₁, hl₁, -⟩ := hbk₉
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₉.recordAt 0 20 (Enc.size (BitVec 32)) .read)
+    (by simpa [Mem.recordAt] using hblk₁) hl₁ e he).elim) fun _ m₁₁ hfr => ?_)
+  obtain ⟨b, blk, hb, hblk, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨rfl, hj₉⟩⟩
+
+/-! ## The results -/
+
+/-- **`mutexCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
+theorem mutexCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (mutexCounter io) mem0).run = some (.ok (v, m))) :
+    v = .ok 4 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+  exact hv
+
+/-- **No run of `mutexCounter` gives an error**: no data race on the counter, no deadlock at the
+futex, no panic, under every schedule. -/
+theorem mutexCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (mutexCounter io) mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+
 end Sync.MutexCounter
