@@ -1,4 +1,6 @@
 Io.Mutex.
 Io.Condition.
 Io.Event.
+Io.Semaphore.
+Io.RwLock.
 debug.assert

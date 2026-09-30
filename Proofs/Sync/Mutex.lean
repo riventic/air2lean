@@ -1792,6 +1792,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : T
       rwa [upd_upd] at this
     · cases hg
   | producer p => cases hg
+  | semWork p => cases hg
+  | writer p => cases hg
 
 /-! ## `main` -/
 

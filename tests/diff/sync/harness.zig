@@ -38,4 +38,6 @@ pub fn main() !void {
 
     try run(gpa, "mutexCounter", sync.mutexCounter);
     try run(gpa, "handoff", sync.handoff);
+    try run(gpa, "semaphoreCounter", sync.semaphoreCounter);
+    try run(gpa, "rwLockRead", sync.rwLockRead);
 }
