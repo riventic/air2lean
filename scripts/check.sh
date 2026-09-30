@@ -16,6 +16,10 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/
 #                         (not `asm` on a host that is not x86_64).
 #                         Also forwarded (via the environment) to scripts/diff.sh at the end.
+#   AIR2LEAN_OUT_DIR      If set: copy each example's dumped AIR-JSON to $AIR2LEAN_OUT_DIR/<ex>/,
+#                         before the golden check. CI uploads it when a job fails: the golden
+#                         files of another host OS (tests/golden/<version>/<ex>/air-<os>/) come
+#                         from there, and the translator makes that OS's Gen.lean from them.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -76,6 +80,10 @@ for ex in $examples; do
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
     echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2
     exit 1
+  fi
+  if [ -n "${AIR2LEAN_OUT_DIR:-}" ]; then
+    mkdir -p "$AIR2LEAN_OUT_DIR/$ex"
+    cp "$air_dir"/*.json "$AIR2LEAN_OUT_DIR/$ex/"
   fi
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
