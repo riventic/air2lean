@@ -153,39 +153,6 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 
 /-! ## Frame: steps that keep the invariant -/
 
-theorem getElem!_set! {α : Type} [Inhabited α] (xs : Array α) (i u : Nat) (v : α) :
-    (xs.set! i v)[u]! = if u = i ∧ i < xs.size then v else xs[u]! := by
-  by_cases hu : u < xs.size
-  · rw [getElem!_pos _ u (by simp [hu]), getElem!_pos xs u hu]
-    simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hu]
-    by_cases h : i = u
-    · subst h; simp [hu]
-    · simp [h, Ne.symm h]
-  · rw [getElem!_neg _ u (by simp [hu]), getElem!_neg xs u hu]
-    split
-    · rename_i h; exact absurd (h.1 ▸ h.2) hu
-    · rfl
-
-theorem VClock.merge_le {a b c : VClock} (ha : VClock.le a c = true) (hb : VClock.le b c = true) :
-    VClock.le (VClock.merge a b) c = true :=
-  VClock.le_iff.mpr fun i => by
-    rw [VClock.get_merge]
-    exact Nat.max_le.mpr ⟨VClock.le_iff.mp ha i, VClock.le_iff.mp hb i⟩
-
-/-- `m'` is `m` with clocks that are not smaller. -/
-structure Grows (m m' : Mem) : Prop where
-  threads : m'.threads = m.threads
-  blocks : m'.blocks = m.blocks
-  atomics : m'.atomics = m.atomics
-  footprint : m'.footprint = m.footprint
-  waiters : m'.waiters = m.waiters
-  csize : m'.clocks.size = m.clocks.size
-  cle : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true
-
-theorem curBytes_congr {m m' : Mem} (h : m'.blocks = m.blocks) (b o len : Nat) :
-    curBytes m' b o len = curBytes m b o len := by
-  unfold curBytes; rw [h]
-
 theorem lockLe_grow {G : ThreadId → Gh} {m m' : Mem} {c : VClock} (hg : Grows m m')
     (h : LockLe G m c) : LockLe G m' c :=
   ⟨fun u hu => VClock.le_trans (h.1 u hu) (hg.cle u), fun hn => by
@@ -220,32 +187,6 @@ theorem Inv.grow {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : Grows m
     rw [hg.footprint] at he
     obtain ⟨h1, h2⟩ := hi.own e he
     exact ⟨hg.threads ▸ h1, VClock.le_trans h2 (hg.cle _)⟩
-
-theorem Grows.trans {m₁ m₂ m₃ : Mem} (h₁ : Grows m₁ m₂) (h₂ : Grows m₂ m₃) : Grows m₁ m₃ :=
-  ⟨h₂.threads.trans h₁.threads, h₂.blocks.trans h₁.blocks, h₂.atomics.trans h₁.atomics,
-    h₂.footprint.trans h₁.footprint, h₂.waiters.trans h₁.waiters, h₂.csize.trans h₁.csize,
-    fun u => VClock.le_trans (h₁.cle u) (h₂.cle u)⟩
-
-theorem grows_current (m : Mem) (u : ThreadId) : Grows m { m with current := u } :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
-
-theorem grows_observe (m : Mem) (li id : Nat) : Grows m (observeM m li id) :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
-
-theorem grows_acq (m : Mem) (c : VClock) : Grows m (acqM m c) := by
-  refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [acqM], fun u => ?_⟩
-  simp only [acqM]
-  rw [getElem!_set!]
-  split
-  · rename_i h; rw [h.1]; exact VClock.le_merge_left _ _
-  · exact VClock.le_refl _
-
-theorem grows_loadM (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
-    Grows m (loadM m li ord msg) := by
-  unfold loadM
-  split
-  · exact (grows_observe _ _ _).trans (grows_acq _ _)
-  · exact grows_observe _ _ _
 
 /-! ## Ghost values: a change of one thread's ghost value -/
 
@@ -400,13 +341,13 @@ theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
   have hg : Grows m m₁ := by
     refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [m₁], fun u => ?_⟩
     simp only [m₁]
-    rw [getElem!_set!]
+    rw [getElem!_set!_ite]
     split
     · rename_i h; rw [h.1]; exact VClock.le_bump _ _
     · exact VClock.le_refl _
   have hi₁ := hi.grow hg
   have hcur : (m.recordAt b o len k).clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
-    simp only [Mem.recordAt]; rw [getElem!_set!]; simp [hcs]
+    simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs]
   exact {
     thr := hi₁.thr, blk := hi₁.blk, cnt := hi₁.cnt, word := hi₁.word, one := hi₁.one,
     loc := hi₁.loc, fq := hi₁.fq
@@ -745,14 +686,6 @@ theorem thrOk_upd {G : ThreadId → Gh} {m : Mem} {t k k' : Nat} {ph ph' : Ph} (
 theorem thrOk_congr {G : ThreadId → Gh} {m m' : Mem} (h : ThrOk G m) (ht : m'.threads = m.threads)
     (hc : m'.clocks.size = m.clocks.size) : ThrOk G m' := by
   unfold ThrOk; rw [ht, hc]; exact h
-
-theorem loadM_current (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
-    (loadM m li ord msg).current = m.current := by
-  unfold loadM; split <;> rfl
-
-theorem acqM_clock (m : Mem) (c : VClock) (h : m.current < m.clocks.size) :
-    (acqM m c).clocks[m.current]! = VClock.merge (m.clocks[m.current]!) c := by
-  simp only [acqM]; rw [getElem!_set!]; simp [h]
 
 /-- If no thread held the mutex, only `t` holds it after `t` takes it. -/
 theorem hold_take {G : ThreadId → Gh} {t k x : Nat} (hn : ∀ u, ¬ Hold G u)
@@ -1271,7 +1204,7 @@ theorem step_cntLoad {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {v : BitV
   cases hv'
   refine ⟨hc, rfl, hi.record htl ⟨rfl, .inr (.inr (.inr ⟨rfl, rfl, fun u hu => ?_, fun hn => ?_⟩))⟩⟩
   · rw [hi.one u t hu ⟨k, hg⟩, ← hc]
-    simp only [Mem.recordAt]; rw [getElem!_set!]; simp [hcs, VClock.le_refl]
+    simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
   · exact absurd ⟨k, hg⟩ (hn t)
 
 theorem cntLoad_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hh : Hold G m.current)
@@ -1361,7 +1294,7 @@ theorem step_cntStore {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} (hi : Inv G
     rw [enc4]
     refine hi.record htl ⟨rfl, .inr (.inr (.inr ⟨rfl, rfl, fun u hu => ?_, fun hn => ?_⟩))⟩
     · rw [hi.one u t hu ⟨k, hg⟩, ← hc]
-      simp only [Mem.recordAt]; rw [getElem!_set!]; simp [hcs, VClock.le_refl]
+      simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
     · exact absurd ⟨k, hg⟩ (hn t)
   refine ⟨hc, hir.cntWrite hblk₀ (enc4 _) (intOfBytes_rmw _) ?_ (count_succ hg ht2) (hold_upd ?_)
     (wakes_upd ?_) ?_⟩
@@ -2009,7 +1942,7 @@ theorem pre_write {m : Mem} {blk : Block} {o : Nat} {bs : Array Byte} (h : Pre m
       (Array.getElem?_eq_some_iff.mp hblk).1]
   have hc0 : ((m.recordAt 0 o bs.size .write).write 0 blk o bs).clocks[0]! =
       VClock.bump (m.clocks[0]!) 0 := by
-    simp only [Mem.write, Mem.recordAt, hcur]; rw [getElem!_set!]; simp [hc]
+    simp only [Mem.write, Mem.recordAt, hcur]; rw [getElem!_set!_ite]; simp [hc]
   refine ⟨⟨_, hb', hl, by show (writeBytes blk.bytes o bs).size = 24; rw [writeBytes_size _ _ _ (by omega), hsz], hk, hadr⟩,
     hat, hq, ht, by simp [Mem.write, Mem.recordAt, hc], hcur, fun e he => ?_⟩
   simp only [Mem.write, Mem.recordAt, Array.mem_push] at he
@@ -2105,7 +2038,7 @@ theorem join_final {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 =
   have hcl : ∀ u < 2, VClock.le (m.clocks[u]!) (((m.clocks.set! 0
       (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[1]!))))[0]!) = true := by
     intro u hu
-    rw [getElem!_set!]
+    rw [getElem!_set!_ite]
     simp only [true_and, show 0 < m.clocks.size by omega, ↓reduceIte]
     rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
     · exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)

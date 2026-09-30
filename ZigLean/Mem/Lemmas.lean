@@ -155,6 +155,12 @@ theorem VClock.le_merge_left (a b : VClock) : VClock.le a (VClock.merge a b) = t
 theorem VClock.le_merge_right (a b : VClock) : VClock.le b (VClock.merge a b) = true :=
   VClock.le_iff.mpr fun i => by rw [VClock.get_merge]; exact Nat.le_max_right _ _
 
+theorem VClock.merge_le {a b c : VClock} (ha : VClock.le a c = true) (hb : VClock.le b c = true) :
+    VClock.le (VClock.merge a b) c = true :=
+  VClock.le_iff.mpr fun i => by
+    rw [VClock.get_merge]
+    exact Nat.max_le.mpr ⟨VClock.le_iff.mp ha i, VClock.le_iff.mp hb i⟩
+
 /-- The padding a bump to `t` may append does not change any component already in `c`, and (if it
 extends the array) leaves every new component but `t` itself at `0`. -/
 theorem VClock.get_pad (c : VClock) (t i : ThreadId) (_h : i ≠ t) :

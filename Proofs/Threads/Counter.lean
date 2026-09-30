@@ -99,11 +99,6 @@ def Inv (G : ThreadId → Gh) (m : Mem) : Prop :=
 
 /-! ## Facts for "no error" (strict mode) -/
 
-/-- Block `b` is a live stack block of `size` bytes whose address is a multiple of `a`. -/
-def BlkAt (m : Mem) (b size a : Nat) : Prop :=
-  ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = size ∧
-    blk.kind = .stack ∧ blk.addr % a = 0
-
 /-- Each footprint entry is a read of a context (block 0), an atomic access to the counter
 (block 1), a plain write to blocks 0 or 1 that happened before every thread, or `main`'s access to
 the handles (block 2). -/
@@ -1519,11 +1514,6 @@ def PreB (m : Mem) : Prop :=
   BlkAt m 0 64 8 ∧ BlkAt m 1 4 4 ∧ BlkAt m 2 32 8 ∧
     ∀ e ∈ m.footprint, ((e.block = 0 ∨ e.block = 1) ∧ e.kind = .write) ∨ e.block = 2
 
-theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
-  unfold alignUp
-  rw [ite_eq_right (by omega)]
-  exact Nat.mul_mod_left _ _
-
 /-- Before the first spawn, no access races: every access happened before. -/
 theorem noRace_pre {m : Mem} {b o l : Nat} {k : AccessKind} (h : PreA m) : NoRace m b o l k :=
   Proto.noRace_of fun e he _ _ _ => .inl (by rw [h.cur]; exact h.fp e he)
@@ -1554,19 +1544,6 @@ theorem preB_store {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (h : Pr
     · exact .inl ⟨.inl rfl, rfl⟩
     · exact .inl ⟨.inr rfl, rfl⟩
     · exact .inr rfl
-
-/-- An access inside a block of `BlkAt`, aligned. -/
-theorem access_blk {m : Mem} {b size a' o len a : Nat} (h : BlkAt m b size a')
-    (hfit : o + len ≤ size) (hal : ∀ A : Nat, A % a' = 0 → (A + o) % a = 0) {p : Ptr}
-    (hp : p = ⟨some b, ((o : Nat) : Int)⟩) :
-    ∃ blk, m.blocks[b]? = some blk ∧ blk.kind ≠ .constGlobal ∧ blk.bytes.size = size ∧
-      m.access p len a = pure (b, blk, o) := by
-  obtain ⟨blk, hb, hl, hs, hk, ha⟩ := h
-  subst hp
-  refine ⟨blk, hb, by rw [hk]; decide, hs, ?_⟩
-  have := access_of (m := m) (p := ⟨some b, ((o : Nat) : Int)⟩) (n := len) (a := a) rfl hb hl
-    (by simp) (by simp; omega) (by simpa using hal _ ha)
-  simpa using this
 
 /-- A store before the first spawn gives no error. -/
 theorem store_noErr_pre {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b o : Nat} {blk : Block}

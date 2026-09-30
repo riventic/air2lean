@@ -774,6 +774,85 @@ theorem cas_chain_pos {n : Nat} {m : Mem} {li : Nat} {e : BitVec n} {c pos : Nat
   · rw [ALoc.hasRmwAfter_chain hc hne] at this; cases this
   · omega
 
+/-! ## Atomic store, from its result -/
+
+/-- The message that an atomic store of `v` writes (`atomicStoreAt`). -/
+def storeMsg {n : Nat} (m : Mem) (ord : AtomicOrder) (v : BitVec n) : Msg :=
+  let cl := m.clocks[m.current]!
+  { id := m.nextMsg, bytes := padTo (intSize n) (intBytes v), clock := cl,
+    relClock := if ord.isRel then cl else #[] }
+
+/-- `atomicStoreAt` at place `slot` of location `li` on `m` (after `storePrep`). -/
+def storeM {n : Nat} (m : Mem) (li slot : Nat) (ord : AtomicOrder) (v : BitVec n) : Mem :=
+  observeM (insertM m li slot (storeMsg m ord v)) li m.nextMsg
+
+theorem storePrep_ok {n align : Nat} {ord : AtomicOrder} {p : Ptr} {m m' : Mem} {li : Nat}
+    {slots : Array Nat}
+    (h : ((storePrep n ord align p).run m).run = some (.ok ((li, slots), m'))) :
+    ∃ b blk o, m.accessW p (intSize n) align = pure (b, blk, o) ∧
+      NoRace m b o (intSize n) .atomicWrite ∧
+      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run =
+        some (.ok (li, m')) ∧
+      slots = writeSlots m' li := by
+  unfold storePrep at h
+  obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨⟨b, blk, o⟩, m₂, ha, h₂⟩ := MemM.bind_ok h₁
+  obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+  dsimp only at h₂
+  obtain ⟨_, m₃, hr, h₃⟩ := MemM.bind_ok h₂
+  obtain ⟨hnr, rfl⟩ := recordAccess_ok hr
+  obtain ⟨li', m₄, hl, h₄⟩ := MemM.bind_ok h₃
+  obtain ⟨a₅, m₅, hg, h₅⟩ := MemM.bind_ok h₄
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨he, rfl⟩ := MemM.pure_ok h₅
+  simp only [Prod.mk.injEq] at he
+  obtain ⟨rfl, rfl⟩ := he
+  exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
+
+/-- An atomic store that took place `slot` of location `li`. -/
+theorem atomicStoreAt_ok {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {v : BitVec n}
+    {m m' : Mem} {x : Unit} (h : ((atomicStoreAt c ord align p v).run m).run = some (.ok (x, m'))) :
+    ∃ b blk o li m₁ slot, m.accessW p (intSize n) align = pure (b, blk, o) ∧
+      NoRace m b o (intSize n) .atomicWrite ∧
+      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run =
+        some (.ok (li, m₁)) ∧
+      (writeSlots m₁ li)[c]? = some slot ∧ m' = storeM m₁ li slot ord v := by
+  unfold atomicStoreAt at h
+  obtain ⟨⟨li, slots⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
+  obtain ⟨b, blk, o, ha, hnr, hl, rfl⟩ := storePrep_ok hp
+  refine ⟨b, blk, o, li, m₁, ?_⟩
+  dsimp only at h₁
+  split at h₁
+  · rename_i slot hslot
+    refine ⟨slot, ha, hnr, hl, hslot, ?_⟩
+    obtain ⟨a₂, m₂, hg, h₂⟩ := MemM.bind_ok h₁
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    obtain ⟨_, m₃, hi, h₃⟩ := MemM.bind_ok h₂
+    have := modify_ok hi
+    subst this
+    exact modify_ok h₃
+  · exact (MemM.throw_ok h₁).elim
+
+/-- A place that a store can take: after the floor, at most the end. -/
+theorem writeSlots_bounds {m : Mem} {li c s : Nat} (h : (writeSlots m li)[c]? = some s) :
+    floorPos m li < s ∧ s ≤ (m.atomics[li]!).msgs.size := by
+  have hm := Array.mem_of_getElem? h
+  unfold writeSlots at hm
+  simp only [Array.mem_filter, Array.mem_map, Array.mem_range] at hm
+  obtain ⟨⟨k, hk, rfl⟩, -⟩ := hm
+  omega
+
+/-- A store can always take the place at the end. -/
+theorem writeSlots_ne {m : Mem} {li : Nat} (h0 : 0 < (m.atomics[li]!).msgs.size) :
+    0 < (writeSlots m li).size := by
+  have hf := floorPos_lt h0
+  have hmem : (m.atomics[li]!).msgs.size ∈ writeSlots m li := by
+    unfold writeSlots
+    rw [Array.mem_filter]
+    exact ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
+  exact Array.size_pos_of_mem hmem
+
 /-! ## No error: from a step's error back to its cause -/
 
 namespace MemM
@@ -1205,6 +1284,50 @@ theorem casOpts_ne {n : Nat} {m : Mem} {li : Nat} {e : BitVec n}
     refine ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
   exact Array.size_pos_of_mem hmem
 
+theorem storePrep_noErr {n align : Nat} {ord : AtomicOrder} {p : Ptr} {m : Mem} {b o : Nat}
+    {blk : Block} (hacc : m.accessW p (intSize n) align = pure (b, blk, o))
+    (hnr : NoRace m b o (intSize n) .atomicWrite)
+    (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run ≠
+      some (.error e)) (e : Error) :
+    ((storePrep n ord align p).run m).run ≠ some (.error e) := by
+  intro h
+  unfold storePrep at h
+  rcases MemM.bind_err h with he1 | ⟨a₁, m₁, hg, h1⟩
+  · exact MemM.get_err he1
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h1 with he2 | ⟨r, m₂, ha, h2⟩
+  · have := MemM.lift_err he2; rw [hacc] at this; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at this
+  obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+  rw [hacc] at ha; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha; subst ha
+  rcases MemM.bind_err h2 with he3 | ⟨_, m₃, hr, h3⟩
+  · rw [recordAccess_run hnr] at he3; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at he3
+  obtain ⟨-, rfl⟩ := recordAccess_ok hr
+  rcases MemM.bind_err h3 with he4 | ⟨li, m₄, hl, h4⟩
+  · exact hloc e he4
+  rcases MemM.bind_err h4 with he5 | ⟨a₅, m₅, hg, h5⟩
+  · exact MemM.get_err he5
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  exact MemM.pure_err h5
+
+theorem atomicStoreAt_noErr {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {v : BitVec n}
+    {m : Mem} (hprep : ∀ e, ((storePrep n ord align p).run m).run ≠ some (.error e))
+    (hslot : ∀ li slots m₁, ((storePrep n ord align p).run m).run = some (.ok ((li, slots), m₁)) →
+      c < slots.size)
+    (e : Error) : ((atomicStoreAt c ord align p v).run m).run ≠ some (.error e) := by
+  intro h
+  unfold atomicStoreAt at h
+  rcases MemM.bind_err h with he1 | ⟨⟨li, slots⟩, m₁, hp, h1⟩
+  · exact hprep e he1
+  have hc := hslot li slots m₁ hp
+  dsimp only at h1
+  rw [Array.getElem?_eq_getElem hc] at h1
+  rcases MemM.bind_err h1 with he2 | ⟨a₂, m₂, hg, h2⟩
+  · exact MemM.get_err he2
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h2 with he3 | ⟨_, m₃, hi, h3⟩
+  · exact MemM.modify_err he3
+  · exact MemM.modify_err h3
+
 /-- What a join did (`Thread.join`). -/
 theorem join_eq {m m' : Mem} {tid : ThreadId}
     (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
@@ -1256,6 +1379,113 @@ theorem fork_run (m : Mem) :
       clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
         (VClock.bump (m.clocks[m.current]!) m.current),
       threads := m.threads.push { spawner := m.current, joined := false } })) := rfl
+
+/-! ## Frames: steps that change only clocks, `current` or `seen` -/
+
+theorem getElem!_set!_ite {α : Type} [Inhabited α] (xs : Array α) (i u : Nat) (v : α) :
+    (xs.set! i v)[u]! = if u = i ∧ i < xs.size then v else xs[u]! := by
+  by_cases hu : u < xs.size
+  · rw [getElem!_pos _ u (by simp [hu]), getElem!_pos xs u hu]
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hu]
+    by_cases h : i = u
+    · subst h; simp [hu]
+    · simp [h, Ne.symm h]
+  · rw [getElem!_neg _ u (by simp [hu]), getElem!_neg xs u hu]
+    split
+    · rename_i h; exact absurd (h.1 ▸ h.2) hu
+    · rfl
+
+/-- `m'` is `m` with clocks that are not smaller. -/
+structure Grows (m m' : Mem) : Prop where
+  threads : m'.threads = m.threads
+  blocks : m'.blocks = m.blocks
+  atomics : m'.atomics = m.atomics
+  footprint : m'.footprint = m.footprint
+  waiters : m'.waiters = m.waiters
+  csize : m'.clocks.size = m.clocks.size
+  cle : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true
+
+theorem curBytes_congr {m m' : Mem} (h : m'.blocks = m.blocks) (b o len : Nat) :
+    curBytes m' b o len = curBytes m b o len := by
+  unfold curBytes; rw [h]
+
+theorem Grows.trans {m₁ m₂ m₃ : Mem} (h₁ : Grows m₁ m₂) (h₂ : Grows m₂ m₃) : Grows m₁ m₃ :=
+  ⟨h₂.threads.trans h₁.threads, h₂.blocks.trans h₁.blocks, h₂.atomics.trans h₁.atomics,
+    h₂.footprint.trans h₁.footprint, h₂.waiters.trans h₁.waiters, h₂.csize.trans h₁.csize,
+    fun u => VClock.le_trans (h₁.cle u) (h₂.cle u)⟩
+
+theorem grows_current (m : Mem) (u : ThreadId) : Grows m { m with current := u } :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
+
+theorem grows_observe (m : Mem) (li id : Nat) : Grows m (observeM m li id) :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
+
+theorem grows_acq (m : Mem) (c : VClock) : Grows m (acqM m c) := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [acqM], fun u => ?_⟩
+  simp only [acqM]
+  rw [getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_merge_left _ _
+  · exact VClock.le_refl _
+
+theorem grows_loadM (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
+    Grows m (loadM m li ord msg) := by
+  unfold loadM
+  split
+  · exact (grows_observe _ _ _).trans (grows_acq _ _)
+  · exact grows_observe _ _ _
+
+theorem loadM_current (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
+    (loadM m li ord msg).current = m.current := by
+  unfold loadM; split <;> rfl
+
+theorem acqM_clock (m : Mem) (c : VClock) (h : m.current < m.clocks.size) :
+    (acqM m c).clocks[m.current]! = VClock.merge (m.clocks[m.current]!) c := by
+  simp only [acqM]; rw [getElem!_set!_ite]; simp [h]
+
+/-! ## Blocks -/
+
+/-- Block `b` is a live stack block of `size` bytes whose address is a multiple of `a`. -/
+def BlkAt (m : Mem) (b size a : Nat) : Prop :=
+  ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = size ∧
+    blk.kind = .stack ∧ blk.addr % a = 0
+
+theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
+  unfold alignUp
+  rw [ite_eq_right (by omega)]
+  exact Nat.mul_mod_left _ _
+
+/-- An access inside a block of `BlkAt`, aligned. -/
+theorem access_blk {m : Mem} {b size a' o len a : Nat} (h : BlkAt m b size a')
+    (hfit : o + len ≤ size) (hal : ∀ A : Nat, A % a' = 0 → (A + o) % a = 0) {p : Ptr}
+    (hp : p = ⟨some b, ((o : Nat) : Int)⟩) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.kind ≠ .constGlobal ∧ blk.bytes.size = size ∧
+      m.access p len a = pure (b, blk, o) := by
+  obtain ⟨blk, hb, hl, hs, hk, ha⟩ := h
+  subst hp
+  refine ⟨blk, hb, by rw [hk]; decide, hs, ?_⟩
+  have := access_of (m := m) (p := ⟨some b, ((o : Nat) : Int)⟩) (n := len) (a := a) rfl hb hl
+    (by simp) (by simp; omega) (by simpa using hal _ ha)
+  simpa using this
+
+/-- A write inside block `b` keeps `BlkAt` of every block. -/
+theorem BlkAt.write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (hfit : o + bs.size ≤ blk.bytes.size) {b' sz a : Nat}
+    (h : BlkAt m b' sz a) : BlkAt (m.write b blk o bs) b' sz a := by
+  obtain ⟨blk', hb', hl, hs, hkd, ha⟩ := h
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  simp only [BlkAt, Mem.write, Array.set!_eq_setIfInBounds]
+  by_cases hbb : b = b'
+  · subst hbb
+    rw [hb] at hb'; cases hb'
+    rw [Array.getElem?_setIfInBounds_self_of_lt hlt]
+    exact ⟨_, rfl, hl, by rw [writeBytes_size _ _ _ hfit]; exact hs, hkd, ha⟩
+  · rw [Array.getElem?_setIfInBounds_ne hbb]
+    exact ⟨blk', hb', hl, hs, hkd, ha⟩
+
+theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb : BlkAt m b sz a) :
+    BlkAt m' b sz a := by
+  unfold BlkAt; rw [h]; exact hb
 
 end Proto
 end Conc
