@@ -208,6 +208,9 @@ theorem Mem.Owns.write (ho : m.Owns m.current h) {b : BlockId} {blk : Block} {o 
 
 end Record
 
+theorem sep_left_comm {P Q R : Assn} {h : Heap} (hh : (P ∗ (Q ∗ R)) h) : (Q ∗ (P ∗ R)) h :=
+  sep_assoc (sep_mono (fun _ h => sep_comm h) (fun _ h => h) (sep_assoc' hh))
+
 /-! ## Thread triples -/
 
 /-- `Triple` for a thread (module doc). -/
@@ -300,9 +303,18 @@ theorem lift {φ : Prop} (h : φ → TTriple P c Q) : TTriple (⌜φ⌝ ∗ P) c
   obtain ⟨hφ, hp⟩ := sep_lift.mp hp
   exact h hφ m hP hF hd hm hp hc ho
 
+/-- A load's result fact stays in front of the frame. -/
+theorem frame_eq {v : α} {P' : Assn} (ht : TTriple P c (fun r => ⌜r = v⌝ ∗ P')) :
+    TTriple (P ∗ R) c (fun r => ⌜r = v⌝ ∗ (P' ∗ R)) :=
+  ht.frame.conseq (fun _ h => h) fun _ _ h => sep_assoc h
+
 /-- The frame rule with the frame on the left. -/
 theorem frameL (ht : TTriple P c Q) : TTriple (R ∗ P) c (fun v => R ∗ Q v) :=
   ht.frame.conseq (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
+
+theorem frameL_eq {v : α} {P' : Assn} (ht : TTriple P c (fun r => ⌜r = v⌝ ∗ P')) :
+    TTriple (R ∗ P) c (fun r => ⌜r = v⌝ ∗ (R ∗ P')) :=
+  ht.frameL.conseq (fun _ h => h) fun _ _ h => sep_left_comm h
 
 /-- A step whose post names its result `v` (a load), then the rest. -/
 theorem bind_eq {v : α} {P' : Assn} {f : α → MemM β} {R : β → Assn}

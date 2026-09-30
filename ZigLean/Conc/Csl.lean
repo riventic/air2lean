@@ -381,6 +381,26 @@ theorem WP.liftM_owned {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn}
   exact WP.bind (WP.liftMem_owned ht ho hc htl hp fun a m' hQ ho' hq hs hm' =>
     WP.pure' (h a m' hQ ho' hq hs hm'))
 
+/-- `WP.liftMem_owned` with the parts `upd own t h`: after the step they are `upd own t h'`. -/
+theorem WP.liftMem_upd {x : MemM α} {Pa : Assn} {Qa : α → Assn} {h : Heap}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa) (ho : Owned (upd own t h) m)
+    (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
+    (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
+      m'.threads = m.threads → Q a G m' n) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  WP.liftMem_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' ho' hq hs _ =>
+    k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads
+
+/-- `WP.liftM_owned` with the parts `upd own t h`. -/
+theorem WP.liftM_upd {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn} {h : Heap}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa)
+    (ho : Owned (upd own t h) m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa h)
+    (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
+      m'.threads = m.threads → Q (a, s) G m' n) :
+    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
+  WP.liftM_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' ho' hq hs _ =>
+    k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads
+
 end Proto
 end Conc
 
