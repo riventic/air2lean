@@ -1,0 +1,10 @@
+Thread.Mutex.lock
+Thread.Mutex.unlock
+Thread.Mutex.tryLock
+Thread.Mutex.FutexImpl.
+Thread.Condition.
+Thread.ResetEvent.
+Thread.WaitGroup.
+debug.assert
+Thread.Futex.Deadline.
+math.sub

@@ -14,6 +14,7 @@ import Proofs.Lists.Gen
 import Proofs.Threads.Gen
 import Proofs.Atomics.Gen
 import Proofs.Sync.Gen
+import Proofs.Threadsync.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 import Proofs.Layout.Gen
@@ -1045,6 +1046,14 @@ def runSync : IO Unit := do
   one "semaphoreCounter" Sync.semaphoreCounter
   one "rwLockRead" Sync.rwLockRead
 
+def runThreadsync : IO Unit := do
+  let one (name : String) (f : Zig.ConcM Threadsync.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "threadsync" name fun _ zig =>
+      pure (searchSchedules (runConcWith Threadsync.dispatch Threadsync.mem0 f (errStr · false)) zig)
+  one "mutexCounter" Threadsync.mutexCounter
+  one "handoff" Threadsync.handoff
+  one "waitGroup" Threadsync.waitGroup
+
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do
     let items ← getArr j
@@ -1166,6 +1175,8 @@ def main : IO Unit := do
   run "atomics" DiffTest.runAtomics
 
   run "sync" DiffTest.runSync
+
+  run "threadsync" DiffTest.runThreadsync
 
   run "floats" do
     DiffTest.runLerp

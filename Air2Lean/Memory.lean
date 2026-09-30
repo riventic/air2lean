@@ -174,6 +174,15 @@ inductive ThreadFn where
   | spawn | join
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
+  /-- `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2). -/
+  | threadFutexWait | threadFutexWake
+  /-- `Thread.Mutex.DarwinImpl.lock`, `.unlock`, `.tryLock` (0.15.2 on macOS): each is one call of
+  `os_unfair_lock_*`, a C function (the exporter does not name an `extern` function). -/
+  | osLock | osUnlock | osTryLock
+  /-- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`: a clock, which the model
+  does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
+  `.unspecified` at run time (the diff test pins that count), not a rejection. -/
+  | noClock
   deriving BEq, Repr
 
 /-- The `Thread` function that the function `name` is an instance of
@@ -185,6 +194,12 @@ def threadFn? (name : String) : Option ThreadFn :=
   | "Io.futexWait" => some .futexWait
   | "Io.futexWaitUncancelable" => some .futexWaitU
   | "Io.futexWake" => some .futexWake
+  | "Thread.Futex.wait" => some .threadFutexWait
+  | "Thread.Futex.wake" => some .threadFutexWake
+  | "Thread.Mutex.DarwinImpl.lock" => some .osLock
+  | "Thread.Mutex.DarwinImpl.unlock" => some .osUnlock
+  | "Thread.Mutex.DarwinImpl.tryLock" => some .osTryLock
+  | "time.Timer.start" | "time.Timer.read" | "Thread.Futex.timedWait" => some .noClock
   | _ => none
 
 /-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
@@ -200,12 +215,6 @@ def rejectedThreadFn? (name : String) : Option String :=
   else if base == "Thread.spinLoopHint" then
     some "Thread.spinLoopHint is outside the model (a spin-wait on a flag diverges, \
       `docs/std-models.md` §Thread model)"
-  else if base.startsWith "Thread.Futex." then
-    some "std.Thread.Futex is outside the fork-join subset"
-  else if base.startsWith "Thread.Mutex." || base.startsWith "Mutex." then
-    some "std.Thread.Mutex is outside the fork-join subset"
-  else if base.startsWith "Thread.Condition." then
-    some "std.Thread.Condition is outside the fork-join subset"
   else none
 
 /-- An op that only a function that uses memory has. -/
