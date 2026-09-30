@@ -110,6 +110,11 @@
 # (ac) Lean-runtime mutation, sync: a futex wake (ZigLean/Mem/Thread.lean's `futexWake`) wakes no
 #     thread. Detected by the proof build: `mutexCounter_safe` (Proofs/Sync/Mutex.lean; a waiter
 #     stays in the queue: a deadlock).
+# (ad) Lean-runtime mutation, atomics: a `cmpxchg` (ZigLean/Mem/Thread.lean's `casPrep`) can
+#     succeed on a message with an RMW after it: two pushes read the same head, one is lost.
+#     Detected by the proof build: `casOpts_pos` (ZigLean/Conc/Lemmas.lean), which
+#     `stackPush_spec` (Proofs/Atomics/Stack.lean) needs. The diff test does not see it: the
+#     newest message is still option 0.
 #
 # Usage: mutate.sh
 # Env:
@@ -752,6 +757,22 @@ else
   }
 
   proof_report "mutation (ac)" Proofs.Sync.Mutex
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (ad): a cmpxchg succeeds on a stale message (Lean runtime, proof build) ==" >&2
+if ! has_example atomics; then
+  echo "mutation (ad): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
+else
+  sed -i.bak 's/^    !(l.hasRmwAfter pos \&\& match/    !(false \&\& match/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^    !(false && match' "$thread_lean" || {
+    echo "error: mutation (ad): sed did not change casPrep" >&2
+    exit 1
+  }
+
+  proof_report "mutation (ad)" Proofs.Atomics.Stack
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi
