@@ -1047,4 +1047,191 @@ theorem step_unlock {G : ThreadId → Gh} {m m' : Mem} {t k c : Nat} {r : Io_Mut
   · obtain ⟨hcM, hiM⟩ := release_inv (ph := .wake) hi₁ hml hg hcu hwu hw (.inr ⟨rfl, rfl⟩) hm'
     exact ⟨hcM, .inr ⟨rfl, hiM⟩⟩
 
+/-! ## The futex -/
+
+/-- A thread in the futex queue: the other thread holds the mutex or is at the wake of its
+unlock, so it does not wait at a join, has not ended, and is not in the queue. -/
+theorem live {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (t : ThreadId) : proto.Live t G m := by
+  intro hw hall
+  obtain ⟨i, hi', -⟩ := Array.any_eq_true.mp hw
+  obtain ⟨-, -, v, -, h3⟩ := hi.fq.2 _ (Array.getElem_mem hi')
+  obtain ⟨k₂, ph, hk₂, hph⟩ : ∃ k ph, G v = .work k ph ∧ ph ≠ .wait := by
+    rcases h3 with ⟨⟨k₂, hk₂⟩, -⟩ | ⟨k₂, hk₂⟩
+    · exact ⟨k₂, _, hk₂, by decide⟩
+    · exact ⟨k₂, _, hk₂, by decide⟩
+  obtain ⟨hs2, hv2, -⟩ := thr_work hi.thr hk₂
+  rcases hall v (by rw [hs2]; exact hv2) with h | h | h
+  · change G v = .fin at h; rw [hk₂] at h; cases h
+  · obtain ⟨j, hj, hej⟩ := Array.any_eq_true.mp h
+    obtain ⟨-, ⟨k₃, hk₃⟩, -⟩ := hi.fq.2 _ (Array.getElem_mem hj)
+    have : (m.waiters[j]).1 = v := by simpa using hej
+    rw [this, hk₂] at hk₃
+    cases hk₃
+    exact hph rfl
+  · change G v = .joins at h; rw [hk₂] at h; cases h
+
+/-- The invariant with another futex queue. -/
+theorem Inv.withQ {G : ThreadId → Gh} {m : Mem} {q : Array (ThreadId × Ptr)} {z : Array ThreadId}
+    (hi : Inv G m) (hq : FqOk G { m with waiters := q, woken := z }) :
+    Inv G { m with waiters := q, woken := z } :=
+  { hi with fq := hq }
+
+/-- The invariant of a memory with the same fields but the futex queue. -/
+theorem Inv.frameQ {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (ht : m'.threads = m.threads)
+    (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
+    (hc : m'.clocks = m.clocks) (hq : FqOk G m') : Inv G m' where
+  thr := by unfold ThrOk; rw [ht, hc]; exact hi.thr
+  blk := by unfold BlkOk; rw [hb]; exact hi.blk
+  cnt := by unfold U32At; rw [curBytes_congr hb]; exact hi.cnt
+  word := by
+    obtain ⟨w, hw, hu, hh⟩ := hi.word
+    exact ⟨w, hw, by unfold U32At; rw [curBytes_congr hb]; exact hu, hh⟩
+  one := hi.one
+  loc := by unfold LocOk U32At; rw [ha, curBytes_congr hb]; exact hi.loc
+  fq := hq
+  fp := by
+    intro e he
+    rw [hf] at he
+    obtain ⟨hb0, h⟩ := hi.fp e he
+    refine ⟨hb0, ?_⟩
+    rcases h with ⟨hk, hle⟩ | h | h | ⟨ho, hl, hle₁, hle₂⟩
+    · exact .inl ⟨hk, by rw [ht, hc]; exact hle⟩
+    · exact .inr (.inl h)
+    · exact .inr (.inr (.inl h))
+    · exact .inr (.inr (.inr ⟨ho, hl, fun u hu => by rw [hc]; exact hle₁ u hu,
+        fun hn => by rw [ha]; exact hle₂ hn⟩))
+  own := by rw [hf, ht, hc]; exact hi.own
+
+/-- The invariant for other ghost values with the same shape, count and holder, and a futex
+queue that keeps `FqOk`. -/
+theorem Inv.congrF {G G' : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hthr : ThrOk G' m)
+    (hcnt : (G' 0).count + (G' 1).count = (G 0).count + (G 1).count)
+    (hh : ∀ u, Hold G' u ↔ Hold G u) (hfq : FqOk G' m) : Inv G' m where
+  thr := hthr
+  blk := hi.blk
+  cnt := hcnt ▸ hi.cnt
+  word := by
+    obtain ⟨w, hw, hu, hz⟩ := hi.word
+    refine ⟨w, hw, hu, hz.trans ?_⟩
+    constructor
+    · intro h u hu; exact h u ((hh u).mp hu)
+    · intro h u hu; exact h u ((hh u).mpr hu)
+  one u v hu hv := hi.one u v ((hh u).mp hu) ((hh v).mp hv)
+  loc := hi.loc
+  fq := hfq
+  fp := by
+    intro e he
+    obtain ⟨hb, h⟩ := hi.fp e he
+    refine ⟨hb, ?_⟩
+    rcases h with h | h | h | ⟨ho, hl, hle⟩
+    · exact .inl h
+    · exact .inr (.inl h)
+    · exact .inr (.inr (.inl h))
+    · exact .inr (.inr (.inr ⟨ho, hl, lockLe_congr hh hle⟩))
+  own := hi.own
+
+/-- Two threads: three different ids of threads in `work` do not exist. -/
+theorem two_threads {G : ThreadId → Gh} {m : Mem} {a b c ka kb kc : Nat} {pa pb pc : Ph}
+    (h : ThrOk G m) (ha : G a = .work ka pa) (hb : G b = .work kb pb) (hc : G c = .work kc pc)
+    (hab : a ≠ b) (hac : a ≠ c) (hbc : b ≠ c) : False := by
+  have := (thr_work h ha).2.1
+  have := (thr_work h hb).2.1
+  have := (thr_work h hc).2.1
+  omega
+
+/-- A thread at its futex wait is not in the queue: then no thread is, since the waker of a
+waiter would be the third thread. -/
+theorem q_empty {G : ThreadId → Gh} {m : Mem} {t k : Nat} (hi : Inv G m) (hg : G t = .work k .wait)
+    (hq : m.waiters.any (·.1 == t) = false) : m.waiters = #[] := by
+  apply Array.eq_empty_of_size_eq_zero
+  by_cases hne : m.waiters.size = 0
+  · exact hne
+  exfalso
+  have hi0 : 0 < m.waiters.size := Nat.pos_of_ne_zero hne
+  obtain ⟨-, ⟨k₁, hk₁⟩, v, hv, h3⟩ := hi.fq.2 _ (Array.getElem_mem hi0)
+  have hxt : m.waiters[0].1 ≠ t := by
+    intro e
+    have : m.waiters.any (·.1 == t) = true := Array.any_eq_true.mpr ⟨0, hi0, by simp [e]⟩
+    rw [hq] at this; cases this
+  obtain ⟨k₂, ph, hk₂, hph⟩ : ∃ k ph, G v = .work k ph ∧ ph ≠ .wait := by
+    rcases h3 with ⟨⟨k₂, hk₂⟩, -⟩ | ⟨k₂, hk₂⟩
+    · exact ⟨k₂, _, hk₂, by decide⟩
+    · exact ⟨k₂, _, hk₂, by decide⟩
+  have hvt : v ≠ t := fun e => by rw [e, hg] at hk₂; cases hk₂; exact hph rfl
+  exact two_threads hi.thr hk₁ hk₂ hg (Ne.symm hv) hxt hvt
+
+theorem fq_nil {G : ThreadId → Gh} {m : Mem} (h : m.waiters = #[]) : FqOk G m :=
+  ⟨by rw [h]; decide, fun w hw => by rw [h] at hw; simp at hw⟩
+
+/-- Thread `t` changes its place in `work`, and the queue is empty. -/
+theorem Inv.retagQ {G : ThreadId → Gh} {m : Mem} {t k k' : Nat} {ph ph' : Ph} (hi : Inv G m)
+    (hg : G t = .work k ph) (hk : k' = k) (hh : ph' = .holds ↔ ph = .holds)
+    (hq : m.waiters = #[]) : Inv (upd G t (.work k' ph')) m := by
+  subst hk
+  obtain ⟨-, -, hk2⟩ := thr_work hi.thr hg
+  refine hi.congrF (thrOk_upd hi.thr hg hk2) (count_upd (by rw [hg]; rfl)) (hold_upd ?_) (fq_nil hq)
+  rw [Hold, hg]
+  constructor
+  · rintro ⟨_, h⟩; cases h; exact ⟨k', by rw [hh.mp rfl]⟩
+  · rintro ⟨_, h⟩; cases h; exact ⟨k', by rw [hh.mpr rfl]⟩
+
+/-- `lock`'s futex wait at the mutex for `2`, by thread `t`, which is not in the queue. If it
+sleeps, the word is `2`, so the other thread holds the mutex, and the invariant holds with `t`
+in the queue. If it goes on, `t` is out of the queue. -/
+theorem wait_step {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} {e : BitVec 32} {b : Bool}
+    (hi : Inv G m) (hg : G t = .work k .wait) (hq : m.waiters.any (·.1 == t) = false)
+    (he : e = BitVec.ofNat 32 2)
+    (h : ((Thread.futexWait mPtr e).run { m with current := t }).run = some (.ok (b, m'))) :
+    if b then Inv G m' else (m'.current = t ∧ Inv (upd G t (.work k .out)) m') := by
+  have hq0 := q_empty hi hg hq
+  rcases futexWait_ok h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  · refine ⟨rfl, ?_⟩
+    have hi' : Inv G _ := hi.frameQ (m' := { m with current := t, woken := m.woken.erase t })
+      rfl rfl rfl rfl rfl (fq_nil hq0)
+    exact hi'.retagQ (ph' := .out) hg rfl (by decide) hq0
+  · -- sleeps: the word is `2`
+    obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 16) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+    have : ({ m with current := t } : Mem).access mPtr 4 4 = m.access ⟨some 0, ((16 : Nat) : Int)⟩ 4 4 := rfl
+    rw [this, he₀] at ha
+    cases ha
+    have h2 : U32At m 16 (BitVec.ofNat 32 2) := by
+      unfold U32At curBytes; rw [hblk₀]; exact he ▸ hv
+    obtain ⟨u, hu⟩ := hold_of_word hi h2 (by decide) (by decide)
+    have hut : u ≠ t := fun e => by obtain ⟨k', hk'⟩ := hu; rw [e, hg] at hk'; cases hk'
+    simp only [↓reduceIte]
+    refine hi.frameQ rfl rfl rfl rfl rfl ⟨by simp [hq0], fun w hw => ?_⟩
+    simp only [hq0, List.push_toArray, List.nil_append, Array.mem_toArray, List.mem_singleton] at hw
+    subst hw
+    exact ⟨rfl, ⟨k, hg⟩, u, hut, .inl ⟨hu, h2⟩⟩
+  · exact ⟨rfl, (hi.grow (grows_current m t)).retag (ph' := .out) hg rfl (by decide) (by decide) (.inr hq)⟩
+
+/-- `unlock`'s futex wake at the mutex, by thread `t` at its wake: the queue had at most the
+other thread, and now it is empty. -/
+theorem wake_step {G : ThreadId → Gh} {m m' : Mem} {t k n : Nat} (hi : Inv G m)
+    (hg : G t = .work k .wake) (hn : 1 ≤ n)
+    (h : ((Thread.futexWake mPtr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    m'.current = t ∧ Inv (upd G t (.work k .out)) m' := by
+  have hm' := modify_ok h
+  have hnil : m'.waiters = #[] := by
+    rw [hm']
+    show m.waiters.filter _ = #[]
+    have hsz := hi.fq.1
+    rcases (by omega : m.waiters.size = 0 ∨ m.waiters.size = 1) with h0 | h1
+    · rw [Array.eq_empty_of_size_eq_zero h0]; rfl
+    · obtain ⟨x, hx⟩ : ∃ x, m.waiters = #[x] := by
+        have : m.waiters.toList.length = 1 := by simpa using h1
+        obtain ⟨x, hx⟩ := List.length_eq_one_iff.mp this
+        exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
+      have hx2 : x.2 = mPtr := (hi.fq.2 x (by rw [hx]; simp)).1
+      have hex : (#[x].filter (·.2 == mPtr)).extract 0 n = #[x] := by
+        apply Array.toList_inj.mp
+        simp only [hx2, Array.toList_extract, Array.filter, List.extract]
+        simp [hx2]
+        exact List.take_of_length_le (by simp; omega)
+      rw [hx, hex]
+      simp
+  have hi' : Inv G m' := hi.frameQ (by rw [hm']) (by rw [hm']) (by rw [hm']) (by rw [hm'])
+    (by rw [hm']) (fq_nil hnil)
+  exact ⟨by rw [hm'], hi'.retagQ (ph' := .out) hg rfl (by decide) hnil⟩
+
 end Sync.MutexCounter

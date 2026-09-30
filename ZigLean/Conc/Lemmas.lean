@@ -1038,6 +1038,30 @@ theorem cmpxchgAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : 
     obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
     exact .inr ⟨b, v, rfl, ho, hd⟩
 
+/-- A futex wait of a woken thread goes on; it leaves `woken`. -/
+theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {m : Mem}
+    (hw : m.woken.contains m.current = true) :
+    ((Thread.futexWait p e).run m).run =
+      some (.ok (false, { m with woken := m.woken.erase m.current })) := by
+  unfold Thread.futexWait
+  simp only [hw, ↓reduceIte, StateT.run_bind, StateT.run_get, pure_bind]
+  simp [StateT.run, set, StateT.set, pure, StateT.pure, bind, ExceptT.bind,
+    ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run]
+
+/-- A futex wait of a thread that is not woken: the kernel reads `v`; the thread sleeps if
+`v = e`. -/
+theorem futexWait_run_go {p : Ptr} {e : BitVec 32} {m : Mem} {bid : BlockId} {blk : Block}
+    {o : Nat} {v : BitVec 32} (hw : m.woken.contains m.current = false)
+    (ha : m.access p 4 4 = pure (bid, blk, o))
+    (hv : intOfBytes 32 (blk.bytes.extract o (o + 4)) = pure v) :
+    ((Thread.futexWait p e).run m).run = some (.ok (decide (v = e),
+      if v = e then { m with waiters := m.waiters.push (m.current, p) } else m)) := by
+  unfold Thread.futexWait
+  simp only [hw, ha, Bool.false_eq_true, ↓reduceIte, StateT.run_bind, StateT.run_get, pure_bind]
+  split <;> simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set,
+    StateT.set, pure, StateT.pure, bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure,
+    ExceptT.bindCont, ExceptT.run]
+
 end Proto
 end Conc
 end Zig
