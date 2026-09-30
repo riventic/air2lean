@@ -81,17 +81,28 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 |---|---|
 | Protocol (`Conc.Proto`) | A ghost value per thread (only the proof sees it); an invariant `inv G m` on the ghost values of all threads and the memory; the ghost value `init tgt` of a new thread; `fin g` of a thread that ended. |
 | One thread (`Proto.Safe`) | Rely–guarantee: at each stop the thread picks its new ghost value and shows `inv`; when it goes on, it knows only `inv` and its own ghost value. A run between two stops keeps the number of threads. A `join` of thread `u` gives `fin (G u)`. |
-| Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callRC`, `pickC`, `spawnC`, `joinC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
-| Strict mode | No error leaf; a `MemM` step needs a proof that it does not throw (`liftM`/`callMC`/`callRC` take it); a `join` must be of a later thread that exists and was not joined, so a thread that waits waits for a later one, and the thread ids go up: no deadlock (`ready_ne`); a `pick` knows its choice is in range; no futex wait. A spawned thread and `main` must end with every thread they spawned joined (`joinedAll`). |
-| No error, from its cause | `MemM.bind_err`, `lift_err` and the others go from an error back to the step that threw it; `noRace_of` (every overlapping access happened before, or does not race by its kind), `join_run`, `locIdx_noErr`, `loadPrep_noErr`, `atomicRmwAt_noErr`, `atomicLoadAt_noErr`, `optCount_le_one`. |
-| A step from its result | In partial correctness a step can fail (a race is `.illegal`), so the lemmas go from a result back to the memory: `load_ok`, `store_ok`, `storeUndef_ok`, `alloc_ok`, `free_ok`, `locIdx_found`/`locIdx_new`, `atomicRmwAt_ok`, `atomicLoadAt_ok`. |
-| RC11 at an RMW chain (`ALoc.Chain`) | An RMW reads only the newest message (`readOpts_chain`). A read whose clock is `≥` the newest message's clock reads only it (`readOpts_floor`, `le_floorPos`). |
+| Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callRC`, `callC`, `pickC`, `spawnC`, `joinC`, `futexWaitC`, `futexWakeC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
+| Strict mode | No error leaf; a `MemM` step needs a proof that it does not throw (`liftM`/`callMC`/`callRC` take it); a `join` must be of a later thread that exists and was not joined, and `Proto.joins` holds of the joining thread's ghost value; a `pick` knows its choice is in range. A spawned thread and `main` must end with every thread they spawned joined (`joinedAll`). |
+| Futex | The futex queue is in the memory (`Mem.waiters`, `Mem.woken`), so `inv` can name it. A wait begins with the thread not in the queue; a wait that sleeps keeps `inv` with the thread's ghost value. In strict mode each wait keeps `Live`: if the thread sleeps, not every thread has ended (`fin`), sleeps, or waits at a join (`joins`). |
+| No deadlock (`ready_ne`) | A thread that cannot go on waits at a join of a later thread that has not ended, or sleeps at a futex. The chain of joins goes up the thread ids, so it ends at a sleeping thread, and its `Live` excludes that every thread waits. |
+| No error, from its cause | `MemM.bind_err`, `lift_err` and the others go from an error back to the step that threw it; `noRace_of` (every overlapping access happened before, or does not race by its kind), `join_run`, `locIdx_noErr`, `loadPrep_noErr`, `casPrep_noErr`, `atomicRmwAt_noErr`, `atomicLoadAt_noErr`, `cmpxchgAt_noErr`, `atomicRmwAs_noErr`, `cmpxchgAs_noErr`, `alloc_noErr`, `free_noErr`, `optCount_le_one`, `optCount_eq`; `futexWait_run_woken`/`futexWait_run_go` (a futex wait's run). |
+| A step from its result | In partial correctness a step can fail (a race is `.illegal`), so the lemmas go from a result back to the memory: `load_ok`, `store_ok`, `storeUndef_ok`, `alloc_ok`, `free_ok`, `locIdx_found`/`locIdx_new`, `atomicRmwAt_ok`, `atomicLoadAt_ok`, `cmpxchgAt_ok`, `atomicRmwAs_ok`, `cmpxchgAs_ok`, `fork_run`, `join_eq`, `futexWait_ok`. |
+| RC11 at an RMW chain (`ALoc.Chain`) | An RMW reads only the newest message (`readOpts_chain`, `rmw_chain_pos`). A `cmpxchg` that reads the expected value reads the newest message (`cas_chain_pos`); it can always read it (`casOpts_ne`). A read whose clock is `≥` the newest message's clock reads only it (`readOpts_floor`, `le_floorPos`). |
 
 `Proofs/Threads/Counter.lean` proves `parallelCounter n = 4 * n` under every schedule. The invariant: the counter's messages are an RMW chain, and their number minus 1 is the sum of the threads' increments (their ghost values); each message's clock is `≤` the clock of some thread, and a thread that `main` joined has a clock `≤` `main`'s; each context holds the counter's address and `n`. After the 4 joins `main`'s clock is `≥` every message's clock, so its load reads the newest message.
 
 `parallelCounter_safe` proves in strict mode that no run of `parallelCounter` gives an error. The protocol adds `Ex`: the three stack blocks are live with their sizes and aligned addresses; each footprint entry is a read of a context, an atomic access to the counter, a plain write that happened before every thread (the spawn copies `main`'s clock), or `main`'s access to the handles; every thread was spawned by `main`; the handle slots hold the thread ids. So no access races (`noRace_b0`, `noRace_b1`, `noRace_b2`), and every join is of thread `k + 1`, spawned and not yet joined.
 
-Not yet (`PLAN.md` §Next): deadlock freedom with futex waits (the mutex counter); assertions on what a thread has seen, for release/acquire (message passing) and relaxed atomics.
+`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error (`mutexCounter_safe`). The ghost value of a thread in `work` is its count and its place in the mutex code (`out`, `wait`, `holds`, `wake`). The invariant (`Inv`):
+
+- The mutex word is `0` if no thread holds the mutex, else `1` or `2`; at most one thread holds it. The mutex's messages are an RMW chain of `0`, `1` and `2`, so an RMW and a successful `cmpxchg` read the newest message.
+- The counter holds the sum of the counts.
+- No data race (`FpOk`, `LockLe`): each access to the counter happened before the holder's clock, or, if no thread holds the mutex, before the release clock of the newest message. An unlock is a release RMW and a lock an acquire RMW, so the next holder's clock is above each access.
+- No deadlock (`FqOk`, `live`): a thread in the futex queue waits at the mutex, and the other thread holds the mutex with the word `2` (so its unlock wakes) or is at that wake.
+
+The steps of the std code (`step_cas`, `step_xlock`, `step_unlock`, `wait_step`, `wake_step`) keep the invariant; `lock_spec`, `unlock_spec` and `work_spec` are the specs of the translated functions.
+
+Not yet (`PLAN.md` §Next): assertions on what a thread has seen, for release/acquire (message passing) and relaxed atomics.
 
 ## Proved examples
 
@@ -100,6 +111,7 @@ Not yet (`PLAN.md` §Next): deadlock freedom with futex waits (the mutex counter
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
 | `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
+| `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed) |
 
 `append` of `ArrayListUnmanaged` has no proof. Its `@memcpy` alias check compares the addresses of the old and the new block. A proof of that check needs a fact that no assertion can state: every block ends below `Mem.nextAddr`.

@@ -107,6 +107,9 @@
 #     no longer happens after its spawner's writes. Detected by the proof build:
 #     `parallelCounter_safe` (Proofs/Threads/Counter.lean; a kid's read of its context would race).
 #     The diff test does not see it: a schedule with a race matches any Zig result.
+# (ac) Lean-runtime mutation, sync: a futex wake (ZigLean/Mem/Thread.lean's `futexWake`) wakes no
+#     thread. Detected by the proof build: `mutexCounter_safe` (Proofs/Sync/Mutex.lean; a waiter
+#     stays in the queue: a deadlock).
 #
 # Usage: mutate.sh
 # Env:
@@ -733,6 +736,22 @@ else
   }
 
   proof_report "mutation (ab)" Proofs.Threads.Counter
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (ac): a futex wake wakes no thread (Lean runtime, proof build) ==" >&2
+if ! has_example sync; then
+  echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
+else
+  sed -i.bak 's/^  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)$/  let woke : Array ThreadId := #[]/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^  let woke : Array ThreadId := #\[\]$' "$thread_lean" || {
+    echo "error: mutation (ac): sed did not change futexWake" >&2
+    exit 1
+  }
+
+  proof_report "mutation (ac)" Proofs.Sync.Mutex
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi

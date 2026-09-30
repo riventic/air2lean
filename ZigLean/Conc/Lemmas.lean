@@ -5,8 +5,9 @@ import ZigLean.Mem.Lemmas
 # Rules for generated concurrent code
 
 The `WP` rules of `ZigLean/Conc/Logic.lean` for the steps that `Emit.lean` writes in a
-concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`), the sync ops
-(`pickC`, `spawnC`, `joinC`), and `run'` of a body. A proof unfolds the generated code, applies
+concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`), a call of a
+concurrent function (`callC`), the sync ops (`pickC`, `spawnC`, `joinC`, `futexWaitC`,
+`futexWakeC`), and `run'` of a body. A proof unfolds the generated code, applies
 these rules one step at a time, and uses the `*_ok` lemmas for what a `MemM` step that gave a
 result did: with partial correctness a step can fail (a race is `.illegal`), so the lemmas go
 from a result back to the memory. In strict mode each step also needs a proof that it does not

@@ -4,11 +4,10 @@ import Proofs.Sync.Gen
 # Proofs about `examples/sync/sync.zig`
 
 `Io.Mutex` is translated from Zig 0.16.0's std code; the futex under it is the model
-(`ZigLean/Conc/Sched.lean`). Its lock has loops (`partial_fixpoint`), which the kernel does not
-run, so a spec of `mutexCounter` over all schedules is milestone T4 (3) (`PLAN.md`); the diff test
-checks it against the compiled Zig over the schedules. This file has the steps without a loop,
-computed by the kernel (`decide +kernel`) under the sequentially consistent schedule, and the
-deadlock rule of the model.
+(`ZigLean/Mem/Thread.lean`, `ZigLean/Conc/Sched.lean`). The spec of `mutexCounter` over all
+schedules is in `Proofs/Sync/Mutex.lean`. This file has the steps without a loop, computed by the
+kernel (`decide +kernel`) under the sequentially consistent schedule, and the deadlock rule of
+the model.
 -/
 
 open Zig Sync
