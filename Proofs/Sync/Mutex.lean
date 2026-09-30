@@ -1509,4 +1509,143 @@ theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} (hi : Inv G m)
       obtain ⟨w, hw, rfl⟩ := msg_val hml hpl hold
       exact ⟨_, ofBits_st hw⟩
 
+/-- The futex wait at the mutex does not throw: block 0 is live, and the word is a `u32`. -/
+theorem wait_ok {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {e : BitVec 32} (hi : Inv G m) :
+    ∃ b m', ((Thread.futexWait mPtr e).run { m with current := t }).run = some (.ok (b, m')) := by
+  by_cases hw : ({ m with current := t } : Mem).woken.contains ({ m with current := t } : Mem).current = true
+  · exact ⟨_, _, futexWait_run_woken hw⟩
+  · obtain ⟨blk, hblk, -, he₀⟩ := acc0 (o := 16) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+    obtain ⟨w, -, hu, -⟩ := hi.word
+    unfold U32At curBytes at hu
+    rw [hblk] at hu
+    simp only [Option.map_some, Option.getD_some] at hu
+    exact ⟨_, _, futexWait_run_go (by simpa using hw) he₀ hu⟩
+
+/-! ## `lock` -/
+
+theorem upd_upd (G : ThreadId → Gh) (t : ThreadId) (a b : Gh) : upd (upd G t a) t b = upd G t b := by
+  funext u; by_cases h : u = t <;> simp [upd, h]
+
+theorem ptr_c16 : (cPtr.add 16).add 0 = mPtr := rfl
+
+/-- `lock`'s loop invariant: thread `t` does not hold the mutex. -/
+def lockInv (t k : Nat) (_ : Io_Mutex_lockUncancelableLocals) (G : ThreadId → Gh) (m : Mem)
+    (_ : Nat) : Prop :=
+  m.current = t ∧ Inv (upd G t (.work k .out)) m
+
+/-- `lock`'s loop ends when thread `t` holds the mutex. -/
+def lockPost (t k : Nat) (r : Io_Mutex_lockUncancelableExit × Io_Mutex_lockUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  r.1 = .br22 ∧ m.current = t ∧ Inv (upd G t (.work k .holds)) m
+
+/-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
+the futex (a stop, so the depth gets smaller). -/
+theorem loop23_body (t k : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : lockInv t k s G m d) :
+    proto.WP t ((Io_Mutex_lockUncancelable.loop23 (cPtr.add 16) io).run s) (fun r G' m' d' =>
+      if Io_Mutex_lockUncancelable.again23 r.1 then lockInv t k r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Mutex_lockUncancelableLocals) => 0) s)
+      else lockPost t k r G' m' d') G m d := by
+  obtain ⟨hc, hi⟩ := h
+  unfold Io_Mutex_lockUncancelable.loop23
+  simp only [StateT.run_bind, pure_bind, bind_assoc, atomicRmwAsC]
+  rw [show ((cPtr.add 16).add 0).add 0 = mPtr from rfl]
+  refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.work k .out, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hi₁' : Inv G₁ { m₁ with current := t } := hi₁.grow (grows_current _ _)
+  obtain ⟨hs₁, ht₁, hkk⟩ := thr_work hi₁'.thr hg₁
+  have htl : ({ m₁ with current := t } : Mem).current <
+      ({ m₁ with current := t } : Mem).threads.size := by
+    show t < _; rw [hs₁]; exact ht₁
+  refine WP.bind (WP.callMC (fun e he => (xchg_noErr hi₁' htl hcr e he).elim) fun r m₂ hr => ?_)
+  obtain ⟨hc₂, ⟨rfl, hi₂⟩ | ⟨hr₂, hi₂⟩⟩ := step_xlock hi₁' hg₁ rfl hr
+  · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
+    simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [Io_Mutex_lockUncancelable.again23, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨rfl, hc₂, hi₂⟩
+  · refine ⟨by rw [(thr_work hi₂.thr hg₁).1, hs₁], ?_⟩
+    have hne : (r != Io_Mutex_State.unlocked) = true := by simpa using hr₂
+    simp only [hne, ↓reduceIte, StateT.run_bind, bind_assoc]
+    refine WP.bind (WP.futexWaitC fun k₂ hk₂ => ⟨.work k .wait,
+      hi₂.retag hg₁ rfl (by decide) (by decide) (.inl rfl), fun G₂ m₃ hg₂ hi₃ =>
+      ⟨fun _ => live hi₃ t, fun hq => ⟨fun _ => wait_ok hi₃, fun b m' hw => ?_⟩⟩⟩)
+    have hs := wait_step hi₃ hg₂ hq rfl hw
+    cases b
+    · simp only [Bool.false_eq_true, ↓reduceIte] at hs ⊢
+      obtain ⟨hc', hi'⟩ := hs
+      simp only [StateT.run_pure, pure_bind]
+      refine WP.pure' ?_
+      simp only [Io_Mutex_lockUncancelable.again23, ↓reduceIte]
+      exact ⟨⟨hc', hi'⟩, .inl (by omega)⟩
+    · simp only [↓reduceIte] at hs ⊢
+      exact hs
+
+theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : Inv (upd G t (.work k .out)) m) (hc : m.current = t) :
+    proto.WP t (Io_Mutex_lockUncancelable (cPtr.add 16) io)
+      (fun _ G' m' _ => m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d := by
+  unfold Io_Mutex_lockUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc, cmpxchgAsC]
+  rw [show ((cPtr.add 16).add 0).add 0 = mPtr from rfl]
+  refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.work k .out, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hi₁' : Inv G₁ { m₁ with current := t } := hi₁.grow (grows_current _ _)
+  obtain ⟨hs₁, ht₁, hkk⟩ := thr_work hi₁'.thr hg₁
+  have htl : ({ m₁ with current := t } : Mem).current < ({ m₁ with current := t } : Mem).threads.size := by
+    show t < _; rw [hs₁]; exact ht₁
+  refine WP.bind (WP.callMC (fun e he => (cas_noErr hi₁' htl hcr e he).elim) fun r m₂ hr => ?_)
+  -- the loop, from a state where `t` does not hold the mutex
+  have hloop : ∀ G₃ m₃ d₃, lockInv t k default G₃ m₃ d₃ →
+      proto.WP t ((do
+          let __do_lift ← loop (Io_Mutex_lockUncancelable.loop23 (cPtr.add 16) io)
+            Io_Mutex_lockUncancelable.again23
+          match __do_lift with
+          | Io_Mutex_lockUncancelableExit.br22 => pure Io_Mutex_lockUncancelableExit.ret
+          | e => pure e : CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit).run
+          default)
+        (fun a G m d => proto.WP t (match a.1 with
+          | Io_Mutex_lockUncancelableExit.ret => pure ()
+          | _ => throw Error.panic)
+          (fun _ G' m' _ => m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d)
+        G₃ m₃ d₃ := by
+    intro G₃ m₃ d₃ h₃
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv t k) (fun _ => 0) (lockPost t k)
+      (loop23_body t k io) default G₃ m₃ d₃ h₃))
+    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hc', hi'⟩
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨hc', hi'⟩
+  obtain ⟨hc₂, ⟨rfl, hi₂⟩ | ⟨hr₂, hi₂⟩⟩ := step_cas hi₁' hg₁ rfl hr
+  · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
+    simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨hc₂, hi₂⟩
+  · refine ⟨by rw [(thr_work hi₂.thr hg₁).1, hs₁], ?_⟩
+    obtain ⟨v, rfl, hv⟩ : ∃ v, r = some v ∧ (v = .locked_once ∨ v = .contended) := by
+      rcases hr₂ with rfl | rfl
+      · exact ⟨_, rfl, .inl rfl⟩
+      · exact ⟨_, rfl, .inr rfl⟩
+    simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind, bind_assoc]
+    refine WP.bind (WP.callRC (fun e he => by cases he) fun a ha => ?_)
+    cases ha
+    simp only [StateT.run_pure, pure_bind]
+    rcases hv with rfl | rfl
+    · simp only [beq_iff_eq, reduceCtorEq, ↓reduceIte, pure_bind]
+      exact hloop G₁ m₂ k₁ ⟨hc₂, by rw [← hg₁, upd_same]; exact hi₂⟩
+    · simp only [beq_self_eq_true, ↓reduceIte, StateT.run_bind, bind_assoc]
+      refine WP.bind (WP.futexWaitC fun k₂ hk₂ => ⟨.work k .wait,
+        hi₂.retag hg₁ rfl (by decide) (by decide) (.inl rfl), fun G₂ m₃ hg₂ hi₃ =>
+        ⟨fun _ => live hi₃ t, fun hq => ⟨fun _ => wait_ok hi₃, fun b m' hw => ?_⟩⟩⟩)
+      have hs := wait_step hi₃ hg₂ hq rfl hw
+      cases b
+      · simp only [Bool.false_eq_true, ↓reduceIte] at hs ⊢
+        obtain ⟨hc', hi'⟩ := hs
+        simp only [StateT.run_pure, pure_bind]
+        exact hloop G₂ m' k₂ ⟨hc', hi'⟩
+      · simp only [↓reduceIte] at hs ⊢
+        exact hs
+
 end Sync.MutexCounter
