@@ -925,7 +925,7 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act (upd G u g) m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
   unfold push.loop12
-  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  simp only [StateT.run_bind, pure_bind]
   rw [show (cPtr u).add 0 = ⟨some u, ((0 : Nat) : Int)⟩ from rfl,
     show (cPtr u).add 8 = ⟨some u, ((8 : Nat) : Int)⟩ from rfl]
   -- `s.s`
@@ -1327,11 +1327,15 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {g : Gh} (hi : Inv
 
 /-! ## `main` after the joins -/
 
-theorem ld_size {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .ld) : m.threads.size = 3 := by
+theorem size3 {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .j1 ∨ G 0 = .j2 ∨ G 0 = .ld) :
+    m.threads.size = 3 := by
   obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, -, hp, -⟩ | ⟨hs, -⟩⟩ := h
-  · rw [h0] at hp; cases hp
-  · rw [h0] at hp; cases hp
+  · rcases h0 with h0 | h0 | h0 <;> rw [h0] at hp <;> cases hp
+  · rcases h0 with h0 | h0 | h0 <;> rw [h0] at hp <;> cases hp
   · exact hs
+
+theorem ld_size {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .ld) : m.threads.size = 3 :=
+  size3 h (.inr (.inr h0))
 
 /-- Both nodes are on the stack. -/
 theorem chains_full {vs : List Nat} (hvs : vs ∈ Chains) (h1 : 1 ∈ vs) (h2 : 2 ∈ vs) :
@@ -1461,5 +1465,321 @@ theorem rd_noErr {G : ThreadId → Gh} {m : Mem} {k : Nat} {w : BitVec 32} (hi :
       · exact .inr (.inr (by rw [hk']; rfl))
       · rcases hbb with hbb | hbb <;> exact (blk_ne hbb hb (by decide)).elim
   exact MemM.noErr_of_run (load_run hacc₀ hx hnr) e
+
+/-! ## `main` before its spawns -/
+
+/-- `main` before its spawns: `Solo`, with the three blocks. -/
+structure Pre (m : Mem) : Prop extends Solo m where
+  b0 : BlkAt m 0 16 4
+  b1 : BlkAt m 1 16 8
+  b2 : BlkAt m 2 16 8
+
+/-- `main`'s store before its spawns, to block `b` at `o` (`solo_store`). -/
+theorem pre_store {α : Type} [Enc α] {m m' : Mem} {b sz al o a : Nat} {v : α} (h : Pre m)
+    (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
+    (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0)
+    (hs : ((store a ⟨some b, (o : Int)⟩ v).run m).run = some (.ok ((), m'))) :
+    Pre m' ∧ curBytes m' b o (Enc.encode v).size = Enc.encode v ∧
+      ∀ b' o' len, (b ≠ b' ∨ b' = b ∧ o' + len ≤ sz ∧ (o + (Enc.encode v).size ≤ o' ∨ o' + len ≤ o)) →
+        curBytes m' b' o' len = curBytes m b' o' len := by
+  obtain ⟨hs', hk, -, h1, h2⟩ := solo_store h.toSolo hb hfit hal hs
+  exact ⟨{ toSolo := hs', b0 := hk _ _ _ h.b0, b1 := hk _ _ _ h.b1, b2 := hk _ _ _ h.b2 }, h1, h2⟩
+
+theorem pre_store_noErr {α : Type} [Enc α] {m : Mem} {b sz al o a : Nat} {v : α} (h : Pre m)
+    (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
+    (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0) (e : Error) :
+    ((store a ⟨some b, (o : Int)⟩ v).run m).run ≠ some (.error e) :=
+  solo_store_noErr h.toSolo hb hfit hal e
+
+/-- The start: before its spawns, `main` holds the invariant with the ghost value `pre`. -/
+def G0 : ThreadId → Gh := fun u => if u = 0 then .pre else .none
+
+theorem pre_inv {m : Mem} (h : Pre m) (hh : U32At m 0 0 0)
+    (hc : ∀ u, (u = 1 ∨ u = 2) → curBytes m u 0 8 = Enc.encode sPtr ∧ U32At m u 8 (BitVec.ofNat 32 u)) :
+    Inv G0 m where
+  thr := by
+    refine ⟨by rw [h.thr]; rfl, by rw [h.clk, h.thr]; rfl, .inl ⟨by rw [h.thr]; rfl, rfl, fun u hu => ?_⟩⟩
+    unfold G0; split
+    · rename_i h; unfold ThreadId at *; omega
+    · rfl
+  b0 := h.b0
+  b1 := h.b1
+  b2 := h.b2
+  ctx := hc
+  head := .inl ⟨h.at0, hh, fun u hu => by
+    unfold G0; split
+    · rename_i h0; rcases hu with rfl | rfl <;> cases h0
+    · intro h; cases h⟩
+  casn := fun u x hu hx => by unfold G0 at hx; split at hx <;> cases hx
+  join := ⟨fun h0 => by simp [G0] at h0, fun h0 => by simp [G0] at h0⟩
+  fp := fun e he => .inl ⟨(h.fp e he).1, fun u hu => by
+    have : u = 0 := by rw [h.thr] at hu; simp at hu; omega
+    rw [this]; exact (h.fp e he).2.2⟩
+  own := fun e he => by
+    obtain ⟨-, h2, h3⟩ := h.fp e he
+    rw [h2]; exact ⟨by rw [h.thr]; decide, h3⟩
+
+/-- `next[k]`, from the index that `main` computes (`@intCast` of a `u32` to `usize`). -/
+theorem next_ptr (k : Nat) (hk : k < 3) :
+    (sPtr.add 4).elem 4 (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) =
+      ⟨some 0, ((4 + 4 * k : Nat) : Int)⟩ := by
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
+
+theorem next_lt (k : Nat) (hk : k < 3) :
+    lt false (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) 3 = true := by
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
+
+/-- After both joins, `main` joined every thread. -/
+theorem joinedAll_ld {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .ld) : joinedAll 0 m := by
+  intro r hr _
+  obtain ⟨h00, -, ⟨-, hp, -⟩ | ⟨-, -, hp, -⟩ | ⟨hs3, -, -, -, hj⟩⟩ := h
+  · rw [h0] at hp; cases hp
+  · rw [h0] at hp; cases hp
+  obtain ⟨hr1, hr2⟩ : m.threads[1]? = some { spawner := 0, joined := true } ∧
+      m.threads[2]? = some { spawner := 0, joined := true } := by
+    rcases hj with ⟨hp, -⟩ | ⟨hp, -⟩ | ⟨-, -, -, hr1, hr2⟩
+    · rw [h0] at hp; cases hp
+    · rw [h0] at hp; cases hp
+    · exact ⟨hr1, hr2⟩
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have hget : ∀ {x : ThreadRec}, m.threads[i]? = some x → m.threads[i] = x := fun hx => by
+    rw [Array.getElem?_eq_getElem hi'] at hx; exact Option.some.inj hx
+  rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
+  · rw [hget h00]
+  · rw [hget hr1]
+  · rw [hget hr2]
+
+theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 0 } d := by
+  unfold stackPush
+  -- the blocks: the `Stack`, the two `PushCtx`
+  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
+  have e0 : s0 = sPtr := by rw [hq₁]; rfl
+  subst e0 hm₁
+  refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₂ ha₂ => ?_)
+  obtain ⟨hq₂, hm₂⟩ := alloc_ok ha₂
+  have e1 : s1 = cPtr 1 := by rw [hq₂]; rfl
+  subst e1 hm₂
+  refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s2 m₃ ha₃ => ?_)
+  obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
+  have e2 : s2 = cPtr 2 := by rw [hq₃]; rfl
+  subst e2
+  refine ⟨by rw [hm₃], ?_⟩
+  have hp₃ : Pre m₃ := by
+    rw [hm₃]
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+  clear hm₃ ha₃ hq₃
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  rw [show sPtr.add 0 = ⟨some 0, ((0 : Nat) : Int)⟩ from rfl,
+    show (sPtr.add 4).elem 4 0 = ⟨some 0, ((4 : Nat) : Int)⟩ from rfl,
+    show (sPtr.add 4).elem 4 1 = ⟨some 0, ((8 : Nat) : Int)⟩ from rfl,
+    show (sPtr.add 4).elem 4 2 = ⟨some 0, ((12 : Nat) : Int)⟩ from rfl]
+  -- `head = .init(0)`
+  refine WP.bind (WP.callRC (fun e he => by
+    have he' : (atomic_Value_u32_init 0).run = some (.error e) := he
+    rw [MP.init_run] at he'; cases he') fun a ha => ?_)
+  have ha' : (atomic_Value_u32_init 0).run = some (.ok a) := ha
+  rw [MP.init_run] at ha'
+  cases ha'
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₃ hp₃.b0 (by rw [MP.enc_av4]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₄ hs₄ => ?_)
+  obtain ⟨hp₄, hh₄, -⟩ := pre_store hp₃ hp₃.b0 (by rw [MP.enc_av4]; omega) (fun A hA => by omega) hs₄
+  refine ⟨by rw [hp₄.thr, hp₃.thr], ?_⟩
+  have hH₄ : U32At m₄ 0 0 0 := by
+    unfold U32At; rw [MP.enc_av4] at hh₄; rw [hh₄, MP.enc_av]; exact intOfBytes_rmw 0
+  -- `next = .{ 0, 0, 0 }`
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₄ hp₄.b0 (by rw [size_encode_u32]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₅ hs₅ => ?_)
+  obtain ⟨hp₅, -, hk₅⟩ := pre_store hp₄ hp₄.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₅
+  refine ⟨by rw [hp₅.thr, hp₄.thr], ?_⟩
+  have hH₅ : U32At m₅ 0 0 0 := by
+    unfold U32At; rw [hk₅ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₄
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b0 (by rw [size_encode_u32]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₆ hs₆ => ?_)
+  obtain ⟨hp₆, -, hk₆⟩ := pre_store hp₅ hp₅.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₆
+  refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
+  have hH₆ : U32At m₆ 0 0 0 := by
+    unfold U32At; rw [hk₆ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₅
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b0 (by rw [size_encode_u32]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₇ hs₇ => ?_)
+  obtain ⟨hp₇, -, hk₇⟩ := pre_store hp₆ hp₆.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₇
+  refine ⟨by rw [hp₇.thr, hp₆.thr], ?_⟩
+  have hH₇ : U32At m₇ 0 0 0 := by
+    unfold U32At; rw [hk₇ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₆
+  -- the `PushCtx` of pusher 1
+  dsimp only
+  rw [show (cPtr 1).add 0 = ⟨some 1, ((0 : Nat) : Int)⟩ from rfl,
+    show (cPtr 1).add 8 = ⟨some 1, ((8 : Nat) : Int)⟩ from rfl]
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₇ hp₇.b1 (by rw [size_encode_ptr]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₈ hs₈ => ?_)
+  obtain ⟨hp₈, hs1₈, hk₈⟩ := pre_store hp₇ hp₇.b1 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₈
+  refine ⟨by rw [hp₈.thr, hp₇.thr], ?_⟩
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₈ hp₈.b1 (by rw [size_encode_u32]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₉ hs₉ => ?_)
+  obtain ⟨hp₉, hn1₉, hk₉⟩ := pre_store hp₈ hp₈.b1 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₉
+  refine ⟨by rw [hp₉.thr, hp₈.thr], ?_⟩
+  -- the `PushCtx` of pusher 2
+  dsimp only
+  rw [show (cPtr 2).add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl,
+    show (cPtr 2).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₉ hp₉.b2 (by rw [size_encode_ptr]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₁₀ hs₁₀ => ?_)
+  obtain ⟨hp₁₀, hs2₁₀, hk₁₀⟩ := pre_store hp₉ hp₉.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₁₀
+  refine ⟨by rw [hp₁₀.thr, hp₉.thr], ?_⟩
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₁₀ hp₁₀.b2 (by rw [size_encode_u32]; omega)
+    (fun A hA => by omega) e he).elim) fun _ m₁₁ hs₁₁ => ?_)
+  obtain ⟨hp₁₁, hn2₁₁, hk₁₁⟩ := pre_store hp₁₀ hp₁₀.b2 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₁₁
+  refine ⟨by rw [hp₁₁.thr, hp₁₀.thr], ?_⟩
+  have hi₁₁ : Inv G0 m₁₁ := by
+    refine pre_inv hp₁₁ ?_ fun u hu => ?_
+    · unfold U32At
+      rw [hk₁₁ 0 0 4 (.inl (by decide)), hk₁₀ 0 0 4 (.inl (by decide)), hk₉ 0 0 4 (.inl (by decide)),
+        hk₈ 0 0 4 (.inl (by decide))]
+      exact hH₇
+    · rcases hu with rfl | rfl
+      · refine ⟨?_, ?_⟩
+        · rw [hk₁₁ 1 0 8 (.inl (by decide)), hk₁₀ 1 0 8 (.inl (by decide)),
+            hk₉ 1 0 8 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]
+          rw [size_encode_ptr] at hs1₈; exact hs1₈
+        · unfold U32At
+          rw [hk₁₁ 1 8 4 (.inl (by decide)), hk₁₀ 1 8 4 (.inl (by decide))]
+          rw [size_encode_u32] at hn1₉; rw [hn1₉]; exact intOfBytes_rmw 1
+      · refine ⟨?_, ?_⟩
+        · rw [hk₁₁ 2 0 8 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]
+          rw [size_encode_ptr] at hs2₁₀; exact hs2₁₀
+        · unfold U32At
+          rw [size_encode_u32] at hn2₁₁; rw [hn2₁₁]; exact intOfBytes_rmw 2
+  have hG0 : upd G0 0 .pre = G0 := by
+    funext u; unfold upd G0; split <;> simp_all
+  -- the spawns
+  refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₁₁, fun G₁ m₁₂ hg₁ hi₁₂ =>
+    ⟨.start 1, by simp [proto], fun child m₁₃ hf => ?_⟩⟩)
+  obtain ⟨rfl, hc₁₃, hi₁₃⟩ := inv_fork1 ((hi₁₂ : Inv G₁ m₁₂).grow (growsAt_current m₁₂ 0) (.inl rfl)) hg₁ rfl hf
+  dsimp only
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.spawnC fun k₂ hk₂ => ⟨Gh.mid, hi₁₃, fun G₂ m₁₄ hg₂ hi₁₄ =>
+    ⟨Gh.start 2, by simp [proto, cPtr], fun child m₁₅ hf => ?_⟩⟩)
+  obtain ⟨rfl, hc₁₅, hi₁₅⟩ := inv_fork2 ((hi₁₄ : Inv G₂ m₁₄).grow (growsAt_current m₁₄ 0) (.inl rfl)) hg₂ rfl hf
+  dsimp only
+  simp only [StateT.run_bind]
+  -- the joins
+  refine WP.bind (WP.joinC fun k₃ hk₃ => ⟨Gh.j1, hi₁₅, fun G₃ m₁₆ hg₃ hi₁₆ =>
+    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₆ : Inv G₃ m₁₆).thr (.inl hg₃)]; decide, .inl rfl⟩, fun hfin =>
+      ⟨fun _ => join_ok hi₁₆ (.inl ⟨hg₃, rfl⟩), fun m₁₇ hj => ?_⟩⟩⟩)
+  obtain ⟨hc₁₇, hs₁₇, hi₁₇⟩ := inv_join hi₁₆ (.inl ⟨hg₃, rfl, rfl⟩) hfin hj
+  refine WP.bind (WP.joinC fun k₄ hk₄ => ⟨Gh.j2, hi₁₇, fun G₄ m₁₈ hg₄ hi₁₈ =>
+    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₈ : Inv G₄ m₁₈).thr (.inr (.inl hg₄))]; decide, .inr rfl⟩, fun hfin =>
+      ⟨fun _ => join_ok hi₁₈ (.inr ⟨hg₄, rfl⟩), fun m₁₉ hj => ?_⟩⟩⟩)
+  obtain ⟨hc₁₉, hs₁₉, hi₁₉⟩ := inv_join hi₁₈ (.inr ⟨hg₄, rfl, rfl⟩) hfin hj
+  -- the acquire load of the head (a stop)
+  rw [show (⟨some 0, ((0 : Nat) : Int)⟩ : Ptr).add 0 = sPtr from rfl]
+  simp only [StateT.run_bind, atomicLoadC]
+  refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₅ hk₅ => ⟨Gh.ld, hi₁₉, fun G₅ m₂₀ hg₅ hi₂₀ c hcr => ?_⟩)))
+  have hi₂₀' : Inv G₅ { m₂₀ with current := 0 } :=
+    (hi₂₀ : Inv G₅ m₂₀).grow (growsAt_current m₂₀ 0) (.inl rfl)
+  have ht₂₀ : ({ m₂₀ with current := 0 } : Mem).current < ({ m₂₀ with current := 0 } : Mem).threads.size := by
+    show 0 < _; rw [ld_size hi₂₀'.thr hg₅]; decide
+  refine WP.callMC (fun e he => (rload_noErr hi₂₀' ht₂₀ (.inl rfl) hcr e he).elim) fun v m₂₁ hl => ?_
+  obtain ⟨hc₂₁, hth₂₁, hi₂₁, a, b, hab, rfl, hnb, hna⟩ := step_top hi₂₀' hg₅ rfl hl
+  refine ⟨by rw [hth₂₁], ?_⟩
+  have hg₂₁ : G₅ 0 = .ld := hg₅
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  have ha3 : a < 3 := by rcases hab with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+  have hb3 : b < 3 := by rcases hab with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have hak : a = 1 ∨ a = 2 := by rcases hab with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> simp
+  have hbk : b = 1 ∨ b = 2 := by rcases hab with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> simp
+  -- `100 * top`, the cast, the bounds check
+  refine WP.bind (WP.callRC_ok (x := mul false 100 (BitVec.ofNat 32 b)) (v := BitVec.ofNat 32 (100 * b))
+    (by rcases hbk with rfl | rfl <;> rfl) ?_)
+  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+  dsimp only
+  simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+  rw [next_ptr b hb3]
+  -- `next[top]`
+  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₁ hg₂₁ hc₂₁ hbk hnb e he).elim) fun v m₂₂ hl => ?_)
+  obtain ⟨rfl, rfl, hi₂₂⟩ := step_rd hi₂₁ hg₂₁ hc₂₁ hbk hnb hl
+  refine ⟨rfl, ?_⟩
+  -- `10 * next[top]`, the sum, the cast, the bounds check
+  refine WP.bind (WP.callRC_ok (x := mul false 10 (BitVec.ofNat 32 a)) (v := BitVec.ofNat 32 (10 * a))
+    (by rcases hak with rfl | rfl <;> rfl) ?_)
+  refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
+    (v := BitVec.ofNat 32 (100 * b + 10 * a))
+    (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+  dsimp only
+  simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+  rw [next_ptr b hb3]
+  -- `next[top]` again
+  have hnb₂ := nextAt_congr (m := m₂₁) (m' := m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hnb
+  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ e he).elim) fun v m₂₃ hl => ?_)
+  obtain ⟨rfl, rfl, hi₂₃⟩ := step_rd hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ hl
+  refine ⟨rfl, ?_⟩
+  -- the cast of `next[top]`, the bounds check, `next[next[top]]`
+  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
+    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
+  dsimp only
+  simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+  rw [next_ptr a ha3]
+  have hna₃ := nextAt_congr (m := m₂₁) (m' := (m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read).recordAt 0
+    (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hna
+  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₃ hg₂₁ hc₂₁ hak hna₃ e he).elim) fun v m₂₄ hl => ?_)
+  obtain ⟨rfl, rfl, hi₂₄⟩ := step_rd hi₂₃ hg₂₁ hc₂₁ hak hna₃ hl
+  refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
+    (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+  refine WP.pure' ?_
+  -- the frees
+  obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi₂₄.b0
+  obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi₂₄.b1
+  obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi₂₄.b2
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ e he).elim) fun _ m₂₅ hf₁ => ?_)
+  obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
+  cases hb'
+  refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
+      simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide)]
+      exact hb₁) hl₁ e he).elim) fun _ m₂₆ hf₂ => ?_)
+  obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
+  cases hb'
+  refine ⟨rfl, ?_⟩
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
+      simp only [Array.set!_eq_setIfInBounds]
+      rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
+      exact hb₂) hl₂ e he).elim) fun _ m₂₇ hf₃ => ?_)
+  obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
+  cases hb'
+  refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi₂₄.thr hg₂₁⟩⟩
+  rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  · exact .inr rfl
+  · exact .inl rfl
+
+/-! ## The results -/
+
+/-- **`stackPush` gives 120 or 210 under every schedule** (every oracle `o`, every `fuel`): both
+nodes are on the stack, the top one first, then the other, then 0. -/
+theorem stackPush_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o stackPush mem0).run = some (.ok (v, m))) :
+    v = .ok 120 ∨ v = .ok 210 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+  exact hv
+
+/-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
+overflow, under every schedule. -/
+theorem stackPush_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o stackPush mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
 
 end Atomics.Stack

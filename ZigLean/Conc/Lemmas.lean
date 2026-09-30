@@ -70,6 +70,13 @@ theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) �
     obtain ⟨rfl, rfl⟩ := hr'
     exact ⟨rfl, WP.pure' (h _ hx)⟩
 
+/-- A call to a pure function whose result is known. -/
+theorem WP.callRC_ok {x : Result α} {v : α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hx : x.run = some (.ok v)) (h : Q (v, s) G m n) :
+    P.WP t ((Zig.callRC x : CM Tgt σ α).run s) Q G m n :=
+  WP.callRC (fun e he => by rw [hx] at he; cases he) fun a ha => by
+    rw [hx] at ha; cases ha; exact h
+
 /-- A stop where the oracle picks one of `count m` options: the post holds for every pick. -/
 theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
