@@ -318,21 +318,6 @@ theorem cntAt_locIdx {tot li : Nat} {m m₁ : Mem} (hc : CntOk tot m)
     obtain ⟨rfl, rfl⟩ := Proto.locIdx_found hf hlen hlast h
     exact ⟨⟨hf, honly, hsz, hch, hval, hlast, hclk⟩, rfl, rfl, rfl, rfl, rfl⟩
 
-theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
-    xs.insertIdxIfInBounds xs.size v = xs.push v := by
-  simp [Array.insertIdxIfInBounds, Array.insertIdx_size_self]
-
-theorem insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
-    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) :
-    Proto.insertM m li (m.atomics[li]!).msgs.size msg = { m with
-      atomics := m.atomics.set! li
-        { m.atomics[li]! with msgs := (m.atomics[li]!).msgs.push msg },
-      nextMsg := m.nextMsg + 1,
-      blocks := m.blocks.set! (m.atomics[li]!).block
-        { blk with bytes := writeBytes blk.bytes (m.atomics[li]!).off msg.bytes } } := by
-  unfold Proto.insertM
-  simp [insertIdxIfInBounds_size_self, hb]
-
 /-- The counter with one more RMW message `msg`, stated field by field. -/
 theorem cntAt_push {tot li : Nat} {m₁ M : Mem} {msg : Msg} {blk : Block}
     (hc : CntAt tot li m₁) (hbs : 4 ≤ blk.bytes.size)

@@ -78,7 +78,8 @@ def Live (t : ThreadId) (G : ThreadId → γ) (m : Mem) : Prop :=
 
 /-- Thread `t` goes on at `op`, with the ghost values `G` and the memory `m` at that time: `K`
 holds of each response and the memory after the scheduler's part of the op
-(`Sched.turn`). A futex wait that sleeps keeps the invariant. -/
+(`Sched.turn`). A futex wait that sleeps keeps the invariant; one that goes on is not in the
+queue. -/
 def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
     (K : op.Resp → (ThreadId → γ) → Mem → Prop) : Prop :=
   match op, K with
@@ -97,7 +98,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
   | .wait p e, K => (P.strict = true → P.Live t G m ∧ ∃ b m',
       ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
       ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
-        if b then P.inv G m' else K () G m'
+        if b then P.inv G m' else (m'.waiters.any (·.1 == t) = false → K () G m')
   | .wake p n, K => ∀ m',
       ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
@@ -111,7 +112,7 @@ theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Me
     refine ⟨hs.1, fun b m' hr => ?_⟩
     have := hs.2 b m' hr
     cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
-    · exact h _ _ _ this
+    · exact fun hw => h _ _ _ (this hw)
     · exact this
   | choose | pick => exact fun c hc => h _ _ _ (hs c hc)
   | spawn tgt =>
@@ -380,23 +381,52 @@ theorem futexWake_ok (p : Ptr) (n : Nat) (m : Mem) :
     ∃ m', ((Thread.futexWake p n).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
   ⟨_, rfl, rfl⟩
 
-/-- A futex wait keeps the threads. -/
-theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
+/-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
+`u32` `v` at `p`, and the thread sleeps (it joins `waiters`) if `v = e`. -/
+theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+    (m.woken.contains m.current = true ∧ b = false ∧
+      m' = { m with woken := m.woken.erase m.current }) ∨
+    (m.woken.contains m.current = false ∧ ∃ bid blk o v, m.access p 4 4 = pure (bid, blk, o) ∧
+      (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
+      ((v = e ∧ b = true ∧ m' = { m with waiters := m.waiters.push (m.current, p) }) ∨
+       (v ≠ e ∧ b = false ∧ m' = m))) := by
   unfold Thread.futexWait at h
   obtain ⟨a, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   split at h₁
-  · obtain ⟨_, m₂, hs, hp⟩ := MemM.bind_ok h₁
-    rw [(MemM.pure_ok hp).2, MemM.set_ok hs]
-  · obtain ⟨⟨_, blk, o⟩, m₂, hx, h₂⟩ := MemM.bind_ok h₁
-    obtain ⟨-, rfl⟩ := MemM.lift_ok (r := m₁.access p 4 4) hx
+  · rename_i hw
+    obtain ⟨_, m₂, hs, hp⟩ := MemM.bind_ok h₁
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok hp
+    exact .inl ⟨hw, rfl, MemM.set_ok hs⟩
+  · rename_i hw
+    refine .inr ⟨by simpa using hw, ?_⟩
+    obtain ⟨⟨bid, blk, o⟩, m₂, hx, h₂⟩ := MemM.bind_ok h₁
+    obtain ⟨hx', rfl⟩ := MemM.lift_ok (r := m₁.access p 4 4) hx
     obtain ⟨v, m₃, hv, h₃⟩ := MemM.bind_ok h₂
-    obtain ⟨-, rfl⟩ := MemM.lift_ok hv
+    obtain ⟨hv', rfl⟩ := MemM.lift_ok hv
+    refine ⟨bid, blk, o, v, hx', hv', ?_⟩
     split at h₃
-    · obtain ⟨_, m₄, hs, hp⟩ := MemM.bind_ok h₃
-      rw [(MemM.pure_ok hp).2, MemM.set_ok hs]
-    · rw [(MemM.pure_ok h₃).2]
+    · rename_i he
+      obtain ⟨_, m₄, hs, hp⟩ := MemM.bind_ok h₃
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok hp
+      exact .inl ⟨he, rfl, MemM.set_ok hs⟩
+    · rename_i he
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
+      exact .inr ⟨he, rfl, rfl⟩
+
+/-- A futex wait keeps the threads. -/
+theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
+  rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, -, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩ <;> rfl
+
+/-- A futex wait that goes on keeps the queue. -/
+theorem futexWait_go {p : Ptr} {e : BitVec 32} {m m' : Mem}
+    (h : ((Thread.futexWait p e).run m).run = some (.ok (false, m'))) : m'.waiters = m.waiters := by
+  rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, -, -, ⟨-, h, -⟩ | ⟨-, -, rfl⟩⟩
+  · rfl
+  · cases h
+  · rfl
 
 /-- A thread's run reached `tree` (`Sched.settle`): it stops at a sync op, with a new ghost
 value and the invariant, or it ends. -/
@@ -526,7 +556,9 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
           .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK, hp⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
-        exact settle_turnPost h hK hsz rfl rfl hth
+        have hq : m₁.waiters.any (·.1 == t) = false := by
+          rw [futexWait_go hw]; simpa [Sched.canGo] using hgo
+        exact settle_turnPost h (hK hq) hsz rfl rfl hth
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
@@ -594,7 +626,9 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
     | true => simp at h
     | false =>
       simp only [Bool.false_eq_true, ↓reduceIte] at h hK
-      exact settle_safe hstr hK hQ e h
+      have hq : m₁.waiters.any (·.1 == t) = false := by
+        rw [futexWait_go hw]; simpa [Sched.canGo] using hgo
+      exact settle_safe hstr (hK hq) hQ e h
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
