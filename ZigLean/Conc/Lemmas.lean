@@ -5,9 +5,9 @@ import ZigLean.Mem.Lemmas
 # Rules for generated concurrent code
 
 The `WP` rules of `ZigLean/Conc/Logic.lean` for the steps that `Emit.lean` writes in a
-concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`), a call of a
-concurrent function (`callC`), the sync ops (`pickC`, `spawnC`, `joinC`, `futexWaitC`,
-`futexWakeC`), and `run'` of a body. A proof unfolds the generated code, applies
+concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`, `callRC_ok`), a
+call of a concurrent function (`callC`), the sync ops (`pickC`, `spawnC`, `joinC`,
+`futexWaitC`, `futexWakeC`), and `run'` of a body. A proof unfolds the generated code, applies
 these rules one step at a time, and uses the `*_ok` lemmas for what a `MemM` step that gave a
 result did: with partial correctness a step can fail (a race is `.illegal`), so the lemmas go
 from a result back to the memory. In strict mode each step also needs a proof that it does not
@@ -1540,19 +1540,6 @@ theorem loadM_acq_le (m : Mem) (li : Nat) (msg : Msg) {t : ThreadId} (ht : m.cur
 /-- The clock `c` happened before every thread. -/
 def Before (m : Mem) (c : VClock) : Prop :=
   ∀ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
-
-/-- The clocks after a record are not smaller. -/
-theorem record_cle (m : Mem) (b o len : Nat) (k : AccessKind) (u : Nat) :
-    VClock.le (m.clocks[u]!) ((m.recordAt b o len k).clocks[u]!) = true := by
-  simp only [Mem.recordAt]
-  rw [getElem!_set!_ite]
-  split
-  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-  · exact VClock.le_refl _
-
-theorem before_record {m : Mem} {b o len : Nat} {k : AccessKind} {c : VClock} (h : Before m c) :
-    Before (m.recordAt b o len k) c :=
-  fun u hu => VClock.le_trans (h u hu) (record_cle m b o len k u)
 
 theorem before_grow {m m' : Mem} (hg : Grows m m') {c : VClock} (h : Before m c) : Before m' c :=
   fun u hu => VClock.le_trans (h u (hg.threads ▸ hu)) (hg.cle u)

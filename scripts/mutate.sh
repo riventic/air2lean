@@ -765,7 +765,7 @@ echo "== mutation (ad): a cmpxchg succeeds on a stale message (Lean runtime, pro
 if ! has_example atomics; then
   echo "mutation (ad): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
 else
-  sed -i.bak 's/^    !(l.hasRmwAfter pos \&\& match/    !(false \&\& match/' "$thread_lean"
+  sed -i.bak 's/^    !(l.hasRmwAfter pos && match/    !(false \&\& match/' "$thread_lean"
   rm -f "$thread_lean.bak"
   grep -q '^    !(false && match' "$thread_lean" || {
     echo "error: mutation (ad): sed did not change casPrep" >&2
