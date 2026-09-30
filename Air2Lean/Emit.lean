@@ -915,6 +915,14 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
   | .futexWake => s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
+  -- `Thread.Futex.wait(ptr, expect)`, `Thread.Futex.wake(ptr, max_waiters)`.
+  | .threadFutexWait => s!"Zig.threadFutexWaitC {String.intercalate " " (args.toList.map rv)}"
+  | .threadFutexWake => s!"Zig.threadFutexWakeC {String.intercalate " " (args.toList.map rv)}"
+  -- `DarwinImpl.lock(self)`: `self` points to the `os_unfair_lock` (its only field).
+  | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
+  | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
+  | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
+  | .noClock => "Zig.callRC (throw Zig.Error.unspecified)"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/

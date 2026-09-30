@@ -591,6 +591,14 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
               -- `(io, ptr, value)`: a `u32`-sized value (Zig asserts it), an enum or integer.
               unless args.size == 3 do
                 throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 3"
+            | some .threadFutexWait | some .threadFutexWake =>
+              -- `(ptr, u32)`: `ptr` is a `*const std.atomic.Value(u32)`.
+              unless args.size == 2 do
+                throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 2"
+            | some .noClock => pure ()
+            | some .osLock | some .osUnlock | some .osTryLock =>
+              unless args.size == 1 do
+                throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 1"
             | none =>
               throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
                 name to the example's `filter` file, docs/std-models.md)"

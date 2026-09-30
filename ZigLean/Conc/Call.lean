@@ -110,6 +110,40 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
+/-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
+
+/-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`). -/
+def threadFutexWaitC (p : Ptr) (expected : BitVec 32) : CM Tgt σ Unit :=
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p expected)))
+
+/-- `Thread.Futex.wake(ptr, max_waiters)`. -/
+def threadFutexWakeC (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
+
+/-- One try of `os_unfair_lock_lock` at the lock word `p`: an acquire `cmpxchg` 0 → 1; on a
+failure, a futex wait while the word holds the value read. `true`: try again. -/
+def osUnfairLockTry (p : Ptr) : CM Tgt σ Bool := do
+  match ← cmpxchgC (n := 32) .acquire .relaxed 4 p 0 1 with
+  | none => pure false
+  | some v => threadFutexWaitC p v; pure true
+
+/-- `os_unfair_lock_lock` (macOS; `Thread.Mutex.DarwinImpl.lock`): a C function, so the model is
+the lock's contract, built from the model's ops: the word is 1 while a thread holds the lock;
+the lock is an acquire, the unlock a release (the happens-before edge); a thread that waits
+sleeps at the futex (so a deadlock is `.deadlock`). -/
+def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
+  let _ ← loop (osUnfairLockTry p) id
+  pure ()
+
+/-- `os_unfair_lock_unlock`: a release store of 0, then a wake of one waiter. -/
+def osUnfairUnlockC (p : Ptr) : CM Tgt σ Unit := do
+  atomicStoreC .release 4 p (0 : BitVec 32)
+  threadFutexWakeC p 1
+
+/-- `os_unfair_lock_trylock`: one acquire `cmpxchg` 0 → 1. -/
+def osUnfairTryLockC (p : Ptr) : CM Tgt σ Bool := do
+  return (← cmpxchgC (n := 32) .acquire .relaxed 4 p 0 1).isNone
+
 section Monotone
 open Lean.Order
 

@@ -95,19 +95,35 @@ for ex in $examples; do
   # a stable number (`Air2Lean/Air/Anon.lean`) and does not emit the others (`usedTys`; a
   # `Thread` handle is `Ty.thread`), so the comparison ignores them, also in the file names (a
   # golden file is `<name>__anon_N.json`).
+  #
+  # Two instances of one generic function (`math.sub` for `u64` and for `i64`) have the same
+  # normalized name: each gets its content hash in the name (`math.sub__anon_N.<hash>.json`), so
+  # the comparison matches them by content. A later directory (version, OS) replaces every file of
+  # a name in the earlier ones, all instances together.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
-  for f in "$golden_dir"/*.json "$version_dir"/*.json "$os_dir"/*.json; do
-    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g' >"$cmp_dir/golden/$(norm_name "$f")"; fi
-  done
-  for f in "$air_dir"/*.json; do
-    n=$(norm_name "$f")
-    if [ -f "$cmp_dir/new/$n" ]; then
-      echo "error: $ex has two instances of the generic function in $n; the golden check cannot tell them apart" >&2
-      exit 1
-    fi
-    grep -v '"zig_version"' "$f" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g' >"$cmp_dir/new/$n"
-  done
+  norm_body() { grep -v '"zig_version"' "$1" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g'; }
+  # add_dir <src-dir> <cmp-dir>: the normalized files of <src-dir> into <cmp-dir>.
+  add_dir() {
+    local src=$1 dst=$2 f n b names
+    [ -d "$src" ] || return 0
+    names=$(for f in "$src"/*.json; do [ -f "$f" ] && { norm_name "$f"; echo; }; done)
+    for b in $(echo "$names" | sort -u); do
+      rm -f "$dst/$b" "$dst/${b%.json}".*.json
+    done
+    for f in "$src"/*.json; do
+      [ -f "$f" ] || continue
+      n=$(norm_name "$f")
+      if [ "$(echo "$names" | grep -cx "$n")" -gt 1 ]; then
+        n="${n%.json}.$(norm_body "$f" | shasum | cut -c1-12).json"
+      fi
+      norm_body "$f" >"$dst/$n"
+    done
+  }
+  add_dir "$golden_dir" "$cmp_dir/golden"
+  add_dir "$version_dir" "$cmp_dir/golden"
+  add_dir "$os_dir" "$cmp_dir/golden"
+  add_dir "$air_dir" "$cmp_dir/new"
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
     echo "error: AIR output for $ex does not match its golden files" >&2
