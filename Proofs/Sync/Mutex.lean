@@ -783,6 +783,45 @@ theorem fq_take {G : ThreadId → Gh} {m M : Mem} {t k : Nat} (hi : Inv G m) (hg
   exact ⟨h1, ⟨k₁, by rw [upd_ne _ _ hwt]; exact hk₁⟩, v, hv,
     .inr ⟨k₂, by rw [upd_ne _ _ hvt]; exact hk₂⟩⟩
 
+/-- Thread `t` takes the free mutex (the word is `0`) with an acquire RMW that writes `w'` (`1`
+or `2`): it holds the mutex, and its clock is above the release clock of the newest message. -/
+theorem take_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w' : Nat}
+    (hi₁ : Inv G m₁) (hml : MLoc m₁ l) (hg : G t = .work k .out) (hcu : m₁.current = t)
+    (h0 : U32At m₁ 16 0) (hw' : w' = 1 ∨ w' = 2)
+    (hM : M = rmwM m₁ 0 (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 w')) :
+    M.current = t ∧ Inv (upd G t (.work k .holds)) M := by
+  obtain ⟨hs2, ht2, hk2⟩ := thr_work hi₁.thr hg
+  have hn := noHold_of_zero hi₁ h0
+  obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, -, hat₃⟩ :=
+    rmw_eff (new := BitVec.ofNat 32 w') hml hi₁.blk rfl rfl hM
+  have hacq : AtomicOrder.acquire.isAcq = true := rfl
+  simp only [hacq, ite_true] at hcl₃ hat₃
+  have hcs₁ : m₁.current < m₁.clocks.size := by
+    rw [hi₁.thr.2.1, hcu, hs2]; exact ht2
+  have hw3 : w' < 3 := by omega
+  refine ⟨hc₃.trans hcu, ?_⟩
+  refine hi₁.mutexWrite (l' := _) (w' := w') ht₃ hf₃ (by rw [hcl₃]; simp [acqM])
+    (fun u => by rw [hcl₃]; exact (grows_acq m₁ _).cle u) hbk₃ h20₃
+    (mloc_push hml hat₃ rfl ⟨w', hw3, intOfBytes_rmw _⟩ h16₃)
+    (thrOk_congr (thrOk_upd hi₁.thr hg hk2) ht₃ (by rw [hcl₃]; simp [acqM]))
+    (count_upd (by rw [hg]; rfl)) hw3 (by unfold U32At; rw [h16₃]; exact intOfBytes_rmw _) ?_ ?_
+    (fq_take hi₁ hg hn hw₃) ?_
+  · constructor
+    · intro h; omega
+    · intro h; exact absurd ⟨k, upd_self _ _ _⟩ (h t)
+  · intro u v hu hv
+    rw [hold_take hn hu, hold_take hn hv]
+  · rintro cl ⟨-, hle⟩
+    obtain ⟨l₀, hl₀, hcl⟩ := hle hn
+    rw [hml.1] at hl₀; cases hl₀
+    refine ⟨fun u hu => ?_, fun hn' => absurd ⟨k, upd_self _ _ _⟩ (hn' t)⟩
+    obtain rfl := hold_take hn hu
+    rw [hcl₃, ← hcu, acqM_clock _ _ hcs₁]
+    refine VClock.le_trans hcl (VClock.le_trans ?_ (VClock.le_merge_right _ _))
+    rw [Array.back!, getElem!_pos l.msgs _ (by have := hml.2.2.2.2.1; omega)]
+    exact VClock.le_refl _
+
 /-- `lock`'s first op, `cmpxchg(unlocked → locked_once)`. On success thread `t` holds the mutex:
 the word was 0, so no thread held it, and the acquire adopts the release clock of the newest
 message. On failure the value read is `1` or `2`, and only `t`'s clock changes. -/
@@ -812,34 +851,7 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {t k c : Nat} {r : Option Io
       rw [hl0] at hpl hold hm'
       rw [hpl] at hold hm'
       have h0 := last_u32 hml hold
-      have hn := noHold_of_zero hi₁ h0
-      obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, -, hat₃⟩ :=
-        rmw_eff (new := Packed.toBits Io_Mutex_State.locked_once) hml hi₁.blk rfl rfl hm'
-      have hacq : AtomicOrder.acquire.isAcq = true := rfl
-      simp only [hacq, ite_true] at hcl₃ hat₃
-      have hcs₁ : m₁.current < m₁.clocks.size := by
-        rw [hi₁.thr.2.1, hcu, ht₁]; show t < m.threads.size; rw [hs2]; exact ht2
-      refine ⟨hc₃.trans hcu, .inl ⟨rfl, ?_⟩⟩
-      refine hi₁.mutexWrite (l' := _) (w' := 1) ht₃ hf₃ (by rw [hcl₃]; simp [acqM])
-        (fun u => by rw [hcl₃]; exact (grows_acq m₁ _).cle u) hbk₃ h20₃
-        (mloc_push hml hat₃ rfl ⟨1, by decide, intOfBytes_rmw _⟩ h16₃)
-        (thrOk_congr (thrOk_upd hi₁.thr hg hk2) ht₃ (by rw [hcl₃]; simp [acqM]))
-        (count_upd (by rw [hg]; rfl)) (by decide) (by unfold U32At; rw [h16₃]; exact intOfBytes_rmw _) ?_ ?_
-        (fq_take hi₁ hg hn hw₃) ?_
-      · constructor
-        · intro h; cases h
-        · intro h; exact absurd ⟨k, upd_self _ _ _⟩ (h t)
-      · intro u v hu hv
-        rw [hold_take hn hu, hold_take hn hv]
-      · rintro cl ⟨-, hle⟩
-        obtain ⟨l₀, hl₀, hcl⟩ := hle hn
-        rw [hml.1] at hl₀; cases hl₀
-        refine ⟨fun u hu => ?_, fun hn' => absurd ⟨k, upd_self _ _ _⟩ (hn' t)⟩
-        obtain rfl := hold_take hn hu
-        rw [hcl₃, ← hcu, acqM_clock _ _ hcs₁]
-        refine VClock.le_trans hcl (VClock.le_trans ?_ (VClock.le_merge_right _ _))
-        rw [Array.back!, getElem!_pos l.msgs _ (by have := hml.2.2.2.2.1; omega)]
-        exact VClock.le_refl _
+      exact ⟨(take_inv hi₁ hml hg hcu h0 (.inl rfl) hm').1, .inl ⟨rfl, (take_inv hi₁ hml hg hcu h0 (.inl rfl) hm').2⟩⟩
     · -- failure: a read with the order `relaxed`
       obtain ⟨w, hw, rfl⟩ := msg_val hml (by have := (casOpts_pos hpos).1; rwa [hl0] at this)
         (by rwa [hl0] at hold)
@@ -860,5 +872,179 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {t k c : Nat} {r : Option Io
       rcases (by omega : w = 1 ∨ w = 2) with rfl | rfl
       · exact .inl rfl
       · exact .inr rfl
+
+/-- The word is not 0: a thread holds the mutex. -/
+theorem hold_of_word {G : ThreadId → Gh} {m : Mem} {w : Nat} (hi : Inv G m) (hwu : U32At m 16 (BitVec.ofNat 32 w))
+    (hw : w < 3) (hw0 : w ≠ 0) : ∃ u, Hold G u := by
+  obtain ⟨w₀, hw₀, hu₀, hz⟩ := hi.word
+  have e := ofNat_inj hw₀ hw (u32_eq hu₀ hwu)
+  subst e
+  by_cases hx : ∃ u, Hold G u
+  · exact hx
+  · exact absurd (hz.mpr fun u hu => hx ⟨u, hu⟩) hw0
+
+/-- Thread `t` writes `2` to the held mutex (`lock`'s loop, an acquire RMW): the holder stays. -/
+theorem contend_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w : Nat}
+    (hi₁ : Inv G m₁) (hml : MLoc m₁ l) (hg : G t = .work k .out) (hcu : m₁.current = t)
+    (hwu : U32At m₁ 16 (BitVec.ofNat 32 w)) (hw : w < 3) (hw0 : w ≠ 0)
+    (hM : M = rmwM m₁ 0 (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 2)) :
+    M.current = t ∧ Inv G M := by
+  obtain ⟨hs2, ht2, hk2⟩ := thr_work hi₁.thr hg
+  obtain ⟨u0, hh⟩ := hold_of_word hi₁ hwu hw hw0
+  obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, hu₃, hat₃⟩ :=
+    rmw_eff (new := BitVec.ofNat 32 2) hml hi₁.blk rfl rfl hM
+  have hacq : AtomicOrder.acquire.isAcq = true := rfl
+  simp only [hacq, ite_true] at hcl₃ hat₃
+  refine ⟨hc₃.trans hcu, ?_⟩
+  refine hi₁.mutexWrite (l' := _) (w' := 2) ht₃ hf₃ (by rw [hcl₃]; simp [acqM])
+    (fun u => by rw [hcl₃]; exact (grows_acq m₁ _).cle u) hbk₃ h20₃
+    (mloc_push hml hat₃ rfl ⟨2, by decide, intOfBytes_rmw _⟩ h16₃)
+    (thrOk_congr hi₁.thr ht₃ (by rw [hcl₃]; simp [acqM])) rfl (by decide) hu₃ ?_ hi₁.one ?_ ?_
+  · exact ⟨fun e => absurd e (by decide), fun hn => absurd hh (hn u0)⟩
+  · refine ⟨hw₃ ▸ hi₁.fq.1, fun x hx => ?_⟩
+    rw [hw₃] at hx
+    obtain ⟨h1, h2, v, hv, h3⟩ := hi₁.fq.2 x hx
+    refine ⟨h1, h2, v, hv, ?_⟩
+    rcases h3 with ⟨hv', -⟩ | h3
+    · exact .inl ⟨hv', hu₃⟩
+    · exact .inr h3
+  · rintro cl ⟨h1, -⟩
+    refine ⟨fun u hu => VClock.le_trans (h1 u hu) ?_, fun hn => absurd hh (hn u0)⟩
+    rw [hcl₃]; exact (grows_acq m₁ _).cle u
+
+/-- `lock`'s loop, `xchg(contended)` with an acquire: if the word was `0`, thread `t` holds the
+mutex; else the holder stays, and the word is `2`. -/
+theorem step_xlock {G : ThreadId → Gh} {m m' : Mem} {t k c : Nat} {r : Io_Mutex_State}
+    (hi : Inv G m) (hg : G t = .work k .out) (hc : m.current = t)
+    (h : ((atomicRmwAs c .xchg .acquire 4 mPtr Io_Mutex_State.contended).run m).run =
+      some (.ok (r, m'))) :
+    m'.current = t ∧ ((r = .unlocked ∧ Inv (upd G t (.work k .holds)) m') ∨
+      (r ≠ .unlocked ∧ Inv G m')) := by
+  obtain ⟨hs2, ht2, hk2⟩ := thr_work hi.thr hg
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  obtain ⟨b, hb, hd⟩ := atomicRmwAs_ok h
+  obtain ⟨b0, blk, off, li, m₁, pos, hacc, -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok hb
+  obtain ⟨rfl, rfl⟩ := accW_mutex hi hacc
+  have hir := hi.record (b := 0) (o := 16) (len := 4) (k := .atomicWrite) htl
+    ⟨rfl, .inr (.inr (.inl ⟨rfl, rfl, rfl⟩))⟩
+  obtain ⟨rfl, hi₁, ⟨l, hml⟩, -, -, -, -, -, hcu₁⟩ := hir.locIdx hl
+  have hl0 : m₁.atomics[0]! = l := by rw [hml.1]; rfl
+  have hcu : m₁.current = t := by rw [hcu₁]; exact hc
+  have hpl := rmw_chain_pos (by rw [hl0]; exact hml.2.2.2.2.1) (by rw [hl0]; exact hml.2.2.2.2.2.1) hpos
+  rw [hl0] at hpl hold hm'
+  rw [hpl] at hold hm'
+  obtain ⟨w, hw, rfl⟩ := msg_val hml (by have := hml.2.2.2.2.1; omega) hold
+  have hwu := last_u32 hml hold
+  have happ : RmwOp.xchg.apply false (BitVec.ofNat 32 w) (Packed.toBits Io_Mutex_State.contended) =
+      BitVec.ofNat 32 2 := rfl
+  rw [happ] at hm'
+  rw [ofBits_st hw] at hd
+  cases hd
+  by_cases hw0 : w = 0
+  · subst hw0
+    obtain ⟨hcM, hiM⟩ := take_inv hi₁ hml hg hcu hwu (.inr rfl) hm'
+    exact ⟨hcM, .inl ⟨rfl, hiM⟩⟩
+  · obtain ⟨hcM, hiM⟩ := contend_inv hi₁ hml hg hcu hwu hw hw0 hm'
+    refine ⟨hcM, .inr ⟨?_, hiM⟩⟩
+    rcases (by omega : w = 1 ∨ w = 2) with rfl | rfl <;> decide
+
+/-- Thread `t` holds the mutex: the word is `1` or `2`. -/
+theorem word_of_hold {G : ThreadId → Gh} {m : Mem} {t w : Nat} (hi : Inv G m) (hh : Hold G t)
+    (hwu : U32At m 16 (BitVec.ofNat 32 w)) (hw : w < 3) : w ≠ 0 := by
+  obtain ⟨w₀, hw₀, hu₀, hz⟩ := hi.word
+  have e := ofNat_inj hw₀ hw (u32_eq hu₀ hwu)
+  subst e
+  exact fun h0 => hz.mp h0 t hh
+
+/-- The holder `t` writes `0` (`unlock`, a release RMW) where the word was `w`: no thread holds
+the mutex; if `w = 2`, `t` is at the wake of its unlock, else no thread waits. The release clock
+of the new message is above `t`'s clock. -/
+theorem release_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w : Nat} {ph : Ph}
+    (hi₁ : Inv G m₁) (hml : MLoc m₁ l) (hg : G t = .work k .holds) (hcu : m₁.current = t)
+    (hwu : U32At m₁ 16 (BitVec.ofNat 32 w)) (hw : w < 3)
+    (hph : (w = 1 ∧ ph = .out) ∨ (w = 2 ∧ ph = .wake))
+    (hM : M = rmwM m₁ 0 (l.msgs.size - 1) .release (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 0)) :
+    M.current = t ∧ Inv (upd G t (.work k ph)) M := by
+  obtain ⟨hs2, ht2, hk2⟩ := thr_work hi₁.thr hg
+  have hht : Hold G t := ⟨k, hg⟩
+  have honly : ∀ u, Hold G u → u = t := fun u hu => hi₁.one u t hu hht
+  have hph' : ph ≠ .holds := by rcases hph with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have hn : ∀ u, ¬ Hold (upd G t (.work k ph)) u := by
+    rintro u ⟨k', hu⟩
+    by_cases hut : u = t
+    · subst hut; rw [upd_self] at hu; cases hu; exact hph' rfl
+    · rw [upd_ne _ _ hut] at hu; exact hut (honly u ⟨k', hu⟩)
+  obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, hu₃, hat₃⟩ :=
+    rmw_eff (new := BitVec.ofNat 32 0) hml hi₁.blk rfl rfl hM
+  have hacq : AtomicOrder.release.isAcq = false := rfl
+  have hrel : AtomicOrder.release.isRel = true := rfl
+  simp only [hacq, Bool.false_eq_true, ite_false] at hcl₃ hat₃
+  refine ⟨hc₃.trans hcu, ?_⟩
+  refine hi₁.mutexWrite (l' := _) (w' := 0) ht₃ hf₃ (by rw [hcl₃])
+    (fun u => by rw [hcl₃]; exact VClock.le_refl _) hbk₃ h20₃
+    (mloc_push hml hat₃ rfl ⟨0, by decide, intOfBytes_rmw _⟩ h16₃)
+    (thrOk_congr (thrOk_upd hi₁.thr hg hk2) ht₃ (by rw [hcl₃]))
+    (count_upd (by rw [hg]; rfl)) (by decide) hu₃ ⟨fun _ => hn, fun _ => rfl⟩
+    (fun u _ hu => absurd hu (hn u)) ?_ ?_
+  · refine ⟨hw₃ ▸ hi₁.fq.1, fun x hx => ?_⟩
+    rw [hw₃] at hx
+    obtain ⟨h1, ⟨k₁, hk₁⟩, v, hv, h3⟩ := hi₁.fq.2 x hx
+    have hxt : x.1 ≠ t := fun e => by rw [e, hg] at hk₁; cases hk₁
+    have hx2 := (thr_work hi₁.thr hk₁).2.1
+    refine ⟨h1, ⟨k₁, by rw [upd_ne _ _ hxt]; exact hk₁⟩, t, Ne.symm hxt, ?_⟩
+    rcases h3 with ⟨hv', h2⟩ | ⟨k₂, hk₂⟩
+    · have e := ofNat_inj hw (by decide) (u32_eq hwu h2)
+      subst e
+      rcases hph with ⟨h, -⟩ | ⟨-, rfl⟩
+      · cases h
+      · exact .inr ⟨k, upd_self _ _ _⟩
+    · have hvt : v ≠ t := fun e => by rw [e, hg] at hk₂; cases hk₂
+      have hv2 := (thr_work hi₁.thr hk₂).2.1
+      exfalso
+      unfold ThreadId at *
+      omega
+  · rintro cl ⟨h1, -⟩
+    refine ⟨fun u hu => absurd hu (hn u), fun _ => ⟨_, hat₃, ?_⟩⟩
+    rw [Array.back!, getElem!_pos _ _ (by simp)]
+    simp only [Array.size_push, Nat.add_sub_cancel, Array.getElem_push_eq, rmwMsg, hrel, ite_true]
+    rw [hcu]
+    exact VClock.le_trans (h1 t hht) (VClock.le_merge_right _ _)
+
+/-- `unlock`'s `xchg(unlocked)` with a release, by the holder `t`: the word was `1` (no thread
+waits) or `2` (`t` goes to the wake). -/
+theorem step_unlock {G : ThreadId → Gh} {m m' : Mem} {t k c : Nat} {r : Io_Mutex_State}
+    (hi : Inv G m) (hg : G t = .work k .holds) (hc : m.current = t)
+    (h : ((atomicRmwAs c .xchg .release 4 mPtr Io_Mutex_State.unlocked).run m).run =
+      some (.ok (r, m'))) :
+    m'.current = t ∧ ((r = .locked_once ∧ Inv (upd G t (.work k .out)) m') ∨
+      (r = .contended ∧ Inv (upd G t (.work k .wake)) m')) := by
+  obtain ⟨hs2, ht2, hk2⟩ := thr_work hi.thr hg
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  obtain ⟨b, hb, hd⟩ := atomicRmwAs_ok h
+  obtain ⟨b0, blk, off, li, m₁, pos, hacc, -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok hb
+  obtain ⟨rfl, rfl⟩ := accW_mutex hi hacc
+  have hir := hi.record (b := 0) (o := 16) (len := 4) (k := .atomicWrite) htl
+    ⟨rfl, .inr (.inr (.inl ⟨rfl, rfl, rfl⟩))⟩
+  obtain ⟨rfl, hi₁, ⟨l, hml⟩, -, -, -, -, -, hcu₁⟩ := hir.locIdx hl
+  have hl0 : m₁.atomics[0]! = l := by rw [hml.1]; rfl
+  have hcu : m₁.current = t := by rw [hcu₁]; exact hc
+  have hpl := rmw_chain_pos (by rw [hl0]; exact hml.2.2.2.2.1) (by rw [hl0]; exact hml.2.2.2.2.2.1) hpos
+  rw [hl0] at hpl hold hm'
+  rw [hpl] at hold hm'
+  obtain ⟨w, hw, rfl⟩ := msg_val hml (by have := hml.2.2.2.2.1; omega) hold
+  have hwu := last_u32 hml hold
+  have hw0 := word_of_hold hi₁ ⟨k, hg⟩ hwu hw
+  have happ : RmwOp.xchg.apply false (BitVec.ofNat 32 w) (Packed.toBits Io_Mutex_State.unlocked) =
+      BitVec.ofNat 32 0 := rfl
+  rw [happ] at hm'
+  rw [ofBits_st hw] at hd
+  cases hd
+  rcases (by omega : w = 1 ∨ w = 2) with rfl | rfl
+  · obtain ⟨hcM, hiM⟩ := release_inv (ph := .out) hi₁ hml hg hcu hwu hw (.inl ⟨rfl, rfl⟩) hm'
+    exact ⟨hcM, .inl ⟨rfl, hiM⟩⟩
+  · obtain ⟨hcM, hiM⟩ := release_inv (ph := .wake) hi₁ hml hg hcu hwu hw (.inr ⟨rfl, rfl⟩) hm'
+    exact ⟨hcM, .inr ⟨rfl, hiM⟩⟩
 
 end Sync.MutexCounter
