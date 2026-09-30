@@ -9,7 +9,9 @@ concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`), 
 (`pickC`, `spawnC`, `joinC`), and `run'` of a body. A proof unfolds the generated code, applies
 these rules one step at a time, and uses the `*_ok` lemmas for what a `MemM` step that gave a
 result did: with partial correctness a step can fail (a race is `.illegal`), so the lemmas go
-from a result back to the memory.
+from a result back to the memory. In strict mode each step also needs a proof that it does not
+throw: the `*_noErr` lemmas, built from `MemM.bind_err` and the others (from an error back to the
+step that threw it), `noRace_of` and `join_run`.
 -/
 
 namespace Zig
@@ -26,26 +28,36 @@ theorem WP.map {x : ConcM Tgt α} {f : α → β} {Q : β → (ThreadId → γ) 
   rw [map_eq_pure_bind]
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq) h)
 
-/-- A call in `MemM`, lifted into the body: no stop. -/
+/-- A call in `MemM`, lifted into the body: no stop. In strict mode it does not throw
+(`herr`). -/
 theorem WP.liftM {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
       m'.threads.size = m.threads.size ∧ Q (a, s) G m' n) :
     P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem fun a m' hr => ⟨(h a m' hr).1, WP.pure' (h a m' hr).2⟩)
+  exact WP.bind (WP.liftMem herr fun a m' hr => ⟨(h a m' hr).1, WP.pure' (h a m' hr).2⟩)
 
 theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
       m'.threads.size = m.threads.size ∧ Q (a, s) G m' n) :
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
-  WP.liftM (x := x) h
+  WP.liftM (x := x) herr h
 
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, x.run = some (.error e) → P.strict = false)
     (h : ∀ a, x.run = some (.ok a) → Q (a, s) G m n) :
     P.WP t ((callRC x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem (StateT.lift x) >>= fun a => pure (a, s)) Q G m n
-  refine WP.bind (WP.liftMem fun a m' hr => ?_)
+  refine WP.bind (WP.liftMem (fun e he => herr e ?_) fun a m' hr => ?_)
+  · have he' : ExceptT.run ((fun a => (a, m)) <$> x) = some (.error e) := he
+    rw [ExceptT.run_map] at he'
+    match hx : x.run, he' with
+    | none, he' => simp at he'
+    | some (.error e'), he' => simp [Except.map] at he'; rw [he']
+    | some (.ok _), he' => simp [Except.map] at he'
   have hr' : ExceptT.run ((fun a => (a, m)) <$> x) = some (.ok (a, m')) := hr
   rw [ExceptT.run_map] at hr'
   match hx : x.run, hr' with
@@ -60,12 +72,13 @@ theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) �
 /-- A stop where the oracle picks one of `count m` options: the post holds for every pick. -/
 theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ c, Q (c, s) G₁ { m₁ with current := t } k) :
+      ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
+        Q (c, s) G₁ { m₁ with current := t } k) :
     P.WP t ((pickC count : CM Tgt σ Nat).run s) Q G m n := by
   show P.WP t (ConcM.sync (.pick count) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.sync fun k hk => ?_)
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c => WP.pure' (hc G₁ m₁ hg hi₁ c)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hcr => WP.pure' (hc G₁ m₁ hg hi₁ c hcr)⟩
 
 /-- `Thread.spawn` of `tgt`: the new thread starts with the ghost value `g₀`. -/
 theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -82,18 +95,22 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
   exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
 
-/-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. -/
+/-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
+strict mode, `tid` is a later thread and the join does not throw. -/
 theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      P.fin (G₁ tid) → ∀ m',
+      (P.strict = true → t < tid ∧ tid < m₁.threads.size) ∧ (P.fin (G₁ tid) →
+        (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
+          some (.ok ((), m'))) ∧ ∀ m',
         ((Thread.join tid).run { m₁ with current := t }).run = some (.ok ((), m')) →
-        Q ((), s) G₁ m' k) :
+        Q ((), s) G₁ m' k)) :
     P.WP t ((joinC tid : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.join tid)) >>= fun a =>
     pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ hf m' hj => WP.pure' (hc G₁ m₁ hg hi₁ hf m' hj)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hf =>
+    ⟨((hc G₁ m₁ hg hi₁).2 hf).1, fun m' hj => WP.pure' (((hc G₁ m₁ hg hi₁).2 hf).2 m' hj)⟩⟩⟩
 
 
 /-! ## What a step in `MemM` did, from its result -/
@@ -612,6 +629,240 @@ theorem atomicLoadAt_ok {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} 
       obtain ⟨hd, rfl⟩ := MemM.lift_ok h₄
       exact ⟨hd, rfl⟩
   · exact (MemM.throw_ok h₁).elim
+
+
+/-! ## No error: from a step's error back to its cause -/
+
+namespace MemM
+
+theorem bind_err {x : MemM α} {f : α → MemM β} {m : Mem} {e : Error}
+    (h : ((x >>= f).run m).run = some (.error e)) :
+    (x.run m).run = some (.error e) ∨
+      ∃ a m', (x.run m).run = some (.ok (a, m')) ∧ ((f a).run m').run = some (.error e) := by
+  rw [StateT.run_bind, ExceptT.run_bind] at h
+  match hx : (x.run m).run, h with
+  | none, h => simp at h
+  | some (.error e'), h => simp [pure] at h; exact .inl (by rw [h])
+  | some (.ok (a, m')), h => exact .inr ⟨a, m', rfl, by simpa [hx] using h⟩
+
+theorem lift_err {r : Result α} {m : Mem} {e : Error}
+    (h : ((StateT.lift r : MemM α).run m).run = some (.error e)) : r.run = some (.error e) := by
+  simp only [StateT.run, StateT.lift, ExceptT.run_bind] at h
+  match hr : r.run, h with
+  | none, h => simp at h
+  | some (.error _), h => simp [pure] at h; rw [h]
+  | some (.ok _), h => simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+
+theorem get_err {m : Mem} {e : Error} (h : ((get : MemM Mem).run m).run = some (.error e)) :
+    False := by
+  simp [get, getThe, MonadStateOf.get, StateT.get, StateT.run, pure, ExceptT.pure,
+    ExceptT.mk, ExceptT.run] at h
+
+theorem pure_err {x : α} {m : Mem} {e : Error}
+    (h : ((pure x : MemM α).run m).run = some (.error e)) : False := by
+  simp [StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+
+theorem set_err {x m : Mem} {e : Error}
+    (h : ((set x : MemM PUnit).run m).run = some (.error e)) : False := by
+  simp [set, StateT.set, StateT.run, pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+
+theorem modify_err {f : Mem → Mem} {m : Mem} {e : Error}
+    (h : ((modify f : MemM PUnit).run m).run = some (.error e)) : False := by
+  simp [modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run, pure,
+    ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+
+theorem map_ok {x : MemM α} {f : α → β} {m m' : Mem} {b : β}
+    (h : ((f <$> x).run m).run = some (.ok (b, m'))) :
+    ∃ a, (x.run m).run = some (.ok (a, m')) ∧ b = f a := by
+  rw [map_eq_pure_bind] at h
+  obtain ⟨a, m₁, hx, hp⟩ := bind_ok h
+  obtain ⟨rfl, rfl⟩ := pure_ok hp
+  exact ⟨a, hx, rfl⟩
+
+/-- A step whose run is `pure r` gives no error. -/
+theorem noErr_of_run {x : MemM α} {m : Mem} {r : α × Mem} (h : x.run m = pure r) (e : Error) :
+    (x.run m).run ≠ some (.error e) := by
+  rw [h]; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
+
+end MemM
+
+/-- No footprint entry that overlaps an access races with it: each one happened before the
+access (its clock is `≤` the thread's clock), or does not race by its kind. -/
+theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
+    (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
+      VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
+    NoRace m b o len k := by
+  unfold NoRace raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro e he
+  by_cases hb : e.block = b
+  · by_cases ho : o < e.off + e.len ∧ e.off < o + len
+    · rcases h e he hb ho.1 ho.2 with hl | hr
+      · have hle : VClock.le e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true :=
+          VClock.le_trans hl (VClock.le_bump _ _)
+        simp [VClock.concurrent, hle]
+      · simp [hr]
+    · have : ¬ (o < e.off + e.len ∧ e.off < o + len) := ho
+      simp only [not_and] at this
+      by_cases h1 : o < e.off + e.len
+      · simp [hb, h1, this h1]
+      · simp [h1]
+  · simp [hb]
+
+/-- `Thread.join` of a thread that the current thread spawned and did not join yet. -/
+theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
+    (hs : rec.spawner = m.current) (hj : rec.joined = false) :
+    ∃ m', ((Thread.join tid).run m).run = some (.ok ((), m')) := by
+  unfold Thread.join
+  simp [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, ExceptT.run,
+    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj]
+
+
+theorem locIdx_noErr {m : Mem} {b o len : Nat}
+    (hfound : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
+      (m.atomics[i]!).len = len)
+    (hnew : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none →
+      ∀ l ∈ m.atomics, l.block ≠ b) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) := by
+  intro h
+  unfold locIdx at h
+  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
+  · exact MemM.get_err h₀
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  cases hi : m₁.atomics.findIdx? (fun l => l.block == b && l.off == o) with
+  | some i =>
+    simp only [hi, hfound i hi, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte] at h₁
+    split at h₁
+    all_goals
+      rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
+      · exact MemM.set_err h₂
+      · exact MemM.pure_err h₂
+  | none =>
+    have hno : (m₁.atomics.any fun l => l.block == b && o < l.off + l.len && l.off < o + len) =
+        false := by
+      rw [Array.any_eq_false]
+      intro j hj
+      have := hnew hi _ (Array.getElem_mem hj)
+      simp [this]
+    simp only [hi, hno, Bool.false_eq_true, ↓reduceIte] at h₁
+    rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
+    · exact MemM.set_err h₂
+    · exact MemM.pure_err h₂
+
+theorem loadPrep_noErr {n : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {rmw : Bool}
+    {m : Mem} {b o : Nat} {blk : Block}
+    (hacc : (if rmw then m.accessW p (intSize n) align else m.access p (intSize n) align) =
+      pure (b, blk, o))
+    (hnr : NoRace m b o (intSize n) (if rmw then .atomicWrite else .atomicRead))
+    (hloc : ∀ e, ((locIdx b o (intSize n)).run
+      (m.recordAt b o (intSize n) (if rmw then .atomicWrite else .atomicRead))).run ≠
+        some (.error e)) (e : Error) :
+    ((loadPrep n ord align p rmw).run m).run ≠ some (.error e) := by
+  intro h
+  unfold loadPrep at h
+  cases rmw <;> simp only [Bool.false_eq_true, ↓reduceIte] at h hacc hnr hloc <;>
+  · rcases MemM.bind_err h with he1 | ⟨a₁, m₁, hg, h1⟩
+    · exact MemM.get_err he1
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    rcases MemM.bind_err h1 with he2 | ⟨r, m₂, ha, h2⟩
+    · have := MemM.lift_err he2; rw [hacc] at this; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at this
+    obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+    rw [hacc] at ha; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha; subst ha
+    rcases MemM.bind_err h2 with he3 | ⟨_, m₃, hr, h3⟩
+    · rw [recordAccess_run hnr] at he3; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at he3
+    obtain ⟨-, rfl⟩ := recordAccess_ok hr
+    rcases MemM.bind_err h3 with he4 | ⟨li, m₄, hl, h4⟩
+    · exact hloc e he4
+    rcases MemM.bind_err h4 with he5 | ⟨a₅, m₅, hg, h5⟩
+    · exact MemM.get_err he5
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    exact MemM.pure_err h5
+
+theorem rmwWrite_noErr {n : Nat} {li pos : Nat} {ord : AtomicOrder} {rd : Msg} {new : BitVec n}
+    {m : Mem} (e : Error) : ((rmwWrite li pos ord rd new).run m).run ≠ some (.error e) := by
+  intro h
+  unfold rmwWrite at h
+  cases hq : ord.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h
+  · rcases MemM.bind_err h with he1 | ⟨a₂, m₂, hg, h1⟩
+    · exact MemM.get_err he1
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    rcases MemM.bind_err h1 with he2 | ⟨_, m₃, hi, h2⟩
+    · exact MemM.modify_err he2
+    · exact MemM.modify_err h2
+  · rcases MemM.bind_err h with he3 | ⟨_, m₁, ha, h3⟩
+    · exact MemM.modify_err he3
+    rcases MemM.bind_err h3 with he4 | ⟨a₂, m₂, hg, h4⟩
+    · exact MemM.get_err he4
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    rcases MemM.bind_err h4 with he5 | ⟨_, m₃, hi, h5⟩
+    · exact MemM.modify_err he5
+    · exact MemM.modify_err h5
+
+theorem atomicRmwAt_noErr {n c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {align : Nat} {p : Ptr} {v : BitVec n} {m : Mem}
+    (hprep : ∀ e, ((loadPrep n ord align p true).run m).run ≠ some (.error e))
+    (hpos : ∀ li opts m₁, ((loadPrep n ord align p true).run m).run =
+        some (.ok ((li, opts), m₁)) →
+      ∃ pos, opts[c]? = some pos ∧
+        ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w))
+    (e : Error) : ((atomicRmwAt c op signed ord align p v).run m).run ≠ some (.error e) := by
+  intro h
+  unfold atomicRmwAt at h
+  rcases MemM.bind_err h with he1 | ⟨⟨li, opts⟩, m₁, hp, h1⟩
+  · exact hprep e he1
+  obtain ⟨pos, hpos, w, hw⟩ := hpos li opts m₁ hp
+  simp only [hpos] at h1
+  rcases MemM.bind_err h1 with he2 | ⟨a₂, m₂, hg, h2⟩
+  · exact MemM.get_err he2
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h2 with he3 | ⟨old, m₃, hd, h3⟩
+  · have := MemM.lift_err he3
+    change ExceptT.run (intOfBytes n _) = _ at this
+    rw [hw] at this; cases this
+  obtain ⟨-, rfl⟩ := MemM.lift_ok hd
+  rcases MemM.bind_err h3 with he4 | ⟨_, m₄, hr, h4⟩
+  · exact rmwWrite_noErr e he4
+  · exact MemM.pure_err h4
+
+theorem atomicLoadAt_noErr {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {m : Mem}
+    (hprep : ∀ e, ((loadPrep n ord align p false).run m).run ≠ some (.error e))
+    (hpos : ∀ li opts m₁, ((loadPrep n ord align p false).run m).run =
+        some (.ok ((li, opts), m₁)) →
+      ∃ pos, opts[c]? = some pos ∧
+        ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w))
+    (e : Error) : ((atomicLoadAt (n := n) c ord align p).run m).run ≠ some (.error e) := by
+  intro h
+  unfold atomicLoadAt at h
+  rcases MemM.bind_err h with he1 | ⟨⟨li, opts⟩, m₁, hp, h1⟩
+  · exact hprep e he1
+  obtain ⟨pos, hpos, w, hw⟩ := hpos li opts m₁ hp
+  simp only [hpos] at h1
+  rcases MemM.bind_err h1 with he2 | ⟨a₂, m₂, hg, h2⟩
+  · exact MemM.get_err he2
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h2 with he3 | ⟨_, m₃, ho, h3⟩
+  · exact MemM.modify_err he3
+  have := modify_ok ho; subst this
+  have hw' : (intOfBytes n ((m₂.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w) := hw
+  cases hq : ord.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h3
+  · have := MemM.lift_err h3
+    change ExceptT.run (intOfBytes n _) = _ at this
+    rw [hw'] at this; cases this
+  · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, hc, h4⟩
+    · exact MemM.modify_err he4
+    have := modify_ok hc; subst this
+    have := MemM.lift_err h4
+    change ExceptT.run (intOfBytes n _) = _ at this
+    rw [hw'] at this; cases this
+
+/-- The number of options of an op is at most 1 if every result of its preparation has at most
+1. -/
+theorem optCount_le_one {x : MemM (Array Nat)} {m : Mem}
+    (h : ∀ a m', (x.run m).run = some (.ok (a, m')) → a.size ≤ 1) : optCount x m ≤ 1 := by
+  unfold optCount
+  split
+  · rename_i a m' hr; exact h a m' hr
+  · exact Nat.le_refl _
 
 end Proto
 end Conc

@@ -103,6 +103,10 @@
 #     `readOpts_chain` (ZigLean/Conc/Lemmas.lean), which `parallelCounter_spec`
 #     (Proofs/Threads/Counter.lean) needs. The diff test does not see it: the newest message is
 #     still option 0.
+# (ab) Lean-runtime mutation, threads: a spawned thread (`Thread.fork`) gets an empty clock: it
+#     no longer happens after its spawner's writes. Detected by the proof build:
+#     `parallelCounter_safe` (Proofs/Threads/Counter.lean; a kid's read of its context would race).
+#     The diff test does not see it: a schedule with a race matches any Zig result.
 #
 # Usage: mutate.sh
 # Env:
@@ -111,7 +115,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -713,6 +717,22 @@ else
   }
 
   proof_report "mutation (aa)" Proofs.Threads.Counter
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (ab): a spawned thread gets an empty clock (Lean runtime, proof build) ==" >&2
+if ! has_example threads; then
+  echo "mutation (ab): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/^    clocks := (m.clocks.set! parent parentClock).push parentClock$/    clocks := (m.clocks.set! parent parentClock).push #[]/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^    clocks := (m.clocks.set! parent parentClock).push #\[\]$' "$thread_lean" || {
+    echo "error: mutation (ab): sed did not change Thread.fork" >&2
+    exit 1
+  }
+
+  proof_report "mutation (ab)" Proofs.Threads.Counter
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi
