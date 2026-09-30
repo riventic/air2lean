@@ -125,9 +125,12 @@ for ex in $examples; do
   fi
   lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex." $translate_args
 
-  # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version, except a
-  # version with its own tests/golden/<version>/<ex>/Gen.lean (its translation differs).
-  gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
+  # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version on Linux (the
+  # reference host), except a version with its own tests/golden/<version>/<ex>/Gen.lean, and a
+  # host OS with its own tests/golden/<version>/<ex>/Gen-<os>.lean (std code that differs per
+  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/).
+  gen_golden="tests/golden/$zig_version/$ex/Gen-$(uname -s | tr '[:upper:]' '[:lower:]').lean"
+  [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
   if [ -f "$gen_golden" ]; then
     # The committed Proofs/<Ex>/Gen.lean is overwritten in either mode: always say so (below).
     restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
