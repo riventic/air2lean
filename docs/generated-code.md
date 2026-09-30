@@ -330,7 +330,7 @@ One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>
 |---|---|
 | `examples/<ex>/<ex>.zig` | The Zig source under test |
 | `examples/<ex>/filter` | Optional: more name prefixes to translate, one per line (std code; [std-models.md](std-models.md)) |
-| `tests/golden/<ex>/air/` | Golden AIR-JSON, checked by `scripts/check.sh`; per-version overrides in `tests/golden/<v>/<ex>/air/`, per-OS overrides in `tests/golden/<v>/<ex>/air-<os>/` (`uname -s` in lower case). The Linux files come from CI: the Mac cannot write them |
+| `tests/golden/<ex>/air/` | Golden AIR-JSON, checked by `scripts/check.sh`; per-version overrides in `tests/golden/<v>/<ex>/air/`, per-OS overrides in `tests/golden/<v>/<ex>/air-<os>/` (`uname -s` in lower case). The Linux files come from CI: the Mac cannot write them. A failed CI job uploads the AIR it dumped (artifact `air-<version>-<n>`, `AIR2LEAN_OUT_DIR`); copy the differing files to `air-linux/` |
 | `Proofs/<Ex>/Gen.lean` | Committed translator output (`--namespace <Ex> --prefix <ex>.`) |
 | `tests/diff/<ex>/inputs/<fn>.jsonl` | Generated inputs, one file per function (`tests/diff/gen_inputs.zig`) |
 | `tests/diff/<ex>/harness.zig` | Per-function dispatch only: imports `<ex>` + `common`, forks, writes `tests/diff/out/zig/<ex>/<fn>.jsonl` |

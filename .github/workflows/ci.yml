@@ -122,7 +122,19 @@ jobs:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
         run: scripts/check.sh
+
+      # A failed check hands out the AIR that this host dumped: the golden files of this OS
+      # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
+      - name: Upload the dumped AIR
+        if: failure() && !matrix.mutate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-${{ matrix.zig }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7
 
       # After check.sh, Proofs/<Ex>/Gen.lean holds this version's translation: the proofs must
       # hold for it too (0.14.1 has its own `layout`, `variants` and `floatops` translations).
