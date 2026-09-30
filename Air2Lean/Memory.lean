@@ -183,6 +183,8 @@ inductive ThreadFn where
   does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
   `.unspecified` at run time (the diff test pins that count), not a rejection. -/
   | noClock
+  /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
+  | groupAsync | groupConcurrent | groupAwait | groupCancel
   deriving BEq, Repr
 
 /-- The `Thread` function that the function `name` is an instance of
@@ -200,6 +202,10 @@ def threadFn? (name : String) : Option ThreadFn :=
   | "Thread.Mutex.DarwinImpl.unlock" => some .osUnlock
   | "Thread.Mutex.DarwinImpl.tryLock" => some .osTryLock
   | "time.Timer.start" | "time.Timer.read" | "Thread.Futex.timedWait" => some .noClock
+  | "Io.Group.async" => some .groupAsync
+  | "Io.Group.concurrent" => some .groupConcurrent
+  | "Io.Group.await" => some .groupAwait
+  | "Io.Group.cancel" => some .groupCancel
   | _ => none
 
 /-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
@@ -316,14 +322,22 @@ partial def concFunctions (funcs : Array Func) : Array String :=
     if next.isEmpty then conc else go (conc ++ next)
   go (funcs.filterMap fun f => if f.syncLocally then some f.name else none)
 
-/-- The spawn targets of `funcs`: each function that a `Thread.spawn` runs, with the type of its
-one argument (the args tuple's field), in first-use order. -/
+/-- The position of the args tuple of a call that spawns a thread: `Thread.spawn(config, f, args)`
+(`f` is comptime), `Io.Group.async(g, io, f, args)`/`.concurrent`. -/
+def ThreadFn.spawnArgs? : ThreadFn → Option Nat
+  | .spawn => some 1
+  | .groupAsync | .groupConcurrent => some 2
+  | _ => none
+
+/-- The spawn targets of `funcs`: each function that a `Thread.spawn` or an `Io.Group.async` runs,
+with the type of its one argument (the args tuple's field), in first-use order. -/
 def spawnTargets (funcs : Array Func) : Array (String × Func × TyId) :=
   funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
     match i.op with
     | .call (.func name _ (some sf)) args =>
-      if threadFn? name == some .spawn && !(acc.any (·.1 == sf)) then
-        let argTy := ((args[1]? : Option Val).bind fun v => match v with
+      if let some k := (threadFn? name).bind (·.spawnArgs?) then
+        if acc.any (·.1 == sf) then acc else
+        let argTy := ((args[k]? : Option Val).bind fun v => match v with
           | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
           | v => v.constTy?).bind fun t => match f.types[t]? with
             | some (.tuple fs) => fs[0]?

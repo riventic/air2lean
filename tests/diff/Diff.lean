@@ -15,6 +15,7 @@ import Proofs.Threads.Gen
 import Proofs.Atomics.Gen
 import Proofs.Sync.Gen
 import Proofs.Threadsync.Gen
+import Proofs.Iogroup.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 import Proofs.Layout.Gen
@@ -1054,6 +1055,13 @@ def runThreadsync : IO Unit := do
   one "handoff" Threadsync.handoff
   one "waitGroup" Threadsync.waitGroup
 
+def runIogroup : IO Unit := do
+  let one (name : String) (f : Zig.Io → Zig.ConcM Iogroup.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "iogroup" name fun _ zig =>
+      pure (searchSchedules (runConcWith Iogroup.dispatch Iogroup.mem0 (f {}) (errStr · false)) zig)
+  one "groupCounter" Iogroup.groupCounter
+  one "groupConcurrent" Iogroup.groupConcurrent
+
 def runXchgRace : IO Unit :=
   processConc "threads" "xchgRace" fun j zig => do
     let items ← getArr j
@@ -1177,6 +1185,8 @@ def main : IO Unit := do
   run "sync" DiffTest.runSync
 
   run "threadsync" DiffTest.runThreadsync
+
+  run "iogroup" DiffTest.runIogroup
 
   run "floats" do
     DiffTest.runLerp

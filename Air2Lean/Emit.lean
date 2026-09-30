@@ -923,6 +923,15 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
   | .noClock => "Zig.callRC (throw Zig.Error.unspecified)"
+  -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`).
+  | .groupAsync | .groupConcurrent =>
+    let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
+    let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
+    let op := if fn == .groupAsync then "groupAsyncC" else "groupConcurrentC"
+    s!"Zig.{op} {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)} \
+      (Tgt.{target} {rv (args[2]?.getD .void)})"
+  | .groupAwait => s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
+  | .groupCancel => s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/

@@ -336,6 +336,16 @@ def join (tid : ThreadId) : MemM Unit := do
     clocks := m.clocks.set! m.current merged
     threads := m.threads.set! tid { rec with joined := true } }
 
+/-- `Io.Group`: the task `tid` belongs to the group at `g`. -/
+def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>
+  { m with groups := m.groups.push (g, tid) }
+
+/-- `Io.Group`: the tasks of the group at `g`, in the order of their spawn; they leave the group. -/
+def groupTake (g : Ptr) : MemM (Array ThreadId) := do
+  let m ← get
+  set { m with groups := m.groups.filter (·.1 != g) }
+  pure ((m.groups.filter (·.1 == g)).map (·.2))
+
 /-! ## Futex (the kernel's part of `Io.futexWait`/`futexWake`)
 
 The scheduler (`ZigLean/Conc/Sched.lean`) calls these at a `wait`/`wake` sync op. The queue is in

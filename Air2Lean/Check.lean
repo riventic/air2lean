@@ -65,8 +65,12 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
     let _ := isConst
     match size with
-    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20).
-    | "one" => if (types[child]?.map isFnTy).getD false then pure () else recur child
+    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`
+    -- (`Io.Group`'s `token`) is a value only: Zig cannot load through it (it has no size).
+    | "one" =>
+      if (types[child]?.map isFnTy).getD false || types[child]? == some (.other "anyopaque") then
+        pure ()
+      else recur child
     | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
   | .array _ child _ => recur child
@@ -555,18 +559,19 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
 `Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),
 so `Emit.lean` needs the callee applied to exactly one Lean term; a 0- or 2+-field args tuple is
 outside the subset (v1, `docs/std-models.md` §Thread model). -/
-def checkThreadSpawn (f : Func) (args : Array Val) : Except String Unit := do
+def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val) :
+    Except String Unit := do
   let tyOf (v : Val) : Option TyId := match v with
     | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
     | v => v.constTy?
-  let some argsTy := args[1]?.bind tyOf
-    | throw s!"{f.name}: a call to Thread.spawn has no args-tuple type"
+  let some argsTy := args[k]?.bind tyOf
+    | throw s!"{f.name}: a call to {callee} has no args-tuple type"
   match f.types[argsTy]? with
   | some (.tuple fields) =>
     if fields.size != 1 then
-      throw s!"{f.name}: Thread.spawn's args tuple has {fields.size} fields; only exactly 1 is \
+      throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields; only exactly 1 is \
         in the subset (v1, docs/std-models.md §Thread model)"
-  | _ => throw s!"{f.name}: Thread.spawn's second argument is not a tuple"
+  | _ => throw s!"{f.name}: {callee}'s args argument is not a tuple"
 
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
@@ -585,7 +590,11 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           | some fn => checkAllocCall f fn args i.ty
           | none =>
             match threadFn? callee with
-            | some .spawn => checkThreadSpawn f args
+            | some .spawn => checkThreadSpawn f "Thread.spawn" 1 args
+            | some .groupAsync | some .groupConcurrent => checkThreadSpawn f "Io.Group.async" 2 args
+            | some .groupAwait | some .groupCancel =>
+              unless args.size == 2 do
+                throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 2"
             | some .join => pure ()
             | some .futexWait | some .futexWaitU | some .futexWake =>
               -- `(io, ptr, value)`: a `u32`-sized value (Zig asserts it), an enum or integer.
