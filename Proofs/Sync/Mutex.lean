@@ -1390,4 +1390,123 @@ theorem step_cntStore {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} (hi : Inv G
     have hwt : w.1 ≠ t := fun e => by rw [e, hg] at hk₁; cases hk₁
     exact ⟨k₁, by rw [upd_ne _ _ hwt]; exact hk₁⟩
 
+/-! ## No error at the mutex -/
+
+/-- The access to the mutex, its race check and its location do not fail. -/
+theorem mutex_prep {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (ht : m.current < m.threads.size) :
+    ∃ blk, m.accessW mPtr (intSize 32) 4 = pure (0, blk, 16) ∧
+      NoRace m 0 16 (intSize 32) .atomicWrite ∧
+      ∀ e, ((locIdx 0 16 (intSize 32)).run (m.recordAt 0 16 (intSize 32) .atomicWrite)).run ≠
+        some (.error e) := by
+  obtain ⟨blk, hblk, -, he₀⟩ := acc0 (o := 16) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+  obtain ⟨blk₁, hblk₁, -, -, hk, -⟩ := hi.blk
+  rw [hblk] at hblk₁; cases hblk₁
+  refine ⟨blk, ?_, noRace_mutex rfl hi ht, fun e => locIdx_noErr (fun i hi' => ?_) (fun hn => ?_) e⟩
+  · have : m.access mPtr (intSize 32) 4 = m.access ⟨some 0, ((16 : Nat) : Int)⟩ 4 4 := rfl
+    unfold Mem.accessW; rw [this, he₀]
+    simp [hk, pure, bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont]
+  · show ((m.atomics)[i]!).len = intSize 32
+    rcases hi.loc with ⟨ha, -⟩ | ⟨l, ha, hb, ho, hl, -⟩
+    · have : (m.recordAt 0 16 (intSize 32) .atomicWrite).atomics = #[] := ha
+      rw [this] at hi'; simp at hi'
+    · have : (m.recordAt 0 16 (intSize 32) .atomicWrite).atomics = #[l] := ha
+      rw [this] at hi'
+      simp [hb, ho] at hi'
+      subst hi'
+      rw [ha]; exact hl
+  · rcases hi.loc with ⟨ha, -⟩ | ⟨l, ha, hb, ho, -⟩
+    · intro l hl; show l.block ≠ 0
+      have : l ∈ m.atomics := hl
+      rw [ha] at this; simp at this
+    · have : (m.recordAt 0 16 (intSize 32) .atomicWrite).atomics = #[l] := ha
+      rw [this] at hn
+      simp [hb, ho] at hn
+
+/-- The state after the mutex's location: the invariant, location 0, a chain. -/
+theorem mutex_loc {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hi : Inv G m)
+    (ht : m.current < m.threads.size)
+    (hl : ((locIdx 0 16 (intSize 32)).run (m.recordAt 0 16 (intSize 32) .atomicWrite)).run =
+      some (.ok (li, m₁))) :
+    li = 0 ∧ Inv G m₁ ∧ ∃ l, MLoc m₁ l ∧ m₁.atomics[0]! = l := by
+  have hir := hi.record (b := 0) (o := 16) (len := 4) (k := .atomicWrite) ht
+    ⟨rfl, .inr (.inr (.inl ⟨rfl, rfl, rfl⟩))⟩
+  obtain ⟨rfl, hi₁, ⟨l, hml⟩, -⟩ := hir.locIdx hl
+  exact ⟨rfl, hi₁, l, hml, by rw [hml.1]; rfl⟩
+
+/-- An `xchg` at the mutex does not throw: it reads the newest message, which holds a state. -/
+theorem xchg_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} {ord : AtomicOrder}
+    {v : Io_Mutex_State} (hi : Inv G m) (ht : m.current < m.threads.size)
+    (hcr : c < rmwCount 32 ord 4 mPtr m ∨ rmwCount 32 ord 4 mPtr m = 0 ∧ c = 0) (e : Error) :
+    ((atomicRmwAs c .xchg ord 4 mPtr v).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := mutex_prep hi ht
+  have hprep : ∀ e, ((loadPrep 32 ord 4 mPtr true).run m).run ≠ some (.error e) :=
+    loadPrep_noErr (by simpa using hacc) (by simpa using hnr) (by simpa using hloc)
+  refine atomicRmwAs_noErr (atomicRmwAt_noErr hprep ?_) ?_ e
+  · intro li opts m₁ hp
+    obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := loadPrep_ok hp
+    simp only [↓reduceIte] at ha hl
+    rw [hacc] at ha; cases ha
+    obtain ⟨rfl, -, l, hml, hl0⟩ := mutex_loc hi ht hl
+    have hsz := hml.2.2.2.2.1
+    have hro : readOpts m₁ 0 true = #[l.msgs.size - 1] := by
+      rw [readOpts_chain (by rw [hl0]; exact hsz) (by rw [hl0]; exact hml.2.2.2.2.2.1), hl0]
+    have hcnt : rmwCount 32 ord 4 mPtr m = 1 := by
+      unfold rmwCount; rw [optCount_eq hp, hro]; rfl
+    have hc0 : c = 0 := by rw [hcnt] at hcr; omega
+    subst hc0
+    refine ⟨l.msgs.size - 1, by rw [hro]; rfl, ?_⟩
+    obtain ⟨w, -, hw⟩ := hml.2.2.2.2.2.2.1 (l.msgs.size - 1) (by omega)
+    exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ (by omega)]; exact hw⟩
+  · intro b m' hb
+    obtain ⟨b0, blk', o, li, m₁, pos, hacc', -, hl, hpos, hold, -⟩ := atomicRmwAt_ok hb
+    obtain ⟨rfl, rfl⟩ := accW_mutex hi hacc'
+    obtain ⟨rfl, -, l, hml, hl0⟩ := mutex_loc hi ht hl
+    rw [hl0] at hold
+    have hpl := readOpts_lt hpos
+    rw [hl0] at hpl
+    obtain ⟨w, hw, rfl⟩ := msg_val hml hpl hold
+    exact ⟨_, ofBits_st hw⟩
+
+/-- `lock`'s `cmpxchg` does not throw: each option is a message, which holds a state. -/
+theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} (hi : Inv G m)
+    (ht : m.current < m.threads.size)
+    (hcr : c < casCount 32 .acquire 4 mPtr (Packed.toBits Io_Mutex_State.unlocked) m ∨
+      casCount 32 .acquire 4 mPtr (Packed.toBits Io_Mutex_State.unlocked) m = 0 ∧ c = 0)
+    (e : Error) :
+    ((cmpxchgAs c .acquire .relaxed 4 mPtr Io_Mutex_State.unlocked
+      Io_Mutex_State.locked_once).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := mutex_prep hi ht
+  have hprep : ∀ e, ((casPrep 32 4 mPtr (Packed.toBits Io_Mutex_State.unlocked)).run m).run ≠
+      some (.error e) := casPrep_noErr hacc hnr hloc
+  refine cmpxchgAs_noErr (cmpxchgAt_noErr hprep ?_) ?_ e
+  · intro li opts m₁ hp
+    obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
+    rw [hacc] at ha; cases ha
+    obtain ⟨rfl, -, l, hml, hl0⟩ := mutex_loc hi ht hl
+    have hsz := hml.2.2.2.2.1
+    have hne := casOpts_ne (e := Packed.toBits Io_Mutex_State.unlocked) (m := m₁) (li := 0)
+      (by rw [hl0]; exact hsz)
+    have hcnt : casCount 32 .acquire 4 mPtr (Packed.toBits Io_Mutex_State.unlocked) m =
+        (casOpts m₁ 0 (Packed.toBits Io_Mutex_State.unlocked)).size := by
+      unfold casCount; rw [optCount_eq hp]
+    have hc : c < (casOpts m₁ 0 (Packed.toBits Io_Mutex_State.unlocked)).size := by
+      rw [hcnt] at hcr; omega
+    refine ⟨_, Array.getElem?_eq_getElem hc, ?_⟩
+    have hpl := (casOpts_pos (Array.getElem?_eq_getElem hc)).1
+    rw [hl0] at hpl
+    obtain ⟨w, -, hw⟩ := hml.2.2.2.2.2.2.1 _ hpl
+    exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
+  · intro b m' hb
+    obtain ⟨b0, blk', o, li, m₁, pos, old, hacc', -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok hb
+    obtain ⟨rfl, rfl⟩ := accW_mutex hi hacc'
+    obtain ⟨rfl, -, l, hml, hl0⟩ := mutex_loc hi ht hl
+    rcases hcase with ⟨-, h, -⟩ | ⟨-, h, -⟩
+    · cases h
+    · cases h
+      rw [hl0] at hold
+      have hpl := (casOpts_pos hpos).1
+      rw [hl0] at hpl
+      obtain ⟨w, hw, rfl⟩ := msg_val hml hpl hold
+      exact ⟨_, ofBits_st hw⟩
+
 end Sync.MutexCounter

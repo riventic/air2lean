@@ -1084,6 +1084,126 @@ theorem add_one_noErr {w : Nat} {a : BitVec w} (hlt : a.toNat + 1 < 2 ^ w) (e : 
   · rename_i h; rw [hno] at h; cases h
   · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
+/-- The number of options of an op is the size of the array that its preparation gives. -/
+theorem optCount_eq {x : MemM (Nat × Array Nat)} {m m₁ : Mem} {li : Nat} {opts : Array Nat}
+    (h : (x.run m).run = some (.ok ((li, opts), m₁))) : optCount ((·.2) <$> x) m = opts.size := by
+  unfold optCount
+  have : ((((·.2) <$> x) : MemM (Array Nat)).run m).run = some (.ok (opts, m₁)) := by
+    rw [StateT.run_map, ExceptT.run_map, h]; rfl
+  rw [this]
+
+theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} {b o : Nat}
+    {blk : Block} (hacc : m.accessW p (intSize n) align = pure (b, blk, o))
+    (hnr : NoRace m b o (intSize n) .atomicWrite)
+    (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run ≠
+      some (.error e)) (e : Error) :
+    ((casPrep n align p expected).run m).run ≠ some (.error e) := by
+  intro h
+  unfold casPrep at h
+  rcases MemM.bind_err h with he1 | ⟨a₁, m₁, hg, h1⟩
+  · exact MemM.get_err he1
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h1 with he2 | ⟨r, m₂, ha, h2⟩
+  · have := MemM.lift_err he2; rw [hacc] at this; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at this
+  obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+  rw [hacc] at ha; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha; subst ha
+  rcases MemM.bind_err h2 with he3 | ⟨_, m₃, hr, h3⟩
+  · rw [recordAccess_run hnr] at he3; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at he3
+  obtain ⟨-, rfl⟩ := recordAccess_ok hr
+  rcases MemM.bind_err h3 with he4 | ⟨li, m₄, hl, h4⟩
+  · exact hloc e he4
+  rcases MemM.bind_err h4 with he5 | ⟨a₅, m₅, hg, h5⟩
+  · exact MemM.get_err he5
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  exact MemM.pure_err h5
+
+theorem cmpxchgAt_noErr {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p : Ptr}
+    {expected new : BitVec n} {m : Mem}
+    (hprep : ∀ e, ((casPrep n align p expected).run m).run ≠ some (.error e))
+    (hpos : ∀ li opts m₁, ((casPrep n align p expected).run m).run =
+        some (.ok ((li, opts), m₁)) →
+      ∃ pos, opts[c]? = some pos ∧
+        ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w))
+    (e : Error) : ((cmpxchgAt c succ fail align p expected new).run m).run ≠ some (.error e) := by
+  intro h
+  unfold cmpxchgAt at h
+  rcases MemM.bind_err h with he1 | ⟨⟨li, opts⟩, m₁, hp, h1⟩
+  · exact hprep e he1
+  obtain ⟨pos, hpos, w, hw⟩ := hpos li opts m₁ hp
+  simp only [hpos] at h1
+  rcases MemM.bind_err h1 with he2 | ⟨a₂, m₂, hg, h2⟩
+  · exact MemM.get_err he2
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h2 with he3 | ⟨old, m₃, hd, h3⟩
+  · have := MemM.lift_err he3
+    change ExceptT.run (intOfBytes n _) = _ at this
+    rw [hw] at this; cases this
+  obtain ⟨-, rfl⟩ := MemM.lift_ok hd
+  split at h3
+  · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, hr, h4⟩
+    · exact rmwWrite_noErr e he4
+    · exact MemM.pure_err h4
+  · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, ho, h4⟩
+    · exact MemM.modify_err he4
+    cases hq : fail.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h4
+    · exact MemM.pure_err h4
+    · rcases MemM.bind_err h4 with he5 | ⟨_, m₅, hc, h5⟩
+      · exact MemM.modify_err he5
+      · exact MemM.pure_err h5
+
+/-- An RMW on an enum does not throw, if the integer RMW does not and its old value decodes. -/
+theorem atomicRmwAs_noErr {α : Type} {n : Nat} [Packed α n] {c : Nat} {op : RmwOp}
+    {ord : AtomicOrder} {align : Nat} {p : Ptr} {v : α} {m : Mem}
+    (hrmw : ∀ e, ((atomicRmwAt c op false ord align p (Packed.toBits v)).run m).run ≠
+      some (.error e))
+    (hdec : ∀ b m', ((atomicRmwAt c op false ord align p (Packed.toBits v)).run m).run =
+      some (.ok (b, m')) → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    (e : Error) : ((atomicRmwAs c op ord align p v).run m).run ≠ some (.error e) := by
+  intro h
+  unfold atomicRmwAs at h
+  rcases MemM.bind_err h with he1 | ⟨b, m₁, hb, h1⟩
+  · exact hrmw e he1
+  obtain ⟨r, hr⟩ := hdec b m₁ hb
+  have := MemM.lift_err h1
+  rw [hr] at this; cases this
+
+/-- A `cmpxchg` on an enum does not throw, if the integer one does not and a value read on
+failure decodes. -/
+theorem cmpxchgAs_noErr {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : AtomicOrder}
+    {align : Nat} {p : Ptr} {expected new : α} {m : Mem}
+    (hcas : ∀ e, ((cmpxchgAt c succ fail align p (Packed.toBits expected)
+      (Packed.toBits new)).run m).run ≠ some (.error e))
+    (hdec : ∀ b m', ((cmpxchgAt c succ fail align p (Packed.toBits expected)
+      (Packed.toBits new)).run m).run = some (.ok (some b, m')) →
+      ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    (e : Error) : ((cmpxchgAs c succ fail align p expected new).run m).run ≠ some (.error e) := by
+  intro h
+  unfold cmpxchgAs at h
+  rcases MemM.bind_err h with he1 | ⟨o, m₁, ho, h1⟩
+  · exact hcas e he1
+  cases o with
+  | none => exact MemM.pure_err h1
+  | some b =>
+    obtain ⟨r, hr⟩ := hdec b m₁ ho
+    dsimp only at h1
+    rw [map_eq_pure_bind] at h1
+    rcases MemM.bind_err h1 with he2 | ⟨_, m₂, hl, h2⟩
+    · have := MemM.lift_err he2; rw [hr] at this; cases this
+    · exact MemM.pure_err h2
+
+/-- A `cmpxchg` can always read the newest message. -/
+theorem casOpts_ne {n : Nat} {m : Mem} {li : Nat} {e : BitVec n}
+    (h0 : 0 < (m.atomics[li]!).msgs.size) : 0 < (casOpts m li e).size := by
+  have hf := floorPos_lt h0
+  have hmem : (m.atomics[li]!).msgs.size - 1 ∈ casOpts m li e := by
+    unfold casOpts
+    rw [Array.mem_filter]
+    refine ⟨?_, by simp [ALoc.hasRmwAfter_last]⟩
+    unfold readOpts
+    rw [Array.mem_filter]
+    refine ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
+  exact Array.size_pos_of_mem hmem
+
 end Proto
 end Conc
 end Zig
