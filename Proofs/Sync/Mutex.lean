@@ -140,9 +140,9 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
   inv := Inv
-  init
-    | .work p => if p = cPtr then some (.work 0 .out) else none
-    | _ => none
+  init tgt g := (match tgt with
+      | .work p => if p = cPtr then some (.work 0 .out) else none
+      | _ => none) = some g
   fin g := g = .fin
   strict := true
   joins g := g = .joins
@@ -1770,7 +1770,7 @@ theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : Inv G
       rw [Option.some.inj hr₁, hsp] at hs; exact absurd hs (Nat.ne_of_lt hu)
 
 /-- The kid: `work` on the `Counter`, then its end. -/
-theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
     proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
   cases tgt with

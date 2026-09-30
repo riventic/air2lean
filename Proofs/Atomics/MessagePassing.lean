@@ -101,9 +101,9 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
   inv := Inv
-  init
-    | .mpWriter p => if p = cPtr then some .start else none
-    | _ => none
+  init tgt g := (match tgt with
+      | .mpWriter p => if p = cPtr then some .start else none
+      | _ => none) = some g
   fin g := g = .fin
   strict := true
   joins g := g = .joins
@@ -741,7 +741,7 @@ theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : Inv G
 
 /-- The writer (thread 1): the read of `data`'s pointer, the write of 42, the read of `flag`'s
 pointer, the release store of 1 (a stop), its end. -/
-theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
     proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
   cases tgt with

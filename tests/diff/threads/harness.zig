@@ -9,7 +9,8 @@
 //! parallelCounter is race-free (an atomic `fetchAdd`): the Lean and Zig sides must agree on the
 //! exact value, `4 * itersPerThread`. race and xchgRace both race two threads on one shared
 //! location: race's plain writes are a data race, so the Lean side throws `.illegal` for every
-//! input (tests/diff/threads/unspecified.txt); xchgRace's atomic swaps give `a` or `b`, and
+//! input (tests/diff/threads/unspecified.txt); disjoint is race with two
+//! locations: race-free (`a +% b`). xchgRace's atomic swaps give `a` or `b`, and
 //! the Lean side searches the schedules for the one that real Zig reported
 //! (tests/diff/Diff.lean's `searchSchedules`, docs/std-models.md §Thread model).
 
@@ -55,6 +56,7 @@ pub fn main() !void {
 
     try run(gpa, "parallelCounter", threads.parallelCounter, argCounter);
     try run(gpa, "race", threads.race, argRace);
+    try run(gpa, "disjoint", threads.disjoint, argRace);
     try run(gpa, "xchgRace", threads.xchgRace, argRace);
     try run(gpa, "claimOnce", threads.claimOnce, argNone);
 }

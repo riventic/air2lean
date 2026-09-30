@@ -98,7 +98,7 @@ theorem WP.callC {r : ConcM Tgt α} {s : σ} {Q : α × σ → (ThreadId → γ)
 /-- `Thread.spawn` of `tgt`: the new thread starts with the ghost value `g₀`. -/
 theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∃ g₀, P.init tgt = some g₀ ∧ ∀ child m',
+      ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
         Q (.ok child, s) (upd G₁ child g₀) m' k) :
     P.WP t ((spawnC tgt : CM Tgt σ (Except ErrName ThreadId)).run s) Q G m n := by

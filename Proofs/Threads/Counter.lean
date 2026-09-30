@@ -120,9 +120,9 @@ def Ex (G : ThreadId → Gh) (m : Mem) : Prop :=
 /-- The protocol, in strict mode: `Ex` (below) has the facts for "no error". -/
 def proto : Proto Tgt Gh where
   inv G m := Inv n G m ∧ Ex G m
-  init
-    | .bump p => some (.bump p 0 false)
-    | _ => none
+  init tgt g := (match tgt with
+      | .bump p => some (.bump p 0 false)
+      | _ => none) = some g
   fin g := ∃ p, g = .bump p n.toNat true
   strict := true
 
@@ -2196,7 +2196,7 @@ theorem main_spec (d : Nat) :
   rw [hv]
   congr 1
 
-theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt = some g) (u : ThreadId)
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (_ : 0 < u) (hgu : G u = g) (hi : (proto n).inv G m) :
     (proto n).WP u (dispatch tgt) ((proto n).QKid u) G { m with current := u } d := by
   cases tgt with
