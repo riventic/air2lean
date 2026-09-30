@@ -563,6 +563,9 @@ theorem Inv.locIdx {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hi : Inv G m
 theorem bs4 (v : BitVec 32) : (padTo (intSize 32) (intBytes v)).size = 4 :=
   LawfulEnc.size_encode (α := BitVec 32) v
 
+theorem enc4 (v : BitVec 32) : (Enc.encode v).size = 4 :=
+  LawfulEnc.size_encode (α := BitVec 32) v
+
 /-- The memory after an RMW at the mutex that read the newest message `rd`. -/
 theorem rmw_eff {m₁ M m₂ : Mem} {l : ALoc} {ord : AtomicOrder} {new : BitVec 32} {rd : Msg}
     (hl : MLoc m₁ l) (hb : BlkOk m₁) (hrd : rd = l.msgs[l.msgs.size - 1]!)
@@ -1233,5 +1236,158 @@ theorem wake_step {G : ThreadId → Gh} {m m' : Mem} {t k n : Nat} (hi : Inv G m
   have hi' : Inv G m' := hi.frameQ (by rw [hm']) (by rw [hm']) (by rw [hm']) (by rw [hm'])
     (by rw [hm']) (fq_nil hnil)
   exact ⟨by rw [hm'], hi'.retagQ (ph' := .out) hg rfl (by decide) hnil⟩
+
+/-! ## Plain accesses: `io` and the counter -/
+
+theorem count_succ {G : ThreadId → Gh} {t k : Nat} {ph ph' : Ph} (hg : G t = .work k ph) (ht : t < 2) :
+    (upd G t (.work (k + 1) ph') 0).count + (upd G t (.work (k + 1) ph') 1).count =
+      (G 0).count + (G 1).count + 1 := by
+  rcases (by omega : t = 0 ∨ t = 1) with rfl | rfl
+  · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), hg]; simp only [Gh.count]; omega
+  · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), hg]; simp only [Gh.count]; omega
+
+/-- A read of `io` (bytes 0..16). -/
+theorem step_io {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {v : Io} (hi : Inv G m)
+    (ht : t < m.threads.size) (hc : m.current = t)
+    (h : ((load Io 8 cPtr).run m).run = some (.ok (v, m'))) : m'.current = t ∧ Inv G m' := by
+  obtain ⟨b, blk, o, ha, -, -, rfl⟩ := load_ok h
+  obtain ⟨blk₀, -, -, he₀⟩ := acc0 (o := 0) (n := 16) (a := 8) hi.blk (by decide) (.inr rfl) rfl
+  have : m.access cPtr (Enc.size Io) 8 = m.access ⟨some 0, ((0 : Nat) : Int)⟩ 16 8 := rfl
+  rw [this, he₀] at ha
+  cases ha
+  exact ⟨hc, hi.record (hc ▸ ht) ⟨rfl, .inr (.inl ⟨rfl, rfl, rfl⟩)⟩⟩
+
+theorem io_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (ht : m.current < m.threads.size)
+    (e : Error) : ((load Io 8 cPtr).run m).run ≠ some (.error e) := by
+  obtain ⟨blk₀, -, -, he₀⟩ := acc0 (o := 0) (n := 16) (a := 8) hi.blk (by decide) (.inr rfl) rfl
+  have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk₀, 0) := he₀
+  have hdec : (Enc.decode (blk₀.bytes.extract 0 (0 + Enc.size Io)) : Result Io) = pure ⟨⟩ := rfl
+  exact MemM.noErr_of_run (load_run hacc hdec (noRace_io hi ht)) e
+
+/-- The holder's read of the counter: the number of increments. -/
+theorem step_cntLoad {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {v : BitVec 32}
+    (hi : Inv G m) (hh : Hold G t) (hc : m.current = t)
+    (h : ((load (BitVec 32) 4 (cPtr.add 20)).run m).run = some (.ok (v, m'))) :
+    m'.current = t ∧ v = BitVec.ofNat 32 ((G 0).count + (G 1).count) ∧ Inv G m' := by
+  obtain ⟨k, hg⟩ := hh
+  obtain ⟨hs2, ht2, -⟩ := thr_work hi.thr hg
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  have hcs : m.current < m.clocks.size := by rw [hi.thr.2.1]; exact htl
+  obtain ⟨b, blk, o, ha, -, hv, rfl⟩ := load_ok h
+  obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 20) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+  have : m.access (cPtr.add 20) (Enc.size (BitVec 32)) 4 = m.access ⟨some 0, ((20 : Nat) : Int)⟩ 4 4 := rfl
+  rw [this, he₀] at ha
+  cases ha
+  have hc0 := hi.cnt
+  unfold U32At curBytes at hc0
+  rw [hblk₀] at hc0
+  simp only [Option.map_some, Option.getD_some] at hc0
+  have hv' : (intOfBytes 32 (blk.bytes.extract 20 (20 + 4))).run = some (.ok v) := hv
+  rw [hc0] at hv'
+  cases hv'
+  refine ⟨hc, rfl, hi.record htl ⟨rfl, .inr (.inr (.inr ⟨rfl, rfl, fun u hu => ?_, fun hn => ?_⟩))⟩⟩
+  · rw [hi.one u t hu ⟨k, hg⟩, ← hc]
+    simp only [Mem.recordAt]; rw [getElem!_set!]; simp [hcs, VClock.le_refl]
+  · exact absurd ⟨k, hg⟩ (hn t)
+
+theorem cntLoad_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hh : Hold G m.current)
+    (ht : m.current < m.threads.size) (e : Error) :
+    ((load (BitVec 32) 4 (cPtr.add 20)).run m).run ≠ some (.error e) := by
+  obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 20) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+  have hc0 := hi.cnt
+  unfold U32At curBytes at hc0
+  rw [hblk₀] at hc0
+  simp only [Option.map_some, Option.getD_some] at hc0
+  have hacc : m.access (cPtr.add 20) (Enc.size (BitVec 32)) 4 = pure (0, blk₀, 20) := he₀
+  have hdec : (Enc.decode (blk₀.bytes.extract 20 (20 + Enc.size (BitVec 32))) : Result (BitVec 32)) =
+      pure (BitVec.ofNat 32 ((G 0).count + (G 1).count)) := hc0
+  exact MemM.noErr_of_run (load_run hacc hdec (noRace_cnt hi ht hh)) e
+
+/-- A write of the 4 bytes `bs` to the counter (bytes 20..24), with ghost values `G'` that
+count one more and keep the holder, the waker and the waiters. -/
+theorem Inv.cntWrite {G G' : ThreadId → Gh} {m : Mem} {blk : Block} {bs : Array Byte} {c : Nat}
+    (hi : Inv G m) (hblk : m.blocks[0]? = some blk) (hbs : bs.size = 4)
+    (hv : (intOfBytes 32 bs).run = some (.ok (BitVec.ofNat 32 c)))
+    (hthr : ThrOk G' m) (hcnt : (G' 0).count + (G' 1).count = c)
+    (hh : ∀ u, Hold G' u ↔ Hold G u) (hwk : ∀ u, Wakes G' u ↔ Wakes G u)
+    (hwt : ∀ w ∈ m.waiters, Waits G' w.1) : Inv G' (m.write 0 blk 20 bs) := by
+  obtain ⟨blk₁, hblk₁, hl, hsz, hk, hadr⟩ := hi.blk
+  rw [hblk] at hblk₁; cases hblk₁
+  have hw : 20 + bs.size ≤ blk.bytes.size := by rw [hbs, hsz]; decide
+  have hb' : (m.write 0 blk 20 bs).blocks[0]? = some { blk with bytes := writeBytes blk.bytes 20 bs } := by
+    simp only [Mem.write]
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+      (Array.getElem?_eq_some_iff.mp hblk).1]
+  have hc16 : curBytes (m.write 0 blk 20 bs) 0 16 4 = curBytes m 0 16 4 := by
+    unfold curBytes; rw [hb', hblk]
+    simp only [Option.map_some, Option.getD_some]
+    exact extract_writeBytes_disjoint _ _ _ _ _ hw (by rw [hsz]; decide) (.inr (by decide))
+  have hc20 : curBytes (m.write 0 blk 20 bs) 0 20 4 = bs := by
+    unfold curBytes; rw [hb']
+    simp only [Option.map_some, Option.getD_some]
+    have := extract_writeBytes blk.bytes 20 bs hw
+    rwa [hbs] at this
+  exact {
+    thr := hthr
+    blk := ⟨_, hb', hl, by show (writeBytes blk.bytes 20 bs).size = 24; rw [writeBytes_size _ _ _ hw, hsz], hk, hadr⟩
+    cnt := by unfold U32At; rw [hc20, hcnt]; exact hv
+    word := by
+      obtain ⟨w, hw', hu, hz⟩ := hi.word
+      refine ⟨w, hw', by unfold U32At; rw [hc16]; exact hu, hz.trans ?_⟩
+      constructor
+      · intro h u hu; exact h u ((hh u).mp hu)
+      · intro h u hu; exact h u ((hh u).mpr hu)
+    one u v hu hv := hi.one u v ((hh u).mp hu) ((hh v).mp hv)
+    loc := by unfold LocOk U32At; rw [hc16]; exact hi.loc
+    fq := by
+      unfold FqOk U32At; rw [hc16]
+      refine ⟨hi.fq.1, fun w hw => ?_⟩
+      obtain ⟨h1, -, v, hv, h3⟩ := hi.fq.2 w hw
+      refine ⟨h1, hwt w hw, v, hv, ?_⟩
+      rcases h3 with ⟨h3, h4⟩ | h3
+      · exact .inl ⟨(hh v).mpr h3, h4⟩
+      · exact .inr ((hwk v).mpr h3)
+    fp := by
+      intro e he
+      obtain ⟨hb, h⟩ := hi.fp e he
+      refine ⟨hb, ?_⟩
+      rcases h with h | h | h | ⟨ho, hl, hle⟩
+      · exact .inl h
+      · exact .inr (.inl h)
+      · exact .inr (.inr (.inl h))
+      · exact .inr (.inr (.inr ⟨ho, hl, lockLe_congr hh hle⟩))
+    own := hi.own }
+
+/-- The holder's write of one more to the counter. -/
+theorem step_cntStore {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} (hi : Inv G m)
+    (hg : G t = .work k .holds) (hk : k < 2) (hc : m.current = t)
+    (h : ((store (α := BitVec 32) 4 (cPtr.add 20)
+      (BitVec.ofNat 32 ((G 0).count + (G 1).count + 1))).run m).run = some (.ok ((), m'))) :
+    m'.current = t ∧ Inv (upd G t (.work (k + 1) .holds)) m' := by
+  obtain ⟨hs2, ht2, -⟩ := thr_work hi.thr hg
+  have htl : m.current < m.threads.size := by rw [hc, hs2]; exact ht2
+  have hcs : m.current < m.clocks.size := by rw [hi.thr.2.1]; exact htl
+  obtain ⟨b, blk, o, ha, -, rfl⟩ := store_ok h
+  obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 20) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
+  have : m.access (cPtr.add 20) (Enc.encode (BitVec.ofNat 32 ((G 0).count + (G 1).count + 1))).size 4 =
+      m.access ⟨some 0, ((20 : Nat) : Int)⟩ 4 4 := by rw [enc4]; rfl
+  rw [this, he₀] at ha
+  cases ha
+  have hir : Inv G (m.recordAt 0 20 (Enc.encode (BitVec.ofNat 32 ((G 0).count + (G 1).count + 1))).size .write) := by
+    rw [enc4]
+    refine hi.record htl ⟨rfl, .inr (.inr (.inr ⟨rfl, rfl, fun u hu => ?_, fun hn => ?_⟩))⟩
+    · rw [hi.one u t hu ⟨k, hg⟩, ← hc]
+      simp only [Mem.recordAt]; rw [getElem!_set!]; simp [hcs, VClock.le_refl]
+    · exact absurd ⟨k, hg⟩ (hn t)
+  refine ⟨hc, hir.cntWrite hblk₀ (enc4 _) (intOfBytes_rmw _) ?_ (count_succ hg ht2) (hold_upd ?_)
+    (wakes_upd ?_) ?_⟩
+  · exact thrOk_congr (thrOk_upd hi.thr hg (by omega)) rfl (by simp [Mem.recordAt])
+  · rw [Hold, hg]; exact ⟨fun _ => ⟨k, rfl⟩, fun _ => ⟨k + 1, rfl⟩⟩
+  · rw [Wakes, hg]
+    constructor <;> rintro ⟨_, h⟩ <;> cases h
+  · intro w hw
+    obtain ⟨-, ⟨k₁, hk₁⟩, -⟩ := hir.fq.2 w hw
+    have hwt : w.1 ≠ t := fun e => by rw [e, hg] at hk₁; cases hk₁
+    exact ⟨k₁, by rw [upd_ne _ _ hwt]; exact hk₁⟩
 
 end Sync.MutexCounter

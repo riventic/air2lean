@@ -205,16 +205,6 @@ theorem total_congr {G G' : ThreadId → Gh} {s : Nat}
   apply List.map_congr_left
   intro k hk; rw [List.mem_range] at hk; exact h _ (by omega) (by omega)
 
-/-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
-theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
-    (hlt : a.toNat + 1 < 2 ^ w) : r.toNat = a.toNat + 1 := by
-  simp only [add, Bool.false_eq_true, ↓reduceIte] at h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
-  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
-    rw [← h, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (a := 1) (by omega)]
-    exact Nat.mod_eq_of_lt hlt
-
 theorem getElem_of_eq {α : Type} {a b : Array α} (e : a = b) {u : Nat} (h : u < a.size) :
     a[u] = b[u]'(e ▸ h) := by subst e; rfl
 
@@ -540,18 +530,6 @@ theorem ex_recordAt {G : ThreadId → Gh} {m : Mem} {b o l : Nat} {k : AccessKin
   · rw [recordAt_clock hcl]; split
     · subst_vars; exact VClock.le_bump _ _
     · exact VClock.le_refl _
-
-/-- `Zig.add` of 1 does not overflow below `2 ^ w - 1`. -/
-theorem add_one_noErr {w : Nat} {a : BitVec w} (hlt : a.toNat + 1 < 2 ^ w) (e : Error) :
-    (add false a 1).run ≠ some (.error e) := by
-  have h1 : (1 : BitVec w).toNat = 1 % 2 ^ w := BitVec.toNat_ofNat 1 w
-  have hno : a.uaddOverflow 1 = false := by
-    simp only [BitVec.uaddOverflow, decide_eq_false_iff_not, h1]
-    rw [Nat.mod_eq_of_lt (by omega)]; omega
-  simp only [add, Bool.false_eq_true, ↓reduceIte]
-  split
-  · rename_i h; rw [hno] at h; cases h
-  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
 /-! ## The invariant under a step -/
 
