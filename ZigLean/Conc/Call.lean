@@ -110,6 +110,33 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
+/-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model)
+
+A task of a group is a thread: `Group.async` is a spawn that the group records (`Mem.groups`),
+`Group.await` a join of each task of the group. The model never fails a spawn and never cancels,
+so `Group.concurrent` is `async`, and `Group.cancel` is `await`. -/
+
+/-- `Io.Group.async(g, io, function, args)`: the task `t` runs as a thread of the group. -/
+def groupAsyncC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
+  let tid ← StateT.lift (ConcM.sync (.spawn t))
+  callMC (Thread.groupAdd g tid)
+
+/-- `Io.Group.concurrent`: as `async` (a spawn never fails, `error.ConcurrencyUnavailable` does
+not happen). -/
+def groupConcurrentC (g : Ptr) (io : Io) (t : Tgt) : CM Tgt σ (Except ErrName Unit) := do
+  groupAsyncC g io t
+  pure (.ok ())
+
+/-- `Io.Group.await`: joins each task of the group, in the order of their spawn. -/
+def groupAwaitC (g : Ptr) (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
+  let tids ← callMC (Thread.groupTake g)
+  for tid in tids do joinC tid
+  pure (.ok ())
+
+/-- `Io.Group.cancel`: the model never cancels, so it waits for the tasks as `await` does. -/
+def groupCancelC (g : Ptr) (io : Io) : CM Tgt σ Unit := do
+  let _ ← groupAwaitC g io
+
 /-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
 
 /-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`). -/

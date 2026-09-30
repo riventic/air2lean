@@ -211,6 +211,9 @@ structure Mem where
   waiters : Array (ThreadId × Ptr) := #[]
   /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
   woken : Array ThreadId := #[]
+  /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
+  of their spawn (`ZigLean/Mem/Thread.lean`). -/
+  groups : Array (Ptr × ThreadId) := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
