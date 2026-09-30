@@ -78,8 +78,8 @@ def Live (t : ThreadId) (G : ThreadId → γ) (m : Mem) : Prop :=
 
 /-- Thread `t` goes on at `op`, with the ghost values `G` and the memory `m` at that time: `K`
 holds of each response and the memory after the scheduler's part of the op
-(`Sched.turn`). A futex wait that sleeps keeps the invariant; one that goes on is not in the
-queue. -/
+(`Sched.turn`). A futex wait begins with the thread not in the queue; one that sleeps keeps the
+invariant. -/
 def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
     (K : op.Resp → (ThreadId → γ) → Mem → Prop) : Prop :=
   match op, K with
@@ -95,10 +95,11 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       (P.strict = true → ∃ m', ((Thread.join tid).run { m with current := t }).run =
         some (.ok ((), m'))) ∧ ∀ m',
       ((Thread.join tid).run { m with current := t }).run = some (.ok ((), m')) → K () G m')
-  | .wait p e, K => (P.strict = true → P.Live t G m ∧ ∃ b m',
-      ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
+  | .wait p e, K => (P.strict = true → P.Live t G m) ∧ (m.waiters.any (·.1 == t) = false →
+      (P.strict = true → ∃ b m',
+        ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
       ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
-        if b then P.inv G m' else (m'.waiters.any (·.1 == t) = false → K () G m')
+        if b then P.inv G m' else K () G m')
   | .wake p n, K => ∀ m',
       ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
@@ -109,10 +110,10 @@ theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Me
   | yield => exact h _ _ _ hs
   | wake => exact fun m' hr => h _ _ _ (hs m' hr)
   | wait =>
-    refine ⟨hs.1, fun b m' hr => ?_⟩
-    have := hs.2 b m' hr
+    refine ⟨hs.1, fun hq => ⟨(hs.2 hq).1, fun b m' hr => ?_⟩⟩
+    have := (hs.2 hq).2 b m' hr
     cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
-    · exact fun hw => h _ _ _ (this hw)
+    · exact h _ _ _ this
     · exact this
   | choose | pick => exact fun c hc => h _ _ _ (hs c hc)
   | spawn tgt =>
@@ -546,7 +547,9 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
     | some (.error _) => simp [hw] at h
     | some (.ok (b, m₁)) =>
       simp only [hw] at h
-      have hK := hstep.2 b m₁ hw
+      have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
+        simpa [Sched.canGo] using hgo
+      have hK := (hstep.2 hq0).2 b m₁ hw
       have hth : m₁.threads.size = s.mem.threads.size := by rw [futexWait_threads hw]
       cases b with
       | true =>
@@ -556,9 +559,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
           .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK, hp⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
-        have hq : m₁.waiters.any (·.1 == t) = false := by
-          rw [futexWait_go hw]; simpa [Sched.canGo] using hgo
-        exact settle_turnPost h (hK hq) hsz rfl rfl hth
+        exact settle_turnPost h hK hsz rfl rfl hth
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
@@ -619,16 +620,16 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_safe hstr (hstep m₁ hw) hQ e h
   | wait ptr e' =>
-    obtain ⟨b, m₁, hw⟩ := (hstep.1 hstr).2
-    have hK := hstep.2 b m₁ hw
+    have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
+      simpa [Sched.canGo] using hgo
+    obtain ⟨b, m₁, hw⟩ := (hstep.2 hq0).1 hstr
+    have hK := (hstep.2 hq0).2 b m₁ hw
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hw] at h
     cases b with
     | true => simp at h
     | false =>
       simp only [Bool.false_eq_true, ↓reduceIte] at h hK
-      have hq : m₁.waiters.any (·.1 == t) = false := by
-        rw [futexWait_go hw]; simpa [Sched.canGo] using hgo
-      exact settle_safe hstr (hK hq) hQ e h
+      exact settle_safe hstr hK hQ e h
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
     simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
@@ -749,7 +750,7 @@ theorem paused_info {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) →
   have hs := hp G m hg hi
   cases op with
   | join tid' => exact ⟨fun tid h => (by cases h; exact hs.1 hstr), fun _ _ h => (by cases h)⟩
-  | wait ptr' e' => exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h; exact (hs.1 hstr).1)⟩
+  | wait ptr' e' => exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h; exact hs.1 hstr)⟩
   | yield | choose | pick | spawn | wake =>
     exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h)⟩
 

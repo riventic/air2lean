@@ -205,13 +205,6 @@ theorem total_congr {G G' : ThreadId → Gh} {s : Nat}
   apply List.map_congr_left
   intro k hk; rw [List.mem_range] at hk; exact h _ (by omega) (by omega)
 
-/-- An RMW's bytes read back as its value. -/
-theorem intOfBytes_rmw (v : BitVec 32) :
-    (intOfBytes 32 (padTo (intSize 32) (intBytes v))).run = some (.ok v) :=
-  congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec 32) v)
-
-theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
-
 /-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
 theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
     (hlt : a.toNat + 1 < 2 ^ w) : r.toNat = a.toNat + 1 := by

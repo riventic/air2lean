@@ -120,25 +120,27 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
     ⟨((hc G₁ m₁ hg hi₁).2 hf).1, fun m' hj => WP.pure' (((hc G₁ m₁ hg hi₁).2 hf).2 m' hj)⟩⟩⟩
 
 /-- A futex wait (`futexWaitC`, the bits `e'` of `e`): the thread stops with the ghost value
-`g`. If it sleeps, it keeps the invariant with `g`; when it goes on (it is not in the queue),
+`g`. It begins not in the queue; if it sleeps, it keeps the invariant with `g`; when it goes on,
 `Q` holds. In strict mode it keeps `Live` and does not throw. -/
 theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e : ε} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       let e' := (Packed.toBits e).setWidth 32
-      (P.strict = true → P.Live t G₁ m₁ ∧ ∃ b m',
-        ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
-      ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
-        if b then P.inv G₁ m' else (m'.waiters.any (·.1 == t) = false → Q ((), s) G₁ m' k)) :
+      (P.strict = true → P.Live t G₁ m₁) ∧ (m₁.waiters.any (·.1 == t) = false →
+        (P.strict = true → ∃ b m',
+          ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
+        ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
+          if b then P.inv G₁ m' else Q ((), s) G₁ m' k)) :
     P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
     (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun b m' hr => ?_⟩⟩
-  have := (hc G₁ m₁ hg hi₁).2 b m' hr
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
+    ⟨((hc G₁ m₁ hg hi₁).2 hq).1, fun b m' hr => ?_⟩⟩⟩
+  have := ((hc G₁ m₁ hg hi₁).2 hq).2 b m' hr
   cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
-  · exact fun hw => WP.pure' (this hw)
+  · exact WP.pure' this
   · exact this
 
 /-- A futex wake (`futexWakeC`): the thread stops with the ghost value `g`; `Q` holds after the
@@ -508,6 +510,13 @@ def loadM (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) : Mem :=
 theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
     xs.insertIdxIfInBounds xs.size v = xs.push v := by
   simp [Array.insertIdxIfInBounds, Array.insertIdx_size_self]
+
+/-- An RMW's bytes read back as its value. -/
+theorem intOfBytes_rmw (v : BitVec 32) :
+    (intOfBytes 32 (padTo (intSize 32) (intBytes v))).run = some (.ok v) :=
+  congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec 32) v)
+
+theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
 
 /-- An insert at the end: the location has one more message, and the block has its bytes. -/
 theorem insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
@@ -996,6 +1005,38 @@ theorem optCount_le_one {x : MemM (Array Nat)} {m : Mem}
   split
   · rename_i a m' hr; exact h a m' hr
   · exact Nat.le_refl _
+
+/-- An RMW on an enum or a `bool` (`atomicRmwAs`): the integer RMW, then the decode. -/
+theorem atomicRmwAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {op : RmwOp} {ord : AtomicOrder}
+    {align : Nat} {p : Ptr} {v r : α} {m m' : Mem}
+    (h : ((atomicRmwAs c op ord align p v).run m).run = some (.ok (r, m'))) :
+    ∃ b, ((atomicRmwAt c op false ord align p (Packed.toBits v)).run m).run = some (.ok (b, m')) ∧
+      (Packed.ofBits? (α := α) b).run = some (.ok r) := by
+  unfold atomicRmwAs at h
+  obtain ⟨b, m₁, hb, h₁⟩ := MemM.bind_ok h
+  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₁
+  exact ⟨b, hb, hd⟩
+
+/-- A `cmpxchg` on an enum or a `bool` (`cmpxchgAs`): the integer `cmpxchg`, then the decode of
+the value read on failure. -/
+theorem cmpxchgAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : AtomicOrder}
+    {align : Nat} {p : Ptr} {expected new : α} {r : Option α} {m m' : Mem}
+    (h : ((cmpxchgAs c succ fail align p expected new).run m).run = some (.ok (r, m'))) :
+    (r = none ∧ ((cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new)).run
+      m).run = some (.ok (none, m'))) ∨
+    ∃ b v, r = some v ∧ ((cmpxchgAt c succ fail align p (Packed.toBits expected)
+      (Packed.toBits new)).run m).run = some (.ok (some b, m')) ∧
+      (Packed.ofBits? (α := α) b).run = some (.ok v) := by
+  unfold cmpxchgAs at h
+  obtain ⟨o, m₁, ho, h₁⟩ := MemM.bind_ok h
+  cases o with
+  | none =>
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
+    exact .inl ⟨rfl, ho⟩
+  | some b =>
+    obtain ⟨v, h₂, rfl⟩ := MemM.map_ok h₁
+    obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
+    exact .inr ⟨b, v, rfl, ho, hd⟩
 
 end Proto
 end Conc
