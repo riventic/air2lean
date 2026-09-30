@@ -309,6 +309,21 @@ theorem _root_.Zig.ALoc.hasRmwAfter_last (l : ALoc) : l.hasRmwAfter (l.msgs.size
   · simp [h]
   · rw [Array.getElem?_eq_none (by omega)]
 
+/-- An RMW of the newest message keeps a chain. -/
+theorem _root_.Zig.ALoc.Chain.push {l : ALoc} {msg : Msg} (hc : l.Chain) (h0 : 0 < l.msgs.size)
+    (hr : msg.rmwOf = some (l.msgs[l.msgs.size - 1]!).id) : ({ l with msgs := l.msgs.push msg }).Chain := by
+  intro j hj
+  simp only [Array.size_push] at hj
+  simp only [Array.getElem_push]
+  split
+  · split
+    · exact hc j (by assumption)
+    · omega
+  · have : j = l.msgs.size - 1 := by omega
+    subst this
+    simp only [show l.msgs.size - 1 < l.msgs.size by omega, dite_true]
+    rw [hr, getElem!_pos l.msgs _ (by omega)]
+
 theorem _root_.Zig.ALoc.pos_lt {l : ALoc} {id p : Nat} (h : l.pos id = some p) :
     p < l.msgs.size := by
   unfold ALoc.pos at h
