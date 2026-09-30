@@ -1487,6 +1487,39 @@ theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb :
     BlkAt m' b sz a := by
   unfold BlkAt; rw [h]; exact hb
 
+/-- After a write of `bs` at `o` of block `b`: `bs` there. -/
+theorem curBytes_write_same {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (hfit : o + bs.size ≤ blk.bytes.size) :
+    curBytes (m.write b blk o bs) b o bs.size = bs := by
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  unfold curBytes
+  simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hlt,
+    Option.map_some, Option.getD_some]
+  exact extract_writeBytes _ _ _ hfit
+
+/-- After a write of `bs` at `o` of block `b`: the same bytes in another block, or in a range of
+`b` that does not overlap. -/
+theorem curBytes_write_other {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (hfit : o + bs.size ≤ blk.bytes.size) {b' o' len : Nat}
+    (hd : b ≠ b' ∨ b' = b ∧ o' + len ≤ blk.bytes.size ∧ (o + bs.size ≤ o' ∨ o' + len ≤ o)) :
+    curBytes (m.write b blk o bs) b' o' len = curBytes m b' o' len := by
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  unfold curBytes
+  rcases hd with hne | ⟨rfl, h', hd⟩
+  · simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne hne]
+  · simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hlt,
+      hb, Option.map_some, Option.getD_some]
+    exact extract_writeBytes_disjoint _ _ _ _ _ hfit h' hd
+
+/-- The clocks after the first fork: both threads have the parent's bumped clock. -/
+theorem fork_clocks_one {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Nat) (hu : u < 2) :
+    ((c.set! 0 b).push b)[u]! = b := by
+  obtain ⟨c0, rfl⟩ : ∃ c0, c = #[c0] := by
+    have : c.toList.length = 1 := by simpa using h
+    obtain ⟨x, hx⟩ := List.length_eq_one_iff.mp this
+    exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
+  rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl <;> rfl
+
 end Proto
 end Conc
 end Zig

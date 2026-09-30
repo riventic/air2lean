@@ -1801,14 +1801,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : T
 
 /-! ## `main` -/
 
-theorem clk2 {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Nat) (hu : u < 2) :
-    ((c.set! 0 b).push b)[u]! = b := by
-  obtain ⟨c0, rfl⟩ : ∃ c0, c = #[c0] := by
-    have : c.toList.length = 1 := by simpa using h
-    obtain ⟨x, hx⟩ := List.length_eq_one_iff.mp this
-    exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
-  rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl <;> rfl
-
 /-- `main`'s spawn: the kid is thread 1; both threads begin `work`. The kid's clock is a copy of
 `main`'s bumped clock, so each write before the spawn happened before both threads. -/
 theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m) (hg : G 0 = .pre)
@@ -1847,7 +1839,7 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
       (VClock.bump (m.clocks[m.current]!) m.current)).push
       (VClock.bump (m.clocks[m.current]!) m.current))[u]!) = true := by
     intro u hu
-    rw [hc, clk2 (by rw [hcs, hs1]) u hu]
+    rw [hc, fork_clocks_one (by rw [hcs, hs1]) u hu]
     exact VClock.le_bump _ _
   refine {
     thr := ⟨by rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
