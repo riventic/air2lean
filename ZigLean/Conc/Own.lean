@@ -300,6 +300,15 @@ theorem lift {φ : Prop} (h : φ → TTriple P c Q) : TTriple (⌜φ⌝ ∗ P) c
   obtain ⟨hφ, hp⟩ := sep_lift.mp hp
   exact h hφ m hP hF hd hm hp hc ho
 
+/-- The frame rule with the frame on the left. -/
+theorem frameL (ht : TTriple P c Q) : TTriple (R ∗ P) c (fun v => R ∗ Q v) :=
+  ht.frame.conseq (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
+
+/-- A step whose post names its result `v` (a load), then the rest. -/
+theorem bind_eq {v : α} {P' : Assn} {f : α → MemM β} {R : β → Assn}
+    (hc : TTriple P c (fun r => ⌜r = v⌝ ∗ P')) (hf : TTriple P' (f v) R) : TTriple P (c >>= f) R :=
+  hc.bind fun _ => TTriple.lift fun hr => hr ▸ hf
+
 end TTriple
 
 section Rules
@@ -314,64 +323,82 @@ theorem bytesAt_in {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
   rw [hpb] at hb'; cases hb'
   rw [hl]; simp [h1, h2]
 
-theorem TTriple.load {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    TTriple (pts p a v) (Zig.load T a p) (fun r => ⌜r = v⌝ ∗ pts p a v) :=
-  TTriple.of_run fun m hP hF hd hm hp hc ho => by
-    have hp' := hp
-    obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := hp
-    obtain ⟨b, blk, hacc, hblk, -, -, hx⟩ :=
-      bytesAt_access (q := p) (k := 0) (n := Enc.size T) (a := a) hb hm (by simp [Ptr.add])
-        hn (by omega) (by simpa using ha)
-    obtain ⟨hpb, -⟩ := access_eq hacc
-    simp only [Nat.add_zero] at hx hacc
-    have hv' : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
-      rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
-    have hin : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T → hP (b, x) ≠ none :=
-      fun x h1 h2 => bytesAt_in hb hpb h1 (by omega)
+/-- A load of the `T` at byte `k` of owned bytes. -/
+theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {k a : Nat}
+    {v : T} (hq : q = p.add k) (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
+    (ha : (A + p.off.toNat + k) % a = 0) (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
+    TTriple (bytesAt p A S K bs) (Zig.load T a q) (fun r => ⌜r = v⌝ ∗ bytesAt p A S K bs) :=
+  TTriple.of_run fun m hP hF hd hm hb hc ho => by
+    obtain ⟨b, blk, hacc, hblk, -, -, hx⟩ := bytesAt_access hb hm hq hn hk ha
+    obtain ⟨hqb, -⟩ := access_eq hacc
+    have hpb : p.block = some b := by rw [hq] at hqb; exact hqb
+    have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + k)
+        (p.off.toNat + k + Enc.size T)) = pure v := by rw [hx]; exact hv
+    have hin : ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + Enc.size T → hP (b, x) ≠ none :=
+      fun x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-    refine ⟨v, _, hP, load_run (by simpa using hacc) hv' (ho.noRace hn hin), hd, ?_,
-      sep_lift.mpr ⟨rfl, hp'⟩, Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
+    refine ⟨v, _, hP, load_run hacc hv' (ho.noRace hn hin), hd, ?_, sep_lift.mpr ⟨rfl, hb⟩,
+      Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
-theorem TTriple.store [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
-    TTriple (pts p a v) (Zig.store a p w) (fun _ => pts p a w) :=
-  TTriple.of_run fun m hP hF hd hm hp hc ho => by
-    obtain ⟨A, S, K, bs, ha, hs, -, hb, hK⟩ := hp
+/-- A store of `w` at byte `k` of owned bytes. -/
+theorem TTriple.storeAt [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {k a : Nat} (w : T) (hq : q = p.add k) (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
+    (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    TTriple (bytesAt p A S K bs) (Zig.store a q w)
+      (fun _ => bytesAt p A S K (writeBytes bs k (Enc.encode w))) :=
+  TTriple.of_run fun m hP hF hd hm hb hc ho => by
     have hw := LawfulEnc.size_encode w
     have hin : ∀ b, p.block = some b →
-        ∀ x, p.off.toNat + 0 ≤ x → x < p.off.toNat + 0 + (Enc.encode w).size → hP (b, x) ≠ none :=
+        ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + (Enc.encode w).size → hP (b, x) ≠ none :=
       fun b hpb x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     obtain ⟨b, blk, hpb, hr, h', hd', hm', hb'⟩ :=
-      bytesAt_store_core (q := p) (k := 0) (a := a) (bs' := Enc.encode w) hb hm hd
-        (by simp [Ptr.add]) (by omega) (by omega) (by simpa using ha)
+      bytesAt_store_core (bs' := Enc.encode w) hb hm hd hq (by omega) (by omega) ha
         (fun b hpb => ho.noRace (by omega) (hin b hpb)) hK
     have hbs : b < m.blocks.size := by
       have c0 := bytesAt_cell (j := 0) hb hm hpb (by omega)
       obtain ⟨blk', hblk', -⟩ := Mem.heap_some c0
       exact (Array.getElem?_eq_some_iff.mp hblk').1
     have hs1 := StepIn.recordAt (kind := .write) hc hd (by omega) (hin b hpb) hbs
-    refine ⟨(), _, h', hr, hd', hm', ⟨A, S, K, _, ha, ?_, ?_, hb', hK⟩,
-      Mem.Owns.write ?_,
-      hs1.trans (StepIn.write _ _ _ _ _ _)⟩
-    · rw [writeBytes_all (by omega)]; exact hw
-    · rw [writeBytes_all (by omega)]; exact LawfulEnc.decode_encode w
-    · -- The written bytes are the owned bytes of `h'`: the same locations as those of `hP`.
-      have ho1 := Mem.Owns.recordAt (b := b) (off := p.off.toNat + 0) (len := (Enc.encode w).size)
-        (kind := .write) hc ho
-      intro e he ht
-      apply ho1 e he
-      rcases ht with ⟨x, h1, h2, h3⟩ | hb2
-      · refine .inl ⟨x, h1, h2, ?_⟩
-        obtain ⟨b'', hpb'', -, hl'⟩ := id hb'
-        rw [hpb] at hpb''; cases hpb''
-        rw [hl', writeBytes_size _ _ _ (by omega)] at h3
-        split at h3
-        · rename_i hc'
-          obtain ⟨hbe, hx1, hx2⟩ := hc'
-          simp only at hbe hx1 hx2
-          rw [hbe]; exact bytesAt_in hb hpb hx1 hx2
-        · exact absurd rfl h3
-      · exact .inr (by simpa [Mem.write] using hb2)
+    refine ⟨(), _, h', hr, hd', hm', hb', Mem.Owns.write ?_, hs1.trans (StepIn.write _ _ _ _ _ _)⟩
+    -- The bytes of `h'` are those of `hP`.
+    have ho1 := Mem.Owns.recordAt (b := b) (off := p.off.toNat + k) (len := (Enc.encode w).size)
+      (kind := .write) hc ho
+    intro e he ht
+    apply ho1 e he
+    rcases ht with ⟨x, h1, h2, h3⟩ | hb2
+    · refine .inl ⟨x, h1, h2, ?_⟩
+      obtain ⟨b'', hpb'', -, hl'⟩ := id hb'
+      rw [hpb] at hpb''; cases hpb''
+      rw [hl', writeBytes_size _ _ _ (by omega)] at h3
+      split at h3
+      · rename_i hc'
+        obtain ⟨hbe, hx1, hx2⟩ := hc'
+        simp only at hbe hx1 hx2
+        rw [hbe]; exact bytesAt_in hb hpb hx1 hx2
+      · exact absurd rfl h3
+    · exact .inr (by simpa [Mem.write] using hb2)
+
+theorem TTriple.load {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
+    TTriple (pts p a v) (Zig.load T a p) (fun r => ⌜r = v⌝ ∗ pts p a v) := by
+  intro m hP hF hd hm hp
+  obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
+  refine (TTriple.loadAt (k := 0) (a := a) (v := v) (by simp [Ptr.add]) hn (by omega)
+    (by simpa using ha) ?_ |>.conseq (fun _ h => h) fun r h hq => ?_) m hP hF hd hm hb
+  · rw [show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
+  · obtain ⟨hr, hb'⟩ := sep_lift.mp hq
+    exact sep_lift.mpr ⟨hr, A, S, K, bs, ha, hs, hv, hb', hK⟩
+
+theorem TTriple.store [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
+    TTriple (pts p a v) (Zig.store a p w) (fun _ => pts p a w) := by
+  intro m hP hF hd hm hp
+  obtain ⟨A, S, K, bs, ha, hs, -, hb, hK⟩ := hp
+  have hw := LawfulEnc.size_encode w
+  refine (TTriple.storeAt (k := 0) (a := a) w (by simp [Ptr.add]) hn (by omega)
+    (by simpa using ha) hK |>.conseq (fun _ h => h) fun _ h hq => ?_) m hP hF hd hm hb
+  refine ⟨A, S, K, _, ha, ?_, ?_, hq, hK⟩
+  · rw [writeBytes_all (by omega)]; exact hw
+  · rw [writeBytes_all (by omega)]; exact LawfulEnc.decode_encode w
 
 end Rules
 
