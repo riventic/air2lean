@@ -1884,4 +1884,94 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : T
     · cases hg
   | producer p => cases hg
 
+/-! ## `main` -/
+
+theorem clk2 {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Nat) (hu : u < 2) :
+    ((c.set! 0 b).push b)[u]! = b := by
+  obtain ⟨c0, rfl⟩ : ∃ c0, c = #[c0] := by
+    have : c.toList.length = 1 := by simpa using h
+    obtain ⟨x, hx⟩ := List.length_eq_one_iff.mp this
+    exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
+  rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl <;> rfl
+
+/-- `main`'s spawn: the kid is thread 1; both threads begin `work`. The kid's clock is a copy of
+`main`'s bumped clock, so each write before the spawn happened before both threads. -/
+theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m) (hg : G 0 = .pre)
+    (hc : m.current = 0) (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
+    c = 1 ∧ Inv (upd (upd G 1 (.work 0 .out)) 0 (.work 0 .out)) m' := by
+  rw [fork_run] at h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  obtain ⟨h0, hcs, hthr⟩ := hi.thr
+  obtain ⟨hs1, -, hnone⟩ : m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none := by
+    rcases hthr with h | ⟨-, -, g0, -, -⟩
+    · exact h
+    · rcases g0 with g0 | ⟨_, _, _, g0⟩ <;> rw [hg] at g0 <;> cases g0
+  refine ⟨hs1, ?_⟩
+  have hG' : ∀ u, ¬ Hold (upd (upd G 1 (.work 0 .out)) 0 (.work 0 .out)) u := by
+    rintro u ⟨k, hk⟩
+    unfold upd at hk
+    split at hk
+    · cases hk
+    · split at hk
+      · cases hk
+      · rename_i h1 h2
+        rw [hnone u (by unfold ThreadId at *; omega)] at hk; cases hk
+  have hG : ∀ u, ¬ Hold G u := by
+    rintro u ⟨k, hk⟩
+    by_cases hu : u = 0
+    · rw [hu, hg] at hk; cases hk
+    · rw [hnone u (by unfold ThreadId at *; omega)] at hk; cases hk
+  have hnw : ∀ w ∈ m.waiters, False := by
+    intro w hw
+    obtain ⟨-, ⟨k, hk⟩, -⟩ := hi.fq.2 w hw
+    by_cases hu : w.1 = 0
+    · rw [hu, hg] at hk; cases hk
+    · rw [hnone w.1 (by unfold ThreadId at *; omega)] at hk; cases hk
+  have hcl0 : ∀ u < 2, VClock.le (m.clocks[0]!) (((m.clocks.set! m.current
+      (VClock.bump (m.clocks[m.current]!) m.current)).push
+      (VClock.bump (m.clocks[m.current]!) m.current))[u]!) = true := by
+    intro u hu
+    rw [hc, clk2 (by rw [hcs, hs1]) u hu]
+    exact VClock.le_bump _ _
+  refine {
+    thr := ⟨by rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
+      by simp [hcs],
+      .inr ⟨by simp [hs1], ?_, ?_, ?_, ?_⟩⟩
+    blk := hi.blk
+    cnt := by
+      have := hi.cnt
+      rw [hg, hnone 1 (by decide)] at this
+      rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), upd_self]
+      exact this
+    word := by
+      obtain ⟨w, hw, hu, hz⟩ := hi.word
+      exact ⟨w, hw, hu, hz.trans ⟨fun _ => hG', fun _ => hG⟩⟩
+    one := fun u _ hu => absurd hu (hG' u)
+    loc := hi.loc
+    fq := ⟨hi.fq.1, fun w hw => (hnw w hw).elim⟩
+    fp := ?_
+    own := ?_ }
+  · exact ⟨{ spawner := m.current, joined := false }, by simp [Array.getElem_push, hs1], hc, rfl⟩
+  · exact .inr ⟨0, .out, by decide, upd_self _ _ _⟩
+  · exact .inr ⟨0, .out, by decide, by rw [upd_ne _ _ (by decide : (1 : Nat) ≠ 0), upd_self]⟩
+  · intro u hu
+    rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+    exact hnone u (by unfold ThreadId at *; omega)
+  · intro e he
+    obtain ⟨hb, h⟩ := hi.fp e he
+    refine ⟨hb, ?_⟩
+    rcases h with ⟨hk, hle⟩ | h | h | ⟨ho, hl, -, hle₂⟩
+    · refine .inl ⟨hk, fun u hu => VClock.le_trans (hle 0 (by rw [hs1]; decide))
+        (hcl0 u (by simpa [hs1] using hu))⟩
+    · exact .inr (.inl h)
+    · exact .inr (.inr (.inl h))
+    · exact .inr (.inr (.inr ⟨ho, hl, fun u hu => absurd hu (hG' u), fun _ => hle₂ hG⟩))
+  · intro e he
+    obtain ⟨h1, h2⟩ := hi.own e he
+    have ht0 : e.tid = 0 := by unfold ThreadId at *; omega
+    refine ⟨by rw [ht0, Array.size_push, hs1]; decide, ?_⟩
+    rw [ht0] at h2 ⊢
+    exact VClock.le_trans h2 (hcl0 0 (by decide))
+
 end Sync.MutexCounter

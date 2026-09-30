@@ -1204,6 +1204,58 @@ theorem casOpts_ne {n : Nat} {m : Mem} {li : Nat} {e : BitVec n}
     refine ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
   exact Array.size_pos_of_mem hmem
 
+/-- What a join did (`Thread.join`). -/
+theorem join_eq {m m' : Mem} {tid : ThreadId}
+    (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
+    ∃ rec, m.threads[tid]? = some rec ∧ rec.joined = false ∧ m' = { m with
+      clocks := m.clocks.set! m.current
+        (VClock.merge (VClock.bump (m.clocks[m.current]!) m.current) (m.clocks[tid]!)),
+      threads := m.threads.set! tid { rec with joined := true } } := by
+  unfold Thread.join at h
+  cases hr : m.threads[tid]? with
+  | none =>
+    simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
+      throw, throwThe, MonadExceptOf.throw, StateT.lift]
+  | some rec =>
+    refine ⟨rec, rfl, ?_⟩
+    by_cases hc : (rec.spawner != m.current || rec.joined) = true <;>
+      simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+        ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
+        throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
+
+/-- An allocation gives no error. -/
+theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) :
+    ((alloc kind size align).run m).run ≠ some (.error e) := by
+  intro h
+  unfold alloc at h
+  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
+  · exact MemM.get_err h₀
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
+  · exact MemM.set_err h₂
+  · exact MemM.pure_err h₃
+
+/-- A free of a live block gives no error. -/
+theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
+    (hl : blk.live = true) (e : Error) :
+    ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
+  intro h
+  unfold free at h
+  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
+  · exact MemM.get_err h₀
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  simp only [hb, hl] at h₁
+  simp at h₁
+
+/-- What a fork does (`Thread.fork`): the new thread's id is the number of threads; the parent's
+clock is bumped, and the child gets a copy. -/
+theorem fork_run (m : Mem) :
+    (Thread.fork.run m).run = some (.ok (m.threads.size, { m with
+      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
+        (VClock.bump (m.clocks[m.current]!) m.current),
+      threads := m.threads.push { spawner := m.current, joined := false } })) := rfl
+
 end Proto
 end Conc
 end Zig

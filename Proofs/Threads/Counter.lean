@@ -1156,25 +1156,6 @@ theorem inv_spawn {G : ThreadId → Gh} {m m₂ m₃ : Mem} {k : Nat} {child : T
       exact ⟨u, by rw [hth3]; simp; omega, VClock.le_trans hl (hgrow u (hsz ▸ hu))⟩
     · exact ⟨0, by rw [hth3]; simp, by rw [he]; exact VClock.le_refl _⟩
 
-theorem join_eq {m m' : Mem} {tid : ThreadId}
-    (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
-    ∃ rec, m.threads[tid]? = some rec ∧ rec.joined = false ∧ m' = { m with
-      clocks := m.clocks.set! m.current
-        (VClock.merge (VClock.bump (m.clocks[m.current]!) m.current) (m.clocks[tid]!)),
-      threads := m.threads.set! tid { rec with joined := true } } := by
-  unfold Thread.join at h
-  cases hr : m.threads[tid]? with
-  | none =>
-    simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
-      throw, throwThe, MonadExceptOf.throw, StateT.lift]
-  | some rec =>
-    refine ⟨rec, rfl, ?_⟩
-    by_cases hc : (rec.spawner != m.current || rec.joined) = true <;>
-      simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-        ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
-        throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
-
 /-- `main`'s join of a thread that ended keeps the invariant; the thread goes into `J`. -/
 theorem inv_join {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {tid : ThreadId}
     (hi : Inv n G m) (hG0 : G 0 = .main 4 J) (hfin : ∃ p, G tid = .bump p n.toNat true)
@@ -1436,30 +1417,6 @@ theorem final_noErr {G : ThreadId → Gh} {m : Mem} {J : List Nat} {c : Nat}
     refine ⟨_, rfl, BitVec.ofNat 32 ((m₁.atomics[li]!).msgs.size - 1), ?_⟩
     rw [getElem!_pos (m₁.atomics[li]!).msgs _ hp]
     exact hct.val _ hp
-
-/-- An allocation gives no error. -/
-theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) :
-    ((alloc kind size align).run m).run ≠ some (.error e) := by
-  intro h
-  unfold alloc at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
-  · exact MemM.set_err h₂
-  · exact MemM.pure_err h₃
-
-/-- A free of a live block gives no error. -/
-theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (e : Error) :
-    ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
-  intro h
-  unfold free at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  simp only [hb, hl] at h₁
-  simp at h₁
 
 /-- After the 4 joins, `main` joined every thread. -/
 theorem joined_final {G : ThreadId → Gh} {m : Mem} {J : List Nat} (hi : Inv n G m)
