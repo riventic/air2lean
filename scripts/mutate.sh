@@ -126,6 +126,11 @@
 #                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab))
 #                         is in the list.
 #                         Default: every dir in examples/.
+#   AIR2LEAN_MUTATION_SHARD   Run only the mutations of line N (from 1) of
+#                         scripts/mutation-shards.txt (CI runs one job per line). Default: all.
+#   AIR2LEAN_MUTATION_SHARDS  The number of shard jobs. If set, the file must have that many lines.
+#                         Each run checks that the lines name every mutation exactly once, so a
+#                         new mutation that is in no line fails.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -145,6 +150,31 @@ has_example() {
   for e in $examples; do
     [ "$e" = "$needle" ] && return 0
   done
+  return 1
+}
+
+# The shards (scripts/mutation-shards.txt): every mutation of this script in exactly one line.
+shards_file="scripts/mutation-shards.txt"
+all_labels=$(sed -n 's/^echo "== mutation (\([a-z]*\)).*/\1/p' scripts/mutate.sh | sort)
+shard_labels=$(tr ' ' '\n' < "$shards_file" | sed '/^$/d' | sort)
+if [ "$all_labels" != "$shard_labels" ]; then
+  echo "error: $shards_file must name every mutation exactly once" >&2
+  diff <(echo "$all_labels") <(echo "$shard_labels") >&2 || true
+  exit 1
+fi
+if [ -n "${AIR2LEAN_MUTATION_SHARDS:-}" ] && [ "$(sed '/^$/d' "$shards_file" | wc -l)" -ne "$AIR2LEAN_MUTATION_SHARDS" ]; then
+  echo "error: $shards_file has not $AIR2LEAN_MUTATION_SHARDS lines (one per CI shard job)" >&2
+  exit 1
+fi
+selected=""
+if [ -n "${AIR2LEAN_MUTATION_SHARD:-}" ]; then
+  selected=$(sed '/^$/d' "$shards_file" | sed -n "${AIR2LEAN_MUTATION_SHARD}p")
+  [ -n "$selected" ] || { echo "error: $shards_file has no line $AIR2LEAN_MUTATION_SHARD" >&2; exit 1; }
+fi
+want_mutation() {
+  local l
+  [ -z "$selected" ] && return 0
+  for l in $selected; do [ "$l" = "$1" ] && return 0; done
   return 1
 }
 
@@ -294,7 +324,9 @@ run_and_report() {
 all_detected=1
 
 echo "== mutation (a): scale a*b -> a*%b (Zig source) ==" >&2
-if ! has_example basic; then
+if ! want_mutation a; then
+  echo "mutation (a): skipped (not in this shard)"
+elif ! has_example basic; then
   echo "mutation (a): skipped (AIR2LEAN_EXAMPLES excludes basic)"
 else
   translate_mutated basic 's/return a \* b;/return a *% b;/' 'a \*% b'
@@ -307,7 +339,9 @@ else
 fi
 
 echo "== mutation (b): Zig.add throws .panic instead of .overflow (Lean runtime) ==" >&2
-if ! has_example basic; then
+if ! want_mutation b; then
+  echo "mutation (b): skipped (not in this shard)"
+elif ! has_example basic; then
   echo "mutation (b): skipped (AIR2LEAN_EXAMPLES excludes basic)"
 else
   sed -i.bak 's/a\.uaddOverflow b) then throw \.overflow/a.uaddOverflow b) then throw .panic/' "$basic_lean"
@@ -337,7 +371,9 @@ else
 fi
 
 echo "== mutation (c): findOr orelse xs.len -> orelse 0 (Zig source) ==" >&2
-if ! has_example options; then
+if ! want_mutation c; then
+  echo "mutation (c): skipped (not in this shard)"
+elif ! has_example options; then
   echo "mutation (c): skipped (AIR2LEAN_EXAMPLES excludes options)"
 else
   translate_mutated options 's/orelse xs\.len/orelse 0/' 'orelse 0'
@@ -346,7 +382,9 @@ else
 fi
 
 echo "== mutation (d): roundQuot ties away from zero (Lean runtime) ==" >&2
-if ! has_example floatops; then
+if ! want_mutation d; then
+  echo "mutation (d): skipped (not in this shard)"
+elif ! has_example floatops; then
   echo "mutation (d): skipped (AIR2LEAN_EXAMPLES excludes floatops)"
 else
   sed -i.bak 's/else if m % 2 = 0 then (m : Int) else (m : Int) + 1/else (m : Int) + 1/' "$round_lean"
@@ -362,7 +400,9 @@ else
 fi
 
 echo "== mutation (e): Light.ofInt? accepts the unnamed value 3 (emitter output) ==" >&2
-if ! has_example variants; then
+if ! want_mutation e; then
+  echo "mutation (e): skipped (not in this shard)"
+elif ! has_example variants; then
   echo "mutation (e): skipped (AIR2LEAN_EXAMPLES excludes variants)"
 else
   sed -i.bak 's/else if v = 2 then Option.some .green else Option.none/else if v = 2 then Option.some .green else if v = 3 then Option.some .red else Option.none/' "$variants_gen"
@@ -378,7 +418,9 @@ else
 fi
 
 echo "== mutation (f): Zig.store writes one byte too few (Lean runtime) ==" >&2
-if ! has_example pointers; then
+if ! want_mutation f; then
+  echo "mutation (f): skipped (not in this shard)"
+elif ! has_example pointers; then
   echo "mutation (f): skipped (AIR2LEAN_EXAMPLES excludes pointers)"
 else
   sed -i.bak 's/storeBytes p align (Enc.encode v)$/storeBytes p align (Enc.encode v).pop/' "$mem_lean"
@@ -394,7 +436,9 @@ else
 fi
 
 echo "== mutation (g): Zig.memmove writes one byte too few (Lean runtime) ==" >&2
-if ! has_example slices; then
+if ! want_mutation g; then
+  echo "mutation (g): skipped (not in this shard)"
+elif ! has_example slices; then
   echo "mutation (g): skipped (AIR2LEAN_EXAMPLES excludes slices)"
 else
   sed -i.bak 's/^  storeBytes dst dstAlign bs$/  storeBytes dst dstAlign bs.pop/' "$mem_lean"
@@ -410,7 +454,9 @@ else
 fi
 
 echo "== mutation (h): Zig.rawAlloc never fails at Mem.failAt (Lean runtime) ==" >&2
-if ! has_example lists; then
+if ! want_mutation h; then
+  echo "mutation (h): skipped (not in this shard)"
+elif ! has_example lists; then
   echo "mutation (h): skipped (AIR2LEAN_EXAMPLES excludes lists)"
 else
   sed -i.bak 's/  if m.failAt = some m.allocs ∨ maxAllocBytes < n then return none/  if maxAllocBytes < n then return none/' "$alloc_lean"
@@ -426,7 +472,9 @@ else
 fi
 
 echo "== mutation (i): air2lean_asm_bswap32 returns x unchanged (diff-test archive) ==" >&2
-if ! has_example asm; then
+if ! want_mutation i; then
+  echo "mutation (i): skipped (not in this shard)"
+elif ! has_example asm; then
   echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes asm)"
 else
   sed -i.bak 's/return @byteSwap(x);/return x;/' "$asm_zig"
@@ -442,7 +490,9 @@ else
 fi
 
 echo "== mutation (j): Vec.reduce drops the last lane (Lean runtime) ==" >&2
-if ! has_example vectors; then
+if ! want_mutation j; then
+  echo "mutation (j): skipped (not in this shard)"
+elif ! has_example vectors; then
   echo "mutation (j): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
 else
   sed -i.bak 's/(v\.lanes\.toArray\.extract 1 n)\.foldl f v\.lanes\.toArray\[0\]!/(v.lanes.toArray.extract 1 (n - 1)).foldl f v.lanes.toArray[0]!/' "$vec_lean"
@@ -458,7 +508,9 @@ else
 fi
 
 echo "== mutation (k): two atomic accesses race (Lean runtime) ==" >&2
-if ! has_example threads; then
+if ! want_mutation k; then
+  echo "mutation (k): skipped (not in this shard)"
+elif ! has_example threads; then
   echo "mutation (k): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
   sed -i.bak 's/^  if (a\.isWrite || b\.isWrite) \&\& !(a\.isAtomic \&\& b\.isAtomic) then some \.illegal else none$/  if a.isWrite || b.isWrite then some .illegal else none/' "$mem_lean"
@@ -474,7 +526,9 @@ else
 fi
 
 echo "== mutation (l): recordAccess never checks for a race (Lean runtime) ==" >&2
-if ! has_example threads; then
+if ! want_mutation l; then
+  echo "mutation (l): skipped (not in this shard)"
+elif ! has_example threads; then
   echo "mutation (l): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
   sed -i.bak 's/match raceAt m.footprint clock block off len kind with/match (none : Option Error) with/' "$mem_lean"
@@ -490,7 +544,9 @@ else
 fi
 
 echo "== mutation (m): Flags.ofBits swaps ready and err (emitter output) ==" >&2
-if ! has_example layout; then
+if ! want_mutation m; then
+  echo "mutation (m): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (m): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/ready := Zig.Packed.get b 0, err := Zig.Packed.get b 1,/ready := Zig.Packed.get b 1, err := Zig.Packed.get b 0,/' "$layout_gen"
@@ -506,7 +562,9 @@ else
 fi
 
 echo "== mutation (n): Mem.accessW does not check for a const global (Lean runtime) ==" >&2
-if ! has_example layout; then
+if ! want_mutation n; then
+  echo "mutation (n): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (n): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/if r\.2\.1\.kind = \.constGlobal then throw \.illegal else pure r/if false then throw .illegal else pure r/' "$mem_lean"
@@ -522,7 +580,9 @@ else
 fi
 
 echo "== mutation (o): byteBits rejects every Byte.part (Lean runtime) ==" >&2
-if ! has_example layout; then
+if ! want_mutation o; then
+  echo "mutation (o): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (o): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/^    if n - 8 \* i ≤ m ∧ (trunc ∨ x\.toNat < 2 ^ (n - 8 \* i)) then some x else none$/    none/' "$enc_lean"
@@ -538,7 +598,9 @@ else
 fi
 
 echo "== mutation (p): byteBits accepts a set bit above the integer (Lean runtime) ==" >&2
-if ! has_example layout; then
+if ! want_mutation p; then
+  echo "mutation (p): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (p): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/| \.int x => if !trunc ∧ n - 8 \* i < 8 ∧ 2 ^ (n - 8 \* i) ≤ x\.toNat then none else some x/| .int x => some x/' "$enc_lean"
@@ -554,7 +616,9 @@ else
 fi
 
 echo "== mutation (q): Zig.mod throws .panic for a negative divisor (Lean runtime) ==" >&2
-if ! has_example vectors; then
+if ! want_mutation q; then
+  echo "mutation (q): skipped (not in this shard)"
+elif ! has_example vectors; then
   echo "mutation (q): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
 else
   sed -i.bak 's/^  else if s then (if remOverflows a b then throw \.illegal else pure (a\.smod b))$/  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))/' "$basic_lean"
@@ -570,7 +634,9 @@ else
 fi
 
 echo "== mutation (r): a [3:0]u8 constant without its sentinel item (emitter output) ==" >&2
-if ! has_example slices; then
+if ! want_mutation r; then
+  echo "mutation (r): skipped (not in this shard)"
+elif ! has_example slices; then
   echo "mutation (r): skipped (AIR2LEAN_EXAMPLES excludes slices)"
 else
   sed -i.bak 's/(#v\[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)\] : Vector (BitVec 8) 4)/(#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8)] : Vector (BitVec 8) 3)/' "$slices_gen"
@@ -586,7 +652,9 @@ else
 fi
 
 echo "== mutation (s): Allocator.freeSentinel frees len items, not len + 1 (Lean runtime) ==" >&2
-if ! has_example lists; then
+if ! want_mutation s; then
+  echo "mutation (s): skipped (not in this shard)"
+elif ! has_example lists; then
   echo "mutation (s): skipped (AIR2LEAN_EXAMPLES excludes lists)"
 else
   sed -i.bak 's/^  if size = 0 then pure () else rawFree s\.ptr (size \* (s\.len\.toNat + 1))$/  if size = 0 then pure () else rawFree s.ptr (size * s.len.toNat)/' "$alloc_lean"
@@ -602,7 +670,9 @@ else
 fi
 
 echo "== mutation (t): every Mode value is valid in a packed struct (emitter output) ==" >&2
-if ! has_example layout; then
+if ! want_mutation t; then
+  echo "mutation (t): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (t): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/^  valid b := (Mode\.ofInt? (Zig\.val false b))\.isSome$/  valid _ := true/' "$layout_gen"
@@ -618,7 +688,9 @@ else
 fi
 
 echo "== mutation (u): a bool vector in memory has its lanes in reverse bit order (Lean runtime) ==" >&2
-if ! has_example layout; then
+if ! want_mutation u; then
+  echo "mutation (u): skipped (not in this shard)"
+elif ! has_example layout; then
   echo "mutation (u): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
   sed -i.bak 's/then acc ||| (1#n <<< i) else acc) 0#n))$/then acc ||| (1#n <<< (n - 1 - i)) else acc) 0#n))/' "$vec_lean"
@@ -634,7 +706,9 @@ else
 fi
 
 echo "== mutation (v): cmpxchgAs compares with the new value (Lean runtime) ==" >&2
-if ! has_example threads; then
+if ! want_mutation v; then
+  echo "mutation (v): skipped (not in this shard)"
+elif ! has_example threads; then
   echo "mutation (v): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
   sed -i.bak 's/^  match ← cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with$/  match ← cmpxchgAt c succ fail align p (Packed.toBits new) (Packed.toBits new) with/' "$thread_lean"
@@ -650,7 +724,9 @@ else
 fi
 
 echo "== mutation (w): an acquire read adopts no clock (Lean runtime, proof build) ==" >&2
-if ! has_example atomics; then
+if ! want_mutation w; then
+  echo "mutation (w): skipped (not in this shard)"
+elif ! has_example atomics; then
   echo "mutation (w): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
 else
   sed -i.bak 's/^  { m with clocks := m.clocks.set! m.current (VClock.merge (m.clocks\[m.current\]!) c) }$/  { m with clocks := m.clocks.set! m.current (m.clocks[m.current]!) }/' "$thread_lean"
@@ -666,7 +742,9 @@ else
 fi
 
 echo "== mutation (x): a write goes only at the end (Lean runtime, proof build) ==" >&2
-if ! has_example atomics; then
+if ! want_mutation x; then
+  echo "mutation (x): skipped (not in this shard)"
+elif ! has_example atomics; then
   echo "mutation (x): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
 else
   sed -i.bak 's/^  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n || !l.hasRmwAfter (p - 1)$/  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n/' "$thread_lean"
@@ -682,7 +760,9 @@ else
 fi
 
 echo "== mutation (y): a futex wait never blocks (Lean runtime, proof build) ==" >&2
-if ! has_example sync; then
+if ! want_mutation y; then
+  echo "mutation (y): skipped (not in this shard)"
+elif ! has_example sync; then
   echo "mutation (y): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
   sed -i.bak 's/^    if v = e then$/    if false then/' "$thread_lean"
@@ -698,7 +778,9 @@ else
 fi
 
 echo "== mutation (z): no deadlock check (Lean runtime, proof build) ==" >&2
-if ! has_example sync; then
+if ! want_mutation z; then
+  echo "mutation (z): skipped (not in this shard)"
+elif ! has_example sync; then
   echo "mutation (z): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
   sed -i.bak 's/^      (if s.anyRunning then some (.error .deadlock) else none, s.trace)$/      (none, s.trace)/' "$sched_lean"
@@ -714,7 +796,9 @@ else
 fi
 
 echo "== mutation (aa): an RMW can read a message with an RMW after it (Lean runtime, proof build) ==" >&2
-if ! has_example threads; then
+if ! want_mutation aa; then
+  echo "mutation (aa): skipped (not in this shard)"
+elif ! has_example threads; then
   echo "mutation (aa): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
   sed -i.bak 's/^  ((Array.range (n - f)).map fun k => n - 1 - k).filter fun p => !rmw || !l.hasRmwAfter p$/  ((Array.range (n - f)).map fun k => n - 1 - k).filter fun p => !rmw || true/' "$thread_lean"
@@ -730,7 +814,9 @@ else
 fi
 
 echo "== mutation (ab): a spawned thread gets an empty clock (Lean runtime, proof build) ==" >&2
-if ! has_example threads; then
+if ! want_mutation ab; then
+  echo "mutation (ab): skipped (not in this shard)"
+elif ! has_example threads; then
   echo "mutation (ab): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
   sed -i.bak 's/^    clocks := (m.clocks.set! parent parentClock).push parentClock$/    clocks := (m.clocks.set! parent parentClock).push #[]/' "$thread_lean"
@@ -746,7 +832,9 @@ else
 fi
 
 echo "== mutation (ac): a futex wake wakes no thread (Lean runtime, proof build) ==" >&2
-if ! has_example sync; then
+if ! want_mutation ac; then
+  echo "mutation (ac): skipped (not in this shard)"
+elif ! has_example sync; then
   echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
   sed -i.bak 's/^  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)$/  let woke : Array ThreadId := #[]/' "$thread_lean"
@@ -762,7 +850,9 @@ else
 fi
 
 echo "== mutation (ad): a cmpxchg succeeds on a stale message (Lean runtime, proof build) ==" >&2
-if ! has_example atomics; then
+if ! want_mutation ad; then
+  echo "mutation (ad): skipped (not in this shard)"
+elif ! has_example atomics; then
   echo "mutation (ad): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
 else
   sed -i.bak 's/^    !(l.hasRmwAfter pos && match/    !(false \&\& match/' "$thread_lean"

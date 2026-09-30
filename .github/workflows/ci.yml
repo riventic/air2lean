@@ -41,12 +41,34 @@ jobs:
             examples: "basic recursion options floatops floats errors variants pointers layout"
             full: false
             mutate: false
-          # The mutation test, on the default version, in its own job: it runs in parallel
-          # with the full jobs. scripts/mutate.sh builds all it needs.
+          # The mutation test, on the default version, in 5 jobs (one per line of
+          # scripts/mutation-shards.txt): they run in parallel with the full jobs.
+          # scripts/mutate.sh builds all it needs.
           - zig: "0.16.0"
             examples: ""
             full: false
             mutate: true
+            shard: 1
+          - zig: "0.16.0"
+            examples: ""
+            full: false
+            mutate: true
+            shard: 2
+          - zig: "0.16.0"
+            examples: ""
+            full: false
+            mutate: true
+            shard: 3
+          - zig: "0.16.0"
+            examples: ""
+            full: false
+            mutate: true
+            shard: 4
+          - zig: "0.16.0"
+            examples: ""
+            full: false
+            mutate: true
+            shard: 5
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -138,4 +160,6 @@ jobs:
         if: matrix.mutate
         env:
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
+          AIR2LEAN_MUTATION_SHARDS: "5"
         run: scripts/mutate.sh
