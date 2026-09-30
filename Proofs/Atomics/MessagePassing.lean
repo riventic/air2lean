@@ -880,6 +880,28 @@ theorem pre_inv {m : Mem} (h : Pre m) (h1 : U32At m 1 0)
     obtain ⟨-, h2, h3⟩ := h.fp e he
     rw [h2]; exact ⟨by rw [h.thr]; decide, h3⟩
 
+/-- `main`'s spawn, for the threads: the writer is thread 1; `main` goes to `run`, the writer
+starts. -/
+theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pre)
+    (hc : m.current = 0) :
+    m.threads.size = 1 ∧ (∀ u, 1 ≤ u → G u = .none) ∧ m.clocks.size = 1 ∧
+    ThrOk (upd (upd G 1 .start) 0 .run) { m with
+      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
+        (VClock.bump (m.clocks[m.current]!) m.current),
+      threads := m.threads.push { spawner := m.current, joined := false } } := by
+  obtain ⟨h0, hcs, hthr⟩ := h
+  obtain ⟨hs1, -, hnone⟩ : m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none := by
+    rcases hthr with h | ⟨-, -, g0, -, -⟩
+    · exact h
+    · rcases g0 with g0 | g0 <;> rw [hg] at g0 <;> cases g0
+  have hG1 : (upd (upd G 1 .start) 0 .run) 1 = .start := by rw [upd_ne _ _ (by decide), upd_self]
+  refine ⟨hs1, hnone, by rw [hcs, hs1], ⟨by
+      rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
+    by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
+      by simp [Array.getElem_push, hs1], hc, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
+  rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+  exact hnone u (by unfold ThreadId at *; omega)
+
 /-- `main`'s spawn: the writer is thread 1. The writer's clock is a copy of `main`'s bumped
 clock, so each write before the spawn happened before both threads. -/
 theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m) (hg : G 0 = .pre)
@@ -888,24 +910,17 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
   rw [fork_run] at h
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, rfl⟩ := h
-  obtain ⟨h0, hcs, hthr⟩ := hi.thr
-  obtain ⟨hs1, -, hnone⟩ : m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none := by
-    rcases hthr with h | ⟨-, -, g0, -, -⟩
-    · exact h
-    · rcases g0 with g0 | g0 <;> rw [hg] at g0 <;> cases g0
+  obtain ⟨hs1, hnone, hcs, hthr⟩ := thr_fork hi.thr hg hc
   refine ⟨hs1, hc, ?_⟩
   have hG1 : (upd (upd G 1 .start) 0 .run) 1 = .start := by rw [upd_ne _ _ (by decide), upd_self]
   have hcl : ∀ u < 2, VClock.le (m.clocks[0]!) (((m.clocks.set! m.current
       (VClock.bump (m.clocks[m.current]!) m.current)).push
       (VClock.bump (m.clocks[m.current]!) m.current))[u]!) = true := by
     intro u hu
-    rw [hc, fork_clocks_one (by rw [hcs, hs1]) u hu]
+    rw [hc, fork_clocks_one hcs u hu]
     exact VClock.le_bump _ _
   refine {
-    thr := ⟨by rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
-      by simp [hcs],
-      .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false }, by simp [Array.getElem_push, hs1], hc, rfl⟩,
-        .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩
+    thr := hthr
     b0 := hi.b0
     b1 := hi.b1
     b2 := hi.b2
@@ -914,8 +929,6 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
     flag := ?_
     fp := ?_
     own := ?_ }
-  · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
-    exact hnone u (by unfold ThreadId at *; omega)
   · rcases hi.flag with h | ⟨l, ha, hlb, hlo, hll, hlast, h1 | ⟨-, -, -, -, -, hfin, -⟩⟩
     · exact .inl h
     · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, .inl h1⟩

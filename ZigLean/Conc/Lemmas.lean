@@ -972,6 +972,18 @@ theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
       · simp [h1]
   · simp [hb]
 
+/-- An entry of block `b` that overlaps an access, whose clock is concurrent with the thread's
+bumped clock, and that races with it by its kind: the access races. -/
+theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
+    (he : e ∈ m.footprint) (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
+    (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
+    {err : Error} (hr : racePair e.kind k = some err) : ¬ NoRace m b o len k := by
+  unfold NoRace raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro h
+  have := h e he
+  simp [hb, h1, h2, hc, hr] at this
+
 /-- `Thread.join` of a thread that the current thread spawned and did not join yet. -/
 theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
     (hs : rec.spawner = m.current) (hj : rec.joined = false) :

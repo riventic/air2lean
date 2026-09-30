@@ -134,6 +134,13 @@ theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VCl
     VClock.le a c = true :=
   VClock.le_iff.mpr fun i => Nat.le_trans (VClock.le_iff.mp hab i) (VClock.le_iff.mp hbc i)
 
+/-- A clock with one component above `b`'s is not below `b`. -/
+theorem VClock.le_eq_false {a b : VClock} {i : ThreadId} (h : b.get i < a.get i) :
+    VClock.le a b = false := by
+  cases hl : VClock.le a b
+  · rfl
+  · have := VClock.le_iff.mp hl i; omega
+
 /-- `VClock.merge` is a genuine upper bound: `a`'s own component is never lost. -/
 theorem VClock.get_merge (a b : VClock) (i : ThreadId) :
     (VClock.merge a b).get i = Nat.max (a.get i) (b.get i) := by
