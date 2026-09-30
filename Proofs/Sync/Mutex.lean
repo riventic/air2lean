@@ -221,9 +221,6 @@ theorem Inv.grow {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : Grows m
     obtain ⟨h1, h2⟩ := hi.own e he
     exact ⟨hg.threads ▸ h1, VClock.le_trans h2 (hg.cle _)⟩
 
-theorem Grows.refl (m : Mem) : Grows m m :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
-
 theorem Grows.trans {m₁ m₂ m₃ : Mem} (h₁ : Grows m₁ m₂) (h₂ : Grows m₂ m₃) : Grows m₁ m₃ :=
   ⟨h₂.threads.trans h₁.threads, h₂.blocks.trans h₁.blocks, h₂.atomics.trans h₁.atomics,
     h₂.footprint.trans h₁.footprint, h₂.waiters.trans h₁.waiters, h₂.csize.trans h₁.csize,
@@ -670,10 +667,6 @@ theorem ofBits_st {w : Nat} (hw : w < 3) :
     (Packed.ofBits? (α := Io_Mutex_State) (BitVec.ofNat 32 w)).run = some (.ok (stOf w)) := by
   rcases (by omega : w = 0 ∨ w = 1 ∨ w = 2) with rfl | rfl | rfl <;> rfl
 
-theorem bits_unlocked : Packed.toBits Io_Mutex_State.unlocked = BitVec.ofNat 32 0 := rfl
-theorem bits_locked : Packed.toBits Io_Mutex_State.locked_once = BitVec.ofNat 32 1 := rfl
-theorem bits_contended : Packed.toBits Io_Mutex_State.contended = BitVec.ofNat 32 2 := rfl
-
 theorem ofNat_inj {a b : Nat} (ha : a < 3) (hb : b < 3) (h : BitVec.ofNat 32 a = BitVec.ofNat 32 b) :
     a = b := by
   have := congrArg BitVec.toNat h
@@ -1070,12 +1063,6 @@ theorem live {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (t : ThreadId) : pro
     cases hk₃
     exact hph rfl
   · change G v = .joins at h; rw [hk₂] at h; cases h
-
-/-- The invariant with another futex queue. -/
-theorem Inv.withQ {G : ThreadId → Gh} {m : Mem} {q : Array (ThreadId × Ptr)} {z : Array ThreadId}
-    (hi : Inv G m) (hq : FqOk G { m with waiters := q, woken := z }) :
-    Inv G { m with waiters := q, woken := z } :=
-  { hi with fq := hq }
 
 /-- The invariant of a memory with the same fields but the futex queue. -/
 theorem Inv.frameQ {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (ht : m'.threads = m.threads)
@@ -1522,8 +1509,6 @@ theorem wait_ok {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {e : BitVec 32} (
 
 theorem upd_upd (G : ThreadId → Gh) (t : ThreadId) (a b : Gh) : upd (upd G t a) t b = upd G t b := by
   funext u; by_cases h : u = t <;> simp [upd, h]
-
-theorem ptr_c16 : (cPtr.add 16).add 0 = mPtr := rfl
 
 /-- `lock`'s loop invariant: thread `t` does not hold the mutex. -/
 def lockInv (t k D : Nat) (_ : Io_Mutex_lockUncancelableLocals) (G : ThreadId → Gh) (m : Mem)

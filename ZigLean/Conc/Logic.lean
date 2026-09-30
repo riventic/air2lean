@@ -421,14 +421,6 @@ theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
     (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
   rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, -, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩ <;> rfl
 
-/-- A futex wait that goes on keeps the queue. -/
-theorem futexWait_go {p : Ptr} {e : BitVec 32} {m m' : Mem}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (false, m'))) : m'.waiters = m.waiters := by
-  rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, -, -, ⟨-, h, -⟩ | ⟨-, -, rfl⟩⟩
-  · rfl
-  · cases h
-  · rfl
-
 /-- A thread's run reached `tree` (`Sched.settle`): it stops at a sync op, with a new ghost
 value and the invariant, or it ends. -/
 theorem settle_ok {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
