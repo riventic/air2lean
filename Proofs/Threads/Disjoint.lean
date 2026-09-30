@@ -421,17 +421,10 @@ theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
     (hr : m.threads[u]? = some rec)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
     m'.current = t ∧ m'.threads = m.threads.setIfInBounds u { rec with joined := true } := by
-  unfold Thread.join at hj
-  by_cases hc : (rec.spawner != t || rec.joined) = true
-  · simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, throw, throwThe,
-      MonadExceptOf.throw, StateT.lift]
-  · simp only [Bool.not_eq_true, Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hc
-    obtain ⟨hc1, hc2⟩ := hc
-    simp [hr, hc1, hc2, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, StateT.set, set,
-      MonadStateOf.set, pure, ExceptT.pure] at hj
-    subst hj; cases rec; simp_all
+  obtain ⟨rec', hr', -, rfl⟩ := join_eq hj
+  simp only at hr'
+  rw [hr] at hr'; cases hr'
+  exact ⟨rfl, Array.set!_eq_setIfInBounds⟩
 
 theorem upd_comm {β : Type} (f : ThreadId → β) {t u : ThreadId} (x y : β) (h : t ≠ u) :
     upd (upd f t x) u y = upd (upd f u y) t x := by

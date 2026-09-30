@@ -262,84 +262,67 @@ theorem fork {h₁ h₂ : Heap} {c : ThreadId} (ho : Owned own m) (ht : t < m.th
 theorem join {u : ThreadId} (ho : Owned own m) (ht : t < m.threads.size) (hut : u ≠ t)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
     Owned (upd (upd own t (own t ∪ own u)) u Heap.empty) m' := by
-  unfold Thread.join at hj
-  cases hr : m.threads[u]? with
-  | none =>
-    simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, throw, throwThe,
-      MonadExceptOf.throw, StateT.lift]
-  | some rec =>
-    by_cases hc : (rec.spawner != t || rec.joined) = true
-    · simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-        ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, throw, throwThe,
-        MonadExceptOf.throw, StateT.lift]
-    · simp only [Bool.not_eq_true, Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hc
-      obtain ⟨hc1, hc2⟩ := hc
-      simp [hr, hc1, hc2, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-        ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, StateT.set, set,
-        MonadStateOf.set, pure, ExceptT.pure] at hj
-      subst hj
-      have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
-      have hcs := ho.csize
-      have hdtu := ho.disj t u (Ne.symm hut)
-      have hclk : ∀ w, (m.clocks.setIfInBounds t (VClock.merge (VClock.bump (m.clocks[t]!) t)
-          (m.clocks[u]!)))[w]! = if w = t then VClock.merge (VClock.bump (m.clocks[t]!) t)
-          (m.clocks[u]!) else m.clocks[w]! := by
-        intro w
-        rw [← Array.set!_eq_setIfInBounds, Proto.getElem!_set!_ite]
-        by_cases hw : w = t
-        · simp [hw, show t < m.clocks.size from hcs ▸ ht]
-        · simp [hw]
-      refine ⟨fun w => ?_, fun w v hwv => ?_, fun w hw => ?_, fun w hw => ?_, by simp [hcs]⟩
-      · by_cases hw : w = u
-        · subst hw; rw [upd_self]; intro l c hc; cases hc
-        · rw [upd_ne _ _ hw]
-          by_cases hwt : w = t
-          · subst hwt; rw [upd_self]; exact Heap.union_sub (ho.sub w) (ho.sub u)
-          · rw [upd_ne _ _ hwt]; exact ho.sub w
-      · -- The part of `u` is now `t`'s; `u` has none.
-        have part : ∀ x, x ≠ u → (upd (upd own t (own t ∪ own u)) u Heap.empty x) =
-            if x = t then own t ∪ own u else own x := by
-          intro x hx; rw [upd_ne _ _ hx]
-          by_cases hxt : x = t
-          · subst hxt; simp
-          · rw [upd_ne _ _ hxt]; simp [hxt]
-        by_cases hw : w = u
-        · subst hw; rw [upd_self]; intro l; exact .inl rfl
-        by_cases hv : v = u
-        · subst hv; rw [upd_self]; exact Heap.disjoint_empty _
-        rw [part w hw, part v hv]
-        have hdU : ∀ x, x ≠ t → x ≠ u → Heap.Disjoint (own t ∪ own u) (own x) := fun x hxt hxu =>
-          fun l => by
-            rcases ho.disj t x (Ne.symm hxt) l with e | e
-            · rcases ho.disj u x (Ne.symm hxu) l with e' | e'
-              · left; simp [e, e']
-              · exact .inr e'
-            · exact .inr e
-        by_cases hwt : w = t
-        · subst hwt; simp only [↓reduceIte, Ne.symm hwv]
-          exact hdU v (Ne.symm hwv) hv
-        · by_cases hvt : v = t
-          · subst hvt; simp only [hwt, ↓reduceIte]; exact (hdU w hwt hw).symm
-          · simp only [hwt, hvt, ↓reduceIte]; exact ho.disj w v hwv
-      · simp only [Array.size_setIfInBounds] at hw
-        show Mem.OwnsC _ _ _
-        dsimp only
-        rw [hclk]
-        by_cases hwu : w = u
-        · subst hwu; rw [upd_self]
-          simp only [hut, ↓reduceIte]
-          exact (ho.owns w hul).sub fun l hl => absurd rfl hl
-        · rw [upd_ne _ _ hwu]
-          by_cases hwt : w = t
-          · subst hwt; rw [upd_self]; simp only [↓reduceIte]
-            exact Mem.OwnsC.union
-              ((ho.owns w ht).mono (VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)))
-              ((ho.owns u hul).mono (VClock.le_merge_right _ _))
-          · rw [upd_ne _ _ hwt]; simp only [hwt, ↓reduceIte]; exact ho.owns w hw
-      · simp only [Array.size_setIfInBounds] at hw
-        rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
-        exact ho.outside w hw
+  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  have hcs := ho.csize
+  have hclk : ∀ w, (m.clocks.set! t (VClock.merge (VClock.bump (m.clocks[t]!) t)
+      (m.clocks[u]!)))[w]! = if w = t then VClock.merge (VClock.bump (m.clocks[t]!) t)
+      (m.clocks[u]!) else m.clocks[w]! := by
+    intro w
+    rw [Proto.getElem!_set!_ite]
+    by_cases hw : w = t
+    · simp [hw, show t < m.clocks.size from hcs ▸ ht]
+    · simp [hw]
+  refine ⟨fun w => ?_, fun w v hwv => ?_, fun w hw => ?_, fun w hw => ?_, by simp [hcs]⟩
+  · by_cases hw : w = u
+    · subst hw; rw [upd_self]; intro l c hc; cases hc
+    · rw [upd_ne _ _ hw]
+      by_cases hwt : w = t
+      · subst hwt; rw [upd_self]; exact Heap.union_sub (ho.sub w) (ho.sub u)
+      · rw [upd_ne _ _ hwt]; exact ho.sub w
+  · -- The part of `u` is now `t`'s; `u` has none.
+    have part : ∀ x, x ≠ u → (upd (upd own t (own t ∪ own u)) u Heap.empty x) =
+        if x = t then own t ∪ own u else own x := by
+      intro x hx; rw [upd_ne _ _ hx]
+      by_cases hxt : x = t
+      · subst hxt; simp
+      · rw [upd_ne _ _ hxt]; simp [hxt]
+    by_cases hw : w = u
+    · subst hw; rw [upd_self]; intro l; exact .inl rfl
+    by_cases hv : v = u
+    · subst hv; rw [upd_self]; exact Heap.disjoint_empty _
+    rw [part w hw, part v hv]
+    have hdU : ∀ x, x ≠ t → x ≠ u → Heap.Disjoint (own t ∪ own u) (own x) := fun x hxt hxu =>
+      fun l => by
+        rcases ho.disj t x (Ne.symm hxt) l with e | e
+        · rcases ho.disj u x (Ne.symm hxu) l with e' | e'
+          · left; simp [e, e']
+          · exact .inr e'
+        · exact .inr e
+    by_cases hwt : w = t
+    · subst hwt; simp only [↓reduceIte, Ne.symm hwv]
+      exact hdU v (Ne.symm hwv) hv
+    · by_cases hvt : v = t
+      · subst hvt; simp only [hwt, ↓reduceIte]; exact (hdU w hwt hw).symm
+      · simp only [hwt, hvt, ↓reduceIte]; exact ho.disj w v hwv
+  · simp only [Array.size_set!] at hw
+    show Mem.OwnsC _ _ _
+    dsimp only
+    rw [hclk]
+    by_cases hwu : w = u
+    · subst hwu; rw [upd_self]
+      simp only [hut, ↓reduceIte]
+      exact (ho.owns w hul).sub fun l hl => absurd rfl hl
+    · rw [upd_ne _ _ hwu]
+      by_cases hwt : w = t
+      · subst hwt; rw [upd_self]; simp only [↓reduceIte]
+        exact Mem.OwnsC.union
+          ((ho.owns w ht).mono (VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)))
+          ((ho.owns u hul).mono (VClock.le_merge_right _ _))
+      · rw [upd_ne _ _ hwt]; simp only [hwt, ↓reduceIte]; exact ho.owns w hw
+  · simp only [Array.size_set!] at hw
+    rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+    exact ho.outside w hw
 
 end Owned
 

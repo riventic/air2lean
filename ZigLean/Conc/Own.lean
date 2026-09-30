@@ -10,8 +10,8 @@ The separation logic of `ZigLean/Sep/` for a thread of a concurrent run.
   access to a byte of `h` happened before `c`. Thread `t` owns `h` if its clock does. Then a
   plain access by `t` to the bytes of `h` does not race (`Mem.Owns.noRace`): no recorded access
   to them is concurrent with `t`. Ownership moves with the clocks: a clock that is later owns
-  what an earlier one owns (`Mem.OwnsC.mono`). So a release write gives ownership to the thread that
-  reads it with acquire, a spawn gives it to the child, and a join gives it back.
+  what an earlier one owns (`Mem.OwnsC.mono`). So a spawn gives ownership to the child, and a
+  join gives it back (`Owned.fork`, `Owned.join` in `ZigLean/Conc/Csl.lean`).
 - **A step of the owner** (`StepIn hF`). A step of the current thread that changes only the
   bytes it owns: the frame `hF` (the rest of the heap) and the other threads' clocks stay
   unchanged, and each new footprint entry is the current thread's and touches no byte of `hF`.
@@ -20,9 +20,8 @@ The separation logic of `ZigLean/Sep/` for a thread of a concurrent run.
   current thread owns the part `P` holds of, `c` does not throw, `Q` holds of the part after it,
   the thread owns that part, and the step is a `StepIn` of the frame. The rules are those of
   `Triple`: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`, `load`, `store`, `alloc`, `free`.
-- **In a thread** (`WP.liftM_triple`). A `MemM` step of generated code with a thread triple is a
-  `WP` step: the proof gets the post and the `StepIn` of the rest of the memory, and with it
-  keeps its invariant for the other threads' parts.
+- **In a thread.** `ZigLean/Conc/Csl.lean` keeps the threads' parts in a proof's invariant and
+  has the `WP` rules for a step with a thread triple.
 
 A zero-length access counts as its first byte (`FootprintEntry.Touches`): the race check sees it
 at that byte too.
@@ -482,32 +481,5 @@ theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS
     · omega
 
 end Blocks
-
-/-! ## In a thread -/
-
-namespace Conc
-namespace Proto
-
-variable {Tgt γ σ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
-  {n : Nat}
-
-/-- A `MemM` step of generated code with a thread triple (module doc): the current thread owns
-`hP`, the rest of the heap is `hF`. -/
-theorem WP.liftM_triple {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn}
-    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} {hP hF : Heap} (ht : TTriple Pa x Qa)
-    (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : Pa hP)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current hP)
-    (h : ∀ a m' hQ, Heap.Disjoint hQ hF → m'.heap = hQ ∪ hF → Qa a hQ →
-      m'.Owns m'.current hQ → StepIn hF m m' → Q (a, s) G m' n) :
-    P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
-  have hx := ht m hP hF hd hm hp hc ho
-  refine WP.liftM (fun e he => ?_) fun a m' hr => ?_
-  · rw [he] at hx; exact hx.elim
-  · rw [hr] at hx
-    obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
-    exact ⟨by rw [hs.threads], h a m' hQ hd' hm' hq ho' hs⟩
-
-end Proto
-end Conc
 
 end Zig
