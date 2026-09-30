@@ -60,6 +60,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (y) | a futex wait never blocks | proof build (`wait_alone_deadlock`) |
 | (z) | no deadlock check | proof build (`wait_alone_deadlock`) |
 | (aa) | an RMW can read a message with an RMW after it (a lost update) | proof build (`readOpts_chain`, which `parallelCounter_spec` needs) |
+| (ab) | a spawned thread gets an empty clock (it does not happen after its spawner's writes) | proof build (`parallelCounter_safe`) |
 
 ## Next
 
@@ -70,7 +71,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | T3 | Waits (0.16.0): `std.Io` is `Zig.Io`; `Io.futexWait`/`futexWaitUncancelable`/`futexWake` are sync ops of the scheduler (a wait blocks until a wake at its address); `Zig.Error.deadlock` when no thread can go on. `Io.Mutex` is translated from its std code (atomics on its `enum(u32)` state). Example `sync` (0.16.0 only, `examples/<ex>/zig-versions`): a counter under `Io.Mutex`, 4 in all 6,522 schedules. Mutations (y), (z) detected by the proof build. |
 | T3b | `Io.Condition` and `Io.Event` translated from their std code (atomics on a packed struct; packed struct constants `.{ .f = v }`). `sync.handoff`: a hand-off through a condition and an event. |
 | T4 (1) | Proofs over all schedules (`ZigLean/Conc/Logic.lean`): a protocol with a global invariant and a ghost value per thread (rely–guarantee), `run_sound` (partial correctness), `WP` rules for generated code and lemmas from a step's result back to the memory (`ZigLean/Conc/Lemmas.lean`). `parallelCounter n = 4 * n` under every schedule (`Proofs/Threads/Counter.lean`). |
-| T3c, T4 (2), T5, T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex). A proof that no run gives `.illegal` or `.deadlock`; assertions on what a thread has seen (release/acquire, relaxed); the mutex counter. Concurrent separation logic. Docs. |
+| T4 (2) | Strict mode (`Proto.strict`): `run_safe`, no run gives an error; no deadlock for fork-join programs (`ready_ne`: a blocked join waits for a later thread). `parallelCounter` never errs under any schedule (`parallelCounter_safe`). |
+| T3c, T4 (3), T5, T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex). Deadlock freedom with futex waits (the mutex counter); assertions on what a thread has seen (release/acquire, relaxed). Concurrent separation logic. Docs. |
 
 ## Decisions
 

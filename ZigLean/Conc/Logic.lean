@@ -20,9 +20,11 @@ invariant and ghost values.
   and each thread keeps it (the guarantee). A thread does not change the ghost value of another
   thread, and a run between two stops keeps the number of threads.
 - **Join.** A `join` of thread `u` goes on only after `u` ended, so the thread learns `fin (G u)`.
-- **Partial correctness.** An error and "no result" satisfy every spec: the spec is about the
-  results that a run gives. A proof that no run gives `.illegal` is a later step (`PLAN.md`
-  §Next, T4 (2)).
+- **Two results** (`run_spec`). Every `ok` result of a run satisfies `main`'s post
+  (`run_sound`; an error or no result satisfies every spec). In strict mode (`Proto.strict`) no
+  run gives an error (`run_safe`): no error leaf, every join is of a later thread that exists and
+  was not joined (so no deadlock, `ready_ne`), and no futex wait (deadlock freedom with futexes
+  needs its own argument). No result (out of fuel) is still allowed.
 
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post
