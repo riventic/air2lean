@@ -5,12 +5,13 @@ import ZigLean.Mem.Lemmas
 # Proofs about `examples/atomics/atomics.zig`
 
 The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). The specs over all schedules are in
-`MessagePassing.lean` (`mpRelAcq`: 0 or 42, no error) and `Relaxed.lean` (`mpRelaxed`: every
-result is 0). This file shows that the model has the results that only a weak memory model
-explains, each under a concrete schedule (an oracle), the result of the sequentially consistent
-schedule (the oracle always picks option 0: the newest message, the thread that is first), and
-the race of `mpRelaxed`. The kernel computes each run (`decide +kernel`); a function with a loop
-(`stackPush`) is defined by `partial_fixpoint`, which the kernel does not run.
+`MessagePassing.lean` (`mpRelAcq`: 0 or 42, no error), `Relaxed.lean` (`mpRelaxed`: every result
+is 0) and `Stack.lean` (`stackPush`: 120 or 210, no error). This file shows that the model has the
+results that only a weak memory model explains, each under a concrete schedule (an oracle), the
+result of the sequentially consistent schedule (the oracle always picks option 0: the newest
+message, the thread that is first), and the race of `mpRelaxed`. The kernel computes each run
+(`decide +kernel`); `stackPush` has a loop, defined by `partial_fixpoint`, which the kernel does
+not run.
 -/
 
 open Zig Atomics

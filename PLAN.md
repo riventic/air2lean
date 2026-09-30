@@ -62,6 +62,7 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (aa) | an RMW can read a message with an RMW after it (a lost update) | proof build (`readOpts_chain`, which `parallelCounter_spec` needs) |
 | (ab) | a spawned thread gets an empty clock (it does not happen after its spawner's writes) | proof build (`parallelCounter_safe`) |
 | (ac) | a futex wake wakes no thread | proof build (`mutexCounter_safe`) |
+| (ad) | a `cmpxchg` can succeed on a message with an RMW after it (a lost push) | proof build (`casOpts_pos`, which `stackPush_spec` needs) |
 
 ## Next
 
@@ -74,7 +75,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | T4 (1) | Proofs over all schedules (`ZigLean/Conc/Logic.lean`): a protocol with a global invariant and a ghost value per thread (rely–guarantee), `run_sound` (partial correctness), `WP` rules for generated code and lemmas from a step's result back to the memory (`ZigLean/Conc/Lemmas.lean`). `parallelCounter n = 4 * n` under every schedule (`Proofs/Threads/Counter.lean`). |
 | T4 (2) | Strict mode (`Proto.strict`): `run_safe`, no run gives an error; no deadlock for fork-join programs (`ready_ne`: a blocked join waits for a later thread). `parallelCounter` never errs under any schedule (`parallelCounter_safe`). |
 | T4 (3) | Futex waits in strict mode: the futex queue is in `Mem` (`Thread.futexWait`, `futexWake`), a wait keeps `Live`, and `ready_ne` covers a chain of joins that ends at a sleeping thread. `mutexCounter` (the translated std `Io.Mutex`) gives 4 and never errs under every schedule (`Proofs/Sync/Mutex.lean`). Mutation (ac) detected by the proof build. |
-| T3c, T4 (4), T5, T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex). Assertions on what a thread has seen (release/acquire, relaxed). Concurrent separation logic. Docs. |
+| T4 (4) | Assertions on what a thread has seen, on the messages and clocks (`Proofs/Atomics/`): `mpRelAcq` gives 0 or 42 and never errs (release/acquire); every result of `mpRelaxed` is 0 (a relaxed read of 1 races); the lock-free `stackPush` loop gives 120 or 210 and never errs. Kit: atomic store results, one atomic location (`locIdx_single`), `Solo`, frames. Mutation (ad) detected by the proof build. |
+| T3c, T5, T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex). Concurrent separation logic. Docs. |
 
 ## Decisions
 
