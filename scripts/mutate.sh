@@ -115,6 +115,9 @@
 #     Detected by the proof build: `casOpts_pos` (ZigLean/Conc/Lemmas.lean), which
 #     `stackPush_spec` (Proofs/Atomics/Stack.lean) needs. The diff test does not see it: the
 #     newest message is still option 0.
+# (ae) Lean-runtime mutation, iogroup: `Io.Group.await` (ZigLean/Mem/Thread.lean's `groupTake`)
+#     forgets the last task, so it is not joined. Detected by the diff test: `main`'s read of the
+#     counter races with that task on every schedule (the `unspecified` count changes).
 #
 # Usage: mutate.sh
 # Env:
@@ -863,6 +866,22 @@ else
   }
 
   proof_report "mutation (ad)" Proofs.Atomics.Stack
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (ae): Io.Group.await does not join the last task (Lean runtime) ==" >&2
+if ! has_example iogroup; then
+  echo "mutation (ae): skipped (AIR2LEAN_EXAMPLES excludes iogroup)"
+else
+  sed -i.bak 's/^  pure ((m.groups.filter (·.1 == g)).map (·.2))$/  pure ((m.groups.filter (·.1 == g)).map (·.2)).pop/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^  pure ((m.groups.filter (·.1 == g)).map (·.2)).pop$' "$thread_lean" || {
+    echo "error: mutation (ae): sed did not change groupTake" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (ae)" iogroup
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi
