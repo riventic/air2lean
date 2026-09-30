@@ -689,4 +689,203 @@ theorem rload_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} {ord : AtomicOrder
   rw [hl0] at hlt ⊢
   exact hfl.val hlt
 
+/-! ## A pusher's `cmpxchg` -/
+
+theorem chains_push {vs : List Nat} (hvs : vs ∈ Chains) {u : Nat} (hu : u = 1 ∨ u = 2)
+    (hn : u ∉ vs) : vs ++ [u] ∈ Chains := by
+  simp only [Chains, List.mem_cons, List.not_mem_nil, or_false] at hvs ⊢
+  rcases hu with rfl | rfl <;> rcases hvs with rfl | rfl | rfl | rfl | rfl <;> simp_all
+
+theorem chains_pos {vs : List Nat} (hvs : vs ∈ Chains) : 0 < vs.length := by
+  simp only [Chains, List.mem_cons, List.not_mem_nil, or_false] at hvs
+  rcases hvs with rfl | rfl | rfl | rfl | rfl <;> decide
+
+theorem getElem!_append_lt {vs : List Nat} {u j : Nat} (h : j < vs.length) :
+    (vs ++ [u])[j]! = vs[j]! := by
+  rw [getElem!_pos (vs ++ [u]) j (by simp; omega), getElem!_pos vs j h, List.getElem_append_left]
+
+theorem getElem!_append_len (vs : List Nat) (u : Nat) : (vs ++ [u])[vs.length]! = u := by
+  rw [getElem!_pos (vs ++ [u]) vs.length (by simp)]; simp
+
+theorem val_inj {msg : Msg} {a b : BitVec 32} (ha : Val msg a) (hb : Val msg b) : a = b := by
+  have := ha.symm.trans hb
+  simpa using this
+
+/-- Pusher `u`'s `cmpxchg` that succeeds: its message `u` after the newest one; it ends. -/
+theorem Inv.pushHead {G : ThreadId → Gh} {M : Mem} {l : ALoc} {msg : Msg} {blk : Block}
+    {u : ThreadId} {h : BitVec 32} (hi : Inv G M) (hu : u = 1 ∨ u = 2) (hg : G u = .cas h)
+    (ha : M.atomics = #[l]) (hlast : Val (l.msgs[l.msgs.size - 1]!) h) (hb : M.blocks[0]? = some blk)
+    (hbs : msg.bytes.size = 4) (hv : Val msg (BitVec.ofNat 32 u))
+    (hr : msg.rmwOf = some (l.msgs[l.msgs.size - 1]!).id)
+    (hcl : VClock.le msg.clock (M.clocks[u]!) = true) :
+    Inv (upd G u .done) { M.write 0 blk 0 msg.bytes with atomics := #[{ l with msgs := l.msgs.push msg }] } := by
+  obtain ⟨hlb, hlo, hll, -, hc, vs, hvs, hsz, hval, hd, hnxt, hclk⟩ : HeadLoc G M l := by
+    rcases hi.head with ⟨ha', -⟩ | ⟨l', ha', hfl⟩
+    · rw [ha] at ha'; simp at ha'
+    · rw [ha] at ha'
+      have : l = l' := by simpa using ha'
+      subst this; exact hfl
+  have hvl := chains_pos hvs
+  have h0 : 0 < l.msgs.size := by rw [hsz]; exact hvl
+  have hnu : u ∉ vs := fun hm => by have := (hd u hu).mpr hm; rw [hg] at this; cases this
+  have hh : h = BitVec.ofNat 32 vs[vs.length - 1]! := by
+    rw [hsz] at hlast
+    rw [getElem!_pos l.msgs _ (by omega)] at hlast
+    exact val_inj hlast (hval (vs.length - 1) (by omega))
+  have hsz16 : blk.bytes.size = 16 := by
+    obtain ⟨blk', hb', -, hs, -⟩ := hi.b0; rw [hb] at hb'; cases hb'; exact hs
+  have hfit : 0 + msg.bytes.size ≤ blk.bytes.size := by rw [hbs, hsz16]; decide
+  have hfit' : 0 + msg.bytes.size ≤ 16 := by rw [hbs]; decide
+  have hnx : ∀ k v, k < 3 → NextAt M k v → NextAt (M.write 0 blk 0 msg.bytes) k v :=
+    fun k v hk hn => nextAt_write hb hsz16 hfit' hk (by rw [hbs]; omega) hn
+  have h0' : upd G u .done 0 = G 0 := upd_ne _ _ (by rcases hu with rfl | rfl <;> decide)
+  have hlast' : ALoc.lastBytes { l with msgs := l.msgs.push msg } =
+      curBytes (M.write 0 blk 0 msg.bytes) 0 0 4 := by
+    have := curBytes_write_same hb hfit
+    rw [hbs] at this
+    rw [this]; simp [ALoc.lastBytes]
+  refine {
+    thr := thr_upd_kid hi.thr rfl rfl hu (.inr (.inl ⟨h, hg⟩)) (.inr (.inr rfl)) (fun _ => rfl)
+    b0 := BlkAt.write hb hfit hi.b0
+    b1 := BlkAt.write hb hfit hi.b1
+    b2 := BlkAt.write hb hfit hi.b2
+    ctx := fun v hv => by
+      show curBytes (M.write 0 blk 0 msg.bytes) v 0 8 = _ ∧ U32At (M.write 0 blk 0 msg.bytes) v 8 _
+      unfold U32At
+      rw [curBytes_write_other hb hfit (.inl (by rcases hv with rfl | rfl <;> decide)),
+        curBytes_write_other hb hfit (.inl (by rcases hv with rfl | rfl <;> decide))]
+      exact hi.ctx v hv
+    head := .inr ⟨_, rfl, hlb, hlo, hll, hlast', hc.push h0 hr, vs ++ [u], chains_push hvs hu hnu,
+      by simp [hsz], fun j hj => ?_, fun v hv => ?_, fun j hj => ?_, fun j hj => ?_⟩
+    casn := fun v x hv hcx => by
+      by_cases hvu : v = u
+      · subst hvu; rw [upd_self] at hcx; cases hcx
+      · rw [upd_ne _ _ hvu] at hcx
+        exact hnx v x (by rcases hv with rfl | rfl <;> decide) (hi.casn v x hv hcx)
+    join := by unfold JoinLe; rw [h0']; exact hi.join
+    fp := by
+      intro e he
+      rcases hi.fp e he with h | h | h | ⟨h1, h2, h3, h4⟩ | h
+      · exact .inl h
+      · exact .inr (.inl h)
+      · exact .inr (.inr (.inl h))
+      · exact .inr (.inr (.inr (.inl ⟨h1, h2, h3, by rw [h0']; exact h4⟩)))
+      · exact .inr (.inr (.inr (.inr h)))
+    own := hi.own }
+  · simp only [Array.size_push] at hj
+    simp only [Array.getElem_push]
+    split
+    · rename_i hj'
+      rw [getElem!_append_lt (by omega)]
+      exact hval j hj'
+    · have : j = vs.length := by omega
+      subst this
+      rw [getElem!_append_len]
+      exact hv
+  · by_cases hvu : v = u
+    · subst hvu; simp
+    · rw [upd_ne _ _ hvu, hd v hv]; simp [hvu]
+  · simp only [List.length_append, List.length_singleton] at hj
+    by_cases hj' : j + 1 < vs.length
+    · rw [getElem!_append_lt hj', getElem!_append_lt (by omega)]
+      exact hnx _ _ (chains_lt hvs (mem_of_getElem! hj')) (hnxt j hj')
+    · have : j + 1 = vs.length := by omega
+      rw [this, getElem!_append_len, getElem!_append_lt (by omega),
+        show j = vs.length - 1 by omega, ← hh]
+      exact hnx _ _ (by rcases hu with rfl | rfl <;> decide) (hi.casn u h hu hg)
+  · simp only [Array.size_push] at hj
+    simp only [Array.getElem_push]
+    split
+    · rename_i hj'
+      rw [getElem!_append_lt (by omega)]
+      exact hclk j hj'
+    · have : j + 1 = vs.length := by omega
+      rw [this, getElem!_append_len]
+      exact hcl
+
+/-- Pusher `u`'s `cmpxchg(h, u)` (release, failure relaxed): on success it ends (`done`); on
+failure nothing that the invariant sees changes. -/
+theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
+    {r : Option (BitVec 32)} (hi : Inv G m) (hu : u = 1 ∨ u = 2) (hg : G u = .cas h)
+    (hc : m.current = u)
+    (hs : ((cmpxchgAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run = some (.ok (r, m'))) :
+    m'.current = u ∧ m'.threads = m.threads ∧
+      ((r = none ∧ Inv (upd G u .done) m') ∨ (∃ old, r = some old ∧ Inv G m')) := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, -, hl, hpos, hold, hres⟩ := cmpxchgAt_ok hs
+  obtain ⟨rfl, rfl, hb0, -⟩ := acc_head (accessW_pure hacc).1
+  have hk0 : Kid u (G u) := .inr (.inl ⟨h, hg⟩)
+  have hnd : G u ≠ .done := by rw [hg]; intro h; cases h
+  have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
+  have hact : Act G m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
+  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicWrite) ht hact
+    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+  have hcur : (m.recordAt 0 0 (intSize 32) .atomicWrite).current = m.current := rfl
+  have hthr : (m.recordAt 0 0 (intSize 32) .atomicWrite).threads = m.threads := rfl
+  have hbr : (m.recordAt 0 0 (intSize 32) .atomicWrite).blocks[0]? = some blk := hb0
+  generalize m.recordAt 0 0 (intSize 32) .atomicWrite = mr at hir hl hcur hthr hbr
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
+  have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
+  have hiM := hir.setLoc hfl k
+  have hact' : Act G mr.current := by rw [hcur]; exact hact
+  rcases hres with ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
+  · -- success: the newest message, then the pusher's message
+    have hpos' := cas_chain_pos (m := { mr with atomics := #[l], nextMsg := k })
+      (by rw [hl0]; exact hfl.2.2.2.2.1) hpos hold
+    rw [hl0] at hpos' hold
+    have hbM : ({ mr with atomics := #[l], nextMsg := k } : Mem).blocks[
+        (({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]!).block]? = some blk := by
+      rw [hl0, hfl.1]; exact hbr
+    unfold rmwM
+    simp only [AtomicOrder.isAcq, Bool.false_eq_true, ↓reduceIte]
+    have hins := insertM_last (msg := rmwMsg { mr with atomics := #[l], nextMsg := k } .release
+      (l.msgs[l.msgs.size - 1]!) (BitVec.ofNat 32 u)) hbM
+    rw [hl0] at hins
+    rw [hpos', Nat.sub_add_cancel hfl.pos, show (#[l] : Array ALoc)[0]! = l from rfl, hins]
+    have hiN := hiM.pushHead hu hg rfl (by rw [← hpos']; exact hold) hbr
+      (msg := rmwMsg { mr with atomics := #[l], nextMsg := k } .release (l.msgs[l.msgs.size - 1]!)
+        (BitVec.ofNat 32 u))
+      (LawfulEnc.size_encode (α := BitVec 32) _) (intOfBytes_rmw _) rfl
+      (by show VClock.le (mr.clocks[mr.current]!) _ = true; rw [hcur, hc]; exact VClock.le_refl _)
+    refine ⟨hcur.trans hc, hthr, .inl ⟨trivial, hiN.congr rfl rfl ?_ ?_ rfl⟩⟩
+    · show mr.blocks.set! _ _ = mr.blocks.set! _ _
+      rw [hfl.1, hfl.2.1]
+    · rfl
+  · -- failure: a read of a message, no acquire
+    exact ⟨by rw [loadM_current]; exact hcur.trans hc, hthr,
+      .inr ⟨_, rfl, hiM.grow (growsAt_loadM _ _ _ mr.current) hact'⟩⟩
+
+theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (hi : Inv G m)
+    (hu : u = 1 ∨ u = 2) (hg : G u = .cas h) (hc : m.current = u)
+    (hcr : c < casCount 32 .release 4 sPtr h m ∨ casCount 32 .release 4 sPtr h m = 0 ∧ c = 0)
+    (e : Error) :
+    ((cmpxchgAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run ≠ some (.error e) := by
+  have hk0 : Kid u (G u) := .inr (.inl ⟨h, hg⟩)
+  have hnd : G u ≠ .done := by rw [hg]; intro h; cases h
+  have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
+  have hact : Act G m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
+  obtain ⟨blk₀, -, hk, -, hacc₀⟩ := access_blk (p := sPtr) (a := 4) (len := intSize 32) (o := 0)
+    hi.b0 (by decide) (fun A hA => by omega) rfl
+  have hacc : m.accessW sPtr (intSize 32) 4 = pure (0, blk₀, 0) := by simp [Mem.accessW, hacc₀, hk]
+  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicWrite) ht hact
+    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+  refine cmpxchgAt_noErr (casPrep_noErr hacc (noRace_head rfl hi ht)
+    (head_locIdx_noErr hir.head)) (fun li opts m₁ hp => ?_) e
+  obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
+  obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
+  have hl0 : ({ m.recordAt 0 0 (intSize 32) .atomicWrite with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
+  have hcount : casCount 32 .release 4 sPtr h m = (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with
+      atomics := #[l], nextMsg := k } 0 h).size := optCount_eq hp
+  have hne : 0 < (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with
+      atomics := #[l], nextMsg := k } 0 h).size := casOpts_ne (by rw [hl0]; exact hfl.pos)
+  rw [hcount] at hcr
+  have hc' : c < (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with atomics := #[l], nextMsg := k } 0 h).size := by
+    rcases hcr with h | ⟨h0, -⟩
+    · exact h
+    · exact absurd h0 (Nat.pos_iff_ne_zero.mp hne)
+  refine ⟨_, Array.getElem?_eq_getElem hc', ?_⟩
+  have hlt := (casOpts_pos (Array.getElem?_eq_getElem hc')).1
+  rw [hl0] at hlt ⊢
+  exact hfl.val hlt
+
 end Atomics.Stack
