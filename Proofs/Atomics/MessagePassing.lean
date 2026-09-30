@@ -51,10 +51,6 @@ def U32At (m : Mem) (b : Nat) (v : BitVec 32) : Prop :=
 /-- Message `msg` holds the `u32` `v`. -/
 def Val (msg : Msg) (v : BitVec 32) : Prop := (intOfBytes 32 msg.bytes).run = some (.ok v)
 
-/-- The clock `c` happened before every thread. -/
-def Before (m : Mem) (c : VClock) : Prop :=
-  ∀ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
-
 /-- Every write to `data` happened before `c`. -/
 def DataLe (m : Mem) (c : VClock) : Prop :=
   ∀ e ∈ m.footprint, e.block = 0 → e.kind = .write → VClock.le e.clock c = true
@@ -117,9 +113,6 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
   fun v _ m _ => (v = .ok 0 ∨ v = .ok 42) ∧ joinedAll 0 m
 
 /-! ## Frame: steps that keep the invariant -/
-
-theorem before_grow {m m' : Mem} (hg : Grows m m') {c : VClock} (h : Before m c) : Before m' c :=
-  fun u hu => VClock.le_trans (h u (hg.threads ▸ hu)) (hg.cle u)
 
 theorem Inv.grow {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : Grows m m') : Inv G m' where
   thr := by unfold ThrOk; rw [hg.threads, hg.csize]; exact hi.thr
@@ -206,10 +199,6 @@ theorem noRace_inv {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
     · exact .inl h
     · exact .inr h
 
-theorem racePair_atomic {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
-    racePair a b = none := by
-  unfold racePair; rw [ha, hb]; simp
-
 /-- `u`'s ghost value is `main`'s or the writer's: `u` is thread 0 or 1. -/
 theorem thr_of {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (h : ThrOk G m)
     (hg : G u = .run ∨ G u = .joins ∨ G u = .start ∨ G u = .wrote ∨ G u = .fin) :
@@ -222,23 +211,6 @@ theorem thr_of {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (h : ThrOk G m)
     by_cases hu : 2 ≤ u
     · rw [hn u hu] at hg; simp at hg
     · unfold ThreadId at *; omega
-
-/-- A `u32` store gives 4 bytes. -/
-theorem enc4 (v : BitVec 32) : (Enc.encode v).size = 4 :=
-  LawfulEnc.size_encode (α := BitVec 32) v
-
-/-- The clocks after a record are not smaller. -/
-theorem record_cle (m : Mem) (b o len : Nat) (k : AccessKind) (u : Nat) :
-    VClock.le (m.clocks[u]!) ((m.recordAt b o len k).clocks[u]!) = true := by
-  simp only [Mem.recordAt]
-  rw [getElem!_set!_ite]
-  split
-  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-  · exact VClock.le_refl _
-
-theorem before_record {m : Mem} {b o len : Nat} {k : AccessKind} {c : VClock} (h : Before m c) :
-    Before (m.recordAt b o len k) c :=
-  fun u hu => VClock.le_trans (h u hu) (record_cle m b o len k u)
 
 /-- The invariant depends only on the threads, the clocks, the blocks, the atomic locations and
 the footprint. -/
@@ -260,10 +232,6 @@ theorem Inv.congr {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (ht : m'.thr
     rw [ht, hc]
     exact this
   own := by intro e he; rw [hf] at he; rw [ht, hc]; exact hi.own e he
-
-/-- Two block numbers that differ. -/
-theorem blk_ne {x : BlockId} {a b : Nat} (ha : x = a) (hb : x = b) (hab : a ≠ b) : False :=
-  hab (ha.symm.trans hb)
 
 /-! ## The writer -/
 
@@ -377,20 +345,20 @@ theorem step_data {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
     m'.current = 1 ∧ m'.threads = m.threads ∧ Inv (upd G 1 .wrote) m' := by
   obtain ⟨b, blk, o, hacc, -, rfl⟩ := store_ok h
   obtain ⟨blk₀, hb₀, -, hs₀, hacc₀⟩ := access_blk (p := dPtr) (a := 4)
-    (len := (Enc.encode (42 : BitVec 32)).size) (o := 0) hi.b0 (by rw [enc4]; omega)
+    (len := (Enc.encode (42 : BitVec 32)).size) (o := 0) hi.b0 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) rfl
   rw [hacc₀] at hacc
   cases hacc
   have ht : m.current < m.threads.size := by
     rw [hc, (thr_of hi.thr (.inr (.inr (.inl hg)))).1]; decide
-  have hfit : 0 + (Enc.encode (42 : BitVec 32)).size ≤ blk.bytes.size := by rw [enc4, hs₀]; omega
+  have hfit : 0 + (Enc.encode (42 : BitVec 32)).size ≤ blk.bytes.size := by rw [size_encode_u32, hs₀]; omega
   have hir := hi.record (b := 0) (o := 0) (len := (Enc.encode (42 : BitVec 32)).size) (k := .write)
     ht (fun _ _ => by rw [hg]; decide) (.inr (.inl ⟨rfl, rfl, hc⟩))
   have hb : (m.recordAt 0 0 (Enc.encode (42 : BitVec 32)).size .write).blocks[0]? = some blk := hb₀
-  refine ⟨hc, rfl, (hir.write0 hg hb (enc4 42)).wrote hg ?_⟩
+  refine ⟨hc, rfl, (hir.write0 hg hb (size_encode_u32 42)).wrote hg ?_⟩
   unfold U32At
   have := curBytes_write_same hb hfit
-  rw (occs := .pos [2]) [enc4] at this
+  rw (occs := .pos [2]) [size_encode_u32] at this
   rw [this]
   exact intOfBytes_rmw 42
 
@@ -420,23 +388,21 @@ The op changes only `atomics` and `nextMsg`. -/
 theorem loc_flag {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hf : FlagOk G m)
     (h : ((locIdx 1 0 4).run m).run = some (.ok (li, m₁))) :
     li = 0 ∧ ∃ l k, FlagLoc G m l ∧ m₁ = { m with atomics := #[l], nextMsg := k } := by
-  rcases hf with ⟨ha, hu⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hms⟩
-  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) h
-    let m0 : Msg := { id := m.nextMsg, bytes := curBytes m 1 0 4, clock := plainClock m 1 0 4, relClock := #[] }
-    let l : ALoc := { block := 1, off := 0, len := 4, msgs := #[m0] }
-    refine ⟨by rw [ha]; rfl, l, m.nextMsg + 1, ⟨rfl, rfl, rfl, rfl, .inl ⟨_, rfl, hu⟩⟩, ?_⟩
-    rw [ha]
-    rfl
-  · have hfind : m.atomics.findIdx? (fun l => l.block == 1 && l.off == 0) = some 0 := by
-      rw [ha]; simp [hlb, hlo]
-    have hl0 : m.atomics[0]! = l := by rw [ha]; rfl
-    obtain ⟨rfl, hm⟩ := locIdx_found hfind (by rw [hl0]; exact hll) (by rw [hl0]; exact hlast) h
-    refine ⟨rfl, l, m.nextMsg, ⟨hlb, hlo, hll, hlast, hms⟩, ?_⟩
-    rw [hm]
-    cases m
-    simp only at ha
-    subst ha
-    rfl
+  have h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = 1 ∧ l.off = 0 ∧ l.len = 4 ∧
+      ALoc.lastBytes l = curBytes m 1 0 4 := by
+    rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, -⟩
+    · exact .inl ha
+    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast⟩
+  obtain ⟨rfl, l, k, rfl, ⟨ha, rfl⟩ | ha⟩ := locIdx_single h0 h
+  · rcases hf with ⟨-, hu⟩ | ⟨l, ha', -⟩
+    · exact ⟨rfl, firstLoc m 1 0 4, k, ⟨rfl, rfl, rfl, rfl, .inl ⟨firstMsg m 1 0 4, rfl, hu⟩⟩, rfl⟩
+    · rw [ha] at ha'; simp at ha'
+  · rcases hf with ⟨ha', -⟩ | ⟨l', ha', hfl⟩
+    · rw [ha] at ha'; simp at ha'
+    · rw [ha] at ha'
+      have : l = l' := by simpa using ha'
+      subst this
+      exact ⟨rfl, l, k, hfl, rfl⟩
 
 theorem flag_locIdx_noErr {G : ThreadId → Gh} {m : Mem} (hf : FlagOk G m) (e : Error) :
     ((locIdx 1 0 4).run m).run ≠ some (.error e) := by
@@ -1002,9 +968,7 @@ theorem enc_av : Enc.encode ({ raw := 0 } : atomic_Value_u32) = Enc.encode (0 : 
   decide +kernel
 
 theorem enc_av4 : (Enc.encode ({ raw := 0 } : atomic_Value_u32)).size = 4 := by
-  rw [enc_av]; exact enc4 0
-
-theorem enc8 (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_encode p
+  rw [enc_av]; exact size_encode_u32 0
 
 /-- `main`: three blocks, four stores, the spawn, the acquire load of the flag (a stop), the read
 of `data` if the flag is 1, the join (a stop), three frees. -/
@@ -1038,9 +1002,9 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   rw [show dPtr = ⟨some 0, ((0 : Nat) : Int)⟩ from rfl, show fPtr = ⟨some 1, ((0 : Nat) : Int)⟩ from rfl]
   -- `data = 0`
-  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₃ hp₃.b0 (by rw [enc4]; omega)
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₃ hp₃.b0 (by rw [size_encode_u32]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₄ hs₄ => ?_)
-  obtain ⟨hp₄, -, -⟩ := pre_store hp₃ hp₃.b0 (by rw [enc4]; omega) (fun A hA => by omega) hs₄
+  obtain ⟨hp₄, -, -⟩ := pre_store hp₃ hp₃.b0 (by rw [size_encode_u32]; omega) (fun A hA => by omega) hs₄
   refine ⟨by rw [hp₄.thr, hp₃.thr], ?_⟩
   -- `flag = .init(0)`
   refine WP.bind (WP.callRC (fun e he => by rw [init_run] at he; cases he) fun a ha => ?_)
@@ -1054,14 +1018,14 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   -- the `MpCtx`
   dsimp only
   rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl, show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
-  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b2 (by rw [enc8]; omega)
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₆ hs₆ => ?_)
-  obtain ⟨hp₆, h2₆, hk₆⟩ := pre_store hp₅ hp₅.b2 (by rw [enc8]; omega) (fun A hA => by omega) hs₆
+  obtain ⟨hp₆, h2₆, hk₆⟩ := pre_store hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₆
   refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
   dsimp only
-  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b2 (by rw [enc8]; omega)
+  refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₇ hs₇ => ?_)
-  obtain ⟨hp₇, h3₇, hk₇⟩ := pre_store hp₆ hp₆.b2 (by rw [enc8]; omega) (fun A hA => by omega) hs₇
+  obtain ⟨hp₇, h3₇, hk₇⟩ := pre_store hp₆ hp₆.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₇
   refine ⟨by rw [hp₇.thr, hp₆.thr], ?_⟩
   have hi₇ : Inv G0 m₇ := by
     refine pre_inv hp₇ ?_ ⟨?_, ?_⟩
@@ -1071,9 +1035,9 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
       rw [h1₅, enc_av]
       exact intOfBytes_rmw 0
     · rw [hk₇ 2 0 8 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]
-      rw [enc8] at h2₆
+      rw [size_encode_ptr] at h2₆
       exact h2₆
-    · rw [enc8] at h3₇
+    · rw [size_encode_ptr] at h3₇
       exact h3₇
   have hG0 : upd G0 0 .pre = G0 := by
     funext u; unfold upd G0; split <;> simp_all

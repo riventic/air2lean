@@ -25,11 +25,6 @@ open Zig Threads
 
 namespace Zig
 
-/-- Two atomic accesses never race: the scheduler orders them. -/
-theorem racePair_atomic {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
-    racePair a b = none := by
-  simp [racePair, ha, hb]
-
 /-- A data race: a plain write against any access. -/
 example : racePair .write .atomicRead = some .illegal := rfl
 example : racePair .read .atomicWrite = some .illegal := rfl

@@ -471,6 +471,37 @@ theorem locIdx_new {m m' : Mem} {b o len r : Nat}
     exact ⟨rfl, rfl⟩
 
 
+/-- The first message of a new location at `(b, o)`: the block's bytes (`locIdx`). -/
+def firstMsg (m : Mem) (b o len : Nat) : Msg :=
+  { id := m.nextMsg, bytes := curBytes m b o len, clock := plainClock m b o len, relClock := #[] }
+
+/-- The location that the first atomic op at `(b, o)` makes (`locIdx`). -/
+def firstLoc (m : Mem) (b o len : Nat) : ALoc :=
+  { block := b, off := o, len, msgs := #[firstMsg m b o len] }
+
+/-- An atomic op at `(b, o)`, when the memory has no atomic location, or only `l` at `(b, o)`
+whose newest message has the block's bytes: location 0. The op changes only `atomics` (one
+location: `l`, or `firstLoc`) and `nextMsg`. -/
+theorem locIdx_single {m m₁ : Mem} {b o len li : Nat}
+    (h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = b ∧ l.off = o ∧ l.len = len ∧
+      ALoc.lastBytes l = curBytes m b o len)
+    (h : ((locIdx b o len).run m).run = some (.ok (li, m₁))) :
+    li = 0 ∧ ∃ l k, m₁ = { m with atomics := #[l], nextMsg := k } ∧
+      ((m.atomics = #[] ∧ l = firstLoc m b o len) ∨ m.atomics = #[l]) := by
+  rcases h0 with ha | ⟨l, ha, hlb, hlo, hll, hlast⟩
+  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) h
+    exact ⟨by rw [ha]; rfl, firstLoc m b o len, m.nextMsg + 1, by rw [ha]; rfl, .inl ⟨ha, rfl⟩⟩
+  · have hfind : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some 0 := by
+      rw [ha]; simp [hlb, hlo]
+    have hl0 : m.atomics[0]! = l := by rw [ha]; rfl
+    obtain ⟨rfl, hm⟩ := locIdx_found hfind (by rw [hl0]; exact hll) (by rw [hl0]; exact hlast) h
+    refine ⟨rfl, l, m.nextMsg, ?_, .inr ha⟩
+    rw [hm]
+    cases m
+    simp only at ha
+    subst ha
+    rfl
+
 /-! ## Atomic ops, from their result -/
 
 /-- `acquireClock c` on `m`. -/
@@ -1462,6 +1493,30 @@ theorem loadM_acq_le (m : Mem) (li : Nat) (msg : Msg) {t : ThreadId} (ht : m.cur
   change VClock.le _ ((acqM (observeM m li msg.id) msg.relClock).clocks[(observeM m li msg.id).current]!) = true
   rw [acqM_clock (observeM m li msg.id) msg.relClock h]
   exact VClock.le_merge_right _ _
+
+/-- The clock `c` happened before every thread. -/
+def Before (m : Mem) (c : VClock) : Prop :=
+  ∀ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
+
+/-- The clocks after a record are not smaller. -/
+theorem record_cle (m : Mem) (b o len : Nat) (k : AccessKind) (u : Nat) :
+    VClock.le (m.clocks[u]!) ((m.recordAt b o len k).clocks[u]!) = true := by
+  simp only [Mem.recordAt]
+  rw [getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+  · exact VClock.le_refl _
+
+theorem before_record {m : Mem} {b o len : Nat} {k : AccessKind} {c : VClock} (h : Before m c) :
+    Before (m.recordAt b o len k) c :=
+  fun u hu => VClock.le_trans (h u hu) (record_cle m b o len k u)
+
+theorem before_grow {m m' : Mem} (hg : Grows m m') {c : VClock} (h : Before m c) : Before m' c :=
+  fun u hu => VClock.le_trans (h u (hg.threads ▸ hu)) (hg.cle u)
+
+/-- Two block numbers that differ (`omega` does not see through `BlockId`). -/
+theorem blk_ne {x : BlockId} {a b : Nat} (ha : x = a) (hb : x = b) (hab : a ≠ b) : False :=
+  hab (ha.symm.trans hb)
 
 /-! ## Blocks -/
 

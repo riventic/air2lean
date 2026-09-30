@@ -778,4 +778,13 @@ theorem loop_spec_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool)
       obtain ⟨e', s'', m'', hr, hpost⟩ := ih (meas s' m') (h ▸ hlt) s' m' rfl hinv
       exact ⟨e', s'', m'', by simp [ha, hr], hpost⟩
 
+/-- Two atomic accesses never race: the scheduler orders them. -/
+theorem racePair_atomic {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
+    racePair a b = none := by
+  simp [racePair, ha, hb]
+
+theorem size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
+
+theorem size_encode_ptr (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_encode p
+
 end Zig

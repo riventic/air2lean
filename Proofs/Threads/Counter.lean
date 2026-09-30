@@ -438,10 +438,6 @@ theorem cntAt_rmw {tot li c pos : Nat} {m₁ : Mem} {old : BitVec 32} (hc : CntA
       fun v => LawfulEnc.size_encode (α := BitVec 32) v
     exact writeBytes_size _ _ _ (by simp only [Proto.rmwMsg, h4]; omega)
 
-theorem racePair_atomic' {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
-    racePair a b = none := by
-  simp [racePair, ha, hb]
-
 /-- A read of a context by a thread does not race. -/
 theorem noRace_b0 {m : Mem} {o l : Nat} (hf : FpOk m) (hcur : m.current < m.threads.size) :
     NoRace m 0 o l .read := by
@@ -458,7 +454,7 @@ theorem noRace_b1 {m : Mem} {o l : Nat} {k : AccessKind} (hf : FpOk m)
   refine Proto.noRace_of fun e he hb _ _ => ?_
   rcases hf e he with ⟨h0, _⟩ | ⟨_, ha⟩ | ⟨_, _, hc⟩ | ⟨h2, _⟩
   · rw [hb] at h0; cases h0
-  · exact .inr (racePair_atomic' ha hk)
+  · exact .inr (racePair_atomic ha hk)
   · exact .inl (hc _ hcur)
   · rw [hb] at h2; cases h2
 

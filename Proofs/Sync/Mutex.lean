@@ -501,9 +501,6 @@ theorem Inv.locIdx {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hi : Inv G m
 theorem bs4 (v : BitVec 32) : (padTo (intSize 32) (intBytes v)).size = 4 :=
   LawfulEnc.size_encode (α := BitVec 32) v
 
-theorem enc4 (v : BitVec 32) : (Enc.encode v).size = 4 :=
-  LawfulEnc.size_encode (α := BitVec 32) v
-
 /-- The memory after an RMW at the mutex that read the newest message `rd`. -/
 theorem rmw_eff {m₁ M m₂ : Mem} {l : ALoc} {ord : AtomicOrder} {new : BitVec 32} {rd : Msg}
     (hl : MLoc m₁ l) (hb : BlkOk m₁) (hm₂ : m₂ = if ord.isAcq then acqM m₁ rd.relClock else m₁)
@@ -1287,16 +1284,16 @@ theorem step_cntStore {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} (hi : Inv G
   obtain ⟨b, blk, o, ha, -, rfl⟩ := store_ok h
   obtain ⟨blk₀, hblk₀, -, he₀⟩ := acc0 (o := 20) (n := 4) (a := 4) hi.blk (by decide) (.inl rfl) rfl
   have : m.access (cPtr.add 20) (Enc.encode (BitVec.ofNat 32 ((G 0).count + (G 1).count + 1))).size 4 =
-      m.access ⟨some 0, ((20 : Nat) : Int)⟩ 4 4 := by rw [enc4]; rfl
+      m.access ⟨some 0, ((20 : Nat) : Int)⟩ 4 4 := by rw [size_encode_u32]; rfl
   rw [this, he₀] at ha
   cases ha
   have hir : Inv G (m.recordAt 0 20 (Enc.encode (BitVec.ofNat 32 ((G 0).count + (G 1).count + 1))).size .write) := by
-    rw [enc4]
+    rw [size_encode_u32]
     refine hi.record htl ⟨rfl, .inr (.inr (.inr ⟨rfl, rfl, fun u hu => ?_, fun hn => ?_⟩))⟩
     · rw [hi.one u t hu ⟨k, hg⟩, ← hc]
       simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
     · exact absurd ⟨k, hg⟩ (hn t)
-  refine ⟨hc, hir.cntWrite hblk₀ (enc4 _) (intOfBytes_rmw _) ?_ (count_succ hg ht2) (hold_upd ?_)
+  refine ⟨hc, hir.cntWrite hblk₀ (size_encode_u32 _) (intOfBytes_rmw _) ?_ (count_succ hg ht2) (hold_upd ?_)
     (wakes_upd ?_) ?_⟩
   · exact thrOk_congr (thrOk_upd hi.thr hg (by omega)) rfl (by simp [Mem.recordAt])
   · rw [Hold, hg]; exact ⟨fun _ => ⟨k, rfl⟩, fun _ => ⟨k + 1, rfl⟩⟩
@@ -2099,13 +2096,13 @@ theorem main_spec (io : Io) (d : Nat) :
   obtain ⟨hp₃, -, h16₃⟩ := pre_store hp₂ (by rw [enc_mutex]; decide) (.inl rfl) rfl hs₃
   refine ⟨by rw [hp₃.thr, hp₂.thr], ?_⟩
   refine WP.bind (WP.liftM (fun e he =>
-    (pre_store_noErr hp₃ (by rw [enc4]; decide) (.inl rfl) rfl e he).elim) fun _ m₄ hs₄ => ?_)
-  obtain ⟨hp₄, hk₄, h20₄⟩ := pre_store hp₃ (by rw [enc4]; decide) (.inl rfl) rfl hs₄
+    (pre_store_noErr hp₃ (by rw [size_encode_u32]; decide) (.inl rfl) rfl e he).elim) fun _ m₄ hs₄ => ?_)
+  obtain ⟨hp₄, hk₄, h20₄⟩ := pre_store hp₃ (by rw [size_encode_u32]; decide) (.inl rfl) rfl hs₄
   refine ⟨by rw [hp₄.thr, hp₃.thr], ?_⟩
   have hi₄ : Inv G0 m₄ := by
     refine pre_inv hp₄ ?_ ?_
     · unfold U32At; rw [hk₄ 16 (by decide) (.inr (by decide)), h16₃ enc_mutex]; exact enc_mutex_val
-    · unfold U32At; rw [h20₄ (enc4 0)]; exact intOfBytes_rmw 0
+    · unfold U32At; rw [h20₄ (size_encode_u32 0)]; exact intOfBytes_rmw 0
   have hG0 : upd G0 0 .pre = G0 := by
     funext u; unfold upd G0; split <;> simp_all
   -- the spawn
