@@ -79,7 +79,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 | Part | What |
 |---|---|
-| Protocol (`Conc.Proto`) | A ghost value per thread (only the proof sees it); an invariant `inv G m` on the ghost values of all threads and the memory; the ghost value `init tgt` of a new thread; `fin g` of a thread that ended. |
+| Protocol (`Conc.Proto`) | A ghost value per thread (only the proof sees it); an invariant `inv G m` on the ghost values of all threads and the memory; the ghost values `init tgt g` that a new thread can start with (the spawner picks one, so it can give the thread a part of what it owns); `fin g` of a thread that ended. |
 | One thread (`Proto.Safe`) | Rely–guarantee: at each stop the thread picks its new ghost value and shows `inv`; when it goes on, it knows only `inv` and its own ghost value. A run between two stops keeps the number of threads. A `join` of thread `u` gives `fin (G u)`. |
 | Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callRC`, `callRC_ok`, `callC`, `pickC`, `spawnC`, `joinC`, `futexWaitC`, `futexWakeC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
 | Strict mode | No error leaf; a `MemM` step needs a proof that it does not throw (`liftM`/`callMC`/`callRC` take it); a `join` must be of a later thread that exists and was not joined, and `Proto.joins` holds of the joining thread's ghost value; a `pick` knows its choice is in range. A spawned thread and `main` must end with every thread they spawned joined (`joinedAll`). |
@@ -110,6 +110,20 @@ The steps of the std code (`step_cas`, `step_xlock`, `step_unlock`, `wait_step`,
 - `Relaxed.lean`: every result of `mpRelaxed` (relaxed flag) is 0 (partial correctness). Until the join, `main`'s clock has 0 at the writer's component, and the writer's clock at `main`'s component is not above `main`'s own (`view`). So after a read of 1, the writer's write of `data` is concurrent with `main`'s read: a race (`read_race`).
 - `Stack.lean`: `stackPush` (two pushers with a `cmpxchgWeak` loop) gives 120 or 210 and never errs. The head's messages are an RMW chain whose values are one of 5 lists (`Chains`); a pusher is `done` exactly when its node is in the list, `next[v]` holds the value under `v`, and each message is below its pusher's clock. A pusher's ghost value `cas h` says that it wrote `next[u] := h`. After both joins `main`'s clock is above both pushers' clocks (`JoinLe`), so the acquire load reads the newest message and the reads of `next` do not race. Zig 0.15.2 reads `next[k]` by a load of the whole `Stack` (the head too); the proof has a branch for each translation (`first`), as `Proofs/Layout/Mem.lean` has for 0.14.1.
 
+## Concurrent separation logic
+
+A thread owns a part of the heap, and the parts move between the threads at the sync ops (`ZigLean/Conc/Own.lean`, `ZigLean/Conc/Csl.lean`). So a thread's code is proved with triples, as sequential code, and the invariant only says who owns which part.
+
+| Part | What |
+|---|---|
+| Ownership (`Mem.OwnsC`, `Mem.Owns`) | The clock `c` owns the heap `h` if every recorded access to a byte of `h` (and to a block that does not exist yet) happened before `c`; thread `t` owns `h` if its clock does. Then a plain access by `t` to `h` does not race (`Mem.Owns.noRace`). A later clock owns what an earlier one owns (`Mem.OwnsC.mono`). |
+| A step of the owner (`StepIn hF`) | A step of the current thread that changes only its part: the rest `hF` and the other threads' clocks are the same, and each new footprint entry touches no byte of `hF`. So every part of `hF` keeps its owner (`Mem.OwnsC.frame`, `Mem.Owns.frame`). |
+| Thread triples (`TTriple`) | `Triple` with ownership in place of `SingleThread`. Rules: `conseq`, `frame`, `frameL`, `ret`, `bind`, `bind_eq`, `ex`, `lift`, `load`, `store`, `loadAt`/`storeAt` (at a byte offset of `bytesAt`), `alloc`, `free`. |
+| The parts (`Owned own m`) | `own u` is thread `u`'s part: in `m.heap` with the same cells, two parts are disjoint, each thread owns its part, a thread that does not exist has none. A proof puts a thread's part in its ghost value: after a stop the thread knows only `inv` and its ghost value, and `Owned` tells it that its part is unchanged. |
+| Transfers | A step with a thread triple (`Owned.step`; `WP.liftMem_owned`, `WP.liftM_owned`, and `WP.liftMem_upd`, `WP.liftM_upd` for the parts `upd own t h`); spawn (`Owned.fork`: the parent gives a part to the new thread, whose clock is the parent's); join (`Owned.join`: the parent takes the joined thread's part, whose clock the join merges); a step that changes no part (`Owned.keep`: an atomic op on a location that no thread owns, a futex op). |
+
+`Proofs/Threads/Disjoint.lean` proves that `disjoint a b` (two threads each write their own flag, as in `race` but on two flags) gives `a + b` under every schedule and never errs (`disjoint_spec`, `disjoint_safe`). `writeFlag` is a thread triple over the two blocks that the thread owns (`writeFlag_spec`, from the rules above). `main` owns its four blocks, gives `{c1, x}` and `{c2, y}` at the spawns, and takes them back at the joins, with the flag written. The invariant has no footprint and no clock facts: `Owned` has them.
+
 ## Proved examples
 
 | File | Theorems |
@@ -117,6 +131,7 @@ The steps of the std code (`step_cas`, `step_xlock`, `step_unlock`, `wait_step`,
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
 | `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
 | `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
+| `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |
 | `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |

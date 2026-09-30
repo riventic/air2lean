@@ -118,6 +118,11 @@
 # (ae) Lean-runtime mutation, iogroup: `Io.Group.await` (ZigLean/Mem/Thread.lean's `groupTake`)
 #     forgets the last task, so it is not joined. Detected by the diff test: `main`'s read of the
 #     counter races with that task on every schedule (the `unspecified` count changes).
+# (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
+#     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
+#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
+#     (ZigLean/Conc/Csl.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
+#     merged clock too (`main`'s read of a flag would race with its kid's write).
 #
 # Usage: mutate.sh
 # Env:
@@ -871,7 +876,9 @@ else
 fi
 
 echo "== mutation (ae): Io.Group.await does not join the last task (Lean runtime) ==" >&2
-if ! has_example iogroup; then
+if ! want_mutation ae; then
+  echo "mutation (ae): skipped (not in this shard)"
+elif ! has_example iogroup; then
   echo "mutation (ae): skipped (AIR2LEAN_EXAMPLES excludes iogroup)"
 else
   sed -i.bak 's/^  pure ((m.groups.filter (·.1 == g)).map (·.2))$/  pure ((m.groups.filter (·.1 == g)).map (·.2)).pop/' "$thread_lean"
@@ -882,6 +889,24 @@ else
   }
 
   run_and_report "mutation (ae)" iogroup
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (af): a join does not merge the joined thread's clock (Lean runtime, proof build) ==" >&2
+if ! want_mutation af; then
+  echo "mutation (af): skipped (not in this shard)"
+elif ! has_example threads; then
+  echo "mutation (af): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/^  let merged := VClock.merge callerClock (m.clocks\[tid\]!)$/  let merged := callerClock/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^  let merged := callerClock$' "$thread_lean" || {
+    echo "error: mutation (af): sed did not change Thread.join" >&2
+    exit 1
+  }
+
+  proof_report "mutation (af)" Proofs.Threads.Disjoint
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi
