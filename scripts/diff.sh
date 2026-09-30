@@ -19,7 +19,9 @@
 # A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics)
 # matches any Zig line and is counted as "unspecified". The count per function must equal the
 # one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
-# expects 0), so a model that throws `unspecified` too often fails the test.
+# expects 0), so a model that throws `unspecified` too often fails the test. "<fn> <min>-<max>"
+# pins a range: for a function whose count depends on the timing of the compiled threads (a race
+# that the hardware shows on some runs only).
 #
 # A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
 # `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
@@ -239,6 +241,21 @@ expected_ctor_for_zig_kind() {
   esac
 }
 
+# The pin of function `$1` in the pin file `$2`: "<count>" or "<min>-<max>"; not listed: 0.
+pin_of() {
+  local spec=0
+  [ -f "$2" ] && spec=$(awk -v f="$1" '$1 == f { print $2 }' "$2")
+  echo "${spec:-0}"
+}
+
+# The pin of function `$1` in the pin file `$2` allows the count `$3`.
+pin_ok() {
+  local spec lo hi
+  spec=$(pin_of "$1" "$2")
+  lo=${spec%-*}; hi=${spec#*-}
+  [ "$3" -ge "$lo" ] && [ "$3" -le "$hi" ]
+}
+
 # The buffers after the call: a Lean `??` (an undefined byte, docs/generated-code.md §Memory)
 # matches any two Zig hex digits. `[` and `]` are glob characters, so both sides replace them.
 bufs_match() {
@@ -328,26 +345,16 @@ for ex in $examples; do
       fi
     done < <(paste "$in_file" "$zig_file" "$lean_file")
 
-    want_unspecified=0
-    if [ -f "tests/diff/$ex/unspecified.txt" ]; then
-      want_unspecified=$(awk -v f="$fn" '$1 == f { print $2 }' "tests/diff/$ex/unspecified.txt")
-      want_unspecified=${want_unspecified:-0}
-    fi
-    if [ "$fn_unspecified" -ne "$want_unspecified" ]; then
+    if ! pin_ok "$fn" "tests/diff/$ex/unspecified.txt" "$fn_unspecified"; then
       mismatch_found=1
-      echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected $want_unspecified" \
-        "(tests/diff/$ex/unspecified.txt)" >&2
+      echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
+        "$(pin_of "$fn" "tests/diff/$ex/unspecified.txt") (tests/diff/$ex/unspecified.txt)" >&2
     fi
 
-    want_capped=0
-    if [ -f "tests/diff/$ex/capped.txt" ]; then
-      want_capped=$(awk -v f="$fn" '$1 == f { print $2 }' "tests/diff/$ex/capped.txt")
-      want_capped=${want_capped:-0}
-    fi
-    if [ "$fn_capped" -ne "$want_capped" ]; then
+    if ! pin_ok "$fn" "tests/diff/$ex/capped.txt" "$fn_capped"; then
       mismatch_found=1
-      echo "CAPPED COUNT $ex.$fn: $fn_capped, expected $want_capped" \
-        "(tests/diff/$ex/capped.txt)" >&2
+      echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
+        "$(pin_of "$fn" "tests/diff/$ex/capped.txt") (tests/diff/$ex/capped.txt)" >&2
     fi
 
     host_str=""

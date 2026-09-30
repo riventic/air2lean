@@ -99,11 +99,6 @@ def Inv (G : ThreadId → Gh) (m : Mem) : Prop :=
 
 /-! ## Facts for "no error" (strict mode) -/
 
-/-- Block `b` is a live stack block of `size` bytes whose address is a multiple of `a`. -/
-def BlkAt (m : Mem) (b size a : Nat) : Prop :=
-  ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = size ∧
-    blk.kind = .stack ∧ blk.addr % a = 0
-
 /-- Each footprint entry is a read of a context (block 0), an atomic access to the counter
 (block 1), a plain write to blocks 0 or 1 that happened before every thread, or `main`'s access to
 the handles (block 2). -/
@@ -443,10 +438,6 @@ theorem cntAt_rmw {tot li c pos : Nat} {m₁ : Mem} {old : BitVec 32} (hc : CntA
       fun v => LawfulEnc.size_encode (α := BitVec 32) v
     exact writeBytes_size _ _ _ (by simp only [Proto.rmwMsg, h4]; omega)
 
-theorem racePair_atomic' {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
-    racePair a b = none := by
-  simp [racePair, ha, hb]
-
 /-- A read of a context by a thread does not race. -/
 theorem noRace_b0 {m : Mem} {o l : Nat} (hf : FpOk m) (hcur : m.current < m.threads.size) :
     NoRace m 0 o l .read := by
@@ -463,7 +454,7 @@ theorem noRace_b1 {m : Mem} {o l : Nat} {k : AccessKind} (hf : FpOk m)
   refine Proto.noRace_of fun e he hb _ _ => ?_
   rcases hf e he with ⟨h0, _⟩ | ⟨_, ha⟩ | ⟨_, _, hc⟩ | ⟨h2, _⟩
   · rw [hb] at h0; cases h0
-  · exact .inr (racePair_atomic' ha hk)
+  · exact .inr (racePair_atomic ha hk)
   · exact .inl (hc _ hcur)
   · rw [hb] at h2; cases h2
 
@@ -1006,15 +997,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
 
 /-! ## `main`'s steps -/
 
-theorem getElem!_push {α : Type} [Inhabited α] (xs : Array α) (v : α) (u : Nat) :
-    (xs.push v)[u]! = if u < xs.size then xs[u]! else if u = xs.size then v else default := by
-  by_cases hu : u < xs.size
-  · rw [getElem!_pos _ u (by simp; omega), getElem!_pos xs u hu, Array.getElem_push_lt hu]
-    simp [hu]
-  · by_cases he : u = xs.size
-    · subst he; rw [getElem!_pos _ _ (by simp)]; simp
-    · rw [getElem!_neg _ u (by simp; omega)]; simp [hu, he]
-
 theorem fork_eq {m m' : Mem} {c : ThreadId}
     (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
     c = m.threads.size ∧ m' = { m with
@@ -1519,11 +1501,6 @@ def PreB (m : Mem) : Prop :=
   BlkAt m 0 64 8 ∧ BlkAt m 1 4 4 ∧ BlkAt m 2 32 8 ∧
     ∀ e ∈ m.footprint, ((e.block = 0 ∨ e.block = 1) ∧ e.kind = .write) ∨ e.block = 2
 
-theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
-  unfold alignUp
-  rw [ite_eq_right (by omega)]
-  exact Nat.mul_mod_left _ _
-
 /-- Before the first spawn, no access races: every access happened before. -/
 theorem noRace_pre {m : Mem} {b o l : Nat} {k : AccessKind} (h : PreA m) : NoRace m b o l k :=
   Proto.noRace_of fun e he _ _ _ => .inl (by rw [h.cur]; exact h.fp e he)
@@ -1554,19 +1531,6 @@ theorem preB_store {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (h : Pr
     · exact .inl ⟨.inl rfl, rfl⟩
     · exact .inl ⟨.inr rfl, rfl⟩
     · exact .inr rfl
-
-/-- An access inside a block of `BlkAt`, aligned. -/
-theorem access_blk {m : Mem} {b size a' o len a : Nat} (h : BlkAt m b size a')
-    (hfit : o + len ≤ size) (hal : ∀ A : Nat, A % a' = 0 → (A + o) % a = 0) {p : Ptr}
-    (hp : p = ⟨some b, ((o : Nat) : Int)⟩) :
-    ∃ blk, m.blocks[b]? = some blk ∧ blk.kind ≠ .constGlobal ∧ blk.bytes.size = size ∧
-      m.access p len a = pure (b, blk, o) := by
-  obtain ⟨blk, hb, hl, hs, hk, ha⟩ := h
-  subst hp
-  refine ⟨blk, hb, by rw [hk]; decide, hs, ?_⟩
-  have := access_of (m := m) (p := ⟨some b, ((o : Nat) : Int)⟩) (n := len) (a := a) rfl hb hl
-    (by simp) (by simp; omega) (by simpa using hal _ ha)
-  simpa using this
 
 /-- A store before the first spawn gives no error. -/
 theorem store_noErr_pre {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b o : Nat} {blk : Block}

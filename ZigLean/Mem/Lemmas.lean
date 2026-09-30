@@ -134,6 +134,19 @@ theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VCl
     VClock.le a c = true :=
   VClock.le_iff.mpr fun i => Nat.le_trans (VClock.le_iff.mp hab i) (VClock.le_iff.mp hbc i)
 
+/-- The empty clock (`default`, a thread with no access yet) is below every clock. -/
+theorem VClock.le_default (c : VClock) : VClock.le default c = true :=
+  VClock.le_iff.mpr fun i => by
+    show (#[] : Array Nat).getD i 0 ≤ _
+    simp
+
+/-- A clock with one component above `b`'s is not below `b`. -/
+theorem VClock.le_eq_false {a b : VClock} {i : ThreadId} (h : b.get i < a.get i) :
+    VClock.le a b = false := by
+  cases hl : VClock.le a b
+  · rfl
+  · have := VClock.le_iff.mp hl i; omega
+
 /-- `VClock.merge` is a genuine upper bound: `a`'s own component is never lost. -/
 theorem VClock.get_merge (a b : VClock) (i : ThreadId) :
     (VClock.merge a b).get i = Nat.max (a.get i) (b.get i) := by
@@ -771,5 +784,14 @@ theorem loop_spec_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool)
       obtain ⟨hinv, hlt⟩ := hnext
       obtain ⟨e', s'', m'', hr, hpost⟩ := ih (meas s' m') (h ▸ hlt) s' m' rfl hinv
       exact ⟨e', s'', m'', by simp [ha, hr], hpost⟩
+
+/-- Two atomic accesses never race: the scheduler orders them. -/
+theorem racePair_atomic {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
+    racePair a b = none := by
+  simp [racePair, ha, hb]
+
+theorem size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
+
+theorem size_encode_ptr (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_encode p
 
 end Zig

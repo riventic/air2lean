@@ -279,6 +279,9 @@ def KidOk (t : ThreadId) (g : γ) : Sched.TS Tgt Unit → Prop
 theorem upd_same (G : ThreadId → γ) (t : ThreadId) : upd G t (G t) = G := by
   funext u; by_cases h : u = t <;> simp [upd, h]
 
+theorem upd_upd (G : ThreadId → γ) (t : ThreadId) (a b : γ) : upd (upd G t a) t b = upd G t b := by
+  funext u; by_cases h : u = t <;> simp [upd, h]
+
 theorem checkJoined_ok {t : ThreadId} {m m' : Mem} {x : Unit}
     (h : ((Thread.checkJoinedByChild t).run m).run = some (.ok (x, m'))) : m' = m := by
   unfold Thread.checkJoinedByChild at h
