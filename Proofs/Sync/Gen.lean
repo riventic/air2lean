@@ -54,18 +54,6 @@ instance : Zig.Enc Io_Mutex where
   encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.state)]
   decode bs := do pure { state := ← Zig.Enc.decodeAt bs 0 }
 
-structure Counter where
-  io : Zig.Io
-  m : Io_Mutex
-  n : BitVec 32
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Enc Counter where
-  size := 24
-  align := 8
-  encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.io), (16, Zig.Enc.encode v.m), (20, Zig.Enc.encode v.n)]
-  decode bs := do pure { io := ← Zig.Enc.decodeAt bs 0, m := ← Zig.Enc.decodeAt bs 16, n := ← Zig.Enc.decodeAt bs 20 }
-
 structure Io_Condition_State where
   waiters : BitVec 16
   signals : BitVec 16
@@ -113,6 +101,66 @@ instance : Zig.Enc Io_Condition where
   align := 4
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.state), (4, Zig.Enc.encode v.epoch)]
   decode bs := do pure { state := ← Zig.Enc.decodeAt bs 0, epoch := ← Zig.Enc.decodeAt bs 4 }
+
+structure Io_Semaphore where
+  mutex : Io_Mutex
+  cond : Io_Condition
+  permits : BitVec 64
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Io_Semaphore where
+  size := 24
+  align := 8
+  encode v := Zig.Enc.fields 24 [(8, Zig.Enc.encode v.mutex), (12, Zig.Enc.encode v.cond), (0, Zig.Enc.encode v.permits)]
+  decode bs := do pure { mutex := ← Zig.Enc.decodeAt bs 8, cond := ← Zig.Enc.decodeAt bs 12, permits := ← Zig.Enc.decodeAt bs 0 }
+
+structure Io_RwLock where
+  state : BitVec 64
+  mutex : Io_Mutex
+  semaphore : Io_Semaphore
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Io_RwLock where
+  size := 40
+  align := 8
+  encode v := Zig.Enc.fields 40 [(0, Zig.Enc.encode v.state), (32, Zig.Enc.encode v.mutex), (8, Zig.Enc.encode v.semaphore)]
+  decode bs := do pure { state := ← Zig.Enc.decodeAt bs 0, mutex := ← Zig.Enc.decodeAt bs 32, semaphore := ← Zig.Enc.decodeAt bs 8 }
+
+structure Shared where
+  io : Zig.Io
+  l : Io_RwLock
+  n : BitVec 32
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Shared where
+  size := 64
+  align := 8
+  encode v := Zig.Enc.fields 64 [(0, Zig.Enc.encode v.io), (16, Zig.Enc.encode v.l), (56, Zig.Enc.encode v.n)]
+  decode bs := do pure { io := ← Zig.Enc.decodeAt bs 0, l := ← Zig.Enc.decodeAt bs 16, n := ← Zig.Enc.decodeAt bs 56 }
+
+structure SemCounter where
+  io : Zig.Io
+  s : Io_Semaphore
+  n : BitVec 32
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc SemCounter where
+  size := 48
+  align := 8
+  encode v := Zig.Enc.fields 48 [(0, Zig.Enc.encode v.io), (16, Zig.Enc.encode v.s), (40, Zig.Enc.encode v.n)]
+  decode bs := do pure { io := ← Zig.Enc.decodeAt bs 0, s := ← Zig.Enc.decodeAt bs 16, n := ← Zig.Enc.decodeAt bs 40 }
+
+structure Counter where
+  io : Zig.Io
+  m : Io_Mutex
+  n : BitVec 32
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Counter where
+  size := 24
+  align := 8
+  encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.io), (16, Zig.Enc.encode v.m), (20, Zig.Enc.encode v.n)]
+  decode bs := do pure { io := ← Zig.Enc.decodeAt bs 0, m := ← Zig.Enc.decodeAt bs 16, n := ← Zig.Enc.decodeAt bs 20 }
 
 inductive Io_Event where
   | unset
@@ -172,6 +220,8 @@ def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
 inductive Tgt where
   | producer (a : Zig.Ptr)
   | work (a : Zig.Ptr)
+  | writer (a : Zig.Ptr)
+  | semWork (a : Zig.Ptr)
 
 structure Io_Condition_signalLocals where
   prev_state : Io_Condition_State
@@ -806,6 +856,243 @@ def Io_Mutex_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+structure Io_RwLock_lockSharedUncancelableLocals where
+  state : BitVec 64
+  deriving Inhabited
+
+inductive Io_RwLock_lockSharedUncancelableExit where
+  | ret
+  | br15 (v : BitVec 64)
+  | br9
+  | br7
+  | rep8
+
+def Io_RwLock_lockSharedUncancelable.again8 : Io_RwLock_lockSharedUncancelableExit → Bool
+  | .rep8 => true
+  | _ => false
+
+def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit := do
+  match ← ((do
+    let i10 ← pure ((← get).state)
+    let i11 ← pure (i10 &&& (4294967295 : BitVec 64))
+    let i12 ← pure (i11)
+    let i13 ← pure (i12 == (0 : BitVec 64))
+    if i13 then (do
+      match ← ((do
+        let i16 ← pure (p0.add 0)
+        let i17 ← pure ((← get).state)
+        let i18 ← pure ((← get).state)
+        let i19 ← Zig.add false i18 (4294967296 : BitVec 64)
+        let i20 ← Zig.cmpxchgC Zig.AtomicOrder.seqCst Zig.AtomicOrder.seqCst 8 i16 i17 i19
+        let i21 ← pure ((i20).isSome)
+        if i21 then (do
+          let i23 ← Zig.optPayload i20
+          pure (.br15 i23))
+        else (do
+          pure .ret)) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit) with
+      | .br15 v15 => (do
+        modify (fun s => { s with state := v15 })
+        pure .br9)
+      | e => pure e)
+    else (do
+      pure .br7)) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit) with
+  | .br9 => (do
+    pure .rep8)
+  | e => pure e
+
+def Io_RwLock_lockSharedUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i3 ← pure (p0.add 0)
+    let i4 ← pure (i3)
+    let i5 ← Zig.atomicLoadC (n := 64) Zig.AtomicOrder.seqCst 8 i4
+    modify (fun s => { s with state := i5 })
+    match ← ((do
+      Zig.loop (Io_RwLock_lockSharedUncancelable.loop8 p0) Io_RwLock_lockSharedUncancelable.again8) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit) with
+    | .br7 => (do
+      let i30 ← pure (p0.add 32)
+      let _i31 ← Zig.callC (Io_Mutex_lockUncancelable i30 p1)
+      let i32 ← pure (p0.add 0)
+      let _i33 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i32 (4294967296 : BitVec 64)
+      let i34 ← pure (p0.add 32)
+      let _i35 ← Zig.callC (Io_Mutex_unlock i34 p1)
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit).run' (default : Io_RwLock_lockSharedUncancelableLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure Io_Semaphore_waitUncancelableLocals where
+  deriving Inhabited
+
+inductive Io_Semaphore_waitUncancelableExit where
+  | ret
+  | br6
+  | br4
+  | br22
+  | rep5
+
+def Io_Semaphore_waitUncancelable.again5 : Io_Semaphore_waitUncancelableExit → Bool
+  | .rep5 => true
+  | _ => false
+
+def Io_Semaphore_waitUncancelable.loop5 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit := do
+  match ← ((do
+    let i7 ← pure (p0.add 0)
+    let i8 ← Zig.load (BitVec 64) 8 i7
+    let i9 ← pure (i8)
+    let i10 ← pure (i9 == (0 : BitVec 64))
+    if i10 then (do
+      let i12 ← pure (p0.add 12)
+      let i13 ← pure (p0.add 8)
+      let _i14 ← Zig.callC (Io_Condition_waitUncancelable i12 p1 i13)
+      pure .br6)
+    else (do
+      pure .br4)) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit) with
+  | .br6 => (do
+    pure .rep5)
+  | e => pure e
+
+def Io_Semaphore_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p0.add 8)
+    let _i3 ← Zig.callC (Io_Mutex_lockUncancelable i2 p1)
+    match ← ((do
+      Zig.loop (Io_Semaphore_waitUncancelable.loop5 p0 p1) Io_Semaphore_waitUncancelable.again5) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit) with
+    | .br4 => (do
+      let i18 ← pure (p0.add 0)
+      let i19 ← Zig.load (BitVec 64) 8 i18
+      let i20 ← Zig.sub false i19 (1 : BitVec 64)
+      Zig.store (α := BitVec 64) 8 i18 i20
+      match ← ((do
+        let i23 ← pure (p0.add 0)
+        let i24 ← Zig.load (BitVec 64) 8 i23
+        let i25 ← pure (i24)
+        let i26 ← pure (Zig.gt false i25 (0 : BitVec 64))
+        if i26 then (do
+          let i28 ← pure (p0.add 12)
+          let _i29 ← Zig.callC (Io_Condition_signal i28 p1)
+          pure .br22)
+        else (do
+          pure .br22)) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit) with
+      | .br22 => (do
+        let i32 ← pure (p0.add 8)
+        let _i33 ← Zig.callC (Io_Mutex_unlock i32 p1)
+        pure .ret)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit).run' (default : Io_Semaphore_waitUncancelableLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure Io_RwLock_lockUncancelableLocals where
+  deriving Inhabited
+
+inductive Io_RwLock_lockUncancelableExit where
+  | ret
+  | br8
+
+def Io_RwLock_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p0.add 0)
+    let _i3 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i2 (2 : BitVec 64)
+    let i4 ← pure (p0.add 32)
+    let _i5 ← Zig.callC (Io_Mutex_lockUncancelable i4 p1)
+    let i6 ← pure (p0.add 0)
+    let i7 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i6 (18446744073709551615 : BitVec 64)
+    match ← ((do
+      let i9 ← pure (i7 &&& (9223372032559808512 : BitVec 64))
+      let i10 ← pure (i9)
+      let i11 ← pure (i10 != (0 : BitVec 64))
+      if i11 then (do
+        let i13 ← pure (p0.add 8)
+        let _i14 ← Zig.callC (Io_Semaphore_waitUncancelable i13 p1)
+        pure .br8)
+      else (do
+        pure .br8)) : Zig.CM Tgt Io_RwLock_lockUncancelableLocals Io_RwLock_lockUncancelableExit) with
+    | .br8 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Io_RwLock_lockUncancelableLocals Io_RwLock_lockUncancelableExit).run' (default : Io_RwLock_lockUncancelableLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure Io_RwLock_unlockLocals where
+  deriving Inhabited
+
+inductive Io_RwLock_unlockExit where
+  | ret
+
+def Io_RwLock_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p0.add 0)
+    let _i3 ← Zig.atomicRmwC Zig.RmwOp.and false Zig.AtomicOrder.seqCst 8 i2 (18446744073709551614 : BitVec 64)
+    let i4 ← pure (p0.add 32)
+    let _i5 ← Zig.callC (Io_Mutex_unlock i4 p1)
+    pure .ret) : Zig.CM Tgt Io_RwLock_unlockLocals Io_RwLock_unlockExit).run' (default : Io_RwLock_unlockLocals)
+  match e with
+  | .ret => pure ()
+
+structure Io_Semaphore_postLocals where
+  deriving Inhabited
+
+inductive Io_Semaphore_postExit where
+  | ret
+
+def Io_Semaphore_post (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p0.add 8)
+    let _i3 ← Zig.callC (Io_Mutex_lockUncancelable i2 p1)
+    let i4 ← pure (p0.add 0)
+    let i5 ← Zig.load (BitVec 64) 8 i4
+    let i6 ← Zig.add false i5 (1 : BitVec 64)
+    Zig.store (α := BitVec 64) 8 i4 i6
+    let i8 ← pure (p0.add 12)
+    let _i9 ← Zig.callC (Io_Condition_signal i8 p1)
+    let i10 ← pure (p0.add 8)
+    let _i11 ← Zig.callC (Io_Mutex_unlock i10 p1)
+    pure .ret) : Zig.CM Tgt Io_Semaphore_postLocals Io_Semaphore_postExit).run' (default : Io_Semaphore_postLocals)
+  match e with
+  | .ret => pure ()
+
+structure Io_RwLock_unlockSharedLocals where
+  deriving Inhabited
+
+inductive Io_RwLock_unlockSharedExit where
+  | ret
+  | br8 (v : Bool)
+  | br4
+
+def Io_RwLock_unlockShared (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure (p0.add 0)
+    let i3 ← Zig.atomicRmwC Zig.RmwOp.sub false Zig.AtomicOrder.seqCst 8 i2 (4294967296 : BitVec 64)
+    match ← ((do
+      let i5 ← pure (i3 &&& (9223372032559808512 : BitVec 64))
+      let i6 ← pure (i5)
+      let i7 ← pure (i6 == (4294967296 : BitVec 64))
+      match ← ((do
+        if i7 then (do
+          let i10 ← pure (i3 &&& (1 : BitVec 64))
+          let i11 ← pure (i10)
+          let i12 ← pure (i11 != (0 : BitVec 64))
+          pure (.br8 i12))
+        else (do
+          pure (.br8 false))) : Zig.CM Tgt Io_RwLock_unlockSharedLocals Io_RwLock_unlockSharedExit) with
+      | .br8 v8 => (do
+        if v8 then (do
+          let i16 ← pure (p0.add 8)
+          let _i17 ← Zig.callC (Io_Semaphore_post i16 p1)
+          pure .br4)
+        else (do
+          pure .br4))
+      | e => pure e) : Zig.CM Tgt Io_RwLock_unlockSharedLocals Io_RwLock_unlockSharedExit) with
+    | .br4 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Io_RwLock_unlockSharedLocals Io_RwLock_unlockSharedExit).run' (default : Io_RwLock_unlockSharedLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
 structure producerLocals where
   deriving Inhabited
 
@@ -1002,9 +1289,212 @@ def mutexCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
   match e with
   | .ret v => pure v
 
+structure readSharedLocals where
+  deriving Inhabited
+
+inductive readSharedExit where
+  | ret (v : BitVec 32)
+
+def readShared (p0 : Zig.Ptr) : Zig.ConcM Tgt (BitVec 32) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 16)
+    let i2 ← pure (p0.add 0)
+    let i3 ← Zig.load (Zig.Io) 8 i2
+    let _i4 ← Zig.callC (Io_RwLock_lockSharedUncancelable i1 i3)
+    let i5 ← pure (p0.add 56)
+    let i6 ← Zig.load (BitVec 32) 4 i5
+    let i7 ← pure (p0.add 16)
+    let i8 ← pure (p0.add 0)
+    let i9 ← Zig.load (Zig.Io) 8 i8
+    let _i10 ← Zig.callC (Io_RwLock_unlockShared i7 i9)
+    pure (.ret i6)) : Zig.CM Tgt readSharedLocals readSharedExit).run' (default : readSharedLocals)
+  match e with
+  | .ret v => pure v
+
+structure writerLocals where
+  local1 : BitVec 64
+  deriving Inhabited
+
+inductive writerExit where
+  | ret
+  | br6
+  | br3
+  | rep4
+
+def writer.again4 : writerExit → Bool
+  | .rep4 => true
+  | _ => false
+
+def writer.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt writerLocals writerExit := do
+  let i5 ← pure ((← get).local1)
+  match ← ((do
+    let i7 ← pure (i5)
+    let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
+    if i8 then (do
+      let i10 ← pure (p0.add 16)
+      let i11 ← pure (p0.add 0)
+      let i12 ← Zig.load (Zig.Io) 8 i11
+      let _i13 ← Zig.callC (Io_RwLock_lockUncancelable i10 i12)
+      let i14 ← pure (p0.add 56)
+      let i15 ← Zig.load (BitVec 32) 4 i14
+      let i16 ← Zig.add false i15 (1 : BitVec 32)
+      Zig.store (α := BitVec 32) 4 i14 i16
+      let i18 ← pure (p0.add 16)
+      let i19 ← pure (p0.add 0)
+      let i20 ← Zig.load (Zig.Io) 8 i19
+      let _i21 ← Zig.callC (Io_RwLock_unlock i18 i20)
+      pure .br6)
+    else (do
+      pure .br3)) : Zig.CM Tgt writerLocals writerExit) with
+  | .br6 => (do
+    let i24 ← Zig.add false i5 (1 : BitVec 64)
+    modify (fun s => { s with local1 := i24 })
+    pure .rep4)
+  | e => pure e
+
+def writer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := (0 : BitVec 64) })
+    match ← ((do
+      Zig.loop (writer.loop4 p0) writer.again4) : Zig.CM Tgt writerLocals writerExit) with
+    | .br3 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt writerLocals writerExit).run' (default : writerLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure rwLockReadLocals where
+  sh : Zig.Ptr
+  deriving Inhabited
+
+inductive rwLockReadExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+
+def rwLockRead (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s1 ← Zig.allocStack 64 8
+  let e ← ((do
+    let i1 ← pure (← get).sh
+    let i2 ← pure (i1.add 0)
+    Zig.store (α := Zig.Io) 8 i2 p0
+    let i4 ← pure (i1.add 16)
+    Zig.store (α := Io_RwLock) 8 i4 ({ state := (0 : BitVec 64), mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), semaphore := ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (0 : BitVec 64) } : Io_Semaphore) } : Io_RwLock)
+    let i6 ← pure (i1.add 56)
+    Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
+    let i8 ← pure (i1)
+    let i9 ← Zig.spawnC (Tgt.writer i8)
+    match i9 with
+    | .error _ => (do
+      let i11 ← Zig.callRC (Zig.unwrapErr i9)
+      let i12 ← pure (i11)
+      let i13 ← pure ((.error i12) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i13))
+    | .ok v10 => (do
+      let i15 ← Zig.callC (readShared i1)
+      let _i16 ← Zig.joinC v10
+      let i17 ← Zig.mul false (10 : BitVec 32) i15
+      let i18 ← Zig.callC (readShared i1)
+      let i19 ← Zig.add false i17 i18
+      let i20 ← pure ((.ok i19) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i20))) : Zig.CM Tgt rwLockReadLocals rwLockReadExit).run' { (default : rwLockReadLocals) with sh := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+
+structure semWorkLocals where
+  local1 : BitVec 64
+  deriving Inhabited
+
+inductive semWorkExit where
+  | ret
+  | br6
+  | br3
+  | rep4
+
+def semWork.again4 : semWorkExit → Bool
+  | .rep4 => true
+  | _ => false
+
+def semWork.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt semWorkLocals semWorkExit := do
+  let i5 ← pure ((← get).local1)
+  match ← ((do
+    let i7 ← pure (i5)
+    let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
+    if i8 then (do
+      let i10 ← pure (p0.add 16)
+      let i11 ← pure (p0.add 0)
+      let i12 ← Zig.load (Zig.Io) 8 i11
+      let _i13 ← Zig.callC (Io_Semaphore_waitUncancelable i10 i12)
+      let i14 ← pure (p0.add 40)
+      let i15 ← Zig.load (BitVec 32) 4 i14
+      let i16 ← Zig.add false i15 (1 : BitVec 32)
+      Zig.store (α := BitVec 32) 4 i14 i16
+      let i18 ← pure (p0.add 16)
+      let i19 ← pure (p0.add 0)
+      let i20 ← Zig.load (Zig.Io) 8 i19
+      let _i21 ← Zig.callC (Io_Semaphore_post i18 i20)
+      pure .br6)
+    else (do
+      pure .br3)) : Zig.CM Tgt semWorkLocals semWorkExit) with
+  | .br6 => (do
+    let i24 ← Zig.add false i5 (1 : BitVec 64)
+    modify (fun s => { s with local1 := i24 })
+    pure .rep4)
+  | e => pure e
+
+def semWork (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := (0 : BitVec 64) })
+    match ← ((do
+      Zig.loop (semWork.loop4 p0) semWork.again4) : Zig.CM Tgt semWorkLocals semWorkExit) with
+    | .br3 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt semWorkLocals semWorkExit).run' (default : semWorkLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure semaphoreCounterLocals where
+  c : Zig.Ptr
+  deriving Inhabited
+
+inductive semaphoreCounterExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+
+def semaphoreCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s1 ← Zig.allocStack 48 8
+  let e ← ((do
+    let i1 ← pure (← get).c
+    let i2 ← pure (i1.add 0)
+    Zig.store (α := Zig.Io) 8 i2 p0
+    let i4 ← pure (i1.add 16)
+    Zig.store (α := Io_Semaphore) 8 i4 ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (1 : BitVec 64) } : Io_Semaphore)
+    let i6 ← pure (i1.add 40)
+    Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
+    let i8 ← pure (i1)
+    let i9 ← Zig.spawnC (Tgt.semWork i8)
+    match i9 with
+    | .error _ => (do
+      let i11 ← Zig.callRC (Zig.unwrapErr i9)
+      let i12 ← pure (i11)
+      let i13 ← pure ((.error i12) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i13))
+    | .ok v10 => (do
+      let _i15 ← Zig.callC (semWork i1)
+      let _i16 ← Zig.joinC v10
+      let i17 ← pure (i1.add 40)
+      let i18 ← Zig.load (BitVec 32) 4 i17
+      let i19 ← pure ((.ok i18) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i19))) : Zig.CM Tgt semaphoreCounterLocals semaphoreCounterExit).run' { (default : semaphoreCounterLocals) with c := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .producer a => discard (producer a)
   | .work a => discard (work a)
+  | .writer a => discard (writer a)
+  | .semWork a => discard (semWork a)
 
 end Sync

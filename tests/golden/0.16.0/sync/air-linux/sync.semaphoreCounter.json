@@ -1,12 +1,11 @@
 {
  "schema": 11,
  "zig_version": "0.16.0",
- "name": "Io.Mutex.unlock",
+ "name": "sync.semaphoreCounter",
  "params": [
-  0,
-  1
+  0
  ],
- "ret": 2,
+ "ret": 1,
  "body": [
   {
    "id": 0,
@@ -16,9 +15,9 @@
   },
   {
    "id": 1,
-   "tag": "arg",
-   "ty": 1,
-   "param": 1
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
   },
   {
    "id": 2,
@@ -27,20 +26,7 @@
   },
   {
    "id": 3,
-   "tag": "store_safe",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 2
-    },
-    {
-     "inst": 0
-    }
-   ]
-  },
-  {
-   "id": 4,
-   "tag": "bitcast",
+   "tag": "struct_field_ptr_index_0",
    "ty": 4,
    "args": [
     {
@@ -49,127 +35,200 @@
    ]
   },
   {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
    "id": 5,
-   "tag": "alloc",
-   "ty": 5
+   "tag": "struct_field_ptr_index_1",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
   },
   {
    "id": 6,
-   "tag": "store_safe",
+   "tag": "store",
    "ty": 2,
    "args": [
     {
      "inst": 5
     },
     {
-     "inst": 1
+     "ty": 6,
+     "elems": [
+      {
+       "ty": 7,
+       "elems": [
+        {
+         "ty": 8,
+         "elems": [
+          {
+           "ty": 9,
+           "enum": "0"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "ty": 10,
+       "elems": [
+        {
+         "ty": 11,
+         "elems": [
+          {
+           "ty": 12,
+           "val": ".{ .waiters = 0, .signals = 0 }"
+          }
+         ]
+        },
+        {
+         "ty": 13,
+         "elems": [
+          {
+           "ty": 14,
+           "val": "0"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "ty": 15,
+       "val": "1"
+      }
+     ]
     }
    ]
   },
   {
    "id": 7,
-   "tag": "bitcast",
-   "ty": 6,
+   "tag": "struct_field_ptr_index_2",
+   "ty": 16,
    "args": [
     {
-     "inst": 5
+     "inst": 2
     }
    ]
   },
   {
    "id": 8,
-   "tag": "dbg_stmt",
+   "tag": "store",
    "ty": 2,
-   "line": 2
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 14,
+     "val": "0"
+    }
+   ]
   },
   {
    "id": 9,
-   "tag": "load",
-   "ty": 0,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
    "args": [
     {
-     "inst": 4
+     "inst": 2
     }
-   ]
+   ],
+   "name": "c"
   },
   {
    "id": 10,
-   "tag": "struct_field_ptr_index_0",
-   "ty": 7,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 12,
+   "tag": "aggregate_init",
+   "ty": 17,
    "args": [
     {
-     "inst": 9
+     "inst": 2
     }
    ]
   },
   {
-   "id": 11,
+   "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 3
   },
   {
-   "id": 12,
-   "tag": "dbg_inline_block",
-   "ty": 8,
-   "body": [
+   "id": 15,
+   "tag": "call",
+   "ty": 18,
+   "callee": {
+    "ty": 19,
+    "func": "Thread.spawn__anon_26566",
+    "noreturn": false,
+    "comptime_fn": "sync.semWork"
+   },
+   "args": [
     {
-     "id": 13,
-     "tag": "dbg_arg_inline",
-     "ty": 2,
-     "args": [
+     "ty": 20,
+     "elems": [
       {
-       "inst": 10
-      }
-     ],
-     "name": "self"
-    },
-    {
-     "id": 14,
-     "tag": "dbg_arg_inline",
-     "ty": 2,
-     "args": [
-      {
-       "ty": 8,
-       "enum": "0"
-      }
-     ],
-     "name": "operand"
-    },
-    {
-     "id": 15,
-     "tag": "dbg_arg_inline",
-     "ty": 2,
-     "args": [
-      {
-       "ty": 9,
-       "enum": "3"
-      }
-     ],
-     "name": "order"
-    },
-    {
-     "id": 16,
-     "tag": "alloc",
-     "ty": 10
-    },
-    {
-     "id": 17,
-     "tag": "store_safe",
-     "ty": 2,
-     "args": [
-      {
-       "inst": 16
+       "ty": 15,
+       "val": "16777216"
       },
       {
-       "inst": 10
+       "ty": 21,
+       "null": true
       }
      ]
     },
     {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "try",
+   "ty": 22,
+   "args": [
+    {
+     "inst": 15
+    }
+   ],
+   "body": [
+    {
+     "id": 16,
+     "tag": "unwrap_errunion_err",
+     "ty": 23,
+     "args": [
+      {
+       "inst": 15
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 3
+    },
+    {
      "id": 18,
      "tag": "bitcast",
-     "ty": 11,
+     "ty": 24,
      "args": [
       {
        "inst": 16
@@ -178,14 +237,8 @@
     },
     {
      "id": 19,
-     "tag": "dbg_stmt",
-     "ty": 2,
-     "line": 2
-    },
-    {
-     "id": 20,
-     "tag": "load",
-     "ty": 7,
+     "tag": "wrap_errunion_err",
+     "ty": 1,
      "args": [
       {
        "inst": 18
@@ -193,300 +246,168 @@
      ]
     },
     {
-     "id": 21,
-     "tag": "struct_field_ptr_index_0",
-     "ty": 12,
+     "id": 20,
+     "tag": "ret_safe",
+     "ty": 25,
      "args": [
       {
-       "inst": 20
+       "inst": 19
       }
      ]
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "tag": "alloc",
+   "ty": 26
+  },
+  {
+   "id": 23,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 22
     },
     {
-     "id": 22,
-     "tag": "atomic_rmw",
-     "ty": 8,
-     "args": [
-      {
-       "inst": 21
-      },
-      {
-       "ty": 8,
-       "enum": "0"
-      }
-     ],
-     "op": "Xchg",
-     "order": "release"
-    },
+     "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "bitcast",
+   "ty": 27,
+   "args": [
     {
-     "id": 23,
-     "tag": "dbg_stmt",
-     "ty": 2,
-     "line": 2
-    },
-    {
-     "id": 24,
-     "tag": "br",
-     "ty": 13,
-     "target": 12,
-     "args": [
-      {
-       "inst": 22
-      }
-     ]
+     "inst": 22
     }
    ]
   },
   {
    "id": 25,
-   "tag": "dbg_stmt",
+   "tag": "dbg_var_val",
    "ty": 2,
-   "line": 2
+   "args": [
+    {
+     "inst": 21
+    }
+   ],
+   "name": "t"
   },
   {
    "id": 26,
-   "tag": "block",
+   "tag": "dbg_stmt",
    "ty": 2,
-   "body": [
+   "line": 4
+  },
+  {
+   "id": 27,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 28,
+    "func": "sync.semWork",
+    "noreturn": false
+   },
+   "args": [
     {
-     "id": 48,
-     "tag": "switch_br",
-     "ty": 13,
-     "args": [
-      {
-       "inst": 12
-      }
-     ],
-     "cases": [
-      {
-       "items": [
-        {
-         "ty": 8,
-         "enum": "0"
-        }
-       ],
-       "ranges": [],
-       "body": [
-        {
-         "id": 27,
-         "tag": "dbg_stmt",
-         "ty": 2,
-         "line": 3
-        },
-        {
-         "id": 28,
-         "tag": "call",
-         "ty": 13,
-         "callee": {
-          "ty": 14,
-          "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
-          "noreturn": true
-         },
-         "args": []
-        },
-        {
-         "id": 29,
-         "tag": "unreach",
-         "ty": 13
-        }
-       ]
-      },
-      {
-       "items": [
-        {
-         "ty": 8,
-         "enum": "1"
-        }
-       ],
-       "ranges": [],
-       "body": [
-        {
-         "id": 30,
-         "tag": "br",
-         "ty": 13,
-         "target": 26,
-         "args": [
-          {
-           "ty": 2,
-           "val": "{}"
-          }
-         ]
-        }
-       ]
-      },
-      {
-       "items": [
-        {
-         "ty": 8,
-         "enum": "2"
-        }
-       ],
-       "ranges": [],
-       "body": [
-        {
-         "id": 31,
-         "tag": "dbg_stmt",
-         "ty": 2,
-         "line": 7
-        },
-        {
-         "id": 32,
-         "tag": "load",
-         "ty": 1,
-         "args": [
-          {
-           "inst": 7
-          }
-         ]
-        },
-        {
-         "id": 34,
-         "tag": "dbg_stmt",
-         "ty": 2,
-         "line": 7
-        },
-        {
-         "id": 35,
-         "tag": "load",
-         "ty": 0,
-         "args": [
-          {
-           "inst": 4
-          }
-         ]
-        },
-        {
-         "id": 36,
-         "tag": "struct_field_ptr_index_0",
-         "ty": 7,
-         "args": [
-          {
-           "inst": 35
-          }
-         ]
-        },
-        {
-         "id": 37,
-         "tag": "dbg_stmt",
-         "ty": 2,
-         "line": 7
-        },
-        {
-         "id": 38,
-         "tag": "struct_field_ptr_index_0",
-         "ty": 12,
-         "args": [
-          {
-           "inst": 36
-          }
-         ]
-        },
-        {
-         "id": 39,
-         "tag": "bitcast",
-         "ty": 15,
-         "args": [
-          {
-           "inst": 38
-          }
-         ]
-        },
-        {
-         "id": 42,
-         "tag": "dbg_stmt",
-         "ty": 2,
-         "line": 7
-        },
-        {
-         "id": 43,
-         "tag": "call",
-         "ty": 2,
-         "callee": {
-          "ty": 16,
-          "func": "Io.futexWake__anon_11819",
-          "noreturn": false
-         },
-         "args": [
-          {
-           "inst": 32
-          },
-          {
-           "inst": 39
-          },
-          {
-           "ty": 17,
-           "val": "1"
-          }
-         ]
-        },
-        {
-         "id": 44,
-         "tag": "br",
-         "ty": 13,
-         "target": 26,
-         "args": [
-          {
-           "ty": 2,
-           "val": "{}"
-          }
-         ]
-        }
-       ]
-      }
-     ],
-     "else": [
-      {
-       "id": 45,
-       "tag": "dbg_stmt",
-       "ty": 2,
-       "line": 2
-      },
-      {
-       "id": 46,
-       "tag": "call",
-       "ty": 13,
-       "callee": {
-        "ty": 14,
-        "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
-        "noreturn": true
-       },
-       "args": []
-      },
-      {
-       "id": 47,
-       "tag": "unreach",
-       "ty": 13
-      }
-     ]
+     "inst": 2
     }
    ]
   },
   {
-   "id": 49,
-   "tag": "ret_safe",
-   "ty": 13,
+   "id": 28,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 29,
+   "tag": "load",
+   "ty": 22,
    "args": [
     {
-     "ty": 2,
-     "val": "{}"
+     "inst": 24
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 31,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 29,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 29
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 33,
+   "tag": "struct_field_ptr_index_2",
+   "ty": 16,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "tag": "load",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 33
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 36,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 34
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "tag": "ret_safe",
+   "ty": 25,
+   "args": [
+    {
+     "inst": 36
     }
    ]
   }
  ],
  "types": [
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 18,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
   {
    "k": "struct",
    "name": "Io",
@@ -494,17 +415,24 @@
    "fields": [
     {
      "name": "userdata",
-     "ty": 19,
+     "ty": 30,
      "offset": 0
     },
     {
      "name": "vtable",
-     "ty": 20,
+     "ty": 31,
      "offset": 8
     }
    ],
    "abi_size": 16,
    "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 24,
+   "payload": 14,
+   "abi_size": 8,
+   "abi_align": 4
   },
   {
    "k": "void",
@@ -515,7 +443,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 0,
+   "child": 32,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -527,7 +455,7 @@
   {
    "k": "ptr",
    "size": "one",
-   "const": true,
+   "const": false,
    "child": 0,
    "ptr_align": 8,
    "volatile": false,
@@ -541,7 +469,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 1,
+   "child": 6,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -551,35 +479,61 @@
    "abi_align": 8
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 1,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
+   "k": "struct",
+   "name": "Io.Semaphore",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "mutex",
+     "ty": 7,
+     "offset": 8
+    },
+    {
+     "name": "cond",
+     "ty": 10,
+     "offset": 12
+    },
+    {
+     "name": "permits",
+     "ty": 15,
+     "offset": 0
+    }
+   ],
+   "abi_size": 24,
    "abi_align": 8
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 21,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
+   "k": "struct",
+   "name": "Io.Mutex",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "state",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Io.Mutex.State)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 9,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "enum",
    "name": "Io.Mutex.State",
-   "tag": 17,
+   "tag": 14,
    "exhaustive": true,
    "fields": [
     {
@@ -599,101 +553,68 @@
    "abi_align": 4
   },
   {
-   "k": "enum",
-   "name": "builtin.AtomicOrder",
-   "tag": 22,
-   "exhaustive": true,
+   "k": "struct",
+   "name": "Io.Condition",
+   "layout": "auto",
    "fields": [
     {
-     "name": "unordered",
-     "value": "0"
+     "name": "state",
+     "ty": 11,
+     "offset": 0
     },
     {
-     "name": "monotonic",
-     "value": "1"
-    },
-    {
-     "name": "acquire",
-     "value": "2"
-    },
-    {
-     "name": "release",
-     "value": "3"
-    },
-    {
-     "name": "acq_rel",
-     "value": "4"
-    },
-    {
-     "name": "seq_cst",
-     "value": "5"
+     "name": "epoch",
+     "ty": 13,
+     "offset": 4
     }
    ],
-   "abi_size": 1,
-   "abi_align": 1
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 7,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
    "abi_size": 8,
-   "abi_align": 8
+   "abi_align": 4
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 7,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
+   "k": "struct",
+   "name": "atomic.Value(Io.Condition.State)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 12,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 8,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
+   "k": "struct",
+   "name": "Io.Condition.State",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "waiters",
+     "ty": 33
+    },
+    {
+     "name": "signals",
+     "ty": 33
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
-   "k": "noreturn"
-  },
-  {
-   "k": "other",
-   "name": "fn () noreturn"
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 8,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "other",
-   "name": "fn (Io, *align(4) const Io.Mutex.State, u32) void"
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 14,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
   },
   {
    "k": "int",
@@ -703,22 +624,123 @@
    "abi_align": 4
   },
   {
-   "k": "struct",
-   "name": "Io.Mutex",
-   "layout": "extern",
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "tuple",
    "fields": [
     {
-     "name": "state",
-     "ty": 21,
+     "ty": 3,
      "offset": 0
     }
    ],
-   "abi_size": 4,
-   "abi_align": 4
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 23,
+   "payload": 22,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread.SpawnConfig, struct { *sync.SemCounter }) error{LockedMemoryLimitExceeded,OutOfMemory,SystemResources,ThreadQuotaExceeded,Unexpected}!Thread"
+  },
+  {
+   "k": "struct",
+   "name": "Thread.SpawnConfig",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "stack_size",
+     "ty": 15,
+     "offset": 0
+    },
+    {
+     "name": "allocator",
+     "ty": 21,
+     "offset": 8
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "optional",
-   "child": 23,
+   "child": 34,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "impl",
+     "ty": 35,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 22,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -726,7 +748,34 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 24,
+   "child": 22,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*sync.SemCounter) void"
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread) void"
+  },
+  {
+   "k": "optional",
+   "child": 36,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 37,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -737,30 +786,73 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Io.Mutex.State)",
-   "layout": "extern",
+   "name": "sync.SemCounter",
+   "layout": "auto",
    "fields": [
     {
-     "name": "raw",
-     "ty": 8,
+     "name": "io",
+     "ty": 0,
      "offset": 0
+    },
+    {
+     "name": "s",
+     "ty": 6,
+     "offset": 16
+    },
+    {
+     "name": "n",
+     "ty": 14,
+     "offset": 40
     }
    ],
-   "abi_size": 4,
-   "abi_align": 4
+   "abi_size": 48,
+   "abi_align": 8
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 3,
-   "abi_size": 1,
-   "abi_align": 1
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "ptr",
+     "ty": 36,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 38,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "thread",
+     "ty": 39,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 25,
+   "child": 40,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -776,547 +868,547 @@
    "fields": [
     {
      "name": "crashHandler",
-     "ty": 26,
+     "ty": 41,
      "offset": 0
     },
     {
      "name": "async",
-     "ty": 27,
+     "ty": 42,
      "offset": 8
     },
     {
      "name": "concurrent",
-     "ty": 28,
+     "ty": 43,
      "offset": 16
     },
     {
      "name": "await",
-     "ty": 29,
+     "ty": 44,
      "offset": 24
     },
     {
      "name": "cancel",
-     "ty": 29,
+     "ty": 44,
      "offset": 32
     },
     {
      "name": "groupAsync",
-     "ty": 30,
+     "ty": 45,
      "offset": 40
     },
     {
      "name": "groupConcurrent",
-     "ty": 31,
+     "ty": 46,
      "offset": 48
     },
     {
      "name": "groupAwait",
-     "ty": 32,
+     "ty": 47,
      "offset": 56
     },
     {
      "name": "groupCancel",
-     "ty": 33,
+     "ty": 48,
      "offset": 64
     },
     {
      "name": "recancel",
-     "ty": 26,
+     "ty": 41,
      "offset": 72
     },
     {
      "name": "swapCancelProtection",
-     "ty": 34,
+     "ty": 49,
      "offset": 80
     },
     {
      "name": "checkCancel",
-     "ty": 35,
+     "ty": 50,
      "offset": 88
     },
     {
      "name": "futexWait",
-     "ty": 36,
+     "ty": 51,
      "offset": 96
     },
     {
      "name": "futexWaitUncancelable",
-     "ty": 37,
+     "ty": 52,
      "offset": 104
     },
     {
      "name": "futexWake",
-     "ty": 37,
+     "ty": 52,
      "offset": 112
     },
     {
      "name": "operate",
-     "ty": 38,
+     "ty": 53,
      "offset": 120
     },
     {
      "name": "batchAwaitAsync",
-     "ty": 39,
+     "ty": 54,
      "offset": 128
     },
     {
      "name": "batchAwaitConcurrent",
-     "ty": 40,
+     "ty": 55,
      "offset": 136
     },
     {
      "name": "batchCancel",
-     "ty": 41,
+     "ty": 56,
      "offset": 144
     },
     {
      "name": "dirCreateDir",
-     "ty": 42,
+     "ty": 57,
      "offset": 152
     },
     {
      "name": "dirCreateDirPath",
-     "ty": 43,
+     "ty": 58,
      "offset": 160
     },
     {
      "name": "dirCreateDirPathOpen",
-     "ty": 44,
+     "ty": 59,
      "offset": 168
     },
     {
      "name": "dirOpenDir",
-     "ty": 45,
+     "ty": 60,
      "offset": 176
     },
     {
      "name": "dirStat",
-     "ty": 46,
+     "ty": 61,
      "offset": 184
     },
     {
      "name": "dirStatFile",
-     "ty": 47,
+     "ty": 62,
      "offset": 192
     },
     {
      "name": "dirAccess",
-     "ty": 48,
+     "ty": 63,
      "offset": 200
     },
     {
      "name": "dirCreateFile",
-     "ty": 49,
+     "ty": 64,
      "offset": 208
     },
     {
      "name": "dirCreateFileAtomic",
-     "ty": 50,
+     "ty": 65,
      "offset": 216
     },
     {
      "name": "dirOpenFile",
-     "ty": 51,
+     "ty": 66,
      "offset": 224
     },
     {
      "name": "dirClose",
-     "ty": 52,
+     "ty": 67,
      "offset": 232
     },
     {
      "name": "dirRead",
-     "ty": 53,
+     "ty": 68,
      "offset": 240
     },
     {
      "name": "dirRealPath",
-     "ty": 54,
+     "ty": 69,
      "offset": 248
     },
     {
      "name": "dirRealPathFile",
-     "ty": 55,
+     "ty": 70,
      "offset": 256
     },
     {
      "name": "dirDeleteFile",
-     "ty": 56,
+     "ty": 71,
      "offset": 264
     },
     {
      "name": "dirDeleteDir",
-     "ty": 57,
+     "ty": 72,
      "offset": 272
     },
     {
      "name": "dirRename",
-     "ty": 58,
+     "ty": 73,
      "offset": 280
     },
     {
      "name": "dirRenamePreserve",
-     "ty": 59,
+     "ty": 74,
      "offset": 288
     },
     {
      "name": "dirSymLink",
-     "ty": 60,
+     "ty": 75,
      "offset": 296
     },
     {
      "name": "dirReadLink",
-     "ty": 61,
+     "ty": 76,
      "offset": 304
     },
     {
      "name": "dirSetOwner",
-     "ty": 62,
+     "ty": 77,
      "offset": 312
     },
     {
      "name": "dirSetFileOwner",
-     "ty": 63,
+     "ty": 78,
      "offset": 320
     },
     {
      "name": "dirSetPermissions",
-     "ty": 64,
+     "ty": 79,
      "offset": 328
     },
     {
      "name": "dirSetFilePermissions",
-     "ty": 65,
+     "ty": 80,
      "offset": 336
     },
     {
      "name": "dirSetTimestamps",
-     "ty": 66,
+     "ty": 81,
      "offset": 344
     },
     {
      "name": "dirHardLink",
-     "ty": 67,
+     "ty": 82,
      "offset": 352
     },
     {
      "name": "fileStat",
-     "ty": 68,
+     "ty": 83,
      "offset": 360
     },
     {
      "name": "fileLength",
-     "ty": 69,
+     "ty": 84,
      "offset": 368
     },
     {
      "name": "fileClose",
-     "ty": 70,
+     "ty": 85,
      "offset": 376
     },
     {
      "name": "fileWritePositional",
-     "ty": 71,
+     "ty": 86,
      "offset": 384
     },
     {
      "name": "fileWriteFileStreaming",
-     "ty": 72,
+     "ty": 87,
      "offset": 392
     },
     {
      "name": "fileWriteFilePositional",
-     "ty": 73,
+     "ty": 88,
      "offset": 400
     },
     {
      "name": "fileReadPositional",
-     "ty": 74,
+     "ty": 89,
      "offset": 408
     },
     {
      "name": "fileSeekBy",
-     "ty": 75,
+     "ty": 90,
      "offset": 416
     },
     {
      "name": "fileSeekTo",
-     "ty": 76,
+     "ty": 91,
      "offset": 424
     },
     {
      "name": "fileSync",
-     "ty": 77,
+     "ty": 92,
      "offset": 432
     },
     {
      "name": "fileIsTty",
-     "ty": 78,
+     "ty": 93,
      "offset": 440
     },
     {
      "name": "fileEnableAnsiEscapeCodes",
-     "ty": 79,
+     "ty": 94,
      "offset": 448
     },
     {
      "name": "fileSupportsAnsiEscapeCodes",
-     "ty": 78,
+     "ty": 93,
      "offset": 456
     },
     {
      "name": "fileSetLength",
-     "ty": 80,
+     "ty": 95,
      "offset": 464
     },
     {
      "name": "fileSetOwner",
-     "ty": 81,
+     "ty": 96,
      "offset": 472
     },
     {
      "name": "fileSetPermissions",
-     "ty": 82,
+     "ty": 97,
      "offset": 480
     },
     {
      "name": "fileSetTimestamps",
-     "ty": 83,
+     "ty": 98,
      "offset": 488
     },
     {
      "name": "fileLock",
-     "ty": 84,
+     "ty": 99,
      "offset": 496
     },
     {
      "name": "fileTryLock",
-     "ty": 85,
+     "ty": 100,
      "offset": 504
     },
     {
      "name": "fileUnlock",
-     "ty": 86,
+     "ty": 101,
      "offset": 512
     },
     {
      "name": "fileDowngradeLock",
-     "ty": 87,
+     "ty": 102,
      "offset": 520
     },
     {
      "name": "fileRealPath",
-     "ty": 88,
+     "ty": 103,
      "offset": 528
     },
     {
      "name": "fileHardLink",
-     "ty": 89,
+     "ty": 104,
      "offset": 536
     },
     {
      "name": "fileMemoryMapCreate",
-     "ty": 90,
+     "ty": 105,
      "offset": 544
     },
     {
      "name": "fileMemoryMapDestroy",
-     "ty": 91,
+     "ty": 106,
      "offset": 552
     },
     {
      "name": "fileMemoryMapSetLength",
-     "ty": 92,
+     "ty": 107,
      "offset": 560
     },
     {
      "name": "fileMemoryMapRead",
-     "ty": 93,
+     "ty": 108,
      "offset": 568
     },
     {
      "name": "fileMemoryMapWrite",
-     "ty": 94,
+     "ty": 109,
      "offset": 576
     },
     {
      "name": "processExecutableOpen",
-     "ty": 95,
+     "ty": 110,
      "offset": 584
     },
     {
      "name": "processExecutablePath",
-     "ty": 96,
+     "ty": 111,
      "offset": 592
     },
     {
      "name": "lockStderr",
-     "ty": 97,
+     "ty": 112,
      "offset": 600
     },
     {
      "name": "tryLockStderr",
-     "ty": 98,
+     "ty": 113,
      "offset": 608
     },
     {
      "name": "unlockStderr",
-     "ty": 26,
+     "ty": 41,
      "offset": 616
     },
     {
      "name": "processCurrentPath",
-     "ty": 99,
+     "ty": 114,
      "offset": 624
     },
     {
      "name": "processSetCurrentDir",
-     "ty": 100,
+     "ty": 115,
      "offset": 632
     },
     {
      "name": "processSetCurrentPath",
-     "ty": 101,
+     "ty": 116,
      "offset": 640
     },
     {
      "name": "processReplace",
-     "ty": 102,
+     "ty": 117,
      "offset": 648
     },
     {
      "name": "processReplacePath",
-     "ty": 103,
+     "ty": 118,
      "offset": 656
     },
     {
      "name": "processSpawn",
-     "ty": 104,
+     "ty": 119,
      "offset": 664
     },
     {
      "name": "processSpawnPath",
-     "ty": 105,
+     "ty": 120,
      "offset": 672
     },
     {
      "name": "childWait",
-     "ty": 106,
+     "ty": 121,
      "offset": 680
     },
     {
      "name": "childKill",
-     "ty": 107,
+     "ty": 122,
      "offset": 688
     },
     {
      "name": "progressParentFile",
-     "ty": 108,
+     "ty": 123,
      "offset": 696
     },
     {
      "name": "now",
-     "ty": 109,
+     "ty": 124,
      "offset": 704
     },
     {
      "name": "clockResolution",
-     "ty": 110,
+     "ty": 125,
      "offset": 712
     },
     {
      "name": "sleep",
-     "ty": 111,
+     "ty": 126,
      "offset": 720
     },
     {
      "name": "random",
-     "ty": 112,
+     "ty": 127,
      "offset": 728
     },
     {
      "name": "randomSecure",
-     "ty": 113,
+     "ty": 128,
      "offset": 736
     },
     {
      "name": "netListenIp",
-     "ty": 114,
+     "ty": 129,
      "offset": 744
     },
     {
      "name": "netAccept",
-     "ty": 115,
+     "ty": 130,
      "offset": 752
     },
     {
      "name": "netBindIp",
-     "ty": 116,
+     "ty": 131,
      "offset": 760
     },
     {
      "name": "netConnectIp",
-     "ty": 117,
+     "ty": 132,
      "offset": 768
     },
     {
      "name": "netListenUnix",
-     "ty": 118,
+     "ty": 133,
      "offset": 776
     },
     {
      "name": "netConnectUnix",
-     "ty": 119,
+     "ty": 134,
      "offset": 784
     },
     {
      "name": "netSocketCreatePair",
-     "ty": 120,
+     "ty": 135,
      "offset": 792
     },
     {
      "name": "netSend",
-     "ty": 121,
+     "ty": 136,
      "offset": 800
     },
     {
      "name": "netRead",
-     "ty": 122,
+     "ty": 137,
      "offset": 808
     },
     {
      "name": "netWrite",
-     "ty": 123,
+     "ty": 138,
      "offset": 816
     },
     {
      "name": "netWriteFile",
-     "ty": 124,
+     "ty": 139,
      "offset": 824
     },
     {
      "name": "netClose",
-     "ty": 125,
+     "ty": 140,
      "offset": 832
     },
     {
      "name": "netShutdown",
-     "ty": 126,
+     "ty": 141,
      "offset": 840
     },
     {
      "name": "netInterfaceNameResolve",
-     "ty": 127,
+     "ty": 142,
      "offset": 848
     },
     {
      "name": "netInterfaceName",
-     "ty": 128,
+     "ty": 143,
      "offset": 856
     },
     {
      "name": "netLookup",
-     "ty": 129,
+     "ty": 144,
      "offset": 864
     }
    ],
@@ -1324,194 +1416,11 @@
    "abi_align": 8
   },
   {
-   "k": "other",
-   "name": "anyopaque"
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 130,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 131,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 132,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 133,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 134,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 135,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 136,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 137,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 138,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 139,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 140,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 141,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 142,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 143,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 144,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
    "k": "ptr",
    "size": "one",
    "const": true,
    "child": 145,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
@@ -1522,14 +1431,19 @@
   {
    "k": "ptr",
    "size": "one",
-   "const": true,
+   "const": false,
    "child": 146,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
   },
   {
    "k": "ptr",
@@ -2576,6 +2490,268 @@
    "abi_align": 8
   },
   {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 234,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 235,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 236,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 237,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 238,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 239,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 240,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 241,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 242,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 243,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 244,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 245,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 246,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 247,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 248,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 249,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 250,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator.VTable",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 251,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 252,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 253,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 254,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "completion",
+     "ty": 255,
+     "offset": 24
+    },
+    {
+     "name": "child_tid",
+     "ty": 256,
+     "offset": 16
+    },
+    {
+     "name": "parent_tid",
+     "ty": 257,
+     "offset": 20
+    },
+    {
+     "name": "mapped",
+     "ty": 258,
+     "offset": 0
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
    "k": "other",
    "name": "fn (?*anyopaque) void"
   },
@@ -2625,7 +2801,7 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Operation) error{Canceled}!Io.Operation.Result__union_2178"
+   "name": "fn (?*anyopaque, Io.Operation) error{Canceled}!Io.Operation.Result__union_2393"
   },
   {
    "k": "other",
@@ -2641,15 +2817,15 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2222) error{AccessDenied,BadPathName,Canceled,DiskQuota,FileNotFound,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2436) error{AccessDenied,BadPathName,Canceled,DiskQuota,FileNotFound,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2222) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir.CreatePathStatus"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2436) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir.CreatePathStatus"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2222, Io.Dir.OpenOptions) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2436, Io.Dir.OpenOptions) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir"
   },
   {
    "k": "other",
@@ -2729,11 +2905,11 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, Io.File.Permissions__enum_2222) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, Io.File.Permissions__enum_2436) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2222, Io.Dir.SetFilePermissionsOptions) error{AccessDenied,BadPathName,Canceled,FileNotFound,InputOutput,NameTooLong,OperationUnsupported,PermissionDenied,ProcessFdQuotaExceeded,ReadOnlyFileSystem,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_2436, Io.Dir.SetFilePermissionsOptions) error{AccessDenied,BadPathName,Canceled,FileNotFound,InputOutput,NameTooLong,OperationUnsupported,PermissionDenied,ProcessFdQuotaExceeded,ReadOnlyFileSystem,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
@@ -2801,7 +2977,7 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.File, Io.File.Permissions__enum_2222) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.File, Io.File.Permissions__enum_2436) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
@@ -2990,6 +3166,147 @@
   {
    "k": "other",
    "name": "fn (?*anyopaque, Io.net.HostName, *Io.Queue(Io.net.HostName.LookupResult), Io.net.HostName.LookupOptions) error{AddressFamilyUnsupported,AddressInUse,AddressUnavailable,Canceled,DetectingNetworkConfigurationFailed,InvalidDnsAAAARecord,InvalidDnsARecord,InvalidDnsCnameRecord,NameServerFailure,NetworkDown,NoAddressReturned,OptionUnsupported,ProcessFdQuotaExceeded,ProtocolUnsupportedByAddressFamily,ProtocolUnsupportedBySystem,ResolvConfParseFailed,SocketModeUnsupported,SystemFdQuotaExceeded,SystemResources,Unexpected,UnknownHostName}!void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 259,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 260,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 261,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 262,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Thread.Completion__enum_905)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 263,
+     "offset": 0
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(i32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 257,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 264,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  },
+  {
+   "k": "enum",
+   "name": "Thread.Completion__enum_905",
+   "tag": 264,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "running",
+     "value": "0"
+    },
+    {
+     "name": "detached",
+     "value": "1"
+    },
+    {
+     "name": "completed",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

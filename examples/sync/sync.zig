@@ -59,7 +59,62 @@ pub fn handoff(io: Io) !u32 {
     return v;
 }
 
+const SemCounter = struct {
+    io: Io,
+    s: Io.Semaphore = .{ .permits = 1 },
+    n: u32 = 0,
+};
+
+fn semWork(c: *SemCounter) void {
+    for (0..2) |_| {
+        c.s.waitUncancelable(c.io);
+        defer c.s.post(c.io);
+        c.n += 1;
+    }
+}
+
+/// Two threads add 2 each to a counter under an `Io.Semaphore` with one permit: always 4.
+pub fn semaphoreCounter(io: Io) !u32 {
+    var c: SemCounter = .{ .io = io };
+    const t = try std.Thread.spawn(.{}, semWork, .{&c});
+    semWork(&c);
+    t.join();
+    return c.n;
+}
+
+const Shared = struct {
+    io: Io,
+    l: Io.RwLock = .init,
+    n: u32 = 0,
+};
+
+fn writer(sh: *Shared) void {
+    for (0..2) |_| {
+        sh.l.lockUncancelable(sh.io);
+        defer sh.l.unlock(sh.io);
+        sh.n += 1;
+    }
+}
+
+fn readShared(sh: *Shared) u32 {
+    sh.l.lockSharedUncancelable(sh.io);
+    defer sh.l.unlockShared(sh.io);
+    return sh.n;
+}
+
+/// A writer adds 1 two times under an `Io.RwLock`; the main thread reads under the shared lock
+/// while it runs and after the join: `10 * first + last`, first 0, 1 or 2, last always 2.
+pub fn rwLockRead(io: Io) !u32 {
+    var sh: Shared = .{ .io = io };
+    const t = try std.Thread.spawn(.{}, writer, .{&sh});
+    const first = readShared(&sh);
+    t.join();
+    return 10 * first + readShared(&sh);
+}
+
 comptime {
     _ = &mutexCounter;
     _ = &handoff;
+    _ = &semaphoreCounter;
+    _ = &rwLockRead;
 }
