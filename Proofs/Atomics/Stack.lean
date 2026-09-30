@@ -998,4 +998,94 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
     simp only [push.again12, ↓reduceIte]
     refine ⟨⟨hc₇, .cas s.h, .inr ⟨_, rfl⟩, by rw [← hg₁, upd_same]; exact hi₇⟩, .inl (by omega)⟩
 
+/-- Every thread was spawned by `main`: a pusher joined its own threads (none). -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (h : ThrOk G m) (hu : 0 < u) :
+    joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, -, hh⟩ := h
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have hget : ∀ {j : Nat} {x : ThreadRec} (hj : j < m.threads.size), m.threads[j]? = some x →
+      m.threads[j] = x := fun hj hx => by rw [Array.getElem?_eq_getElem hj] at hx; exact Option.some.inj hx
+  have hsp : (m.threads[i]'hi').spawner = 0 := by
+    rcases hh with ⟨hs1, -⟩ | ⟨hs2, hr1, -⟩ | ⟨hs3, -, -, -, hj⟩
+    · have : i = 0 := by omega
+      subst this; rw [hget hi' h0]
+    · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+      · rw [hget hi' h0]
+      · rw [hget hi' hr1]
+    · have hr12 : ∃ a b : Bool, m.threads[1]? = some { spawner := 0, joined := a } ∧
+          m.threads[2]? = some { spawner := 0, joined := b } := by
+        rcases hj with ⟨-, h1, h2⟩ | ⟨-, -, h1, h2⟩ | ⟨-, -, -, h1, h2⟩
+        · exact ⟨_, _, h1, h2⟩
+        · exact ⟨_, _, h1, h2⟩
+        · exact ⟨_, _, h1, h2⟩
+      obtain ⟨a, b, h1, h2⟩ := hr12
+      rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
+      · rw [hget hi' h0]
+      · rw [hget hi' h1]
+      · rw [hget hi' h2]
+  rw [hsp] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+/-- Pusher `u` (thread `u`, `PushCtx` `u`): the relaxed load of the head (a stop), then the loop. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | push p =>
+    simp only [proto] at hg
+    obtain ⟨n, hn, rfl, rfl⟩ : ∃ n, (n = 1 ∨ n = 2) ∧ p = cPtr n ∧ g = .start n := by
+      split at hg
+      · rename_i hp; cases hg; exact ⟨1, .inl rfl, hp, rfl⟩
+      · split at hg
+        · rename_i hp; cases hg; exact ⟨2, .inr rfl, hp, rfl⟩
+        · cases hg
+    have hk := thr_kid (hi : Inv G m).thr (.inr (.inl ⟨n, hgu⟩))
+    have hnu : n = u := by
+      rcases hk.2.2 with h | ⟨_, h⟩ | h <;> rw [hgu] at h <;> cases h; rfl
+    subst hnu
+    have hact : Act G n := .inr ⟨hn, by rw [hgu]; intro h; cases h⟩
+    have hi₀ : Inv G { m with current := n } := (hi : Inv G m).grow (growsAt_current m n) hact
+    have ht₀ : ({ m with current := n } : Mem).current < ({ m with current := n } : Mem).threads.size :=
+      hk.2.1
+    show proto.WP n ((fun _ => ()) <$> push (cPtr n)) _ G _ d
+    refine WP.map ?_
+    unfold push
+    refine WP.bind ?_
+    rw [StateT.run'_eq]
+    refine WP.map ?_
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [show (cPtr n).add 0 = ⟨some n, ((0 : Nat) : Int)⟩ from rfl]
+    -- `c.s`
+    refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₀ hn ht₀ (by decide) (fun A hA => by omega)
+      (ctxS_dec hi₀ hn) e he).elim) fun q m₁ hl => ?_)
+    obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ hn ht₀ hact (by decide) (fun A hA => by omega) (ctxS_dec hi₀ hn) hl
+    refine ⟨rfl, ?_⟩
+    -- the relaxed load of the head (a stop)
+    rw [show (sPtr.add 0).add 0 = sPtr from rfl]
+    simp only [atomicLoadC, StateT.run_bind]
+    refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₁ hk₁ =>
+      ⟨Gh.start n, by rw [← hgu, upd_same]; exact hi₁, fun G₁ m₂ hg₁ hi₂ c hcr => ?_⟩)))
+    have hact₂ : Act G₁ n := .inr ⟨hn, by rw [hg₁]; intro h; cases h⟩
+    have hi₂' : Inv G₁ { m₂ with current := n } := (hi₂ : Inv G₁ m₂).grow (growsAt_current m₂ n) hact₂
+    have hk₂ : Kid n (G₁ n) := by rw [hg₁]; exact .inl rfl
+    have ht₂ : ({ m₂ with current := n } : Mem).current < ({ m₂ with current := n } : Mem).threads.size :=
+      kid_lt hi₂' hk₂
+    refine WP.callMC (fun e he => (rload_noErr hi₂' ht₂ hact₂ hcr e he).elim) fun v m₃ hl => ?_
+    obtain ⟨hc₃, hth₃, hi₃⟩ := step_rload hi₂' hn hk₂ (by rw [hg₁]; intro h; cases h) rfl hl
+    refine ⟨by rw [hth₃], ?_⟩
+    refine WP.pure' ?_
+    simp only [StateT.run_modify, StateT.run_bind, pure_bind]
+    -- the loop
+    refine WP.bind (WP.mono ?_ (WP.loop _ _ (loopInv n) (fun _ => 0) (loopPost n) (loop12_body n hn)
+      _ G₁ m₃ k₁ ⟨hc₃, .start n, .inl rfl, by rw [← hg₁, upd_same]; exact hi₃⟩))
+    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hc', hi'⟩
+    dsimp only
+    simp only [StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    exact ⟨.done, hi', rfl, fun _ => joinedAll_kid hi'.thr hu⟩
+  | mpWriter p => cases hg
+  | mpWriterRelaxed p => cases hg
+  | sb p => cases hg
+  | ww p => cases hg
+
 end Atomics.Stack
