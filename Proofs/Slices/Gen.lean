@@ -3,6 +3,17 @@ import ZigLean
 
 namespace Slices
 
+structure Tag where
+  name : Vector (BitVec 8) 4
+  n : BitVec 8
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Tag where
+  size := 5
+  align := 1
+  encode v := Zig.Enc.fields 5 [(0, Zig.Enc.encode v.name), (4, Zig.Enc.encode v.n)]
+  decode bs := do pure { name := ← Zig.Enc.decodeAt bs 0, n := ← Zig.Enc.decodeAt bs 4 }
+
 inductive Color where
   | red
   | green
@@ -19,12 +30,17 @@ def Color.ofInt? (v : Int) : Option Color :=
 
 def Color.isNamed (_ : Color) : Bool := true
 
+instance : Zig.Packed Color 2 where
+  toBits := Color.toBits
+  ofBits b := (Color.ofInt? (Zig.val false b)).getD default
+  valid b := (Color.ofInt? (Zig.val false b)).isSome
+
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
   -- 0: slices.counter
   (Zig.Enc.encode ((0 : BitVec 32) : BitVec 32), 4, .global),
   -- 1: a constant
-  (Zig.Enc.encode (#v[(104 : BitVec 8), (101 : BitVec 8), (108 : BitVec 8), (108 : BitVec 8), (111 : BitVec 8), (44 : BitVec 8), (32 : BitVec 8), (119 : BitVec 8), (111 : BitVec 8), (114 : BitVec 8), (108 : BitVec 8), (100 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 13), 1, .constGlobal),
+  (Zig.Enc.encode ((#v[(104 : BitVec 8), (101 : BitVec 8), (108 : BitVec 8), (108 : BitVec 8), (111 : BitVec 8), (44 : BitVec 8), (32 : BitVec 8), (119 : BitVec 8), (111 : BitVec 8), (114 : BitVec 8), (108 : BitVec 8), (100 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 13) : Vector (BitVec 8) 13), 1, .constGlobal),
   -- 2: the name of Color.red
   (Zig.Enc.encode (#v[114, 101, 100, 0] : Vector (BitVec 8) 4), 1, .constGlobal),
   -- 3: the name of Color.green
@@ -553,6 +569,58 @@ def second (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM secondLocals secondExit).run' (default : secondLocals)
   match e with
   | .ret v => pure v
+
+structure sentinelArrLocals where
+  x : Zig.Ptr
+  local15 : Zig.Ptr
+  deriving Inhabited
+
+inductive sentinelArrExit where
+  | ret (v : BitVec 8)
+  | br20
+
+def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
+  let s1 ← Zig.allocStack 5 1
+  let s15 ← Zig.allocStack 5 1
+  let e ← ((do
+    let i1 ← pure (← get).x
+    let i2 ← pure (i1.add 0)
+    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i4 ← pure (Zig.trunc 8 p0)
+    Zig.store (α := BitVec 8) 1 i3 i4
+    let i6 ← pure (i2.elem 1 (1 : BitVec 64))
+    Zig.store (α := BitVec 8) 1 i6 (2 : BitVec 8)
+    let i8 ← pure (i2.elem 1 (2 : BitVec 64))
+    Zig.store (α := BitVec 8) 1 i8 (3 : BitVec 8)
+    let i10 ← pure (i2.elem 1 (3 : BitVec 64))
+    Zig.store (α := BitVec 8) 1 i10 (0 : BitVec 8)
+    let i12 ← pure (i1.add 4)
+    Zig.store (α := BitVec 8) 1 i12 (7 : BitVec 8)
+    let i14 ← Zig.load (Tag) 1 i1
+    let i15 ← pure (← get).local15
+    Zig.store (α := Tag) 1 i15 i14
+    let i17 ← pure (i15)
+    let i18 ← pure (i17.add 0)
+    let i19 ← pure (Zig.le false p0 (3 : BitVec 64))
+    match ← ((do
+      if i19 then (do
+        pure .br20)
+      else (do
+        throw .outOfBounds)) : Zig.MM sentinelArrLocals sentinelArrExit) with
+    | .br20 => (do
+      let i25 ← Zig.callM (Zig.load (BitVec 8) 1 (i18.elem 1 p0))
+      let i26 ← Zig.callR (Zig.vindex (#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 4) p0)
+      let i27 ← pure (Zig.addWrap i25 i26)
+      let i28 ← pure (i17.add 4)
+      let i29 ← Zig.load (BitVec 8) 1 i28
+      let i30 ← pure (Zig.addWrap i27 i29)
+      pure (.ret i30))
+    | e => pure e) : Zig.MM sentinelArrLocals sentinelArrExit).run' { (default : sentinelArrLocals) with x := s1, local15 := s15 }
+  Zig.free s1
+  Zig.free s15
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 
 structure subZLocals where
   deriving Inhabited

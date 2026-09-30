@@ -7,6 +7,10 @@ import ZigLean.Mem.Enc
 each packed struct: `toBits` puts field 0 in the lowest bits, as Zig does; `ofBits` reads the
 fields back. `@bitCast` between a packed struct and its backing integer is `toBits`/`ofBits`.
 
+`valid` is `false` for bits that are not a value: a tag value without a name of an exhaustive
+enum, in any field. Where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed`
+union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does.
+
 In memory a packed struct is its backing integer (the instance's `Enc`). A bit-pointer
 (`&p.field`, `*align(a:o:h) T`) points to the host integer (`h` bytes); `loadBits`/`storeBits`
 read and write the field's `n` bits at bit `o` of it.
@@ -17,6 +21,7 @@ namespace Zig
 class Packed (α : Type) (n : outParam Nat) where
   toBits : α → BitVec n
   ofBits : BitVec n → α
+  valid : BitVec n → Bool := fun _ => true
 
 instance {n : Nat} : Packed (BitVec n) n where
   toBits v := v
@@ -29,6 +34,14 @@ instance : Packed Bool 1 where
 /-- The `n` bits of `α` at bit `o` of `host`. -/
 def Packed.get {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : α :=
   Packed.ofBits (host.extractLsb' o n)
+
+/-- `ofBits` where bits become a value: bits that are not `valid` throw `.illegal`. -/
+def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result α :=
+  if Packed.valid (α := α) b then pure (Packed.ofBits b) else throw .illegal
+
+/-- The `n` bits of `α` at bit `o` of `host` are `valid`. -/
+def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
+  Packed.valid (α := α) (host.extractLsb' o n)
 
 /-- `host` with the `n` bits at bit `o` replaced by `v`. -/
 def Packed.set {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) (v : α) :
@@ -55,7 +68,7 @@ def loadHost (hostSize align fieldEnd : Nat) (p : Ptr) :
 def loadBits (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr) :
     MemM α := do
   let (host, _) ← loadHost hostSize align (bitOffset + n) p
-  pure (Packed.get host bitOffset)
+  Packed.ofBits? (host.extractLsb' bitOffset n)
 
 /-- A store through a bit-pointer: read the host integer, replace the field's bits, write it
 back. Undefined padding bits in the last byte stay undefined. -/

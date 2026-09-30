@@ -73,6 +73,7 @@ f80/f128 hi/lo split. -/
 @[extern "air2lean_asm_bswap32"] private opaque asmBswap32 : UInt32 → UInt32
 @[extern "air2lean_asm_popcnt64"] private opaque asmPopcnt64 : UInt64 → UInt64
 @[extern "air2lean_asm_lzcnt64"] private opaque asmLzcnt64 : UInt64 → UInt64
+@[extern "air2lean_asm_divmod32"] private opaque asmDivmod32 : UInt32 → UInt32 → UInt64
 
 private def airAsm_3500345798_impl (x : BitVec 32) : BitVec 32 :=
   (asmBswap32 (.ofBitVec x)).toBitVec
@@ -83,6 +84,12 @@ private def airAsm_3884223243_impl (x : BitVec 64) : BitVec 64 :=
 private def airAsm_4040357768_impl (x : BitVec 64) : BitVec 64 :=
   (asmPopcnt64 (.ofBitVec x)).toBitVec
 
+/-- Two outputs: the archive packs them in one `UInt64` (quotient low, remainder high). -/
+private def airAsm_2482283570_impl (a b : BitVec 32) : BitVec 32 × BitVec 32 :=
+  let r := (asmDivmod32 (.ofBitVec a) (.ofBitVec b)).toBitVec
+  (r.extractLsb' 0 32, r.extractLsb' 32 32)
+
+@[csimp] theorem airAsm_2482283570_eq : @Asm.airAsm_2482283570 = @airAsm_2482283570_impl := sorry
 @[csimp] theorem airAsm_3500345798_eq : @Asm.airAsm_3500345798 = @airAsm_3500345798_impl := sorry
 @[csimp] theorem airAsm_3884223243_eq : @Asm.airAsm_3884223243 = @airAsm_3884223243_impl := sorry
 @[csimp] theorem airAsm_4040357768_eq : @Asm.airAsm_4040357768 = @airAsm_4040357768_impl := sorry
@@ -478,6 +485,14 @@ def vecStr {n : Nat} (v : Zig.Vec (BitVec n) 4) : String :=
 def renderVec {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
   renderOk r vecStr
 
+/-- A `@Vector(4, iN)` result: signed lanes. -/
+def renderVecS {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
+  renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map (toString ·.toInt)) ++ "]"
+
+/-- A `@Vector(4, fN)` result: float-hex lanes. -/
+def renderVecF {fmt : Zig.FloatFmt} (r : Zig.Result (Zig.Vec (Zig.Float fmt) 4)) : String :=
+  renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map floatStr) ++ "]"
+
 def runFDot : IO Unit :=
   processFile "vectors" "fDot" fun j => do
     let items ← getArr j
@@ -526,6 +541,16 @@ def boolVecOf (j : Json) : IO (Zig.Vec Bool 4) := do
     | _ => throw (IO.userError s!"not a bool: {x.compress}")
   pure (vec4 (← b items[0]!) (← b items[1]!) (← b items[2]!) (← b items[3]!))
 
+/-- `f` on the two `@Vector(4, u32/i32)` arguments of the line `j`. -/
+def pairI {α : Type} (f : Zig.Vec (BitVec 32) 4 → Zig.Vec (BitVec 32) 4 → α) (j : Json) :
+    IO α := do
+  let items ← getArr j
+  pure (f (← intVecOf 32 items[0]!) (← intVecOf 32 items[1]!))
+
+/-- `f` on the one `@Vector(4, u32/i32)` argument of the line `j`. -/
+def oneI {α : Type} (f : Zig.Vec (BitVec 32) 4 → α) (j : Json) : IO α := do
+  pure (f (← intVecOf 32 (← getArr j)[0]!))
+
 /-- The coverage functions (`examples/vectors/vectors.zig` after `checkedAdd`). -/
 def runVectorCoverage : IO Unit := do
   let ex := "vectors"
@@ -556,6 +581,23 @@ def runVectorCoverage : IO Unit := do
   -- A memory function: run from `mem0`.
   processFile ex "twiceInMem" fun j => do
     pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' Vectors.mem0))
+  processFile ex "vDiv" fun j => renderVecS <$> pairI Vectors.vDiv j
+  processFile ex "vMod" fun j => renderVecS <$> pairI Vectors.vMod j
+  processFile ex "sRem" fun j => do
+    let items ← getArr j
+    pure (renderSigned (Vectors.sRem (bv 32 (← getInt items[0]!)) (bv 32 (← getInt items[1]!))))
+  processFile ex "sMod" fun j => do
+    let items ← getArr j
+    pure (renderSigned (Vectors.sMod (bv 32 (← getInt items[0]!)) (bv 32 (← getInt items[1]!))))
+  processFile ex "vMinMax" fun j => renderVecS <$> pairI Vectors.vMinMax j
+  processFile ex "vBits" fun j => renderVec <$> pairI Vectors.vBits j
+  processFile ex "vShift" fun j => renderVec <$> pairI Vectors.vShift j
+  processFile ex "vNeg" fun j => renderVecS <$> oneI Vectors.vNeg j
+  processFile ex "vAbs" fun j => renderVec <$> oneI Vectors.vAbs j
+  processFile ex "vLess" fun j => renderVecS <$> pairI Vectors.vLess j
+  processFile ex "vNarrow" fun j => renderVecS <$> oneI Vectors.vNarrow j
+  processFile ex "vOverflow" fun j => renderVec <$> pairI Vectors.vOverflow j
+  processFile ex "vToFloat" fun j => renderVecF <$> oneI Vectors.vToFloat j
 
 /-! ### variants: an enum is its tag value; a `Shape` is an object with its active field -/
 
@@ -769,6 +811,18 @@ def runLayout : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "incCount" (fun g a => return Layout.incCount (← ptrOf g a[0]!)) unitStr
   processMem ex m0 "isOk" (fun g a => return Layout.isOk (← ptrOf g a[0]!)) fun _ b => b01 b
+  processMem ex m0 "ctlSum" (fun _ a => return pureMem (Layout.ctlSum (bv 8 (← getInt a[0]!))))
+    fun _ v => natStr v false
+  processMem ex m0 "ctlMode" (fun g a => return Layout.ctlMode (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "maskStore"
+    (fun g a => return Layout.maskStore (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
+  processMem ex m0 "maskCount" (fun g a => return Layout.maskCount (← ptrOf g a[0]!))
+    fun _ v => natStr v false
+  processMem ex m0 "laneSet"
+    (fun g a => return Layout.laneSet (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!)))
+    fun _ v => natStr v false
   let headerStr (m : Zig.Mem) (h : Layout.Header) : String :=
     s!"\{\"magic\":{h.magic.toNat},\"len\":{h.len.toNat},\"kind\":{h.kind.toNat},\"flags\":{flagsStr m h.flags}}"
   processMem ex m0 "headerLen" (fun g a => return Layout.headerLen (← sliceOf g a[0]!))
@@ -859,6 +913,8 @@ def runSlices : IO Unit := do
     fun _ v => natStr v false
   processMem ex m0 "localArr" (fun _ a => return Slices.localArr (bv 64 (← getInt a[0]!)))
     fun _ v => natStr v false
+  processMem ex m0 "sentinelArr" (fun _ a => return Slices.sentinelArr (bv 64 (← getInt a[0]!)))
+    fun _ v => natStr v false
   processMem ex m0 "lenOr" (fun g a => do
       let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
       return Slices.lenOr s) fun _ v => natStr v true
@@ -881,6 +937,8 @@ def runLists : IO Unit := do
     (fun _ x => do withFailAt x[0]! (Lists.sumRange a (bv 64 (← getInt x[1]!)))) wide (heap := true)
   processMem ex m0 "dupe" (fun g x => do withFailAt x[0]! (Lists.dupe a (← sliceOf g x[1]!)))
     (items 1) (heap := true)
+  processMem ex m0 "dupeZLen" (fun g x => do withFailAt x[0]! (Lists.dupeZLen a (← sliceOf g x[1]!)))
+    wide (heap := true)
   processMem ex m0 "evens" (fun g x => do withFailAt x[0]! (Lists.evens a (← sliceOf g x[1]!)))
     (items 4) (heap := true)
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
@@ -945,6 +1003,17 @@ def runLzcnt64 : IO Unit :=
     let items ← getArr j
     let x ← getWideInt items[0]!
     pure (render (pure (Asm.airAsm_3884223243 (bv 64 x)) : Zig.Result (BitVec 64)) true)
+
+-- The right side of `Proofs/Asm/Proofs.lean`'s `divmod_spec`, from the opaque's two outputs:
+-- the test checks the asm op, the proof checks the translation around it (the tuple and the
+-- store to `rem`).
+def runDivmod : IO Unit :=
+  processFile "asm" "divmod" fun j => do
+    let items ← getArr j
+    let a := bv 32 (← getInt items[0]!)
+    let b := bv 32 (← getInt items[1]!)
+    let (q, r) := Asm.airAsm_2482283570 a b
+    pure (render (pure (r.setWidth 64 <<< 32 ||| q.setWidth 64) : Zig.Result (BitVec 64)) true)
 
 end DiffTest
 
@@ -1038,6 +1107,7 @@ def main : IO Unit := do
     DiffTest.runBswap32
     DiffTest.runPopcnt64
     DiffTest.runLzcnt64
+    DiffTest.runDivmod
 
   run "layout" DiffTest.runLayout
 

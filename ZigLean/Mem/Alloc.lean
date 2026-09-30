@@ -80,6 +80,11 @@ dead after the free, and a bad free throws in both steps, so the model only free
 def Allocator.free (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
   if size * s.len.toNat = 0 then pure () else rawFree s.ptr (size * s.len.toNat)
 
+/-- `free(s)` of a slice with a sentinel (`[:s]T`): `len + 1` items, the sentinel too
+(`mem.absorbSentinel`). -/
+def Allocator.freeSentinel (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
+  if size = 0 then pure () else rawFree s.ptr (size * (s.len.toNat + 1))
+
 /-- `dupe(T, m)`: a new block with a copy of the items of `m`. Items of 0 bytes have no bytes to
 copy (and the result has no block). -/
 def Allocator.dupe (a : Allocator) (size align srcAlign : Nat) (m : Slice) :

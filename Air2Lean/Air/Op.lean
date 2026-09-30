@@ -24,7 +24,9 @@ inductive Ty where
   | noreturn
   /-- `size`: `one`, `many`, `slice` or `c`. -/
   | ptr (size : String) (isConst : Bool) (child : TyId)
-  | array (len : Nat) (child : TyId)
+  /-- `[len]child`, or `[len:s]child` (`sentinel`): the value then has `len + 1` items, the
+  sentinel last, as in the AIR (`aggregate_init`, `docs/air-json.md`'s `elems`). -/
+  | array (len : Nat) (child : TyId) (sentinel : Bool)
   /-- `@Vector(len, child)`. Distinct from `array`: its ABI layout rounds the size up to a power
   of 2 (`Check.lean`'s `modelLayout`, `ZigLean/Vec.lean`'s `Zig.Enc` instance). -/
   | vector (len : Nat) (child : TyId)

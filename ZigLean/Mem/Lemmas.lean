@@ -91,8 +91,8 @@ theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : Acc
           block, off, len, kind } }) := by
   unfold recordAccess NoRace at *
   simp only [get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set, StateT.set,
-    MonadStateOf.set, pure, StateT.pure, StateT.run, ExceptT.pure, ExceptT.mk, ExceptT.bind,
-    ExceptT.bindCont, liftM, monadLift, MonadLift.monadLift, StateT.lift, Option.bind_some, hnr]
+    MonadStateOf.set, pure, StateT.run, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont, Option.bind_some, hnr]
 
 /-- The memory after a race-free `recordAccess` at `block`/`off`/`len`/`kind` on `m`
 (`recordAccess_run`). -/
@@ -136,7 +136,7 @@ theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VCl
 
 /-- The padding a bump to `t` may append does not change any component already in `c`, and (if it
 extends the array) leaves every new component but `t` itself at `0`. -/
-theorem VClock.get_pad (c : VClock) (t i : ThreadId) (h : i ≠ t) :
+theorem VClock.get_pad (c : VClock) (t i : ThreadId) (_h : i ≠ t) :
     ((if t < c.size then c else c ++ Array.replicate (t + 1 - c.size) 0) : VClock).get i =
       c.get i := by
   unfold VClock.get
@@ -211,7 +211,7 @@ theorem noRace_of_singleThread {m : Mem} (h : m.SingleThread) (block off len : N
   intro e he
   have ⟨_, hle⟩ := h.2 e he
   have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
-  simp [racePair, VClock.concurrent, hle']
+  simp [VClock.concurrent, hle']
 
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
@@ -266,7 +266,7 @@ theorem storeBytes_run {m : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {b : Bloc
   have hw : m.accessW p bs.size a = pure (b, blk, o) := by simp [Mem.accessW, h, hK]
   unfold storeBytes recordAccess NoRace at *
   simp only [hw, Mem.write, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, set,
-    StateT.set, MonadStateOf.set, pure, StateT.pure, StateT.run, liftM, monadLift,
+    StateT.set, MonadStateOf.set, pure, StateT.run, liftM, monadLift,
     MonadLift.monadLift, StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     Option.bind_some, hnr, Mem.recordAt]
 
@@ -350,7 +350,7 @@ theorem access_store_same {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p q : P
 /-- After `store_run`, an access to another block is unaffected. -/
 theorem access_store_other {α : Type} [Enc α] {m : Mem} {p q : Ptr} {a n' a' : Nat}
     {b c : BlockId} {blk blk' : Block} {o o' : Nat} (v : α)
-    (hp : m.access p (Enc.size α) a = pure (b, blk, o))
+    (_hp : m.access p (Enc.size α) a = pure (b, blk, o))
     (hq : m.access q n' a' = pure (c, blk', o')) (hbc : b ≠ c) :
     ((m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)).access q n' a' =
       pure (c, blk', o') :=
@@ -422,7 +422,7 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
       m' = m.recordAt b o (Enc.size α) .read := by
   simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
-    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set, StateT.set,
+    ExceptT.mk, pure, StateT.pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont, set,
     MonadStateOf.set, throw, throwThe, MonadExceptOf.throw, Function.comp] at h
   generalize hacc : m.access p (Enc.size α) a = r at h
   match r, hacc, h with
@@ -435,10 +435,9 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
       (Enc.size α) .read = r at h
     match r, hr, h with
     | some _, _, h =>
-      simp only [Option.bind_some, ExceptT.bindCont, Function.comp] at h; cases h
+      cases h
     | none, hr, h =>
-      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk,
-        Mem.recordAt] at h
+      simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk] at h
       generalize hd2 : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
       match d, hd2, h with
       | none, _, h => simp at h
@@ -694,5 +693,44 @@ theorem Raw.get_set {α : Type} [Enc α] [LawfulEnc α] {n : Nat} (u : Vector By
   simp only [Nat.zero_add] at hw
   rw [hw]
   exact LawfulEnc.decode_encode v
+
+/-! ## Loops in a memory function
+
+`Zig.loop` over `MM` (locals over `MemM`): the same rules as `loop_run`/`loop_spec`
+(`ZigLean/Loop.lean`), with the memory as a second state. -/
+
+/-- One unfolding of a loop over `MM`. -/
+theorem loop_run_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool) (s : σ) (m : Mem) :
+    ((loop body again).run s).run m =
+      (do let ((e, s'), m') ← (body.run s).run m
+          if again e then ((loop body again).run s').run m' else pure ((e, s'), m')) := by
+  conv => lhs; rw [loop]
+  simp only [StateT.run, bind, StateT.bind]
+  congr 1
+  funext p
+  rcases p with ⟨⟨e, s'⟩, m'⟩
+  cases again e <;> rfl
+
+/-- `loop_spec` over `MM`: an invariant on the locals and the memory, a measure that each
+repeating iteration makes smaller, and a post-condition on the exit that ends the loop. -/
+theorem loop_spec_mm {σ ε : Type} (body : MM σ ε) (again : ε → Bool)
+    (inv : σ → Mem → Prop) (meas : σ → Mem → Nat) (post : ε → σ → Mem → Prop)
+    (step : ∀ s m, inv s m → ∃ e s' m', (body.run s).run m = pure ((e, s'), m') ∧
+      (if again e then inv s' m' ∧ meas s' m' < meas s m else post e s' m')) :
+    ∀ s m, inv s m → ∃ e s' m', ((loop body again).run s).run m = pure ((e, s'), m') ∧
+      post e s' m' := by
+  intro s m
+  induction h : meas s m using Nat.strongRecOn generalizing s m with
+  | _ n ih =>
+    intro hs
+    obtain ⟨e, s', m', hrun, hnext⟩ := step s m hs
+    rw [loop_run_mm, hrun]
+    cases ha : again e
+    · simp only [ha, Bool.false_eq_true, ↓reduceIte] at hnext
+      exact ⟨e, s', m', by simp [ha], hnext⟩
+    · simp only [ha, ↓reduceIte] at hnext
+      obtain ⟨hinv, hlt⟩ := hnext
+      obtain ⟨e', s'', m'', hr, hpost⟩ := ih (meas s' m') (h ▸ hlt) s' m' rfl hinv
+      exact ⟨e', s'', m'', by simp [ha, hr], hpost⟩
 
 end Zig

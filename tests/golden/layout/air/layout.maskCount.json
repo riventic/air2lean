@@ -1,0 +1,248 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "name": "layout.maskCount",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "m"
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 5,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "elems": [
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      }
+     ]
+    }
+   ],
+   "name": "one"
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 4,
+     "elems": [
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      }
+     ]
+    }
+   ],
+   "name": "zero"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 9,
+   "tag": "select",
+   "ty": 4,
+   "args": [
+    {
+     "ty": 4,
+     "elems": [
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      },
+      {
+       "ty": 1,
+       "val": "1"
+      }
+     ]
+    },
+    {
+     "ty": 4,
+     "elems": [
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "reduce",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    }
+   ],
+   "op": "Add"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 12,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 10
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 3,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 1,
+   "abi_size": 16,
+   "abi_align": 16
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

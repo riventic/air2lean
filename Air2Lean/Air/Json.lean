@@ -137,7 +137,7 @@ def parseTy (j : Json) : Except String Ty := do
   | "array" =>
     let len ← (← j.getObjVal? "len").getNat?
     let child ← (← j.getObjVal? "child").getNat?
-    return .array len child
+    return .array len child ((j.getObjValAs? Bool "sentinel").toOption.getD false)
   | "vector" =>
     let len ← (← j.getObjVal? "len").getNat?
     let child ← (← j.getObjVal? "child").getNat?

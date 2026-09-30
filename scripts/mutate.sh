@@ -72,6 +72,20 @@
 #     `N`-bit integer in its last byte (the old truncation). `numInt` then reads the tag byte 2
 #     of its 1-bit hidden tag as tag 0: tests/diff/layout/unspecified.txt's pinned count for it
 #     (30) drops to 0.
+# (q) Lean-runtime mutation, vectors: `Zig.mod` (ZigLean/Basic.lean) throws `.panic` for a
+#     negative divisor (the old model; Sema checks only `b ≠ 0`). `sMod` and `vMod` then
+#     fail where Zig returns the floored modulo.
+# (r) Emitter-output mutation, slices: the generated constant `"xyz".*` in `sentinelArr`
+#     (Proofs/Slices/Gen.lean) has no sentinel item (`Vector (BitVec 8) 3`), as when the emitter
+#     drops the sentinel of a `[N:s]T` value. `sentinelArr(3)` then panics where Zig returns.
+# (s) Lean-runtime mutation, lists: `Allocator.freeSentinel` (ZigLean/Mem/Alloc.lean) frees `len`
+#     items, not `len + 1`: the free of `dupeZLen`'s `[:0]u8` then misses the sentinel byte and
+#     throws `.illegal` (a free that is not the whole block).
+# (t) Emitter-output mutation, layout: the generated `Zig.Packed Mode 2` instance
+#     (Proofs/Layout/Gen.lean) calls every value `valid`, as when the emitter drops the check of
+#     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
+# (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) puts lane
+#     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
 #
 # Usage: mutate.sh
 # Env:
@@ -80,7 +94,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -109,6 +123,7 @@ gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
 variants_gen="Proofs/Variants/Gen.lean"
 layout_gen="Proofs/Layout/Gen.lean"
+slices_gen="Proofs/Slices/Gen.lean"
 basic_lean="ZigLean/Basic.lean"
 lemmas_lean="ZigLean/Lemmas.lean"
 round_lean="ZigLean/Float/Round.lean"
@@ -122,6 +137,7 @@ gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
 layout_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-layout-gen.XXXXXX")
+slices_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-slices-gen.XXXXXX")
 basic_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-basic.XXXXXX")
 lemmas_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-lemmas.XXXXXX")
 round_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-round.XXXXXX")
@@ -135,6 +151,7 @@ cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
 cp "$layout_gen" "$layout_backup"
+cp "$slices_gen" "$slices_backup"
 cp "$basic_lean" "$basic_backup"
 cp "$lemmas_lean" "$lemmas_backup"
 cp "$round_lean" "$round_backup"
@@ -155,6 +172,7 @@ cleanup() {
   cp "$options_backup" "$options_gen"
   cp "$variants_backup" "$variants_gen"
   cp "$layout_backup" "$layout_gen"
+  cp "$slices_backup" "$slices_gen"
   cp "$basic_backup" "$basic_lean"
   cp "$lemmas_backup" "$lemmas_lean"
   cp "$round_backup" "$round_lean"
@@ -164,7 +182,7 @@ cleanup() {
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
-  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
+  rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
     "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
@@ -489,6 +507,86 @@ else
   run_and_report "mutation (p)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$enc_backup" "$enc_lean"
+fi
+
+echo "== mutation (q): Zig.mod throws .panic for a negative divisor (Lean runtime) ==" >&2
+if ! has_example vectors; then
+  echo "mutation (q): skipped (AIR2LEAN_EXAMPLES excludes vectors)"
+else
+  sed -i.bak 's/^  else if s then (if remOverflows a b then throw \.illegal else pure (a\.smod b))$/  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))/' "$basic_lean"
+  rm -f "$basic_lean.bak"
+  grep -q 'if b.toInt < 0 then throw .panic else pure (a.smod b)' "$basic_lean" || {
+    echo "error: mutation (q): sed did not change Zig.mod" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (q)" vectors
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$basic_backup" "$basic_lean"
+fi
+
+echo "== mutation (r): a [3:0]u8 constant without its sentinel item (emitter output) ==" >&2
+if ! has_example slices; then
+  echo "mutation (r): skipped (AIR2LEAN_EXAMPLES excludes slices)"
+else
+  sed -i.bak 's/(#v\[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)\] : Vector (BitVec 8) 4)/(#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8)] : Vector (BitVec 8) 3)/' "$slices_gen"
+  rm -f "$slices_gen.bak"
+  grep -q '(122 : BitVec 8)\] : Vector (BitVec 8) 3)' "$slices_gen" || {
+    echo "error: mutation (r): sed did not change the constant" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (r)" slices
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$slices_backup" "$slices_gen"
+fi
+
+echo "== mutation (s): Allocator.freeSentinel frees len items, not len + 1 (Lean runtime) ==" >&2
+if ! has_example lists; then
+  echo "mutation (s): skipped (AIR2LEAN_EXAMPLES excludes lists)"
+else
+  sed -i.bak 's/^  if size = 0 then pure () else rawFree s\.ptr (size \* (s\.len\.toNat + 1))$/  if size = 0 then pure () else rawFree s.ptr (size * s.len.toNat)/' "$alloc_lean"
+  rm -f "$alloc_lean.bak"
+  grep -q 'rawFree s.ptr (size \* s.len.toNat)$' "$alloc_lean" || {
+    echo "error: mutation (s): sed did not change Allocator.freeSentinel" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (s)" lists
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$alloc_backup" "$alloc_lean"
+fi
+
+echo "== mutation (t): every Mode value is valid in a packed struct (emitter output) ==" >&2
+if ! has_example layout; then
+  echo "mutation (t): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/^  valid b := (Mode\.ofInt? (Zig\.val false b))\.isSome$/  valid _ := true/' "$layout_gen"
+  rm -f "$layout_gen.bak"
+  grep -q '^  valid _ := true$' "$layout_gen" || {
+    echo "error: mutation (t): sed did not change the Mode instance" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (t)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$layout_backup" "$layout_gen"
+fi
+
+echo "== mutation (u): a bool vector in memory has its lanes in reverse bit order (Lean runtime) ==" >&2
+if ! has_example layout; then
+  echo "mutation (u): skipped (AIR2LEAN_EXAMPLES excludes layout)"
+else
+  sed -i.bak 's/then acc ||| (1#n <<< i) else acc) 0#n))$/then acc ||| (1#n <<< (n - 1 - i)) else acc) 0#n))/' "$vec_lean"
+  rm -f "$vec_lean.bak"
+  grep -q '(1#n <<< (n - 1 - i))' "$vec_lean" || {
+    echo "error: mutation (u): sed did not change the Vec Bool encoding" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (u)" layout
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$vec_backup" "$vec_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

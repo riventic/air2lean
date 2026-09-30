@@ -44,6 +44,11 @@ def ShapeTag.ofInt? (v : Int) : Option ShapeTag :=
 
 def ShapeTag.isNamed (_ : ShapeTag) : Bool := true
 
+instance : Zig.Packed ShapeTag 2 where
+  toBits := ShapeTag.toBits
+  ofBits b := (ShapeTag.ofInt? (Zig.val false b)).getD default
+  valid b := (ShapeTag.ofInt? (Zig.val false b)).isSome
+
 instance : Zig.Enc ShapeTag where
   size := 1
   align := 1
@@ -143,7 +148,7 @@ instance : Zig.Enc Flags where
   encode v := Zig.Enc.encode (Zig.Packed.toBits v)
   decode bs := do
     let b : BitVec 8 ← Zig.Enc.decode bs
-    pure (Zig.Packed.ofBits b)
+    Zig.Packed.ofBits? b
 
 structure Reg where
   bytes : Vector Zig.Byte 1
@@ -196,7 +201,7 @@ instance : Zig.Enc Pair where
   encode v := Zig.Enc.encode (Zig.Packed.toBits v)
   decode bs := do
     let b : BitVec 6 ← Zig.Enc.decode bs
-    pure (Zig.Packed.ofBits b)
+    Zig.Packed.ofBits? b
 
 inductive NumTag where
   | int
@@ -211,6 +216,11 @@ def NumTag.ofInt? (v : Int) : Option NumTag :=
   if v = 0 then Option.some .int else if v = 1 then Option.some .small else Option.none
 
 def NumTag.isNamed (_ : NumTag) : Bool := true
+
+instance : Zig.Packed NumTag 1 where
+  toBits := NumTag.toBits
+  ofBits b := (NumTag.ofInt? (Zig.val false b)).getD default
+  valid b := (NumTag.ofInt? (Zig.val false b)).isSome
 
 instance : Zig.Enc NumTag where
   size := 1
@@ -287,6 +297,37 @@ instance : Zig.Enc Nib where
   encode v := v.bytes.toArray
   decode bs := pure ⟨Zig.Raw.ofArray 1 bs⟩
 
+inductive Mode where
+  | off
+  | low
+  | high
+  deriving Repr, Inhabited, DecidableEq
+
+def Mode.toBits : Mode → BitVec 2
+  | .off => (0 : BitVec 2)
+  | .low => (1 : BitVec 2)
+  | .high => (2 : BitVec 2)
+
+def Mode.ofInt? (v : Int) : Option Mode :=
+  if v = 0 then Option.some .off else if v = 1 then Option.some .low else if v = 2 then Option.some .high else Option.none
+
+def Mode.isNamed (_ : Mode) : Bool := true
+
+instance : Zig.Packed Mode 2 where
+  toBits := Mode.toBits
+  ofBits b := (Mode.ofInt? (Zig.val false b)).getD default
+  valid b := (Mode.ofInt? (Zig.val false b)).isSome
+
+instance : Zig.Enc Mode where
+  size := 1
+  align := 1
+  encode v := Zig.Enc.encode v.toBits
+  decode bs := do
+    let b : BitVec 2 ← Zig.Enc.decode bs
+    match Mode.ofInt? (Zig.val false b) with
+    | some v => pure v
+    | none => throw .illegal
+
 structure Header where
   magic : BitVec 32
   len : BitVec 16
@@ -299,6 +340,25 @@ instance : Zig.Enc Header where
   align := 4
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.magic), (4, Zig.Enc.encode v.len), (6, Zig.Enc.encode v.kind), (7, Zig.Enc.encode v.flags)]
   decode bs := do pure { magic := ← Zig.Enc.decodeAt bs 0, len := ← Zig.Enc.decodeAt bs 4, kind := ← Zig.Enc.decodeAt bs 6, flags := ← Zig.Enc.decodeAt bs 7 }
+
+structure Ctl where
+  on : Bool
+  mode : Mode
+  level : BitVec 5
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed Ctl 8 where
+  toBits v := ((Zig.Packed.toBits v.on).setWidth 8 <<< 0) ||| ((Zig.Packed.toBits v.mode).setWidth 8 <<< 1) ||| ((Zig.Packed.toBits v.level).setWidth 8 <<< 3)
+  ofBits b := { on := Zig.Packed.get b 0, mode := Zig.Packed.get b 1, level := Zig.Packed.get b 3 }
+  valid b := Zig.Packed.validAt (Mode) b 1
+
+instance : Zig.Enc Ctl where
+  size := 1
+  align := 1
+  encode v := Zig.Enc.encode (Zig.Packed.toBits v)
+  decode bs := do
+    let b : BitVec 8 ← Zig.Enc.decode bs
+    Zig.Packed.ofBits? b
 
 inductive WordTag where
   | int
@@ -316,6 +376,11 @@ def WordTag.ofInt? (v : Int) : Option WordTag :=
 
 def WordTag.isNamed (_ : WordTag) : Bool := true
 
+instance : Zig.Packed WordTag 2 where
+  toBits := WordTag.toBits
+  ofBits b := (WordTag.ofInt? (Zig.val false b)).getD default
+  valid b := (WordTag.ofInt? (Zig.val false b)).isSome
+
 inductive RegTag where
   | raw
   | signed
@@ -331,6 +396,11 @@ def RegTag.ofInt? (v : Int) : Option RegTag :=
   if v = 0 then Option.some .raw else if v = 1 then Option.some .signed else if v = 2 then Option.some .flags else Option.none
 
 def RegTag.isNamed (_ : RegTag) : Bool := true
+
+instance : Zig.Packed RegTag 2 where
+  toBits := RegTag.toBits
+  ofBits b := (RegTag.ofInt? (Zig.val false b)).getD default
+  valid b := (RegTag.ofInt? (Zig.val false b)).isSome
 
 /-- The memory at program start: block `k` is global `k`. -/
 def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
@@ -610,7 +680,7 @@ inductive bumpPairExit where
 
 def bumpPair (p0 : Zig.Ptr) (p1 : BitVec 6) : Zig.MemM (BitVec 3) := do
   let e ← ((do
-    let i2 ← pure (Zig.Packed.ofBits p1 : Pair)
+    let i2 ← Zig.Packed.ofBits? (α := Pair) p1
     Zig.store (α := Pair) 1 p0 i2
     let i4 ← pure (p0.add 0)
     let i5 ← Zig.loadBits (BitVec 3) 1 1 3 i4
@@ -630,8 +700,43 @@ inductive byteToFlagsExit where
 
 def byteToFlags (p0 : BitVec 8) : Zig.Result (Flags) := do
   let e ← ((do
-    let i1 ← pure (Zig.Packed.ofBits p0 : Flags)
+    let i1 ← Zig.Packed.ofBits? (α := Flags) p0
     pure (.ret i1)) : Zig.M byteToFlagsLocals byteToFlagsExit).run' (default : byteToFlagsLocals)
+  match e with
+  | .ret v => pure v
+
+structure ctlModeLocals where
+  deriving Inhabited
+
+inductive ctlModeExit where
+  | ret (v : BitVec 8)
+
+def ctlMode (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 0)
+    let i2 ← Zig.loadBits (Mode) 1 1 1 i1
+    let i3 ← pure (Mode.toBits i2)
+    let i4 ← Zig.intCast false false 8 i3
+    pure (.ret i4)) : Zig.MM ctlModeLocals ctlModeExit).run' (default : ctlModeLocals)
+  match e with
+  | .ret v => pure v
+
+structure ctlSumLocals where
+  deriving Inhabited
+
+inductive ctlSumExit where
+  | ret (v : BitVec 8)
+
+def ctlSum (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
+  let e ← ((do
+    let i1 ← Zig.Packed.ofBits? (α := Ctl) p0
+    let i2 ← pure ((i1).mode)
+    let i3 ← pure (Mode.toBits i2)
+    let i4 ← Zig.intCast false false 8 i3
+    let i5 ← pure ((i1).level)
+    let i6 ← Zig.intCast false false 8 i5
+    let i7 ← Zig.add false i4 i6
+    pure (.ret i7)) : Zig.M ctlSumLocals ctlSumExit).run' (default : ctlSumLocals)
   match e with
   | .ret v => pure v
 
@@ -793,6 +898,23 @@ def isOk (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+structure laneSetLocals where
+  deriving Inhabited
+
+inductive laneSetExit where
+  | ret (v : BitVec 32)
+
+def laneSet (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i2 ← pure (p0.elem 4 (2 : BitVec 64))
+    Zig.store (α := BitVec 32) 4 i2 p1
+    let i4 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (1 : BitVec 64)))
+    let i5 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (2 : BitVec 64)))
+    let i6 ← pure (Zig.addWrap i4 i5)
+    pure (.ret i6)) : Zig.MM laneSetLocals laneSetExit).run' (default : laneSetLocals)
+  match e with
+  | .ret v => pure v
+
 structure lowByteLocals where
   deriving Inhabited
 
@@ -804,6 +926,58 @@ def lowByte (p0 : Word) : Zig.Result (BitVec 8) := do
     let i1 ← Zig.call (Word.get_bytes p0)
     let i2 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
     pure (.ret i2)) : Zig.M lowByteLocals lowByteExit).run' (default : lowByteLocals)
+  match e with
+  | .ret v => pure v
+
+structure maskCountLocals where
+  deriving Inhabited
+
+inductive maskCountExit where
+  | ret (v : BitVec 32)
+
+def maskCount (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    let i1 ← Zig.load (Zig.Vec (Bool) 4) 1 p0
+    let i2 ← pure (Zig.Vec.select i1 ((⟨#v[(1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4) ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4))
+    let i3 ← pure (Zig.Vec.reduce Zig.addWrap i2)
+    pure (.ret i3)) : Zig.MM maskCountLocals maskCountExit).run' (default : maskCountLocals)
+  match e with
+  | .ret v => pure v
+
+structure maskStoreLocals where
+  local2 : Zig.Ptr
+  deriving Inhabited
+
+inductive maskStoreExit where
+  | ret (v : BitVec 32)
+
+def maskStore (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let s2 ← Zig.allocStack 16 16
+  let e ← ((do
+    let i2 ← pure (← get).local2
+    let i3 ← pure (i2.elem 4 (0 : BitVec 64))
+    let i4 ← pure (p1 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i3 i4
+    let i6 ← pure (i2.elem 4 (1 : BitVec 64))
+    let i7 ← pure (Zig.shr false p1 (8 : BitVec 5))
+    let i8 ← pure (i7 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i6 i8
+    let i10 ← pure (i2.elem 4 (2 : BitVec 64))
+    let i11 ← pure (Zig.shr false p1 (16 : BitVec 5))
+    let i12 ← pure (i11 &&& (255 : BitVec 32))
+    Zig.store (α := BitVec 32) 4 i10 i12
+    let i14 ← pure (i2.elem 4 (3 : BitVec 64))
+    let i15 ← pure (Zig.shr false p1 (24 : BitVec 5))
+    Zig.store (α := BitVec 32) 4 i14 i15
+    let i17 ← pure (i2)
+    let i18 ← Zig.load (Zig.Vec (BitVec 32) 4) 16 i17
+    let i19 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.gt false x0 x1)) i18 ((⟨#v[(127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4)
+    Zig.store (α := Zig.Vec (Bool) 4) 1 p0 i19
+    let i21 ← Zig.load (Zig.Vec (Bool) 4) 1 p0
+    let i22 ← pure (Zig.Vec.select i21 ((⟨#v[(1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32), (1 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4) ((⟨#v[(0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32), (0 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4))
+    let i23 ← pure (Zig.Vec.reduce Zig.addWrap i22)
+    pure (.ret i23)) : Zig.MM maskStoreLocals maskStoreExit).run' { (default : maskStoreLocals) with local2 := s2 }
+  Zig.free s2
   match e with
   | .ret v => pure v
 
@@ -1073,7 +1247,7 @@ inductive setModeExit where
 
 def setMode (p0 : BitVec 8) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
   let e ← ((do
-    let i3 ← pure (Zig.Packed.ofBits p0 : Flags)
+    let i3 ← Zig.Packed.ofBits? (α := Flags) p0
     modify (fun s => { s with f := i3 })
     modify (fun s => { s with f := { s.f with mode := p1 } })
     let i7 ← pure ((← get).f)

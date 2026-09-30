@@ -72,3 +72,11 @@ theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Me
 theorem copy_len (d s : Slice) (h : d.len ≠ s.len) (m : Mem) :
     (copy d s).run m = throw .panic := by
   simp [copy, zig_unfold, h]
+
+/-- An array with a sentinel is `N + 1` items in memory: the bytes of a `Tag` hold the sentinel
+at byte 3, before the field `n`. -/
+theorem tag_bytes (a : BitVec 8) :
+    Enc.encode ({ name := #v[a, 2, 3, 0], n := 7 } : Tag) =
+      #[.int a, .int 2, .int 3, .int 0, .int 7] := by
+  simp [Enc.encode, Enc.fields, intBytes, padTo, intSize, intAlign, alignUp, writeBytes]
+  apply BitVec.eq_of_toNat_eq; simp; omega

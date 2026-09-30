@@ -13,12 +13,12 @@ encode (`modelLayout`), a pointer constant without a global, and a global that i
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
-An `assembly` instruction (M21) is accepted only when every operand is a register constraint
-(`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint tying it to the sole
-output register (`0`; valid only because at most one output is ever allowed here), there is no
-`"memory"` clobber, and at most one output is present and it is the asm expression's own result
-(`ref = none`) — anything else (a memory operand, a named/read-write output, a `"memory"`
-clobber) is outside the subset.
+An `assembly` instruction (M21) is accepted only when every operand is an integer with a
+register constraint (`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint that
+names an output (`0`, `1`, …), and there is no `"memory"` clobber. At most one output is the asm
+expression's own result (`ref = none`); every other output is an lvalue output, a store through
+its pointer `ref`. Anything else (a memory operand, a read-write output, a `"memory"` clobber)
+is outside the subset.
 -/
 
 namespace Air2Lean
@@ -27,13 +27,14 @@ namespace Air2Lean
 named register in braces — either alone or with a leading `=` (write-only) marker. -/
 def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=" then c.drop 1 else c
-  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.length > 2)
+  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
 
-/-- Is `c` a matching constraint on an input, tying it to output operand `0` — the register a
-register-modify-in-place instruction (`bswap`) both reads and writes? Always `0`: `checkInst`
-already rejects more than one output, so `0` is the only output index that can ever exist. -/
-def isMatchingConstraint (c : String) : Bool :=
-  c == "0"
+/-- Is `c` a matching constraint on an input, tying it to output operand `k < outputs` — the
+register a register-modify-in-place instruction (`bswap`) both reads and writes? -/
+def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
+  match c.toNat? with
+  | some k => k < outputs
+  | none => false
 
 /-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
 `allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
@@ -68,7 +69,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     | "one" => if (types[child]?.map isFnTy).getD false then pure () else recur child
     | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
-  | .array _ child => recur child
+  | .array _ child _ => recur child
   | .vector _ child => recur child
   | .optional child => recur child
   | .errorUnion set payload => do
@@ -78,7 +79,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .struct name layout fields =>
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
-        integer, a `bool` or a packed struct: outside the subset"
+        integer, a `bool`, an enum or a packed struct: outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
@@ -91,7 +92,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
           subset"
       if layout == "packed" && fields.any (fun (_, t) => (packedBits types t).isNone) then
         throw s!"{fnName}: near line {line}: packed union '{name}' has a field other than an \
-          integer, a `bool` or a packed struct: outside the subset"
+          integer, a `bool`, an enum or a packed struct: outside the subset"
     | some t =>
       unless (match types[t]? with | some (.enum ..) => true | _ => false) do
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
@@ -132,17 +133,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     | _ =>
       let (s, a) ← modelLayout types layouts c
       pure (Zig.alignUp (s + 1) a, a)
-  | some (.array len c) =>
-    if (layouts[id]?.map (·.sentinel)).getD false then
-      throw "an array with a sentinel as one value"
+  | some (.array len c sentinel) =>
     let (s, a) ← modelLayout types layouts c
-    pure (len * s, a)
+    pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
     match types[c]? with
     | some (.int ..) | some (.float _) =>
       let (s, _) ← modelLayout types layouts c
       pure (Zig.vecLayout len s, Zig.vecLayout len s)
-    | _ => throw "a vector of a type other than an integer or float (M19)"
+    | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
+    | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
     let _ ← modelLayout types layouts tag
     exported
@@ -164,7 +164,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let (s, a) ← modelLayout types layouts payload
     pure (Zig.errUnionSize s a, Nat.max a 2)
   | some (.errorSet _) => throw "an error set value (not in an error union)"
-  | some (.union name _ (some tag) fields) =>
+  | some (.union _ _ (some tag) fields) =>
     let (ts, ta) ← modelLayout types layouts tag
     let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
@@ -246,7 +246,10 @@ def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String 
 def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   match types[pty]? with
   | some (.ptr "one" _ c) => match types[c]? with
-    | some (.array _ e) => some e
+    | some (.array _ e _) => some e
+    -- The lanes of a vector of integers or floats are bytes, as the items of an array. A lane
+    -- of a `bool` vector is a bit (`CheckCtx.itemAccess`).
+    | some (.vector _ e) => if types[e]? == some .bool then none else some e
     | _ => none
   | some (.ptr _ _ c) => some c
   | _ => none
@@ -266,6 +269,11 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   let pty ← cx.memPtrTy line ptr
+  if let some (.ptr "one" _ c) := cx.types[pty]? then
+    if let some (.vector _ e) := cx.types[c]? then
+      if cx.types[e]? == some .bool then
+        cx.fail line "a pointer to a lane of a `bool` vector is outside the subset (the lane is a \
+          bit, and the AIR file has no lane index)"
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
   checkMemTy cx.fnName cx.types cx.layouts line e
@@ -294,14 +302,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         | t => t
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
-    pure line
-  | .cmp .. =>
-    -- `cmp_vector`/`cmp_vector_optimized` normalize into this same `.cmp` (`Normalize.lean`), but
-    -- `Emit.lean`'s `.cmp` case has no vector-comparison path (no `Zig.Vec Bool n` support):
-    -- reject here instead of a confusing type error in the generated Lean's `lake build`.
-    if let some (.vector ..) := cx.types[ty]? then
-      throw s!"{fnName}: near line {line}: a vector comparison (`cmp_vector`) is outside the \
-        subset (M19)"
     pure line
   | .bitcast (.inst a) =>
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
@@ -337,10 +337,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
           struct or union to or from an integer is outside the subset"
       | _, _ => pure line
     | none => pure line
-  | .abs _ =>
-    match cx.types[ty]? with
-    | some (.int ..) => throw s!"{fnName}: near line {line}: integer @abs is outside the subset"
-    | _ => pure line
   | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
   | .errCodePtr ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
@@ -421,21 +417,30 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
     if clobbers.contains "memory" then
       throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21)"
-    if outputs.size > 1 then
-      throw s!"{fnName}: near line {line}: an asm expression with more than one output is \
-        outside the subset (M21)"
-    if let some o := outputs[0]? then
-      if o.ref.isSome then
-        throw s!"{fnName}: near line {line}: an asm output other than the expression's own \
-          result is outside the subset (M21)"
-      if !isRegisterConstraint o.constraint then
+    -- One output can be the expression's own result (`-> T`, no `ref`); every other output
+    -- is a store through its pointer `ref` (an lvalue output).
+    for o in outputs do
+      if !isRegisterConstraint o.constraint || !o.constraint.startsWith "=" then
         throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
-          register constraint (M21)"
-      if !isIntTy ty then
+          register output constraint (M21)"
+      let outTy ← match o.ref with
+        | none => pure ty
+        | some r =>
+          let some pty := cx.valTy? r
+            | cx.fail line s!"asm output '{o.name}': operand has no known type"
+          let some c := ptrChild cx.types pty
+            | cx.fail line s!"asm output '{o.name}' is not a pointer"
+          if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+            cx.fail line s!"asm output '{o.name}' is a bit-pointer"
+          cx.memAccess line r
+          pure c
+      if !isIntTy outTy then
         throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+    if (outputs.filter (·.ref.isNone)).size > 1 then
+      cx.fail line "an asm expression with two result outputs (malformed input in the AIR file)"
     for i in inputs do
       if !(isRegisterConstraint i.constraint ||
-          (outputs.size == 1 && isMatchingConstraint i.constraint)) then
+          isMatchingConstraint outputs.size i.constraint) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
           register or matching constraint (M21)"
       let some r := i.ref
@@ -482,11 +487,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
     throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
-  let ty := match f.types[g.ty]?, f.layouts[g.ty]? with
-    | some (.array _ c), some l => if l.sentinel then c else g.ty
-    | _, _ => g.ty
-  checkTy f.name f.types f.layouts 0 ty
-  checkMemTy f.name f.types f.layouts 0 ty
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
@@ -525,7 +527,7 @@ def check (f : Func) : Except String Unit := do
   pure ()
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
-arguments and result have a known item size and `ptr_align`, and a slice that it frees has no
+arguments and result have a known item size and `ptr_align`, and a slice that it remaps has no
 sentinel. -/
 def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : Except String Unit := do
   let tyOf (v : Val) : Option TyId := match v with
@@ -542,8 +544,8 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
     unless known && l.ptrAlign.isSome do
       throw s!"{f.name}: a call to the allocator ({repr fn}) with pointer type {p}, which has \
         no item size or `ptr_align` in the AIR file"
-    if l.sentinel && (fn == .free || fn == .remap) then
-      throw s!"{f.name}: a free of a slice with a sentinel is outside the subset"
+    if l.sentinel && fn == .remap then
+      throw s!"{f.name}: a remap of a slice with a sentinel is outside the subset"
 
 /-- A call to `Thread.spawn`: `args[1]` (the `.{...}` args tuple) must have exactly one field.
 `Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),

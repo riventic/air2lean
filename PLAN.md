@@ -47,8 +47,13 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (l) | no data-race check | 2 pinned counts |
 | (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
 | (n) | no read-only check for a `const` global | 1 pinned count |
-| (o) | every `Byte.part` rejected | 3 pinned counts |
-| (p) | a set bit above an `N`-bit integer accepted | 1 pinned count |
+| (o) | every `Byte.part` rejected | 4 pinned counts |
+| (p) | a set bit above an `N`-bit integer accepted | 135 mismatches |
+| (q) | `Zig.mod` throws `.panic` for a negative divisor | 387 mismatches |
+| (r) | a `[3:0]u8` constant without its sentinel item | 32 mismatches |
+| (s) | `Allocator.freeSentinel` frees `len` items, not `len + 1` | 1 pinned count |
+| (t) | every `Mode` value is valid in a packed struct | 128 mismatches |
+| (u) | a `bool` vector in memory has its lanes in reverse bit order | 220 mismatches |
 
 ## Next
 
@@ -119,14 +124,14 @@ Support matrix:
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
-| inline asm with register operands only, as an opaque function (x86_64) | asm with a memory operand, a named or read-write output, or a `"memory"` clobber |
-| `@Vector(N, T)` over integers and floats: `splat`, `select`, `shuffle`, `reduce`, lane-wise `add`/`sub`/`mul` | vector `div`, `@min`/`@max`, `@addWithOverflow`, bitwise/shift, negation; vector comparison (`cmp_vector`, rejected explicitly); a vector of another type |
+| inline asm with register operands only, as an opaque function (x86_64); more than one output (lvalue outputs are stores) | asm with a memory operand, a read-write output (`+r`), or a `"memory"` clobber |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to a lane of a `bool` vector (the AIR file has no lane index) |
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |
-| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove` | an array with a sentinel as one value in memory |
+| slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove`; an array with a sentinel `[N:s]T` as one value (`N+1` items) | |
 | globals (`var`, `const`; a write to a `const` global throws `.illegal`), string literals, `@tagName`, `@errorName` | |
-| `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool` or packed struct; a `packed` union in a packed struct |
+| `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool`, enum or packed struct; a `packed` union in a packed struct (a union value can have undefined bits, and a packed struct value is a `BitVec` without undefined bits) |
 
 ## Risks
 

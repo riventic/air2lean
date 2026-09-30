@@ -461,6 +461,173 @@ def dupe (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Z
   match e with
   | .ret v => pure v
 
+structure mem_Allocator_dupeZ__anon_1Locals where
+  deriving Inhabited
+
+inductive mem_Allocator_dupeZ__anon_1Exit where
+  | ret (v : Except Zig.ErrName (Zig.Slice))
+  | br15
+  | br24
+  | br36
+  | br45
+  | br59
+  | br67
+
+def mem_Allocator_dupeZ__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
+  let e ← ((do
+    let i2 ← pure p1.len
+    let i3 ← Zig.add false i2 (1 : BitVec 64)
+    let i4 ← Zig.callM (Zig.Allocator.alloc p0 1 1 i3)
+    match i4 with
+    | .error _ => (do
+      let i6 ← Zig.callR (Zig.unwrapErr i4)
+      let i7 ← pure ((.error i6) : Except Zig.ErrName (Zig.Slice))
+      pure (.ret i7))
+    | .ok v5 => (do
+      let i9 ← pure p1.len
+      let i10 ← pure v5.ptr
+      let i11 ← pure (i10.elem 1 (0 : BitVec 64))
+      let i12 ← Zig.sub false i9 (0 : BitVec 64)
+      let i13 ← pure v5.len
+      let i14 ← pure (Zig.le false i9 i13)
+      match ← ((do
+        if i14 then (do
+          pure .br15)
+        else (do
+          throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+      | .br15 => (do
+        let i20 ← pure (⟨i11, i12⟩ : Zig.Slice)
+        let i21 ← pure i20.len
+        let i22 ← pure p1.len
+        let i23 ← pure (i21 == i22)
+        match ← ((do
+          if i23 then (do
+            pure .br24)
+          else (do
+            throw .panic)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+        | .br24 => (do
+          let i29 ← pure p1.ptr
+          let i30 ← pure i20.ptr
+          let i31 ← pure (i29.elem 1 i21)
+          let i32 ← pure (i30.elem 1 i21)
+          let i33 ← Zig.callM (Zig.ptrLe i31 i30)
+          let i34 ← Zig.callM (Zig.ptrLe i32 i29)
+          let i35 ← pure (i33 || i34)
+          match ← ((do
+            if i35 then (do
+              pure .br36)
+            else (do
+              throw .panic)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+          | .br36 => (do
+            Zig.callM (Zig.memmove 1 1 1 i20.ptr i29 i20.len)
+            let i42 ← pure p1.len
+            let i43 ← pure v5.len
+            let i44 ← pure (Zig.lt false i42 i43)
+            match ← ((do
+              if i44 then (do
+                pure .br45)
+              else (do
+                throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+            | .br45 => (do
+              let i50 ← pure (v5.ptr.elem 1 i42)
+              Zig.store (α := BitVec 8) 1 i50 (0 : BitVec 8)
+              let i52 ← pure p1.len
+              let i53 ← pure v5.ptr
+              let i54 ← pure (i53.elem 1 (0 : BitVec 64))
+              let i55 ← Zig.sub false i52 (0 : BitVec 64)
+              let i56 ← pure v5.len
+              let i57 ← Zig.add false i52 (1 : BitVec 64)
+              let i58 ← pure (Zig.le false i57 i56)
+              match ← ((do
+                if i58 then (do
+                  pure .br59)
+                else (do
+                  throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+              | .br59 => (do
+                let i64 ← pure (⟨i54, i55⟩ : Zig.Slice)
+                let i65 ← Zig.callM (Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
+                let i66 ← pure ((0 : BitVec 8) == i65)
+                match ← ((do
+                  if i66 then (do
+                    pure .br67)
+                  else (do
+                    throw .panic)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
+                | .br67 => (do
+                  let i72 ← pure ((.ok i64) : Except Zig.ErrName (Zig.Slice))
+                  pure (.ret i72))
+                | e => pure e)
+              | e => pure e)
+            | e => pure e)
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit).run' (default : mem_Allocator_dupeZ__anon_1Locals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure dupeZLenLocals where
+  n : BitVec 64
+  deriving Inhabited
+
+inductive dupeZLenExit where
+  | ret (v : Except Zig.ErrName (BitVec 64))
+  | br16
+  | br12
+  | br10
+  | rep11
+
+def dupeZLen.again11 : dupeZLenExit → Bool
+  | .rep11 => true
+  | _ => false
+
+def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
+  match ← ((do
+    let i13 ← pure ((← get).n)
+    let i14 ← pure i3.len
+    let i15 ← pure (Zig.le false i13 i14)
+    match ← ((do
+      if i15 then (do
+        pure .br16)
+      else (do
+        throw .outOfBounds)) : Zig.MM dupeZLenLocals dupeZLenExit) with
+    | .br16 => (do
+      let i21 ← Zig.callM (Zig.load (BitVec 8) 1 (i3.ptr.elem 1 i13))
+      let i22 ← pure (i21 != (0 : BitVec 8))
+      if i22 then (do
+        let i24 ← pure ((← get).n)
+        let i25 ← Zig.add false i24 (1 : BitVec 64)
+        modify (fun s => { s with n := i25 })
+        pure .br12)
+      else (do
+        pure .br10))
+    | e => pure e) : Zig.MM dupeZLenLocals dupeZLenExit) with
+  | .br12 => (do
+    pure .rep11)
+  | e => pure e
+
+def dupeZLen (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (BitVec 64)) := do
+  let e ← ((do
+    let i2 ← Zig.callM (mem_Allocator_dupeZ__anon_1 p0 p1)
+    match i2 with
+    | .error _ => (do
+      let i4 ← Zig.callR (Zig.unwrapErr i2)
+      let i5 ← pure (i4)
+      let i6 ← pure ((.error i5) : Except Zig.ErrName (BitVec 64))
+      pure (.ret i6))
+    | .ok v3 => (do
+      modify (fun s => { s with n := (0 : BitVec 64) })
+      match ← ((do
+        Zig.loop (dupeZLen.loop11 v3) dupeZLen.again11) : Zig.MM dupeZLenLocals dupeZLenExit) with
+      | .br10 => (do
+        let i30 ← pure ((← get).n)
+        let _i31 ← Zig.callM (Zig.Allocator.freeSentinel p0 1 v3)
+        let i32 ← pure ((.ok i30) : Except Zig.ErrName (BitVec 64))
+        pure (.ret i32))
+      | e => pure e)) : Zig.MM dupeZLenLocals dupeZLenExit).run' (default : dupeZLenLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure evensLocals where
   list : Zig.Ptr
   local4 : BitVec 64

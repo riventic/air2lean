@@ -131,6 +131,18 @@ pub fn localArr(i: usize) u8 {
     return a[0] + a[3];
 }
 
+const Tag = struct { name: [3:0]u8, n: u8 };
+
+/// An array with a sentinel as one value in memory: a copy has all 4 items, and `i = 3` reads
+/// the sentinel.
+pub fn sentinelArr(i: usize) u8 {
+    var x: Tag = .{ .name = .{ @truncate(i), 2, 3 }, .n = 7 };
+    const p = &x;
+    const y = p.*;
+    const lit: [3:0]u8 = "xyz".*;
+    return y.name[i] +% lit[i] +% y.n;
+}
+
 /// The length of an optional slice, 0 for null.
 pub fn lenOr(s: ?[]const u8) usize {
     return if (s) |x| x.len else 0;
@@ -156,5 +168,6 @@ comptime {
     _ = &failName;
     _ = &bumpAt;
     _ = &localArr;
+    _ = &sentinelArr;
     _ = &lenOr;
 }

@@ -78,20 +78,29 @@ for ex in $examples; do
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
   # Each file names the Zig version that wrote it; compare everything else. The number of a
-  # generic std instance (`sentinelMismatch__anon_5800`) or of a std type without a name
+  # generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
   # (`Thread.Completion__enum_1614`) depends on how much std code the compiler analyses, which
-  # differs by run and host OS in 0.16.0; the translator ignores the first (`panicErrorFor?`) and
-  # does not emit the second (`usedTys`), so the comparison ignores both.
+  # differs by run and host OS in 0.16.0; the translator gives the first a stable number
+  # (`Air2Lean/Air/Anon.lean`) and does not emit the second (`usedTys`), so the comparison
+  # ignores both, also in the file names (a golden file is `<name>__anon_N.json`).
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
+  norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
   for f in "$golden_dir"/*.json "$version_dir"/*.json "$os_dir"/*.json; do
-    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/golden/${f##*/}"; fi
+    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/golden/$(norm_name "$f")"; fi
   done
-  for f in "$air_dir"/*.json; do grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/new/${f##*/}"; done
+  for f in "$air_dir"/*.json; do
+    n=$(norm_name "$f")
+    if [ -f "$cmp_dir/new/$n" ]; then
+      echo "error: $ex has two instances of the generic function in $n; the golden check cannot tell them apart" >&2
+      exit 1
+    fi
+    grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/new/$n"
+  done
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
     echo "error: AIR output for $ex does not match its golden files" >&2
     echo "$diff_output" >&2
-    echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/" >&2
+    echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/ (then rename each <name>__anon_<n>.json to <name>__anon_N.json)" >&2
     echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
     echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
     exit 1

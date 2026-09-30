@@ -21,6 +21,11 @@ def ShapeTag.ofInt? (v : Int) : Option ShapeTag :=
 
 def ShapeTag.isNamed (_ : ShapeTag) : Bool := true
 
+instance : Zig.Packed ShapeTag 2 where
+  toBits := ShapeTag.toBits
+  ofBits b := (ShapeTag.ofInt? (Zig.val false b)).getD default
+  valid b := (ShapeTag.ofInt? (Zig.val false b)).isSome
+
 structure Rect where
   w : BitVec 32
   h : BitVec 32
@@ -103,6 +108,11 @@ def Prio.ofInt? (v : Int) : Option Prio :=
 
 def Prio.isNamed (_ : Prio) : Bool := true
 
+instance : Zig.Packed Prio 8 where
+  toBits := Prio.toBits
+  ofBits b := (Prio.ofInt? (Zig.val true b)).getD default
+  valid b := (Prio.ofInt? (Zig.val true b)).isSome
+
 inductive Light where
   | red
   | yellow
@@ -119,6 +129,11 @@ def Light.ofInt? (v : Int) : Option Light :=
 
 def Light.isNamed (_ : Light) : Bool := true
 
+instance : Zig.Packed Light 8 where
+  toBits := Light.toBits
+  ofBits b := (Light.ofInt? (Zig.val false b)).getD default
+  valid b := (Light.ofInt? (Zig.val false b)).isSome
+
 structure Code where
   bits : BitVec 8
   deriving Repr, Inhabited, DecidableEq
@@ -132,6 +147,10 @@ def Code.ofInt? (v : Int) : Option Code :=
   if 0 ≤ v ∧ v ≤ 255 then Option.some ⟨BitVec.ofInt 8 v⟩ else Option.none
 
 def Code.isNamed (e : Code) : Bool := e.bits == (0 : BitVec 8) || e.bits == (1 : BitVec 8)
+
+instance : Zig.Packed Code 8 where
+  toBits := Code.toBits
+  ofBits b := ⟨b⟩
 
 structure nextLocals where
   deriving Inhabited

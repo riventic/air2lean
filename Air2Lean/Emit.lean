@@ -77,7 +77,8 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
     if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else "Zig.Slice"
   | .ptr "slice" .. => "Zig.Slice"
   | .ptr .. => "Zig.Ptr"
-  | .array len child => s!"Vector ({emitTy structNames types types[child]!}) {len}"
+  | .array len child s =>
+    s!"Vector ({emitTy structNames types types[child]!}) {len + if s then 1 else 0}"
   | .vector len child => s!"Zig.Vec ({emitTy structNames types types[child]!}) {len}"
   | .optional child => s!"Option ({emitTy structNames types types[child]!})"
   | .errorUnion _set payload => s!"Except Zig.ErrName ({emitTy structNames types types[payload]!})"
@@ -127,7 +128,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .struct _ _ fields | .union _ _ none fields => fields.flatMap (go ·.2)
   | .union _ _ (some tag) fields => go tag ++ fields.flatMap (go ·.2)
   | .enum .. => #[]
-  | .ptr "slice" _ c | .array _ c | .optional c => go c
+  | .ptr "slice" _ c | .array _ c _ | .optional c => go c
   | .errorUnion _ p => go p
   | .tuple fs => fs.flatMap go
   | _ => #[]
@@ -135,7 +136,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
-  | .ptr _ _ c | .array _ c | .vector _ c | .optional c => #[c]
+  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
   | .errorUnion s p => #[s, p]
   | .struct _ _ fs => fs.map (·.2)
   | .enum _ t _ _ => #[t]
@@ -250,7 +251,7 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
     String.intercalate "\n" (head ++
       ["  encode v := Zig.Enc.encode (Zig.Packed.toBits v)", "  decode bs := do",
-       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    pure (Zig.Packed.ofBits b)"])
+       s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
       s!"({o}, Zig.Enc.encode v.{mangleField f})"
@@ -288,7 +289,12 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
         ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
           s!"def {n}.toBits : {n} → BitVec {bits}"] ++ toBits ++ ["",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=", s!"  {ofInt}", "",
-          s!"def {n}.isNamed (_ : {n}) : Bool := true"])
+          s!"def {n}.isNamed (_ : {n}) : Bool := true", "",
+          -- A field of a packed struct (`ZigLean/Packed.lean`): a tag value without a name is
+          -- not `valid`.
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits",
+          s!"  ofBits b := ({n}.ofInt? (Zig.val {signed} b)).getD default",
+          s!"  valid b := ({n}.ofInt? (Zig.val {signed} b)).isSome"])
     else
       let named := fields.toList.map fun (f, v) => s!"def {n}.{mangleField f} : {n} := ⟨{tagLit bits v}⟩"
       let isNamed := String.intercalate " || " (fields.toList.map fun (_, v) => s!"e.bits == {tagLit bits v}")
@@ -298,7 +304,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
           s!"def {n}.toBits (e : {n}) : BitVec {bits} := e.bits", "",
           s!"def {n}.ofInt? (v : Int) : Option {n} :=",
           s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
-          s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}"])
+          s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}", "",
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits", "  ofBits b := ⟨b⟩"])
   | .union _ layout none fields =>
     -- `extern`, `packed`: the bytes; every field at byte 0 (`ZigLean/Union.lean`).
     let size := s.layout.size.getD 0
@@ -349,10 +356,14 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       s!"((Zig.Packed.toBits v.{mangleField f}).setWidth {bits} <<< {o})"
     let ofBits := (fields.toList.zip offs).map fun ((f, _), o) =>
       s!"{mangleField f} := Zig.Packed.get b {o}"
+    -- `valid`: the fields that can hold bits that are not a value (an enum, in any depth).
+    let valid := (fields.toList.zip offs).filterMap fun ((_, t), o) =>
+      if packedHasEnum s.srcTypes t then some s!"Zig.Packed.validAt ({tyStr t}) b {o}" else none
     String.intercalate "\n" (decl ++ ["",
       s!"instance : Zig.Packed {n} {bits} where",
       s!"  toBits v := {String.intercalate " ||| " toBits}",
-      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"])
+      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"] ++
+      (if valid.isEmpty then [] else [s!"  valid b := {String.intercalate " && " valid}"]))
   | _ => ""
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
@@ -367,7 +378,7 @@ partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array St
   | some (.union name _ tag fs) =>
     if acc.contains name then acc
     else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts) (acc.push name)
-  | some (.optional c) | some (.array _ c) => memNamed types layouts acc c
+  | some (.optional c) | some (.array _ c _) => memNamed types layouts acc c
   | some (.errorUnion _ c) => memNamed types layouts acc c
   | _ => acc
 
@@ -574,8 +585,9 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .agg tid elems =>
     let items (xs : Array Val) := ", ".intercalate (xs.map (fc.resolveVal env)).toList
     match fc.tyOfId tid with
-    -- The sentinel is not an item of the value.
-    | .array len _ => s!"(#v[{items (elems.extract 0 len)}] : {fc.emitTyOf tid})"
+    -- A sentinel is the last item of the value (`Ty.array`).
+    | .array len _ s =>
+      s!"(#v[{items (elems.extract 0 (len + if s then 1 else 0))}] : {fc.emitTyOf tid})"
     -- A vector has no sentinel (`docs/air-json.md`'s `elems`).
     | .vector len _ => s!"((⟨#v[{items (elems.extract 0 len)}]⟩) : {fc.emitTyOf tid})"
     | .struct _ _ fields =>
@@ -798,7 +810,7 @@ def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
 def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
-    | .array len _ => (rv, s!"({len} : BitVec 64)")
+    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec 64)")
     | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
 
 /-- `v` is a pointer to memory: not a place. -/
@@ -840,7 +852,9 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
   | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
-  | .free => s!"Zig.Allocator.free {a} {argSize} {rv (arg 1)}"
+  | .free =>
+    let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
+    s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
 
 /-- A call to the fork-join thread model (`ZigLean/Mem/Thread.lean`), a `Zig.MemM` term.
@@ -1012,8 +1026,9 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .trap => #[]
   | .line _ => #[]
   | .dbg _ _ => #[]
-  -- `Check.lean` accepts only the no-`ref` output convention, so only the inputs carry a `ref`.
-  | .asm _ _ _ _ inputs => inputs.filterMap (·.ref)
+  -- An lvalue output's `ref` is a pointer, used as `store`'s pointer.
+  | .asm _ _ _ outputs inputs =>
+    outputs.filterMap (fun o => o.ref.filter fc.isMemPtr) ++ inputs.filterMap (·.ref)
 
 /-- Ids referenced inside `body` (recursively) that are defined outside it: the free variables
 of a loop body, i.e. what its extracted top-level def must take as parameters. -/
@@ -1086,15 +1101,21 @@ identity here too. -/
 structure AsmDef where
   name : String
   inputWidths : Array Nat
-  outputWidth : Option Nat
+  /-- The width of each output, in output order. -/
+  outputWidths : Array Nat
   deriving BEq
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
-widths. -/
+widths. One output or none keeps the text of an `Option` width, so the names of those ops do not
+change. -/
 def asmKey (source : String) (constraints : Array String) (inputWidths : Array Nat)
-    (outputWidth : Option Nat) : String :=
+    (outputWidths : Array Nat) : String :=
+  let outs := match outputWidths.toList with
+    | [] => "none"
+    | [w] => s!"(some {w})"
+    | ws => s!"{ws}"
   s!"{source}\u0001{"\u0001".intercalate constraints.toList}\u0001\
-    {inputWidths.toList}\u0001{outputWidth}"
+    {inputWidths.toList}\u0001{outs}"
 
 /-- The generated Lean name of the `opaque` def for an asm op: `airAsm_<hash>`, `<hash>` a small
 FNV-1a hash of the source template, the ordered constraint list and the operand widths. Not
@@ -1115,6 +1136,17 @@ def asmValBits (f : Func) (v : Val) : Nat :=
   | .inst id => ((f.allInsts.find? (·.id == id)).map fun i => tyBits i.ty).getD 0
   | v => (v.constTy?.map tyBits).getD 0
 
+/-- The bit width of each output of an asm op: the result (no `ref`) has the instruction's type
+`resTy`; an lvalue output has its pointer's child type. -/
+def asmOutputWidths (types : Array Ty) (tyOf : Val → Option TyId) (resTy : TyId)
+    (outputs : Array AsmOperand) : Array Nat :=
+  let tyBits (tid : TyId) : Nat := match types[tid]? with | some (.int _ b) => b | _ => 0
+  outputs.map fun o => match o.ref with
+    | none => tyBits resTy
+    | some r => ((tyOf r).bind fun p => match types[p]? with
+        | some (.ptr _ _ c) => some (tyBits c)
+        | _ => none).getD 0
+
 /-- Every distinct asm op in `funcs`, in first-seen order (`asmKey` gives the identity). -/
 def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut seen : Array String := #[]
@@ -1123,21 +1155,25 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
     for i in f.allInsts do
       if let .asm source _ _ outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
-        let outputWidth := if outputs.isEmpty then none else some (asmValBits f (.inst i.id))
+        let tyOf (v : Val) : Option TyId := match v with
+          | .inst id => (f.allInsts.find? (·.id == id)).map (·.ty)
+          | v => v.constTy?
+        let outputWidths := asmOutputWidths f.types tyOf i.ty outputs
         let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-        let key := asmKey source constraints inputWidths outputWidth
+        let key := asmKey source constraints inputWidths outputWidths
         if !seen.contains key then
           seen := seen.push key
-          defs := defs.push { name := asmDefName key, inputWidths, outputWidth }
+          defs := defs.push { name := asmDefName key, inputWidths, outputWidths }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
-to its output's `BitVec` (`Unit` for no output). A proof can use only what the caller states
+to its output's `BitVec` (`Unit` for no output; a tuple in output order for more than one). A proof can use only what the caller states
 about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
 doc comment). -/
 def emitAsmDef (d : AsmDef) : String :=
   let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
-  let ret := match d.outputWidth with | some w => s!"BitVec {w}" | none => "Unit"
+  let ret := if d.outputWidths.isEmpty then "Unit"
+    else " × ".intercalate (d.outputWidths.toList.map fun w => s!"BitVec {w}")
   s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
@@ -1147,8 +1183,9 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
   let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
   (env.push (id, name), s!"let {name} ← {expr}")
 
-/-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
-def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+/-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
+output line. `emitSimple` lifts it to vectors. -/
+def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   let rv := fc.resolveVal env
   match inst.op with
@@ -1255,6 +1292,13 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
         | .and | .or | .xor =>
           "(panic! \"air2lean: bitwise @reduce of a float vector\")"
+      else if fc.tyOfId child == .bool then
+        -- A `bool` vector: the safety checks of a vector op (`cmp_vector`, then `reduce .Or`).
+        match op with
+        | .and => s!"pure (Zig.Vec.reduce (· && ·) {rv a})"
+        | .or => s!"pure (Zig.Vec.reduce (· || ·) {rv a})"
+        | .xor => s!"pure (Zig.Vec.reduce (· ^^ ·) {rv a})"
+        | _ => "(panic! \"air2lean: arithmetic @reduce of a bool vector\")"
       else
         let sgn := if fc.tySigned child then "true" else "false"
         match op with
@@ -1295,7 +1339,10 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
       let (env, l) := bindLet fc env inst.id s!"Zig.neg {if fc.valSigned a then "true" else "false"} {rv a}"
       (env, some l)
-  | .abs a => let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.abs {rv a})"; (env, some l)
+  | .abs a =>
+    let expr := if fc.isFloat a then s!"pure (Zig.Float.abs {rv a})"
+      else s!"pure (Zig.absInt {if fc.valSigned a then "true" else "false"} {rv a})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let expr := match op with
@@ -1358,7 +1405,7 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A packed struct to its backing integer.
       let (env, l) := bindLet fc env inst.id s!"pure (Zig.Packed.toBits {rv a})"; (env, some l)
     else if isPacked (fc.tyOfId inst.ty) then
-      let expr := s!"pure (Zig.Packed.ofBits {rv a} : {fc.emitTyOf inst.ty})"
+      let expr := s!"Zig.Packed.ofBits? (α := {fc.emitTyOf inst.ty}) {rv a}"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
     let srcPtr := fc.isPtr a
@@ -1672,14 +1719,102 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
     -- pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
-    let outputWidth := if outputs.isEmpty then none else some (fc.tyBits inst.ty)
+    let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmDefName (asmKey source constraints inputWidths outputWidth)
+    let name := asmDefName (asmKey source constraints inputWidths outputWidths)
     let args := inputs.toList.map fun i => rv i.ref.get!
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
-    let (env, l) := bindLet fc env inst.id s!"pure ({call})"
-    (env, some l)
+    if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
+      let (env, l) := bindLet fc env inst.id s!"pure ({call})"
+      (env, some l)
+    else
+      -- The tuple of the outputs; output `k` of `n` is `.2.….2.1` (`k` times `.2`), the last one
+      -- without the `.1`. The result output binds the instruction; each lvalue output is a
+      -- store through its pointer, as `store`.
+      let t := s!"a{inst.id}"
+      let n := outputs.size
+      let proj (k : Nat) : String :=
+        t ++ String.join (List.replicate k ".2") ++ (if k + 1 < n then ".1" else "")
+      let (env, lines) := outputs.toList.zipIdx.foldl (init := (env, [s!"let {t} := {call}"]))
+        fun (env, ls) (o, k) => match o.ref with
+          | none =>
+            let (env, l) := bindLet fc env inst.id s!"pure {proj k}"
+            (env, ls ++ [l])
+          | some ptr =>
+            if fc.isMemPtr ptr then
+              (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {proj k}"])
+            else (env, ls ++ [fc.storePlace ptr (proj k)])
+      (env, some ("\n".intercalate lines))
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
+
+
+/-- A lane-wise op on vectors: its operands, and the same op with other operands. `arith`,
+`splat`, `select`, `reduce` and `shuffle` have their own vector cases in `emitScalar`. -/
+def laneOp? : Op → Option (Array Val × (Array Val → Op))
+  | .div o a b => some (#[a, b], fun v => .div o v[0]! v[1]!)
+  | .divFloat a b => some (#[a, b], fun v => .divFloat v[0]! v[1]!)
+  | .minMax m a b => some (#[a, b], fun v => .minMax m v[0]! v[1]!)
+  | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
+  | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
+  | .not a => some (#[a], fun v => .not v[0]!)
+  | .neg a => some (#[a], fun v => .neg v[0]!)
+  | .abs a => some (#[a], fun v => .abs v[0]!)
+  | .shift o a b => some (#[a, b], fun v => .shift o v[0]! v[1]!)
+  | .cmp o a b => some (#[a, b], fun v => .cmp o v[0]! v[1]!)
+  | .boolAnd a b => some (#[a, b], fun v => .boolAnd v[0]! v[1]!)
+  | .boolOr a b => some (#[a, b], fun v => .boolOr v[0]! v[1]!)
+  | .intCast a => some (#[a], fun v => .intCast v[0]!)
+  | .trunc a => some (#[a], fun v => .trunc v[0]!)
+  | .floatRound o a => some (#[a], fun v => .floatRound o v[0]!)
+  | .sqrt a => some (#[a], fun v => .sqrt v[0]!)
+  | .libm o a => some (#[a], fun v => .libm o v[0]!)
+  | .mulAdd a b c => some (#[a, b, c], fun v => .mulAdd v[0]! v[1]! v[2]!)
+  | .floatConv a => some (#[a], fun v => .floatConv v[0]!)
+  | .floatFromInt a => some (#[a], fun v => .floatFromInt v[0]!)
+  | .intFromFloat safe a => some (#[a], fun v => .intFromFloat safe v[0]!)
+  | _ => none
+
+/-- A lane-wise op on vectors (`laneOp?`): the scalar op's expression (`emitScalar`) on lane
+variables `x0`, `x1`, `x2`, in `Zig.Vec.mapM`/`map2M`/`map3M`. So each lane has the scalar
+semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of
+pairs: `Zig.Vec.unzip` makes the tuple of two vectors. `none` if `inst` is not such an op. -/
+def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Option (Array (InstId × String) × Option String) := do
+  let (vals, rebuild) ← laneOp? inst.op
+  let laneTy (t : TyId) : Option TyId := match fc.tyOfId t with | .vector _ c => some c | _ => none
+  -- The result's lane type: a vector's child, or the tuple of the lane types (`withOverflow`).
+  let (resTy, tupleTys) ← match fc.tyOfId inst.ty with
+    | .vector _ c => some (c, none)
+    | .tuple fs => do
+      let cs ← fs.mapM laneTy
+      some (0, some cs)
+    | _ => none
+  -- One fake instruction per operand: its lane type, bound to `x<k>`.
+  let base := (fc.allInsts.foldl (fun m i => max m i.id) 0) + 1
+  let mut fakes : Array Inst := #[]
+  for k in [0:vals.size] do
+    let t ← (fc.valTyId? vals[k]!).bind laneTy
+    fakes := fakes.push { id := base + k, ty := t, op := .arg 0 }
+  let fc' := { fc with allInsts := fc.allInsts ++ fakes }
+  let env' := env ++ fakes.mapIdx fun k f => (f.id, s!"x{k}")
+  -- `withOverflow`'s scalar result is the pair tuple; its type is only for the scalar emitter's
+  -- signedness and width lookups, which read the operands.
+  let scalarTy := match tupleTys with | some cs => cs[0]! | none => resTy
+  let scalar : Inst := { id := inst.id, ty := scalarTy, op := rebuild (fakes.map (.inst ·.id)) }
+  let (_, line?) := emitScalar fc' env' scalar
+  let line ← line?
+  let expr := (line.splitOn " ← ").drop 1 |> " ← ".intercalate
+  let params := String.intercalate " " ((List.range vals.size).map (s!"x{·}"))
+  let args := String.intercalate " " (vals.toList.map (fc.resolveVal env))
+  let fn := match vals.size with | 1 => "Zig.Vec.mapM" | 2 => "Zig.Vec.map2M" | _ => "Zig.Vec.map3M"
+  let lifted := s!"{fn} (fun {params} => {expr}) {args}"
+  let lifted := if tupleTys.isSome then s!"(Zig.Vec.unzip <$> {lifted})" else lifted
+  some (bindLet fc env inst.id lifted |> fun (e, l) => (e, some l))
+
+/-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
+def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Array (InstId × String) × Option String :=
+  (emitLaneWise fc env inst).getD (emitScalar fc env inst)
 
 mutual
 
@@ -1702,7 +1837,8 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
           let restStr := emitStmts fc env rest
           s!"match ← {inner} with\n| .br{inst.id} => {doBlock restStr}\n| e => pure e"
         | _ =>
-          let vname := s!"v{inst.id}"
+          -- `_v<id>` if nothing reads the block's result (Lean's unused-variable linter).
+          let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
           let restStr := emitStmts fc (env.push (inst.id, vname)) rest
           s!"match ← {inner} with\n| .br{inst.id} {vname} => {doBlock restStr}\n| e => pure e"
       | .loop body =>
@@ -1880,7 +2016,7 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   -- `«at»` (a keyword) gives `atLocals`.
-  let plain := (leanName.stripPrefix "«").stripSuffix "»"
+  let plain := ((leanName.dropPrefix "«").dropSuffix "»").toString
   let allocs := collectAllocs f.types allInsts
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
@@ -1933,18 +2069,14 @@ structure ProgGlobal where
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 
-/-- The initial bytes of global `g` of `fc`'s function. An array with a sentinel is one item
-longer: the sentinel is its last item. `undefined` is undefined bytes. -/
+/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
-  match fc.tyOfId g.ty, g.init, (fc.layouts[g.ty]?.map (·.sentinel)).getD false with
+  match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
-  | _, some (.func ..), _ => "#[.undef]"
-  | _, some (.undef _), _ | _, none, _ => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
-  | .array _ c, some (.agg _ elems), true =>
-    let t := s!"Vector ({emitTy fc.structNames fc.types (fc.tyOfId c)}) {elems.size}"
-    encodeTerm s!"#v[{", ".intercalate (elems.map (fc.resolveVal #[])).toList}]" t
-  | _, some init, _ => encodeTerm (fc.resolveVal #[] init) ty
+  | some (.func ..) => "#[.undef]"
+  | some (.undef _) | none => s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
+  | some init => encodeTerm (fc.resolveVal #[] init) ty
 
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with

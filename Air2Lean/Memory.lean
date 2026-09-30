@@ -112,15 +112,23 @@ def escapingAllocs (f : Func) : Array InstId :=
         | none => acc
       | _ => acc
 
-/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, or another packed
-struct. `none` for every other type (outside the subset, M20). -/
+/-- The bit size of `id` as a field of a packed struct: an integer, a `bool`, an enum (its tag
+integer), or another packed struct. `none` for every other type (outside the subset). -/
 partial def packedBits (types : Array Ty) (id : TyId) : Option Nat :=
   match types[id]? with
   | some (.int _ bits) => some bits
   | some .bool => some 1
+  | some (.enum _ tag _ _) => packedBits types tag
   | some (.struct _ "packed" fields) =>
     fields.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedBits types t
   | _ => none
+
+/-- A packed struct field of type `id` has an enum, in any depth. -/
+partial def packedHasEnum (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.enum ..) => true
+  | some (.struct _ "packed" fields) => fields.any (packedHasEnum types ·.2)
+  | _ => false
 
 /-- The first bit of field `idx` of the packed struct `fields`: field 0 is at bit 0. -/
 def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : Nat) : Nat :=
@@ -131,7 +139,7 @@ fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.ptr ..) | some .allocator => true
-  | some (.array _ c) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
+  | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
   | _ => false

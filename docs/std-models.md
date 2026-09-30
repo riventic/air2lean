@@ -30,11 +30,13 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 | `create(T)` | `Zig.Allocator.create a size align` |
 | `destroy(p)` | `Zig.Allocator.destroy a size p` |
 | `alloc(T, n)`, `alignedAlloc(T, a, n)` | `Zig.Allocator.alloc a size align n` |
-| `free(s)` | `Zig.Allocator.free a size s` |
+| `free(s)` | `Zig.Allocator.free a size s`; `Zig.Allocator.freeSentinel a size s` for a `[:s]T` (`len + 1` items, the sentinel too) |
 | `dupe(T, s)` | `Zig.Allocator.dupe a size align srcAlign s` |
 | `remap(s, n)` | `Zig.Allocator.remap a size s n` |
 
-`size` and `align` come from the call's result or argument type. Every other function of `std.mem.Allocator` is outside the subset. A free of a slice with a sentinel is outside the subset.
+`size` and `align` come from the call's result or argument type. `dupeZ` (and in 0.16.0 `dupeSentinel`, which it calls) is translated from its AIR (`examples/lists/filter`): it calls `alloc`. `allocSentinel` is outside the subset: its sentinel is a comptime argument, and the exporter does not write it. Every other function of `std.mem.Allocator` is outside the subset. A `remap` of a slice with a sentinel is outside the subset.
+
+The name of a generic instance has a number that differs between compiles (`mem.Allocator.dupeZ__anon_16959`). The translator gives each instance a stable number by first use (`Air2Lean/Air/Anon.lean`), so the Lean name is `mem_Allocator_dupeZ__anon_1` in every version and on every host. A golden file of an instance is named `<name>__anon_N.json`.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
 

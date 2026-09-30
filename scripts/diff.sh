@@ -26,6 +26,12 @@
 # tests/diff/<ex>/nondet.txt: real threaded code interleaves non-deterministically, so a
 # racing-input line's Zig side is whatever this run's OS scheduler produced.
 #
+# The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
+# other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
+# lists the functions whose results depend on the target, one per line. Only on a host that is
+# not x86_64-linux, a mismatch of such a function counts as "host", prints no MISMATCH line and
+# does not fail the run: CI (x86_64-linux) is the reference.
+#
 # Usage: diff.sh
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
@@ -129,8 +135,8 @@ echo "== libm self-check ==" >&2
 "$build_dir/libm_selfcheck"
 
 echo "== building asm archive ==" >&2
-# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's 3 ops with ordinary Zig builtins
-# (@byteSwap/@popCount/@clz) instead of inline asm, so it builds on any host, unlike the example
+# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's ops with ordinary Zig builtins
+# (@byteSwap/@popCount/@clz, `/` and `%`) instead of inline asm, so it builds on any host, unlike the example
 # itself (x86_64 only). No compiler_rt dependency (unlike libm): these are plain integer ops.
 mkdir -p tests/diff/out/asm
 "$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \
@@ -237,12 +243,17 @@ bufs_match() {
   [[ $z == $l ]]
 }
 
+# The reference host of the float model (docs/floats.md).
+reference_host=0
+if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then reference_host=1; fi
+
 echo "== comparing ==" >&2
 total_ok=0
 total_fail_match=0
 total_unspecified=0
 total_nondet=0
 total_mismatch=0
+total_host=0
 mismatch_found=0
 
 for ex in $examples; do
@@ -251,6 +262,7 @@ for ex in $examples; do
   ex_unspecified=0
   ex_nondet=0
   ex_mismatch=0
+  ex_host=0
 
   for fn in $(functions_of "$ex"); do
     in_file="tests/diff/$ex/inputs/${fn}.jsonl"
@@ -271,6 +283,12 @@ for ex in $examples; do
     fn_unspecified=0
     fn_nondet=0
     fn_mismatch=0
+    fn_host=0
+    host_dependent=0
+    if [ "$reference_host" -eq 0 ] && [ -f "tests/diff/$ex/host.txt" ] &&
+      grep -qx "$fn" "tests/diff/$ex/host.txt"; then
+      host_dependent=1
+    fi
     i=0
     while IFS=$'\t' read -r in_line zig_line lean_line; do
       i=$((i + 1))
@@ -296,6 +314,8 @@ for ex in $examples; do
         [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
         [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
         fn_fail_match=$((fn_fail_match + 1))
+      elif [ "$host_dependent" -eq 1 ]; then
+        fn_host=$((fn_host + 1))
       else
         fn_mismatch=$((fn_mismatch + 1))
         mismatch_found=1
@@ -327,24 +347,36 @@ for ex in $examples; do
         "(tests/diff/$ex/nondet.txt)" >&2
     fi
 
+    host_str=""
+    if [ "$fn_host" -gt 0 ]; then host_str=" host=$fn_host"; fi
     echo "$ex.$fn: ok=$fn_ok fail_match=$fn_fail_match unspecified=$fn_unspecified" \
-      "nondet=$fn_nondet mismatch=$fn_mismatch (of $n)"
+      "nondet=$fn_nondet mismatch=$fn_mismatch$host_str (of $n)"
     ex_ok=$((ex_ok + fn_ok))
     ex_fail_match=$((ex_fail_match + fn_fail_match))
     ex_unspecified=$((ex_unspecified + fn_unspecified))
     ex_nondet=$((ex_nondet + fn_nondet))
     ex_mismatch=$((ex_mismatch + fn_mismatch))
+    ex_host=$((ex_host + fn_host))
   done
 
+  host_str=""
+  if [ "$ex_host" -gt 0 ]; then host_str=" host=$ex_host"; fi
   echo "TOTAL $ex: ok=$ex_ok fail_match=$ex_fail_match unspecified=$ex_unspecified" \
-    "nondet=$ex_nondet mismatch=$ex_mismatch"
+    "nondet=$ex_nondet mismatch=$ex_mismatch$host_str"
   total_ok=$((total_ok + ex_ok))
   total_fail_match=$((total_fail_match + ex_fail_match))
   total_unspecified=$((total_unspecified + ex_unspecified))
   total_nondet=$((total_nondet + ex_nondet))
   total_mismatch=$((total_mismatch + ex_mismatch))
+  total_host=$((total_host + ex_host))
 done
 
+host_str=""
+if [ "$total_host" -gt 0 ]; then host_str=" host=$total_host"; fi
 echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspecified" \
-  "nondet=$total_nondet mismatch=$total_mismatch"
+  "nondet=$total_nondet mismatch=$total_mismatch$host_str"
+if [ "$total_host" -gt 0 ]; then
+  echo "note: $total_host host-dependent float results differ from the x86_64-linux model" \
+    "(tests/diff/<ex>/host.txt); CI checks them" >&2
+fi
 [ "$mismatch_found" -eq 0 ]

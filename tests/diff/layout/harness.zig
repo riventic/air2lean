@@ -83,6 +83,20 @@ fn argIsOk(b: []common.Buf, it: []std.json.Value) struct { *const layout.Flags }
     return .{ptr(*const layout.Flags, b, it[0])};
 }
 
+fn argCtlMode(b: []common.Buf, it: []std.json.Value) struct { *const layout.Ctl } {
+    return .{ptr(*const layout.Ctl, b, it[0])};
+}
+
+fn argMaskStore(b: []common.Buf, it: []std.json.Value) struct { *@Vector(4, bool), u32 } {
+    return .{ ptr(*@Vector(4, bool), b, it[0]), @intCast(it[1].integer) };
+}
+fn argMaskCount(b: []common.Buf, it: []std.json.Value) struct { *const @Vector(4, bool) } {
+    return .{ptr(*const @Vector(4, bool), b, it[0])};
+}
+fn argLaneSet(b: []common.Buf, it: []std.json.Value) struct { *@Vector(4, u32), u32 } {
+    return .{ ptr(*@Vector(4, u32), b, it[0]), @intCast(it[1].integer) };
+}
+
 fn argHeader(b: []common.Buf, it: []std.json.Value) struct { []const u8 } {
     return .{common.sliceArg([]const u8, b, it[0])};
 }
@@ -174,6 +188,11 @@ pub fn main() !void {
     try run(gpa, "setMode", layout.setMode, argSetMode);
     try run(gpa, "incCount", layout.incCount, argIncCount);
     try run(gpa, "isOk", layout.isOk, argIsOk);
+    try run(gpa, "ctlSum", layout.ctlSum, argByteToFlags);
+    try run(gpa, "ctlMode", layout.ctlMode, argCtlMode);
+    try run(gpa, "maskStore", layout.maskStore, argMaskStore);
+    try run(gpa, "maskCount", layout.maskCount, argMaskCount);
+    try run(gpa, "laneSet", layout.laneSet, argLaneSet);
     try run(gpa, "headerLen", layout.headerLen, argHeader);
     try run(gpa, "readHeader", layout.readHeader, argHeader);
     try run(gpa, "floatBits", layout.floatBits, argFloatBits);

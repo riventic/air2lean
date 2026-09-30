@@ -21,3 +21,8 @@ export fn air2lean_asm_popcnt64(x: u64) u64 {
 export fn air2lean_asm_lzcnt64(x: u64) u64 {
     return @clz(x);
 }
+
+/// `divl` with `edx = 0`: the quotient in the low 32 bits, the remainder in the high 32 bits.
+export fn air2lean_asm_divmod32(a: u32, b: u32) u64 {
+    return (@as(u64, a % b) << 32) | (a / b);
+}

@@ -80,16 +80,22 @@ variable {n : Nat}
   let q ← divTrunc s a b
   if q * b = a then pure q else throw .panic
 
-/-- `@rem`, and `%` on unsigned integers. The result has the sign of `a`. -/
+/-- `minInt % -1`: LLVM's `srem` has no result (x86_64 `idiv` traps), and Sema does not check
+it, so `@rem`/`@mod` of these is illegal behaviour. -/
+@[inline] def remOverflows (a b : BitVec n) : Bool := a == BitVec.intMin n && b == -1
+
+/-- `@rem`, and `%` on unsigned integers. The result has the sign of `a`. A negative `b` is
+allowed (Sema checks only `b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverflows`). -/
 @[inline] def rem (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
   if b = 0 then throw .divByZero
-  else if s then (if b.toInt < 0 then throw .panic else pure (a.srem b))
+  else if s then (if remOverflows a b then throw .illegal else pure (a.srem b))
   else pure (a.umod b)
 
-/-- `@mod`. The result has the sign of `b`. -/
+/-- `@mod`. The result has the sign of `b` (floored). A negative `b` is allowed (Sema checks only
+`b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverflows`). -/
 @[inline] def mod (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
   if b = 0 then throw .divByZero
-  else if s then (if b.toInt < 0 then throw .panic else pure (a.smod b))
+  else if s then (if remOverflows a b then throw .illegal else pure (a.smod b))
   else pure (a.umod b)
 
 @[inline] def addWrap (a b : BitVec n) : BitVec n := a + b
@@ -120,6 +126,11 @@ def clamp (s : Bool) (n : Nat) (v : Int) : BitVec n :=
   if (if s then a.sle b else a.ule b) then a else b
 @[inline] def max (s : Bool) (a b : BitVec n) : BitVec n :=
   if (if s then a.sle b else a.ule b) then b else a
+
+/-- Integer `@abs`: the result is unsigned of the same width, so it never overflows (`-minInt`
+is `2^(n-1)`, the same bits). -/
+@[inline] def absInt (s : Bool) (a : BitVec n) : BitVec n :=
+  if s && a.msb then -a else a
 
 /-! ## Bits -/
 

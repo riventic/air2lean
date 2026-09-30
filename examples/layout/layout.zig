@@ -92,6 +92,53 @@ pub fn isOk(p: *const Flags) bool {
     return p.ready and !p.err;
 }
 
+/// A mode of 2 bits: 3 has no name.
+pub const Mode = enum(u2) { off, low, high };
+
+/// A control byte with an enum field.
+pub const Ctl = packed struct(u8) {
+    on: bool,
+    mode: Mode,
+    level: u5,
+};
+
+/// The mode plus the level of `b` (`@bitCast` to a packed struct with an enum field). A mode of
+/// 3 has no name: illegal behaviour, not checked.
+pub fn ctlSum(b: u8) u8 {
+    const c: Ctl = @bitCast(b);
+    return @as(u8, @intFromEnum(c.mode)) + c.level;
+}
+
+/// The mode of `p.*`, read through a bit-pointer.
+pub fn ctlMode(p: *const Ctl) u8 {
+    return @intFromEnum(p.mode);
+}
+
+/// A `bool` vector in memory: lane `i` is bit `i` of the byte, the high 4 bits are padding.
+/// Lane `i` is set if byte `i` of `a` is above 0x7f.
+pub fn maskStore(p: *@Vector(4, bool), a: u32) u32 {
+    const v: @Vector(4, u32) = .{ a & 0xff, (a >> 8) & 0xff, (a >> 16) & 0xff, a >> 24 };
+    p.* = v > @as(@Vector(4, u32), @splat(0x7f));
+    const m = p.*;
+    const one: @Vector(4, u32) = @splat(1);
+    const zero: @Vector(4, u32) = @splat(0);
+    return @reduce(.Add, @select(u32, m, one, zero));
+}
+
+/// The number of set lanes of the `bool` vector at `p`. A set padding bit gives no value.
+pub fn maskCount(p: *const @Vector(4, bool)) u32 {
+    const m = p.*;
+    const one: @Vector(4, u32) = @splat(1);
+    const zero: @Vector(4, u32) = @splat(0);
+    return @reduce(.Add, @select(u32, m, one, zero));
+}
+
+/// Lanes of a vector in memory through lane pointers: `r[2] = x`, then `r[1] +% r[2]`.
+pub fn laneSet(r: *@Vector(4, u32), x: u32) u32 {
+    r[2] = x;
+    return r[1] +% r[2];
+}
+
 /// A packed struct of 6 bits: the high 2 bits of its byte are padding.
 pub const Pair = packed struct(u6) {
     lo: u3,
@@ -384,4 +431,9 @@ comptime {
     _ = &setNib;
     _ = &bumpPair;
     _ = &writeTable;
+    _ = &ctlSum;
+    _ = &ctlMode;
+    _ = &maskStore;
+    _ = &maskCount;
+    _ = &laneSet;
 }

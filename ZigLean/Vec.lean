@@ -9,7 +9,9 @@ same lanes, but the ABI size and alignment round up to a power of 2 (`docs/air-j
 plain `n * Enc.size α`.
 
 `Emit.lean` lifts a scalar op lane-wise with `map`/`map2`/`map2M` (the same function the scalar
-case calls, e.g. `Zig.add`), builds `select` and `reduce` (`std.builtin.ReduceOp`, Zig's lane
+case calls, e.g. `Zig.add`); every other lane-wise op (`div`, `@min`, bitwise, shifts,
+comparisons, casts, …) is the scalar expression in `mapM`/`map2M`/`map3M` (`Emit.lean`'s
+`emitLaneWise`), builds `select` and `reduce` (`std.builtin.ReduceOp`, Zig's lane
 order: lane 0 first) from here, and expands `@shuffle` to an explicit per-lane pick at emission
 time (the mask is comptime-known, so no runtime shuffle function is needed).
 -/
@@ -37,6 +39,21 @@ instance {α : Type} {n : Nat} [Enc α] : Enc (Vec α n) where
       (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
     if h : xs.size = n then pure ⟨⟨xs, h⟩⟩ else throw .unspecified
 
+/-- The ABI size and alignment of `@Vector(n, bool)`: its lanes are bits, so `⌈n / 8⌉` bytes,
+rounded up to a power of 2 (`Check.lean`'s `modelLayout`). -/
+def boolVecLayout (n : Nat) : Nat := ceilPow2 ((n + 7) / 8)
+
+/-- `@Vector(n, bool)` in memory: lane `i` is bit `i`, as the `uN` of its `n` bits (`intBytes`:
+the bits above `n` in the last byte are padding). -/
+instance (priority := high) {n : Nat} : Enc (Vec Bool n) where
+  size := boolVecLayout n
+  align := boolVecLayout n
+  encode v := padTo (boolVecLayout n) (intBytes ((List.range n).foldl
+    (fun acc i => if v.lanes.toArray[i]! then acc ||| (1#n <<< i) else acc) 0#n))
+  decode bs := do
+    let b ← intOfBytes n (bs.extract 0 ((n + 7) / 8))
+    pure ⟨Vector.ofFn fun i => b.getLsbD i⟩
+
 /-- A vector with every lane `a` (`splat`). -/
 def Vec.splat {α : Type} {n : Nat} (a : α) : Vec α n := ⟨Vector.replicate n a⟩
 
@@ -47,12 +64,27 @@ def Vec.map {α β : Type} {n : Nat} (f : α → β) (v : Vec α n) : Vec β n :
 def Vec.map2 {α β γ : Type} {n : Nat} (f : α → β → γ) (a : Vec α n) (b : Vec β n) : Vec γ n :=
   ⟨Vector.zipWith f a.lanes b.lanes⟩
 
+/-- Lane-wise unary op in `Result` (throws on the first lane that throws). -/
+def Vec.mapM {α β : Type} {n : Nat} (f : α → Result β) (v : Vec α n) : Result (Vec β n) := do
+  let lanes ← v.lanes.mapM f
+  pure ⟨lanes⟩
+
 /-- Lane-wise binary op in `Result` (checked arithmetic: throws on the first lane that
 overflows). -/
 def Vec.map2M {α β γ : Type} {n : Nat} (f : α → β → Result γ) (a : Vec α n) (b : Vec β n) :
     Result (Vec γ n) := do
   let lanes ← (a.lanes.zip b.lanes).mapM fun (x, y) => f x y
   pure ⟨lanes⟩
+
+/-- Lane-wise ternary op in `Result` (`@mulAdd`). -/
+def Vec.map3M {α β γ δ : Type} {n : Nat} (f : α → β → γ → Result δ) (a : Vec α n) (b : Vec β n)
+    (c : Vec γ n) : Result (Vec δ n) := do
+  let lanes ← ((a.lanes.zip b.lanes).zip c.lanes).mapM fun ((x, y), z) => f x y z
+  pure ⟨lanes⟩
+
+/-- A vector of pairs as a pair of vectors (`@addWithOverflow` on vectors). -/
+def Vec.unzip {α β : Type} {n : Nat} (v : Vec (α × β) n) : Vec α n × Vec β n :=
+  (⟨v.lanes.map (·.1)⟩, ⟨v.lanes.map (·.2)⟩)
 
 /-- `select`: lane `i` is `a`'s lane if `pred`'s lane `i` is true, else `b`'s. -/
 def Vec.select {α : Type} {n : Nat} (pred : Vec Bool n) (a b : Vec α n) : Vec α n :=

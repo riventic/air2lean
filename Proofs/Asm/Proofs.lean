@@ -39,3 +39,13 @@ theorem lzcnt64_allOnes
   unfold lzcnt64
   simp only [zig_unfold]
   rw [hz]
+
+/-- `divl` with `edx = 0` gives the quotient and the remainder: two outputs, the second one a
+store to the local `rem` (an lvalue output). Stated as a hypothesis about the opaque
+`airAsm_2482283570`. Then `divmod` puts the remainder in the high 32 bits and the quotient in the
+low 32 bits. -/
+theorem divmod_spec (a b : BitVec 32)
+    (hdiv : airAsm_2482283570 a b = (a / b, a % b)) :
+    divmod a b = pure ((a % b).setWidth 64 <<< 32 ||| (a / b).setWidth 64) := by
+  unfold divmod
+  simp [zig_unfold, hdiv, Zig.shl]

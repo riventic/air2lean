@@ -5,7 +5,7 @@ import Air2Lean.Air.Json
 /-!
 # Canonical AIR
 
-Four rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Five rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -30,7 +30,11 @@ supported version, so one translation (and the proofs over it) serves all versio
    with the same tag and operands as an earlier check in the same body, `0 <= x`, or `x <= x + y`
    after the `add` (it does not wrap), for unsigned `x` and `y`. For `s[a..][0..n]`, 0.15.2
    checks `a <= a + n`.
-4. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+4. `argRanks`. An `arg`'s `param` is the source index of the parameter, and it counts the
+   `comptime` parameters of a generic instance (`dupeSentinel(allocator, comptime T, m)` reads
+   `m` as `param 2`). The pass gives each `arg` the rank of its index among the `arg`s, so
+   `param` is the index of the runtime parameter (`p0, p1, …`).
+5. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -52,10 +56,12 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       elseBody := rewriteBody g i.elseBody,
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
 
-/-- `i` with `f` applied to each value operand (not to nested bodies). -/
+/-- `i` with `f` applied to each value operand (not to nested bodies), asm operands included. -/
 def RawInst.mapVals (f : Val → Val) (i : RawInst) : RawInst :=
+  let op (o : RawAsmOperand) : RawAsmOperand := { o with ref := o.ref.map f }
   { i with
     args := i.args.map f, callee := i.callee.map f,
+    asm := i.asm.map fun a => { a with outputs := a.outputs.map op, inputs := a.inputs.map op },
     cases := i.cases.map fun c =>
       { c with items := c.items.map f, ranges := c.ranges.map fun (a, b) => (f a, f b) } }
 
@@ -63,7 +69,8 @@ def RawInst.mapVals (f : Val → Val) (i : RawInst) : RawInst :=
 def RawInst.uses (i : RawInst) : Array InstId :=
   let ids (v : Val) : Array InstId := match v with | .inst id => #[id] | _ => #[]
   i.args.flatMap ids ++ (i.callee.map ids).getD #[] ++
-    i.cases.flatMap fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b
+    i.cases.flatMap (fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b) ++
+    (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o => (o.ref.map ids).getD #[]).getD #[]
 
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||
@@ -289,8 +296,17 @@ def renumber (f : RawFunc) : RawFunc :=
     some { (i.mapVals rv) with id := r i.id, target := i.target.map r }
   { f with body }
 
-/-- The four rewrites (module doc). -/
+/-- `argRanks` (module doc). -/
+def argRanks (f : RawFunc) : RawFunc :=
+  let ps := ((flatten f.body).filterMap fun i => if i.tag == "arg" then i.param else none)
+  let ranks := (ps.qsort (· < ·)).toList.eraseDups.toArray
+  let rank (p : Nat) : Nat := (ranks.idxOf? p).getD p
+  let body := rewriteBody (body := f.body) fun i =>
+    some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
+  { f with body }
+
+/-- The five rewrites (module doc). -/
 def canonicalize (f : RawFunc) : RawFunc :=
-  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies f)))
+  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies (argRanks f))))
 
 end Air2Lean.Raw

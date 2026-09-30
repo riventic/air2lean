@@ -70,6 +70,16 @@ pub fn dupe(a: Allocator, xs: []const u8) ![]u8 {
     return a.dupe(u8, xs);
 }
 
+/// The length of a `dupeZ` copy of `xs` up to its first 0 (the sentinel, if `xs` has no 0).
+/// `free` of the `[:0]u8` frees `len + 1` bytes.
+pub fn dupeZLen(a: Allocator, xs: []const u8) !usize {
+    const z = try a.dupeZ(u8, xs);
+    defer a.free(z);
+    var n: usize = 0;
+    while (z[n] != 0) n += 1;
+    return n;
+}
+
 /// The even items of `xs`, in a new slice (`std.ArrayListUnmanaged`).
 pub fn evens(a: Allocator, xs: []const u32) ![]u32 {
     var list: std.ArrayListUnmanaged(u32) = .empty;
@@ -88,5 +98,6 @@ comptime {
     _ = &listSum;
     _ = &sumRange;
     _ = &dupe;
+    _ = &dupeZLen;
     _ = &evens;
 }

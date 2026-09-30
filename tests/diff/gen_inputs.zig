@@ -130,6 +130,13 @@ pub fn main() !void {
     // The layout generators run last, so every earlier input stays the same.
     try compat.makePath("tests/diff/layout/inputs");
     try genLayout(rng);
+    // The vector op generators run last, so every earlier input stays the same.
+    try genVectorOps(rng);
+    try genSentinelArr(rng);
+    try genDupeZ(rng);
+    try genCtl();
+    try genVecMem(rng);
+    try genDivmod(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2510,5 +2517,192 @@ fn genLayout(rng: std.Random) !void {
             try writePtr(writer, 0, rng.uintLessThan(usize, 2));
             try writer.print(",{d}]}}\n", .{rng.int(u6)});
         }
+    }
+}
+
+// --- examples/vectors: the other lane-wise ops ---------------------------------------------
+
+/// Two `@Vector(4, i32)` per line: lines 0..48 pair every `edgesI` lane with every edge, so a
+/// lane of 0 (division by zero) and `minInt` with -1 (overflow) show up in each lane.
+fn writeVecPairI(w: anytype, rng: std.Random, n: usize) !void {
+    const e = edgesI(i32);
+    var b = vecI(rng, n + 3);
+    if (n < 49) b = .{ e[n % 7], e[(n / 7) % 7], e[(n + 3) % 7], e[(n / 7 + 2) % 7] };
+    try w.writeAll("[");
+    try writeIntSlice(w, i32, &vecI(rng, n));
+    try w.writeAll(",");
+    try writeIntSlice(w, i32, &b);
+    try w.writeAll("]\n");
+}
+
+/// vDiv .. vToFloat: N lines each.
+fn genVectorOps(rng: std.Random) !void {
+    inline for (.{ "vDiv", "vMod", "vMinMax", "vLess" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| try writeVecPairI(w, rng, n);
+    }
+    inline for (.{ "vBits", "vOverflow" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &vecU(rng, n + 5));
+            try w.writeAll("]\n");
+        }
+    }
+    {
+        var file = try openOutV("vShift");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            // Lines 0..31: every shift amount; later lines also set bits above the 5 used.
+            var s: [4]u32 = undefined;
+            for (0..4) |i| s[i] = if (n < 32) @intCast((n + 8 * i) % 32) else rng.int(u32);
+            try w.writeAll("[");
+            try writeIntSlice(w, u32, &vecU(rng, n));
+            try w.writeAll(",");
+            try writeIntSlice(w, u32, &s);
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "vNeg", "vAbs", "vToFloat" }) |name| {
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            try w.writeAll("[");
+            try writeIntSlice(w, i32, &vecI(rng, n));
+            try w.writeAll("]\n");
+        }
+    }
+    inline for (.{ "sRem", "sMod" }) |name| {
+        // Lines 0..48: every pair of `edgesI`; then random, with small divisors of both signs.
+        var file = try openOutV(name);
+        defer file.close();
+        const w = file.writer();
+        const e = edgesI(i32);
+        for (0..N) |n| {
+            const a: i32 = if (n < 49) e[n % 7] else rng.int(i32);
+            const b: i32 = if (n < 49) e[n / 7] else rng.intRangeAtMost(i32, -9, 9);
+            try w.print("[{d},{d}]\n", .{ a, b });
+        }
+    }
+    {
+        // Small values in some lines, so most lines fit in an `i16`.
+        var file = try openOutV("vNarrow");
+        defer file.close();
+        const w = file.writer();
+        for (0..N) |n| {
+            var a = vecI(rng, n);
+            if (n >= 64 and n % 2 == 0) {
+                for (0..4) |i| a[i] = rng.intRangeAtMost(i32, -40000, 40000);
+            }
+            try w.writeAll("[");
+            try writeIntSlice(w, i32, &a);
+            try w.writeAll("]\n");
+        }
+    }
+}
+
+/// sentinelArr(i): `i = 3` reads the sentinel; `i > 3` panics. Last, so that the shared `rng`
+/// stream of every earlier generator does not change.
+fn genSentinelArr(rng: std.Random) !void {
+    var file = try openSlices("sentinelArr");
+    defer file.close();
+    const writer = file.writer();
+    for (0..N) |i| {
+        const x = if (i % 4 == 0) edgesU(u32)[rng.uintLessThan(usize, 4)] else rng.uintLessThan(u32, 6);
+        try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{x});
+    }
+}
+
+/// dupeZLen(xs: []const u8): some bytes are 0; the one allocation fails in some inputs.
+fn genDupeZ(rng: std.Random) !void {
+    var file = try openLists("dupeZLen");
+    defer file.close();
+    const writer = file.writer();
+    for (0..N) |i| {
+        const n = rng.uintAtMost(usize, 24);
+        try writeBuf(writer, rng, n, 6);
+        try writeFailAt(writer, rng, i, 1);
+        try writer.writeAll(",");
+        const a = rng.uintAtMost(usize, n);
+        try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
+        try writer.writeAll("]}\n");
+    }
+}
+
+/// ctlSum(b: u8), ctlMode(p: *const Ctl): every byte (a mode of 3 has no name).
+fn genCtl() !void {
+    {
+        var file = try openLayout("ctlSum");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[],\"args\":[{d}]}}\n", .{b});
+    }
+    {
+        var file = try openLayout("ctlMode");
+        defer file.close();
+        const writer = file.writer();
+        for (0..256) |b| try writer.print("{{\"bufs\":[[{d}]],\"args\":[{{\"buf\":0,\"off\":0}}]}}\n", .{b});
+    }
+}
+
+/// maskStore(p: *@Vector(4, bool), a: u32), maskCount(p), laneSet(r: *@Vector(4, u32), x: u32).
+fn genVecMem(rng: std.Random) !void {
+    {
+        var file = try openLayout("maskStore");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 1)});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{rng.int(u32)});
+        }
+    }
+    {
+        // Half of the bytes have no set padding bit (the high 4 bits).
+        var file = try openLayout("maskCount");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |i| {
+            const b = if (i % 2 == 0) rng.uintLessThan(u8, 16) else rng.int(u8);
+            try writer.print("{{\"bufs\":[[{d}]],\"args\":[", .{b});
+            try writePtr(writer, 0, 0);
+            try writer.writeAll("]}\n");
+        }
+    }
+    {
+        var file = try openLayout("laneSet");
+        defer file.close();
+        const writer = file.writer();
+        for (0..N) |_| {
+            try writeBufs(writer, &.{Bytes.random(rng, 16)});
+            try writePtr(writer, 0, 0);
+            try writer.print(",{d}]}}\n", .{edgyU32(rng)});
+        }
+    }
+}
+
+/// divmod(a: u32, b: u32): `b > 0` (0 is a CPU fault). Edges of `a` with small and large `b`.
+fn genDivmod(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/asm/inputs", "divmod");
+    defer file.close();
+    const writer = file.writer();
+    var n: usize = 0;
+    for (edgesU(u32)) |a| {
+        for ([_]u32{ 1, 2, 7, 0xffff_ffff }) |b| {
+            try writer.print("[{d},{d}]\n", .{ a, b });
+            n += 1;
+        }
+    }
+    while (n < N) : (n += 1) {
+        const b = if (n % 2 == 0) rng.intRangeAtMost(u32, 1, 100) else rng.intRangeAtMost(u32, 1, 0xffff_ffff);
+        try writer.print("[{d},{d}]\n", .{ rng.int(u32), b });
     }
 }

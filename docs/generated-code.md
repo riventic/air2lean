@@ -25,6 +25,7 @@
 | `bool` | `Bool` |
 | `void` | `Unit` |
 | `[N]T` | `Vector T' N` |
+| `[N:s]T` | `Vector T' (N+1)`: the sentinel is the last item, as in the AIR (a constant's `elems`, `docs/air-json.md`). A load or store copies all `N+1` items; a slice of it has length `N`. |
 | `@Vector(N, T)` (`T` an integer or a float) | `Zig.Vec T' N` (`ZigLean/Vec.lean`) |
 | `[]const T` in a pure function (§Memory) | `Array T'` |
 | `[]T`, `[:s]T`; `[]const T` in a function that uses memory | `Zig.Slice` (an item pointer and a `BitVec 64` length; §Memory) |
@@ -77,18 +78,23 @@ first. AIR op → generated code:
 | `splat` | `Zig.Vec.splat` |
 | `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
 | `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
-| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
+| every other lane-wise op: `div_*`, `rem`, `mod`, `div_float`, `min`/`max`, `add_with_overflow` family, `bit_and`/`bit_or`/`xor`, `not`, `abs`, shifts, `cmp_vector`, `bool_and`/`bool_or`, `intcast`, `trunc`, float rounding, `sqrt`, libm ops, `mul_add`, float/int conversions | the scalar op's expression on lane variables in `Zig.Vec.mapM`/`map2M`/`map3M` (`Emit.lean`'s `emitLaneWise`): each lane has the scalar semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of pairs, and `Zig.Vec.unzip` makes the tuple |
+| `reduce` | `Zig.Vec.reduce` (int `.Add`/`.Mul` wrap: safe, since wraparound `+`/`*` stay associative; `.And`/`.Or`/`.Xor`/`.Min`/`.Max`; `bool` `.And`/`.Or`/`.Xor`, the safety checks of a vector op) or `Zig.Vec.reduceM` (float `.Min`/`.Max`: `Float.minChk`/`maxChk`, throws `.unspecified` on the `+0`/`-0` tie, docs/floats.md §+0 and −0 in `@min` / `@max`) |
 
 A float `reduce`'s lane order is exactly Zig's (`Vec.reduce_four`-style, lane 0 first for a
 4-lane vector) — float addition is not associative, so a proof about a float `reduce` states this
 order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s `fDot_body`).
 
-Vector `div`, `@min`/`@max`, `@addWithOverflow`-family ops, bitwise/`@shlExact`-family ops, `-`
-(negation) and `~` (bitwise not) are not translated (`vectors.zig` does not use them; `Emit.lean`
-has no vector-specific case for any of them, so one would emit a scalar function call on
-`Zig.Vec`-typed arguments — a `lake build` type error, not a silent miscompile). A vector
-comparison (`cmp_vector`) and a vector of a type other than an integer or float are rejected
-explicitly (`Check.lean`).
+Sema writes the safety checks of a vector op (division by zero, overflow) as a `cmp_vector` and
+a `reduce` of the `bool` vector, before the op.
+
+In memory, a vector of integers or floats is its lanes, as an array, with the size rounded up
+to a power of 2 (`vecLayout`). A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
+size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
+are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
+A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of an integer or float vector is
+an item pointer, as for an array. A lane pointer of a `bool` vector is outside the subset: the
+lane is a bit, and the AIR file has no lane index (the pointer type's `vector_index`).
 
 ### Places
 
@@ -133,7 +139,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 
-`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A `uN` with `N % 8 ≠ 0` has padding bits: its last byte is `part (N % 8) b`, because Zig stores it as its integer type and the bits above are undefined. A load that reads an `undef` byte or bit of the value throws `.unspecified` (a `uM` read of a `part m` byte needs its bits in that byte to be at most `m`). A set bit above a `uN` in its last byte also throws `.unspecified`: LLVM makes a load of `iN` undefined if no `iN` store wrote it (a union tag byte 2 of a 1-bit tag). A `packed` union field read is a bit-cast of the backing integer and truncates; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. An array with a sentinel as one value is outside the subset. Packed structs, tagged unions and error unions in memory: §Casts, layout and function pointers.
+`Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A `uN` with `N % 8 ≠ 0` has padding bits: its last byte is `part (N % 8) b`, because Zig stores it as its integer type and the bits above are undefined. A load that reads an `undef` byte or bit of the value throws `.unspecified` (a `uM` read of a `part m` byte needs its bits in that byte to be at most `m`). A set bit above a `uN` in its last byte also throws `.unspecified`: LLVM makes a load of `iN` undefined if no `iN` store wrote it (a union tag byte 2 of a 1-bit tag). A `packed` union field read is a bit-cast of the backing integer and truncates; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Packed structs, tagged unions and error unions in memory: §Casts, layout and function pointers.
 
 `@memset`, `@memcpy`, `@memmove` and `Zig.readSlice` do nothing for 0 items, also through a pointer that is not valid. `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
 
@@ -165,10 +171,10 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 | `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
 | `@fieldParentPtr("f", p)` | `field_parent_ptr` | `p.add (-offset)` |
-| `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits` |
+| `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
 
-A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool` or a packed struct; other fields are outside the subset. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
+A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool`, an enum (its tag integer; each enum has a `Zig.Packed` instance) or a packed struct; other fields are outside the subset. `valid` is `false` for bits with a tag value without a name of an exhaustive enum, in any field: where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed` union read), `Zig.Packed.ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
 
 An **`extern` struct** uses the exporter's field offsets, as every struct does.
 
@@ -256,7 +262,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 8 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `nondet`. `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free). `nondet` = a concurrent atomic access races with a write, and the model does not pick an interleaving (§Atomics and threads); the diff test treats it like `unspecified` (a Lean `unspecified` or `illegal` matches any Zig line — see below — and `nondet` follows the same rule, pinned separately in `tests/diff/<ex>/nondet.txt`). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
+`Zig.Error` has 8 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `nondet`. `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps). `nondet` = a concurrent atomic access races with a write, and the model does not pick an interleaving (§Atomics and threads); the diff test treats it like `unspecified` (a Lean `unspecified` or `illegal` matches any Zig line — see below — and `nondet` follows the same rule, pinned separately in `tests/diff/<ex>/nondet.txt`). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|
@@ -284,6 +290,18 @@ def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 ```
+
+**More than one output.** Each output is a register output (`=r`, `={reg}`) of an integer. At most one is the expression's result (`-> T`); every other one is an lvalue output: the asm writes it to its operand, a pointer. The opaque then returns a tuple of all outputs, in output order. The translation binds the result output, and writes each lvalue output with the code of a `store` (a local's field, or `Zig.store` through a pointer). A matching input constraint (`"1"`) can name any output. `examples/asm/asm.zig`'s `divmod` (`divl`: the quotient is the result, the remainder goes to the local `rem`):
+
+```lean
+opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
+
+    let a4 := airAsm_2482283570 p0 p1
+    let i4 ← pure a4.1
+    modify (fun s => { s with rem := a4.2 })
+```
+
+A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
 
 `volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
 

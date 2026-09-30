@@ -110,5 +110,6 @@ pub fn main() !void {
     try run(gpa, "failName", slices.failName, false, argU8);
     try run(gpa, "bumpAt", slices.bumpAt, false, argBumpAt);
     try run(gpa, "localArr", slices.localArr, false, argUsize);
+    try run(gpa, "sentinelArr", slices.sentinelArr, false, argUsize);
     try run(gpa, "lenOr", slices.lenOr, true, argLenOr);
 }
