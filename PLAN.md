@@ -43,8 +43,8 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (h) | an allocation never fails at `Mem.failAt` | 311 mismatches |
 | (i) | the asm `bswap32` returns its input | 298 mismatches |
 | (j) | `Zig.Vec.reduce` drops the last lane | 1083 mismatches |
-| (k) | `Xchg` in the `Xor` commuting group | 1 pinned count |
-| (l) | no data-race check | 2 pinned counts |
+| (k) | two atomic accesses race | 3 pinned counts |
+| (l) | no data-race check | 1 pinned count |
 | (m) | `Flags.ofBits` swaps two packed fields | 787 mismatches |
 | (n) | no read-only check for a `const` global | 1 pinned count |
 | (o) | every `Byte.part` rejected | 4 pinned counts |
@@ -54,12 +54,21 @@ Mutation check (`scripts/mutate.sh`, CI job `mutate`): each mutation must change
 | (s) | `Allocator.freeSentinel` frees `len` items, not `len + 1` | 1 pinned count |
 | (t) | every `Mode` value is valid in a packed struct | 128 mismatches |
 | (u) | a `bool` vector in memory has its lanes in reverse bit order | 220 mismatches |
+| (v) | `cmpxchgAs` compares with the new value | 20 mismatches |
+| (w) | an acquire read adopts no clock | proof build (`mp_sees_data`) |
+| (x) | a write goes only at the end | proof build (`twoPlusTwoW_weak`) |
+| (y) | a futex wait never blocks | proof build (`wait_alone_deadlock`) |
+| (z) | no deadlock check | proof build (`wait_alone_deadlock`) |
 
 ## Next
 
 | # | Milestone |
 |---|---|
-| M23 | Docs for v1 (this table, README, `docs/`); tag v1.0.0 after approval. The AIR export is not sent upstream. |
+| T1 | Threads that take turns (`ZigLean/Conc/`): the monad `ConcM` (a tree of sync ops with `CCPO`/`MonoBind`), the scheduler `Zig.Sched.run` over an oracle, concurrent functions in `Emit.lean` (`Tgt`, `dispatch`, a `yield` before each atomic op), the race rule (two atomic accesses never race; release/acquire clocks per location), the diff test's search over schedules. `Zig.Error.nondet` is gone. |
+| T2 | RC11 (`ZigLean/Mem/Thread.lean`): per atomic location the writes in modification order; a read reads a message not older than its happens-before and its own reads; a write can go before newer messages; RMWs stay right after what they read; only acquire/release give happens-before edges (release sequences). `seq_cst` = `acq_rel` (no SC order: more results, never fewer). Each atomic op is one `pick` of the oracle. Example `atomics` (message passing, store buffering, 2+2W, a lock-free stack); proofs of the weak results under concrete schedules; mutations (w), (x) detected by the proof build. |
+| T3 | Waits (0.16.0): `std.Io` is `Zig.Io`; `Io.futexWait`/`futexWaitUncancelable`/`futexWake` are sync ops of the scheduler (a wait blocks until a wake at its address); `Zig.Error.deadlock` when no thread can go on. `Io.Mutex` is translated from its std code (atomics on its `enum(u32)` state). Example `sync` (0.16.0 only, `examples/<ex>/zig-versions`): a counter under `Io.Mutex`, 4 in all 6,522 schedules. Mutations (y), (z) detected by the proof build. |
+| T3b | `Io.Condition` and `Io.Event` translated from their std code (atomics on a packed struct; packed struct constants `.{ .f = v }`). `sync.handoff`: a hand-off through a condition and an event. |
+| T3c–T6 | `Io.RwLock`, `Io.Semaphore`, `Io.Group`; 0.15.2's `Thread.Mutex` (`os_unfair_lock`, the Linux futex); proofs over all schedules; concurrent separation logic; docs. |
 
 ## Decisions
 
@@ -120,7 +129,7 @@ Support matrix:
 | checked, wrapping, saturating arithmetic | |
 | `if`, `switch`, `while`, `for` | |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | |
-| read-only slices `[]const T` in a pure function; atomics on an integer pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) with a data-race check | |
+| read-only slices `[]const T` in a pure function; atomics on an integer, enum or `bool` pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) that take turns at sync ops, with a data-race check | |
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |

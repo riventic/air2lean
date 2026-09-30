@@ -149,6 +149,7 @@ def parseTy (j : Json) : Except String Ty := do
     let name ← (← j.getObjVal? "name").getStr?
     if name == "mem.Allocator" then return .allocator
     if name == "Thread" then return .thread
+    if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
     if (optField j "no_fields").isSome then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
@@ -252,9 +253,44 @@ or `{}`. Shared between a top-level constant and an optional's payload (below): 
 def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except String Val := do
   match ty with
   | .int .. => return .int tyId (← parseIntLit fnName s)
+  -- A packed struct constant is its backing integer (`Emit.lean` writes `Zig.Packed.ofBits`).
+  | .struct _ "packed" _ => return .int tyId (← parseIntLit fnName s)
   | .bool => return .bool (s == "true")
   | .void => return .void
   | other => throw s!"{fnName}: constant of unsupported type {repr other}"
+
+/-- The bit width of a packed struct field of type `id`: an integer, a `bool`, an enum (its tag),
+or a packed struct (`Air2Lean/Memory.lean`'s `packedBits`, which this file cannot import). -/
+partial def packedWidth (types : Array Ty) (id : TyId) : Option Nat :=
+  match types[id]? with
+  | some (.int _ bits) => some bits
+  | some .bool => some 1
+  | some (.enum _ tag _ _) => packedWidth types tag
+  | some (.struct _ "packed" fs) => fs.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedWidth types t
+  | _ => none
+
+/-- A packed struct constant written as `.{ .f = v, … }` (the exporter's `fmtValue` for some
+constants): its backing integer, field 0 in the lowest bits. A field value is an integer or
+`true`/`false`. -/
+def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String × TyId)) (s : String) :
+    Except String Int := do
+  let body := ((s.drop 2).dropEnd 1).toString
+  let parts := (body.splitOn ",").map (·.trimAscii.toString) |>.filter (· != "")
+  let mut acc : Nat := 0
+  let mut off : Nat := 0
+  for ((name, fty), part) in fields.toList.zip parts do
+    let some w := packedWidth types fty
+      | throw s!"{fnName}: packed field {name} has no bit width"
+    let v ← match (part.splitOn "=").map (·.trimAscii.toString) with
+      | [lhs, rhs] =>
+        if lhs != "." ++ name then throw s!"{fnName}: packed constant {s}: field {lhs}, expected .{name}"
+        if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0 else parseIntLit fnName rhs
+      | _ => throw s!"{fnName}: packed constant {s}: cannot read {part}"
+    acc := acc + (v.toNat % 2 ^ w) * 2 ^ off
+    off := off + w
+  if parts.length != fields.size then
+    throw s!"{fnName}: packed constant {s} has {parts.length} fields, expected {fields.size}"
+  pure acc
 
 /-- A `Ref`: `{"inst": id}`, `{"ty", "val"}`, `{"ty", "undef": true}`, `{"ty", "func",
 "noreturn"}`, `{"ty", "err"}` (an error value, or an error-union constant in the error state —
@@ -337,7 +373,11 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       | other => throw s!"{fnName}: 'fbits' constant of unexpected type {repr other}"
     else
       let s ← (← j.getObjVal? "val").getStr?
-      parseLeafVal fnName tyId ty s
+      match ty with
+      | .struct _ "packed" fields =>
+        if s.startsWith ".{" then return .int tyId (← parsePackedLit fnName types fields s)
+        parseLeafVal fnName tyId ty s
+      | _ => parseLeafVal fnName tyId ty s
 
 /-- One lane of a shuffle mask: `{"a": i}`, `{"b": i}`, `{"u": true}`, or `{"v": Ref}`
 (`docs/air-json.md`). -/

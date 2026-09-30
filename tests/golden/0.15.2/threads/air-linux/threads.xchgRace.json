@@ -241,7 +241,7 @@
    "ty": 10,
    "callee": {
     "ty": 11,
-    "func": "Thread.spawn__anon_1955",
+    "func": "Thread.spawn__anon_1506",
     "noreturn": false,
     "comptime_fn": "threads.swapFlag"
    },
@@ -389,7 +389,7 @@
    "ty": 10,
    "callee": {
     "ty": 11,
-    "func": "Thread.spawn__anon_1955",
+    "func": "Thread.spawn__anon_1506",
     "noreturn": false,
     "comptime_fn": "threads.swapFlag"
    },
@@ -1241,7 +1241,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_440)",
+   "name": "atomic.Value(Thread.Completion__enum_449)",
    "layout": "extern",
    "fields": [
     {
@@ -1299,7 +1299,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_440",
+   "name": "Thread.Completion__enum_449",
    "tag": 50,
    "exhaustive": true,
    "fields": [

@@ -174,7 +174,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
 
-A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool`, an enum (its tag integer; each enum has a `Zig.Packed` instance) or a packed struct; other fields are outside the subset. `valid` is `false` for bits with a tag value without a name of an exhaustive enum, in any field: where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed` union read), `Zig.Packed.ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
+A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool`, an enum (its tag integer; each enum has a `Zig.Packed` instance) or a packed struct; other fields are outside the subset. A packed struct constant is its backing integer (`Zig.Packed.ofBits`); the exporter writes some as `.{ .f = v, … }`, which `Json.lean`'s `parsePackedLit` reads. `valid` is `false` for bits with a tag value without a name of an exhaustive enum, in any field: where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed` union read), `Zig.Packed.ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
 
 An **`extern` struct** uses the exporter's field offsets, as every struct does.
 
@@ -188,27 +188,34 @@ A **function pointer** points to a 1-byte global block of its function in `mem0`
 
 ### Atomics and threads
 
+A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, or a call to such a function; `Air2Lean/Memory.lean`'s `concFunctions`) is a **concurrent function**: it returns `Zig.ConcM Tgt α`, and its body runs in `Zig.CM Tgt σ` (`ZigLean/Conc/`). Calls from it: to a concurrent function `Zig.callC`, to a memory function `Zig.callMC` (no stop), to a pure function `Zig.callRC`. The scheduler runs it ([std-models.md](std-models.md) §Thread model).
+
 | AIR | Lean |
 |---|---|
-| `atomic_load` | `Zig.atomicLoad align p` |
-| `atomic_store_unordered`/`monotonic`/`release`/`seq_cst` | `Zig.atomicStore align p v` (the ordering is decoded and otherwise ignored: the model is sequentially consistent, [std-models.md](std-models.md) §Thread model) |
-| `atomic_rmw` | `Zig.atomicRmw op signed align p v commute` (`op`: `Zig.RmwOp`; `commute`: `Zig.RmwOp.group op signed unused`, `some` only for a result-unused RMW of a commuting op) |
-| `cmpxchg_weak`, `cmpxchg_strong` | `Zig.cmpxchg align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
-| `call` of `Thread.spawn(config, f, args)` | `Zig.Thread.spawn (f args)` — the already-applied call, run eagerly as a new thread |
-| `call` of `Thread.join(handle)` | `Zig.Thread.join handle` |
+| `atomic_load` | `Zig.atomicLoadC (n := N) ord align p` |
+| `atomic_store_monotonic`/`release`/`seq_cst` | `Zig.atomicStoreC ord align p v` |
+| `atomic_rmw` | `Zig.atomicRmwC op signed ord align p v` (`op`: `Zig.RmwOp`) |
+| `cmpxchg_weak`, `cmpxchg_strong` | `Zig.cmpxchgC succ fail align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
+| an atomic op on an enum, a `bool` or a packed struct | the same with `Zig.atomicLoadAsC (T)`, `atomicStoreAsC`, `atomicRmwAsC`, `cmpxchgAsC`: the op on the value's `Zig.Packed` bits |
 
-Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead`, or `.atomicWrite (commute : Option Zig.RmwGroup)` — `some g` only for a result-unused RMW whose op commutes with itself (`Zig.RmwOp.group`); a plain atomic store or a used-result RMW is `.atomicWrite none`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`.
+`ord` is a `Zig.AtomicOrder` (`monotonic` is `.relaxed`; `unordered` is rejected). Each `*C` op is a `Zig.pickC` (the oracle picks the message to read or the place of the write, RC11, std-models.md §Thread model), then the op in `MemM` (`Zig.atomicLoadAt c …`).
+| `call` of `Thread.spawn(config, f, args)` | `Zig.spawnC (Tgt.f args)` |
+| `call` of `Thread.join(handle)` | `Zig.joinC handle` |
+| `call` of `Io.futexWaitUncancelable(T, ptr, expected)` / `Io.futexWait` / `Io.futexWake(T, ptr, n)` (0.16.0) | `Zig.futexWaitC io ptr expected` / `Zig.futexWaitCancelableC …` / `Zig.futexWakeC io ptr n` |
 
-`Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`:
+A program with a concurrent function gets the type `Tgt`, one constructor per spawned function with its one argument, and `dispatch : Tgt → Zig.ConcM Tgt Unit`, which runs a target (a memory function through `Zig.ConcM.liftMem`):
 
-| Earlier access | New access | Result |
-|---|---|---|
-| `.read`/`.atomicRead` | `.read`/`.atomicRead` | no race |
-| `.atomicWrite (some g1)` | `.atomicWrite (some g2)`, `g1 = g2`, the same byte range | no race (they commute) |
-| any `.write` | anything | `.illegal` |
-| anything else (an atomic access racing with a write, or two non-commuting atomics) | | `.nondet` |
+```lean
+inductive Tgt where
+  | bump (a : Zig.Ptr)
+  | writeFlag (a : Zig.Ptr)
 
-`Zig.Thread.spawn`/`.join` are calls the translator recognizes by callee name (`Air2Lean.Memory.lean`'s `threadFn?`), not AIR tags — like the allocator model, they are not translated, they call the Lean model directly. `spawn` bumps the caller's vector clock and gives the new thread a copy; `join` merges the joined thread's clock into the caller's. `Thread.detach`, `.yield`, `.spinLoopHint`, `std.Thread.Futex.*`, `std.Thread.Mutex.*`/`Mutex.*`, `std.Thread.Condition.*` are rejected at translation time (`rejectedThreadFn?`), each with its own reason.
+def dispatch : Tgt → Zig.ConcM Tgt Unit
+  | .bump a => discard (bump a)
+  | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
+```
+
+Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.detach`, `.yield`, `.spinLoopHint`, `std.Thread.Futex.*`, `std.Thread.Mutex.*`/`Mutex.*`, `std.Thread.Condition.*` are rejected at translation time (`rejectedThreadFn?`), each with its own reason.
 
 An escaping `alloc` gets a stack block at function entry. Its `Locals` field holds the pointer, and the block is freed when the function returns:
 
@@ -262,7 +269,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 8 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `nondet`. `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps). `nondet` = a concurrent atomic access races with a write, and the model does not pick an interleaving (§Atomics and threads); the diff test treats it like `unspecified` (a Lean `unspecified` or `illegal` matches any Zig line — see below — and `nondet` follows the same rule, pinned separately in `tests/diff/<ex>/nondet.txt`). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
+`Zig.Error` has 8 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `deadlock` (every thread that has not ended waits, std-models.md §Thread model). `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|
@@ -274,7 +281,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 
-`tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` or `illegal` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0). A Lean `nondet` matches any Zig line the same way, pinned in `tests/diff/<ex>/nondet.txt` instead — a racing input is expected to hit it, and the count is fixed so a new race the check does not catch shows up as a changed count.
+`tests/diff/common.zig` installs a matching `std.builtin.panic` override (same member names, one per Zig safety check), shared by every example's `tests/diff/<ex>/harness.zig`, so the Zig side reports which check tripped instead of aborting; `scripts/diff.sh` compares that name — via the same table (`expected_ctor_for_zig_kind`) — against the `Zig.Error` constructor the Lean side actually threw. A `fail`/`fail` line only counts as a match when the kinds agree; a Zig kind with no table entry, or `unknown` (the child died without reporting one, e.g. a signal), is always a mismatch. A Lean `unspecified` or `illegal` matches any Zig line; the number of such lines per function must equal `tests/diff/<ex>/unspecified.txt` (`<fn> <count>` lines, default 0).
 
 ## Inline asm
 

@@ -1,1 +1,2 @@
 atomic.Value(u32).init
+atomic.Value(threads.Phase).init

@@ -1,0 +1,1797 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "name": "atomics.stackPush",
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 1,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 2,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "call",
+   "ty": 4,
+   "callee": {
+    "ty": 5,
+    "func": "atomic.Value(u32).init",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "ty": 9,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "ty": 9,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "ty": 9,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    }
+   ],
+   "name": "s"
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 15,
+   "tag": "alloc",
+   "ty": 10
+  },
+  {
+   "id": 16,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 16
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 18
+    },
+    {
+     "ty": 6,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    }
+   ],
+   "name": "c1"
+  },
+  {
+   "id": 21,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4
+  },
+  {
+   "id": 22,
+   "tag": "alloc",
+   "ty": 10
+  },
+  {
+   "id": 23,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 22
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 23
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 22
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 25
+    },
+    {
+     "ty": 6,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 22
+    }
+   ],
+   "name": "c2"
+  },
+  {
+   "id": 28,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5
+  },
+  {
+   "id": 30,
+   "tag": "aggregate_init",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5
+  },
+  {
+   "id": 33,
+   "tag": "call",
+   "ty": 13,
+   "callee": {
+    "ty": 14,
+    "func": "Thread.spawn__anon_732",
+    "noreturn": false,
+    "comptime_fn": "atomics.push"
+   },
+   "args": [
+    {
+     "ty": 15,
+     "elems": [
+      {
+       "ty": 9,
+       "val": "16777216"
+      },
+      {
+       "ty": 16,
+       "null": true
+      }
+     ]
+    },
+    {
+     "inst": 30
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "try",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 33
+    }
+   ],
+   "body": [
+    {
+     "id": 34,
+     "tag": "unwrap_errunion_err",
+     "ty": 18,
+     "args": [
+      {
+       "inst": 33
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 5
+    },
+    {
+     "id": 36,
+     "tag": "bitcast",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 34
+      }
+     ]
+    },
+    {
+     "id": 37,
+     "tag": "wrap_errunion_err",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 36
+      }
+     ]
+    },
+    {
+     "id": 38,
+     "tag": "ret_safe",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 37
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "alloc",
+   "ty": 21
+  },
+  {
+   "id": 41,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 40
+    },
+    {
+     "inst": 39
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "tag": "bitcast",
+   "ty": 22,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 39
+    }
+   ],
+   "name": "h1"
+  },
+  {
+   "id": 44,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6
+  },
+  {
+   "id": 46,
+   "tag": "aggregate_init",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 22
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6
+  },
+  {
+   "id": 49,
+   "tag": "call",
+   "ty": 13,
+   "callee": {
+    "ty": 14,
+    "func": "Thread.spawn__anon_732",
+    "noreturn": false,
+    "comptime_fn": "atomics.push"
+   },
+   "args": [
+    {
+     "ty": 15,
+     "elems": [
+      {
+       "ty": 9,
+       "val": "16777216"
+      },
+      {
+       "ty": 16,
+       "null": true
+      }
+     ]
+    },
+    {
+     "inst": 46
+    }
+   ]
+  },
+  {
+   "id": 55,
+   "tag": "try",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 49
+    }
+   ],
+   "body": [
+    {
+     "id": 50,
+     "tag": "unwrap_errunion_err",
+     "ty": 18,
+     "args": [
+      {
+       "inst": 49
+      }
+     ]
+    },
+    {
+     "id": 51,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 6
+    },
+    {
+     "id": 52,
+     "tag": "bitcast",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 50
+      }
+     ]
+    },
+    {
+     "id": 53,
+     "tag": "wrap_errunion_err",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 52
+      }
+     ]
+    },
+    {
+     "id": 54,
+     "tag": "ret_safe",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 53
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 56,
+   "tag": "alloc",
+   "ty": 21
+  },
+  {
+   "id": 57,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 56
+    },
+    {
+     "inst": 55
+    }
+   ]
+  },
+  {
+   "id": 58,
+   "tag": "bitcast",
+   "ty": 22,
+   "args": [
+    {
+     "inst": 56
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 55
+    }
+   ],
+   "name": "h2"
+  },
+  {
+   "id": 60,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7
+  },
+  {
+   "id": 61,
+   "tag": "load",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 42
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7
+  },
+  {
+   "id": 63,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 23,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 61
+    }
+   ]
+  },
+  {
+   "id": 64,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8
+  },
+  {
+   "id": 65,
+   "tag": "load",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 58
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8
+  },
+  {
+   "id": 67,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 23,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 65
+    }
+   ]
+  },
+  {
+   "id": 68,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9
+  },
+  {
+   "id": 69,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 70,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9
+  },
+  {
+   "id": 71,
+   "tag": "bitcast",
+   "ty": 24,
+   "args": [
+    {
+     "inst": 69
+    }
+   ]
+  },
+  {
+   "id": 72,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9
+  },
+  {
+   "id": 73,
+   "tag": "dbg_inline_block",
+   "ty": 6,
+   "body": [
+    {
+     "id": 74,
+     "tag": "dbg_arg_inline",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 71
+      }
+     ],
+     "name": "self"
+    },
+    {
+     "id": 75,
+     "tag": "dbg_arg_inline",
+     "ty": 1,
+     "args": [
+      {
+       "ty": 25,
+       "enum": "2"
+      }
+     ],
+     "name": "order"
+    },
+    {
+     "id": 76,
+     "tag": "alloc",
+     "ty": 26
+    },
+    {
+     "id": 77,
+     "tag": "store_safe",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 76
+      },
+      {
+       "inst": 71
+      }
+     ]
+    },
+    {
+     "id": 78,
+     "tag": "bitcast",
+     "ty": 27,
+     "args": [
+      {
+       "inst": 76
+      }
+     ]
+    },
+    {
+     "id": 79,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2
+    },
+    {
+     "id": 80,
+     "tag": "load",
+     "ty": 24,
+     "args": [
+      {
+       "inst": 78
+      }
+     ]
+    },
+    {
+     "id": 81,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 28,
+     "args": [
+      {
+       "inst": 80
+      }
+     ]
+    },
+    {
+     "id": 82,
+     "tag": "atomic_load",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 81
+      }
+     ],
+     "order": "acquire"
+    },
+    {
+     "id": 83,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2
+    },
+    {
+     "id": 84,
+     "tag": "br",
+     "ty": 20,
+     "target": 73,
+     "args": [
+      {
+       "inst": 82
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 85,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 73
+    }
+   ],
+   "name": "top"
+  },
+  {
+   "id": 86,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 87,
+   "tag": "mul_safe",
+   "ty": 6,
+   "args": [
+    {
+     "ty": 6,
+     "val": "100"
+    },
+    {
+     "inst": 73
+    }
+   ]
+  },
+  {
+   "id": 88,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 89,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 90,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 91,
+   "tag": "intcast",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 73
+    }
+   ]
+  },
+  {
+   "id": 92,
+   "tag": "cmp_lt",
+   "ty": 29,
+   "args": [
+    {
+     "inst": 91
+    },
+    {
+     "ty": 9,
+     "val": "3"
+    }
+   ]
+  },
+  {
+   "id": 95,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 96,
+     "tag": "cond_br",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 92
+      }
+     ],
+     "then": [
+      {
+       "id": 97,
+       "tag": "br",
+       "ty": 20,
+       "target": 95,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 93,
+       "tag": "call",
+       "ty": 20,
+       "callee": {
+        "ty": 30,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 91
+        },
+        {
+         "ty": 9,
+         "val": "3"
+        }
+       ]
+      },
+      {
+       "id": 94,
+       "tag": "unreach",
+       "ty": 20
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 98,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 89
+    },
+    {
+     "inst": 91
+    }
+   ]
+  },
+  {
+   "id": 99,
+   "tag": "load",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 98
+    }
+   ]
+  },
+  {
+   "id": 100,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 101,
+   "tag": "mul_safe",
+   "ty": 6,
+   "args": [
+    {
+     "ty": 6,
+     "val": "10"
+    },
+    {
+     "inst": 99
+    }
+   ]
+  },
+  {
+   "id": 102,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 103,
+   "tag": "add_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 87
+    },
+    {
+     "inst": 101
+    }
+   ]
+  },
+  {
+   "id": 104,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 105,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 106,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 107,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 108,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 109,
+   "tag": "intcast",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 73
+    }
+   ]
+  },
+  {
+   "id": 110,
+   "tag": "cmp_lt",
+   "ty": 29,
+   "args": [
+    {
+     "inst": 109
+    },
+    {
+     "ty": 9,
+     "val": "3"
+    }
+   ]
+  },
+  {
+   "id": 113,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 114,
+     "tag": "cond_br",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 110
+      }
+     ],
+     "then": [
+      {
+       "id": 115,
+       "tag": "br",
+       "ty": 20,
+       "target": 113,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 111,
+       "tag": "call",
+       "ty": 20,
+       "callee": {
+        "ty": 30,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 109
+        },
+        {
+         "ty": 9,
+         "val": "3"
+        }
+       ]
+      },
+      {
+       "id": 112,
+       "tag": "unreach",
+       "ty": 20
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 116,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 107
+    },
+    {
+     "inst": 109
+    }
+   ]
+  },
+  {
+   "id": 117,
+   "tag": "load",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 116
+    }
+   ]
+  },
+  {
+   "id": 118,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 119,
+   "tag": "intcast",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 117
+    }
+   ]
+  },
+  {
+   "id": 120,
+   "tag": "cmp_lt",
+   "ty": 29,
+   "args": [
+    {
+     "inst": 119
+    },
+    {
+     "ty": 9,
+     "val": "3"
+    }
+   ]
+  },
+  {
+   "id": 123,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 124,
+     "tag": "cond_br",
+     "ty": 20,
+     "args": [
+      {
+       "inst": 120
+      }
+     ],
+     "then": [
+      {
+       "id": 125,
+       "tag": "br",
+       "ty": 20,
+       "target": 123,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 121,
+       "tag": "call",
+       "ty": 20,
+       "callee": {
+        "ty": 30,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 119
+        },
+        {
+         "ty": 9,
+         "val": "3"
+        }
+       ]
+      },
+      {
+       "id": 122,
+       "tag": "unreach",
+       "ty": 20
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 126,
+   "tag": "ptr_elem_ptr",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 105
+    },
+    {
+     "inst": 119
+    }
+   ]
+  },
+  {
+   "id": 127,
+   "tag": "load",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 126
+    }
+   ]
+  },
+  {
+   "id": 128,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 129,
+   "tag": "add_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 103
+    },
+    {
+     "inst": 127
+    }
+   ]
+  },
+  {
+   "id": 130,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 131,
+   "tag": "wrap_errunion_payload",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 129
+    }
+   ]
+  },
+  {
+   "id": 132,
+   "tag": "ret_safe",
+   "ty": 20,
+   "args": [
+    {
+     "inst": 131
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "error_union",
+   "error": 19,
+   "payload": 6,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 31,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 6,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) atomic.Value(u32)"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 32,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 33,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 10,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 18,
+   "payload": 17,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread.SpawnConfig, struct { *atomics.PushCtx }) error{LockedMemoryLimitExceeded,OutOfMemory,SystemResources,ThreadQuotaExceeded,Unexpected}!Thread"
+  },
+  {
+   "k": "struct",
+   "name": "Thread.SpawnConfig",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "stack_size",
+     "ty": 9,
+     "offset": 0
+    },
+    {
+     "name": "allocator",
+     "ty": 16,
+     "offset": 8
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 34,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "impl",
+     "ty": 35,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 17,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 17,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread) void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "enum",
+   "name": "builtin.AtomicOrder",
+   "tag": 36,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "unordered",
+     "value": "0"
+    },
+    {
+     "name": "monotonic",
+     "value": "1"
+    },
+    {
+     "name": "acquire",
+     "value": "2"
+    },
+    {
+     "name": "release",
+     "value": "3"
+    },
+    {
+     "name": "acq_rel",
+     "value": "4"
+    },
+    {
+     "name": "seq_cst",
+     "value": "5"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 24,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 24,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "atomics.Stack",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "head",
+     "ty": 4,
+     "offset": 0
+    },
+    {
+     "name": "next",
+     "ty": 32,
+     "offset": 4
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 4
+  },
+  {
+   "k": "array",
+   "len": 3,
+   "child": 6,
+   "sentinel": false,
+   "abi_size": 12,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "atomics.PushCtx",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "s",
+     "ty": 2,
+     "offset": 0
+    },
+    {
+     "name": "node",
+     "ty": 6,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "ptr",
+     "ty": 37,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 38,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "thread",
+     "ty": 39,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 3,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 40,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 41,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 42,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator.VTable",
+   "layout": "auto",
+   "no_fields": true
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "layout": "auto",
+   "no_fields": true
+  }
+ ]
+}

@@ -138,7 +138,7 @@ def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : N
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr ..) | some .allocator => true
+  | some (.ptr ..) | some .allocator | some .io => true
   | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
@@ -172,6 +172,8 @@ def allocFn? (name : String) : Option AllocFn :=
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
+  | futexWait | futexWaitU | futexWake
   deriving BEq, Repr
 
 /-- The `Thread` function that the function `name` is an instance of
@@ -180,13 +182,18 @@ def threadFn? (name : String) : Option ThreadFn :=
   match (name.splitOn "__anon_").head! with
   | "Thread.spawn" => some .spawn
   | "Thread.join" => some .join
+  | "Io.futexWait" => some .futexWait
+  | "Io.futexWaitUncancelable" => some .futexWaitU
+  | "Io.futexWake" => some .futexWake
   | _ => none
 
 /-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
 model): `Check.lean` rejects a call to one of these, with this reason. -/
 def rejectedThreadFn? (name : String) : Option String :=
   let base := (name.splitOn "__anon_").head!
-  if base == "Thread.detach" then
+  if base == "Io.futexWaitTimeout" then
+    some "Io.futexWaitTimeout is outside the model: it has no clock"
+  else if base == "Thread.detach" then
     some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
   else if base == "Thread.yield" then
     some "Thread.yield is outside the model: there is no scheduler to yield to"
@@ -239,11 +246,6 @@ partial def valueUsed (allInsts : Array Inst) (id : InstId) : Bool :=
     | .br target _ => valueUsed allInsts target
     | _ => true
 
-/-- Is the result of the atomic RMW at `id` (in `allInsts`, `Func.allInsts` or `FCtx.allInsts`)
-unused: eligible for a commuting `RmwGroup` (`docs/std-models.md` §Thread model,
-`Zig.RmwOp.group`)? -/
-def rmwResultUnused (allInsts : Array Inst) (id : InstId) : Bool := !valueUsed allInsts id
-
 /-- A function type. The exporter writes it as `other`, with the name `fn (…) …`; it is only
 behind a pointer (M20). -/
 def isFnTy (t : Ty) : Bool := match t with | .other n => n.startsWith "fn (" | _ => false
@@ -286,5 +288,41 @@ partial def memoryFunctions (funcs : Array Func) : Array String :=
       if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
   go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
+
+/-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
+def Func.syncLocally (f : Func) : Bool :=
+  f.allInsts.any fun i => match i.op with
+    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
+    | .call (.func name ..) _ => (threadFn? name).isSome
+    | _ => false
+
+/-- The names of the concurrent functions in `funcs` (`Zig.ConcM`): the ones with a sync op,
+then every caller of such a function, up to a fixpoint. A concurrent function also uses memory
+(`memoryOp`). -/
+partial def concFunctions (funcs : Array Func) : Array String :=
+  let refs := fnRefs funcs
+  let rec go (conc : Array String) : Array String :=
+    let next := funcs.filterMap fun f =>
+      if !conc.contains f.name && (f.callees refs).any conc.contains then some f.name else none
+    if next.isEmpty then conc else go (conc ++ next)
+  go (funcs.filterMap fun f => if f.syncLocally then some f.name else none)
+
+/-- The spawn targets of `funcs`: each function that a `Thread.spawn` runs, with the type of its
+one argument (the args tuple's field), in first-use order. -/
+def spawnTargets (funcs : Array Func) : Array (String × Func × TyId) :=
+  funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
+    match i.op with
+    | .call (.func name _ (some sf)) args =>
+      if threadFn? name == some .spawn && !(acc.any (·.1 == sf)) then
+        let argTy := ((args[1]? : Option Val).bind fun v => match v with
+          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+          | v => v.constTy?).bind fun t => match f.types[t]? with
+            | some (.tuple fs) => fs[0]?
+            | _ => none
+        match argTy with
+        | some a => acc.push (sf, f, a)
+        | none => acc
+      else acc
+    | _ => acc
 
 end Air2Lean

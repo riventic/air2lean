@@ -99,7 +99,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       recur t
     fields.forM fun (_, fty) => recur fty
   | .tuple fields => fields.forM recur
-  | .int .. | .bool | .void | .noreturn | .allocator | .thread => pure ()
+  | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
 largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
@@ -126,6 +126,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some (.ptr ..) => pure (8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
+  | some .io => pure (16, 8)
   | some (.optional c) =>
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
@@ -254,16 +255,17 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
-/-- An atomic op's pointee must be an integer (`docs/std-models.md` §Thread model: the subset
-does not model a float, bool, enum or pointer atomic). -/
+/-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
+(`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
 def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   let some pty := cx.valTy? ptr
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
   match cx.types[c]? with
-  | some (.int ..) => pure ()
-  | _ => cx.fail line "an atomic op on a non-integer type is outside the subset (M22)"
+  | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
+  | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool` or a \
+      packed struct is outside the subset"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -348,6 +350,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
           cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
     pure line
+  | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
+    cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
@@ -583,6 +587,10 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
             match threadFn? callee with
             | some .spawn => checkThreadSpawn f args
             | some .join => pure ()
+            | some .futexWait | some .futexWaitU | some .futexWake =>
+              -- `(io, ptr, value)`: a `u32`-sized value (Zig asserts it), an enum or integer.
+              unless args.size == 3 do
+                throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 3"
             | none =>
               throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its \
                 name to the example's `filter` file, docs/std-models.md)"

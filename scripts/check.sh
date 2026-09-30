@@ -37,9 +37,11 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 }
 
 # The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
-# (examples/asm/asm.zig).
+# (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
+# version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
 examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
   if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
+  if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
   printf '%s ' "${d%/}"
 done)}
 restore_gen=""
@@ -79,14 +81,16 @@ for ex in $examples; do
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
   # Each file names the Zig version that wrote it; compare everything else. The number of a
   # generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
-  # (`Thread.Completion__enum_1614`) depends on how much std code the compiler analyses, which
-  # differs by run and host OS in 0.16.0; the translator gives the first a stable number
-  # (`Air2Lean/Air/Anon.lean`) and does not emit the second (`usedTys`), so the comparison
-  # ignores both, also in the file names (a golden file is `<name>__anon_N.json`).
+  # (`Thread.Completion__enum_1614`, `c.pthread_t__opaque_339`, `Io.Operation.Result__union_2204`,
+  # a `__struct_N`) depends on how much std code the
+  # compiler analyses, which differs by run and host OS in 0.16.0; the translator gives the first
+  # a stable number (`Air2Lean/Air/Anon.lean`) and does not emit the others (`usedTys`; a
+  # `Thread` handle is `Ty.thread`), so the comparison ignores them, also in the file names (a
+  # golden file is `<name>__anon_N.json`).
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
   for f in "$golden_dir"/*.json "$version_dir"/*.json "$os_dir"/*.json; do
-    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/golden/$(norm_name "$f")"; fi
+    if [ -f "$f" ]; then grep -v '"zig_version"' "$f" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g' >"$cmp_dir/golden/$(norm_name "$f")"; fi
   done
   for f in "$air_dir"/*.json; do
     n=$(norm_name "$f")
@@ -94,7 +98,7 @@ for ex in $examples; do
       echo "error: $ex has two instances of the generic function in $n; the golden check cannot tell them apart" >&2
       exit 1
     fi
-    grep -v '"zig_version"' "$f" | sed 's/__anon_[0-9]*/__anon_N/g; s/__enum_[0-9]*/__enum_N/g' >"$cmp_dir/new/$n"
+    grep -v '"zig_version"' "$f" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g' >"$cmp_dir/new/$n"
   done
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then

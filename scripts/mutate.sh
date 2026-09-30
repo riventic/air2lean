@@ -49,14 +49,13 @@
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
-# (k) Lean-runtime mutation, threads: `RmwOp.group` (ZigLean/Mem/Thread.lean) puts `Xchg` in the
-#     `Xor` commuting group. `xchgRace`'s two concurrent, unused-result swaps then commute: the
-#     model computes a value instead of throwing `.nondet` -- tests/diff/threads/nondet.txt's
-#     pinned count (300) drops to 0.
+# (k) Lean-runtime mutation, threads: `racePair` (ZigLean/Mem/Basic.lean) makes two atomic
+#     accesses race, as the eager model did. `parallelCounter` and `xchgRace` then throw
+#     `.illegal` -- tests/diff/threads/unspecified.txt's pinned counts change.
 # (l) Lean-runtime mutation, threads: `recordAccess` (ZigLean/Mem/Basic.lean) never checks for a
-#     race (`raceAt`'s result is ignored; every access is recorded as race-free). `race` and
-#     `xchgRace` then both return a value instead of throwing `.illegal`/`.nondet` --
-#     tests/diff/threads/unspecified.txt and nondet.txt's pinned counts both drop to 0.
+#     race (`raceAt`'s result ignored; every access recorded race-free). `race` then returns a
+#     value instead of throwing `.illegal` -- tests/diff/threads/unspecified.txt's pinned count
+#     drops to 0.
 # (m) Emitter-output mutation, layout: the generated `Zig.Packed Flags 8` instance
 #     (Proofs/Layout/Gen.lean) reads `ready` from bit 1 and `err` from bit 0 in `ofBits` (two
 #     fields swapped). `byteToFlags`, `isOk` and the `@bitCast` round trip in `setMode` then
@@ -86,6 +85,19 @@
 #     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
 # (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) puts lane
 #     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
+# (v) Lean-runtime mutation, threads: `cmpxchgAs` (ZigLean/Mem/Thread.lean) compares with the
+#     new value, not the expected one. In `claimOnce` no thread wins the claim.
+# (w) Lean-runtime mutation, atomics: `acquireClock` (ZigLean/Mem/Thread.lean) adopts no clock:
+#     an acquire read gives no happens-before edge. Detected by the proof build: in
+#     `mp_sees_data` (Proofs/Atomics/Proofs.lean) the data read after the flag is then a race.
+# (x) Lean-runtime mutation, atomics: `writeSlots` offers only the end: a relaxed write never
+#     goes before a newer message. Detected by the proof build: `twoPlusTwoW_weak` needs it.
+#     A weak-memory result is rare on real hardware, so the diff test seldom sees one; the
+#     proofs show each one under a fixed schedule.
+# (y) Lean-runtime mutation, sync: a futex `wait` (ZigLean/Conc/Sched.lean) never blocks.
+#     Detected by the proof build: `wait_alone_deadlock` (Proofs/Sync/Proofs.lean).
+# (z) Lean-runtime mutation, sync: the scheduler's deadlock check is off (no result instead of
+#     `.deadlock`). Detected by the proof build: `wait_alone_deadlock`.
 #
 # Usage: mutate.sh
 # Env:
@@ -94,7 +106,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z))
 #                         is in the list.
 #                         Default: every dir in examples/.
 set -euo pipefail
@@ -133,6 +145,7 @@ alloc_lean="ZigLean/Mem/Alloc.lean"
 asm_zig="tests/diff/asm/asm.zig"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
+sched_lean="ZigLean/Conc/Sched.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -147,6 +160,7 @@ alloc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-alloc.XXXXXX")
 asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
+sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -161,6 +175,7 @@ cp "$alloc_lean" "$alloc_backup"
 cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
+cp "$sched_lean" "$sched_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -182,8 +197,9 @@ cleanup() {
   cp "$asm_backup" "$asm_zig"
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
+  cp "$sched_backup" "$sched_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   exit "$ec"
@@ -217,6 +233,18 @@ translate_mutated() {
 # detected (mismatch=N)" and sets $detected (1/0). A diff.sh crash with no TOTAL line at all (not
 # even a mismatch report) is a broken test setup, not an undetected mutation, so that case
 # aborts the whole script instead.
+# proof_report <label> <module>: `lake build <module>` fails with the mutation (a detection).
+proof_report() {
+  local label=$1 mod=$2
+  if lake build "$mod" >/dev/null 2>&1; then
+    echo "$label: NOT detected (lake build $mod succeeded)"
+    detected=0
+  else
+    echo "$label: detected (lake build $mod failed)"
+    detected=1
+  fi
+}
+
 run_and_report() {
   local label=$1 ex=$2
   local out
@@ -233,9 +261,9 @@ run_and_report() {
   fi
   local mismatch counts
   mismatch=$(echo "$total_line" | sed -n 's/.*mismatch=\([0-9]*\).*/\1/p')
-  # A pinned `unspecified`/`nondet` count that changed is a detection too (threads: a mutation
+  # A pinned `unspecified`/`capped` count that changed is a detection too (threads: a mutation
   # that removes a race result changes no value, only the count).
-  counts=$(grep -c '^\(UNSPECIFIED\|NONDET\) COUNT' "$out" || true)
+  counts=$(grep -c '^\(UNSPECIFIED\|CAPPED\) COUNT' "$out" || true)
   rm -f "$out"
   if [ "$status" -ne 0 ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; then
     echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
@@ -412,21 +440,20 @@ else
   cp "$vec_backup" "$vec_lean"
 fi
 
-echo "== mutation (k): RmwOp.group puts Xchg in the Xor commuting group (Lean runtime) ==" >&2
+echo "== mutation (k): two atomic accesses race (Lean runtime) ==" >&2
 if ! has_example threads; then
   echo "mutation (k): skipped (AIR2LEAN_EXAMPLES excludes threads)"
 else
-  sed -i.bak 's/| \.xor => some \.xor/| .xor | .xchg => some .xor/' "$thread_lean"
-  sed -i.bak 's/| \.xchg | \.nand => none/| .nand => none/' "$thread_lean"
-  rm -f "$thread_lean.bak"
-  grep -q '| .xor | .xchg => some .xor' "$thread_lean" || {
-    echo "error: mutation (k): sed did not change RmwOp.group" >&2
+  sed -i.bak 's/^  if (a\.isWrite || b\.isWrite) \&\& !(a\.isAtomic \&\& b\.isAtomic) then some \.illegal else none$/  if a.isWrite || b.isWrite then some .illegal else none/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q '^  if a.isWrite || b.isWrite then some .illegal else none$' "$mem_lean" || {
+    echo "error: mutation (k): sed did not change racePair" >&2
     exit 1
   }
 
   run_and_report "mutation (k)" threads
   [ "$detected" -eq 1 ] || all_detected=0
-  cp "$thread_backup" "$thread_lean"
+  cp "$mem_backup" "$mem_lean"
 fi
 
 echo "== mutation (l): recordAccess never checks for a race (Lean runtime) ==" >&2
@@ -587,6 +614,86 @@ else
   run_and_report "mutation (u)" layout
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$vec_backup" "$vec_lean"
+fi
+
+echo "== mutation (v): cmpxchgAs compares with the new value (Lean runtime) ==" >&2
+if ! has_example threads; then
+  echo "mutation (v): skipped (AIR2LEAN_EXAMPLES excludes threads)"
+else
+  sed -i.bak 's/^  match ← cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with$/  match ← cmpxchgAt c succ fail align p (Packed.toBits new) (Packed.toBits new) with/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q 'cmpxchgAt c succ fail align p (Packed.toBits new) (Packed.toBits new) with' "$thread_lean" || {
+    echo "error: mutation (v): sed did not change cmpxchgAs" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (v)" threads
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (w): an acquire read adopts no clock (Lean runtime, proof build) ==" >&2
+if ! has_example atomics; then
+  echo "mutation (w): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
+else
+  sed -i.bak 's/^  { m with clocks := m.clocks.set! m.current (VClock.merge (m.clocks\[m.current\]!) c) }$/  { m with clocks := m.clocks.set! m.current (m.clocks[m.current]!) }/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^  { m with clocks := m.clocks.set! m.current (m.clocks\[m.current\]!) }$' "$thread_lean" || {
+    echo "error: mutation (w): sed did not change acquireClock" >&2
+    exit 1
+  }
+
+  proof_report "mutation (w)" Proofs.Atomics.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (x): a write goes only at the end (Lean runtime, proof build) ==" >&2
+if ! has_example atomics; then
+  echo "mutation (x): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
+else
+  sed -i.bak 's/^  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n || !l.hasRmwAfter (p - 1)$/  ((Array.range (n - f)).map fun k => n - k).filter fun p => p == n/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q 'filter fun p => p == n$' "$thread_lean" || {
+    echo "error: mutation (x): sed did not change writeSlots" >&2
+    exit 1
+  }
+
+  proof_report "mutation (x)" Proofs.Atomics.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (y): a futex wait never blocks (Lean runtime, proof build) ==" >&2
+if ! has_example sync; then
+  echo "mutation (y): skipped (AIR2LEAN_EXAMPLES excludes sync)"
+else
+  sed -i.bak 's/^        if v = e then .ok (.paused/        if false then .ok (.paused/' "$sched_lean"
+  rm -f "$sched_lean.bak"
+  grep -q '^        if false then .ok (.paused' "$sched_lean" || {
+    echo "error: mutation (y): sed did not change the futex wait" >&2
+    exit 1
+  }
+
+  proof_report "mutation (y)" Proofs.Sync.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$sched_backup" "$sched_lean"
+fi
+
+echo "== mutation (z): no deadlock check (Lean runtime, proof build) ==" >&2
+if ! has_example sync; then
+  echo "mutation (z): skipped (AIR2LEAN_EXAMPLES excludes sync)"
+else
+  sed -i.bak 's/^      (if s.anyRunning then some (.error .deadlock) else none, s.trace)$/      (none, s.trace)/' "$sched_lean"
+  rm -f "$sched_lean.bak"
+  grep -q '^      (none, s.trace)$' "$sched_lean" || {
+    echo "error: mutation (z): sed did not change the deadlock check" >&2
+    exit 1
+  }
+
+  proof_report "mutation (z)" Proofs.Sync.Proofs
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$sched_backup" "$sched_lean"
 fi
 
 [ "$all_detected" -eq 1 ]

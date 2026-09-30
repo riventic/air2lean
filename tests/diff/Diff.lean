@@ -12,6 +12,8 @@ import Proofs.Pointers.Gen
 import Proofs.Slices.Gen
 import Proofs.Lists.Gen
 import Proofs.Threads.Gen
+import Proofs.Atomics.Gen
+import Proofs.Sync.Gen
 import Proofs.Vectors.Gen
 import Proofs.Asm.Gen
 import Proofs.Layout.Gen
@@ -944,37 +946,109 @@ def runLists : IO Unit := do
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
 
-/-- `renderOk` for a `Zig.MemM` function with no buffer/allocator args (`examples/threads`): runs
-it from a fresh `mem0`, then discards the final memory. A model rejection (`.illegal`, a
-non-atomic race; `.nondet`, a non-commuting concurrent atomic op; `.illegal`, a thread that the
-main thread did not join before the function returned) is the outer `Zig.Error`, the same as
-`renderOk`'s (docs/std-models.md §Thread model). -/
-def renderThread {α : Type} (m0 : Zig.Mem) (r : Zig.MemM α) (payload : α → String) : String :=
-  let r := do let v ← r; Zig.Thread.checkJoinedByChild 0; pure v
-  match (r.run m0).run with
+/-- One run of a concurrent function as a result line, as `renderOk`. -/
+def renderOut {α : Type} (r : Zig.Sched.Out α) (payload : α → String) : String :=
+  match r with
   | none => "{\"diverge\":true}"
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok (v, _)) => "{\"ok\":" ++ payload v ++ "}"
 
+/-- The most runs (schedules) that `searchSchedules` tries for one input. -/
+def scheduleCap : Nat := 2000
+
+/-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
+def scheduleFuel : Nat := 100000
+
+/-- The line of a concurrent function for one input, from the schedules: a depth-first search
+over the oracle's choices (`Zig.Sched.runTrace` gives the options of each choice).
+
+1. A schedule whose line equals Zig's line `zig`: that line.
+2. Else a schedule with a data race (`.illegal`): the program is undefined, so it matches any Zig
+   line (`diff.sh`'s `unspecified` class, pinned per function).
+3. Else, if the search stopped at `scheduleCap`: `Zig.Error.capped` (`diff.sh`'s `capped`
+   class, pinned per function).
+4. Else the line of the first schedule: `diff.sh` shows the mismatch.
+
+A search that misses a schedule can only give a false mismatch, never hide one. -/
+partial def searchSchedules (run : (Nat → Nat) → String × Array Nat) (zig : String) : String :=
+  let rec go (pre : Array Nat) (runs : Nat) (first race : Option String) : String :=
+    let (line, opts) := run fun i => pre.getD i 0
+    if line == zig then line else
+    let first := first.orElse fun _ => some line
+    let race := race.orElse fun _ =>
+      if line == "{\"fail\":\"Zig.Error.illegal\"}" then some line else none
+    -- The next schedule: increase the last choice that has an option left.
+    let rec next (i : Nat) : Option (Array Nat) :=
+      if i = 0 then none else
+      let j := i - 1
+      let c := pre.getD j 0
+      if c + 1 < opts[j]! then some (((Array.range j).map fun x => pre.getD x 0).push (c + 1))
+      else next j
+    match next opts.size with
+    | some p => if runs + 1 ≥ scheduleCap then race.getD "{\"fail\":\"Zig.Error.capped\"}"
+                else go p (runs + 1) first race
+    | none => race.getD (first.getD line)
+  go #[] 0 none none
+
+/-- `processFile` for a concurrent function: each input line with Zig's line for it
+(`tests/diff/out/zig/<ex>/<name>.jsonl`, written before the Lean side runs). -/
+def processConc (ex name : String) (step : Json → String → IO String) : IO Unit := do
+  let zig ← IO.FS.lines ("tests/diff/out/zig/" ++ ex ++ "/" ++ name ++ ".jsonl")
+  let k ← IO.mkRef 0
+  processFile ex name fun j => do
+    let i ← k.modifyGet fun i => (i, i + 1)
+    step j (zig[i]?.getD "")
+
+/-- One concurrent top-level call under the schedule `o`, from `m0`; `dispatch` runs the
+program's spawn targets. -/
+def runConcWith {Tgt α : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
+    (main : Zig.ConcM Tgt α) (payload : α → String) (o : Nat → Nat) : String × Array Nat :=
+  let (r, opts) := Zig.Sched.runTrace dispatch scheduleFuel o main m0
+  (renderOut r payload, opts)
+
+def runConc {α : Type} (m0 : Zig.Mem) (main : Zig.ConcM Threads.Tgt α) (payload : α → String) :=
+  runConcWith Threads.dispatch m0 main payload
+
 def runParallelCounter : IO Unit :=
-  processFile "threads" "parallelCounter" fun j => do
+  processConc "threads" "parallelCounter" fun j zig => do
     let items ← getArr j
     let n ← getInt items[0]!
-    pure (renderThread Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false))
+    pure (searchSchedules (runConc Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false)) zig)
 
 def runRace : IO Unit :=
-  processFile "threads" "race" fun j => do
+  processConc "threads" "race" fun j zig => do
     let items ← getArr j
     let a ← getInt items[0]!
     let b ← getInt items[1]!
-    pure (renderThread Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false))
+    pure (searchSchedules (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+
+def runClaimOnce : IO Unit :=
+  processConc "threads" "claimOnce" fun _ zig => do
+    pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+
+def runAtomics : IO Unit := do
+  let one (name : String) (f : Zig.ConcM Atomics.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "atomics" name fun _ zig =>
+      pure (searchSchedules (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
+  one "mpRelAcq" Atomics.mpRelAcq
+  one "mpRelaxed" Atomics.mpRelaxed
+  one "sbRelaxed" Atomics.sbRelaxed
+  one "twoPlusTwoW" Atomics.twoPlusTwoW
+  one "stackPush" Atomics.stackPush
+
+def runSync : IO Unit := do
+  let one (name : String) (f : Zig.Io → Zig.ConcM Sync.Tgt (Except Zig.ErrName (BitVec 32))) :=
+    processConc "sync" name fun _ zig =>
+      pure (searchSchedules (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
+  one "mutexCounter" Sync.mutexCounter
+  one "handoff" Sync.handoff
 
 def runXchgRace : IO Unit :=
-  processFile "threads" "xchgRace" fun j => do
+  processConc "threads" "xchgRace" fun j zig => do
     let items ← getArr j
     let a ← getInt items[0]!
     let b ← getInt items[1]!
-    pure (renderThread Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false))
+    pure (searchSchedules (runConc Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
 -- Calls the opaque directly (`Asm.airAsm_*`), not the generated wrapper (`Asm.bswap32` etc.):
 -- the wrapper's own body is compiled once, inside `Proofs/Asm/Gen.lean`, before this file's
@@ -1085,6 +1159,11 @@ def main : IO Unit := do
     DiffTest.runParallelCounter
     DiffTest.runRace
     DiffTest.runXchgRace
+    DiffTest.runClaimOnce
+
+  run "atomics" DiffTest.runAtomics
+
+  run "sync" DiffTest.runSync
 
   run "floats" do
     DiffTest.runLerp

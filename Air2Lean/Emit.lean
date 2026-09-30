@@ -90,6 +90,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
     if parts.isEmpty then "Unit" else String.intercalate " × " parts
   | .allocator => "Zig.Allocator"
   | .thread => "Zig.ThreadId"
+  | .io => "Zig.Io"
   | .other name => name
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
@@ -457,6 +458,11 @@ structure FCtx where
   mem : Bool
   /-- The names of the functions that use memory. -/
   memFuncs : Array String
+  /-- This function reaches a sync op (`Air2Lean/Memory.lean`'s `concFunctions`): it returns
+  `Zig.ConcM Tgt`, and its body runs in `Zig.CM Tgt`. -/
+  conc : Bool := false
+  /-- The names of the concurrent functions. -/
+  concFuncs : Array String := #[]
   layouts : Array Layout
   /-- The `alloc`s whose address escapes: stack blocks, not places. -/
   escaping : Array InstId
@@ -541,7 +547,12 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
 partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : String :=
   match v with
   | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD s!"(panic! \"air2lean: unbound inst {id}\")"
-  | .int tid n => tagLit (fc.tyBits tid) n
+  | .int tid n =>
+    match fc.tyOfId tid with
+    | .struct _ "packed" _ =>
+      let bits := (packedBits fc.types tid).getD 0
+      s!"(Zig.Packed.ofBits {tagLit bits n} : {fc.emitTyOf tid})"
+    | _ => tagLit (fc.tyBits tid) n
   | .float tid bits =>
     let n := match fc.tyOfId tid with | .float b => b | _ => 0
     s!"(Zig.Float.ofBits ({bits} : BitVec {n}) : {fc.emitTyOf tid})"
@@ -715,6 +726,27 @@ def FCtx.place? (fc : FCtx) (v : Val) : Option (String × Array PathStep) :=
 
 def FCtx.isPlace (fc : FCtx) (v : Val) : Bool := (fc.place? v).isSome
 
+/-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
+def FCtx.monad (fc : FCtx) : String :=
+  if fc.conc then "Zig.CM Tgt" else if fc.mem then "Zig.MM" else "Zig.M"
+
+/-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
+def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
+
+/-- The lift of a call to a pure function (`Zig.Result`). -/
+def FCtx.callRName (fc : FCtx) : String :=
+  if fc.conc then "Zig.callRC" else if fc.mem then "Zig.callR" else "Zig.call"
+
+/-- The call `term` of the function `name`, lifted to this function's monad. -/
+def FCtx.callOf (fc : FCtx) (name term : String) (memCallee : Bool) : String :=
+  if fc.concFuncs.contains name then s!"Zig.callC ({term})"
+  else if memCallee then s!"{fc.callMName} ({term})"
+  else s!"{fc.callRName} ({term})"
+
+/-- A `Zig.Result` term called from the body. -/
+def FCtx.liftR (fc : FCtx) (e : String) : String :=
+  s!"{fc.callRName} ({e})"
+
 /-- The value at a place, as a term inside a `do` block. -/
 def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
   match fc.place? v with
@@ -722,7 +754,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
     path.foldl (init := s!"(← get).{field}") fun e step =>
       match step with
       | .field f => s!"({e}).{f}"
-      | .ufield u f => s!"(← {if fc.mem then "Zig.callR" else "Zig.call"} ({u}.get_{f} {e}))"
+      | .ufield u f => s!"(← {fc.callRName} ({u}.get_{f} {e}))"
   | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
@@ -748,16 +780,24 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 
 /-! ## Memory (`docs/generated-code.md` §Memory) -/
 
-/-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
-def FCtx.monad (fc : FCtx) : String := if fc.mem then "Zig.MM" else "Zig.M"
-
-/-- A `Zig.Result` term called from the body. -/
-def FCtx.liftR (fc : FCtx) (e : String) : String :=
-  if fc.mem then s!"Zig.callR ({e})" else s!"Zig.call ({e})"
-
 /-- The alignment of an access through the pointer `v`: its type's `align(N)`. -/
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
+
+/-- The Lean term of an atomic ordering (`Zig.AtomicOrder`; `Check.lean` rejects `unordered`). -/
+def orderTerm : AtomicOrder → String
+  | .unordered | .monotonic => "Zig.AtomicOrder.relaxed"
+  | .acquire => "Zig.AtomicOrder.acquire"
+  | .release => "Zig.AtomicOrder.release"
+  | .acqRel => "Zig.AtomicOrder.acqRel"
+  | .seqCst => "Zig.AtomicOrder.seqCst"
+
+/-- An atomic op through `ptr` on an enum, a `bool` or a packed struct: the typed op (`Zig.atomicLoadAs`, …, on
+the value's `Zig.Packed` bits), not the integer op. -/
+def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
+  match fc.pointeeOf ptr with
+  | .enum .. | .bool | .struct _ "packed" _ => true
+  | _ => false
 
 /-- The Lean type of the value that the pointer `v` points to. -/
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
@@ -831,7 +871,7 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
 def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
   if fc.mem && !memCallee && fc.isSlice a then
     let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
-    s!"(← Zig.callM (Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}))"
+    s!"(← {fc.callMName} (Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}))"
   else fc.resolveVal env a
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
@@ -857,11 +897,11 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
     s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
 
-/-- A call to the fork-join thread model (`ZigLean/Mem/Thread.lean`), a `Zig.MemM` term.
-`.spawn`: `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, resolved through
-`funcNames` like an ordinary callee; `args[1]` is the args tuple, applied to it directly
-(`Check.lean`'s `checkThreadSpawn` requires exactly one field, so `rv` of the tuple is already
-the one Lean argument, not a genuine `Prod`). `.join`: `args[0]` is the `Thread` handle. -/
+/-- A sync op of the thread model (`ZigLean/Conc/Call.lean`), a `Zig.CM Tgt` term. `.spawn`:
+`callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
+program's `Tgt` (`emitTgt`); `args[1]` is the args tuple, its argument (`Check.lean`'s
+`checkThreadSpawn` requires exactly one field, so `rv` of the tuple is already the one Lean
+argument, not a genuine `Prod`). `.join`: `args[0]` is the `Thread` handle. -/
 def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
     (args : Array Val) : String :=
   let rv := fc.resolveVal env
@@ -869,8 +909,12 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .spawn =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
-    s!"Zig.Thread.spawn ({target} {rv (args[1]?.getD .void)})"
-  | .join => s!"Zig.Thread.join {rv (args[0]?.getD .void)}"
+    s!"Zig.spawnC (Tgt.{target} {rv (args[1]?.getD .void)})"
+  | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
+  | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWake => s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
@@ -1373,7 +1417,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .ptr .., .ge => some s!"Zig.ptrLe {rv b} {rv a}"
       | _, _ => none
     let expr := match ptrOrder with
-      | some e => s!"Zig.callM ({e})"
+      | some e => s!"{fc.callMName} ({e})"
       | none => s!"pure ({expr})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
@@ -1413,11 +1457,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
     if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
-      let expr := s!"Zig.callM (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+      let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
       -- `@ptrFromInt`.
-      let expr := s!"Zig.callM (Zig.ptrFromAddr ({rv a}).toNat)"
+      let expr := s!"{fc.callMName} (Zig.ptrFromAddr ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
     let srcFloat := fc.isFloat a
@@ -1573,13 +1617,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}")
     else (env, some (fc.storePlace ptr (rv v)))
-  | .atomicLoad ptr _order =>
+  -- An atomic op is a sync op: the oracle picks the message or the place, and another thread can
+  -- run first (`ZigLean/Conc/Call.lean`).
+  | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
-    let expr := s!"Zig.atomicLoad (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+    let o := orderTerm order
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
-  | .atomicStore ptr v _order =>
-    (env, some s!"Zig.atomicStore {fc.ptrAlign ptr} {rv ptr} {rv v}")
-  | .atomicRmw op _order ptr v =>
+  | .atomicStore ptr v order =>
+    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
+    (env, some s!"{f} {orderTerm order} {fc.ptrAlign ptr} {rv ptr} {rv v}")
+  | .atomicRmw op order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
     -- `Zig.RmwOp` (the model, `ZigLean/Mem/Thread.lean`).
     let opName := match op with
@@ -1587,26 +1636,21 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .or => "or" | .xor => "xor" | .max => "max" | .min => "min"
     let opTerm := s!"Zig.RmwOp.{opName}"
     let signed := if fc.tySigned inst.ty then "true" else "false"
-    -- `rmwResultUnused` (`Air2Lean.Memory.lean`), not `fc.isReferenced`: a call to a
-    -- generic/inline std function like `fetchAdd` always wraps its body in a `dbg_inline_block`
-    -- that closes with a `br` carrying the call's result, so the RMW's own id is always
-    -- "referenced" by that closing `br` even when the caller discards the call
-    -- (`docs/std-models.md` §Thread model: only an unused commuting RMW may race with its own
-    -- kind).
-    let unused := if rmwResultUnused fc.allInsts inst.id then "true" else "false"
-    let expr := s!"Zig.atomicRmw {opTerm} {signed} {fc.ptrAlign ptr} {rv ptr} {rv v} \
-      (Zig.RmwOp.group {opTerm} {signed} {unused})"
+    let o := orderTerm order
+    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
-  | .cmpxchg _weak ptr expected new _succ _fail =>
+  | .cmpxchg _weak ptr expected new succ fail =>
     -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
-    let expr := s!"Zig.cmpxchg {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
+    let f := if fc.atomicTyped ptr then "Zig.cmpxchgAsC" else "Zig.cmpxchgC"
+    let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
     let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them.
-    let expr := if fc.mem then s!"Zig.callM ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
+    let expr := if fc.mem then s!"{fc.callMName} ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
       else fc.liftR s!"Zig.index {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
@@ -1618,7 +1662,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let base := if fc.isSlice p then s!"{rv p}.ptr" else rv p
     let (env, l) := bindLet fc env inst.id s!"pure ({base}.elem {size} {rv i})"; (env, some l)
   | .ptrElemVal p i =>
-    let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.loadItem p (rv p) (rv i)})"
+    let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
     (env, some l)
   | .arrayElemVal a i =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {rv a} {rv i}"); (env, some l)
@@ -1637,7 +1681,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (ptr, n) := fc.itemsOf dst (rv dst)
     let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
-    (env, some s!"Zig.callM (Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'})")
+    (env, some s!"{fc.callMName} (Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'})")
   | .memcpy dst src =>
     -- The item count of the operand that has one (the AIR checks that both agree).
     let hasLen (v : Val) : Bool :=
@@ -1646,7 +1690,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
-    (env, some s!"Zig.callM (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
+    (env, some s!"{fc.callMName} (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
   | .tagName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.tagName {rv a}")
     (env, some l)
@@ -1688,10 +1732,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let allocFn := match callee with | .func name .. => allocFn? name | _ => none
     let threadFn := match callee with | .func name .. => threadFn? name | _ => none
     if let some fn := allocFn then
-      let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.allocCall env fn args inst.ty})"
+      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
       (env, some l)
     else if let some fn := threadFn then
-      let (env, l) := bindLet fc env inst.id s!"Zig.callM ({fc.threadCall env fn callee args})"
+      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args)
       (env, some l)
     else if isNoreturn then (env, none)
     else if let .inst p := callee then
@@ -1703,14 +1747,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let lean := (fc.funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
         let memCallee := fc.memFuncs.contains nm
         let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
-        let call := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
+        let call := fc.callOf nm term memCallee
         s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
       let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
       (env, some l)
     else
       let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
       let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
-      let expr := if memCallee then s!"Zig.callM ({term})" else fc.liftR term
+      let expr := match callee with
+        | .func name .. => fc.callOf name term memCallee
+        | _ => fc.liftR term
       let (env, l) := bindLet fc env inst.id expr
       (env, some l)
   | .line _ => (env, none)
@@ -1995,7 +2041,7 @@ def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTy
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
-  let resultTy := if fc.mem then "Zig.MemM" else "Zig.Result"
+  let resultTy := if fc.conc then "Zig.ConcM Tgt" else if fc.mem then "Zig.MemM" else "Zig.Result"
   String.intercalate "\n"
     ([s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := do"] ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
@@ -2012,7 +2058,8 @@ structure FuncParts where
 
 /-- The static context of `f`. `globalIds`: the block of each global of `f.globals`. -/
 def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
-    (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat) : FCtx :=
+    (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
+    (concFuncs : Array String := #[]) : FCtx :=
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   -- `«at»` (a keyword) gives `atLocals`.
@@ -2024,14 +2071,15 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
       allInsts, retTy := f.ret, fnName := leanName, localsName := s!"{plain}Locals",
       exitName := s!"{plain}Exit", floatSemantics, zigVersion := f.zigVersion, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
+      conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds }
   { fc with places := fc.computePlaces }
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
-    (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat)) :
-    FuncParts :=
-  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds with fnBlocks }
+    (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
+    (concFuncs : Array String := #[]) : FuncParts :=
+  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts
@@ -2248,6 +2296,26 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 
 /-! ## Top level -/
 
+/-- The spawn targets of a program with a concurrent function (`ZigLean/Conc/Basic.lean`): the
+type `Tgt`, one constructor per spawned function with its one argument, and `dispatch`, which
+runs a target. `targets`: (Lean name, argument type, kind: 2 concurrent, 1 memory, 0 pure). A
+target's result is discarded (Zig's `Thread.spawn` discards it too). -/
+def emitTgt (_structNames : Array (String × String)) (targets : Array (String × String × Nat)) :
+    List String × List String :=
+  let ctors := targets.toList.map fun (n, a, _) => s!"  | {n} (a : {a})"
+  let tgt := String.intercalate "\n" (["/-- The spawn targets of the program. -/",
+    "inductive Tgt where"] ++ ctors)
+  let arms := targets.toList.map fun (n, _, k) =>
+    let call := match k with
+      | 2 => s!"{n} a"
+      | 1 => s!"Zig.ConcM.liftMem ({n} a)"
+      | _ => s!"Zig.ConcM.liftMem (StateT.lift ({n} a))"
+    s!"  | .{n} a => discard ({call})"
+  let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
+  let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
+    s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
+  ([tgt], [dispatch])
+
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
 `--float-semantics` (default `ieee`). -/
@@ -2257,6 +2325,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
   let memFuncs := memoryFunctions funcs
+  let concFuncs := concFunctions funcs
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := (collectAsmOps funcs).toList.map emitAsmDef
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
@@ -2278,7 +2347,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
-      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks
+      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks concFuncs
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
@@ -2288,8 +2357,13 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
         (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
     else
       String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
+  let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
+  let targets := spawnTargets funcs
+  let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
+    emitTgt structNames (targets.map fun (nm, f, a) => (leanOf nm, emitTy structNames f.types f.types[a]!,
+      if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0))
   String.intercalate "\n\n"
-    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ funcsStr ++
-      [s!"end {ns}"])
+    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
+      funcsStr ++ dispatchStr ++ [s!"end {ns}"])
 
 end Air2Lean

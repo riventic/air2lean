@@ -26,10 +26,9 @@ inductive Error where
   to a freed block, out of bounds, or misaligned; a double free. A proof of "never throws" shows
   that the code never reaches such a case. -/
   | illegal
-  /-- A concurrent atomic access racing with a write (`ZigLean/Mem/Thread.lean`): the model does
-  not choose a value, like `.unspecified` (`docs/generated-code.md` §Panics). Real hardware picks
-  some interleaving; a non-commuting concurrent atomic op is outside what the model resolves. -/
-  | nondet
+  /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
+  a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
+  | deadlock
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/

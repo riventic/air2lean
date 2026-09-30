@@ -134,6 +134,27 @@ theorem VClock.le_trans {a b c : VClock} (hab : VClock.le a b = true) (hbc : VCl
     VClock.le a c = true :=
   VClock.le_iff.mpr fun i => Nat.le_trans (VClock.le_iff.mp hab i) (VClock.le_iff.mp hbc i)
 
+/-- `VClock.merge` is a genuine upper bound: `a`'s own component is never lost. -/
+theorem VClock.get_merge (a b : VClock) (i : ThreadId) :
+    (VClock.merge a b).get i = Nat.max (a.get i) (b.get i) := by
+  unfold VClock.merge VClock.get
+  rw [Array.getD_eq_getD_getElem?, Array.getElem?_map, Array.getElem?_range]
+  by_cases hi : i < Nat.max a.size b.size
+  · simp only [hi, ite_true, Option.map_some, Option.getD_some]
+  · simp only [hi, ite_false, Option.map_none, Option.getD_none]
+    have hmax : Nat.max a.size b.size ≤ i := Nat.not_lt.mp hi
+    have ha : a.size ≤ i := Nat.le_trans (Nat.le_max_left _ _) hmax
+    have hb : b.size ≤ i := Nat.le_trans (Nat.le_max_right _ _) hmax
+    rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_none ha, Array.getD_eq_getD_getElem?,
+      Array.getElem?_eq_none hb]
+    rfl
+
+theorem VClock.le_merge_left (a b : VClock) : VClock.le a (VClock.merge a b) = true :=
+  VClock.le_iff.mpr fun i => by rw [VClock.get_merge]; exact Nat.le_max_left _ _
+
+theorem VClock.le_merge_right (a b : VClock) : VClock.le b (VClock.merge a b) = true :=
+  VClock.le_iff.mpr fun i => by rw [VClock.get_merge]; exact Nat.le_max_right _ _
+
 /-- The padding a bump to `t` may append does not change any component already in `c`, and (if it
 extends the array) leaves every new component but `t` itself at `0`. -/
 theorem VClock.get_pad (c : VClock) (t i : ThreadId) (_h : i ≠ t) :

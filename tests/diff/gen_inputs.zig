@@ -137,6 +137,9 @@ pub fn main() !void {
     try genCtl();
     try genVecMem(rng);
     try genDivmod(rng);
+    try genClaim();
+    try genAtomics();
+    try genSync();
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -2047,8 +2050,8 @@ fn genThreadsCounter(rng: std.Random) !void {
 
 /// race(a: u32, b: u32) -> u32 and xchgRace(a: u32, b: u32) -> u32: both race two threads on
 /// one shared location without an ordering between them (a plain write, an atomic swap). The
-/// model rejects every call (`.illegal`/`.nondet`, docs/std-models.md §Thread model) regardless
-/// of `a`/`b`, so the values only need to exercise the full u32 range.
+/// model gives `.illegal` for race (a data race) and `a` or `b` for xchgRace (by the schedule),
+/// so the values only need to exercise the full u32 range.
 fn genThreadsRace(rng: std.Random, comptime name: []const u8) !void {
     var file = try openOutIn("tests/diff/threads/inputs", name);
     defer file.close();
@@ -2704,5 +2707,35 @@ fn genDivmod(rng: std.Random) !void {
     while (n < N) : (n += 1) {
         const b = if (n % 2 == 0) rng.intRangeAtMost(u32, 1, 100) else rng.intRangeAtMost(u32, 1, 0xffff_ffff);
         try writer.print("[{d},{d}]\n", .{ rng.int(u32), b });
+    }
+}
+
+/// claimOnce(): no argument; 20 runs, each with the OS scheduler's own interleaving.
+fn genClaim() !void {
+    var file = try openOutIn("tests/diff/threads/inputs", "claimOnce");
+    defer file.close();
+    const writer = file.writer();
+    for (0..20) |_| try writer.writeAll("[]\n");
+}
+
+/// atomics: no argument; 20 runs of each function.
+fn genAtomics() !void {
+    try compat.makePath("tests/diff/atomics/inputs");
+    inline for (.{ "mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush" }) |name| {
+        var file = try openOutIn("tests/diff/atomics/inputs", name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..20) |_| try writer.writeAll("[]\n");
+    }
+}
+
+/// sync: the `std.Io` argument only; 20 runs of each function.
+fn genSync() !void {
+    try compat.makePath("tests/diff/sync/inputs");
+    inline for (.{ "mutexCounter", "handoff" }) |name| {
+        var file = try openOutIn("tests/diff/sync/inputs", name);
+        defer file.close();
+        const writer = file.writer();
+        for (0..20) |_| try writer.writeAll("[]\n");
     }
 }

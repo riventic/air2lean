@@ -21,10 +21,10 @@
 # one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
 # expects 0), so a model that throws `unspecified` too often fails the test.
 #
-# A Lean `Zig.Error.nondet` (a concurrent non-commuting atomic op, docs/generated-code.md
-# §Panics) is the same kind of match, counted separately against
-# tests/diff/<ex>/nondet.txt: real threaded code interleaves non-deterministically, so a
-# racing-input line's Zig side is whatever this run's OS scheduler produced.
+# A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
+# `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
+# `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
+# match, counted separately against tests/diff/<ex>/capped.txt.
 #
 # The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
 # other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
@@ -36,15 +36,18 @@
 # Env:
 #   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
-#                       (not `asm` on a host that is not x86_64, as in check.sh).
+#                       (not `asm` on a host that is not x86_64, and not an example whose
+#                       examples/<ex>/zig-versions does not list the zig's version, as in check.sh).
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 zig_bin=${AIR2LEAN_ZIG:-zig}
+zig_version=$("$zig_bin" version)
 examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
   if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
+  if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
   printf '%s ' "${d%/}"
 done)}
 
@@ -251,7 +254,7 @@ echo "== comparing ==" >&2
 total_ok=0
 total_fail_match=0
 total_unspecified=0
-total_nondet=0
+total_capped=0
 total_mismatch=0
 total_host=0
 mismatch_found=0
@@ -260,7 +263,7 @@ for ex in $examples; do
   ex_ok=0
   ex_fail_match=0
   ex_unspecified=0
-  ex_nondet=0
+  ex_capped=0
   ex_mismatch=0
   ex_host=0
 
@@ -281,7 +284,7 @@ for ex in $examples; do
     fn_ok=0
     fn_fail_match=0
     fn_unspecified=0
-    fn_nondet=0
+    fn_capped=0
     fn_mismatch=0
     fn_host=0
     host_dependent=0
@@ -308,8 +311,8 @@ for ex in $examples; do
         fn_ok=$((fn_ok + 1))
       elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ]; }; then
         fn_unspecified=$((fn_unspecified + 1))
-      elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.nondet ]; then
-        fn_nondet=$((fn_nondet + 1))
+      elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
+        fn_capped=$((fn_capped + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
         [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
         [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
@@ -336,25 +339,25 @@ for ex in $examples; do
         "(tests/diff/$ex/unspecified.txt)" >&2
     fi
 
-    want_nondet=0
-    if [ -f "tests/diff/$ex/nondet.txt" ]; then
-      want_nondet=$(awk -v f="$fn" '$1 == f { print $2 }' "tests/diff/$ex/nondet.txt")
-      want_nondet=${want_nondet:-0}
+    want_capped=0
+    if [ -f "tests/diff/$ex/capped.txt" ]; then
+      want_capped=$(awk -v f="$fn" '$1 == f { print $2 }' "tests/diff/$ex/capped.txt")
+      want_capped=${want_capped:-0}
     fi
-    if [ "$fn_nondet" -ne "$want_nondet" ]; then
+    if [ "$fn_capped" -ne "$want_capped" ]; then
       mismatch_found=1
-      echo "NONDET COUNT $ex.$fn: $fn_nondet, expected $want_nondet" \
-        "(tests/diff/$ex/nondet.txt)" >&2
+      echo "CAPPED COUNT $ex.$fn: $fn_capped, expected $want_capped" \
+        "(tests/diff/$ex/capped.txt)" >&2
     fi
 
     host_str=""
     if [ "$fn_host" -gt 0 ]; then host_str=" host=$fn_host"; fi
     echo "$ex.$fn: ok=$fn_ok fail_match=$fn_fail_match unspecified=$fn_unspecified" \
-      "nondet=$fn_nondet mismatch=$fn_mismatch$host_str (of $n)"
+      "capped=$fn_capped mismatch=$fn_mismatch$host_str (of $n)"
     ex_ok=$((ex_ok + fn_ok))
     ex_fail_match=$((ex_fail_match + fn_fail_match))
     ex_unspecified=$((ex_unspecified + fn_unspecified))
-    ex_nondet=$((ex_nondet + fn_nondet))
+    ex_capped=$((ex_capped + fn_capped))
     ex_mismatch=$((ex_mismatch + fn_mismatch))
     ex_host=$((ex_host + fn_host))
   done
@@ -362,11 +365,11 @@ for ex in $examples; do
   host_str=""
   if [ "$ex_host" -gt 0 ]; then host_str=" host=$ex_host"; fi
   echo "TOTAL $ex: ok=$ex_ok fail_match=$ex_fail_match unspecified=$ex_unspecified" \
-    "nondet=$ex_nondet mismatch=$ex_mismatch$host_str"
+    "capped=$ex_capped mismatch=$ex_mismatch$host_str"
   total_ok=$((total_ok + ex_ok))
   total_fail_match=$((total_fail_match + ex_fail_match))
   total_unspecified=$((total_unspecified + ex_unspecified))
-  total_nondet=$((total_nondet + ex_nondet))
+  total_capped=$((total_capped + ex_capped))
   total_mismatch=$((total_mismatch + ex_mismatch))
   total_host=$((total_host + ex_host))
 done
@@ -374,7 +377,7 @@ done
 host_str=""
 if [ "$total_host" -gt 0 ]; then host_str=" host=$total_host"; fi
 echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspecified" \
-  "nondet=$total_nondet mismatch=$total_mismatch$host_str"
+  "capped=$total_capped mismatch=$total_mismatch$host_str"
 if [ "$total_host" -gt 0 ]; then
   echo "note: $total_host host-dependent float results differ from the x86_64-linux model" \
     "(tests/diff/<ex>/host.txt); CI checks them" >&2
