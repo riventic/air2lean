@@ -4,12 +4,13 @@ import ZigLean.Mem.Lemmas
 /-!
 # Proofs about `examples/atomics/atomics.zig`
 
-The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). A spec over all schedules of these
-functions needs assertions on what a thread has seen (`PLAN.md` §Next, T4 (4)); this file shows that the model has the results that only a weak memory model
-explains, each under a concrete schedule (an oracle), and the result of the sequentially
-consistent schedule (the oracle always picks option 0: the newest message, the thread that is
-first). The kernel computes each run (`decide +kernel`); a function with a loop (`stackPush`) is
-defined by `partial_fixpoint`, which the kernel does not run, so its proof waits for T4 (4).
+The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). The specs over all schedules are in
+`MessagePassing.lean` (`mpRelAcq`: 0 or 42, no error) and `Relaxed.lean` (`mpRelaxed`: every
+result is 0). This file shows that the model has the results that only a weak memory model
+explains, each under a concrete schedule (an oracle), the result of the sequentially consistent
+schedule (the oracle always picks option 0: the newest message, the thread that is first), and
+the race of `mpRelaxed`. The kernel computes each run (`decide +kernel`); a function with a loop
+(`stackPush`) is defined by `partial_fixpoint`, which the kernel does not run.
 -/
 
 open Zig Atomics
@@ -44,6 +45,14 @@ theorem twoPlusTwoW_weak :
 /-- Message passing: the reader sees the flag and then the data. -/
 theorem mp_sees_data :
     okVal (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelAcq mem0) = some 42 := by
+  decide +kernel
+
+/-- The same schedule with relaxed atomics: the read of the data after the flag is a data race
+(`.illegal`), since the relaxed load gives no happens-before edge. -/
+theorem mpRelaxed_race :
+    (match (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelaxed mem0).run with
+      | some (.error .illegal) => true
+      | _ => false) = true := by
   decide +kernel
 
 namespace Zig
