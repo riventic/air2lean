@@ -27,10 +27,29 @@ theorem Mem.heap_push (m : Mem) (nb : Block) (a : Nat) (l : Loc) :
 theorem Mem.heap_none_size (m : Mem) (y : Nat) : m.heap (m.blocks.size, y) = none := by
   simp [Mem.heap]
 
-theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hst : m.SingleThread) :
+/-- `m'` is `m` with other blocks: the threads' part of the memory is the same. -/
+structure Mem.SameThreads (m m' : Mem) : Prop where
+  current : m'.current = m.current
+  clocks : m'.clocks = m.clocks
+  threads : m'.threads = m.threads
+  footprint : m'.footprint = m.footprint
+  atomics : m'.atomics = m.atomics
+  seen : m'.seen = m.seen
+  nextMsg : m'.nextMsg = m.nextMsg
+  waiters : m'.waiters = m.waiters
+  woken : m'.woken = m.woken
+  groups : m'.groups = m.groups
+
+theorem Mem.SameThreads.singleThread {m m' : Mem} (h : m.SameThreads m') (hs : m.SingleThread) :
+    m'.SingleThread := by
+  unfold Mem.SingleThread; rw [h.current, h.clocks, h.footprint]; exact hs
+
+/-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. -/
+theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
-      Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.SingleThread ∧
+      p.block = some m.blocks.size ∧ m'.blocks.size = m.blocks.size + 1 ∧
+      Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m.SameThreads m' ∧
       ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' := by
   let A := alignUp m.nextAddr align
   let nb : Block := { bytes := Array.replicate size .undef, align, kind, live := true, addr := A }
@@ -44,7 +63,7 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     exact Option.or_eq_none_iff.mp this.symm
   have hh' : ∀ x y, x ≠ m.blocks.size → h' (x, y) = none := by
     intro x y hx; simp [h', hx]
-  refine ⟨⟨some m.blocks.size, 0⟩, _, h', rfl, rfl, ?_, ?_, ?_, ?_, A, ?_, ?_⟩
+  refine ⟨⟨some m.blocks.size, 0⟩, _, h', rfl, rfl, rfl, by simp, ?_, ?_, ?_, ?_, A, ?_, ?_⟩
   · refine Heap.disjoint_union_left.mpr ⟨hd, fun ⟨x, y⟩ => ?_⟩
     by_cases hx : x = m.blocks.size
     · subst hx; right; exact (hfree y).2
@@ -62,25 +81,35 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
     by_cases hx : x = m.blocks.size
     · subst hx; left; exact (hfree y).1
     · right; exact hh' x y hx
-  · -- `alloc` only changes `blocks`/`nextAddr`; `SingleThread` depends on neither.
-    exact hst
+  · -- `alloc` only changes `blocks` and `nextAddr`.
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · simp only [A, alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
   · refine ⟨m.blocks.size, rfl, Int.le_refl 0, fun l => ?_⟩
     simp only [h', Int.toNat_zero, Array.size_replicate]
     split <;> simp_all
 
+theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hst : m.SingleThread) :
+    ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
+      Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.SingleThread ∧
+      ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' := by
+  obtain ⟨p, m', h', hr, h0, -, -, hd', hm', hdd, hs, hA⟩ := alloc_run_core hd hm kind size align ha
+  exact ⟨p, m', h', hr, h0, hd', hm', hdd, hs.singleThread hst, hA⟩
+
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned) removes it from the heap. -/
-theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.SingleThread) :
-    ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.SingleThread := by
+theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧
+      m'.blocks.size = m.blocks.size ∧ m.SameThreads m' := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
   have c0 := bytesAt_cell hb hm hpb (j := 0) (by omega)
   obtain ⟨blk, hblk, hl, _, hc⟩ := Mem.heap_some c0
   simp only [Cell.mk.injEq] at hc
   have hsz : blk.bytes.size = S := hc.2.2.1.symm
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-  refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, hst⟩
+  refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, by simp,
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
   · simp [free, hpb, hblk, hl, h0, zig_unfold, set, StateT.set, MonadStateOf.set]
   · funext ⟨x, y⟩
     have hmx := congrFun hm (x, y)
@@ -105,6 +134,13 @@ theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {
       simp only [hx, false_and, ↓reduceIte, Option.none_or] at hmx
       simp only [Mem.heap, e] at hmx ⊢
       exact hmx
+
+theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.SingleThread) :
+    ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.SingleThread := by
+  obtain ⟨m', hr, hm', -, hs⟩ := free_run_core hb hm hd hS h0 hpos
+  exact ⟨m', hr, hm', hs.singleThread hst⟩
 
 theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     Triple emp (alloc kind size align) (fun p => Assn.ex fun A =>

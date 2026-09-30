@@ -1,5 +1,5 @@
 import ZigLean.Conc.Lemmas
-import ZigLean.Sep.Triple
+import ZigLean.Sep.Block
 
 /-!
 # Ownership in threads
@@ -19,7 +19,7 @@ The separation logic of `ZigLean/Sep/` for a thread of a concurrent run.
 - **Thread triples** (`TTriple`). `Triple` with ownership in place of `SingleThread`: if the
   current thread owns the part `P` holds of, `c` does not throw, `Q` holds of the part after it,
   the thread owns that part, and the step is a `StepIn` of the frame. The rules are those of
-  `Triple`: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`, `load`, `store`.
+  `Triple`: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`, `load`, `store`, `alloc`, `free`.
 - **In a thread** (`WP.liftM_triple`). A `MemM` step of generated code with a thread triple is a
   `WP` step: the proof gets the post and the `StepIn` of the rest of the memory, and with it
   keeps its invariant for the other threads' parts.
@@ -374,6 +374,75 @@ theorem TTriple.store [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.si
       · exact .inr (by simpa [Mem.write] using hb2)
 
 end Rules
+
+section Blocks
+
+variable {m : Mem} {h hF : Heap}
+
+/-- A byte of `bytesAt p …` is in the block of `p`. -/
+theorem bytesAt_block {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) {b : BlockId} (hpb : p.block = some b) {l : Loc}
+    (hl : h l ≠ none) : l.1 = b := by
+  obtain ⟨b', hb', -, hown⟩ := hb
+  rw [hpb] at hb'; cases hb'
+  rw [hown] at hl
+  split at hl
+  · rename_i hc; exact hc.1
+  · exact absurd rfl hl
+
+/-- A step that changes only the blocks. -/
+theorem StepIn.sameThreads {m' : Mem} (hs : m.SameThreads m') (hb : m.blocks.size ≤ m'.blocks.size) :
+    StepIn hF m m' where
+  current := hs.current
+  threads := hs.threads
+  atomics := hs.atomics
+  seen := hs.seen
+  nextMsg := hs.nextMsg
+  waiters := hs.waiters
+  woken := hs.woken
+  groups := hs.groups
+  size := by rw [hs.clocks]
+  others u _ := by rw [hs.clocks]
+  mine := by rw [hs.clocks]; exact VClock.le_refl _
+  blocks := hb
+  fp e he := .inl (hs.footprint ▸ he)
+
+theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+    TTriple emp (Zig.alloc kind size align) (fun p => Assn.ex fun A =>
+      ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
+  TTriple.of_run fun m hP hF hd hm hp _ ho => by
+    have hP0 : hP = Heap.empty := hp
+    subst hP0
+    obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, hA, hb⟩ :=
+      alloc_run_core hd hm kind size align ha
+    simp only [Heap.empty_union] at hd' hm'
+    refine ⟨p, m', h', hr, hd', hm', ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩, ?_,
+      StepIn.sameThreads hs (by omega)⟩
+    intro e he ht
+    rw [hs.footprint] at he
+    unfold Mem.Owns at ho
+    rw [hs.current, hs.clocks]
+    apply ho e he (.inr ?_)
+    rcases ht with ⟨x, -, -, hx⟩ | hb'
+    · have := bytesAt_block hb hpb hx; simp only at this; rw [this]; exact Nat.le_refl _
+    · omega
+
+theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
+    (h0 : p.off = 0) (hpos : 0 < S) : TTriple (bytesAt p A S K bs) (Zig.free p) (fun _ => emp) :=
+  TTriple.of_run fun m _ hF hd hm hb _ ho => by
+    obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
+    refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_,
+      StepIn.sameThreads hs (by omega)⟩
+    intro e he ht
+    rw [hs.footprint] at he
+    unfold Mem.Owns at ho
+    rw [hs.current, hs.clocks]
+    apply ho e he (.inr ?_)
+    rcases ht with ⟨x, -, -, hx⟩ | hb'
+    · exact absurd rfl hx
+    · omega
+
+end Blocks
 
 /-! ## In a thread -/
 
