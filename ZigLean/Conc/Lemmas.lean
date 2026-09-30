@@ -99,7 +99,7 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
 strict mode, `tid` is a later thread and the join does not throw. -/
 theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      (P.strict = true → t < tid ∧ tid < m₁.threads.size) ∧ (P.fin (G₁ tid) →
+      (P.strict = true → t < tid ∧ tid < m₁.threads.size ∧ P.joins g) ∧ (P.fin (G₁ tid) →
         (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
           some (.ok ((), m'))) ∧ ∀ m',
         ((Thread.join tid).run { m₁ with current := t }).run = some (.ok ((), m')) →
@@ -109,57 +109,45 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
     pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hf =>
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨hg ▸ (hc G₁ m₁ hg hi₁).1, fun hf =>
     ⟨((hc G₁ m₁ hg hi₁).2 hf).1, fun m' hj => WP.pure' (((hc G₁ m₁ hg hi₁).2 hf).2 m' hj)⟩⟩⟩
 
+/-- A futex wait (`futexWaitC`, the bits `e'` of `e`): the thread stops with the ghost value
+`g`. If it sleeps, it keeps the invariant with `g`; when it goes on, `Q` holds. In strict mode
+it keeps `Live` and does not throw. -/
+theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e : ε} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      let e' := (Packed.toBits e).setWidth 32
+      (P.strict = true → P.Live t G₁ m₁ ∧ ∃ b m',
+        ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
+      ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
+        if b then P.inv G₁ m' else Q ((), s) G₁ m' k) :
+    P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
+  show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
+    (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
+  refine WP.bind (WP.map (WP.sync fun k hk => ?_))
+  obtain ⟨g, hi, hc⟩ := h k hk
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun b m' hr => ?_⟩⟩
+  have := (hc G₁ m₁ hg hi₁).2 b m' hr
+  cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
+  · exact WP.pure' this
+  · exact this
 
-/-! ## What a step in `MemM` did, from its result -/
+/-- A futex wake (`futexWakeC`): the thread stops with the ghost value `g`; `Q` holds after the
+wake. -/
+theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∀ m', ((Thread.futexWake p c.toNat).run { m₁ with current := t }).run =
+        some (.ok ((), m')) → Q ((), s) G₁ m' k) :
+    P.WP t ((futexWakeC io p c : CM Tgt σ Unit).run s) Q G m n := by
+  show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.wake p c.toNat)) >>= fun a =>
+    pure (a, s)) Q G m n
+  refine WP.bind (WP.map (WP.sync fun k hk => ?_))
+  obtain ⟨g, hi, hc⟩ := h k hk
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
 
-namespace MemM
-
-theorem bind_ok {x : MemM α} {f : α → MemM β} {m m'' : Mem} {b : β}
-    (h : ((x >>= f).run m).run = some (.ok (b, m''))) :
-    ∃ a m', (x.run m).run = some (.ok (a, m')) ∧ ((f a).run m').run = some (.ok (b, m'')) := by
-  rw [StateT.run_bind, ExceptT.run_bind] at h
-  match hx : (x.run m).run, h with
-  | none, h => simp at h
-  | some (.error _), h => simp [pure] at h
-  | some (.ok (a, m')), h => exact ⟨a, m', rfl, by simpa [hx] using h⟩
-
-theorem lift_ok {r : Result α} {m m' : Mem} {a : α}
-    (h : ((StateT.lift r : MemM α).run m).run = some (.ok (a, m'))) :
-    r.run = some (.ok a) ∧ m' = m := by
-  simp only [StateT.run, StateT.lift, ExceptT.run_bind] at h
-  match hr : r.run, h with
-  | none, h => simp at h
-  | some (.error _), h => simp [pure] at h
-  | some (.ok a'), h =>
-    simp [pure, ExceptT.pure, ExceptT.mk] at h
-    obtain ⟨rfl, rfl⟩ := h
-    exact ⟨rfl, rfl⟩
-
-theorem get_ok {m m' : Mem} {a : Mem} (h : ((get : MemM Mem).run m).run = some (.ok (a, m'))) :
-    a = m ∧ m' = m := by
-  simp [get, getThe, MonadStateOf.get, StateT.get, StateT.run, pure, ExceptT.pure,
-    ExceptT.mk, ExceptT.run] at h
-  exact ⟨h.1.symm, h.2.symm⟩
-
-theorem pure_ok {x : α} {m m' : Mem} {a : α}
-    (h : ((pure x : MemM α).run m).run = some (.ok (a, m'))) : a = x ∧ m' = m := by
-  simp [StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
-  exact ⟨h.1.symm, h.2.symm⟩
-
-theorem throw_ok {e : Error} {m m' : Mem} {a : α}
-    (h : ((throw e : MemM α).run m).run = some (.ok (a, m'))) : False := by
-  simp [throw, throwThe, MonadExceptOf.throw, StateT.lift, StateT.run, ExceptT.run,
-    ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont] at h
-
-theorem set_ok {x : Mem} {m m' : Mem} {a : PUnit}
-    (h : ((set x : MemM PUnit).run m).run = some (.ok (a, m'))) : m' = x := by
-  simp [set, StateT.set, StateT.run, pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
-  exact h.symm
-
-end MemM
 
 /-- A result `(b, blk, o)` of `Mem.access` is `pure`. -/
 theorem access_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}

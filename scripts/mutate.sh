@@ -94,7 +94,7 @@
 #     goes before a newer message. Detected by the proof build: `twoPlusTwoW_weak` needs it.
 #     A weak-memory result is rare on real hardware, so the diff test seldom sees one; the
 #     proofs show each one under a fixed schedule.
-# (y) Lean-runtime mutation, sync: a futex `wait` (ZigLean/Conc/Sched.lean) never blocks.
+# (y) Lean-runtime mutation, sync: a futex `wait` (ZigLean/Mem/Thread.lean) never blocks.
 #     Detected by the proof build: `wait_alone_deadlock` (Proofs/Sync/Proofs.lean).
 # (z) Lean-runtime mutation, sync: the scheduler's deadlock check is off (no result instead of
 #     `.deadlock`). Detected by the proof build: `wait_alone_deadlock`.
@@ -677,16 +677,16 @@ echo "== mutation (y): a futex wait never blocks (Lean runtime, proof build) =="
 if ! has_example sync; then
   echo "mutation (y): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
-  sed -i.bak 's/^        if v = e then .ok (.paused/        if false then .ok (.paused/' "$sched_lean"
-  rm -f "$sched_lean.bak"
-  grep -q '^        if false then .ok (.paused' "$sched_lean" || {
+  sed -i.bak 's/^    if v = e then$/    if false then/' "$thread_lean"
+  rm -f "$thread_lean.bak"
+  grep -q '^    if false then$' "$thread_lean" || {
     echo "error: mutation (y): sed did not change the futex wait" >&2
     exit 1
   }
 
   proof_report "mutation (y)" Proofs.Sync.Proofs
   [ "$detected" -eq 1 ] || all_detected=0
-  cp "$sched_backup" "$sched_lean"
+  cp "$thread_backup" "$thread_lean"
 fi
 
 echo "== mutation (z): no deadlock check (Lean runtime, proof build) ==" >&2

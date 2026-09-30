@@ -17,6 +17,7 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
 - **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
   waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
   edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
+  The queue is in `Mem` (`Thread.futexWait`, `Thread.futexWake`).
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
   joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then. If no
   thread can go on and one has not ended, the run is `.deadlock`.
@@ -52,10 +53,6 @@ structure State (Tgt α : Type) where
   step : Nat
   /-- The number of options of each choice so far. -/
   trace : Array Nat
-  /-- The threads that wait at a futex, and the address, in the order they began to wait. -/
-  waiters : Array (ThreadId × Ptr) := #[]
-  /-- The threads that a `wake` woke: their `wait` goes on at their next turn. -/
-  woken : Array ThreadId := #[]
 
 /-- Thread `t` has ended. -/
 def State.isDone (s : State Tgt α) (t : ThreadId) : Bool :=
@@ -67,7 +64,7 @@ def State.isDone (s : State Tgt α) (t : ThreadId) : Bool :=
 /-- Thread `t`, which waits at the op, can go on now. -/
 def canGo (s : State Tgt α) (t : ThreadId) : SyncOp Tgt → Bool
   | .join tid => s.isDone tid
-  | .wait .. => !(s.waiters.any (·.1 == t))
+  | .wait .. => !(s.mem.waiters.any (·.1 == t))
   | _ => true
 
 /-- The threads that can go on, in thread order. -/
@@ -136,19 +133,10 @@ def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat �
     let ((), s) ← s.onMem (Thread.join tid)
     settle t s (k () s.mem)
   | ⟨d, .wait ptr e, k⟩ =>
-    if s.woken.contains t then
-      settle t { s with woken := s.woken.erase t } (k () s.mem)
-    else
-      -- The kernel compares the value at `ptr`: the newest write (the block's bytes).
-      match (do let (_, blk, o) ← s.mem.access ptr 4 4; intOfBytes 32 (blk.bytes.extract o (o + 4))).run with
-      | some (.ok v) =>
-        if v = e then .ok (.paused ⟨d, .wait ptr e, k⟩, none, { s with waiters := s.waiters.push (t, ptr) })
-        else settle t s (k () s.mem)
-      | some (.error err) => .error (some err)
-      | none => .error none
+    let (sleep, s) ← s.onMem (Thread.futexWait ptr e)
+    if sleep then .ok (.paused ⟨d, .wait ptr e, k⟩, none, s) else settle t s (k () s.mem)
   | ⟨_, .wake ptr n, k⟩ =>
-    let woke := (s.waiters.filter (·.2 == ptr)).extract 0 n |>.map (·.1)
-    let s := { s with waiters := s.waiters.filter (fun w => !woke.contains w.1), woken := s.woken ++ woke }
+    let ((), s) ← s.onMem (Thread.futexWake ptr n)
     settle t s (k () s.mem)
 
 /-- Up to `fuel` turns. -/

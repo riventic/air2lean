@@ -2050,7 +2050,7 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       fun G₁ m₂ hg₁ hie₂ => ⟨fun _ => ?_, fun hfin => ⟨fun _ => ?_, fun m' hj => ?_⟩⟩⟩)
     · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
       rw [hg₁] at hG₂; cases hG₂
-      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega⟩
+      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega, trivial⟩
     · obtain ⟨hi₂, he₂⟩ := hie₂
       obtain ⟨s₂, J₂, hG₂, -, hsz₂, -, -, -, -, -, hjoined, -⟩ := hi₂
       rw [hg₁] at hG₂; cases hG₂
@@ -2334,7 +2334,7 @@ theorem parallelCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName 
     {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) mem0).run = some (.ok (v, m))) :
     v = .ok (4 * n) := by
   obtain ⟨_, _, hv, -⟩ := (proto n).run_sound dispatch (fun u => if u = 0 then .main 0 [] else .none)
-    (fun _ _ _ h => ⟨inv_current n h.1, h.2⟩) (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
+    (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
     (main_spec n) h
   exact hv
 
@@ -2343,7 +2343,7 @@ deadlock, no overflow, no other illegal behaviour. -/
 theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o (parallelCounter n) mem0).run ≠ some (.error e) :=
   (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
-    (fun _ _ _ h => ⟨inv_current n h.1, h.2⟩) (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
+    (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n)
 
 end Threads.Counter

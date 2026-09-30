@@ -206,6 +206,11 @@ structure Mem where
   seen : Array (ThreadId × Nat × Nat) := #[]
   /-- The id of the next message. -/
   nextMsg : Nat := 0
+  /-- The futex queue (the kernel's state, `ZigLean/Mem/Thread.lean`): the threads that wait at
+  a futex, and the address, in the order they began to wait. -/
+  waiters : Array (ThreadId × Ptr) := #[]
+  /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
+  woken : Array ThreadId := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
