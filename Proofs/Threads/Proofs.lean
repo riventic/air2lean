@@ -8,8 +8,8 @@ import ZigLean.Simp
 
 The threads take turns at sync ops (`ZigLean/Conc/Sched.lean`), and `bump`, `parallelCounter`
 and `xchgRace` are concurrent functions (`Zig.ConcM`). A spec of such a function holds for every
-schedule; the program logic for it is milestone T4 (`PLAN.md`). This file has the facts of one
-atomic step, which T4 builds on:
+schedule: `Proofs/Threads/Counter.lean` proves `parallelCounter n = 4 * n` over all schedules
+with the program logic of `ZigLean/Conc/Logic.lean`. This file has facts of one atomic step:
 
 - Two atomic accesses never race (`racePair_atomic`), so an atomic access races only with a
   plain one (`noRace_of_atomic`).
