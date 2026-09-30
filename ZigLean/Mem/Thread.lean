@@ -336,5 +336,33 @@ def join (tid : ThreadId) : MemM Unit := do
     clocks := m.clocks.set! m.current merged
     threads := m.threads.set! tid { rec with joined := true } }
 
+/-! ## Futex (the kernel's part of `Io.futexWait`/`futexWake`)
+
+The scheduler (`ZigLean/Conc/Sched.lean`) calls these at a `wait`/`wake` sync op. The queue is in
+`Mem` (`Mem.waiters`, `Mem.woken`), as the thread table is: so the invariant of a proof over all
+schedules (`ZigLean/Conc/Logic.lean`) can name it. -/
+
+/-- A futex wait of the current thread at `p` for the value `e`: `true` if the thread sleeps
+(it is added to `waiters`). A woken thread goes on. Else the kernel compares the `u32` at `p`,
+the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. -/
+def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
+  let m ← get
+  if m.woken.contains m.current then
+    set { m with woken := m.woken.erase m.current }
+    pure false
+  else
+    let (_, blk, o) ← m.access p 4 4
+    let v ← intOfBytes 32 (blk.bytes.extract o (o + 4))
+    if v = e then
+      set { m with waiters := m.waiters.push (m.current, p) }
+      pure true
+    else pure false
+
+/-- A futex wake at `p`: the first `n` waiters at `p` are woken. No happens-before edge (the std
+code reads the value again with an acquire). -/
+def futexWake (p : Ptr) (n : Nat) : MemM Unit := modify fun m =>
+  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)
+  { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+
 end Thread
 end Zig

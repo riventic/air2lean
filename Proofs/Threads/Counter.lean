@@ -205,23 +205,6 @@ theorem total_congr {G G' : ThreadId → Gh} {s : Nat}
   apply List.map_congr_left
   intro k hk; rw [List.mem_range] at hk; exact h _ (by omega) (by omega)
 
-/-- An RMW's bytes read back as its value. -/
-theorem intOfBytes_rmw (v : BitVec 32) :
-    (intOfBytes 32 (padTo (intSize 32) (intBytes v))).run = some (.ok v) :=
-  congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec 32) v)
-
-theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
-
-/-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
-theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
-    (hlt : a.toNat + 1 < 2 ^ w) : r.toNat = a.toNat + 1 := by
-  simp only [add, Bool.false_eq_true, ↓reduceIte] at h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
-  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
-    rw [← h, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (a := 1) (by omega)]
-    exact Nat.mod_eq_of_lt hlt
-
 theorem getElem_of_eq {α : Type} {a b : Array α} (e : a = b) {u : Nat} (h : u < a.size) :
     a[u] = b[u]'(e ▸ h) := by subst e; rfl
 
@@ -317,21 +300,6 @@ theorem cntAt_locIdx {tot li : Nat} {m m₁ : Mem} (hc : CntOk tot m)
       rw [getElem!_pos m.atomics i hlt]; exact (honly _ (Array.getElem_mem hlt) hq.1).2
     obtain ⟨rfl, rfl⟩ := Proto.locIdx_found hf hlen hlast h
     exact ⟨⟨hf, honly, hsz, hch, hval, hlast, hclk⟩, rfl, rfl, rfl, rfl, rfl⟩
-
-theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
-    xs.insertIdxIfInBounds xs.size v = xs.push v := by
-  simp [Array.insertIdxIfInBounds, Array.insertIdx_size_self]
-
-theorem insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
-    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) :
-    Proto.insertM m li (m.atomics[li]!).msgs.size msg = { m with
-      atomics := m.atomics.set! li
-        { m.atomics[li]! with msgs := (m.atomics[li]!).msgs.push msg },
-      nextMsg := m.nextMsg + 1,
-      blocks := m.blocks.set! (m.atomics[li]!).block
-        { blk with bytes := writeBytes blk.bytes (m.atomics[li]!).off msg.bytes } } := by
-  unfold Proto.insertM
-  simp [insertIdxIfInBounds_size_self, hb]
 
 /-- The counter with one more RMW message `msg`, stated field by field. -/
 theorem cntAt_push {tot li : Nat} {m₁ M : Mem} {msg : Msg} {blk : Block}
@@ -562,18 +530,6 @@ theorem ex_recordAt {G : ThreadId → Gh} {m : Mem} {b o l : Nat} {k : AccessKin
   · rw [recordAt_clock hcl]; split
     · subst_vars; exact VClock.le_bump _ _
     · exact VClock.le_refl _
-
-/-- `Zig.add` of 1 does not overflow below `2 ^ w - 1`. -/
-theorem add_one_noErr {w : Nat} {a : BitVec w} (hlt : a.toNat + 1 < 2 ^ w) (e : Error) :
-    (add false a 1).run ≠ some (.error e) := by
-  have h1 : (1 : BitVec w).toNat = 1 % 2 ^ w := BitVec.toNat_ofNat 1 w
-  have hno : a.uaddOverflow 1 = false := by
-    simp only [BitVec.uaddOverflow, decide_eq_false_iff_not, h1]
-    rw [Nat.mod_eq_of_lt (by omega)]; omega
-  simp only [add, Bool.false_eq_true, ↓reduceIte]
-  split
-  · rename_i h; rw [hno] at h; cases h
-  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
 /-! ## The invariant under a step -/
 
@@ -1200,25 +1156,6 @@ theorem inv_spawn {G : ThreadId → Gh} {m m₂ m₃ : Mem} {k : Nat} {child : T
       exact ⟨u, by rw [hth3]; simp; omega, VClock.le_trans hl (hgrow u (hsz ▸ hu))⟩
     · exact ⟨0, by rw [hth3]; simp, by rw [he]; exact VClock.le_refl _⟩
 
-theorem join_eq {m m' : Mem} {tid : ThreadId}
-    (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
-    ∃ rec, m.threads[tid]? = some rec ∧ rec.joined = false ∧ m' = { m with
-      clocks := m.clocks.set! m.current
-        (VClock.merge (VClock.bump (m.clocks[m.current]!) m.current) (m.clocks[tid]!)),
-      threads := m.threads.set! tid { rec with joined := true } } := by
-  unfold Thread.join at h
-  cases hr : m.threads[tid]? with
-  | none =>
-    simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
-      throw, throwThe, MonadExceptOf.throw, StateT.lift]
-  | some rec =>
-    refine ⟨rec, rfl, ?_⟩
-    by_cases hc : (rec.spawner != m.current || rec.joined) = true <;>
-      simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-        ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
-        throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
-
 /-- `main`'s join of a thread that ended keeps the invariant; the thread goes into `J`. -/
 theorem inv_join {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {tid : ThreadId}
     (hi : Inv n G m) (hG0 : G 0 = .main 4 J) (hfin : ∃ p, G tid = .bump p n.toNat true)
@@ -1480,30 +1417,6 @@ theorem final_noErr {G : ThreadId → Gh} {m : Mem} {J : List Nat} {c : Nat}
     refine ⟨_, rfl, BitVec.ofNat 32 ((m₁.atomics[li]!).msgs.size - 1), ?_⟩
     rw [getElem!_pos (m₁.atomics[li]!).msgs _ hp]
     exact hct.val _ hp
-
-/-- An allocation gives no error. -/
-theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) :
-    ((alloc kind size align).run m).run ≠ some (.error e) := by
-  intro h
-  unfold alloc at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
-  · exact MemM.set_err h₂
-  · exact MemM.pure_err h₃
-
-/-- A free of a live block gives no error. -/
-theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (e : Error) :
-    ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
-  intro h
-  unfold free at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  simp only [hb, hl] at h₁
-  simp at h₁
 
 /-- After the 4 joins, `main` joined every thread. -/
 theorem joined_final {G : ThreadId → Gh} {m : Mem} {J : List Nat} (hi : Inv n G m)
@@ -2050,7 +1963,7 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       fun G₁ m₂ hg₁ hie₂ => ⟨fun _ => ?_, fun hfin => ⟨fun _ => ?_, fun m' hj => ?_⟩⟩⟩)
     · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
       rw [hg₁] at hG₂; cases hG₂
-      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega⟩
+      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega, trivial⟩
     · obtain ⟨hi₂, he₂⟩ := hie₂
       obtain ⟨s₂, J₂, hG₂, -, hsz₂, -, -, -, -, -, hjoined, -⟩ := hi₂
       rw [hg₁] at hG₂; cases hG₂
@@ -2320,7 +2233,7 @@ theorem main_spec (d : Nat) :
   congr 1
 
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt = some g) (u : ThreadId)
-    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hgu : G u = g) (hi : (proto n).inv G m) :
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (_ : 0 < u) (hgu : G u = g) (hi : (proto n).inv G m) :
     (proto n).WP u (dispatch tgt) ((proto n).QKid u) G { m with current := u } d := by
   cases tgt with
   | bump p =>
@@ -2334,7 +2247,7 @@ theorem parallelCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName 
     {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) mem0).run = some (.ok (v, m))) :
     v = .ok (4 * n) := by
   obtain ⟨_, _, hv, -⟩ := (proto n).run_sound dispatch (fun u => if u = 0 then .main 0 [] else .none)
-    (fun _ _ _ h => ⟨inv_current n h.1, h.2⟩) (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
+    (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
     (main_spec n) h
   exact hv
 
@@ -2343,7 +2256,7 @@ deadlock, no overflow, no other illegal behaviour. -/
 theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o (parallelCounter n) mem0).run ≠ some (.error e) :=
   (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
-    (fun _ _ _ h => ⟨inv_current n h.1, h.2⟩) (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
+    (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n)
 
 end Threads.Counter
