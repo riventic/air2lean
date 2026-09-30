@@ -568,8 +568,7 @@ theorem enc4 (v : BitVec 32) : (Enc.encode v).size = 4 :=
 
 /-- The memory after an RMW at the mutex that read the newest message `rd`. -/
 theorem rmw_eff {m₁ M m₂ : Mem} {l : ALoc} {ord : AtomicOrder} {new : BitVec 32} {rd : Msg}
-    (hl : MLoc m₁ l) (hb : BlkOk m₁) (hrd : rd = l.msgs[l.msgs.size - 1]!)
-    (hm₂ : m₂ = if ord.isAcq then acqM m₁ rd.relClock else m₁)
+    (hl : MLoc m₁ l) (hb : BlkOk m₁) (hm₂ : m₂ = if ord.isAcq then acqM m₁ rd.relClock else m₁)
     (hM : M = rmwM m₁ 0 (l.msgs.size - 1) ord rd new) :
     M.threads = m₁.threads ∧ M.footprint = m₁.footprint ∧ M.waiters = m₁.waiters ∧
       M.current = m₁.current ∧ M.clocks = m₂.clocks ∧ BlkOk M ∧
@@ -630,7 +629,6 @@ theorem rmw_eff {m₁ M m₂ : Mem} {l : ALoc} {ord : AtomicOrder} {new : BitVec
 /-- The memory `M` after a write to the mutex: the invariant, from the facts of the write. -/
 theorem Inv.mutexWrite {G G' : ThreadId → Gh} {m₁ M : Mem} {l' : ALoc} {w' : Nat} (hi : Inv G m₁)
     (ht : M.threads = m₁.threads) (hf : M.footprint = m₁.footprint)
-    (hcs : M.clocks.size = m₁.clocks.size)
     (hcl : ∀ u : Nat, VClock.le (m₁.clocks[u]!) (M.clocks[u]!) = true) (hbk : BlkOk M)
     (h20 : curBytes M 0 20 4 = curBytes m₁ 0 20 4) (hloc : MLoc M l') (hthr : ThrOk G' M)
     (hcnt : (G' 0).count + (G' 1).count = (G 0).count + (G 1).count)
@@ -797,14 +795,14 @@ theorem take_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w' : Nat}
   obtain ⟨hs2, ht2, hk2⟩ := thr_work hi₁.thr hg
   have hn := noHold_of_zero hi₁ h0
   obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, -, hat₃⟩ :=
-    rmw_eff (new := BitVec.ofNat 32 w') hml hi₁.blk rfl rfl hM
+    rmw_eff (new := BitVec.ofNat 32 w') hml hi₁.blk rfl hM
   have hacq : AtomicOrder.acquire.isAcq = true := rfl
   simp only [hacq, ite_true] at hcl₃ hat₃
   have hcs₁ : m₁.current < m₁.clocks.size := by
     rw [hi₁.thr.2.1, hcu, hs2]; exact ht2
   have hw3 : w' < 3 := by omega
   refine ⟨hc₃.trans hcu, ?_⟩
-  refine hi₁.mutexWrite (l' := _) (w' := w') ht₃ hf₃ (by rw [hcl₃]; simp [acqM])
+  refine hi₁.mutexWrite (l' := _) (w' := w') ht₃ hf₃
     (fun u => by rw [hcl₃]; exact (grows_acq m₁ _).cle u) hbk₃ h20₃
     (mloc_push hml hat₃ rfl ⟨w', hw3, intOfBytes_rmw _⟩ h16₃)
     (thrOk_congr (thrOk_upd hi₁.thr hg hk2) ht₃ (by rw [hcl₃]; simp [acqM]))
@@ -896,11 +894,11 @@ theorem contend_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w : Nat
   obtain ⟨hs2, ht2, hk2⟩ := thr_work hi₁.thr hg
   obtain ⟨u0, hh⟩ := hold_of_word hi₁ hwu hw hw0
   obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, hu₃, hat₃⟩ :=
-    rmw_eff (new := BitVec.ofNat 32 2) hml hi₁.blk rfl rfl hM
+    rmw_eff (new := BitVec.ofNat 32 2) hml hi₁.blk rfl hM
   have hacq : AtomicOrder.acquire.isAcq = true := rfl
   simp only [hacq, ite_true] at hcl₃ hat₃
   refine ⟨hc₃.trans hcu, ?_⟩
-  refine hi₁.mutexWrite (l' := _) (w' := 2) ht₃ hf₃ (by rw [hcl₃]; simp [acqM])
+  refine hi₁.mutexWrite (l' := _) (w' := 2) ht₃ hf₃
     (fun u => by rw [hcl₃]; exact (grows_acq m₁ _).cle u) hbk₃ h20₃
     (mloc_push hml hat₃ rfl ⟨2, by decide, intOfBytes_rmw _⟩ h16₃)
     (thrOk_congr hi₁.thr ht₃ (by rw [hcl₃]; simp [acqM])) rfl (by decide) hu₃ ?_ hi₁.one ?_ ?_
@@ -980,12 +978,12 @@ theorem release_inv {G : ThreadId → Gh} {m₁ M : Mem} {l : ALoc} {t k w : Nat
     · subst hut; rw [upd_self] at hu; cases hu; exact hph' rfl
     · rw [upd_ne _ _ hut] at hu; exact hut (honly u ⟨k', hu⟩)
   obtain ⟨ht₃, hf₃, hw₃, hc₃, hcl₃, hbk₃, h20₃, h16₃, hu₃, hat₃⟩ :=
-    rmw_eff (new := BitVec.ofNat 32 0) hml hi₁.blk rfl rfl hM
+    rmw_eff (new := BitVec.ofNat 32 0) hml hi₁.blk rfl hM
   have hacq : AtomicOrder.release.isAcq = false := rfl
   have hrel : AtomicOrder.release.isRel = true := rfl
   simp only [hacq, Bool.false_eq_true, ite_false] at hcl₃ hat₃
   refine ⟨hc₃.trans hcu, ?_⟩
-  refine hi₁.mutexWrite (l' := _) (w' := 0) ht₃ hf₃ (by rw [hcl₃])
+  refine hi₁.mutexWrite (l' := _) (w' := 0) ht₃ hf₃
     (fun u => by rw [hcl₃]; exact VClock.le_refl _) hbk₃ h20₃
     (mloc_push hml hat₃ rfl ⟨0, by decide, intOfBytes_rmw _⟩ h16₃)
     (thrOk_congr (thrOk_upd hi₁.thr hg hk2) ht₃ (by rw [hcl₃]))
@@ -1203,7 +1201,7 @@ theorem wait_step {G : ThreadId → Gh} {m m' : Mem} {t k : Nat} {e : BitVec 32}
     have hut : u ≠ t := fun e => by obtain ⟨k', hk'⟩ := hu; rw [e, hg] at hk'; cases hk'
     simp only [↓reduceIte]
     refine hi.frameQ rfl rfl rfl rfl rfl ⟨by simp [hq0], fun w hw => ?_⟩
-    simp only [hq0, List.push_toArray, List.nil_append, Array.mem_toArray, List.mem_singleton] at hw
+    simp only [hq0, List.push_toArray, List.nil_append, List.mem_toArray, List.mem_singleton] at hw
     subst hw
     exact ⟨rfl, ⟨k, hg⟩, u, hut, .inl ⟨hu, h2⟩⟩
   · exact ⟨rfl, (hi.grow (grows_current m t)).retag (ph' := .out) hg rfl (by decide) (by decide) (.inr hq)⟩
@@ -1228,7 +1226,6 @@ theorem wake_step {G : ThreadId → Gh} {m m' : Mem} {t k n : Nat} (hi : Inv G m
       have hx2 : x.2 = mPtr := (hi.fq.2 x (by rw [hx]; simp)).1
       have hex : (#[x].filter (·.2 == mPtr)).extract 0 n = #[x] := by
         apply Array.toList_inj.mp
-        simp only [hx2, Array.toList_extract, Array.filter, List.extract]
         simp [hx2]
         exact List.take_of_length_le (by simp; omega)
       rw [hx, hex]
@@ -1581,7 +1578,7 @@ theorem loop23_body (t k D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals
       exact hs
 
 theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : Inv (upd G t (.work k .out)) m) (hc : m.current = t) :
+    (hi : Inv (upd G t (.work k .out)) m) :
     proto.WP t (Io_Mutex_lockUncancelable (cPtr.add 16) io)
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ Inv (upd G' t (.work k .holds)) m') G m d := by
   unfold Io_Mutex_lockUncancelable
@@ -1651,7 +1648,7 @@ theorem lock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat
 /-! ## `unlock` -/
 
 theorem unlock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : Inv (upd G t (.work k .holds)) m) (hc : m.current = t) :
+    (hi : Inv (upd G t (.work k .holds)) m) :
     proto.WP t (Io_Mutex_unlock (cPtr.add 16) io)
       (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧ Inv (upd G' t (.work k .out)) m') G m d := by
   unfold Io_Mutex_unlock
@@ -1673,7 +1670,7 @@ theorem unlock_spec (t k : Nat) (io : Io) (G : ThreadId → Gh) (m : Mem) (d : N
     refine WP.pure' ?_
     exact WP.pure' ⟨by omega, hc₂, hi₂⟩
   · refine ⟨by rw [(thr_work hi₂.thr (upd_self _ _ _)).1, hs₁], ?_⟩
-    simp only [StateT.run_bind, bind_assoc, pure_bind]
+    simp only [StateT.run_bind, bind_assoc]
     refine WP.bind (WP.futexWakeC fun k₂ hk₂ => ⟨.work k .wake, hi₂, fun G₂ m₃ hg₂ hi₃ m' hw => ?_⟩)
     obtain ⟨hc', hi'⟩ := wake_step hi₃ hg₂ (by decide) hw
     simp only [StateT.run_pure, pure_bind]
@@ -1732,7 +1729,7 @@ theorem loop4_body (t : Nat) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d
     obtain ⟨hc₁, hi₁⟩ := step_io hi (hc ▸ htl) hc hl
     refine ⟨by rw [(thr_work hi₁.thr hgt).1, hs2], ?_⟩
     -- `lock`
-    refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t s.local1.toNat v G m₁ d hi₁ hc₁)))
+    refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t s.local1.toNat v G m₁ d hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₂⟩
     have hg₂ : (upd G₂ t (.work s.local1.toNat .holds)) t = .work s.local1.toNat .holds := upd_self _ _ _
     obtain ⟨hs₂, -, -⟩ := thr_work hi₂.thr hg₂
@@ -1774,7 +1771,7 @@ theorem loop4_body (t : Nat) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d
     obtain ⟨hc₅, hi₅⟩ := step_io hi₄ (hc₄ ▸ htl₄) hc₄ hl₅
     refine ⟨by rw [(thr_work hi₅.thr hg₄).1, (thr_work hi₄.thr hg₄).1], ?_⟩
     -- `unlock`
-    refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t _ v₅ G₂ m₅ d₂ hi₅ hc₅)))
+    refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t _ v₅ G₂ m₅ d₂ hi₅)))
     rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
     simp only [StateT.run_pure, pure_bind]
     -- the next repeat
@@ -2211,7 +2208,7 @@ theorem main_spec (io : Io) (d : Nat) :
   have hc₆ : m₆.current = 0 := by
     simp only [fork_run, Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
     rw [← hf.2]
-  simp only [StateT.run_bind, bind_assoc]
+  simp only [StateT.run_bind]
   -- `work`
   refine WP.bind (WP.callC (WP.mono ?_ (work_spec 0 _ m₆ k hi₆ hc₆)))
   rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
