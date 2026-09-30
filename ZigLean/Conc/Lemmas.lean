@@ -1598,6 +1598,64 @@ theorem curBytes_write_other {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byt
       hb, Option.map_some, Option.getD_some]
     exact extract_writeBytes_disjoint _ _ _ _ _ hfit h' hd
 
+/-! ## Before the first spawn -/
+
+/-- `main` alone, before its first spawn: no atomic location; each access so far is `main`'s
+write. -/
+structure Solo (m : Mem) : Prop where
+  at0 : m.atomics = #[]
+  thr : m.threads = #[{ spawner := 0, joined := true }]
+  clk : m.clocks.size = 1
+  cur : m.current = 0
+  fp : ∀ e ∈ m.footprint, e.kind = .write ∧ e.tid = 0 ∧ VClock.le e.clock (m.clocks[0]!) = true
+
+theorem Solo.noRace {m : Mem} (h : Solo m) (b o n : Nat) : NoRace m b o n .write :=
+  noRace_of fun e he _ _ _ => .inl (by rw [h.cur]; exact (h.fp e he).2.2)
+
+/-- `main`'s store before its first spawn, inside block `b`: `Solo` and each `BlkAt` hold after
+it, `main`'s clock is bumped, the bytes it wrote are the value's encoding, and other bytes
+stay. -/
+theorem solo_store {α : Type} [Enc α] {m m' : Mem} {b sz al o a : Nat} {v : α} (h : Solo m)
+    (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
+    (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0)
+    (hs : ((store a ⟨some b, (o : Int)⟩ v).run m).run = some (.ok ((), m'))) :
+    Solo m' ∧ (∀ b' sz' al', BlkAt m b' sz' al' → BlkAt m' b' sz' al') ∧
+      m'.clocks[0]! = VClock.bump (m.clocks[0]!) 0 ∧
+      curBytes m' b o (Enc.encode v).size = Enc.encode v ∧
+      ∀ b' o' len, (b ≠ b' ∨ b' = b ∧ o' + len ≤ sz ∧ (o + (Enc.encode v).size ≤ o' ∨ o' + len ≤ o)) →
+        curBytes m' b' o' len = curBytes m b' o' len := by
+  obtain ⟨b₁, blk, o₁, hacc, -, rfl⟩ := store_ok hs
+  obtain ⟨blk₀, hb₀, -, hs₀, hacc₀⟩ := access_blk (p := ⟨some b, (o : Int)⟩)
+    (len := (Enc.encode v).size) (a := a) hb hfit hal rfl
+  rw [hacc₀] at hacc
+  cases hacc
+  have hfit' : o + (Enc.encode v).size ≤ blk.bytes.size := by rw [hs₀]; exact hfit
+  have hbr : (m.recordAt b o (Enc.encode v).size .write).blocks[b]? = some blk := hb₀
+  have hc0 : ((m.recordAt b o (Enc.encode v).size .write).write b blk o (Enc.encode v)).clocks[0]! =
+      VClock.bump (m.clocks[0]!) 0 := by
+    simp only [Mem.write, Mem.recordAt, h.cur]; rw [getElem!_set!_ite]; simp [h.clk]
+  refine ⟨?_, fun b' sz' al' hb' => BlkAt.write hbr hfit' hb', hc0, curBytes_write_same hbr hfit',
+    fun b' o' len hd => ?_⟩
+  · refine ⟨h.at0, h.thr, by simp [Mem.write, Mem.recordAt, h.clk], h.cur, fun e he => ?_⟩
+    simp only [Mem.write, Mem.recordAt, Array.mem_push] at he
+    rw [hc0]
+    rcases he with he | rfl
+    · obtain ⟨h1, h2, h3⟩ := h.fp e he
+      exact ⟨h1, h2, VClock.le_trans h3 (VClock.le_bump _ _)⟩
+    · exact ⟨rfl, h.cur, by rw [h.cur]; exact VClock.le_refl _⟩
+  · rcases hd with hne | ⟨rfl, h1, h2⟩
+    · exact curBytes_write_other hbr hfit' (.inl hne)
+    · exact curBytes_write_other hbr hfit' (.inr ⟨rfl, by rw [hs₀]; exact h1, h2⟩)
+
+theorem solo_store_noErr {α : Type} [Enc α] {m : Mem} {b sz al o a : Nat} {v : α} (h : Solo m)
+    (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
+    (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0) (e : Error) :
+    ((store a ⟨some b, (o : Int)⟩ v).run m).run ≠ some (.error e) := by
+  obtain ⟨blk₀, -, hk, -, hacc₀⟩ := access_blk (p := ⟨some b, (o : Int)⟩)
+    (len := (Enc.encode v).size) (a := a) hb hfit hal rfl
+  exact MemM.noErr_of_run (x := store a ⟨some b, (o : Int)⟩ v)
+    (storeBytes_run hacc₀ hk (h.noRace _ _ _)) e
+
 /-- The clocks after the first fork: both threads have the parent's bumped clock. -/
 theorem fork_clocks_one {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Nat) (hu : u < 2) :
     ((c.set! 0 b).push b)[u]! = b := by

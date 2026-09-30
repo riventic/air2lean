@@ -536,9 +536,10 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
   refine ⟨by rw [hm₃], ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact ⟨⟨_, rfl, rfl, rfl, rfl, by decide⟩, ⟨_, rfl, rfl, rfl, rfl, by decide⟩,
-      ⟨_, rfl, rfl, rfl, rfl, by decide⟩, rfl, rfl, rfl, rfl,
-      fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
   have hv₃ : (m₃.clocks[0]!).get 1 = 0 := by rw [hm₃]; rfl
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_

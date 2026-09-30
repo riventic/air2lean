@@ -801,23 +801,13 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : T
 
 /-! ## `main` before its spawn -/
 
-/-- `main` before its spawn: the three blocks, no atomic location, one thread; each access so
-far is `main`'s write. -/
-structure Pre (m : Mem) : Prop where
+/-- `main` before its spawn: `Solo`, with the three blocks. -/
+structure Pre (m : Mem) : Prop extends Solo m where
   b0 : BlkAt m 0 4 4
   b1 : BlkAt m 1 4 4
   b2 : BlkAt m 2 16 8
-  at0 : m.atomics = #[]
-  thr : m.threads = #[{ spawner := 0, joined := true }]
-  clk : m.clocks.size = 1
-  cur : m.current = 0
-  fp : ∀ e ∈ m.footprint, e.kind = .write ∧ e.tid = 0 ∧ VClock.le e.clock (m.clocks[0]!) = true
 
-theorem Pre.noRace {m : Mem} (h : Pre m) (b o n : Nat) : NoRace m b o n .write :=
-  noRace_of fun e he _ _ _ => .inl (by rw [h.cur]; exact (h.fp e he).2.2)
-
-/-- `main`'s store before its spawn, to block `b` at `o`: `Pre` holds after it, the bytes it
-wrote are the value's encoding, and other bytes stay. -/
+/-- `main`'s store before its spawn, to block `b` at `o` (`solo_store`). -/
 theorem pre_store {α : Type} [Enc α] {m m' : Mem} {b sz al o a : Nat} {v : α} (h : Pre m)
     (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
     (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0)
@@ -825,37 +815,14 @@ theorem pre_store {α : Type} [Enc α] {m m' : Mem} {b sz al o a : Nat} {v : α}
     Pre m' ∧ curBytes m' b o (Enc.encode v).size = Enc.encode v ∧
       ∀ b' o' len, (b ≠ b' ∨ b' = b ∧ o' + len ≤ sz ∧ (o + (Enc.encode v).size ≤ o' ∨ o' + len ≤ o)) →
         curBytes m' b' o' len = curBytes m b' o' len := by
-  obtain ⟨b₁, blk, o₁, hacc, -, rfl⟩ := store_ok hs
-  obtain ⟨blk₀, hb₀, -, hs₀, hacc₀⟩ := access_blk (p := ⟨some b, (o : Int)⟩)
-    (len := (Enc.encode v).size) (a := a) hb hfit hal rfl
-  rw [hacc₀] at hacc
-  cases hacc
-  have hfit' : o + (Enc.encode v).size ≤ blk.bytes.size := by rw [hs₀]; exact hfit
-  have hbr : (m.recordAt b o (Enc.encode v).size .write).blocks[b]? = some blk := hb₀
-  refine ⟨?_, curBytes_write_same hbr hfit', fun b' o' len hd => ?_⟩
-  · have hc0 : ((m.recordAt b o (Enc.encode v).size .write).write b blk o (Enc.encode v)).clocks[0]! =
-        VClock.bump (m.clocks[0]!) 0 := by
-      simp only [Mem.write, Mem.recordAt, h.cur]; rw [getElem!_set!_ite]; simp [h.clk]
-    refine ⟨BlkAt.write hbr hfit' h.b0, BlkAt.write hbr hfit' h.b1, BlkAt.write hbr hfit' h.b2, h.at0,
-      h.thr, by simp [Mem.write, Mem.recordAt, h.clk], h.cur, fun e he => ?_⟩
-    simp only [Mem.write, Mem.recordAt, Array.mem_push] at he
-    rw [hc0]
-    rcases he with he | rfl
-    · obtain ⟨h1, h2, h3⟩ := h.fp e he
-      exact ⟨h1, h2, VClock.le_trans h3 (VClock.le_bump _ _)⟩
-    · exact ⟨rfl, h.cur, by rw [h.cur]; exact VClock.le_refl _⟩
-  · rcases hd with hne | ⟨rfl, h1, h2⟩
-    · exact curBytes_write_other hbr hfit' (.inl hne)
-    · exact curBytes_write_other hbr hfit' (.inr ⟨rfl, by rw [hs₀]; exact h1, h2⟩)
+  obtain ⟨hs', hk, -, h1, h2⟩ := solo_store h.toSolo hb hfit hal hs
+  exact ⟨{ toSolo := hs', b0 := hk _ _ _ h.b0, b1 := hk _ _ _ h.b1, b2 := hk _ _ _ h.b2 }, h1, h2⟩
 
 theorem pre_store_noErr {α : Type} [Enc α] {m : Mem} {b sz al o a : Nat} {v : α} (h : Pre m)
     (hb : BlkAt m b sz al) (hfit : o + (Enc.encode v).size ≤ sz)
     (hal : ∀ A : Nat, A % al = 0 → (A + o) % a = 0) (e : Error) :
-    ((store a ⟨some b, (o : Int)⟩ v).run m).run ≠ some (.error e) := by
-  obtain ⟨blk₀, -, hk, -, hacc₀⟩ := access_blk (p := ⟨some b, (o : Int)⟩)
-    (len := (Enc.encode v).size) (a := a) hb hfit hal rfl
-  exact MemM.noErr_of_run (x := store a ⟨some b, (o : Int)⟩ v)
-    (storeBytes_run hacc₀ hk (h.noRace _ _ _)) e
+    ((store a ⟨some b, (o : Int)⟩ v).run m).run ≠ some (.error e) :=
+  solo_store_noErr h.toSolo hb hfit hal e
 
 /-- The start: before its spawn, `main` holds the invariant with the ghost value `pre`. -/
 def G0 : ThreadId → Gh := fun u => if u = 0 then .pre else .none
@@ -1005,9 +972,10 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   refine ⟨by rw [hm₃], ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact ⟨⟨_, rfl, rfl, rfl, rfl, by decide⟩, ⟨_, rfl, rfl, rfl, rfl, by decide⟩,
-      ⟨_, rfl, rfl, rfl, rfl, by decide⟩, rfl, rfl, rfl, rfl,
-      fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
+            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
+            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
