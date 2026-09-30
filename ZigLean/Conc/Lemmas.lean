@@ -853,6 +853,16 @@ theorem writeSlots_ne {m : Mem} {li : Nat} (h0 : 0 < (m.atomics[li]!).msgs.size)
     exact ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
   exact Array.size_pos_of_mem hmem
 
+/-- A read can always read the newest message. -/
+theorem readOpts_ne {m : Mem} {li : Nat} (h0 : 0 < (m.atomics[li]!).msgs.size) :
+    0 < (readOpts m li false).size := by
+  have hf := floorPos_lt h0
+  have hmem : (m.atomics[li]!).msgs.size - 1 ∈ readOpts m li false := by
+    unfold readOpts
+    rw [Array.mem_filter]
+    exact ⟨Array.mem_map.mpr ⟨0, Array.mem_range.mpr (by omega), by omega⟩, by simp⟩
+  exact Array.size_pos_of_mem hmem
+
 /-! ## No error: from a step's error back to its cause -/
 
 namespace MemM
@@ -1442,6 +1452,16 @@ theorem loadM_current (m : Mem) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
 theorem acqM_clock (m : Mem) (c : VClock) (h : m.current < m.clocks.size) :
     (acqM m c).clocks[m.current]! = VClock.merge (m.clocks[m.current]!) c := by
   simp only [acqM]; rw [getElem!_set!_ite]; simp [h]
+
+/-- After an acquire read of `msg`, the thread's clock is above the message's release clock. -/
+theorem loadM_acq_le (m : Mem) (li : Nat) (msg : Msg) {t : ThreadId} (ht : m.current = t)
+    (h : t < m.clocks.size) : VClock.le msg.relClock ((loadM m li .acquire msg).clocks[t]!) = true := by
+  subst ht
+  unfold loadM
+  simp only [AtomicOrder.isAcq, ↓reduceIte]
+  change VClock.le _ ((acqM (observeM m li msg.id) msg.relClock).clocks[(observeM m li msg.id).current]!) = true
+  rw [acqM_clock (observeM m li msg.id) msg.relClock h]
+  exact VClock.le_merge_right _ _
 
 /-! ## Blocks -/
 
