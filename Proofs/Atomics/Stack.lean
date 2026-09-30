@@ -21,6 +21,9 @@ schedule gives an error (`stackPush_safe`).
 - **No data race.** Each pusher writes only its `next[u]`; `main` reads `next` only after both
   joins, and its clock is then above both pushers' clocks (`JoinLe`). The head's messages are
   below their pusher's clock, so the acquire load after the joins reads the newest message.
+
+The end of `main` has two translations: 0.16.0 reads `next[k]` through a pointer into the
+`Stack`; 0.15.2 loads the whole `Stack` and indexes its `next`. `main_spec` has a branch for each.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Atomics
@@ -1841,46 +1844,104 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   -- `100 * top`, the cast, the bounds check
   refine WP.bind (WP.callRC_ok (x := mul false 100 (BitVec.ofNat 32 b)) (v := BitVec.ofNat 32 (100 * b))
     (by rcases hbk with rfl | rfl <;> rfl) ?_)
-  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
-    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
-  dsimp only
-  simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
-  rw [next_ptr b hb3]
-  -- `next[top]`
-  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₁ hg₂₁ hc₂₁ hbk hnb e he).elim) fun v m₂₂ hl => ?_)
-  obtain ⟨rfl, rfl, hi₂₂⟩ := step_rd hi₂₁ hg₂₁ hc₂₁ hbk hnb hl
-  refine ⟨rfl, ?_⟩
-  -- `10 * next[top]`, the sum, the cast, the bounds check
-  refine WP.bind (WP.callRC_ok (x := mul false 10 (BitVec.ofNat 32 a)) (v := BitVec.ofNat 32 (10 * a))
-    (by rcases hak with rfl | rfl <;> rfl) ?_)
-  refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
-    (v := BitVec.ofNat 32 (100 * b + 10 * a))
-    (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
-  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
-    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
-  dsimp only
-  simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
-  rw [next_ptr b hb3]
-  -- `next[top]` again
-  have hnb₂ := nextAt_congr (m := m₂₁) (m' := m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hnb
-  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ e he).elim) fun v m₂₃ hl => ?_)
-  obtain ⟨rfl, rfl, hi₂₃⟩ := step_rd hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ hl
-  refine ⟨rfl, ?_⟩
-  -- the cast of `next[top]`, the bounds check, `next[next[top]]`
-  refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
-    (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
-  dsimp only
-  simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
-  rw [next_ptr a ha3]
-  have hna₃ := nextAt_congr (m := m₂₁) (m' := (m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read).recordAt 0
-    (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hna
-  refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₃ hg₂₁ hc₂₁ hak hna₃ e he).elim) fun v m₂₄ hl => ?_)
-  obtain ⟨rfl, rfl, hi₂₄⟩ := step_rd hi₂₃ hg₂₁ hc₂₁ hak hna₃ hl
-  refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
-    (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
-  refine WP.pure' ?_
-  exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+  first
+  | -- Zig 0.16.0: `next[k]` through a pointer into the `Stack`
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+        (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+      dsimp only
+      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      rw [next_ptr b hb3]
+      -- `next[top]`
+      refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₁ hg₂₁ hc₂₁ hbk hnb e he).elim) fun v m₂₂ hl => ?_)
+      obtain ⟨rfl, rfl, hi₂₂⟩ := step_rd hi₂₁ hg₂₁ hc₂₁ hbk hnb hl
+      refine ⟨rfl, ?_⟩
+      -- `10 * next[top]`, the sum, the cast, the bounds check
+      refine WP.bind (WP.callRC_ok (x := mul false 10 (BitVec.ofNat 32 a)) (v := BitVec.ofNat 32 (10 * a))
+        (by rcases hak with rfl | rfl <;> rfl) ?_)
+      refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
+        (v := BitVec.ofNat 32 (100 * b + 10 * a))
+        (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+        (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+      dsimp only
+      simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      rw [next_ptr b hb3]
+      -- `next[top]` again
+      have hnb₂ := nextAt_congr (m := m₂₁) (m' := m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hnb
+      refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ e he).elim) fun v m₂₃ hl => ?_)
+      obtain ⟨rfl, rfl, hi₂₃⟩ := step_rd hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ hl
+      refine ⟨rfl, ?_⟩
+      -- the cast of `next[top]`, the bounds check, `next[next[top]]`
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
+        (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
+      dsimp only
+      simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+      rw [next_ptr a ha3]
+      have hna₃ := nextAt_congr (m := m₂₁) (m' := (m₂₁.recordAt 0 (4 + 4 * b) (Enc.size (BitVec 32)) .read).recordAt 0
+        (4 + 4 * b) (Enc.size (BitVec 32)) .read) rfl hna
+      refine WP.bind (WP.callMC (fun e he => (rd_noErr hi₂₃ hg₂₁ hc₂₁ hak hna₃ e he).elim) fun v m₂₄ hl => ?_)
+      obtain ⟨rfl, rfl, hi₂₄⟩ := step_rd hi₂₃ hg₂₁ hc₂₁ hak hna₃ hl
+      refine ⟨rfl, ?_⟩
+      refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
+        (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+      refine WP.pure' ?_
+      exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+  | -- Zig 0.15.2: a load of the whole `Stack`, then an index into its `next`
+    obtain ⟨w1, w2, hn1, hn2, hw⟩ : ∃ w1 w2 : BitVec 32, NextAt m₂₁ 1 w1 ∧ NextAt m₂₁ 2 w2 ∧
+        ((a = 1 ∧ b = 2 ∧ w1 = 0 ∧ w2 = 1) ∨ (a = 2 ∧ b = 1 ∧ w1 = 2 ∧ w2 = 0)) := by
+      rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact ⟨0, 1, hna, hnb, .inl ⟨rfl, rfl, rfl, rfl⟩⟩
+      · exact ⟨2, 0, hnb, hna, .inr ⟨rfl, rfl, rfl, rfl⟩⟩
+    refine WP.bind (WP.liftM (fun e he => (whole_noErr hi₂₁ hg₂₁ hc₂₁ hi₂₁.n0 hn1 hn2 e he).elim)
+      fun s m₂₂ hl => ?_)
+    obtain ⟨hs, rfl, hi₂₂⟩ := step_whole hi₂₁ hg₂₁ hc₂₁ hi₂₁.n0 hn1 hn2 hl
+    refine ⟨rfl, ?_⟩
+    -- the cast, the bounds check, `next[top]`, `10 * next[top]`, the sum
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+      (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+    dsimp only
+    simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+    rw [hs]
+    refine WP.bind (WP.callRC_ok (x := vindex #v[0, w1, w2] (BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))))
+      (v := BitVec.ofNat 32 a) (by rcases hw with ⟨rfl, rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl, rfl⟩ <;> rfl) ?_)
+    refine WP.bind (WP.callRC_ok (x := mul false 10 (BitVec.ofNat 32 a)) (v := BitVec.ofNat 32 (10 * a))
+      (by rcases hak with rfl | rfl <;> rfl) ?_)
+    refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b)) (BitVec.ofNat 32 (10 * a)))
+      (v := BitVec.ofNat 32 (100 * b + 10 * a))
+      (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+    -- two more loads of the `Stack`
+    have hn1' := nextAt_congr (m' := m₂₁.recordAt 0 0 (Enc.size Stack) .read) rfl hn1
+    have hn2' := nextAt_congr (m' := m₂₁.recordAt 0 0 (Enc.size Stack) .read) rfl hn2
+    refine WP.bind (WP.liftM (fun e he => (whole_noErr hi₂₂ hg₂₁ hc₂₁ hi₂₂.n0 hn1' hn2' e he).elim)
+      fun s' m₂₃ hl => ?_)
+    obtain ⟨hs', rfl, hi₂₃⟩ := step_whole hi₂₂ hg₂₁ hc₂₁ hi₂₂.n0 hn1' hn2' hl
+    refine ⟨rfl, ?_⟩
+    have hn1'' := nextAt_congr (m' := (m₂₁.recordAt 0 0 (Enc.size Stack) .read).recordAt 0 0 (Enc.size Stack) .read) rfl hn1
+    have hn2'' := nextAt_congr (m' := (m₂₁.recordAt 0 0 (Enc.size Stack) .read).recordAt 0 0 (Enc.size Stack) .read) rfl hn2
+    refine WP.bind (WP.liftM (fun e he => (whole_noErr hi₂₃ hg₂₁ hc₂₁ hi₂₃.n0 hn1'' hn2'' e he).elim)
+      fun s'' m₂₄ hl => ?_)
+    obtain ⟨hs'', rfl, hi₂₄⟩ := step_whole hi₂₃ hg₂₁ hc₂₁ hi₂₃.n0 hn1'' hn2'' hl
+    refine ⟨rfl, ?_⟩
+    -- the cast, the bounds check, `next[top]`
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+      (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
+    dsimp only
+    simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+    rw [hs'']
+    refine WP.bind (WP.callRC_ok (x := vindex #v[0, w1, w2] (BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))))
+      (v := BitVec.ofNat 32 a) (by rcases hw with ⟨rfl, rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl, rfl⟩ <;> rfl) ?_)
+    -- the cast of `next[top]`, the bounds check, `next[next[top]]`, the sum
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
+      (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
+    dsimp only
+    simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+    rw [hs']
+    refine WP.bind (WP.callRC_ok (x := vindex #v[0, w1, w2] (BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))))
+      (v := 0) (by rcases hw with ⟨rfl, rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl, rfl⟩ <;> rfl) ?_)
+    refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
+      (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
+    refine WP.pure' ?_
+    exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
 
 /-! ## The results -/
 
