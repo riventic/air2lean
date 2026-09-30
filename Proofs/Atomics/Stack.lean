@@ -1196,4 +1196,133 @@ theorem inv_fork1 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G 
     · rw [upd_self] at hx; cases hx
     · rw [upd_ne _ _ (by decide), hnone 2 (by decide)] at hx; cases hx
 
+/-- `main`'s second spawn: pusher 2 is thread 2. -/
+theorem inv_fork2 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m) (hg : G 0 = .mid)
+    (hc : m.current = 0) (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
+    c = 2 ∧ m'.current = 0 ∧ Inv (upd (upd G 2 (.start 2)) 0 .j1) m' := by
+  rw [fork_run] at h
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  obtain ⟨h0, hcs, hthr⟩ := hi.thr
+  obtain ⟨hs2, hr1, k1, hnone⟩ : m.threads.size = 2 ∧
+      m.threads[1]? = some { spawner := 0, joined := false } ∧ Kid 1 (G 1) ∧ ∀ u, 2 ≤ u → G u = .none := by
+    rcases hthr with ⟨-, g0, -⟩ | ⟨hs, hr, -, k1, hn⟩ | ⟨-, -, -, -, h0'⟩
+    · rw [hg] at g0; cases g0
+    · exact ⟨hs, hr, k1, hn⟩
+    · rcases h0' with ⟨g0, -⟩ | ⟨g0, -⟩ | ⟨g0, -⟩ <;> rw [hg] at g0 <;> cases g0
+  have h1 : upd (upd G 2 (.start 2)) 0 .j1 1 = G 1 := by
+    rw [upd_ne _ _ (by decide), upd_ne _ _ (by decide)]
+  have h2 : upd (upd G 2 (.start 2)) 0 .j1 2 = .start 2 := by rw [upd_ne _ _ (by decide), upd_self]
+  refine ⟨hs2, hc, hi.frame ?_ ⟨fun h => ?_, fun h => ?_⟩ (fun u hu => ?_) (fun u x hu hx => ?_)
+    (fun h => by rw [hg] at h; cases h) rfl rfl rfl (by simp) (fork_cl hc) (fork_new hc hcs _)⟩
+  · refine ⟨by rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
+      by simp [hcs], .inr (.inr ⟨by simp [hs2], by rw [h1]; exact k1, by rw [h2]; exact .inl rfl,
+        fun u hu => ?_, .inl ⟨by rw [upd_self], ?_, ?_⟩⟩)⟩
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+      exact hnone u (by unfold ThreadId at *; omega)
+    · rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact hr1
+    · simp only [Array.getElem?_push, hs2]; simp [hc]
+  · rw [upd_self] at h; rcases h with h | h <;> cases h
+  · rw [upd_self] at h; cases h
+  · rcases hu with rfl | rfl
+    · rw [h1]
+    · rw [h2, hnone 2 (by decide)]; exact ⟨fun h => (by cases h), fun h => (by cases h)⟩
+  · rcases hu with rfl | rfl
+    · rw [h1] at hx; exact hx
+    · rw [h2] at hx; cases hx
+
+/-- `main`'s join of pusher `k` is possible: thread `k`, spawned by `main`, not joined. -/
+theorem join_ok {G : ThreadId → Gh} {m : Mem} {k : Nat} (hi : Inv G m)
+    (hk : (G 0 = .j1 ∧ k = 1) ∨ (G 0 = .j2 ∧ k = 2)) :
+    ∃ m', ((Thread.join k).run { m with current := 0 }).run = some (.ok ((), m')) := by
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, -, hp, -⟩ | ⟨-, -, -, -, hj⟩⟩ := hi.thr
+  · rcases hk with ⟨h0, -⟩ | ⟨h0, -⟩ <;> rw [h0] at hp <;> cases hp
+  · rcases hk with ⟨h0, -⟩ | ⟨h0, -⟩ <;> rw [h0] at hp <;> cases hp
+  · rcases hk with ⟨h0, rfl⟩ | ⟨h0, rfl⟩
+    · rcases hj with ⟨-, hr, -⟩ | ⟨hp, -⟩ | ⟨hp, -⟩
+      · exact join_run (m := { m with current := 0 }) hr rfl rfl
+      · rw [h0] at hp; cases hp
+      · rw [h0] at hp; cases hp
+    · rcases hj with ⟨hp, -⟩ | ⟨-, -, -, hr⟩ | ⟨hp, -⟩
+      · rw [h0] at hp; cases hp
+      · exact join_run (m := { m with current := 0 }) hr rfl rfl
+      · rw [h0] at hp; cases hp
+
+/-- `main`'s join of pusher `k`, which ended: `main`'s clock goes above the pusher's. -/
+theorem inv_join {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {g : Gh} (hi : Inv G m)
+    (hk : (G 0 = .j1 ∧ k = 1 ∧ g = .j2) ∨ (G 0 = .j2 ∧ k = 2 ∧ g = .ld)) (hfin : G k = .done)
+    (hj : ((Thread.join k).run { m with current := 0 }).run = some (.ok ((), m'))) :
+    m'.current = 0 ∧ m'.threads.size = 3 ∧ Inv (upd G 0 g) m' := by
+  obtain ⟨rec, hr, hjf, rfl⟩ := join_eq hj
+  obtain ⟨h00, hcs, hthr⟩ := hi.thr
+  obtain ⟨hs3, k1, k2, hn, hj3⟩ : m.threads.size = 3 ∧ Kid 1 (G 1) ∧ Kid 2 (G 2) ∧
+      (∀ u, 3 ≤ u → G u = .none) ∧
+      ((G 0 = .j1 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
+          m.threads[2]? = some { spawner := 0, joined := false }) ∨
+       (G 0 = .j2 ∧ G 1 = .done ∧ m.threads[1]? = some { spawner := 0, joined := true } ∧
+          m.threads[2]? = some { spawner := 0, joined := false }) ∨
+       (G 0 = .ld ∧ G 1 = .done ∧ G 2 = .done ∧ m.threads[1]? = some { spawner := 0, joined := true } ∧
+          m.threads[2]? = some { spawner := 0, joined := true })) := by
+    rcases hthr with ⟨-, hp, -⟩ | ⟨-, -, hp, -⟩ | h
+    · rcases hk with ⟨h0, -⟩ | ⟨h0, -⟩ <;> rw [h0] at hp <;> cases hp
+    · rcases hk with ⟨h0, -⟩ | ⟨h0, -⟩ <;> rw [h0] at hp <;> cases hp
+    · exact h
+  have hk0 : k ≠ 0 := by rcases hk with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩ <;> decide
+  have hkk : k = 1 ∨ k = 2 := by rcases hk with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩ <;> simp
+  have hc0 : 0 < m.clocks.size := by rw [hcs, hs3]; decide
+  have hup : ∀ u, u ≠ 0 → upd G 0 g u = G u := fun u hu => upd_ne _ _ hu
+  have hcl : ∀ u : Nat, (m.clocks.set! 0 (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!)))[u]! =
+      if u = 0 then VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!) else m.clocks[u]! := by
+    intro u; rw [getElem!_set!_ite]; by_cases hu : u = 0 <;> simp [hu, hc0]
+  have hth : ∀ i, i ≠ k → (m.threads.set! k { rec with joined := true })[i]? = m.threads[i]? := by
+    intro i hi
+    simp only [Array.set!_eq_setIfInBounds]
+    rw [Array.getElem?_setIfInBounds_ne (Ne.symm hi)]
+  have hthk : (m.threads.set! k { rec with joined := true })[k]? = some { rec with joined := true } := by
+    simp only [Array.set!_eq_setIfInBounds]
+    rw [Array.getElem?_setIfInBounds_self_of_lt (by rcases hkk with rfl | rfl <;> omega)]
+  refine ⟨rfl, by simp [hs3], hi.frame ?_ ?_ (fun u hu => ?_) (fun u x hu hx => ?_) (fun h => ?_) rfl rfl rfl
+    (by simp) (fun u => ?_) (fun u hu hge => by simp at hu; omega)⟩
+  · refine ⟨by rw [hth 0 (Ne.symm hk0)]; exact h00, by simp [hcs], .inr (.inr ⟨by simp [hs3],
+      by rw [hup 1 (by decide)]; exact k1, by rw [hup 2 (by decide)]; exact k2,
+      fun u hu => by rw [hup u (by unfold ThreadId at *; omega)]; exact hn u hu, ?_⟩)⟩
+    rcases hk with ⟨h0, rfl, rfl⟩ | ⟨h0, rfl, rfl⟩
+    · rcases hj3 with ⟨-, hr1, hr2⟩ | ⟨hp, -⟩ | ⟨hp, -⟩
+      · rw [hr1] at hr; cases hr
+        refine .inr (.inl ⟨upd_self _ _ _, by rw [hup 1 (by decide)]; exact hfin, hthk, ?_⟩)
+        rw [hth 2 (by decide)]; exact hr2
+      · rw [h0] at hp; cases hp
+      · rw [h0] at hp; cases hp
+    · rcases hj3 with ⟨hp, -⟩ | ⟨-, h1, hr1, hr2⟩ | ⟨hp, -⟩
+      · rw [h0] at hp; cases hp
+      · rw [hr2] at hr; cases hr
+        refine .inr (.inr ⟨upd_self _ _ _, by rw [hup 1 (by decide)]; exact h1,
+          by rw [hup 2 (by decide)]; exact hfin, ?_, hthk⟩)
+        rw [hth 1 (by decide)]; exact hr1
+      · rw [h0] at hp; cases hp
+  · show (_ → VClock.le (Array.set! _ _ _)[1]! (Array.set! _ _ _)[0]! = true) ∧
+      (_ → VClock.le (Array.set! _ _ _)[2]! (Array.set! _ _ _)[0]! = true)
+    have e0 : (m.clocks.set! 0 (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!)))[0]! =
+        VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!) := by rw [hcl]; rfl
+    have e1 : (m.clocks.set! 0 (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!)))[1]! =
+        m.clocks[1]! := by rw [hcl]; rfl
+    have e2 : (m.clocks.set! 0 (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!)))[2]! =
+        m.clocks[2]! := by rw [hcl]; rfl
+    rw [e0, e1, e2, upd_self]
+    rcases hk with ⟨h0, rfl, rfl⟩ | ⟨h0, rfl, rfl⟩
+    · exact ⟨fun _ => VClock.le_merge_right _ _, fun h => by cases h⟩
+    · have hj2 := hi.join.1 (.inl h0)
+      exact ⟨fun _ => VClock.le_trans hj2 (VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)),
+        fun _ => VClock.le_merge_right _ _⟩
+  · rw [hup u (by rcases hu with rfl | rfl <;> decide)]
+  · rw [hup u (by rcases hu with rfl | rfl <;> decide)] at hx; exact hx
+  · rcases hk with ⟨h0, -⟩ | ⟨h0, -⟩ <;> rw [h0] at h <;> cases h
+  · show VClock.le (m.clocks[u]!)
+      ((m.clocks.set! 0 (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[k]!)))[u]!) = true
+    rw [hcl]
+    split
+    · rename_i hu; subst hu
+      exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+    · exact VClock.le_refl _
+
 end Atomics.Stack
