@@ -3,19 +3,19 @@ import ZigLean
 
 namespace Threadsync
 
-structure c_timespec__struct_2607 where
+structure os_linux_timespec__struct_2872 where
   sec : BitVec 64
   nsec : BitVec 64
   deriving Repr, Inhabited, DecidableEq
 
-instance : Zig.Enc c_timespec__struct_2607 where
+instance : Zig.Enc os_linux_timespec__struct_2872 where
   size := 16
   align := 8
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.sec), (8, Zig.Enc.encode v.nsec)]
   decode bs := do pure { sec := ← Zig.Enc.decodeAt bs 0, nsec := ← Zig.Enc.decodeAt bs 8 }
 
 structure time_Instant where
-  timestamp : c_timespec__struct_2607
+  timestamp : os_linux_timespec__struct_2872
   deriving Repr, Inhabited, DecidableEq
 
 instance : Zig.Enc time_Instant where
@@ -86,28 +86,18 @@ instance : Zig.Enc Thread_WaitGroup where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.state), (8, Zig.Enc.encode v.event)]
   decode bs := do pure { state := ← Zig.Enc.decodeAt bs 0, event := ← Zig.Enc.decodeAt bs 8 }
 
-structure c_darwin_os_unfair_lock where
-  _os_unfair_lock_opaque : BitVec 32
+structure Thread_Mutex_FutexImpl where
+  state : atomic_Value_u32
   deriving Repr, Inhabited, DecidableEq
 
-instance : Zig.Enc c_darwin_os_unfair_lock where
+instance : Zig.Enc Thread_Mutex_FutexImpl where
   size := 4
   align := 4
-  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v._os_unfair_lock_opaque)]
-  decode bs := do pure { _os_unfair_lock_opaque := ← Zig.Enc.decodeAt bs 0 }
-
-structure Thread_Mutex_DarwinImpl where
-  oul : c_darwin_os_unfair_lock
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Enc Thread_Mutex_DarwinImpl where
-  size := 4
-  align := 4
-  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.oul)]
-  decode bs := do pure { oul := ← Zig.Enc.decodeAt bs 0 }
+  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.state)]
+  decode bs := do pure { state := ← Zig.Enc.decodeAt bs 0 }
 
 structure Thread_Mutex where
-  impl : Thread_Mutex_DarwinImpl
+  impl : Thread_Mutex_FutexImpl
   deriving Repr, Inhabited, DecidableEq
 
 instance : Zig.Enc Thread_Mutex where
@@ -221,6 +211,41 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+structure Thread_Mutex_FutexImpl_unlockLocals where
+  deriving Inhabited
+
+inductive Thread_Mutex_FutexImpl_unlockExit where
+  | ret
+  | br2 (v : BitVec 32)
+  | br8
+
+def Thread_Mutex_FutexImpl_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 0)
+    match ← ((do
+      let i3 ← pure (i1.add 0)
+      let i4 ← Zig.atomicRmwC Zig.RmwOp.xchg false Zig.AtomicOrder.release 4 i3 (0 : BitVec 32)
+      pure (.br2 i4)) : Zig.CM Tgt Thread_Mutex_FutexImpl_unlockLocals Thread_Mutex_FutexImpl_unlockExit) with
+    | .br2 v2 => (do
+      let i6 ← pure (v2 != (0 : BitVec 32))
+      let _i7 ← Zig.callRC (debug_assert i6)
+      match ← ((do
+        let i9 ← pure (v2 == (3 : BitVec 32))
+        if i9 then (do
+          let i11 ← pure (p0.add 0)
+          let i12 ← pure (i11)
+          let _i13 ← Zig.threadFutexWakeC i12 (1 : BitVec 32)
+          pure .br8)
+        else (do
+          pure .br8)) : Zig.CM Tgt Thread_Mutex_FutexImpl_unlockLocals Thread_Mutex_FutexImpl_unlockExit) with
+      | .br8 => (do
+        pure .ret)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_unlockLocals Thread_Mutex_FutexImpl_unlockExit).run' (default : Thread_Mutex_FutexImpl_unlockLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
 structure Thread_Mutex_unlockLocals where
   deriving Inhabited
 
@@ -230,7 +255,7 @@ inductive Thread_Mutex_unlockExit where
 def Thread_Mutex_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure (p0.add 0)
-    let _i2 ← Zig.osUnfairUnlockC i1
+    let _i2 ← Zig.callC (Thread_Mutex_FutexImpl_unlock i1)
     pure .ret) : Zig.CM Tgt Thread_Mutex_unlockLocals Thread_Mutex_unlockExit).run' (default : Thread_Mutex_unlockLocals)
   match e with
   | .ret => pure ()
@@ -344,6 +369,132 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
   | .ret v => pure v
   | _ => throw .panic
 
+structure Thread_Mutex_FutexImpl_tryLockLocals where
+  deriving Inhabited
+
+inductive Thread_Mutex_FutexImpl_tryLockExit where
+  | ret (v : Bool)
+  | br1
+  | br5 (v : BitVec 32)
+  | br4 (v : BitVec 1)
+
+def Thread_Mutex_FutexImpl_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
+  let e ← ((do
+    match ← ((do
+      pure .br1) : Zig.CM Tgt Thread_Mutex_FutexImpl_tryLockLocals Thread_Mutex_FutexImpl_tryLockExit) with
+    | .br1 => (do
+      let i3 ← pure (p0.add 0)
+      match ← ((do
+        match ← ((do
+          let i6 ← pure (i3.add 0)
+          let i7 ← Zig.atomicRmwC Zig.RmwOp.or false Zig.AtomicOrder.acquire 4 i6 (1 : BitVec 32)
+          pure (.br5 i7)) : Zig.CM Tgt Thread_Mutex_FutexImpl_tryLockLocals Thread_Mutex_FutexImpl_tryLockExit) with
+        | .br5 v5 => (do
+          let i9 ← pure (v5 &&& (1 : BitVec 32))
+          let i10 ← pure (i9 != (0 : BitVec 32))
+          let i11 ← pure (if i10 then 1 else 0 : BitVec 1)
+          pure (.br4 i11))
+        | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_tryLockLocals Thread_Mutex_FutexImpl_tryLockExit) with
+      | .br4 v4 => (do
+        let i13 ← pure (v4 == (0 : BitVec 1))
+        pure (.ret i13))
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_tryLockLocals Thread_Mutex_FutexImpl_tryLockExit).run' (default : Thread_Mutex_FutexImpl_tryLockLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure Thread_Mutex_FutexImpl_lockSlowLocals where
+  deriving Inhabited
+
+inductive Thread_Mutex_FutexImpl_lockSlowExit where
+  | ret
+  | br4 (v : BitVec 32)
+  | br1
+  | br19 (v : BitVec 32)
+  | br17
+  | br15
+  | rep16
+
+def Thread_Mutex_FutexImpl_lockSlow.again16 : Thread_Mutex_FutexImpl_lockSlowExit → Bool
+  | .rep16 => true
+  | _ => false
+
+def Thread_Mutex_FutexImpl_lockSlow.loop16 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit := do
+  match ← ((do
+    let i18 ← pure (p0.add 0)
+    match ← ((do
+      let i20 ← pure (i18.add 0)
+      let i21 ← Zig.atomicRmwC Zig.RmwOp.xchg false Zig.AtomicOrder.acquire 4 i20 (3 : BitVec 32)
+      pure (.br19 i21)) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit) with
+    | .br19 v19 => (do
+      let i23 ← pure (v19 != (0 : BitVec 32))
+      if i23 then (do
+        let i25 ← pure (p0.add 0)
+        let i26 ← pure (i25)
+        let _i27 ← Zig.threadFutexWaitC i26 (3 : BitVec 32)
+        pure .br17)
+      else (do
+        pure .br15))
+    | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit) with
+  | .br17 => (do
+    pure .rep16)
+  | e => pure e
+
+def Thread_Mutex_FutexImpl_lockSlow (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0.add 0)
+      let i3 ← pure (i2)
+      match ← ((do
+        let i5 ← pure (i3.add 0)
+        let i6 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i5
+        pure (.br4 i6)) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit) with
+      | .br4 v4 => (do
+        let i8 ← pure (v4 == (3 : BitVec 32))
+        if i8 then (do
+          let i10 ← pure (p0.add 0)
+          let i11 ← pure (i10)
+          let _i12 ← Zig.threadFutexWaitC i11 (3 : BitVec 32)
+          pure .br1)
+        else (do
+          pure .br1))
+      | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit) with
+    | .br1 => (do
+      match ← ((do
+        Zig.loop (Thread_Mutex_FutexImpl_lockSlow.loop16 p0) Thread_Mutex_FutexImpl_lockSlow.again16) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit) with
+      | .br15 => (do
+        pure .ret)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit).run' (default : Thread_Mutex_FutexImpl_lockSlowLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+structure Thread_Mutex_FutexImpl_lockLocals where
+  deriving Inhabited
+
+inductive Thread_Mutex_FutexImpl_lockExit where
+  | ret
+  | br1
+
+def Thread_Mutex_FutexImpl_lock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← Zig.callC (Thread_Mutex_FutexImpl_tryLock p0)
+      let i3 ← pure (!i2)
+      if i3 then (do
+        let _i5 ← Zig.callC (Thread_Mutex_FutexImpl_lockSlow p0)
+        pure .br1)
+      else (do
+        pure .br1)) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockLocals Thread_Mutex_FutexImpl_lockExit) with
+    | .br1 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockLocals Thread_Mutex_FutexImpl_lockExit).run' (default : Thread_Mutex_FutexImpl_lockLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
 structure Thread_Mutex_lockLocals where
   deriving Inhabited
 
@@ -353,7 +504,7 @@ inductive Thread_Mutex_lockExit where
 def Thread_Mutex_lock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure (p0.add 0)
-    let _i2 ← Zig.osUnfairLockC i1
+    let _i2 ← Zig.callC (Thread_Mutex_FutexImpl_lock i1)
     pure .ret) : Zig.CM Tgt Thread_Mutex_lockLocals Thread_Mutex_lockExit).run' (default : Thread_Mutex_lockLocals)
   match e with
   | .ret => pure ()
@@ -1115,36 +1266,10 @@ structure math_sub__anon_3Locals where
   deriving Inhabited
 
 inductive math_sub__anon_3Exit where
-  | ret (v : Except Zig.ErrName (BitVec 8))
-  | br3
-
-def math_sub__anon_3 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (Except Zig.ErrName (BitVec 8)) := do
-  let e ← ((do
-    let i2 ← pure (Zig.subWithOverflow false p0 p1)
-    match ← ((do
-      let i4 ← pure ((i2).2)
-      let i5 ← pure (i4 != (0 : BitVec 1))
-      if i5 then (do
-        pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 8))))
-      else (do
-        pure .br3)) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit) with
-    | .br3 => (do
-      let i9 ← pure ((i2).1)
-      let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 8))
-      pure (.ret i10))
-    | e => pure e) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit).run' (default : math_sub__anon_3Locals)
-  match e with
-  | .ret v => pure v
-  | _ => throw .panic
-
-structure math_sub__anon_4Locals where
-  deriving Inhabited
-
-inductive math_sub__anon_4Exit where
   | ret (v : Except Zig.ErrName (BitVec 64))
   | br3
 
-def math_sub__anon_4 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
+def math_sub__anon_3 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← pure (Zig.subWithOverflow false p0 p1)
     match ← ((do
@@ -1153,12 +1278,12 @@ def math_sub__anon_4 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.
       if i5 then (do
         pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 64))))
       else (do
-        pure .br3)) : Zig.M math_sub__anon_4Locals math_sub__anon_4Exit) with
+        pure .br3)) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit) with
     | .br3 => (do
       let i9 ← pure ((i2).1)
       let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 64))
       pure (.ret i10))
-    | e => pure e) : Zig.M math_sub__anon_4Locals math_sub__anon_4Exit).run' (default : math_sub__anon_4Locals)
+    | e => pure e) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit).run' (default : math_sub__anon_3Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -1221,7 +1346,7 @@ def handoff  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 24 4
   let e ← ((do
     let i0 ← pure (← get).b
-    Zig.store (α := Box) 4 i0 ({ m := ({ impl := ({ oul := ({ _os_unfair_lock_opaque := (0 : BitVec 32) } : c_darwin_os_unfair_lock) } : Thread_Mutex_DarwinImpl) } : Thread_Mutex), c := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Condition_FutexImpl) } : Thread_Condition), ready := false, done := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent), v := (0 : BitVec 32) } : Box)
+    Zig.store (α := Box) 4 i0 ({ m := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Mutex_FutexImpl) } : Thread_Mutex), c := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Condition_FutexImpl) } : Thread_Condition), ready := false, done := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent), v := (0 : BitVec 32) } : Box)
     let i2 ← pure (i0)
     let i3 ← Zig.spawnC (Tgt.producer i2)
     match i3 with
@@ -1311,7 +1436,7 @@ def mutexCounter  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 8 4
   let e ← ((do
     let i0 ← pure (← get).c
-    Zig.store (α := Counter) 4 i0 ({ m := ({ impl := ({ oul := ({ _os_unfair_lock_opaque := (0 : BitVec 32) } : c_darwin_os_unfair_lock) } : Thread_Mutex_DarwinImpl) } : Thread_Mutex), n := (0 : BitVec 32) } : Counter)
+    Zig.store (α := Counter) 4 i0 ({ m := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Mutex_FutexImpl) } : Thread_Mutex), n := (0 : BitVec 32) } : Counter)
     let i2 ← pure (i0)
     let i3 ← Zig.spawnC (Tgt.work i2)
     match i3 with
@@ -1364,7 +1489,7 @@ def waitGroup  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 24 8
   let e ← ((do
     let i0 ← pure (← get).s
-    Zig.store (α := Tally) 8 i0 ({ wg := ({ state := ({ raw := (0 : BitVec 64) } : atomic_Value_usize), event := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent) } : Thread_WaitGroup), m := ({ impl := ({ oul := ({ _os_unfair_lock_opaque := (0 : BitVec 32) } : c_darwin_os_unfair_lock) } : Thread_Mutex_DarwinImpl) } : Thread_Mutex), n := (0 : BitVec 32) } : Tally)
+    Zig.store (α := Tally) 8 i0 ({ wg := ({ state := ({ raw := (0 : BitVec 64) } : atomic_Value_usize), event := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent) } : Thread_WaitGroup), m := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Mutex_FutexImpl) } : Thread_Mutex), n := (0 : BitVec 32) } : Tally)
     let i2 ← pure (i0.add 0)
     let _i3 ← Zig.callC (Thread_WaitGroup_startMany i2 (2 : BitVec 64))
     let i4 ← pure (i0)

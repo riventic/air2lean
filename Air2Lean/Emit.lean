@@ -1459,6 +1459,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else if isPacked (fc.tyOfId inst.ty) then
       let expr := s!"Zig.Packed.ofBits? (α := {fc.emitTyOf inst.ty}) {rv a}"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if fc.valTy a == .bool && fc.tyOfId inst.ty != .bool then
+      -- `@intFromBool` (a `bitcast` `bool` → `u1`; `std.atomic.Value.bitSet`).
+      let (env, l) := bindLet fc env inst.id
+        s!"pure (if {rv a} then 1 else 0 : {fc.emitTyOf inst.ty})"
+      (env, some l)
+    else if fc.valTy a != .bool && fc.tyOfId inst.ty == .bool then
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv a} == 1)"
+      (env, some l)
     else
     let srcPtr := fc.isPtr a
     let dstPtr := fc.isPtrTy inst.ty
