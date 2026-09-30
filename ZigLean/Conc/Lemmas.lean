@@ -9,7 +9,9 @@ concurrent function (`Zig.CM`): a call in `MemM` (`liftM`, `callMC`, `callRC`), 
 (`pickC`, `spawnC`, `joinC`), and `run'` of a body. A proof unfolds the generated code, applies
 these rules one step at a time, and uses the `*_ok` lemmas for what a `MemM` step that gave a
 result did: with partial correctness a step can fail (a race is `.illegal`), so the lemmas go
-from a result back to the memory.
+from a result back to the memory. In strict mode each step also needs a proof that it does not
+throw: the `*_noErr` lemmas, built from `MemM.bind_err` and the others (from an error back to the
+step that threw it), `noRace_of` and `join_run`.
 -/
 
 namespace Zig

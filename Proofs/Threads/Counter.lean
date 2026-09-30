@@ -6,7 +6,8 @@ import ZigLean.Conc.Lemmas
 
 `parallelCounter n` spawns 4 threads; each one does `n` atomic `fetchAdd(1, .seq_cst)` on a
 shared counter; `main` joins the 4 threads and loads the counter. The result is `4 * n` under
-every schedule (`parallelCounter_spec`): a proof with the program logic of
+every schedule (`parallelCounter_spec`), and no schedule gives an error (`parallelCounter_safe`):
+a proof with the program logic of
 `ZigLean/Conc/Logic.lean`.
 
 **Protocol.** A thread's ghost value (`Gh`): for a `bump` thread, how many increments it did
@@ -21,6 +22,14 @@ invariant (`Inv`):
   joined thread's clock is `≤` `main`'s clock. After the 4 joins, `main`'s clock is `≥` every
   message's clock, so its load reads the newest message only (`readOpts_floor`): `4 * n`.
 - Thread `k + 1`'s context (block 0, slot `k`) holds the counter's address and `n`.
+
+**No error** (`parallelCounter_safe`). The protocol is in strict mode (`Proto.strict`), so the
+same proof also shows that no run gives an error. `Ex` adds: the three stack blocks are live with
+their sizes and aligned addresses; each footprint entry is a read of a context, an atomic access
+to the counter, a plain write that happened before every thread, or `main`'s access to the handles
+(so no access races: `noRace_b0`, `noRace_b1`, `noRace_b2`); every thread was spawned by `main`;
+handle slot `k` holds thread id `k + 1` (so every join is of a thread that `main` spawned and did
+not join yet).
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Threads
@@ -465,8 +474,6 @@ theorem cntAt_rmw {tot li c pos : Nat} {m₁ : Mem} {old : BitVec 32} (hc : CntA
     have h4 : ∀ v : BitVec 32, (padTo (intSize 32) (intBytes v)).size = 4 :=
       fun v => LawfulEnc.size_encode (α := BitVec 32) v
     exact writeBytes_size _ _ _ (by simp only [Proto.rmwMsg, h4]; omega)
-
-theorem racePair_read : racePair .read .read = none := rfl
 
 theorem racePair_atomic' {a b : AccessKind} (ha : a.isAtomic = true) (hb : b.isAtomic = true) :
     racePair a b = none := by
@@ -2093,12 +2100,6 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
 theorem ex_congr {G G' : ThreadId → Gh} {m : Mem} (h0 : G' 0 = G 0) (he : Ex G m) : Ex G' m := by
   obtain ⟨h0', h1, h2, hf, hsp, s, J, hG, hd⟩ := he
   exact ⟨h0', h1, h2, hf, hsp, s, J, h0.trans hG, hd⟩
-
-/-- A change of a kid's ghost value keeps `Ex`. -/
-theorem ex_upd {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {g : Gh} (hu : u ≠ 0) (he : Ex G m) :
-    Ex (Conc.upd G u g) m := by
-  obtain ⟨h0, h1, h2, hf, hsp, s, J, hG, hd⟩ := he
-  exact ⟨h0, h1, h2, hf, hsp, s, J, by rw [Conc.upd_ne _ _ (Ne.symm hu)]; exact hG, hd⟩
 
 /-- A kid spawned nothing: every thread was spawned by `main`. -/
 theorem ex_joinedAll {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hu : u ≠ 0) (he : Ex G m) :
