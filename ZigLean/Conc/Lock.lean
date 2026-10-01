@@ -53,6 +53,8 @@ inductive LPh where
   | holds
   /-- At the futex wake of `unlock`. -/
   | wake
+  /-- Out of the lock's code, at the futex wait of another sync object: it can sleep there. -/
+  | away
   deriving DecidableEq
 
 /-- In the lock's code, after `lock`'s first try: the thread will take the lock or wake a
@@ -68,6 +70,106 @@ def AllLe (m : Mem) (c : VClock) : Prop :=
 /-- The clock `c` happened before a thread. -/
 def SomeLe (m : Mem) (c : VClock) : Prop :=
   ∃ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
+
+/-- The atomic locations at other addresses than `(b, o)` stay (the same index, the same
+location), and a new location is at `(b, o)`, with 4 bytes. -/
+structure LocsKeep (b o : Nat) (m m' : Mem) : Prop where
+  new : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = b ∧ l.off = o ∧ l.len = 4)
+  same : ∀ b' o', (b' ≠ b ∨ o' ≠ o) → ∀ i l,
+    (m'.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m'.atomics[i]? = some l) ↔
+    (m.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m.atomics[i]? = some l)
+
+/-- `findIdx?` with a predicate that has the same value at each index. -/
+theorem findIdx?_congr {α : Type} {xs ys : Array α} {p : α → Bool} (hs : ys.size = xs.size)
+    (h : ∀ k (h1 : k < ys.size) (h2 : k < xs.size), p ys[k] = p xs[k]) :
+    ys.findIdx? p = xs.findIdx? p := by
+  cases hf : xs.findIdx? p with
+  | some i =>
+    obtain ⟨hi, hp, hj⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
+    exact Array.findIdx?_eq_some_iff_getElem.mpr ⟨by omega, by rw [h i (by omega) hi]; exact hp,
+      fun j hji => by rw [h j (by omega) (by omega)]; exact hj j hji⟩
+  | none =>
+    have hn := Array.findIdx?_eq_none_iff.mp hf
+    refine Array.findIdx?_eq_none_iff.mpr fun y hy => ?_
+    obtain ⟨k, hk, rfl⟩ := Array.mem_iff_getElem.mp hy
+    rw [h k hk (by omega)]; exact hn _ (Array.getElem_mem _)
+
+theorem LocsKeep.of_eq {b o : Nat} {m m' : Mem} (h : m'.atomics = m.atomics) : LocsKeep b o m m' :=
+  ⟨fun l hl => .inl (h ▸ hl), fun _ _ _ _ _ => by rw [h]⟩
+
+theorem LocsKeep.trans {b o : Nat} {m₁ m₂ m₃ : Mem} (h₁ : LocsKeep b o m₁ m₂)
+    (h₂ : LocsKeep b o m₂ m₃) : LocsKeep b o m₁ m₃ :=
+  ⟨fun l hl => (h₂.new l hl).elim (h₁.new l) .inr,
+    fun b' o' hne i l => (h₂.same b' o' hne i l).trans (h₁.same b' o' hne i l)⟩
+
+/-- A change of location `j` at `(b, o)` that keeps its address. -/
+theorem LocsKeep.set {b o j : Nat} {m m' : Mem} {l l' : ALoc} (hj : m.atomics[j]? = some l)
+    (hb : l.block = b) (ho : l.off = o) (hb' : l'.block = b) (ho' : l'.off = o) (hl' : l'.len = 4)
+    (h : m'.atomics = m.atomics.set! j l') : LocsKeep b o m m' := by
+  have hjs := (Array.getElem?_eq_some_iff.mp hj).1
+  refine ⟨fun x hx => ?_, fun b₁ o₁ hne i x => ?_⟩
+  · rw [h, Array.set!_eq_setIfInBounds] at hx
+    rcases Array.mem_or_eq_of_mem_set (w := hjs) (by simpa [Array.setIfInBounds, hjs] using hx)
+      with hx | rfl
+    · exact .inl hx
+    · exact .inr ⟨hb', ho', hl'⟩
+  · have hf : (m.atomics.set! j l').findIdx? (fun l => l.block == b₁ && l.off == o₁) =
+        m.atomics.findIdx? (fun l => l.block == b₁ && l.off == o₁) := by
+      refine findIdx?_congr (by simp) fun k h1 h2 => ?_
+      by_cases e : j = k
+      · subst e
+        rw [Array.getElem?_eq_getElem hjs] at hj; cases hj
+        simp [Array.set!_eq_setIfInBounds, hb', ho', hb, ho]
+      · simp only [Array.set!_eq_setIfInBounds]
+        rw [Array.getElem_setIfInBounds, if_neg e]
+    rw [h, hf]
+    constructor
+    · rintro ⟨h1, h2⟩
+      refine ⟨h1, ?_⟩
+      have hi := (Array.findIdx?_eq_some_iff_getElem.mp h1)
+      obtain ⟨hik, hp, -⟩ := hi
+      have hij : i ≠ j := fun e => by
+        subst e
+        rw [Array.getElem?_eq_getElem hik] at hj; cases hj
+        simp [hb, ho] at hp; rcases hne with h | h <;> simp_all
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (Ne.symm hij)] at h2
+      exact h2
+    · rintro ⟨h1, h2⟩
+      refine ⟨h1, ?_⟩
+      obtain ⟨hik, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp h1
+      have hij : i ≠ j := fun e => by
+        subst e
+        rw [Array.getElem?_eq_getElem hik] at hj; cases hj
+        simp [hb, ho] at hp; rcases hne with h | h <;> simp_all
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (Ne.symm hij)]
+      exact h2
+
+/-- A new location at `(b, o)`. -/
+theorem LocsKeep.push {b o : Nat} {m m' : Mem} {l' : ALoc} (hb' : l'.block = b) (ho' : l'.off = o)
+    (hl' : l'.len = 4) (h : m'.atomics = m.atomics.push l') : LocsKeep b o m m' := by
+  refine ⟨fun x hx => ?_, fun b₁ o₁ hne i x => ?_⟩
+  · rw [h] at hx
+    rcases Array.mem_push.mp hx with hx | rfl
+    · exact .inl hx
+    · exact .inr ⟨hb', ho', hl'⟩
+  · rw [h, Array.findIdx?_push]
+    have hn : ¬ (l'.block == b₁ && l'.off == o₁) = true := by
+      simp only [Bool.and_eq_true, beq_iff_eq, hb', ho']
+      rintro ⟨rfl, rfl⟩; rcases hne with h | h <;> exact h rfl
+    cases hf : m.atomics.findIdx? (fun l => l.block == b₁ && l.off == o₁) with
+    | some k =>
+      have hk := (Array.findIdx?_eq_some_iff_getElem.mp hf).1
+      simp only [Option.some_or]
+      constructor
+      · rintro ⟨h1, h2⟩; refine ⟨h1, ?_⟩; cases h1
+        rw [Array.getElem?_push_lt hk] at h2; rw [Array.getElem?_eq_getElem hk]; exact h2
+      · rintro ⟨h1, h2⟩; refine ⟨h1, ?_⟩; cases h1
+        rw [Array.getElem?_push_lt hk, ← Array.getElem?_eq_getElem hk]; exact h2
+    | none =>
+      simp only [Option.none_or]
+      rw [show (if (l'.block == b₁ && l'.off == o₁) = true then some m.atomics.size else none) = none
+        from if_neg hn]
+      simp
 
 /-- A lock (module doc). -/
 structure Lock (γ : Type) where
@@ -186,6 +288,18 @@ def Hits (e : FootprintEntry) : Prop :=
 /-- No thread holds the lock. -/
 def Free (G : ThreadId → γ) : Prop := ∀ u, L.ph (G u) ≠ .holds
 
+/-- The clock `c` happened before the release clock of the newest message of the word. -/
+def Before (m : Mem) (c : VClock) : Prop :=
+  ∃ i l, L.Loc m i l ∧ VClock.le c (l.msgs.back!).relClock = true
+
+/-- A thread waits at the word in the futex queue `ws`. -/
+def Waits (ws : Array (ThreadId × Ptr)) : Prop := ws.any (·.2 == L.ptr) = true
+
+/-- The futex queue `ws`: a thread at the word is at `lock`'s futex wait; a thread at another
+futex is `away`. -/
+def Queue (G : ThreadId → γ) (ws : Array (ThreadId × Ptr)) : Prop :=
+  ∀ w ∈ ws, (w.2 = L.ptr ∧ L.ph (G w.1) = .wait) ∨ (w.2 ≠ L.ptr ∧ L.ph (G w.1) = .away)
+
 /-- The invariant of the lock (module doc). -/
 structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   own : Owned (L.own G m) m
@@ -208,8 +322,8 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
     L.Off hL ∧ L.Owns m hL
   /-- The holder's resource. -/
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
-  fq : ∀ w ∈ m.waiters, w.2 = L.ptr ∧ L.ph (G w.1) = .wait
-  wit : 0 < m.waiters.size → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
+  fq : L.Queue G m.waiters
+  wit : L.Waits m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
     (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m 2)
 
 /-- A step of thread `t` in the lock's code: the threads, the groups and the other threads'
@@ -225,6 +339,12 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   bsize : m'.blocks.size = m.blocks.size
   blocks : m'.blocks = m.blocks ∨ ∃ blk bs, m.blocks[L.b]? = some blk ∧ blk.live = true ∧
     bs.size = 4 ∧ L.o + 4 ≤ blk.bytes.size ∧ m'.blocks = (m.write L.b blk L.o bs).blocks
+  /-- The threads at another futex stay in the queue. -/
+  waiters : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)
+  /-- A clock that happened before the newest message of the word still does. -/
+  before : ∀ c, L.Before m c → L.Before m' c
+  /-- The atomic locations at other addresses stay. -/
+  locs : LocsKeep L.b L.o m m'
 
 /-- A protocol with the lock `L` (module doc): its invariant is `Lock.Inv` and `U`. -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem → Prop) : Prop where
@@ -250,12 +370,15 @@ theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
   obtain ⟨u, hu, hle⟩ := h
   exact ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u hu)⟩
 
-/-- A step that keeps the threads, the groups, the blocks, the clocks and the footprint. -/
+/-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
+locations and the threads at another futex. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
-    (hf : m'.footprint = m.footprint) : L.Step t m m' :=
+    (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
+    (hw : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
-    by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb⟩
+    by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw,
+    fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩, .of_eq ha⟩
 
 /-- The same memory, but `current`, `seen`, `nextMsg` and `woken`. -/
 theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
@@ -271,6 +394,15 @@ theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array 
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit⟩
+
+/-- The queue with fewer threads, whose places stay. -/
+theorem Queue.mono {G G' : ThreadId → γ} {ws ws' : Array (ThreadId × Ptr)} (hq : L.Queue G ws)
+    (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) :
+    L.Queue G' ws' := fun w hw => by
+  rw [hph w hw]; exact hq w (hsub w hw)
+
+theorem waits_pos {ws : Array (ThreadId × Ptr)} (h : L.Waits ws) : 0 < ws.size := by
+  obtain ⟨i, hi, -⟩ := Array.any_eq_true.mp h; omega
 
 theorem Inv.current {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (t : ThreadId) :
     L.Inv G { m with current := t } :=
@@ -416,7 +548,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
     fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_⟩,
     fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    fun w hw => ?_, fun hp => ?_⟩
+    hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_⟩
   · by_cases hu : u = t
     · subst hu; rw [upd_self]; exact hpd
     · rw [upd_ne _ _ hu]; exact hi.pdisj u
@@ -463,23 +595,21 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     · rw [upd_ne _ _ hut] at hu ⊢
       have htn : L.ph (G t) ≠ .holds := fun h => hut (hi.one u t hu h)
       exact hRk htn _ (hi.res u hu)
-  · obtain ⟨h1, h2⟩ := hi.fq w (hs.waiters ▸ hw)
-    exact ⟨h1, by rw [hphu]; exact h2⟩
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hp)
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
     rw [hphu] at hh; exact (hU32 2).mpr (h2 hh)
 
-/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` or `gone` before
-and after, keeps its part, and holds nothing. -/
+/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` or `gone` before,
+and `out`, `gone` or `away` after; it keeps its part and holds nothing. -/
 theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : L.Inv G m)
-    (hph : L.ph (G t) = .out ∨ L.ph (G t) = .gone) (hg : L.ph g = .out ∨ L.ph g = .gone)
+    (hph : L.ph (G t) = .out ∨ L.ph (G t) = .gone)
+    (hg : L.ph g = .out ∨ L.ph g = .gone ∨ L.ph g = .away)
     (hpart : L.part g = L.part (G t)) (hheld : L.held g = Heap.empty)
-    (hlive : L.ph g = .out → t < m.threads.size ∧ joinedB m t = false)
+    (hlive : L.ph g ≠ .gone → t < m.threads.size ∧ joinedB m t = false)
     (hRk : ∀ hL, L.R G hL → L.R (upd G t g) hL) : L.Inv (upd G t g) m := by
   have hnh : L.ph (G t) ≠ .holds := by rcases hph with h | h <;> rw [h] <;> decide
-  have hgh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
-  have hgw : L.ph g ≠ .wait := by rcases hg with h | h <;> rw [h] <;> decide
-  have hgb : (L.ph g).busy = false := by rcases hg with h | h <;> rw [h] <;> rfl
+  have hgh : L.ph g ≠ .holds := by rcases hg with h | h | h <;> rw [h] <;> decide
+  have hgb : (L.ph g).busy = false := by rcases hg with h | h | h <;> rw [h] <;> rfl
   have htb : (L.ph (G t)).busy = false := by rcases hph with h | h <;> rw [h] <;> rfl
   have hown : L.own (upd G t g) m = L.own G m := by
     funext u; unfold Lock.own
@@ -506,10 +636,7 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
     · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
   · rw [hphu] at hu
     split at hu
-    · rename_i h; subst h
-      rcases hg with h | h
-      · exact hlive h
-      · exact absurd h hu
+    · rename_i h; subst h; exact hlive hu
     · exact hi.live u hu
   · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
   · obtain ⟨h1, h2⟩ := hi.rel i l hl
@@ -519,10 +646,10 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
   · have hut : u ≠ t := fun e => by
       have := (hholds u).mp hu; rw [e] at this; exact hnh this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
-  · obtain ⟨h1, h2⟩ := hi.fq w hw
-    have hwt : w.1 ≠ t := fun e => by
-      rw [e] at h2; rcases hph with h | h <;> rw [h] at h2 <;> cases h2
-    exact ⟨h1, by rw [upd_ne _ _ hwt]; exact h2⟩
+  · have hwt : w.1 ≠ t := fun e => by
+      rcases hi.fq w hw with ⟨-, h2⟩ | ⟨-, h2⟩ <;>
+        rw [e] at h2 <;> rcases hph with h | h <;> rw [h] at h2 <;> cases h2
+    rw [upd_ne _ _ hwt]; exact hi.fq w hw
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
     have hvt : v ≠ t := fun e => by rw [e, htb] at h1; cases h1
     exact ⟨v, hv, hq, by rw [upd_ne _ _ hvt]; exact h1,
@@ -693,9 +820,9 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
     have hut : u ≠ t := fun e => by rw [e, hout] at hu; cases hu
     rw [show upd (upd G m.threads.size g₀) t g₁ u = G u by simp [upd, hc', hut]]
     exact hRk _ (hi.res u hu)
-  · obtain ⟨h1, h2⟩ := hi.fq w hw
-    refine ⟨h1, ?_⟩
-    rw [hphu w.1 (hnc w.1 (by rw [h2]; decide))]; exact h2
+  · have hwc : w.1 ≠ m.threads.size :=
+      hnc w.1 (by rcases hi.fq w hw with ⟨-, h2⟩ | ⟨-, h2⟩ <;> rw [h2] <;> decide)
+    rw [hphu w.1 hwc]; exact hi.fq w hw
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
     have hvc : v ≠ m.threads.size := hnc v (fun e => by rw [e] at h1; cases h1)
     exact ⟨v, by simp only [Array.size_push]; exact Nat.lt_succ_of_lt hv, hq,
@@ -768,7 +895,8 @@ theorem Inv.join {G : ThreadId → γ} {m m' : Mem} {t u : ThreadId} {g : γ} (h
   have hnu : ∀ w, L.ph (G w) ≠ .gone → w ≠ u := fun w hw e => hw (by rw [e, huo])
   refine ⟨hown ▸ ho, fun w => ?_, fun w hw => ?_, fun w hw => ?_, hi.blk, ?_,
     fun v w hv hw => ?_, ⟨hi.loc.only, hi.loc.ok⟩, fun w => ?_, fun e he hh => ?_,
-    fun i l hl => ?_, fun hF => ?_, fun v hv => ?_, fun w hw => ?_, fun hp => ?_⟩
+    fun i l hl => ?_, fun hF => ?_, fun v hv => ?_,
+    hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_⟩
   · unfold upd; split
     · rw [hgh]; exact Heap.disjoint_empty _
     · exact hi.pdisj w
@@ -808,7 +936,6 @@ theorem Inv.join {G : ThreadId → γ} {m m' : Mem} {t u : ThreadId} {g : γ} (h
   · rw [hphu] at hv
     have hvt : v ≠ t := fun e => by rw [e, hout] at hv; cases hv
     rw [upd_ne _ _ hvt]; exact hRk _ (hi.res v hv)
-  · obtain ⟨h1, h2⟩ := hi.fq w hw; exact ⟨h1, by rw [hphu]; exact h2⟩
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
     exact ⟨v, by rw [hsz]; exact hv, hq, by rw [hphu]; exact h1,
       fun hh => h2 (by rw [← hphu]; exact hh)⟩
@@ -869,7 +996,7 @@ theorem Inv.make {G : ThreadId → γ} {m : Mem} {own : ThreadId → Heap} {t : 
         (ho.owns t ht e he (htc.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hL1.ne h3⟩) id))
         (hall u hu)⟩,
     fun u hu => absurd hu (hfree u),
-    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp at hp⟩
+    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp [Lock.Waits] at hp⟩
   rw [hownE]; unfold upd
   by_cases hu : u = t
   · simp only [hu, ↓reduceIte]

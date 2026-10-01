@@ -668,8 +668,8 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
     rw [hX]; unfold sum; unfold upd
     split <;> split <;> split <;> simp_all [Ph.count]
   have hl := hi.1.ghost (t := t) (g := (⟨.gone, Heap.empty, Heap.empty⟩, .fin))
-    (by rw [upd_self]; exact .inl rfl) (.inr rfl) (by rw [upd_self]; rfl) rfl
-    (fun h => absurd h (by decide))
+    (by rw [upd_self]; exact .inl rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
+    (fun h => absurd rfl h)
     (fun hL hR => by
       have hR' : R (fun u => (upd G t (gTask true) u).2) hL := hR
       show R _ hL; unfold R at hR' ⊢; rw [hsum]; exact hR')
