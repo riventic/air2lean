@@ -999,7 +999,7 @@ theorem parts_m {G : ThreadId → Gh} {g g' : Gh} (hp : ∀ u, (upd G 0 g u).1.p
 /-- `main`'s lock place, with the same place in `main`'s code: `U` stays if `main` does not hold
 the mutex before or after. -/
 theorem U_lock0 {G : ThreadId → Gh} {m : Mem} {a a' : LG} {x : X} (hu : U (upd G 0 (a, x)) m)
-    (hpa : a'.part = Heap.empty) (ha : a.ph ≠ .holds) (ha' : a'.ph ≠ .holds) :
+    (hpa : a'.part = Heap.empty) (ha : a.ph = .holds → a'.ph = .holds) :
     U (upd G 0 (a', x)) m := by
   have hX : (fun u => (upd G 0 (a', x) u).2) = fun u => (upd G 0 (a, x) u).2 := by
     funext u; unfold upd; split <;> rfl
@@ -1012,8 +1012,8 @@ theorem U_lock0 {G : ThreadId → Gh} {m : Mem} {a a' : LG} {x : X} (hu : U (upd
   · rw [h0] at hcw; rw [h1]
     obtain ⟨c1, c2⟩ := hu.reg (by rw [← h0]; exact hcw)
     refine ⟨fun hr => ?_, by rw [← h1]; exact c2⟩
-    rcases c1 (by rw [← h1]; exact hr) with ⟨hh, -⟩ | hb | hle
-    · rw [upd_self] at hh; exact absurd hh ha
+    rcases c1 (by rw [← h1]; exact hr) with ⟨hh, hle⟩ | hb | hle
+    · rw [upd_self] at hh; exact .inl ⟨by rw [upd_self]; exact ha hh, hle⟩
     · exact .inr (.inl hb)
     · exact .inr (.inr hle)
   · rcases hu.q w hw with h | ⟨a1, a2, a3, a4⟩ | ⟨a1, a2, a3, a4⟩
@@ -1035,7 +1035,7 @@ theorem inv_away {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 
       exact (R_congr (Y := fun u => (upd G 0 (gP x) u).2) (by rw [upd0_1, upd0_1])
         (by rw [upd0_1, upd0_1]) hL).mpr hR)
   rw [upd_upd] at hl
-  exact ⟨hl, U_lock0 hi.2 rfl (by decide) (by decide)⟩
+  exact ⟨hl, U_lock0 hi.2 rfl (fun h => absurd h (by decide))⟩
 
 /-- `main`'s futex wait at a shared word (`W`, the value `e`), at `out` with the place `x`: it
 can sleep while the word is `e` (`hq`: then the futex queue keeps `QOk`). It goes on at `out`
@@ -1069,7 +1069,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     · have := U_mem hi₁.2 (m' := { m₁ with current := 0, woken := m₁.woken.erase 0 }) rfl rfl rfl
         rfl rfl hi₁.2.q
       rw [← upd_g hg₁] at this
-      exact U_lock0 this rfl (by decide) (by decide)
+      exact U_lock0 this rfl (fun h => absurd h (by decide))
   · -- it sleeps: the word is `e`
     simp only [↓reduceIte] at hl ⊢
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
@@ -1086,7 +1086,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     · rw [show gP x = L.set (G₁ 0) .out Heap.empty by rw [hg₁]; rfl]; exact hl'
     · have := U_mem hi₁.2 (m' := { m₁ with current := 0 }) rfl rfl rfl rfl rfl hi₁.2.q
       rw [← upd_g hg₁] at this
-      exact U_lock0 this rfl (by decide) (by decide)
+      exact U_lock0 this rfl (fun h => absurd h (by decide))
 
 /-- An op of `main` at a shared word, with `main`'s new place `x'` and the same lock part. -/
 theorem inv_mstep {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {a : LG} {x x' : X}
@@ -2058,6 +2058,101 @@ theorem event_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (c : Bool
     simp only [Option.isSome_some, ↓reduceIte]
     repeat (first | exact ⟨hop.current, false, inv_evd hi₂ (.inl rfl) rfl⟩ | refine WP.pure' ?_ |
       simp only [StateT.run_pure])
+
+/-! ## `main`'s body -/
+
+/-- A step of `main` on the resource `hL` that it holds (`TTriple Pa x Qa`), with the same place:
+after it `main` holds `hQ`. -/
+theorem wp_mres {α σ : Type} {x : MemM α} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    {x0 : X} {hL : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
+    (hi : proto.inv (upd G 0 (gH x0 hL)) m) (hc : m.current = 0)
+    (hp : R (fun u => (upd G 0 (gH x0 hL) u).2) hL → Pa hL)
+    (hq : ∀ a hQ, Qa a hQ → R (fun u => (upd G 0 (gH x0 hQ) u).2) hQ)
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ a m' hQ, m'.current = 0 → m'.threads = m.threads → Qa a hQ →
+      proto.inv (upd G 0 (gH x0 hQ)) m' → Q (a, s) G m' d) :
+    proto.WP 0 ((liftM x : CM Tgt σ α).run s) Q G m d := by
+  have hh : L.ph (upd G 0 (gH x0 hL) 0) = .holds := by rw [upd_self]; rfl
+  obtain ⟨ht0, hjt⟩ := hi.1.live 0 (by rw [hh]; decide)
+  have hres : R (fun u => (upd G 0 (gH x0 hL) u).2) hL := by
+    have := hi.1.res 0 hh
+    rwa [show L.held (upd G 0 (gH x0 hL) 0) = hL by rw [upd_self]; rfl] at this
+  have hown : L.own (upd G 0 (gH x0 hL)) m 0 = hL := by
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
+  refine WP.liftM_owned ht hi.1.own hc ht0 (by rw [hown]; exact hp hres)
+    fun a m' hQ hr ho' hq₀ hs hm' hd => ?_
+  have hQe : L.part (gH x0 hQ) ∪ L.held (gH x0 hQ) = hQ := Heap.empty_union hQ
+  rw [hown] at hs hm' hd
+  have hl := hi.1.stepIn (g := gH x0 hQ) hc hjt (by rw [hQe]; exact ho')
+    (by rw [hown]; exact hs) (by rw [hown, hQe]; exact hm') (by rw [hown, hQe]; exact hd)
+    (by rw [upd_self]; rfl) (Heap.disjoint_empty _ |>.symm) (fun h => absurd rfl h)
+    (fun h => absurd hh h) (fun _ => by
+      show R (fun u => (upd (upd G 0 (gH x0 hL)) 0 (gH x0 hQ) u).2) hQ
+      rw [upd_upd]; exact hq a hQ hq₀)
+  rw [upd_upd] at hl
+  have hu := U_stepIn hi (by rw [hown]; exact hs) (by rw [hown]; exact hm') (by rw [hown]; exact hd)
+  exact h a m' hQ (hs.current.trans hc) hs.threads hq₀ ⟨hl, U_lock0 hu rfl (fun _ => rfl)⟩
+
+/-- `main`'s place while it holds the mutex in its `ready` loop: `run`, or `cons` after the
+condition wait. -/
+def RunX (x : X) : Prop := x = { ph := .run } ∨ x = { ph := .cons, cw := true }
+
+/-- The `ready` loop's invariant: `main` holds the mutex. -/
+def inv24 (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  s.b = bPtr ∧ m.current = 0 ∧ ∃ x hL, RunX x ∧ proto.inv (upd G 0 (gH x hL)) m
+
+/-- The `ready` loop ends: `main` read `ready = true`. -/
+def post24 (r : handoffExit × handoffLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  r.1 = .br23 ∧ r.2.b = bPtr ∧ m.current = 0 ∧ ∃ x hL, RunX x ∧
+    proto.inv (upd G 0 (gH x hL)) m ∧ ∃ Y, R Y hL ∧ rdyOf (Y 1) = true
+
+theorem loop24_body (io : Io) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (h : inv24 s G m d) :
+    proto.WP 0 ((handoff.loop24 io bPtr).run s) (fun r G' m' d' =>
+      if handoff.again24 r.1 then inv24 r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : handoffLocals) => 0) s)
+      else post24 r G' m' d') G m d := by
+  obtain ⟨hb, hc, x, hL, hx, hi⟩ := h
+  unfold handoff.loop24
+  simp only [StateT.run_bind]
+  simp only [StateT.run_pure, pure_bind]
+  refine WP.bind (WP.bind (wp_mres (Qa := fun r => ⌜r = rdyOf ((upd G 0 (gH x hL)) 1).2⌝ ∗ R
+      (fun u => (upd G 0 (gH x hL) u).2))
+    (((TTriple.load (p := bPtr.add 36) (a := 1) (v := rdyOf ((upd G 0 (gH x hL)) 1).2)
+      (by decide)).frameL_eq (R := pts (bPtr.add 32) 4
+        (BitVec.ofNat 32 (vOf ((upd G 0 (gH x hL)) 1).2)))))
+    hi hc (fun h => h) (fun a hQ h => by
+      obtain ⟨-, hR⟩ := sep_lift.mp h
+      exact (R_congr (by simp only [upd0_1]) (by simp only [upd0_1]) hQ).mpr hR)
+    fun a m' hQ hc' ht' hq hi' => ?_))
+  obtain ⟨rfl, hR⟩ := sep_lift.mp hq
+  cases hr : rdyOf (upd G 0 (gH x hL) 1).2
+  · -- `ready = false`: `main` is at `run`; the condition wait
+    have hxr : x = { ph := .run } := by
+      rcases hx with rfl | rfl
+      · rfl
+      · exfalso
+        have hf := hi.2.flags
+        rw [upd_self, upd0_1] at hf
+        have hc1 := hf.cons rfl (.inl rfl)
+        have h7 := hf.pcw hc1
+        obtain ⟨-, hsh⟩ := hi.2.shape
+        rw [upd0_1] at hr
+        rcases hsh with ⟨-, h0, -⟩ | ⟨-, -, -, -, hp, -⟩
+        · simp only [upd_self] at h0; cases h0
+        · simp only [upd0_1] at hp; unfold rdyOf at hr; rw [hp] at hr; simp at hr; omega
+    subst hxr
+    simp only [Bool.not_false, ↓reduceIte, StateT.run_bind]
+    refine WP.bind (WP.callC (WP.mono ?_ (condWait_spec G m' d io hQ hR hr hi' hc')))
+    rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
+    simp only [StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    simp only [handoff.again24, ↓reduceIte]
+    exact ⟨⟨hb, hc₁, _, hL₁, .inr rfl, hi₁⟩, .inl hd₁⟩
+  · simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    simp only [handoff.again24, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨rfl, hb, hc', x, hQ, hx, hi', _, hR, hr⟩
 
 /-! ## The producer -/
 
