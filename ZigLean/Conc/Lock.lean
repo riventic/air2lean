@@ -239,9 +239,9 @@ theorem snd_upd {X : Type} (G : ThreadId → LG × X) (t : ThreadId) (g : LG × 
   funext u; unfold upd; split <;> rfl
 
 /-- A step of a thread in the lock's code keeps the ghost values `X`. -/
-theorem snd_set {X : Type} {b o : Nat} {R : (ThreadId → X) → Assn} (G : ThreadId → LG × X)
-    (t : ThreadId) (p : LPh) (h : Heap) :
-    (fun u => (upd G t ((Lock.prod b o R).set (G t) p h) u).2) = fun u => (G u).2 := by
+theorem snd_set {X : Type} {b o c : Nat} {R : (ThreadId → X) → Assn} {hc : c = 2 ∨ c = 3}
+    (G : ThreadId → LG × X) (t : ThreadId) (p : LPh) (h : Heap) :
+    (fun u => (upd G t ((Lock.prod b o R c hc).set (G t) p h) u).2) = fun u => (G u).2 := by
   rw [snd_upd]; funext u; unfold upd; split
   · rename_i e; subst e; rfl
   · rfl
