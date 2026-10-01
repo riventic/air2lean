@@ -68,6 +68,7 @@ def S : States Io_Mutex_State where
   unl := .unlocked
   one := .locked_once
   two := .contended
+  c := 2
   bits0 := rfl
   bits1 := rfl
   bits2 := rfl
@@ -208,7 +209,7 @@ theorem loop23_body (t : ThreadId) (g : Gh) (D : Nat) (io : Io)
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [mptr]
-  refine WP.bind (wp_xchgLock fits S (g := L.set g .spin Heap.empty) rfl hi
+  refine WP.bind (wp_xchgLock fits S rfl (g := L.set g .spin Heap.empty) rfl hi
     fun k hk G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
   · simp only [StateT.run_pure, pure_bind]
@@ -219,7 +220,7 @@ theorem loop23_body (t : ThreadId) (g : Gh) (D : Nat) (io : Io)
     simp only [StateT.run_pure, pure_bind]
     simp only [show (r != Io_Mutex_State.unlocked) = true from hne, ↓reduceIte, StateT.run_bind,
       bind_assoc, pure_bind]
-    refine WP.bind (wp_wait fits S (g := L.set g .wait Heap.empty) rfl hi₁
+    refine WP.bind (wp_wait fits S rfl (g := L.set g .wait Heap.empty) rfl hi₁
       fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
@@ -237,7 +238,7 @@ theorem lock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .out) (io : Io) (G : Th
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [mptr]
-  refine WP.bind (wp_cas fits S (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
+  refine WP.bind (wp_cas fits S rfl (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   -- the loop, from `spin`
   have hloop : ∀ G₃ m₃ d₃, lockInv t g d default G₃ m₃ d₃ →
       proto.WP t ((do
@@ -276,7 +277,7 @@ theorem lock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .out) (io : Io) (G : Th
     cases ha
     simp only [StateT.run_pure, pure_bind]
     simp only [S, beq_self_eq_true, ↓reduceIte, StateT.run_bind, bind_assoc]
-    refine WP.bind (wp_wait fits S (g := L.set g .wait Heap.empty) rfl hi₁
+    refine WP.bind (wp_wait fits S rfl (g := L.set g .wait Heap.empty) rfl hi₁
       fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     simp only [StateT.run_pure, pure_bind]
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
@@ -294,7 +295,7 @@ theorem unlock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .holds) (io : Io) (G 
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [mptr]
-  refine WP.bind (wp_xchgUnlock fits S (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
+  refine WP.bind (wp_xchgUnlock fits S rfl (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hi₁⟩ | ⟨rfl, hi₁⟩
   · simp only [S, StateT.run_pure, pure_bind]
     refine WP.pure' ?_

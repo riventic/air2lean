@@ -1555,7 +1555,7 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
       refine WP.pure' ?_
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
       simp only [StateT.run_bind]
-      refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr 0 (gP { ph := .cons, cw := true })
+      refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr rfl 0 (gP { ph := .cons, cw := true })
         rfl _ G₁ m' k hi₂)))
       rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL₂, hi₃⟩
       simp only [StateT.run_pure]
@@ -1759,7 +1759,7 @@ theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL :
   dsimp only
   simp only [StateT.run_bind]
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr 0
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 0
     (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄)))
   rintro _ G₃ m₅ d₃ ⟨hd₃, hc₅, hi₅⟩
   have hi₅' : proto.inv (upd G₃ 0 (gP { ph := .reg, cw := true })) m₅ := hi₅
@@ -2865,7 +2865,7 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
   rw [ptr_add_zero]
   refine WP.bind (wp_io hi hc (live1 hi (by decide)) fun m₁ hc₁ ht₁ hi₁ => ?_)
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr 1 (gP { ph := .lk }) rfl _ G
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr rfl 1 (gP { ph := .lk }) rfl _ G
     m₁ d hi₁)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
   have hi₂' : proto.inv (upd G₂ 1 (gH { ph := .hl } hL)) m₂ := by
@@ -2908,7 +2908,7 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     · exact hle
   -- `unlock`
   refine WP.bind (wp_io hi₄ hc₄ (live1 hi₄ (by simp [gH])) fun m₅ hc₅ ht₅ hi₅ => ?_)
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr 1 (gH { ph := .rdy } hQ') rfl
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 1 (gH { ph := .rdy } hQ') rfl
     _ G₂ m₅ d₂ hi₅)))
   rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
   have hi₆' : proto.inv (upd G₃ 1 (gP { ph := .rdy })) m₆ := hi₆
@@ -3391,7 +3391,7 @@ theorem main_spec (io : Io) (d : Nat) :
   dsimp only
   simp only [StateT.run_bind]
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr 0 (gP { ph := .run }) rfl io _ _ k
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr rfl 0 (gP { ph := .run }) rfl io _ _ k
     hi₉)))
   rintro _ G₂ m₁₀ d₂ ⟨-, hc₁₀, hL₂, hi₁₀⟩
   -- the `ready` loop
@@ -3417,7 +3417,7 @@ theorem main_spec (io : Io) (d : Nat) :
   obtain ⟨rfl, -⟩ := sep_lift.mp hq
   rw [vOf_of_rdy hrd]
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr 0 (gH x hQ) rfl io _ _ d₃ hi₁₂)))
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 0 (gH x hQ) rfl io _ _ d₃ hi₁₂)))
   rintro _ G₄ m₁₃ d₄ ⟨-, hc₁₃, hi₁₃⟩
   have hi₁₃' : proto.inv (upd G₄ 0 (gP x)) m₁₃ := hi₁₃
   -- the event wait

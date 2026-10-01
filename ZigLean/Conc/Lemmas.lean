@@ -165,6 +165,25 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
 
+/-- `Thread.Futex.wait` is the futex wait of `Io.futexWait` (0.15.2 has no `Io`). -/
+theorem threadFutexWaitC_eq (p : Ptr) (e : BitVec 32) :
+    (threadFutexWaitC p e : CM Tgt σ Unit) = futexWaitC ⟨⟩ p e := by
+  unfold threadFutexWaitC futexWaitC; rw [show (Packed.toBits e).setWidth 32 = e from
+    BitVec.setWidth_eq e]
+
+theorem threadFutexWakeC_eq (p : Ptr) (c : BitVec 32) :
+    (threadFutexWakeC p c : CM Tgt σ Unit) = futexWakeC ⟨⟩ p c := rfl
+
+/-- An RMW on bits is the RMW `As` of `BitVec`, whose bits are always valid. -/
+theorem atomicRmwC_eq {k : Nat} (op : RmwOp) (ord : AtomicOrder) (align : Nat) (p : Ptr)
+    (v : BitVec k) : (atomicRmwC op false ord align p v : CM Tgt σ (BitVec k)) =
+      atomicRmwAsC op ord align p v := by
+  unfold atomicRmwC atomicRmwAsC atomicRmwAs
+  congr 1; funext c; congr 1
+  simp only [Packed.ofBits?, Packed.valid, ↓reduceIte, Packed.toBits, Packed.ofBits]
+  show _ = (atomicRmwAt c op false ord align p v >>= fun b => (pure b : MemM _))
+  rw [bind_pure]
+
 
 /-- A result `(b, blk, o)` of `Mem.access` is `pure`. -/
 theorem access_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}
