@@ -131,7 +131,8 @@ theorem snd_set (G : ThreadId → Gh) (t : ThreadId) (p : LPh) (h : Heap) :
   · rfl
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Heap)
-    (hu : U G m) (hs : L.Step t m m') : U (upd G t (L.set (G t) p h)) m' := by
+    (_ : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m') :
+    U (upd G t (L.set (G t) p h)) m' := by
   obtain ⟨hsh, hio, hpart, hblk⟩ := hu
   refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, ?_⟩
   · rw [snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
@@ -727,7 +728,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     obtain ⟨rfl, rfl⟩ := hg
     show proto.WP u ((fun _ => ()) <$> work cPtr) _ G _ d
     refine WP.map (WP.mono ?_ (work_spec u G _ d
-      (by rw [show gOut 0 = G u from hgu.symm, upd_same]; exact fits.cur u hi) rfl))
+      (by rw [show gOut 0 = G u from hgu.symm, upd_same]
+          exact fits.cur u hi (by rw [hgu]; exact (by decide : LPh.out ≠ LPh.gone))) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
     have hx : (fun v => (upd G' u (gOut 2) v).2) u = .work 2 := by
       show (upd G' u (gOut 2) u).2 = _; rw [upd_self]; rfl

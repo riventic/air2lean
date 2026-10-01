@@ -361,18 +361,6 @@ theorem owned_start : Owned (fun _ => Heap.empty) { mem0 with current := 0 } whe
   outside _ _ := rfl
   csize := rfl
 
-/-- An allocation next to the heap `R` that the thread owns. -/
-theorem alloc_next {R : Assn} (size align : Nat) (ha : 0 < align) :
-    TTriple R (Zig.alloc .stack size align) (fun p => R ∗ Assn.ex fun A =>
-      ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size .stack (Array.replicate size .undef)) :=
-  (TTriple.alloc .stack size align ha).frameL.conseq (fun _ h => sep_emp.mpr h) fun _ _ h => h
-
-theorem sep_ex_lift {R : Assn} {φ : Nat → Prop} {P : Nat → Assn} {h : Heap}
-    (hh : (R ∗ Assn.ex fun A => ⌜φ A⌝ ∗ P A) h) : ∃ A, φ A ∧ (R ∗ P A) h := by
-  obtain ⟨h₁, h₂, hd, rfl, hr, A, hp⟩ := hh
-  obtain ⟨hφ, hp⟩ := sep_lift.mp hp
-  exact ⟨A, hφ, h₁, h₂, hd, rfl, hr, hp⟩
-
 /-- `main`'s ghost value and no kid: the parts. -/
 theorem ownOf_main (m : Mem) (g : Gh) :
     ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => Heap.empty) 0 g.heap := by

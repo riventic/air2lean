@@ -1693,6 +1693,26 @@ theorem fork_clocks_one {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Na
     exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
   rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl <;> rfl
 
+/-- `Io.Group.async(g, io, f, args)`: a spawn of `tgt`, which the group at `g` records. -/
+theorem WP.groupAsyncC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ gh, P.inv (upd G t gh) m ∧ ∀ G₁ m₁, G₁ t = gh → P.inv G₁ m₁ →
+      ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
+        (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
+        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k) :
+    P.WP t ((Zig.groupAsyncC g io tgt : CM Tgt σ Unit).run s) Q G m n := by
+  unfold Zig.groupAsyncC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  obtain ⟨gh, hi, hc⟩ := h k hk
+  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
+  refine ⟨g₀, hg₀, fun child m' hf => WP.pure' ?_⟩
+  refine WP.callMC (fun e he => (MemM.modify_err he).elim) fun a m'' hr => ?_
+  have := modify_ok hr
+  subst this
+  exact ⟨rfl, hk' child m' hf⟩
+
 end Proto
 end Conc
 end Zig

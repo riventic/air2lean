@@ -208,7 +208,9 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem �
   inv : ∀ G m, P.inv G m ↔ L.Inv G m ∧ U G m
   fin : ∀ g, P.fin g → L.ph g = .gone
   joins : ∀ g, P.joins g → L.ph g = .out
-  stable : ∀ G m m' t p h, U G m → L.Step t m m' → U (upd G t (L.set (G t) p h)) m'
+  /-- A step of a thread in the lock's code keeps `U`. -/
+  stable : ∀ G m m' t p h, L.ph (G t) ≠ .gone → U G m → L.Step t m m' →
+    U (upd G t (L.set (G t) p h)) m'
 
 variable {L}
 
@@ -243,6 +245,13 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
 theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
     (s : Array (ThreadId × Nat × Nat)) (k : Nat) (w : Array ThreadId) :
     L.Inv G { m with current := c, seen := s, nextMsg := k, woken := w } :=
+  ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.res, hi.fq, hi.wit⟩
+
+/-- The same memory, but the groups' tasks. -/
+theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array (Ptr × ThreadId)) :
+    L.Inv G { m with groups := gs } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit⟩
