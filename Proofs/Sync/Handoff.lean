@@ -3261,4 +3261,110 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : proto.
   · exact .inl (qok_out hi (by rw [hg]; exact (by decide : LPh.out ≠ LPh.away)) w hw)
   · rw [h1'] at h; cases h
 
+theorem main_spec (io : Io) (d : Nat) :
+    proto.WP 0 (handoff io) QM G0 { mem0 with current := 0 } d := by
+  unfold handoff
+  -- the `Box`: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 40 8 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  -- its five parts
+  obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
+  obtain ⟨hW, hR₂, dW, rfl, hW₁, hR₂'⟩ := bytesAt_split hR₁' (k := 4) (by simp)
+  obtain ⟨hS, hR₃, dS, rfl, hS₁, hR₃'⟩ := bytesAt_split hR₂' (k := 12) (by simp)
+  obtain ⟨hR, hP, dR, rfl, hRr, hP₁⟩ := bytesAt_split hR₃' (k := 5) (by simp)
+  simp only [Array.extract_replicate, Array.size_replicate] at hI₁ hW₁ hS₁ hRr hP₁
+  change bytesAt bPtr A 40 .stack (Array.replicate 16 .undef) hI at hI₁
+  change bytesAt (bPtr.add 16) A 40 .stack (Array.replicate 4 .undef) hW at hW₁
+  change bytesAt (bPtr.add 20) A 40 .stack (Array.replicate 12 .undef) hS at hS₁
+  change bytesAt (bPtr.add 32) A 40 .stack (Array.replicate 5 .undef) hR at hRr
+  change bytesAt (bPtr.add 37) A 40 .stack (Array.replicate 3 .undef) hP at hP₁
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  simp only [StateT.run_pure]
+  simp only [pure_bind]
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 (hI ∪ (hW ∪ (hS ∪ (hR ∪ hP))))) m₁ := ho₁
+  have hth₁ : 0 < m₁.threads.size := by rw [hs₁.threads]; decide
+  have F₁ : (bytesAt bPtr A 40 .stack (Array.replicate 16 .undef) ∗
+      (bytesAt (bPtr.add 16) A 40 .stack (Array.replicate 4 .undef) ∗
+      (bytesAt (bPtr.add 20) A 40 .stack (Array.replicate 12 .undef) ∗
+      (bytesAt (bPtr.add 32) A 40 .stack (Array.replicate 5 .undef) ∗
+      bytesAt (bPtr.add 37) A 40 .stack (Array.replicate 3 .undef)))))
+      (hI ∪ (hW ∪ (hS ∪ (hR ∪ hP)))) :=
+    ⟨hI, _, dI, rfl, hI₁, hW, _, dW, rfl, hW₁, hS, _, dS, rfl, hS₁, hR, hP, dR, rfl, hRr, hP₁⟩
+  -- `io`
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := bPtr) (A := A) (S := 40) (K := .stack)
+    (bs := Array.replicate 16 .undef) (k := 0) (a := 8) io rfl (by decide)
+    (by simp [show Enc.size Io = 16 from rfl]) (by simp [bPtr]; omega) (by decide)).frame)
+    ho₁' hc₁ hth₁ (by rw [upd_self]; exact F₁) fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
+  -- the mutex
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 16) (A := A) (S := 40)
+    (K := .stack) (bs := Array.replicate 4 .undef) (k := 0) (a := 4) mutex0
+    (by rw [enc_mutex]; exact LawfulEnc.size_encode _) rfl (by decide) (by decide)
+    (by simp [bPtr, Ptr.add]; omega)
+    (by decide)).frame.frameL) ho₂ hc₂ (by rw [hs₂.threads]; exact hth₁) (by rw [upd_self]; exact F₂)
+    fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
+  rw [upd_upd] at ho₃
+  have hc₃ : m₃.current = 0 := hs₃.current.trans hc₂
+  -- the condition
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 20) (A := A) (S := 40)
+    (K := .stack) (bs := Array.replicate 12 .undef) (k := 0) (a := 4) cond0
+    (by decide +kernel) rfl (by decide) (by decide) (by simp [bPtr, Ptr.add]; omega)
+    (by decide)).frame.frameL.frameL) ho₃ hc₃ (by rw [hs₃.threads, hs₂.threads]; exact hth₁)
+    (by rw [upd_self]; exact F₃) fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
+  rw [upd_upd] at ho₄
+  have hc₄ : m₄.current = 0 := hs₄.current.trans hc₃
+  -- `ready`
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := bPtr.add 32) (A := A) (S := 40)
+    (K := .stack) (bs := Array.replicate 5 .undef) (k := 4) (a := 1) false rfl (by decide)
+    (by decide) (Nat.mod_one _) (by decide)).frame.frameL.frameL.frameL) ho₄ hc₄
+    (by rw [hs₄.threads, hs₃.threads, hs₂.threads]; exact hth₁) (by rw [upd_self]; exact F₄)
+    fun _ m₅ h₅ _ ho₅ F₅ hs₅ _ _ => ?_)
+  rw [upd_upd] at ho₅
+  have hc₅ : m₅.current = 0 := hs₅.current.trans hc₄
+  -- the event
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 20) (A := A) (S := 40)
+    (K := .stack) (bs := writeBytes (Array.replicate 12 .undef) 0 (Enc.encode cond0)) (k := 8) (a := 4)
+    Io_Event.unset (by decide +kernel) rfl (by decide)
+    (by decide +kernel) (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₅ hc₅
+    (by rw [hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads]; exact hth₁)
+    (by rw [upd_self]; exact F₅) fun _ m₆ h₆ _ ho₆ F₆ hs₆ _ _ => ?_)
+  rw [upd_upd] at ho₆
+  have hc₆ : m₆.current = 0 := hs₆.current.trans hc₅
+  -- `v`
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := bPtr.add 32) (A := A) (S := 40)
+    (K := .stack) (bs := writeBytes (Array.replicate 5 .undef) 4 (Enc.encode false)) (k := 0) (a := 4)
+    (0 : BitVec 32) rfl (by decide) (by decide +kernel)
+    (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL.frameL) ho₆ hc₆
+    (by rw [hs₆.threads, hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads]; exact hth₁)
+    (by rw [upd_self]; exact F₆) fun _ m₇ h₇ _ ho₇ F₇ hs₇ _ _ => ?_)
+  rw [upd_upd] at ho₇
+  have hc₇ : m₇.current = 0 := hs₇.current.trans hc₆
+  have hth₇ : m₇.threads = #[{ spawner := 0, joined := true }] := by
+    rw [hs₇.threads, hs₆.threads, hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; rfl
+  have hat₇ : m₇.atomics = #[] := by
+    rw [hs₇.atomics, hs₆.atomics, hs₅.atomics, hs₄.atomics, hs₃.atomics, hs₂.atomics, hs₁.atomics]; rfl
+  have hq₇ : m₇.waiters = #[] := by
+    rw [hs₇.waiters, hs₆.waiters, hs₅.waiters, hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
+  have hP : Parts io A (Array.replicate 3 .undef) h₇ := by
+    rw [writeBytes_all (by rw [enc_io]; rfl),
+      writeBytes_all (by rw [enc_mutex, LawfulEnc.size_encode]; rfl)] at F₇
+    exact F₇
+  -- the spawn
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, inv_start ho₇ hP hA8 hth₇ hat₇ hq₇, fun G₁ m₈ hg₁ hi₈ =>
+    ⟨gP { ph := .lk }, ⟨rfl, rfl⟩, fun child m₉ hf => ?_⟩⟩)
+  obtain ⟨rfl, hi₉⟩ := inv_spawn hi₈ hg₁ hf
+  trace_state
+  sorry
+
 end Sync.Handoff
