@@ -892,6 +892,28 @@ def gH (x : X) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, x)
 
 /-! ## `main` -/
 
+theorem get_push_lt {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k < h.size) :
+    (h.push x)[k]! = h[k]! := by
+  have h1 : k < (h.push x).size := by simp; omega
+  rw [getElem!_pos (h.push x) k h1, getElem!_pos h k hk, Array.getElem_push_lt hk]
+
+theorem get_push_eq {h : Array Word.Entry} {x : Word.Entry} : (h.push x)[h.size]! = x := by
+  rw [getElem!_pos _ _ (by simp)]; simp
+
+theorem get_push_eq' {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k = h.size) :
+    (h.push x)[k]! = x := by
+  subst hk; exact get_push_eq
+
+theorem rmwEnt_val {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Entry}
+    {new : BitVec 32} : (Word.rmwEnt M t ord last new).Val new := intOfBytes_rmw new
+
+theorem ofBits_cst (b : BitVec 32) :
+    (Packed.ofBits? (α := Io_Condition_State) b).run = some (.ok (Packed.ofBits b)) := rfl
+
+theorem val_eq {x : Word.Entry} {a b : BitVec 32} (ha : x.Val a) (hb : x.Val b) : a = b := by
+  unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
+
+
 theorem upd_g {G : ThreadId → Gh} {t : ThreadId} {g : Gh} (hg : G t = g) : upd G t g = G := by
   rw [← hg]; exact upd_same G t
 
@@ -1066,6 +1088,138 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
       rw [← upd_g hg₁] at this
       exact U_lock0 this rfl (by decide) (by decide)
 
+/-- An op of `main` at a shared word, with `main`'s new place `x'` and the same lock part. -/
+theorem inv_mstep {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {a : LG} {x x' : X}
+    (hi : proto.inv (upd G 0 (a, x)) m₁) (hw' : W.Ok m') (hop : W.Op 0 m₁ m')
+    (hL : L.Inv (upd G 0 (a, x)) m') (hpa : a.part = Heap.empty) (hx : x.ph ≠ .pre)
+    (hm : x'.ph.isMain) (hpre : x'.ph ≠ .pre)
+    (hS : SOk m' (sN x' (G 1).2)) (hE : EOk m' (eN (G 1).2)) (hV : VOk m' (vL x' (G 1).2))
+    (hfl : Flags x' (G 1).2) (hreg : RegHB (upd G 0 (a, x')) m')
+    (hsig : eN (G 1).2 = 1 → VClock.le (WS.hist m')[2]!.clock (WE.hist m')[1]!.relClock = true)
+    (hseen : x'.ph = .seen → VClock.le (WS.hist m')[2]!.clock (m'.clocks[0]!) = true)
+    (hvclk : x'.vw → VClock.le (WV.hist m')[1]!.clock (m'.clocks[0]!) = true)
+    (hq : QOk (upd G 0 (a, x')) m')
+    (hpc : (G 1).2.ph = .sgp → VClock.le (WS.hist m')[2]!.clock (m'.clocks[1]!) = true) :
+    proto.inv (upd G 0 (a, x')) m' :=
+  ⟨linv0 hL, U_op hW hi.2 hop hw' (shape_m hi.2.shape hx hm hpre) (parts_m hi.2.parts hpa)
+    (by rw [upd_self, upd0_1]; exact hS) (by rw [upd0_1]; exact hE)
+    (by rw [upd_self, upd0_1]; exact hV) (by rw [upd_self, upd0_1]; exact hfl) hreg
+    (by rw [upd0_1]; exact hsig) (by rw [upd_self]; exact hseen) (by rw [upd_self]; exact hvclk) hq
+    (by rw [upd0_1]; exact hpc)⟩
+
+/-- The producer is before its `ready = true` if `main` read `ready = false`. -/
+theorem early_of {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (hrd : rdyOf (G 1).2 = false) :
+    (G 1).2.ph.rank ≤ 3 ∧ (G 1).2.cw = false ∧ eN (G 1).2 = 0 := by
+  obtain ⟨-, hc⟩ := hi.2.shape
+  have hfl := hi.2.flags
+  rcases hc with ⟨-, h0, h1⟩ | ⟨-, -, -, -, hp, -⟩
+  · have := h1 1 (Nat.le_refl _); change (G 1).2 = {} at this
+    rw [this]; exact ⟨by decide, rfl, rfl⟩
+  · have hr : (G 1).2.ph.rank ≤ 3 := by
+      unfold rdyOf at hrd; rw [hp] at hrd; simp at hrd; omega
+    have hc : (G 1).2.cw = false := by
+      cases e : (G 1).2.cw
+      · rfl
+      · have := hfl.pcw e; omega
+    exact ⟨hr, hc, by simp [eN, hc]⟩
+
+/-- `main`'s load of the epoch at `run`, while it holds the mutex and read `ready = false`: it
+reads 0 and goes to `ep`. -/
+theorem inv_ep {G : ThreadId → Gh} {m₁ m' : Mem} {hL : Heap} {j : Nat} {v : BitVec 32}
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m₁) (hrd : rdyOf (G 1).2 = false)
+    (hw' : WE.Ok m') (hop : WE.Op 0 m₁ m') (hL' : L.Inv (upd G 0 (gH { ph := .run } hL)) m')
+    (hh : WE.hist m' = WE.hist m₁) (hj : j < (WE.hist m₁).size) (hv : (WE.hist m₁)[j]!.Val v) :
+    v = 0 ∧ proto.inv (upd G 0 (gH { ph := .ep } hL)) m' := by
+  have hu := hi.2
+  obtain ⟨hr3, hc1, he0⟩ := early_of hi (by rw [upd0_1]; exact hrd)
+  rw [upd0_1] at hr3 hc1 he0
+  have hfl := hu.flags
+  rw [upd_self, upd0_1] at hfl
+  have hv1 : (G 1).2.vw = false := by
+    cases e : (G 1).2.vw
+    · rfl
+    · rcases hfl.pvw.mp e with h | ⟨h, -⟩ <;> rw [h] at hr3 <;> simp [Ph.rank] at hr3
+  obtain ⟨hsz, hval⟩ := hu.eh
+  rw [upd0_1, he0] at hsz hval
+  have hj0 : j = 0 := by omega
+  subst hj0
+  have hS := hist_op (.inr (.inl rfl)) (.inl rfl) (by decide) hu hop
+  have hV := hist_op (.inr (.inl rfl)) (.inr (.inr rfl)) (by decide) hu hop
+  refine ⟨val_eq hv (hval 0 (Nat.le_refl _)), inv_mstep (.inr (.inl rfl)) hi hw' hop hL' rfl
+    (by decide) rfl (by decide) ?_ ?_ ?_ ?_ ?_ (fun h => ?_) (fun h => by cases h)
+    (fun h => by cases h) ?_ (fun h => ?_)⟩
+  · rw [sok_congr hS]; have := hu.sh; rw [upd_self, upd0_1] at this; simpa [sN, gH] using this
+  · rw [eok_congr hh]; have := hu.eh; rw [upd0_1] at this; exact this
+  · rw [vok_congr hV]; have := hu.vh; rw [upd_self, upd0_1] at this; simpa [vL, gH] using this
+  · exact ⟨(fun h => by rw [hc1] at h; cases h), (by simp), (fun h => by cases h),
+      hfl.pcw, hfl.pcw', (fun h => by cases h), (fun h => by cases h), hfl.pvw,
+      (fun h => by rw [h] at hr3; simp [Ph.rank] at hr3), (fun h => by cases h), hfl.pfin,
+      (fun h => by rw [h] at hr3; simp [Ph.rank] at hr3)⟩
+  · intro h; simp [gH] at h
+  · rw [he0] at h; cases h
+  · intro w hw
+    rw [hop.waiters] at hw
+    rcases hu.q w hw with h | ⟨-, -, h3, -⟩ | ⟨-, -, h3, -⟩
+    · exact .inl h
+    · rw [upd_self] at h3; cases h3
+    · rw [upd_self] at h3; cases h3
+  · rw [h] at hr3; simp [Ph.rank] at hr3
+
+theorem bits_one : RmwOp.add.apply false (0 : BitVec 32)
+    (Packed.toBits (Packed.ofBits (1 : BitVec 32) : Io_Condition_State)) = sv 1 := by decide
+
+/-- `main`'s `waiters += 1` at `ep` (relaxed), while it holds the mutex: it goes to `reg`. -/
+theorem inv_reg {G : ThreadId → Gh} {m₁ m' : Mem} {hL : Heap} {old : BitVec 32}
+    (hi : proto.inv (upd G 0 (gH { ph := .ep } hL)) m₁) (hrd : rdyOf (G 1).2 = false)
+    (hw' : WS.Ok m') (hop : WS.Op 0 m₁ m') (hL' : L.Inv (upd G 0 (gH { ph := .ep } hL)) m')
+    (hv : (last (WS.hist m₁)).Val old)
+    (hh : WS.hist m' = (WS.hist m₁).push (Word.rmwEnt m' 0 .relaxed (last (WS.hist m₁))
+      (RmwOp.add.apply false old
+        (Packed.toBits (Packed.ofBits (1 : BitVec 32) : Io_Condition_State))))) :
+    old = 0 ∧ proto.inv (upd G 0 (gH { ph := .reg, cw := true } hL)) m' := by
+  have hu := hi.2
+  obtain ⟨hr3, hc1, he0⟩ := early_of hi (by rw [upd0_1]; exact hrd)
+  rw [upd0_1] at hr3 hc1 he0
+  have hfl := hu.flags
+  rw [upd_self, upd0_1] at hfl
+  obtain ⟨hsz, hval⟩ := hu.sh
+  rw [upd_self, upd0_1] at hsz hval
+  have hN : sN (gH { ph := .ep } hL).2 (G 1).2 = 0 := by simp [sN, gH, hc1]
+  rw [hN] at hsz hval
+  have h0 : old = 0 := val_eq hv (by
+    rw [show last (WS.hist m₁) = (WS.hist m₁)[0]! by simp [last, hsz]]; exact hval 0 (Nat.le_refl _))
+  subst h0
+  have hE := hist_op (.inl rfl) (.inr (.inl rfl)) (by decide) hu hop
+  have hV := hist_op (.inl rfl) (.inr (.inr rfl)) (by decide) hu hop
+  have hlast : (WS.hist m')[1]! = Word.rmwEnt m' 0 .relaxed (last (WS.hist m₁)) (sv 1) := by
+    rw [hh, get_push_eq' hsz.symm, bits_one]
+  refine ⟨rfl, inv_mstep (.inl rfl) hi hw' hop hL' rfl (by decide) rfl (by decide) ⟨?_, fun k hk => ?_⟩
+    ?_ ?_ ?_ (fun hcw => ⟨fun _ => .inl ⟨by rw [upd_self]; rfl, ?_⟩, fun h => ?_⟩) (fun h => ?_)
+    (fun h => by cases h) (fun h => by cases h) ?_ (fun h => ?_)⟩
+  · rw [hh]; simp [sN, hc1, hsz, Ph.post]
+  · have hk1 : k ≤ 1 := by simpa [sN, gH, hc1, Ph.post] using hk
+    rcases (by omega : k = 0 ∨ k = 1) with rfl | rfl
+    · rw [hh, get_push_lt (by omega)]; exact hval 0 (Nat.le_refl _)
+    · rw [hlast]; exact rmwEnt_val
+  · rw [eok_congr hE]; have := hu.eh; rw [upd0_1] at this; exact this
+  · rw [vok_congr hV]; have := hu.vh; rw [upd_self, upd0_1] at this; simpa [vL, gH] using this
+  · exact ⟨(fun h => by simp [hc1] at h), ⟨fun _ => .inl rfl, fun _ => rfl⟩,
+      (fun _ h => absurd h (by decide)),
+      hfl.pcw, hfl.pcw', (fun h => by cases h), (fun h => by cases h), hfl.pvw,
+      (fun h => by rw [h] at hr3; simp [Ph.rank] at hr3), (fun _ h => by omega), hfl.pfin,
+      (fun _ => rfl)⟩
+  · rw [hlast]; exact VClock.le_refl _
+  · rw [upd0_1] at h
+    rcases h with h | h | h <;> rw [h] at hr3 <;> simp [Ph.rank] at hr3
+  · rw [he0] at h; cases h
+  · intro w hw
+    rw [hop.waiters] at hw
+    rcases hu.q w hw with h | ⟨-, -, h3, -⟩ | ⟨-, -, h3, -⟩
+    · exact .inl h
+    · rw [upd_self] at h3; cases h3
+    · rw [upd_self] at h3; cases h3
+  · rw [h] at hr3; simp [Ph.rank] at hr3
+
 /-! ## The producer -/
 
 
@@ -1167,24 +1321,6 @@ theorem wp_pstep {α σ : Type} {x : MemM α} {s : σ} {G : ThreadId → Gh} {m 
 /-- The state `(waiters, signals)`. -/
 def cst (w s : Nat) : Io_Condition_State := ⟨BitVec.ofNat 16 w, BitVec.ofNat 16 s⟩
 
-theorem get_push_lt {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k < h.size) :
-    (h.push x)[k]! = h[k]! := by
-  have h1 : k < (h.push x).size := by simp; omega
-  rw [getElem!_pos (h.push x) k h1, getElem!_pos h k hk, Array.getElem_push_lt hk]
-
-theorem get_push_eq {h : Array Word.Entry} {x : Word.Entry} : (h.push x)[h.size]! = x := by
-  rw [getElem!_pos _ _ (by simp)]; simp
-
-theorem get_push_eq' {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k = h.size) :
-    (h.push x)[k]! = x := by
-  subst hk; exact get_push_eq
-
-theorem rmwEnt_val {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Entry}
-    {new : BitVec 32} : (Word.rmwEnt M t ord last new).Val new := intOfBytes_rmw new
-
-theorem ofBits_cst (b : BitVec 32) :
-    (Packed.ofBits? (α := Io_Condition_State) b).run = some (.ok (Packed.ofBits b)) := rfl
-
 /-- A thread's lock part with the same `v` and `ready`: the lock's invariant stays. -/
 theorem linv_x {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (hL : L.Inv (upd G 1 (a, x)) m)
     (hv : vOf x' = vOf x) (hr : rdyOf x' = rdyOf x) : L.Inv (upd G 1 (a, x')) m :=
@@ -1255,9 +1391,6 @@ theorem inv_sgp {G : ThreadId → Gh} {m₁ m' : Mem}
   · intro _
     have hsz2 : (WS.hist m₁).size = 2 := by omega
     rw [hh, get_push_eq' (by omega)]; exact VClock.le_refl _
-
-theorem val_eq {x : Word.Entry} {a b : BitVec 32} (ha : x.Val a) (hb : x.Val b) : a = b := by
-  unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
 
 /-- The producer's `epoch += 1` (release): it goes to `wk`. -/
 theorem inv_wk {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 32}
