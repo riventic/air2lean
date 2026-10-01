@@ -338,20 +338,6 @@ def workPost (t : ThreadId) (r : workExit × workLocals) (G : ThreadId → Gh) (
     Prop :=
   r.1 = .br3 ∧ m.current = t ∧ proto.inv (upd G t (gOut 2)) m
 
-/-- `lock` in `work`, by thread `t` at `out` after `k` increments. -/
-theorem lockC (t : ThreadId) (k : Nat) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : proto.inv (upd G t (gOut k)) m) :
-    proto.WP t (Thread_Mutex_lock (cPtr.add 0)) (fun _ G' m' d' => d' < d ∧
-      m'.current = t ∧ ∃ hL, proto.inv (upd G' t (gHold k hL)) m') G m d :=
-  lock_spec fits rfl mptr t (gOut k) rfl G m d hi
-
-/-- `unlock` in `work`, by the holder `t` after `k` increments. -/
-theorem unlockC (t : ThreadId) (k : Nat) (hL : Heap) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : proto.inv (upd G t (gHold k hL)) m) :
-    proto.WP t (Thread_Mutex_unlock (cPtr.add 0)) (fun _ G' m' d' => d' ≤ d ∧
-      m'.current = t ∧ proto.inv (upd G' t (gOut k)) m') G m d :=
-  unlock_spec fits rfl mptr t (gHold k hL) rfl G m d hi
-
 theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : workInv t s G m d) :
     proto.WP t ((work.loop4 cPtr).run s) (fun r G' m' d' =>
@@ -369,9 +355,10 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
     have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
     -- `lock`
-    refine WP.bind (WP.callC (WP.mono ?_ (lockC t s.local1.toNat G m d hi)))
+    refine WP.bind (WP.callC (WP.mono ?_ (lock_spec fits rfl mptr t (gOut s.local1.toNat) rfl G m d
+      hi)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
-    have hi₂' := hi₂
+    have hi₂' : proto.inv (upd G₂ t (gHold s.local1.toNat hL)) m₂ := hi₂
     -- the load of the counter
     refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
     have hx₂ : (fun u => (upd G₂ t (gHold s.local1.toNat hL) u).2) t = .work s.local1.toNat := by
@@ -395,7 +382,7 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
       apply BitVec.eq_of_toNat_eq
       rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]) fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
     -- `unlock`
-    refine WP.bind (WP.callC (WP.mono ?_ (unlockC t (s.local1.toNat + 1) hQ' G₂ m₄ d₂ hi₄)))
+    refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec fits rfl mptr t (gHold (s.local1.toNat + 1) hQ') rfl G₂ m₄ d₂ hi₄)))
     rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
     simp only [StateT.run_pure, pure_bind]
     -- the next repeat

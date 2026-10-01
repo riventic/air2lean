@@ -3,17 +3,18 @@ import ZigLean.Conc.Csl
 /-!
 # A lock that owns a resource
 
-A lock (`Io.Mutex`, translated from Zig 0.16.0's std code; the futex under it is the model)
-protects a resource: a part of the heap that the lock owns while it is free. `lock` gives the
+A lock (`Io.Mutex` of Zig 0.16.0, `Thread.Mutex` of 0.15.2, translated from their std code; the
+futex under it is the model) protects a resource: a part of the heap that the lock owns while it is free. `lock` gives the
 resource to the thread that takes the lock, `unlock` gives it back. This file is the part of a
 protocol (`ZigLean/Conc/Logic.lean`) for one lock, proved once for every protocol that has it:
 
-- **The lock** (`Lock`). The mutex word: 4 bytes at offset `o` of block `b`; the resource `R`.
+- **The lock** (`Lock`). The mutex word: 4 bytes at offset `o` of block `b`; its value while a
+  thread can wait for the lock, `c` (`2` for `Io.Mutex`, `3` for `Thread.Mutex`); the resource `R`.
   The protocol's ghost value tells for each thread where it is in the lock's code (`LPh`), its
   part of the heap (`part`), and the resource while it holds the lock (`held`). A thread owns
   `part ∪ held` (`Lock.own`; a joined thread owns nothing).
 - **The invariant** (`Lock.Inv`). The threads' parts (`Owned`). The word is `0` if no thread holds
-  the lock, else `1` or `2`; at most one thread holds it. The word's atomic location is an RMW
+  the lock, else `1` or `c`; at most one thread holds it. The word's atomic location is an RMW
   chain, and no other location overlaps the word; no part has a byte of the word. The free lock
   owns a heap with `R` (`Lock.Owns`): each access to it happened before every thread, or before
   the release clock of the newest message of the word; the holder's resource has `R` (`res`).

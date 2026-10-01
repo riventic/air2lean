@@ -3,23 +3,30 @@ import ZigLean.Conc.Lock
 /-!
 # The rules of a lock's code
 
-The steps of `Io.Mutex`'s code (`lock`, `unlock`; translated from Zig 0.16.0's std code) on the
-word of a lock `L` (`ZigLean/Conc/Lock.lean`), proved once for every protocol that has the lock
-(`Lock.Fits`):
+The steps of `Io.Mutex`'s code (`lock`, `unlock`; translated from Zig 0.16.0's std code) and of
+`Thread.Mutex`'s code (0.15.2, `FutexImpl`) on the word of a lock `L` (`ZigLean/Conc/Lock.lean`),
+proved once for every protocol that has the lock (`Lock.Fits`). `c` is the lock's contended value
+(`2` or `3`; `States` gives the values of the generated code):
 
 | Rule | Op | Place before | Place after |
 |---|---|---|---|
-| `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), or `spin` (read `1`), or `wait` (read `2`) |
-| `wp_xchgLock` | `xchg(2)`, acquire | `spin` | `holds` (read `0`, with the resource), or `wait` |
-| `wp_wait` | futex wait for `2` | `wait` | `spin` (it sleeps while the word is `2`) |
-| `wp_xchgUnlock` | `xchg(0)`, release | `holds` | `out` (read `1`), or `wake` (read `2`); the lock gets the resource |
+| `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), or `spin` (read `1`), or `wait` (read `c`) |
+| `wp_orLock` | `or(1)`, acquire (`c = 3`) | `out` | `holds` (read `0`, with the resource), or `spin` (read `1` or `3`) |
+| `wp_loadLock` | load, relaxed | any but `gone` | the same |
+| `Fits.toWait` | (no op) | `spin` | `wait` |
+| `wp_xchgLock` | `xchg(c)`, acquire | `spin` | `holds` (read `0`, with the resource), or `wait` |
+| `wp_wait` | futex wait for `c` | `wait` | `spin` (it sleeps while the word is `c`) |
+| `wp_xchgUnlock` | `xchg(0)`, release | `holds` | `out` (read `1`), or `wake` (read `c`); the lock gets the resource |
 | `wp_wake` | futex wake of 1 | `wake` | `out` |
 
+`Thread.Futex.wait`/`wake` and the ops on bits (`atomicRmwC`) are the same ops
+(`threadFutexWaitC_eq`, `threadFutexWakeC_eq`, `atomicRmwC_eq`).
 Each rule is a stop (the pick of the op, or the futex op) and then the op. It gives the
 protocol's invariant with the thread's new place; the rest of the invariant (`U`) stays, by
 `Lock.Fits.stable`. In strict mode no op throws, and a futex wait keeps `Live` (`Fits.live`).
-The `Lock.Inv` form of each step is `Inv.cas`, `Inv.xchgLock`, `Inv.wait`, `Inv.xchgUnlock` and
-`Inv.wake`; the RMW cases under them are `Inv.acquire`, `Inv.contend` and `Inv.release`.
+The `Lock.Inv` form of each step is `Inv.cas`, `Inv.orLock`, `Inv.load`, `Inv.xchgLock`,
+`Inv.wait`, `Inv.xchgUnlock` and `Inv.wake`; the RMW cases under them are `Inv.acquire`,
+`Inv.contend`, `Inv.rmwKeep` (the same value again) and `Inv.release`.
 
 The acquire RMW that takes the lock adopts the release clock of the newest message, so the
 thread owns the resource (`Lock.Owns`); the release RMW of `unlock` puts the thread's clock in the
@@ -1350,14 +1357,14 @@ theorem Inv.cas {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Pack
       · exact .inl ⟨rfl, hret _ (by decide) (by decide)⟩
       · exact .inr ⟨rfl, hret _ (by decide) (by decide)⟩
 
-/-- An `xchg` at the word by thread `t`: it reads the newest message (a chain), whose value `w` is
-the word, and writes `v`. -/
-theorem Inv.xchgAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v b : BitVec 32}
-    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
-    (h : ((atomicRmwAt c .xchg false ord 4 L.ptr v).run m).run = some (.ok (b, m'))) :
+/-- An RMW `op` at the word by thread `t`: it reads the newest message (a chain), whose value `w`
+is the word, and writes `op.apply w v`. -/
+theorem Inv.rmwAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {op : RmwOp} {ord : AtomicOrder}
+    {v b : BitVec 32} (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (h : ((atomicRmwAt c op false ord 4 L.ptr v).run m).run = some (.ok (b, m'))) :
     ∃ m₁ li l w, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
       m₁.blocks = m.blocks ∧ L.Val w ∧ b = BitVec.ofNat 32 w ∧ L.U32 m₁ (BitVec.ofNat 32 w) ∧
-      m' = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) v := by
+      m' = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) (op.apply false b v) := by
   obtain ⟨b0, blk, off, li, m₁, pos, hacc, -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok h
   obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
   obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
@@ -1366,6 +1373,17 @@ theorem Inv.xchgAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicO
   rw [hpl] at hold hm'
   obtain ⟨w, hw, rfl, hU⟩ := hi₁.msgVal hl' (by omega) hold
   exact ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU rfl, hm'⟩
+
+/-- An `xchg` at the word by thread `t`: it reads the newest message (a chain), whose value `w` is
+the word, and writes `v`. -/
+theorem Inv.xchgAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v b : BitVec 32}
+    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (h : ((atomicRmwAt c .xchg false ord 4 L.ptr v).run m).run = some (.ok (b, m'))) :
+    ∃ m₁ li l w, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
+      m₁.blocks = m.blocks ∧ L.Val w ∧ b = BitVec.ofNat 32 w ∧ L.U32 m₁ (BitVec.ofNat 32 w) ∧
+      m' = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) v := by
+  obtain ⟨m₁, li, l, w, h1, h2, h3, h4, h5, h6, h7, h8, hm'⟩ := hi.rmwAt hc ht h
+  exact ⟨m₁, li, l, w, h1, h2, h3, h4, h5, h6, h7, h8, by simpa only [RmwOp.apply] using hm'⟩
 
 /-- `lock`'s loop, `xchg(contended)` with an acquire, by thread `t` at `spin`: if the word was `0`,
 `t` holds the lock; else it goes to the futex wait. -/
@@ -1420,23 +1438,6 @@ theorem Inv.xchgUnlock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inl ⟨rfl, hi'⟩⟩
   · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨rfl, rfl⟩) hm'
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inr ⟨rfl, hi'⟩⟩
-
-/-- An RMW `op` at the word by thread `t`: it reads the newest message (a chain), whose value `w`
-is the word, and writes `op.apply w v`. -/
-theorem Inv.rmwAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {op : RmwOp} {ord : AtomicOrder}
-    {v b : BitVec 32} (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
-    (h : ((atomicRmwAt c op false ord 4 L.ptr v).run m).run = some (.ok (b, m'))) :
-    ∃ m₁ li l w, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
-      m₁.blocks = m.blocks ∧ L.Val w ∧ b = BitVec.ofNat 32 w ∧ L.U32 m₁ (BitVec.ofNat 32 w) ∧
-      m' = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) (op.apply false b v) := by
-  obtain ⟨b0, blk, off, li, m₁, pos, hacc, -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok h
-  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
-  obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
-  have hpl := rmw_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact h0) (by rw [hl0]; exact hch) hpos
-  rw [hl0] at hpl hold hm'
-  rw [hpl] at hold hm'
-  obtain ⟨w, hw, rfl, hU⟩ := hi₁.msgVal hl' (by omega) hold
-  exact ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU rfl, hm'⟩
 
 /-- `Thread.Mutex`'s `tryLock`, `or(1)` with an acquire, by thread `t` at `out` (the word's values
 are `0`, `1`, `3`): if the word was `0`, `t` holds the lock; else it read `1` or `3`, the word does
