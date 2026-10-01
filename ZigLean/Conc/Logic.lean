@@ -12,7 +12,8 @@ invariant and ghost values.
 - **Protocol** (`Proto`). Each thread has a ghost value (`γ`), a value that only the proof sees:
   what the thread did so far (for example, how many increments). The invariant `inv G m` is on
   the ghost values `G` of all threads and the memory; it holds at every stop of every thread. A
-  new thread with the target `tgt` starts with the ghost value `init tgt`; `fin g` holds of the
+  new thread with the target `tgt` starts with a ghost value `g` with `init tgt g`, which its
+  spawner picks (so it can give the new thread a part of what it owns); `fin g` holds of the
   ghost value of a thread that has ended.
 - **One thread** (`Safe`). A thread's run is a tree (`CoN`). At each stop the thread picks its
   new ghost value and shows the invariant. When it goes on, it knows only the invariant and its
@@ -42,9 +43,9 @@ namespace Conc
 structure Proto (Tgt γ : Type) where
   /-- Holds at every stop of every thread, of the ghost values and the memory. -/
   inv : (ThreadId → γ) → Mem → Prop
-  /-- The ghost value of a new thread with the target `tgt`; `none`: the proof does not allow
-  a spawn of `tgt`. -/
-  init : Tgt → Option γ
+  /-- The ghost values that a new thread with the target `tgt` can start with; the spawner picks
+  one. None: the proof does not allow a spawn of `tgt`. -/
+  init : Tgt → γ → Prop
   /-- Holds of the ghost value of a thread that has ended. -/
   fin : γ → Prop
   /-- `true`: no run gives an error (`run_safe`): no error leaf, every join is of a later thread
@@ -87,7 +88,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
   | .choose n, K => ∀ c, (c < n ∨ n = 0 ∧ c = 0) → K c G { m with current := t }
   | .pick count, K => ∀ c, (c < count { m with current := t } ∨
       count { m with current := t } = 0 ∧ c = 0) → K c G { m with current := t }
-  | .spawn tgt, K => ∃ g, P.init tgt = some g ∧ ∀ child m',
+  | .spawn tgt, K => ∃ g, P.init tgt g ∧ ∀ child m',
       (Thread.fork.run { m with current := t }).run = some (.ok (child, m')) →
       K child (upd G child g) m'
   | .join tid, K => (P.strict = true → t < tid ∧ tid < m.threads.size ∧ P.joins (G t)) ∧
@@ -512,7 +513,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
     {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {s : Sched.State Tgt α}
     {G : ThreadId → γ} {p : Sched.Paused Tgt β} {ts : Sched.TS Tgt β} {ov : Option β}
     {s' : Sched.State Tgt α}
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hinv : P.inv G s.mem) (hsz : s.mem.threads.size = s.kids.size + 1)
     (hp : P.PausedOk t Q (G t) p)
@@ -841,7 +842,7 @@ theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → 
 /-- Up to `fuel` turns from a state that keeps the protocol: a result of `main` is `Good`. -/
 theorem go_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat)
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m) :
     ∀ (fuel : Nat) (s : Sched.State Tgt α) (G : ThreadId → γ), P.SInv QM s G →
@@ -970,7 +971,7 @@ run, under every schedule `o` and every `fuel`, is `Good`: an `ok` result satisf
 strict mode no run gives an error (no data race, no deadlock, no panic). -/
 theorem run_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
@@ -1014,7 +1015,7 @@ theorem run_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM T
 /-- Partial correctness: every `ok` result of a run satisfies `QM`. -/
 theorem run_sound {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : P.strict = true → ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)
@@ -1027,7 +1028,7 @@ theorem run_sound {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM 
 /-- **No error.** In strict mode no run, under any schedule, gives an error. -/
 theorem run_safe {α : Type} (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ) (hstr : P.strict = true)
-    (hdisp : ∀ tgt g, P.init tgt = some g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+    (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hQM : ∀ v G m d, QM v G m d → joinedAll 0 m)
     (hsize : m0.threads.size = 1)

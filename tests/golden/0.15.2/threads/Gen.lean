@@ -109,8 +109,8 @@ def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
 /-- The spawn targets of the program. -/
 inductive Tgt where
   | claim (a : Zig.Ptr)
-  | bump (a : Zig.Ptr)
   | writeFlag (a : Zig.Ptr)
+  | bump (a : Zig.Ptr)
   | swapFlag (a : Zig.Ptr)
 
 structure atomic_Value_threads_Phase_initLocals where
@@ -305,6 +305,85 @@ def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+structure writeFlagLocals where
+  deriving Inhabited
+
+inductive writeFlagExit where
+  | ret
+
+def writeFlag (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
+  let e ← ((do
+    let i1 ← pure (p0.add 0)
+    let i2 ← Zig.load (Zig.Ptr) 8 i1
+    let i3 ← pure (p0.add 8)
+    let i4 ← Zig.load (BitVec 32) 4 i3
+    Zig.store (α := BitVec 32) 4 i2 i4
+    pure .ret) : Zig.MM writeFlagLocals writeFlagExit).run' (default : writeFlagLocals)
+  match e with
+  | .ret => pure ()
+
+structure disjointLocals where
+  x : Zig.Ptr
+  y : Zig.Ptr
+  c1 : Zig.Ptr
+  c2 : Zig.Ptr
+  deriving Inhabited
+
+inductive disjointExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+
+def disjoint (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s2 ← Zig.allocStack 4 4
+  let s4 ← Zig.allocStack 4 4
+  let s6 ← Zig.allocStack 16 8
+  let s11 ← Zig.allocStack 16 8
+  let e ← ((do
+    let i2 ← pure (← get).x
+    Zig.store (α := BitVec 32) 4 i2 (0 : BitVec 32)
+    let i4 ← pure (← get).y
+    Zig.store (α := BitVec 32) 4 i4 (0 : BitVec 32)
+    let i6 ← pure (← get).c1
+    let i7 ← pure (i6.add 0)
+    Zig.store (α := Zig.Ptr) 8 i7 i2
+    let i9 ← pure (i6.add 8)
+    Zig.store (α := BitVec 32) 4 i9 p0
+    let i11 ← pure (← get).c2
+    let i12 ← pure (i11.add 0)
+    Zig.store (α := Zig.Ptr) 8 i12 i4
+    let i14 ← pure (i11.add 8)
+    Zig.store (α := BitVec 32) 4 i14 p1
+    let i16 ← pure (i6)
+    let i17 ← Zig.spawnC (Tgt.writeFlag i16)
+    match i17 with
+    | .error _ => (do
+      let i19 ← Zig.callRC (Zig.unwrapErr i17)
+      let i20 ← pure (i19)
+      let i21 ← pure ((.error i20) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i21))
+    | .ok v18 => (do
+      let i23 ← pure (i11)
+      let i24 ← Zig.spawnC (Tgt.writeFlag i23)
+      match i24 with
+      | .error _ => (do
+        let i26 ← Zig.callRC (Zig.unwrapErr i24)
+        let i27 ← pure (i26)
+        let i28 ← pure ((.error i27) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i28))
+      | .ok v25 => (do
+        let _i30 ← Zig.joinC v18
+        let _i31 ← Zig.joinC v25
+        let i32 ← Zig.load (BitVec 32) 4 i2
+        let i33 ← Zig.load (BitVec 32) 4 i4
+        let i34 ← pure (Zig.addWrap i32 i33)
+        let i35 ← pure ((.ok i34) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i35)))) : Zig.CM Tgt disjointLocals disjointExit).run' { (default : disjointLocals) with x := s2, y := s4, c1 := s6, c2 := s11 }
+  Zig.free s2
+  Zig.free s4
+  Zig.free s6
+  Zig.free s11
+  match e with
+  | .ret v => pure v
+
 structure parallelCounterLocals where
   counter : Zig.Ptr
   ctxs : Zig.Ptr
@@ -445,23 +524,6 @@ def parallelCounter (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
   match e with
   | .ret v => pure v
   | _ => throw .panic
-
-structure writeFlagLocals where
-  deriving Inhabited
-
-inductive writeFlagExit where
-  | ret
-
-def writeFlag (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
-  let e ← ((do
-    let i1 ← pure (p0.add 0)
-    let i2 ← Zig.load (Zig.Ptr) 8 i1
-    let i3 ← pure (p0.add 8)
-    let i4 ← Zig.load (BitVec 32) 4 i3
-    Zig.store (α := BitVec 32) 4 i2 i4
-    pure .ret) : Zig.MM writeFlagLocals writeFlagExit).run' (default : writeFlagLocals)
-  match e with
-  | .ret => pure ()
 
 structure raceLocals where
   flag : Zig.Ptr
@@ -609,8 +671,8 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .claim a => discard (claim a)
-  | .bump a => discard (bump a)
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
+  | .bump a => discard (bump a)
   | .swapFlag a => discard (swapFlag a)
 
 end Threads

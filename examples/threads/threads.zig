@@ -54,6 +54,20 @@ pub fn race(a: u32, b: u32) !u32 {
     return flag;
 }
 
+/// Two threads each write their own `u32` (`writeFlag`, as in `race`, but two locations): no
+/// data race. The result is always `a +% b`.
+pub fn disjoint(a: u32, b: u32) !u32 {
+    var x: u32 = 0;
+    var y: u32 = 0;
+    var c1: RaceCtx = .{ .flag = &x, .val = a };
+    var c2: RaceCtx = .{ .flag = &y, .val = b };
+    const h1 = try Thread.spawn(.{}, writeFlag, .{&c1});
+    const h2 = try Thread.spawn(.{}, writeFlag, .{&c2});
+    h1.join();
+    h2.join();
+    return x +% y;
+}
+
 /// One thread's racing atomic swap.
 const SwapCtx = struct {
     flag: *std.atomic.Value(u32),
@@ -109,6 +123,7 @@ pub fn claimOnce() !u32 {
 comptime {
     _ = &parallelCounter;
     _ = &race;
+    _ = &disjoint;
     _ = &xchgRace;
     _ = &claimOnce;
 }

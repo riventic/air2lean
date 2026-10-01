@@ -1024,6 +1024,13 @@ def runRace : IO Unit :=
     let b ← getInt items[1]!
     pure (searchSchedules (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
+def runDisjoint : IO Unit :=
+  processConc "threads" "disjoint" fun j zig => do
+    let items ← getArr j
+    let a ← getInt items[0]!
+    let b ← getInt items[1]!
+    pure (searchSchedules (runConc Threads.mem0 (Threads.disjoint (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+
 def runClaimOnce : IO Unit :=
   processConc "threads" "claimOnce" fun _ zig => do
     pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
@@ -1177,6 +1184,7 @@ def main : IO Unit := do
   run "threads" do
     DiffTest.runParallelCounter
     DiffTest.runRace
+    DiffTest.runDisjoint
     DiffTest.runXchgRace
     DiffTest.runClaimOnce
 

@@ -64,6 +64,7 @@ Mutation check (`scripts/mutate.sh`, 5 CI jobs, one per line of `scripts/mutatio
 | (ac) | a futex wake wakes no thread | proof build (`mutexCounter_safe`) |
 | (ad) | a `cmpxchg` can succeed on a message with an RMW after it (a lost push) | proof build (`casOpts_pos`, which `stackPush_spec` needs) |
 | (ae) | `Io.Group.await` does not join the last task | diff test (`iogroup`: the `unspecified` count) |
+| (af) | `Thread.join` does not merge the joined thread's clock | proof build (`join_eq`; `Owned.join`, which `disjoint_safe` needs) |
 
 ## Next
 
@@ -80,7 +81,10 @@ Mutation check (`scripts/mutate.sh`, 5 CI jobs, one per line of `scripts/mutatio
 | T4 (4) | Assertions on what a thread has seen, on the messages and clocks (`Proofs/Atomics/`): `mpRelAcq` gives 0 or 42 and never errs (release/acquire); every result of `mpRelaxed` is 0 (a relaxed read of 1 races); the lock-free `stackPush` loop gives 120 or 210 and never errs. Kit: atomic store results, one atomic location (`locIdx_single`), `Solo`, frames. Mutation (ad) detected by the proof build. |
 | T3c (2) | 0.15.2's `std.Thread` sync primitives (`Thread.Mutex`, `Condition`, `ResetEvent`, `WaitGroup`) from their std code, example `threadsync`: `Thread.Futex` is the model; `Thread.Mutex` per OS (`Gen-darwin.lean`: `os_unfair_lock` as a model built from the model's ops). The golden check handles two instances of one generic function (content hash in the name). |
 | T3c (3) | `Io.Group`: a task is a thread; `async`/`concurrent` a spawn that the group records (`Mem.groups`), `await`/`cancel` a join of each task. Example `iogroup`. The subset takes a `*anyopaque` as a value (`Io.Group`'s `token`). Mutation (ae) detected by the diff test. |
-| T5, T6 | Concurrent separation logic. Docs. |
+| T5 (1) | Concurrent separation logic (`ZigLean/Conc/Own.lean`, `ZigLean/Conc/Csl.lean`, `docs/proofs.md` §Concurrent separation logic): a clock owns a heap (`Mem.Owns`), thread triples (`TTriple`, the rules of `Triple` without `SingleThread`), the threads' parts (`Owned`) and their transfers at a step, a spawn and a join. `Proto.init` is a relation: the spawner picks the new thread's ghost value. Example `threads.disjoint` (two threads write two flags) with `disjoint_spec`/`disjoint_safe`. Mutation (af) detected by the proof build. |
+| T5 (2) | A lock owns a resource: the rules of the translated `Io.Mutex` (`lock` gives the holder the resource, `unlock` takes it back) proved once over any protocol with the lock's part; `mutexCounter` again with them, and `groupCounter`. |
+| T5 (3) | Futex-based sync (`Io.Condition`, `Io.Event`) and 0.15.2's `std.Thread` primitives with resources. |
+| T6 | Docs. |
 
 ## Decisions
 

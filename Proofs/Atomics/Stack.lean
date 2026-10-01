@@ -134,9 +134,9 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
   inv := Inv
-  init
-    | .push p => if p = cPtr 1 then some (.start 1) else if p = cPtr 2 then some (.start 2) else none
-    | _ => none
+  init tgt g := (match tgt with
+      | .push p => if p = cPtr 1 then some (.start 1) else if p = cPtr 2 then some (.start 2) else none
+      | _ => none) = some g
   fin g := g = .done
   strict := true
   joins g := g = .j1 ∨ g = .j2
@@ -1044,7 +1044,7 @@ theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (h : ThrOk 
   rw [hsp] at hs; exact absurd hs (Nat.ne_of_lt hu)
 
 /-- Pusher `u` (thread `u`, `PushCtx` `u`): the relaxed load of the head (a stop), then the loop. -/
-theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt = some g) (u : ThreadId)
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
     proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
   cases tgt with

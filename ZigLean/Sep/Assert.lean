@@ -129,23 +129,27 @@ theorem bytesAt_access (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {q :
       simp [getElem!_pos, show k + i < bs.size by omega]
 
 /-- A store of `bs'` (`0 < bs'.size`) at `q`, a part of the bytes that `h` owns, succeeds if its
-address is aligned, `m` is single-threaded (`hst`, so the access cannot race:
-`noRace_of_singleThread`) and the block is not a `const` global (`hw`). After it, the owned bytes are `writeBytes bs k bs'`, the frame `hF` is
-unchanged, and the result is itself single-threaded. -/
-theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k) (hn : 0 < bs'.size)
-    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hst : m.SingleThread)
+address is aligned, the access does not race (`hnr`) and the block is not a `const` global (`hw`).
+The result memory is the recorded access and the write; the owned bytes are `writeBytes bs k bs'`,
+and the frame `hF` is unchanged. -/
+theorem bytesAt_store_core (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
+    (hd : Heap.Disjoint h hF) {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k)
+    (hn : 0 < bs'.size) (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0)
+    (hnr : ∀ b, p.block = some b → NoRace m b (p.off.toNat + k) bs'.size .write)
     (hw : K ≠ .constGlobal) :
-    ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧ m'.SingleThread ∧
-      ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
+    ∃ b blk, p.block = some b ∧ (storeBytes q a bs').run m =
+      pure ((), (m.recordAt b (p.off.toNat + k) bs'.size .write).write b blk (p.off.toNat + k) bs') ∧
+      ∃ h', Heap.Disjoint h' hF ∧
+        ((m.recordAt b (p.off.toNat + k) bs'.size .write).write b blk (p.off.toNat + k) bs').heap =
+          h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access hb hm hq hn hk ha
-  have hnr' := noRace_of_singleThread hst b (p.off.toNat + k) bs'.size AccessKind.write
   obtain ⟨hqb, -, hl, hq0, hbound, -, -⟩ := access_eq hacc
   obtain ⟨b', hpb, h0, hown⟩ := id hb
   have hbb : b' = b := by
     have : q.block = p.block := by subst hq; rfl
     rw [this, hpb] at hqb; exact Option.some.inj hqb
   subst hbb
+  have hnr' := hnr b' hpb
   have hK : blk.kind = K := by
     obtain ⟨blk', hblk', -, _, hc⟩ := Mem.heap_some (bytesAt_cell hb hm hpb (j := k) (by omega))
     rw [hblk] at hblk'; cases hblk'
@@ -153,13 +157,11 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
   have hws := writeBytes_size bs k bs' hk
   have hqo : q.off.toNat = p.off.toNat + k := by subst hq; simp [Ptr.add]; omega
   have hpbq := hpb
-  generalize ho : p.off.toNat = o at hown hqo ha hacc hnr'
+  generalize ho : p.off.toNat = o at hown hqo ha hacc hnr' ⊢
   let h' : Heap := fun l =>
     if l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
     then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S, K⟩ else none
-  refine ⟨_, storeBytes_run hacc (hK ▸ hw) hnr',
-    singleThread_write (singleThread_recordAt hst b' (o + k) bs'.size AccessKind.write) b' blk
-      (o + k) bs',
+  refine ⟨b', blk, hpb, storeBytes_run hacc (hK ▸ hw) hnr',
     h', ?_, ?_, ⟨b', hpb, h0, fun l => by simp only [h', ho]⟩⟩
   · intro l
     by_cases hc : l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
@@ -191,6 +193,18 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
           exact hmx
     · simp only [hx, false_and, ↓reduceIte, Option.none_or] at hmx ⊢
       exact hmx
+
+/-- `bytesAt_store_core` in a single-threaded memory (`hst`, so the access cannot race:
+`noRace_of_singleThread`); the result is itself single-threaded. -/
+theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    {q : Ptr} {k a : Nat} {bs' : Array Byte} (hq : q = p.add k) (hn : 0 < bs'.size)
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hst : m.SingleThread)
+    (hw : K ≠ .constGlobal) :
+    ∃ m', (storeBytes q a bs').run m = pure ((), m') ∧ m'.SingleThread ∧
+      ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
+  obtain ⟨b, blk, -, hr, hh⟩ := bytesAt_store_core hb hm hd hq hn hk ha
+    (fun b _ => noRace_of_singleThread hst b _ _ _) hw
+  exact ⟨_, hr, singleThread_write (singleThread_recordAt hst _ _ _ _) _ _ _ _, hh⟩
 
 /-- The live block `b` as owned bytes, and the rest of the memory. -/
 theorem Mem.heap_split {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
