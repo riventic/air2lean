@@ -843,6 +843,47 @@ theorem inv_p {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (hi : proto.in
   · simp only [h0, upd_self, sN, hcw]
   · simp only [h0, upd_self, vL, hvw]
 
+/-! ## `ready` in the mutex's resource -/
+
+/-- The cell of `ready` in a heap with `R`. -/
+theorem R_cell {Y : ThreadId → X} {h : Heap} (hR : R Y h) :
+    ∃ bs : Array Byte, bs.size = 1 ∧ Enc.decode bs = pure (rdyOf (Y 1)) ∧
+      ∃ A S K, h (0, 36) = some ⟨bs[0]!, A, S, K⟩ := by
+  obtain ⟨h1, h2, -, rfl, ⟨A, S, K, bs, -, hs, -, ⟨b, hb, -, hl⟩, -⟩,
+    ⟨A', S', K', bs', -, hs', hd', ⟨b', hb', -, hl'⟩, -⟩⟩ := hR
+  cases hb; cases hb'
+  have hs4 : bs.size = 4 := hs
+  have hs1 : bs'.size = 1 := hs'
+  refine ⟨bs', hs1, hd', A', S', K', ?_⟩
+  simp only [Heap.union_apply, hl, hl']
+  rw [if_neg (by simp only [bPtr, Ptr.add, not_and, Nat.not_lt, hs4]; intro _ h; simp at h ⊢),
+    if_pos (by simp [bPtr, Ptr.add, hs1])]
+  simp [bPtr, Ptr.add]
+
+theorem decode_bool {bs bs' : Array Byte} {a b : Bool} (hs : bs.size = 1) (hs' : bs'.size = 1)
+    (h0 : bs[0]! = bs'[0]!) (ha : Enc.decode bs = pure a) (hb : Enc.decode bs' = pure b) :
+    a = b := by
+  have e1 : bs = bs' := by
+    apply Array.ext (by omega)
+    intro i h1 h2
+    have : i = 0 := by omega
+    subst this
+    rw [getElem!_pos bs 0 (by omega), getElem!_pos bs' 0 (by omega)] at h0
+    exact h0
+  subst e1
+  rw [ha] at hb
+  have := congrArg ExceptT.run hb
+  simpa [pure, ExceptT.pure, ExceptT.run, ExceptT.mk] using this
+
+/-- Two views of the same resource give the same `ready`. -/
+theorem R_rdy {Y Y' : ThreadId → X} {h : Heap} (hR : R Y h) (hR' : R Y' h) :
+    rdyOf (Y 1) = rdyOf (Y' 1) := by
+  obtain ⟨bs, hs, hd, A, S, K, hc⟩ := R_cell hR
+  obtain ⟨bs', hs', hd', A', S', K', hc'⟩ := R_cell hR'
+  rw [hc] at hc'
+  simp only [Option.some.injEq, Cell.mk.injEq] at hc'
+  exact decode_bool hs hs' hc'.1 hd hd'
+
 /-! ## The producer -/
 
 /-- The producer's ghost value outside the lock's code. -/
