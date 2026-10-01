@@ -191,6 +191,7 @@ structure Lock (γ : Type) where
   part_set : ∀ g p h, part (set g p h) = part g
   held_set : ∀ g p h, held (set g p h) = h
   set_self : ∀ g, set g (ph g) (held g) = g
+  set_set : ∀ g p h p' h', set (set g p h) p' h' = set g p' h'
   /-- The resource does not read where a thread is in the lock's code. -/
   R_set : ∀ G t p h hL, R (upd G t (set (G t) p h)) hL ↔ R G hL
 
@@ -214,6 +215,7 @@ def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) : Lock (LG 
   part_set _ _ _ := rfl
   held_set _ _ _ := rfl
   set_self _ := rfl
+  set_set _ _ _ _ _ := rfl
   R_set G t p h hL := by
     have : (fun u => (upd G t ({ (G t).1 with ph := p, held := h }, (G t).2) u).2) =
         fun u => (G u).2 := by
