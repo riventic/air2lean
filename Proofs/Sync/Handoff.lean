@@ -1442,19 +1442,57 @@ theorem sub_s : (sub false (Packed.ofBits (sv 2) : Io_Condition_State).signals (
     some (.ok ((Packed.ofBits (sv 2) : Io_Condition_State).signals - 1)) := rfl
 theorem dbg_true : (debug_assert true).run = some (.ok ()) := rfl
 
+/-- A read of the state by `main` at `wt` or `seen`: write `j ≤ 2`; at `seen`, write 2. -/
+theorem state_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec 32}
+    (hi : proto.inv (upd G 0 (gP x)) m) (hcw : x.cw = true) (hp : x.ph.post = false)
+    (hj : j < (WS.hist m).size) (hv : (WS.hist m)[j]!.Val b) :
+    j ≤ 2 ∧ b = sv j ∧ (x.ph = .seen → Word.Floor (WS.hist m) (m.clocks[0]!) j → j = 2) := by
+  obtain ⟨hsz, hval⟩ := hi.2.sh
+  rw [upd_self, upd0_1] at hsz hval
+  have hN : sN (gP x).2 (G 1).2 ≤ 2 := by
+    simp only [sN, gP, hcw, hp]; cases (G 1).2.cw <;> simp
+  refine ⟨by omega, val_eq hv (hval j (by omega)), fun hs hfl => ?_⟩
+  have hf := hi.2.flags
+  rw [upd_self, upd0_1] at hf
+  have hc1 := hf.cons hcw (.inr hs)
+  have hN2 : sN (gP x).2 (G 1).2 = 2 := by simp [sN, gP, hcw, hp, hc1]
+  have := hfl 2 (by omega) (hi.2.seen (by rw [upd_self]; exact hs))
+  omega
+
+/-- `main` sleeps at the epoch only while it is 0: the producer has not done its wake. -/
+theorem wt_sleep {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
+    (hg : G 0 = gA { ph := .wt, cw := true }) (hU : WE.U32 m 0) : (G 1).2.ph.rank < 9 := by
+  have hf := hi.2.flags
+  rw [hg] at hf
+  obtain ⟨hsz, hval⟩ := hi.2.eh
+  have hl := (hi.2.we.u32_last).mp hU
+  have h0 : eN (G 1).2 = 0 := by
+    have := val_eq hl (by rw [hsz]; exact hval _ (by simp))
+    simp only [Nat.add_sub_cancel] at this
+    cases e : eN (G 1).2 with
+    | zero => rfl
+    | succ n =>
+      rw [e] at this
+      have hn : n = 0 := by unfold eN at e; split at e <;> simp at e; omega
+      subst hn; cases this
+  refine Nat.lt_of_not_le fun h9 => ?_
+  have hc := hf.late rfl (by omega)
+  simp [eN, hc] at h0; omega
+
 /-- The inner loop's invariant: `main` at `wt` with epoch 0 and the state value it read, or at
 `seen` with epoch 1 and `(1, 1)`. -/
-def inv56 (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = 0 ∧
+def inv56 (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat) :
+    Prop :=
+  d < D ∧ m.current = 0 ∧
   ((s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m ∧
       ∃ k ≤ 3, s.prev_state = Packed.ofBits (sv k)) ∨
     (s.epoch = 1 ∧ proto.inv (upd G 0 (gP { ph := .seen, cw := true })) m ∧
       s.prev_state = Packed.ofBits (sv 2)))
 
 /-- The inner loop ends with `main` at `wt` (no signal to take), or holding the mutex at `cons`. -/
-def post56 (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
-    (m : Mem) (_ : Nat) : Prop :=
-  m.current = 0 ∧
+def post56 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = 0 ∧
   ((r.1 = .br55 ∧ r.2.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) ∨
     (r.1 = .ret (.ok ()) ∧ ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m))
 
@@ -1463,14 +1501,14 @@ theorem sig_pos {k : Nat} (hk : k ≤ 3)
   rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;>
     first | rfl | (exfalso; revert h; decide)
 
-theorem loop56_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem)
-    (d : Nat) (h : inv56 s G m d) :
+theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (h : inv56 D s G m d) :
     proto.WP 0 ((Io_Condition_waitInner.loop56 (bPtr.add 20) io (bPtr.add 16)).run s) (fun r G' m' d' =>
-      if Io_Condition_waitInner.again56 r.1 then inv56 r.2 G' m' d' ∧
+      if Io_Condition_waitInner.again56 r.1 then inv56 D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
-      else post56 r G' m' d') G m d := by
+      else post56 D r G' m' d') G m d := by
   obtain ⟨ep, ps⟩ := s
-  obtain ⟨hc, hcase⟩ := h
+  obtain ⟨hD, hc, hcase⟩ := h
   -- the cases: a signal to take, or none (at `wt`)
   have key : (ps = Packed.ofBits (sv 2) ∧ ∃ x : X, (x.ph = .wt ∨ x.ph = .seen) ∧ x.cw = true ∧
         x.vw = false ∧ proto.inv (upd G 0 (gP x)) m ∧ (x.ph = .wt → ep = 0) ∧
@@ -1523,7 +1561,7 @@ theorem loop56_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId �
       simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
-      exact ⟨hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
+      exact ⟨by omega, hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
     · -- failure: only at `wt`; `main` read write `j`
       have hwt : x.ph = .wt := by
         rcases hx with h | h
@@ -1553,7 +1591,7 @@ theorem loop56_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId �
       simp only [StateT.run_pure, StateT.run_modify]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, ↓reduceIte]
-      refine ⟨⟨hop.current, .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩⟩,
+      refine ⟨⟨by omega, hop.current, .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩⟩,
         .inl (by omega)⟩
   · rw [if_neg (by rw [hg]; simp)]
     simp only [StateT.run_pure]
@@ -1561,7 +1599,98 @@ theorem loop56_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId �
     simp only [StateT.run_pure]
     refine WP.pure' ?_
     simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
-    exact ⟨hc, .inl ⟨rfl, rfl, hi⟩⟩
+    exact ⟨hD, hc, .inl ⟨rfl, rfl, hi⟩⟩
+
+/-- The outer loop's invariant: `main` at `wt` with epoch 0. -/
+def inv23 (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = 0 ∧ s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m
+
+/-- The outer loop ends with `main` holding the mutex at `cons`. -/
+def post23 (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
+    (m : Mem) (_ : Nat) : Prop :=
+  r.1 = .ret (.ok ()) ∧ m.current = 0 ∧
+    ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m
+
+theorem loop23_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem)
+    (d : Nat) (h : inv23 s G m d) :
+    proto.WP 0 ((Io_Condition_waitInner.loop23 (bPtr.add 20) io (bPtr.add 16) true).run s)
+      (fun r G' m' d' =>
+        if Io_Condition_waitInner.again23 r.1 then inv23 r.2 G' m' d' ∧
+          (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
+        else post23 r G' m' d') G m d := by
+  obtain ⟨ep, ps⟩ := s
+  obtain ⟨hc, he, hi⟩ := h
+  simp only at he
+  subst he
+  unfold Io_Condition_waitInner.loop23
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  refine WP.bind ?_
+  simp only [↓reduceIte]
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  refine WP.bind (WP.bind (wp_mwait (.inr (.inl rfl)) (by decide) hi (fun G₁ m₁ hg₁ hi₁ hU => ?_)
+    fun k hk G₁ m₁ hc₁ hi₁ => ?_))
+  · -- it sleeps: `QOk` with `main` at the epoch
+    intro w hw
+    rcases Array.mem_push.mp hw with hw | rfl
+    · exact hi₁.2.q w hw
+    · exact .inr (.inl ⟨rfl, rfl, by rw [hg₁]; rfl, wt_sleep hi₁ hg₁ hU⟩)
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gP { ph := .wt, cw := true }) hi₁
+    (fun _ _ _ h => main_alive h) fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
+  have hcase := inv_seen (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hw' hop (by rw [upd_g hg₂]; exact hL)
+    hh hj hv (hacq rfl)
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  -- the state's load, then the inner loop
+  obtain ⟨x, hx, hcwx, hvwx, hpx, hi₃⟩ : ∃ x : X, (x.ph = .wt ∧ v = 0 ∨ x.ph = .seen ∧ v = 1) ∧
+      x.cw = true ∧ x.vw = false ∧ x.ph.post = false ∧ proto.inv (upd G₂ 0 (gP x)) m₃ := by
+    rcases hcase with ⟨rfl, h⟩ | ⟨rfl, h⟩
+    · exact ⟨_, .inl ⟨rfl, rfl⟩, rfl, rfl, rfl, h⟩
+    · exact ⟨_, .inr ⟨rfl, rfl⟩, rfl, rfl, rfl, h⟩
+  refine WP.bind (WP.bind (WP.bind (wp_loadAs (.inl rfl) (g := gP x) hi₃
+    (fun _ _ _ h => main_alive h) (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩)
+    fun k₃ hk₃ G₃ m₄ m₅ b r j' hg₃ hi₄ hd hj' hv' hfl' hacq' hh' hw₅ hop₅ hL₅ => ?_)))
+  have hi₅ := inv_mload (.inl rfl) (G := G₃) (by rw [upd_g hg₃]; exact hi₄) hw₅ hop₅
+    (by rw [upd_g hg₃]; exact hL₅) hh'
+  obtain ⟨hj2, hbj, hseen2⟩ := state_read (G := G₃) (by rw [upd_g hg₃]; exact hi₄) hcwx hpx hj' hv'
+  have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv56 d) (fun _ => 0) (post56 d) (loop56_body d io) _ G₃
+    m₅ k₃ ⟨by omega, hop₅.current, ?_⟩))
+  · rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨hd₄, hc₆, ⟨rfl, hep, hi₆⟩ | ⟨rfl, hL₆, hi₆⟩⟩
+    · simp only [StateT.run_pure]
+      refine WP.pure' ?_
+      dsimp only
+      simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+      refine WP.pure' (WP.pure' ?_)
+      simp only [Io_Condition_waitInner.again23, ↓reduceIte]
+      exact ⟨⟨hc₆, hep, hi₆⟩, .inl (by omega)⟩
+    · simp only [StateT.run_pure]
+      refine WP.pure' (WP.pure' (WP.pure' ?_))
+      simp only [Io_Condition_waitInner.again23, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨rfl, hc₆, hL₆, hi₆⟩
+  · rcases hx with ⟨hwt, rfl⟩ | ⟨hs, rfl⟩
+    · have hx' : x = { ph := .wt, cw := true } := by
+        cases x; simp only at hwt hcwx hvwx; subst hwt hcwx hvwx; rfl
+      subst hx'
+      exact .inl ⟨rfl, hi₅, j', by omega, by rw [hr, hbj]⟩
+    · have hx' : x = { ph := .seen, cw := true } := by
+        cases x; simp only at hs hcwx hvwx; subst hs hcwx hvwx; rfl
+      subst hx'
+      have := hseen2 rfl hfl'
+      subst this
+      exact .inr ⟨rfl, hi₅, by rw [hr, hbj]⟩
 
 /-! ## The producer -/
 
