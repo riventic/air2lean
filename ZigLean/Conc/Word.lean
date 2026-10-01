@@ -202,6 +202,28 @@ theorem not_touches {e : FootprintEntry} {h : Heap} (ho : W.Off h)
   obtain ⟨a, b⟩ := hx x h1 h2
   rw [hb, ho x a b] at h3; exact h3 rfl
 
+/-- The word as the block's bytes. -/
+theorem u32_bytes {m : Mem} {blk : Block} {v : BitVec 32} (hb : m.blocks[W.b]? = some blk) :
+    W.U32 m v ↔ (intOfBytes 32 (blk.bytes.extract W.o (W.o + 4))).run = some (.ok v) := by
+  unfold Word.U32 curBytes; rw [hb]; rfl
+
+/-- The word holds the value of its newest write. -/
+theorem Ok.u32_last {m : Mem} (hw : W.Ok m) {v : BitVec 32} :
+    W.U32 m v ↔ (W.hist m)[(W.hist m).size - 1]!.Val v := by
+  unfold hist
+  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | none => simp [Entry.Val, Word.U32]
+  | some i =>
+    have hl := loc_of_find hf
+    obtain ⟨-, h0, -, hlast, -⟩ := hw.loc i _ hl
+    simp only
+    rw [getElem!_pos _ _ (by simp; omega), Array.getElem_mapIdx]
+    unfold Entry.Val ent Word.U32
+    rw [← hlast]
+    unfold ALoc.lastBytes
+    rw [Array.back?_eq_getElem?, Array.getElem?_eq_getElem (by omega)]
+    simp only [Array.size_mapIdx, Option.map_some, Option.getD_some]
+
 /-! ## Steps that keep the word -/
 
 /-- The same location (`Keep.loc`): the same index. -/
