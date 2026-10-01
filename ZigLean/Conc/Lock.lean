@@ -17,9 +17,9 @@ protocol (`ZigLean/Conc/Logic.lean`) for one lock, proved once for every protoco
   chain, and no other location overlaps the word; no part has a byte of the word. The free lock
   owns a heap with `R` (`Lock.Owns`): each access to it happened before every thread, or before
   the release clock of the newest message of the word; the holder's resource has `R` (`res`).
-  Each thread in the futex queue waits at the word; if the queue is not empty, a thread that is
-  not asleep is in the lock's code and will take the lock or wake a waiter (`wit`), so there is
-  no deadlock. The futex queue belongs to the lock: a protocol has one futex user.
+  A thread in the futex queue waits at the word, or at another futex (`away`, `Lock.Queue`); if a
+  thread waits at the word, a thread that is not asleep is in the lock's code and will take the
+  lock or wake a waiter (`wit`), so there is no deadlock at the word.
 - **A protocol with the lock** (`Lock.Fits`): its invariant is `Lock.Inv` and the rest `U`; a
   step of the lock's code by a thread that has not ended keeps `U` (`Lock.Step`: the threads, the
   groups and the other threads' clocks stay, only the word's bytes change, and each new access is
@@ -404,9 +404,6 @@ theorem Queue.mono {G G' : ThreadId → γ} {ws ws' : Array (ThreadId × Ptr)} (
     (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) :
     L.Queue G' ws' := fun w hw => by
   rw [hph w hw]; exact hq w (hsub w hw)
-
-theorem waits_pos {ws : Array (ThreadId × Ptr)} (h : L.Waits ws) : 0 < ws.size := by
-  obtain ⟨i, hi, -⟩ := Array.any_eq_true.mp h; omega
 
 theorem Inv.current {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (t : ThreadId) :
     L.Inv G { m with current := t } :=

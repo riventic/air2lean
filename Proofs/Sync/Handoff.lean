@@ -1243,9 +1243,6 @@ theorem inv_seen {G : ThreadId → Gh} {m₁ m' : Mem} {j : Nat} {v : BitVec 32}
       rw [hh] at hsig
       exact VClock.le_trans hsig hacq
 
-theorem sv_vals (k : Nat) : sv k = 0 ∨ sv k = 1 ∨ sv k = 0x10001 := by
-  unfold sv; split <;> simp
-
 /-- The state's writes are `sv 0 .. sv n` with `n ≤ 3`: write `k` has the value `0x10001` iff
 `k = 2`. -/
 theorem sv_two {k : Nat} (hk : k ≤ 3) (h : sv k = 0x10001) : k = 2 := by
@@ -1803,9 +1800,6 @@ theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : 
 theorem ofBits_ev0 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 0)).run = some (.ok .unset) := rfl
 theorem ofBits_ev1 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 1)).run = some (.ok .waiting) := rfl
 theorem ofBits_ev2 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 2)).run = some (.ok .is_set) := rfl
-theorem bits_set : RmwOp.xchg.apply false (0 : BitVec 32) (Packed.toBits Io_Event.is_set) =
-    BitVec.ofNat 32 2 := rfl
-
 theorem sN_cw {x0 x1 x1' : X} (h : x1'.cw = x1.cw) : sN x0 x1' = sN x0 x1 := by simp [sN, h]
 
 theorem eN_eq {x x' : X} (h : x'.cw = x.cw) (h8 : 8 ≤ x.ph.rank) (h8' : 8 ≤ x'.ph.rank) :
@@ -1840,12 +1834,6 @@ theorem ev_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec 32
   rw [upd_self, upd0_1] at hsz hval
   simp only [gP] at hsz hval
   exact ⟨by omega, val_eq hv (hval j (by omega))⟩
-
-theorem ofBits_cst' (b : BitVec 32) :
-    (Packed.ofBits? (α := Io_Event) b).run = some (.ok (Packed.ofBits b)) ∨
-      (Packed.ofBits? (α := Io_Event) b).run = some (.error .illegal) := by
-  unfold Packed.ofBits?; split <;> simp [pure, throw, throwThe, MonadExceptOf.throw, ExceptT.pure,
-    ExceptT.mk, ExceptT.run]
 
 /-- `main`'s `cmpxchg(unset → waiting)` (acquire) succeeded at `ev0`: it goes to `ev1`. -/
 theorem inv_ev1 {G : ThreadId → Gh} {m₁ m' : Mem} {c : Bool}
@@ -2561,8 +2549,6 @@ theorem add16 : (add false (cst 1 0).signals (1 : BitVec 16)).run = some (.ok 1)
     | ok v =>
       have := add_one_ok h (by decide)
       rw [show v = 1 from BitVec.eq_of_toNat_eq (by rw [this]; decide)]
-
-theorem liftM_res {α σ : Type} (x : Result α) : (liftM x : CM Tgt σ α) = callRC x := rfl
 
 /-- The producer at `sg1`: the state has the writes 0 and 1, and write 1 happened before it. -/
 theorem sg1_hist {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 1 (gP { ph := .sg1 })) m) :

@@ -18,8 +18,13 @@ values and clocks in the rest of its invariant.
   word does not race, and an RMW reads the newest message.
 - **Steps that keep the word** (`Word.Keep`): the same cells and location, and no new access to
   the word. A step of the lock's code (`keep_lockStep`), a step of a thread on its own part
-  (`keep_stepIn`), a spawn and a join keep each word that the step does not touch, with the same
-  writes (`hist_keep`).
+  (`keep_stepIn`), a spawn, a join, a plain read and an op at another word (`keep_op`) keep each
+  word that the step does not touch, with the same writes (`hist_keep`).
+- **The ops** (`Word.Op`): a load (`Ok.load`) reads write `j`, at least each write that happened
+  before the thread (`Word.Floor`); an RMW (`Ok.rmw`) reads the newest write and adds one
+  (`rmwEnt`); a `cmpxchg` (`Ok.cas`) is an RMW of the newest write or a read of write `j`. In
+  strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`, `Ok.cas_noErr`). An op at a word
+  keeps a lock's invariant (`Lock.Inv.wordOp`).
 -/
 
 namespace Zig
@@ -194,14 +199,6 @@ theorem Ok.cell {m : Mem} (hw : W.Ok m) {x : Nat} (h1 : W.o ≤ x) (h2 : x < W.o
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
   simp
 
-/-- An access that hits the word does not touch a heap without the word's bytes. -/
-theorem not_touches {e : FootprintEntry} {h : Heap} (ho : W.Off h)
-    (ht : e.Touches h) (hb : e.block = W.b) (hx : ∀ x, e.off ≤ x → x < e.off + e.len ∨ x = e.off →
-      W.o ≤ x ∧ x < W.o + 4) : False := by
-  obtain ⟨x, h1, h2, h3⟩ := ht
-  obtain ⟨a, b⟩ := hx x h1 h2
-  rw [hb, ho x a b] at h3; exact h3 rfl
-
 /-- The word as the block's bytes. -/
 theorem u32_bytes {m : Mem} {blk : Block} {v : BitVec 32} (hb : m.blocks[W.b]? = some blk) :
     W.U32 m v ↔ (intOfBytes 32 (blk.bytes.extract W.o (W.o + 4))).run = some (.ok v) := by
@@ -225,17 +222,6 @@ theorem Ok.u32_last {m : Mem} (hw : W.Ok m) {v : BitVec 32} :
     simp only [Array.size_mapIdx, Option.map_some, Option.getD_some]
 
 /-! ## Steps that keep the word -/
-
-/-- The same location (`Keep.loc`): the same index. -/
-theorem find_keep {m m' : Mem} (hloc : ∀ i l, W.Loc m' i l ↔ W.Loc m i l) :
-    m'.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) =
-      m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) := by
-  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
-  | some i => exact ((hloc i _).mpr (loc_of_find hf)).1
-  | none =>
-    cases hf' : m'.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
-    | none => rfl
-    | some i => have := ((hloc i _).mp (loc_of_find hf')).1; rw [hf] at this; cases this
 
 theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.hist m := by
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
@@ -558,13 +544,6 @@ theorem Ok.noRace {m : Mem} (hw : W.Ok m) {k : AccessKind} (hk : k.isAtomic = tr
   rcases hw.wfp e he (hits_of hb h1 h2) with ⟨ha, -⟩ | h
   · refine .inr ?_; unfold racePair; simp [ha, hk]
   · exact .inl (h _ ht)
-
-/-- The writes are not empty. -/
-theorem Ok.hist_pos {m : Mem} (hw : W.Ok m) : 0 < (W.hist m).size := by
-  unfold hist
-  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
-  | none => simp
-  | some i => simp only [Array.size_mapIdx]; exact (hw.loc i _ (loc_of_find hf)).2.1
 
 /-- Message `j` as write `j`. -/
 theorem hist_get {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) {j : Nat} (hj : j < l.msgs.size) :
