@@ -2012,6 +2012,53 @@ theorem loop17_body (c : Bool) (D : Nat) (io : Io) (s : Io_Event_waitUncancelabl
     simp only [Io_Event_waitUncancelable.again17, Bool.false_eq_true, ↓reduceIte]
     exact ⟨by omega, rfl, hop.current, inv_evd hi₃ (.inr rfl) rfl⟩
 
+/-- `Event.waitUncancelable` by `main` at `ev0`: it ends at `evd`. -/
+theorem event_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (c : Bool)
+    (hi : proto.inv (upd G 0 (gP { ph := .ev0, cw := c })) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Event_waitUncancelable (bPtr.add 28) io) (fun _ G' m' _ => m'.current = 0 ∧
+      ∃ w, proto.inv (upd G' 0 (gP { ph := .evd, cw := c, vw := w })) m') G m d := by
+  unfold Io_Event_waitUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  rw [show bPtr.add 28 = WV.ptr from rfl]
+  refine WP.bind (WP.bind (wp_casAs (.inr (.inr rfl)) (g := gP { ph := .ev0, cw := c }) hi
+    (fun _ _ _ h => main_alive h) (fun G₁ m₁ hg₁ hi₁ j hj b hv => by
+      obtain ⟨hj', rfl⟩ := ev_read (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hj hv
+      exact ev_dec hj') fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
+        ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩))
+  · -- success: `main` wrote `waiting`; the loop
+    have hi₂ := inv_ev1 (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop (by rw [upd_g hg₁]; exact hL)
+      hv hh
+    simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
+    refine WP.pure' ?_
+    dsimp only
+    refine WP.mono ?_ (WP.loop _ _ (inv17 c d) (fun _ => 0) (post17 c d) (loop17_body c d io) _ G₁
+      m' k ⟨by omega, hop.current, hi₂⟩)
+    rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨-, rfl, hc₂, hi₃⟩
+    exact WP.pure' ⟨hc₂, true, hi₃⟩
+  · -- failure: the event was set
+    have hi₂ := inv_mload (.inr (.inr rfl)) (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
+      (by rw [upd_g hg₁]; exact hL) hh
+    obtain ⟨hj', rfl⟩ := ev_read (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hj hv
+    have hj2 : (vL { ph := .ev0, cw := c } (G₁ 1).2)[j]! = 2 := by
+      rcases vL_vals _ _ j hj' with h | h | h
+      · exact absurd (by rw [h]; rfl) hne
+      · exfalso; have hlen := hj'
+        simp only [vL] at hlen h
+        cases e : (G₁ 1).2.vw <;> simp [e] at hlen h
+        · subst hlen; simp at h
+        · rcases (by omega : j = 0 ∨ j = 1) with rfl | rfl <;> simp at h
+      · exact h
+    rw [hj2, ofBits_ev2] at hd
+    cases hd
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [Option.isSome_some, ↓reduceIte]
+    repeat (first | exact ⟨hop.current, false, inv_evd hi₂ (.inl rfl) rfl⟩ | refine WP.pure' ?_ |
+      simp only [StateT.run_pure])
+
 /-! ## The producer -/
 
 
