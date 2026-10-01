@@ -1602,24 +1602,25 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
     exact ⟨hD, hc, .inl ⟨rfl, rfl, hi⟩⟩
 
 /-- The outer loop's invariant: `main` at `wt` with epoch 0. -/
-def inv23 (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = 0 ∧ s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m
+def inv23 (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat) :
+    Prop :=
+  d < D ∧ m.current = 0 ∧ s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m
 
 /-- The outer loop ends with `main` holding the mutex at `cons`. -/
-def post23 (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
-    (m : Mem) (_ : Nat) : Prop :=
-  r.1 = .ret (.ok ()) ∧ m.current = 0 ∧
+def post23 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ r.1 = .ret (.ok ()) ∧ m.current = 0 ∧
     ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m
 
-theorem loop23_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem)
-    (d : Nat) (h : inv23 s G m d) :
+theorem loop23_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (h : inv23 D s G m d) :
     proto.WP 0 ((Io_Condition_waitInner.loop23 (bPtr.add 20) io (bPtr.add 16) true).run s)
       (fun r G' m' d' =>
-        if Io_Condition_waitInner.again23 r.1 then inv23 r.2 G' m' d' ∧
+        if Io_Condition_waitInner.again23 r.1 then inv23 D r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
-        else post23 r G' m' d') G m d := by
+        else post23 D r G' m' d') G m d := by
   obtain ⟨ep, ps⟩ := s
-  obtain ⟨hc, he, hi⟩ := h
+  obtain ⟨hD, hc, he, hi⟩ := h
   simp only at he
   subst he
   unfold Io_Condition_waitInner.loop23
@@ -1675,11 +1676,11 @@ theorem loop23_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId �
       simp only [isNonErr, ↓reduceIte, StateT.run_pure]
       refine WP.pure' (WP.pure' ?_)
       simp only [Io_Condition_waitInner.again23, ↓reduceIte]
-      exact ⟨⟨hc₆, hep, hi₆⟩, .inl (by omega)⟩
+      exact ⟨⟨by omega, hc₆, hep, hi₆⟩, .inl (by omega)⟩
     · simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again23, Bool.false_eq_true, ↓reduceIte]
-      exact ⟨rfl, hc₆, hL₆, hi₆⟩
+      exact ⟨by omega, rfl, hc₆, hL₆, hi₆⟩
   · rcases hx with ⟨hwt, rfl⟩ | ⟨hs, rfl⟩
     · have hx' : x = { ph := .wt, cw := true } := by
         cases x; simp only at hwt hcwx hvwx; subst hwt hcwx hvwx; rfl
@@ -1720,9 +1721,9 @@ theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).wai
 theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
-    proto.WP 0 (Io_Condition_waitInner (bPtr.add 20) io (bPtr.add 16) true) (fun r G' m' _ =>
-      r = .ok () ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
-      G m d := by
+    proto.WP 0 (Io_Condition_waitInner (bPtr.add 20) io (bPtr.add 16) true) (fun r G' m' d' =>
+      d' < d ∧ r = .ok () ∧ m'.current = 0 ∧
+        ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m') G m d := by
   unfold Io_Condition_waitInner
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -1772,10 +1773,30 @@ theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL :
         (fun h => by have := hfl.setw h; simp [gP] at this), hfl.late, hfl.pfin, hfl.sg1⟩
       (reg_x0 hi₅'.2.reg rfl) (fun h => by cases h) (fun h => by cases h)
       (qok_of (G := upd G₃ 0 (gP { ph := .reg, cw := true })) hi₅' (by rw [upd_self]; decide))
-  refine WP.mono ?_ (WP.loop _ _ inv23 (fun _ => 0) post23 (loop23_body io) _ G₃ m₅ d₃
-    ⟨hc₅, rfl, hi₆⟩)
-  rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨rfl, hc₆, hL₆, hi₇⟩
-  exact WP.pure' ⟨rfl, hc₆, hL₆, hi₇⟩
+  refine WP.mono ?_ (WP.loop _ _ (inv23 d) (fun _ => 0) (post23 d) (loop23_body d io) _ G₃ m₅ d₃
+    ⟨by omega, hc₅, rfl, hi₆⟩)
+  rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨hd₄, rfl, hc₆, hL₆, hi₇⟩
+  exact WP.pure' ⟨hd₄, rfl, hc₆, hL₆, hi₇⟩
+
+/-- `Condition.waitUncancelable` by `main`, which holds the mutex at `run` and read
+`ready = false`: it holds the mutex again at `cons`. -/
+theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+    {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
+      G m d := by
+  unfold Io_Condition_waitUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callC (WP.mono ?_ (waitInner_spec G m d io hL hR hY hi hc)))
+  rintro r G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, hL₁, hi₁⟩
+  simp only [StateT.run_pure]
+  simp only [pure_bind]
+  simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+  exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
 
 /-! ## The producer -/
 
