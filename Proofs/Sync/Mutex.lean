@@ -425,7 +425,7 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
     -- the read of `io`
     refine WP.bind (wp_io hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
     -- `lock`
-    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr t (gOut s.local1.toNat) rfl _ G
+    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr rfl t (gOut s.local1.toNat) rfl _ G
       m₁ d hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
     have hi₂' : proto.inv (upd G₂ t (gHold s.local1.toNat hL)) m₂ := hi₂
@@ -456,7 +456,7 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
       (hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))).1
     refine WP.bind (wp_io hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
     -- `unlock`
-    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr t (gHold (s.local1.toNat + 1) hQ') rfl _ G₂
+    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl t (gHold (s.local1.toNat + 1) hQ') rfl _ G₂
       m₅ d₂ hi₅)))
     rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
     simp only [StateT.run_pure, pure_bind]

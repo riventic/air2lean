@@ -177,6 +177,10 @@ structure Lock (γ : Type) where
   b : BlockId
   /-- The offset of the word in its block. -/
   o : Nat
+  /-- The word's value while a thread can wait for the lock: `2` (`Io.Mutex`) or `3`
+  (`Thread.Mutex`). -/
+  c : Nat := 2
+  c_ok : c = 2 ∨ c = 3 := by decide
   /-- The resource, with the ghost values of all threads. -/
   R : (ThreadId → γ) → Assn
   /-- Where the thread is in the lock's code. -/
@@ -203,9 +207,12 @@ structure LG where
 
 /-- A lock whose ghost value is `LG × X`: `X` is the rest of the protocol's ghost value. The
 resource reads only `X`. -/
-def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) : Lock (LG × X) where
+def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) (c : Nat := 2)
+    (c_ok : c = 2 ∨ c = 3 := by decide) : Lock (LG × X) where
   b := b
   o := o
+  c := c
+  c_ok := c_ok
   R G := R fun u => (G u).2
   ph g := g.1.ph
   part g := g.1.part
@@ -251,6 +258,19 @@ variable {γ : Type} (L : Lock γ)
 /-- The address of the word. -/
 def ptr : Ptr := ⟨some L.b, (L.o : Int)⟩
 
+/-- The values of the word: `0`, `1`, `c`. -/
+def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
+
+theorem Val.lt {w : Nat} (h : L.Val w) : w < 4 := by
+  rcases L.c_ok with hc | hc <;> rcases h with rfl | rfl | rfl <;> omega
+
+theorem c_ne0 : L.c ≠ 0 := by rcases L.c_ok with h | h <;> omega
+theorem c_ne1 : L.c ≠ 1 := by rcases L.c_ok with h | h <;> omega
+theorem c_lt : L.c < 4 := by rcases L.c_ok with h | h <;> omega
+theorem val0 : L.Val 0 := .inl rfl
+theorem val1 : L.Val 1 := .inr (.inl rfl)
+theorem valC : L.Val L.c := .inr (.inr rfl)
+
 /-- The word holds `v`. -/
 def U32 (m : Mem) (v : BitVec 32) : Prop :=
   (intOfBytes 32 (curBytes m L.b L.o 4)).run = some (.ok v)
@@ -268,12 +288,12 @@ def Loc (m : Mem) (i : Nat) (l : ALoc) : Prop :=
   m.atomics.findIdx? (fun l => l.block == L.b && l.off == L.o) = some i ∧ m.atomics[i]? = some l
 
 /-- The word's atomic location: no other location overlaps the word; the location is an RMW
-chain of 4-byte messages that hold `0`, `1` or `2`, and its newest message has the word's
+chain of 4-byte messages that hold `0`, `1` or `c`, and its newest message has the word's
 bytes. -/
 structure LocOk (m : Mem) : Prop where
   only : ∀ l ∈ m.atomics, l.block = L.b → l.off < L.o + 4 → L.o < l.off + l.len → l.off = L.o
   ok : ∀ i l, L.Loc m i l → l.len = 4 ∧ 0 < l.msgs.size ∧ l.Chain ∧
-    (∀ j (h : j < l.msgs.size), ∃ w < 3,
+    (∀ j (h : j < l.msgs.size), ∃ w, L.Val w ∧
       (intOfBytes 32 l.msgs[j].bytes).run = some (.ok (BitVec.ofNat 32 w))) ∧
     ALoc.lastBytes l = curBytes m L.b L.o 4
 
@@ -310,7 +330,7 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   live : ∀ u, L.ph (G u) ≠ .gone → u < m.threads.size ∧ joinedB m u = false
   blk : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
     (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal
-  word : ∃ w < 3, L.U32 m (BitVec.ofNat 32 w) ∧ (w = 0 ↔ L.Free G)
+  word : ∃ w, L.Val w ∧ L.U32 m (BitVec.ofNat 32 w) ∧ (w = 0 ↔ L.Free G)
   one : ∀ u v, L.ph (G u) = .holds → L.ph (G v) = .holds → u = v
   loc : L.LocOk m
   off : ∀ u, L.Off (L.own G m u)
@@ -326,7 +346,7 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
   fq : L.Queue G m.waiters
   wit : L.Waits m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
-    (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m 2)
+    (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))
 
 /-- A step of thread `t` in the lock's code: the threads, the groups and the other threads'
 clocks stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
@@ -622,7 +642,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
       exact hRk htn _ (hi.res u hu)
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hp)
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
-    rw [hphu] at hh; exact (hU32 2).mpr (h2 hh)
+    rw [hphu] at hh; exact (hU32 _).mpr (h2 hh)
 
 /-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` or `gone` before,
 and `out`, `gone` or `away` after; it keeps its part and holds nothing. -/
@@ -1011,7 +1031,7 @@ theorem Inv.make {G : ThreadId → γ} {m : Mem} {own : ThreadId → Heap} {t : 
     exact hat _ (Array.getElem_mem hi') hp.1
   refine ⟨hownE ▸ ho.shrink hP1, fun u => by rw [hheld]; exact Heap.disjoint_empty _,
     fun u _ => hheld u, fun u hu => ((hph u).resolve_right hu).2, hblk,
-    ⟨0, by decide, h0, ⟨fun _ => hfree, fun _ => rfl⟩⟩,
+    ⟨0, .inl rfl, h0, ⟨fun _ => hfree, fun _ => rfl⟩⟩,
     fun u _ hu => absurd hu (hfree u),
     ⟨fun l hl hb => absurd hb (hat l hl), fun i l hl => absurd hl (hnoloc i l)⟩, hoffu,
     fun e he hh => .inr fun u hu => VClock.le_trans

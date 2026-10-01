@@ -18,6 +18,7 @@ def mutexS : States Io_Mutex_State where
   unl := .unlocked
   one := .locked_once
   two := .contended
+  c := 2
   bits0 := rfl
   bits1 := rfl
   bits2 := rfl
@@ -45,7 +46,7 @@ def lockPost (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
 
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
-theorem loop23_body (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t : ThreadId)
+theorem loop23_body (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (h : lockInv P L t g D s G m d) :
     P.WP t ((Io_Mutex_lockUncancelable.loop23 p io).run s) (fun r G' m' d' =>
@@ -56,7 +57,7 @@ theorem loop23_body (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp]
-  refine WP.bind (wp_xchgLock hP mutexS (g := L.set g .spin Heap.empty) (L.ph_set _ _ _) hi
+  refine WP.bind (wp_xchgLock hP mutexS hS (g := L.set g .spin Heap.empty) (L.ph_set _ _ _) hi
     fun k hk G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
   · simp only [StateT.run_pure, pure_bind]
@@ -69,7 +70,7 @@ theorem loop23_body (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (
     simp only [show (r != Io_Mutex_State.unlocked) = true from hne, ↓reduceIte, StateT.run_bind,
       bind_assoc, pure_bind]
     rw [L.set_set] at hi₁
-    refine WP.bind (wp_wait hP mutexS (g := L.set g .wait Heap.empty) (L.ph_set _ _ _) hi₁
+    refine WP.bind (wp_wait hP mutexS hS (g := L.set g .wait Heap.empty) (L.ph_set _ _ _) hi₁
       fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
@@ -78,7 +79,7 @@ theorem loop23_body (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
-theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t : ThreadId)
+theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧
@@ -89,7 +90,7 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t 
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp]
-  refine WP.bind (wp_cas hP mutexS (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
+  refine WP.bind (wp_cas hP mutexS hS (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   -- the loop, from `spin`
   have hloop : ∀ G₃ m₃ d₃, lockInv P L t g d default G₃ m₃ d₃ →
       P.WP t ((do
@@ -108,7 +109,7 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t 
     intro G₃ m₃ d₃ h₃
     simp only [StateT.run_bind]
     refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
-      (loop23_body hP hp t g d io) default G₃ m₃ d₃ h₃))
+      (loop23_body hP hp hS t g d io) default G₃ m₃ d₃ h₃))
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hL, hi'⟩
     simp only [StateT.run_pure]
     refine WP.pure' ?_
@@ -128,14 +129,14 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t 
     cases ha
     simp only [StateT.run_pure, pure_bind]
     simp only [mutexS, beq_self_eq_true, ↓reduceIte, StateT.run_bind, bind_assoc]
-    refine WP.bind (wp_wait hP mutexS (g := L.set g .wait Heap.empty) (L.ph_set _ _ _) hi₁
+    refine WP.bind (wp_wait hP mutexS hS (g := L.set g .wait Heap.empty) (L.ph_set _ _ _) hi₁
       fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     simp only [StateT.run_pure, pure_bind]
     rw [L.set_set] at hi₂
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (t : ThreadId)
+theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
@@ -146,7 +147,7 @@ theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp]
-  refine WP.bind (wp_xchgUnlock hP mutexS (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
+  refine WP.bind (wp_xchgUnlock hP mutexS hS (g := g) hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hi₁⟩ | ⟨rfl, hi₁⟩
   · simp only [mutexS, StateT.run_pure, pure_bind]
     refine WP.pure' ?_
