@@ -21,6 +21,9 @@ invariant:
 - **Other steps** (`Owned.keep`). A step that changes no byte of a part, whose new footprint
   entries touch no part, and that makes no clock smaller keeps `Owned`: an atomic op on a
   location that no thread owns, a futex op, a stop.
+- **The start and a change of a part** (`Owned.start`: no thread owns anything, in a memory with
+  no recorded access; `Owned.shrink`: a part gets smaller; `Owned.add`: a part gets a heap that the
+  thread owns and no part has). A lock (`ZigLean/Conc/Lock.lean`) moves its resource with these.
 -/
 
 namespace Zig
@@ -157,6 +160,15 @@ theorem keep (ho : Owned own m) (hth : m'.threads.size = m.threads.size)
       · exact absurd hb' (Nat.not_le.mpr hb)
   outside u hu := ho.outside u (hth ▸ hu)
   csize := by rw [hcs, hth]; exact ho.csize
+
+/-- No thread owns anything, in a memory with no recorded access: the start. -/
+theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size) :
+    Owned (fun _ => Heap.empty) m where
+  sub _ l c h := by cases h
+  disj _ _ _ _ := .inl rfl
+  owns _ _ e he := by rw [hf] at he; simp at he
+  outside _ _ := rfl
+  csize := hc
 
 /-- A thread's part gets smaller: the rest is no thread's part. -/
 theorem shrink {h : Heap} (ho : Owned own m) (hs : h.Sub (own t)) : Owned (upd own t h) m where

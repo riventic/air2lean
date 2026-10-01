@@ -16,15 +16,20 @@ protocol (`ZigLean/Conc/Logic.lean`) for one lock, proved once for every protoco
   the lock, else `1` or `2`; at most one thread holds it. The word's atomic location is an RMW
   chain, and no other location overlaps the word; no part has a byte of the word. The free lock
   owns a heap with `R` (`Lock.Owns`): each access to it happened before every thread, or before
-  the release clock of the newest message of the word. Each thread in the futex queue waits at the
-  word; if the queue is not empty, a thread that is not asleep is in the lock's code and will
-  take the lock or wake a waiter (`wit`), so there is no deadlock.
+  the release clock of the newest message of the word; the holder's resource has `R` (`res`).
+  Each thread in the futex queue waits at the word; if the queue is not empty, a thread that is
+  not asleep is in the lock's code and will take the lock or wake a waiter (`wit`), so there is
+  no deadlock. The futex queue belongs to the lock: a protocol has one futex user.
 - **A protocol with the lock** (`Lock.Fits`): its invariant is `Lock.Inv` and the rest `U`; a
-  step of the lock's code (`Lock.Step`: only the word, the futex queue and the thread's clock
-  change) keeps `U`; a thread that ended or waits at a join is out of the lock's code.
-- **Steps outside the lock's code**: a step of a thread on its own part (`Inv.stepIn`), a spawn
-  (`Inv.fork`), a join (`Inv.join`), the start of the lock (`Inv.make`) and its end, when one
-  thread is above all others (`Inv.take`).
+  step of the lock's code by a thread that has not ended keeps `U` (`Lock.Step`: the threads, the
+  groups and the other threads' clocks stay, only the word's bytes change, and each new access is
+  an atomic access to the word); a thread that ended is `gone`, one that waits at a join is `out`.
+- **Steps outside the lock's code**: a step of a thread on its own part (`Inv.stepIn`), a plain
+  read of bytes that no thread owns (`Inv.read`, in `ZigLean/Conc/LockRules.lean`), a change of a
+  ghost value outside the lock's code (`Inv.ghost`), a spawn (`Inv.fork`), a join (`Inv.join`), the
+  start of the lock (`Inv.make`) and its end, when one thread is above all others (`Inv.take`).
+- **A product** (`Lock.prod`): a lock whose ghost value is `LG × X`, with `X` the rest of the
+  protocol's ghost value.
 
 The lock's code (`lock`, `unlock`) is in `ZigLean/Conc/LockRules.lean`.
 -/
@@ -84,7 +89,6 @@ structure Lock (γ : Type) where
   part_set : ∀ g p h, part (set g p h) = part g
   held_set : ∀ g p h, held (set g p h) = h
   set_self : ∀ g, set g (ph g) (held g) = g
-  set_set : ∀ g p h p' h', set (set g p h) p' h' = set g p' h'
   /-- The resource does not read where a thread is in the lock's code. -/
   R_set : ∀ G t p h hL, R (upd G t (set (G t) p h)) hL ↔ R G hL
 
@@ -108,7 +112,6 @@ def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) : Lock (LG 
   part_set _ _ _ := rfl
   held_set _ _ _ := rfl
   set_self _ := rfl
-  set_set _ _ _ _ _ := rfl
   R_set G t p h hL := by
     have : (fun u => (upd G t ({ (G t).1 with ph := p, held := h }, (G t).2) u).2) =
         fun u => (G u).2 := by
@@ -118,6 +121,26 @@ def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) : Lock (LG 
     simp only [this]
 
 namespace Lock
+
+/-- The ghost values `X` of a product: `upd` of `G` is `upd` of `X`. -/
+theorem snd_upd {X : Type} (G : ThreadId → LG × X) (t : ThreadId) (g : LG × X) :
+    (fun u => (upd G t g u).2) = upd (fun u => (G u).2) t g.2 := by
+  funext u; unfold upd; split <;> rfl
+
+/-- A step of a thread in the lock's code keeps the ghost values `X`. -/
+theorem snd_set {X : Type} {b o : Nat} {R : (ThreadId → X) → Assn} (G : ThreadId → LG × X)
+    (t : ThreadId) (p : LPh) (h : Heap) :
+    (fun u => (upd G t ((Lock.prod b o R).set (G t) p h) u).2) = fun u => (G u).2 := by
+  rw [snd_upd]; funext u; unfold upd; split
+  · rename_i e; subst e; rfl
+  · rfl
+
+/-- Two changes of thread `t`'s ghost value with the same `X`. -/
+theorem snd_upd_upd {X : Type} (G : ThreadId → LG × X) (t : ThreadId) (g g' : LG × X)
+    (h : g'.2 = g.2) : (fun u => (upd (upd G t g) t g' u).2) = fun u => (upd G t g u).2 := by
+  funext u; unfold upd; split
+  · exact h
+  · rfl
 
 variable {γ : Type} (L : Lock γ)
 
@@ -216,10 +239,6 @@ variable {L}
 
 /-! ## Basic facts -/
 
-theorem ph_upd {G : ThreadId → γ} {t u : ThreadId} {g : γ} :
-    L.ph (upd G t g u) = if u = t then L.ph g else L.ph (G u) := by
-  unfold upd; split <;> rfl
-
 theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : AllLe m c) : AllLe m' c := fun u hu =>
@@ -230,9 +249,6 @@ theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (h : SomeLe m c) : SomeLe m' c := by
   obtain ⟨u, hu, hle⟩ := h
   exact ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u hu)⟩
-
-theorem Step.refl (t : ThreadId) (m : Mem) : L.Step t m m :=
-  ⟨rfl, fun e he => .inl he, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl, .inl rfl⟩
 
 /-- A step that keeps the threads, the groups, the blocks, the clocks and the footprint. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
@@ -264,6 +280,16 @@ theorem Inv.current {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (t : Thread
 theorem upd_set_self (G : ThreadId → γ) (t : ThreadId) :
     upd G t (L.set (G t) (L.ph (G t)) (L.held (G t))) = G := by
   rw [L.set_self]; funext u; unfold upd; split <;> simp_all
+
+/-- A thread that was not joined owns its part and its resource. -/
+theorem own_live {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hj : joinedB m t = false) :
+    L.own G m t = L.part (G t) ∪ L.held (G t) := by
+  unfold Lock.own; rw [hj]; rfl
+
+theorem allLe_stepIn {hF : Heap} {m m' : Mem} {c : VClock} (hs : StepIn hF m m') (h : AllLe m c) :
+    AllLe m' c := fun u hu => by
+  rw [hs.threads] at hu
+  exact VClock.le_trans (h u hu) (hs.clock u)
 
 theorem joinedB_congr {m m' : Mem} (h : m'.threads = m.threads) : joinedB m' = joinedB m := by
   funext u; unfold joinedB; rw [h]

@@ -10,14 +10,16 @@ word of a lock `L` (`ZigLean/Conc/Lock.lean`), proved once for every protocol th
 | Rule | Op | Place before | Place after |
 |---|---|---|---|
 | `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), or `spin` (read `1`), or `wait` (read `2`) |
-| `wp_xchg` | `xchg(2)`, acquire | `spin` | `holds` (read `0`, with the resource), or `wait` |
+| `wp_xchgLock` | `xchg(2)`, acquire | `spin` | `holds` (read `0`, with the resource), or `wait` |
 | `wp_wait` | futex wait for `2` | `wait` | `spin` (it sleeps while the word is `2`) |
-| `wp_unlock` | `xchg(0)`, release | `holds` | `out` (read `1`), or `wake` (read `2`); the lock gets the resource |
+| `wp_xchgUnlock` | `xchg(0)`, release | `holds` | `out` (read `1`), or `wake` (read `2`); the lock gets the resource |
 | `wp_wake` | futex wake of 1 | `wake` | `out` |
 
 Each rule is a stop (the pick of the op, or the futex op) and then the op. It gives the
 protocol's invariant with the thread's new place; the rest of the invariant (`U`) stays, by
-`Lock.Fits.stable`. In strict mode no op throws, and a futex wait keeps `Live`.
+`Lock.Fits.stable`. In strict mode no op throws, and a futex wait keeps `Live` (`Fits.live`).
+The `Lock.Inv` form of each step is `Inv.cas`, `Inv.xchgLock`, `Inv.wait`, `Inv.xchgUnlock` and
+`Inv.wake`; the RMW cases under them are `Inv.acquire`, `Inv.contend` and `Inv.release`.
 
 The acquire RMW that takes the lock adopts the release clock of the newest message, so the
 thread owns the resource (`Lock.Owns`); the release RMW of `unlock` puts the thread's clock in the
@@ -121,48 +123,6 @@ theorem Step.heap {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {l : Zig.Loc}
       obtain ⟨b, x⟩ := l; simp only [Mem.heap, h5]
     rw [this, Mem.heap_write h1 h2 (by omega)]
     rw [h3]; simp only [hl, ↓reduceIte]
-
-/-- The bytes of a range that is not the word's stay. -/
-theorem Step.bytes {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {b o n : Nat}
-    (hd : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) : curBytes m' b o n = curBytes m b o n := by
-  rcases hs.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
-  · unfold curBytes; rw [e]
-  · unfold curBytes; rw [h5]
-    simp only [Mem.write]
-    by_cases hbb : b = L.b
-    · subst hbb
-      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
-        (Array.getElem?_eq_some_iff.mp h1).1, h1]
-      simp only [Option.map_some, Option.getD_some]
-      by_cases hn : o + n ≤ blk.bytes.size
-      · exact extract_writeBytes_disjoint _ _ _ _ _ (by omega) hn (by omega)
-      · apply Array.ext
-        · simp [writeBytes_size _ _ _ (show L.o + bs.size ≤ blk.bytes.size by omega)]
-        · intro i hi1 hi2
-          simp only [Array.getElem_extract]
-          simp only [Array.size_extract] at hi1 hi2
-          rw [writeBytes_getElem _ _ _ (by omega)]
-          have : ¬ (L.o ≤ o + i ∧ o + i < L.o + bs.size) := by omega
-          simp only [this, ↓reduceIte, getElem!_pos blk.bytes (o + i) (by omega)]
-    · rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
-      simp [Ne.symm hbb]
-
-/-- The block of the word after a step in the lock's code. -/
-theorem Step.blk {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
-    (hb : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal) :
-    ∃ blk, m'.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal := by
-  rcases hs.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
-  · rw [e]; exact hb
-  · obtain ⟨blk₀, hb₀, -, -, ha, hk⟩ := hb
-    rw [h1] at hb₀; cases hb₀
-    refine ⟨{ blk with bytes := writeBytes blk.bytes L.o bs }, ?_, h2, ?_, ha, hk⟩
-    · rw [h5]; simp only [Mem.write]
-      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
-        (Array.getElem?_eq_some_iff.mp h1).1]
-    · show L.o + 4 ≤ (writeBytes blk.bytes L.o bs).size
-      rw [writeBytes_size _ _ _ (by omega)]; exact h4
 
 /-- A step in the lock's code keeps the threads' parts, which have no byte of the word, if each
 new access is atomic, at the word. -/
@@ -422,8 +382,6 @@ theorem bs4 (v : BitVec 32) : (padTo (intSize 32) (intBytes v)).size = 4 :=
 theorem back_push (xs : Array Msg) (x : Msg) : (xs.push x).back! = x := by
   rw [Array.back!, getElem!_pos _ _ (by simp)]
   simp
-
-theorem back_eq {xs : Array Msg} (h : 0 < xs.size) : xs.back! = xs[xs.size - 1]! := rfl
 
 /-- The memory `M` after an RMW at the word by thread `t` that read the newest message of `l`
 and wrote the message `msg` with the value `w'`: the invariant with the ghost values `G'`, from

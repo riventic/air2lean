@@ -353,14 +353,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
 
 /-! ## `main` -/
 
-/-- No thread owns anything: the start. -/
-theorem owned_start : Owned (fun _ => Heap.empty) { mem0 with current := 0 } where
-  sub _ l c h := by cases h
-  disj _ _ _ _ := .inl rfl
-  owns u _ e he := by simp [mem0, Mem.ofGlobals] at he
-  outside _ _ := rfl
-  csize := rfl
-
 /-- `main`'s ghost value and no kid: the parts. -/
 theorem ownOf_main (m : Mem) (g : Gh) :
     ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => Heap.empty) 0 g.heap := by
@@ -397,7 +389,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   unfold disjoint
   have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
-    exact owned_start
+    exact (Owned.start rfl rfl)
   -- The four blocks.
   refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by decide) rfl
     fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)

@@ -61,7 +61,7 @@ def sum (X : ThreadId → Ph) : Nat := (X 1).count + (X 2).count + (X 3).count
 def R (X : ThreadId → Ph) : Assn := pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum X))
 
 /-- The `Io.Mutex`: bytes 16..20 of the `Counter`. It owns the counter. -/
-def L : Lock Gh := Lock.prod 0 16 R
+abbrev L : Lock Gh := Lock.prod 0 16 R
 
 /-- The states of `Io.Mutex`. -/
 def S : States Io_Mutex_State where
@@ -130,16 +130,6 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
   fun v _ m _ => v = .ok 3 ∧ joinedAll 0 m
 
 /-! ## The protocol has the lock -/
-
-theorem snd_upd (G : ThreadId → Gh) (t : ThreadId) (g : Gh) :
-    (fun u => (upd G t g u).2) = upd (fun u => (G u).2) t g.2 := by
-  funext u; unfold upd; split <;> rfl
-
-theorem snd_set (G : ThreadId → Gh) (t : ThreadId) (p : LPh) (h : Heap) :
-    (fun u => (upd G t (L.set (G t) p h) u).2) = fun u => (G u).2 := by
-  rw [snd_upd]; funext u; unfold upd; split
-  · rename_i e; subst e; rfl
-  · rfl
 
 /-- Block 1 after a lock step: the same. -/
 theorem blk1_step {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
@@ -444,17 +434,6 @@ theorem blk1_heap {m : Mem} (hb : Blk1 m) : m.heap (1, 0) ≠ none := by
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
   simp
 
-theorem clock_stepIn {hF : Heap} {m m' : Mem} (hs : StepIn hF m m') (u : ThreadId) :
-    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
-  by_cases hc : u = m.current
-  · subst hc; exact hs.mine
-  · rw [hs.others u hc]; exact VClock.le_refl _
-
-theorem allLe_stepIn {hF : Heap} {m m' : Mem} {c : VClock} (hs : StepIn hF m m') (h : AllLe m c) :
-    AllLe m' c := fun u hu => by
-  rw [hs.threads] at hu
-  exact VClock.le_trans (h u hu) (clock_stepIn hs u)
-
 /-- A step of thread `t` (not joined) on its own part keeps `U`, with `t`'s new ghost value `g`
 (no part) and the shape `hsh`. -/
 theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ : Heap}
@@ -490,7 +469,7 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     obtain ⟨h1, h2⟩ := hi.2.jle v hv
     refine ⟨by rw [upd_ne _ _ hvt]; exact h1, ?_⟩
     rw [hs.others v (hc ▸ hvt)]
-    exact VClock.le_trans h2 (clock_stepIn hs 0)
+    exact VClock.le_trans h2 (hs.clock 0)
 
 /-! ## `io` -/
 
@@ -554,16 +533,6 @@ def gTask (done : Bool) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .task done)
 /-- A task that holds the mutex and the counter `h`. -/
 def gHold (done : Bool) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, .task done)
 
-theorem own_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hj : joinedB m t = false) :
-    L.own G m t = (G t).1.part ∪ (G t).1.held := by
-  unfold Lock.own; rw [hj]; rfl
-
-theorem upd_X (G : ThreadId → Gh) (t : ThreadId) (g g' : Gh) (h : g'.2 = g.2) :
-    (fun u => (upd (upd G t g) t g' u).2) = fun u => (upd G t g u).2 := by
-  funext u; unfold upd; split
-  · exact h
-  · rfl
-
 /-- The holder's load of the counter: the increments of the tasks. -/
 theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Bool} {hL : Heap} {G : ThreadId → Gh}
     {m : Mem} {d : Nat} (hi : proto.inv (upd G t (gHold dn hL)) m) (hc : m.current = t)
@@ -578,7 +547,7 @@ theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Bool} {hL : Heap} {
     have := hi.1.res t hh
     rwa [show L.held (upd G t (gHold dn hL) t) = hL by rw [upd_self]; rfl] at this
   have hown : L.own (upd G t (gHold dn hL)) m t = hL := by
-    rw [own_self hjt, upd_self]; exact Heap.empty_union hL
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
   refine WP.liftM_owned (TTriple.load (by decide)) hi.1.own hc ht (by rw [hown]; exact hres)
     fun a m' hQ hr ho' hq hs hm' hd => ?_
   obtain ⟨rfl, hq'⟩ := sep_lift.mp hq
@@ -587,7 +556,7 @@ theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Bool} {hL : Heap} {
     (by rw [hQe]; exact hd) (by rw [upd_self]; rfl) (fun _ => .inl rfl) (fun h => absurd rfl h)
     (fun h => absurd hh h) (fun _ => by
       show R (fun u => (upd (upd G t (gHold dn hL)) t (gHold dn hQ) u).2) hQ
-      rw [upd_X G t (gHold dn hL) (gHold dn hQ) rfl]; exact hq')
+      rw [snd_upd_upd G t (gHold dn hL) (gHold dn hQ) rfl]; exact hq')
   rw [upd_upd] at hl
   refine h m' hQ (hs.current.trans hc) hs.threads ⟨hl, ?_⟩
   have hx : (fun u => (upd G t (gHold dn hL) u).2) t = .task dn := by
@@ -612,7 +581,7 @@ theorem wp_cntStore {σ : Type} {s : σ} {t : ThreadId} {hL : Heap} {G : ThreadI
     have := hi.1.res t hh
     rwa [show L.held (upd G t (gHold false hL) t) = hL by rw [upd_self]; rfl] at this
   have hown : L.own (upd G t (gHold false hL)) m t = hL := by
-    rw [own_self hjt, upd_self]; exact Heap.empty_union hL
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
   refine WP.liftM_owned (TTriple.store (by decide) w) hi.1.own hc ht (by rw [hown]; exact hres)
     fun a m' hQ hr ho' hq hs hm' hd => ?_
   have hQe : L.part (gHold true hQ) ∪ L.held (gHold true hQ) = hQ := Heap.empty_union hQ
@@ -763,14 +732,6 @@ theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_enco
 def group0 : Io_Group := { token := { raw := none }, state := 0 }
 
 theorem enc_group : (Enc.encode group0).size = 16 := by decide +kernel
-
-/-- No thread owns anything: the start. -/
-theorem owned_start : Owned (fun _ => Heap.empty) { mem0 with current := 0 } where
-  sub _ l c h := by cases h
-  disj _ _ _ _ := .inl rfl
-  owns u _ e he := by simp [mem0, Mem.ofGlobals] at he
-  outside _ _ := rfl
-  csize := rfl
 
 /-- `main` after `j` spawns. -/
 def gSpawn (j : Nat) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .spawn j)
@@ -1277,13 +1238,12 @@ theorem take_run {m : Mem} (hg : m.groups = grp 3) :
     show ((grp 3).filter (·.1 == gPtr)).map (·.2) = #[1, 2, 3] by decide +kernel]
   rfl
 
-set_option maxHeartbeats 1000000 in
 theorem main_spec (io : Io) (d : Nat) :
     proto.WP 0 (groupCounter io) QM G0 { mem0 with current := 0 } d := by
   unfold groupCounter
   -- the `Counter`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 24 8 (by decide))
-    owned_start rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA

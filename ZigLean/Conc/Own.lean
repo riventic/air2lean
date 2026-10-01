@@ -131,6 +131,13 @@ namespace StepIn
 
 variable {m m' m'' : Mem} {hF hF' : Heap}
 
+/-- No clock gets smaller. -/
+theorem clock (hs : StepIn hF m m') (u : ThreadId) :
+    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
+  by_cases hc : u = m.current
+  · subst hc; exact hs.mine
+  · rw [hs.others u hc]; exact VClock.le_refl _
+
 theorem refl (m : Mem) (hF : Heap) : StepIn hF m m :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, Nat.le_refl _,
     fun _ he => .inl he⟩
