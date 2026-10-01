@@ -600,4 +600,278 @@ theorem inv_pre {m : Mem} {A : Nat} {h : Heap} (ho : Owned (upd (fun _ => Heap.e
       · subst hu; rw [upd_self]; rfl
       · rw [hGu u hu]; rfl
 
+/-! ## The end: `main` loads the whole `Counter` -/
+
+/-- The cells of block 0 (8 bytes) are its bytes. -/
+theorem blk_bytes {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
+    (hs : blk.bytes.size = 8) :
+    bytesAt cPtr blk.addr 8 blk.kind blk.bytes
+      (fun l => if l.1 = 0 ∧ l.2 < 8 then m.heap l else none) := by
+  refine ⟨0, rfl, by decide, fun l => ?_⟩
+  obtain ⟨b, o⟩ := l
+  show (if b = 0 ∧ o < 8 then m.heap (b, o) else none) =
+    if b = 0 ∧ 0 ≤ o ∧ o < 0 + blk.bytes.size then some ⟨blk.bytes[o - 0]!, blk.addr, 8, blk.kind⟩
+    else none
+  by_cases h : b = 0 ∧ o < 8
+  · obtain ⟨rfl, ho⟩ := h
+    rw [if_pos ⟨rfl, ho⟩, if_pos ⟨rfl, Nat.zero_le _, by omega⟩]
+    simp only [Mem.heap, hb]
+    rw [dif_pos ⟨hl, by omega⟩, Nat.sub_zero, getElem!_pos blk.bytes o (by omega)]
+    simp only [Option.some.injEq, Cell.mk.injEq, hs, and_self]
+  · rw [if_neg h, if_neg fun h' => h ⟨h'.1, by omega⟩]
+
+/-- The counter and the word: the cells of block 0. -/
+theorem cnt_heap {m : Mem} {hL : Heap} {v : BitVec 32} (hp : pts (cPtr.add 4) 4 v hL)
+    (hs : hL.Sub m.heap) :
+    hL ∪ L.wordH m = fun l => if l.1 = 0 ∧ l.2 < 8 then m.heap l else none := by
+  obtain ⟨A, S, K, bs, -, hsz, -, ⟨b', hb', -, hl⟩, -⟩ := hp
+  cases hb'
+  have hsz' : bs.size = 4 := hsz
+  funext l
+  obtain ⟨b, o⟩ := l
+  rw [Heap.union_apply]
+  have hL' := hl (b, o)
+  simp only [cPtr, Ptr.add, hsz', Int.reduceAdd, Int.reduceToNat] at hL'
+  unfold Lock.wordH
+  show (hL (b, o)).or (if b = 0 ∧ 0 ≤ o ∧ o < 0 + 4 then m.heap (b, o) else none) =
+    if b = 0 ∧ o < 8 then m.heap (b, o) else none
+  by_cases h1 : b = 0 ∧ o < 4
+  · obtain ⟨rfl, ho⟩ := h1
+    rw [hL', if_neg fun h' => by omega, if_pos ⟨rfl, Nat.zero_le _, by omega⟩, if_pos ⟨rfl, by omega⟩]
+    rfl
+  · rw [if_neg fun h' => h1 ⟨h'.1, by omega⟩, Option.or_none]
+    by_cases h2 : b = 0 ∧ o < 8
+    · rw [if_pos h2]
+      cases e : hL (b, o) with
+      | none =>
+        rw [hL', if_pos ⟨h2.1, Nat.le_of_not_lt fun h3 => h1 ⟨h2.1, h3⟩, by omega⟩] at e; cases e
+      | some c => exact (hs _ c e).symm
+    · rw [if_neg h2, hL', if_neg fun h' => h2 ⟨h'.1, by omega⟩]
+
+/-- The bytes of the `Counter` at the end: the word `w` and the counter `4`. -/
+theorem cnt_decode {bs : Array Byte} {w : BitVec 32} (hs : bs.size = 8)
+    (hw : (intOfBytes 32 (bs.extract 0 4)).run = some (.ok w))
+    (hn' : (intOfBytes 32 (bs.extract 4 8)).run = some (.ok (BitVec.ofNat 32 4))) :
+    Enc.decode (α := Counter) (bs.extract 0 (0 + Enc.size Counter)) =
+      pure { m := { impl := { state := { raw := w } } }, n := BitVec.ofNat 32 4 } := by
+  have hw2 : intOfBytes 32 (bs.extract 0 4) = pure w := ExceptT.ext (by rw [hw]; rfl)
+  have hn2 : intOfBytes 32 (bs.extract 4 8) = pure (BitVec.ofNat 32 4) :=
+    ExceptT.ext (by rw [hn']; rfl)
+  have h4 : alignUp ((32 + 7) / 8) (intAlign 32) = 4 := by decide
+  simp only [Enc.decode, Enc.decodeAt, Enc.size, intSize, Array.extract_extract, Nat.zero_add,
+    Nat.add_zero, Nat.min_def, h4, Nat.le_refl, ↓reduceIte, show (4 : Nat) ≤ 8 by decide,
+    show (4 + 4 : Nat) ≤ 8 by decide, show (4 + 4 : Nat) = 8 by rfl, hw2, hn2, pure_bind]
+
+
+theorem main_spec (d : Nat) :
+    proto.WP 0 mutexCounter QM G0 { mem0 with current := 0 } d := by
+  unfold mutexCounter
+  -- the `Counter`: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 8 4 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA4⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  -- the store of the `Counter`
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 h₁) m₁ := ho₁
+  obtain ⟨he0, he4, he8⟩ := enc_counter
+  refine WP.bind (WP.liftM_owned (TTriple.storeAt' (p := cPtr) (A := A) (S := 8) (K := .stack) (bs := Array.replicate 8 .undef)
+    (k := 0) (a := 4) counter0 he8 rfl (by decide) (by simp [Enc.size]) (by simp [cPtr]; omega)
+    (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact hb₁)
+    fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  rw [writeBytes_all (by rw [he8]; simp)] at F₂
+  obtain ⟨hW, hC, dWC, rfl, hW₂, hC₂⟩ := bytesAt_split F₂ (k := 4) (by rw [he8]; decide)
+  rw [he0] at hW₂
+  rw [he8, he4] at hC₂
+  have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
+  have hth₂ : m₂.threads = #[{ spawner := 0, joined := true }] := by
+    rw [hs₂.threads, hs₁.threads]; rfl
+  have hat₂ : m₂.atomics = #[] := by rw [hs₂.atomics, hs₁.atomics]; rfl
+  have hq₂ : m₂.waiters = #[] := by rw [hs₂.waiters, hs₁.waiters]; rfl
+  have hP : Parts A (hW ∪ hC) := ⟨hW, hC, dWC, rfl, hW₂, hC₂⟩
+  -- the spawn
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, inv_pre ho₂ hP hA4 hth₂ hat₂ hq₂, fun G₁ m₅ hg₁ hi₅ =>
+    ⟨gOut 0, ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
+  -- after the stop: `main` alone, at `gPre`
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hi₅.2.shape
+  rotate_left
+  · exfalso; change (G₁ 0).2 = _ ∨ _ at h0
+    simp [hg₁, gPre] at h0
+  have hcs₅ : m₅.clocks.size = 1 := by rw [hi₅.1.own.csize, hs1]
+  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  rw [hs1] at hch
+  subst hch hm₆
+  have hsum₀ : ∀ X : ThreadId → Ph, X 0 = .pre ∨ X 0 = .work 0 → X 1 = .none ∨ X 1 = .work 0 →
+      sum X = 0 := by
+    intro X h0 h1
+    unfold sum
+    rcases h0 with h0 | h0 <;> rcases h1 with h1 | h1 <;> rw [h0, h1] <;> rfl
+  have hX₅ : ∀ u, (G₁ u).2 = if u = 0 then .pre else .none := by
+    intro u; split
+    · rename_i h; subst h; rw [hg₁]; rfl
+    · exact hnone u (by unfold ThreadId at *; omega)
+  have hi₆ : proto.inv (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0))
+      { m₅ with
+        current := 0
+        clocks := (m₅.clocks.set! 0 (VClock.bump (m₅.clocks[0]!) 0)).push
+          (VClock.bump (m₅.clocks[0]!) 0)
+        threads := m₅.threads.push { spawner := 0, joined := false } } := by
+    refine ⟨?_, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, .inr ⟨0, by decide, ?_⟩, .inr ⟨0, by decide, ?_⟩,
+      fun u hu => ?_⟩⟩, fun u => ?_, hi₅.2.blk⟩⟩
+    · refine hi₅.1.fork (t := 0) (by rw [hg₁]; rfl) hf (by rw [hg₁]; rfl) (fun _ => .inl rfl) rfl rfl
+        rfl rfl fun hL hR => ?_
+      have hR' : R (fun u => (G₁ u).2) hL := hR
+      show R _ hL
+      unfold R at hR' ⊢
+      rw [hsum₀ _ (by rw [hX₅]; simp) (by rw [hX₅]; simp)] at hR'
+      rw [hsum₀ _ (.inr (by show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 0).2 = _; rw [upd_self]; rfl))
+        (.inr (by show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 1).2 = _
+                  rw [upd_ne _ _ (by decide), upd_self]; rfl))]
+      exact hR'
+    · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+    · simp only [Array.getElem?_push, hs1, ↓reduceIte]
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 0).2 = _; rw [upd_self]; rfl
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 1).2 = _; rw [upd_ne _ _ (by decide), upd_self]; rfl
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) u).2 = _
+      rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+      exact hnone u (by unfold ThreadId at *; omega)
+    · unfold upd; split
+      · rfl
+      · split
+        · rfl
+        · exact hi₅.2.parts u
+  simp only [StateT.run_bind]
+  -- `work`
+  refine WP.bind (WP.callC (WP.mono ?_ (work_spec 0 _ _ k hi₆ rfl)))
+  rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
+  -- the join of the kid
+  have hiJ := inv_end hi₇ (.inl rfl) (.inl ⟨rfl, rfl⟩)
+  refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gJoin, hiJ, fun G₃ m₈ hg₃ hi₈ => ?_⟩)
+  have hsh₈ := hi₈.2.shape
+  obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
+  · exfalso; change (G₃ 0).2 = _ at h0; rw [hg₃] at h0; cases h0
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, rfl, rfl⟩, fun hfin => ⟨fun _ =>
+    join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
+  -- `main` takes the kid's part, then the lock's resource and word
+  let gEnd : Gh := (⟨.out, L.part (G₃ 0) ∪ L.own G₃ m₈ 1, Heap.empty⟩, .joins)
+  have hX₃ : (fun u => (upd G₃ 0 gEnd u).2) = fun u => (G₃ u).2 := by
+    funext u; unfold upd; split
+    · rename_i h; subst h; rw [hg₃]; rfl
+    · rfl
+  have hL₉ := hi₈.1.join (t := 0) (u := 1) (g := gEnd) (by decide) (by decide)
+    (by rw [hg₃]; rfl) hfin.1 hj rfl rfl rfl (fun hL hR => by
+      show R _ hL; rw [hX₃]; exact hR)
+  obtain ⟨rec, hrec, -, hm₉⟩ := join_eq hj
+  have hth₉ : m₉.threads = m₈.threads.set! 1 { rec with joined := true } := by rw [hm₉]
+  have hs₉ : m₉.threads.size = 2 := by rw [hth₉, Array.size_set!, hs2]
+  have hc₉ : m₉.current = 0 := by rw [hm₉]
+  have hcs₈ : m₈.clocks.size = 2 := by rw [hi₈.1.own.csize, hs2]
+  have hfree : L.Free (upd G₃ 0 gEnd) := by
+    intro u hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu
+      obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
+      have : u = 1 := by unfold ThreadId at *; omega
+      subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
+  obtain ⟨w₉, -, hU₉, -⟩ := hL₉.word
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (fun u hu => by
+    rw [hm₉]
+    simp only
+    rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
+    simp only [true_and, show 0 < m₈.clocks.size by omega, ↓reduceIte, show (0 : Nat) = 0 from rfl]
+    rw [hs₉] at hu
+    by_cases h0 : u = 0
+    · subst h0; simp [VClock.le_refl]
+    · have : u = 1 := by omega
+      subst this
+      exact VClock.le_merge_right _ _)
+  -- the counter holds 4
+  have hR4 : pts (cPtr.add 4) 4 (BitVec.ofNat 32 4) hL := by
+    have : R (fun u => (upd G₃ 0 gEnd u).2) hL := hR
+    rw [hX₃] at this
+    have h4 : sum (fun u => (G₃ u).2) = 4 := by
+      show (G₃ 0).2.count + (G₃ 1).2.count = 4
+      rw [hg₃, hfin.2]; rfl
+    unfold R at this; rw [h4] at this; exact this
+  let own₉ := L.own (upd G₃ 0 gEnd) m₉
+  have hsub : (own₉ 0 ∪ (hL ∪ L.wordH m₉)).Sub m₉.heap := by
+    have := ho.sub 0; rwa [upd_self] at this
+  have hLW : (hL ∪ L.wordH m₉).Sub m₉.heap := (Heap.sub_union_right hd).trans hsub
+  have hLs : hL.Sub m₉.heap := Heap.sub_union_left.trans hLW
+  -- block 0 and its bytes
+  obtain ⟨blk₀, hblk₀, hl₀, hs₀, ha₀, hk₀⟩ := hi₈.2.blk
+  have hb₉ : m₉.blocks[0]? = some blk₀ := by rw [hm₉]; exact hblk₀
+  have hw₉ : (intOfBytes 32 (blk₀.bytes.extract 0 4)).run = some (.ok (BitVec.ofNat 32 w₉)) :=
+    (L.u32_bytes hb₉).mp hU₉
+  obtain ⟨A', S', K', bs, hbal, hbsz, hbdec, hbA, hbK⟩ := hR4
+  obtain ⟨blk', hblk', -, -, -, -, hx⟩ := bytesAt_blk (m := m₉) hbA hLs rfl
+    (by rw [hbsz]; decide)
+  rw [hb₉] at hblk'; cases hblk'
+  have hn4 : (intOfBytes 32 (blk₀.bytes.extract 4 8)).run = some (.ok (BitVec.ofNat 32 4)) := by
+    have hx' : blk₀.bytes.extract 4 8 = bs := by
+      rw [← hx, hbsz]; rfl
+    rw [hx']
+    show (Enc.decode (α := BitVec 32) bs).run = _
+    rw [hbdec]; rfl
+  have hbytes := blk_bytes hb₉ hl₀ hs₀
+  rw [← cnt_heap ⟨A', S', K', bs, hbal, hbsz, hbdec, hbA, hbK⟩ hLs] at hbytes
+  -- the load of the `Counter`
+  have heq : own₉ 0 ∪ (hL ∪ L.wordH m₉) = (hL ∪ L.wordH m₉) ∪ own₉ 0 := Heap.union_comm hd
+  refine WP.bind (WP.liftM_owned (TTriple.loadAt (T := Counter) (p := cPtr) (q := cPtr)
+    (A := blk₀.addr) (S := 8) (K := blk₀.kind) (bs := blk₀.bytes) (k := 0) (a := 4)
+    (v := { m := { impl := { state := { raw := BitVec.ofNat 32 w₉ } } }, n := BitVec.ofNat 32 4 })
+    rfl (by decide) (by rw [hs₀]; decide) (by simp [cPtr]; omega) (cnt_decode hs₀ hw₉ hn4)).frame
+    ho hc₉ (by rw [hs₉]; decide) (by rw [upd_self, heq]; exact ⟨_, _, hd.symm, rfl, hbytes, rfl⟩)
+    fun a m₁₀ hQ hr ho' hq hs₁₀ _ _ => ?_)
+  obtain ⟨h₁, h₂, -, -, hq₁, -⟩ := hq
+  obtain ⟨rfl, -⟩ := sep_lift.mp hq₁
+  obtain ⟨b, blk, o, -, -, -, hm₁₀⟩ := load_ok hr
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  -- the free of the `Counter`
+  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+    fun _ m₁₁ hfr => ?_)
+  obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
+  -- every thread is joined
+  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀]; rfl
+  simp only [hth₁₀, hth₉] at hr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  simp only [Array.size_set!] at hi'
+  simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hi'] at hsp ⊢
+  split
+  · rfl
+  · rename_i hne
+    have : i = 0 := by omega
+    subst this
+    rw [Array.getElem?_eq_getElem (by omega)] at h08
+    rw [Option.some.inj h08]
+
+/-! ## The results -/
+
+/-- **`threadsync.mutexCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
+theorem mutexCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o mutexCounter mem0).run = some (.ok (v, m))) :
+    v = .ok 4 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec) h
+  exact hv
+
+/-- **No run of `threadsync.mutexCounter` gives an error**: no data race on the counter, no deadlock
+at the futex, no panic, under every schedule. -/
+theorem mutexCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o mutexCounter mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
 end Threadsync.MutexCounter
+
