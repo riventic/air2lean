@@ -300,7 +300,7 @@ theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G
     ∃ l, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ m₁.blocks = m.blocks ∧ m₁.clocks = m.clocks ∧
       m₁.threads = m.threads ∧ m₁.footprint = m.footprint ∧ m₁.waiters = m.waiters ∧
       m₁.current = m.current ∧ m₁.groups = m.groups ∧ (∀ i l, L.Loc m i l → L.Loc m₁ i l) ∧
-      LocsKeep L.b L.o m m₁ := by
+      LocsKeep L.b L.o 4 m m₁ := by
   cases hf : m.atomics.findIdx? (fun l => l.block == L.b && l.off == L.o) with
   | some i =>
     obtain ⟨hi', -, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf

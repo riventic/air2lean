@@ -585,9 +585,9 @@ theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
   simp [Array.insertIdxIfInBounds, Array.insertIdx_size_self]
 
 /-- An RMW's bytes read back as its value. -/
-theorem intOfBytes_rmw (v : BitVec 32) :
-    (intOfBytes 32 (padTo (intSize 32) (intBytes v))).run = some (.ok v) :=
-  congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec 32) v)
+theorem intOfBytes_rmw {n : Nat} [LawfulEnc (BitVec n)] (v : BitVec n) :
+    (intOfBytes n (padTo (intSize n) (intBytes v))).run = some (.ok v) :=
+  congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec n) v)
 
 theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
 

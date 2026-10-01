@@ -74,8 +74,8 @@ def SomeLe (m : Mem) (c : VClock) : Prop :=
 
 /-- The atomic locations at other addresses than `(b, o)` stay (the same index, the same
 location), and a new location is at `(b, o)`, with 4 bytes. -/
-structure LocsKeep (b o : Nat) (m m' : Mem) : Prop where
-  new : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = b ∧ l.off = o ∧ l.len = 4)
+structure LocsKeep (b o k : Nat) (m m' : Mem) : Prop where
+  new : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = b ∧ l.off = o ∧ l.len = k)
   same : ∀ b' o', (b' ≠ b ∨ o' ≠ o) → ∀ i l,
     (m'.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m'.atomics[i]? = some l) ↔
     (m.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m.atomics[i]? = some l)
@@ -95,18 +95,18 @@ theorem findIdx?_congr {α : Type} {xs ys : Array α} {p : α → Bool} (hs : ys
     obtain ⟨k, hk, rfl⟩ := Array.mem_iff_getElem.mp hy
     rw [h k hk (by omega)]; exact hn _ (Array.getElem_mem _)
 
-theorem LocsKeep.of_eq {b o : Nat} {m m' : Mem} (h : m'.atomics = m.atomics) : LocsKeep b o m m' :=
+theorem LocsKeep.of_eq {b o k : Nat} {m m' : Mem} (h : m'.atomics = m.atomics) : LocsKeep b o k m m' :=
   ⟨fun l hl => .inl (h ▸ hl), fun _ _ _ _ _ => by rw [h]⟩
 
-theorem LocsKeep.trans {b o : Nat} {m₁ m₂ m₃ : Mem} (h₁ : LocsKeep b o m₁ m₂)
-    (h₂ : LocsKeep b o m₂ m₃) : LocsKeep b o m₁ m₃ :=
+theorem LocsKeep.trans {b o k : Nat} {m₁ m₂ m₃ : Mem} (h₁ : LocsKeep b o k m₁ m₂)
+    (h₂ : LocsKeep b o k m₂ m₃) : LocsKeep b o k m₁ m₃ :=
   ⟨fun l hl => (h₂.new l hl).elim (h₁.new l) .inr,
     fun b' o' hne i l => (h₂.same b' o' hne i l).trans (h₁.same b' o' hne i l)⟩
 
 /-- A change of location `j` at `(b, o)` that keeps its address. -/
-theorem LocsKeep.set {b o j : Nat} {m m' : Mem} {l l' : ALoc} (hj : m.atomics[j]? = some l)
-    (hb : l.block = b) (ho : l.off = o) (hb' : l'.block = b) (ho' : l'.off = o) (hl' : l'.len = 4)
-    (h : m'.atomics = m.atomics.set! j l') : LocsKeep b o m m' := by
+theorem LocsKeep.set {b o k j : Nat} {m m' : Mem} {l l' : ALoc} (hj : m.atomics[j]? = some l)
+    (hb : l.block = b) (ho : l.off = o) (hb' : l'.block = b) (ho' : l'.off = o) (hl' : l'.len = k)
+    (h : m'.atomics = m.atomics.set! j l') : LocsKeep b o k m m' := by
   have hjs := (Array.getElem?_eq_some_iff.mp hj).1
   refine ⟨fun x hx => ?_, fun b₁ o₁ hne i x => ?_⟩
   · rw [h, Array.set!_eq_setIfInBounds] at hx
@@ -146,8 +146,8 @@ theorem LocsKeep.set {b o j : Nat} {m m' : Mem} {l l' : ALoc} (hj : m.atomics[j]
       exact h2
 
 /-- A new location at `(b, o)`. -/
-theorem LocsKeep.push {b o : Nat} {m m' : Mem} {l' : ALoc} (hb' : l'.block = b) (ho' : l'.off = o)
-    (hl' : l'.len = 4) (h : m'.atomics = m.atomics.push l') : LocsKeep b o m m' := by
+theorem LocsKeep.push {b o k : Nat} {m m' : Mem} {l' : ALoc} (hb' : l'.block = b) (ho' : l'.off = o)
+    (hl' : l'.len = k) (h : m'.atomics = m.atomics.push l') : LocsKeep b o k m m' := by
   refine ⟨fun x hx => ?_, fun b₁ o₁ hne i x => ?_⟩
   · rw [h] at hx
     rcases Array.mem_push.mp hx with hx | rfl
@@ -367,7 +367,7 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   /-- A clock that happened before the newest message of the word still does. -/
   before : ∀ c, L.Before m c → L.Before m' c
   /-- The atomic locations at other addresses stay. -/
-  locs : LocsKeep L.b L.o m m'
+  locs : LocsKeep L.b L.o 4 m m'
 
 /-- A protocol with the lock `L` (module doc): its invariant is `Lock.Inv` and `U`. -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem → Prop) : Prop where
