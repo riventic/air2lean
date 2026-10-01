@@ -296,7 +296,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
       (writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hc0 hac hx0 hax (ctxBytes_size x v)
         (enc_u32 0)
         (ctxBytes_flag x v) (ctxBytes_val x v)) (hi.own.current u) rfl hut
-      (by rw [hown]; simpa [ctxA, flagA] using hcx) fun _ m' hQ ho' hq hs _ _ => ?_)
+      (by rw [hown]; simpa [ctxA, flagA] using hcx) fun _ m' hQ _ ho' hq hs _ _ => ?_)
     refine ⟨.kid hQ c ac x ax v true, ?_, ⟨_, _, _, _, _, _, rfl⟩, fun _ => ?_⟩
     · refine ⟨?_, fun w h' c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
       · rw [ownOf_upd hs.threads hj]; exact ho'

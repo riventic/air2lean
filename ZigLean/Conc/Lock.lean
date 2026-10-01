@@ -434,6 +434,65 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
     rw [hphu] at hh; exact (hU32 2).mpr (h2 hh)
 
+/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` or `gone` before
+and after, keeps its part, and holds nothing. -/
+theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .out ∨ L.ph (G t) = .gone) (hg : L.ph g = .out ∨ L.ph g = .gone)
+    (hpart : L.part g = L.part (G t)) (hheld : L.held g = Heap.empty)
+    (hlive : L.ph g = .out → t < m.threads.size ∧ joinedB m t = false)
+    (hRk : ∀ hL, L.R G hL → L.R (upd G t g) hL) : L.Inv (upd G t g) m := by
+  have hnh : L.ph (G t) ≠ .holds := by rcases hph with h | h <;> rw [h] <;> decide
+  have hgh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
+  have hgw : L.ph g ≠ .wait := by rcases hg with h | h <;> rw [h] <;> decide
+  have hgb : (L.ph g).busy = false := by rcases hg with h | h <;> rw [h] <;> rfl
+  have htb : (L.ph (G t)).busy = false := by rcases hph with h | h <;> rw [h] <;> rfl
+  have hown : L.own (upd G t g) m = L.own G m := by
+    funext u; unfold Lock.own
+    by_cases h : u = t
+    · subst h; rw [upd_self, hpart, hheld, hi.idle u hnh]
+    · rw [upd_ne _ _ h]
+  have hphu : ∀ u, L.ph (upd G t g u) = if u = t then L.ph g else L.ph (G u) := fun u => by
+    unfold upd; split <;> rfl
+  have hholds : ∀ u, L.ph (upd G t g u) = .holds ↔ L.ph (G u) = .holds := by
+    intro u; rw [hphu]; split
+    · rename_i h; subst h; exact ⟨fun h => absurd h hgh, fun h => absurd h hnh⟩
+    · exact Iff.rfl
+  have hfree : L.Free (upd G t g) ↔ L.Free G := by
+    unfold Lock.Free; exact forall_congr' fun u => not_congr (hholds u)
+  refine ⟨hown ▸ hi.own, fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_,
+    fun u v hu hv => hi.one u v ((hholds u).mp hu) ((hholds v).mp hv), ⟨hi.loc.only, hi.loc.ok⟩,
+    fun u => hown ▸ hi.off u, hi.wfp, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
+    fun w hw => ?_, fun hp => ?_⟩
+  · unfold upd; split
+    · rw [hheld]; exact Heap.disjoint_empty _
+    · exact hi.pdisj u
+  · unfold upd; split
+    · exact hheld
+    · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h
+      rcases hg with h | h
+      · exact hlive h
+      · exact absurd h hu
+    · exact hi.live u hu
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    exact ⟨h1, fun u hu => h2 u ((hholds u).mp hu)⟩
+  · obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free (hfree.mp hF)
+    exact ⟨hL, hRk hL hR, hsub, fun u => hown ▸ hdj u, hoff, how⟩
+  · have hut : u ≠ t := fun e => by
+      have := (hholds u).mp hu; rw [e] at this; exact hnh this
+    rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
+  · obtain ⟨h1, h2⟩ := hi.fq w hw
+    have hwt : w.1 ≠ t := fun e => by
+      rw [e] at h2; rcases hph with h | h <;> rw [h] at h2 <;> cases h2
+    exact ⟨h1, by rw [upd_ne _ _ hwt]; exact h2⟩
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
+    have hvt : v ≠ t := fun e => by rw [e, htb] at h1; cases h1
+    exact ⟨v, hv, hq, by rw [upd_ne _ _ hvt]; exact h1,
+      fun hh => h2 (by rw [upd_ne _ _ hvt] at hh; exact hh)⟩
+
 /-! ## Spawn and join -/
 
 theorem fork_eq {m m' : Mem} {t c : ThreadId}

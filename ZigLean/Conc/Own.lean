@@ -334,6 +334,36 @@ theorem bytesAt_in {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
   rw [hpb] at hb'; cases hb'
   rw [hl]; simp [h1, h2]
 
+/-- `std.Io` (one value, 16 bytes): a store of it is a store of an encoding. -/
+instance : LawfulEnc Io where
+  size_encode _ := by simp [Enc.encode, Enc.size]
+  decode_encode _ := rfl
+
+/-- Owned bytes are the block's bytes at `p`, in a live block with the address `A`, the size `S`
+and the kind `K`. -/
+theorem bytesAt_blk {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) (hs : ∀ l c, h l = some c → m.heap l = some c) {b : BlockId}
+    (hpb : p.block = some b) (hn : 0 < bs.size) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.addr = A ∧ blk.bytes.size = S ∧
+      blk.kind = K ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
+  have hm : m.heap = h ∪ fun l => if h l = none then m.heap l else none := by
+    funext l
+    cases e : h l with
+    | none => simp [e]
+    | some c => rw [Heap.union_apply, e, hs l c e]; rfl
+  obtain ⟨b', blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p.add 0) (k := 0) (n := bs.size)
+    (a := 1) hb hm (by simp [Ptr.add]) hn (by omega) (Nat.mod_one _)
+  obtain ⟨hqb, -⟩ := access_eq hacc
+  have : b' = b := by simp [Ptr.add] at hqb; rw [hpb] at hqb; cases hqb; rfl
+  subst this
+  have c0 := bytesAt_cell hb hm hpb (j := 0) hn
+  obtain ⟨blk', hblk', hl, hlt, hc⟩ := Mem.heap_some c0
+  rw [hblk] at hblk'; cases hblk'
+  simp only [Cell.mk.injEq] at hc
+  refine ⟨blk, hblk, by simpa using hl, hA, hS, hc.2.2.2.symm, ?_⟩
+  simp only [Nat.add_zero] at hx
+  rw [hx]; simp
+
 /-- A load of the `T` at byte `k` of owned bytes. -/
 theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {k a : Nat}
     {v : T} (hq : q = p.add k) (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
@@ -352,14 +382,14 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
       Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
-/-- A store of `w` at byte `k` of owned bytes. -/
-theorem TTriple.storeAt [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {k a : Nat} (w : T) (hq : q = p.add k) (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
+/-- A store of `w`, whose encoding has the size of `T`, at byte `k` of owned bytes. -/
+theorem TTriple.storeAt' {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {k a : Nat} (w : T) (hw : (Enc.encode w).size = Enc.size T) (hq : q = p.add k)
+    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
     (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
     TTriple (bytesAt p A S K bs) (Zig.store a q w)
       (fun _ => bytesAt p A S K (writeBytes bs k (Enc.encode w))) :=
   TTriple.of_run fun m hP hF hd hm hb hc ho => by
-    have hw := LawfulEnc.size_encode w
     have hin : ∀ b, p.block = some b →
         ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + (Enc.encode w).size → hP (b, x) ≠ none :=
       fun b hpb x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
@@ -389,6 +419,14 @@ theorem TTriple.storeAt [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {b
         rw [hbe]; exact bytesAt_in hb hpb hx1 hx2
       · exact absurd rfl h3
     · exact .inr (by simpa [Mem.write] using hb2)
+
+/-- A store of `w` at byte `k` of owned bytes. -/
+theorem TTriple.storeAt [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {k a : Nat} (w : T) (hq : q = p.add k) (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
+    (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    TTriple (bytesAt p A S K bs) (Zig.store a q w)
+      (fun _ => bytesAt p A S K (writeBytes bs k (Enc.encode w))) :=
+  TTriple.storeAt' w (LawfulEnc.size_encode w) hq hn hk ha hK
 
 theorem TTriple.load {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
     TTriple (pts p a v) (Zig.load T a p) (fun r => ⌜r = v⌝ ∗ pts p a v) := by
