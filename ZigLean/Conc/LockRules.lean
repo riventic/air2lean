@@ -1,0 +1,1362 @@
+import ZigLean.Conc.Lock
+
+/-!
+# The rules of a lock's code
+
+The steps of `Io.Mutex`'s code (`lock`, `unlock`; translated from Zig 0.16.0's std code) on the
+word of a lock `L` (`ZigLean/Conc/Lock.lean`), proved once for every protocol that has the lock
+(`Lock.Fits`):
+
+| Rule | Op | Place before | Place after |
+|---|---|---|---|
+| `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), or `spin` (read `1`), or `wait` (read `2`) |
+| `wp_xchg` | `xchg(2)`, acquire | `spin` | `holds` (read `0`, with the resource), or `wait` |
+| `wp_wait` | futex wait for `2` | `wait` | `spin` (it sleeps while the word is `2`) |
+| `wp_unlock` | `xchg(0)`, release | `holds` | `out` (read `1`), or `wake` (read `2`); the lock gets the resource |
+| `wp_wake` | futex wake of 1 | `wake` | `out` |
+
+Each rule is a stop (the pick of the op, or the futex op) and then the op. It gives the
+protocol's invariant with the thread's new place; the rest of the invariant (`U`) stays, by
+`Lock.Fits.stable`. In strict mode no op throws, and a futex wait keeps `Live`.
+
+The acquire RMW that takes the lock adopts the release clock of the newest message, so the
+thread owns the resource (`Lock.Owns`); the release RMW of `unlock` puts the thread's clock in the
+new message, so the lock owns it again.
+-/
+
+namespace Zig
+namespace Conc
+
+open Assn Proto
+
+namespace Lock
+
+variable {γ : Type} {L : Lock γ}
+
+/-! ## The word: access and race check -/
+
+theorem Inv.access {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) :
+    ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
+      m.access L.ptr 4 4 = pure (L.b, blk, L.o) ∧ m.accessW L.ptr 4 4 = pure (L.b, blk, L.o) := by
+  obtain ⟨blk, hb, hl, hs, ha, hk⟩ := hi.blk
+  have hacc : m.access L.ptr 4 4 = pure (L.b, blk, L.o) := by
+    have := access_of (p := L.ptr) (n := 4) (a := 4) (m := m) rfl hb hl (by simp [Lock.ptr])
+      (by simp only [Lock.ptr]; omega) (by simpa [Lock.ptr] using ha)
+    simpa [Lock.ptr] using this
+  refine ⟨blk, hb, hl, hs, hacc, ?_⟩
+  unfold Mem.accessW; rw [hacc]
+  simp [hk, pure, bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont]
+
+/-- An atomic access to the word does not race. -/
+theorem Inv.noRace {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessKind}
+    (hk : k.isAtomic = true) (ht : m.current < m.threads.size) : NoRace m L.b L.o 4 k := by
+  refine noRace_of fun e he hb h1 h2 => ?_
+  rcases hi.wfp e he (hits_of hb h1 h2) with ⟨ha, -⟩ | h
+  · refine .inr ?_; unfold racePair; simp [ha, hk]
+  · exact .inl (h _ ht)
+
+/-- The word as the block's bytes. -/
+theorem u32_bytes {m : Mem} {blk : Block} {v : BitVec 32} (hb : m.blocks[L.b]? = some blk) :
+    L.U32 m v ↔ (intOfBytes 32 (blk.bytes.extract L.o (L.o + 4))).run = some (.ok v) := by
+  unfold Lock.U32 curBytes; rw [hb]; rfl
+
+theorem u32_eq {m : Mem} {a b : BitVec 32} (ha : L.U32 m a) (hb : L.U32 m b) : a = b := by
+  unfold Lock.U32 at ha hb; rw [ha] at hb; cases hb; rfl
+
+theorem ofNat_inj {a b : Nat} (ha : a < 3) (hb : b < 3)
+    (h : BitVec.ofNat 32 a = BitVec.ofNat 32 b) : a = b := by
+  have := congrArg BitVec.toNat h
+  simp only [BitVec.toNat_ofNat] at this
+  rwa [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)] at this
+
+/-- The word is `w` (`< 3`): a thread holds the lock iff `w ≠ 0`. -/
+theorem Inv.free_iff {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {w : Nat} (hw : w < 3)
+    (hu : L.U32 m (BitVec.ofNat 32 w)) : w = 0 ↔ L.Free G := by
+  obtain ⟨w₀, hw₀, hu₀, hz⟩ := hi.word
+  have e := ofNat_inj hw₀ hw (u32_eq hu₀ hu)
+  subst e; exact hz
+
+/-! ## A step in the lock's code -/
+
+theorem Step.clocks {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (u : Nat) :
+    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
+  by_cases hu : u = t
+  · subst hu; exact hs.mine
+  · rw [hs.others u hu]; exact VClock.le_refl _
+
+theorem Step.allLe {t : ThreadId} {m m' : Mem} {c : VClock} (hs : L.Step t m m')
+    (h : AllLe m c) : AllLe m' c :=
+  allLe_mono hs.threads (fun u _ => hs.clocks u) h
+
+theorem Step.someLe {t : ThreadId} {m m' : Mem} {c : VClock} (hs : L.Step t m m')
+    (h : SomeLe m c) : SomeLe m' c :=
+  someLe_mono hs.threads (fun u _ => hs.clocks u) h
+
+theorem Step.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : L.Step t m₁ m₂) (h₂ : L.Step t m₂ m₃)
+    (hb : m₂.blocks = m₁.blocks ∨ m₃.blocks = m₂.blocks) : L.Step t m₁ m₃ := by
+  refine ⟨h₂.threads.trans h₁.threads, fun e he => ?_, h₂.groups.trans h₁.groups,
+    h₂.csize.trans h₁.csize,
+    fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
+    h₂.bsize.trans h₁.bsize, ?_⟩
+  · rcases h₂.fp e he with h | h
+    · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
+      · exact .inl h'
+      · exact .inr ⟨a, b, c, d, h₂.someLe f⟩
+    · exact .inr h
+  rcases hb with hb | hb
+  · rcases h₂.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
+    · exact .inl (e.trans hb)
+    · refine .inr ⟨blk, bs, by rw [← hb]; exact h1, h2, h3, h4, ?_⟩
+      rw [h5]; simp only [Mem.write, hb]
+  · rcases h₁.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
+    · exact .inl (hb.trans e)
+    · exact .inr ⟨blk, bs, h1, h2, h3, h4, hb.trans h5⟩
+
+/-- The heap after a step in the lock's code: the same, but at the word. -/
+theorem Step.heap {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {l : Zig.Loc}
+    (hl : ¬ (l.1 = L.b ∧ L.o ≤ l.2 ∧ l.2 < L.o + 4)) : m'.heap l = m.heap l := by
+  rcases hs.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
+  · obtain ⟨b, x⟩ := l; simp only [Mem.heap, e]
+  · have : m'.heap l = (m.write L.b blk L.o bs).heap l := by
+      obtain ⟨b, x⟩ := l; simp only [Mem.heap, h5]
+    rw [this, Mem.heap_write h1 h2 (by omega)]
+    rw [h3]; simp only [hl, ↓reduceIte]
+
+/-- The bytes of a range that is not the word's stay. -/
+theorem Step.bytes {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {b o n : Nat}
+    (hd : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) : curBytes m' b o n = curBytes m b o n := by
+  rcases hs.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
+  · unfold curBytes; rw [e]
+  · unfold curBytes; rw [h5]
+    simp only [Mem.write]
+    by_cases hbb : b = L.b
+    · subst hbb
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+        (Array.getElem?_eq_some_iff.mp h1).1, h1]
+      simp only [Option.map_some, Option.getD_some]
+      by_cases hn : o + n ≤ blk.bytes.size
+      · exact extract_writeBytes_disjoint _ _ _ _ _ (by omega) hn (by omega)
+      · apply Array.ext
+        · simp [writeBytes_size _ _ _ (show L.o + bs.size ≤ blk.bytes.size by omega)]
+        · intro i hi1 hi2
+          simp only [Array.getElem_extract]
+          simp only [Array.size_extract] at hi1 hi2
+          rw [writeBytes_getElem _ _ _ (by omega)]
+          have : ¬ (L.o ≤ o + i ∧ o + i < L.o + bs.size) := by omega
+          simp only [this, ↓reduceIte, getElem!_pos blk.bytes (o + i) (by omega)]
+    · rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+      simp [Ne.symm hbb]
+
+/-- The block of the word after a step in the lock's code. -/
+theorem Step.blk {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
+    (hb : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal) :
+    ∃ blk, m'.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal := by
+  rcases hs.blocks with e | ⟨blk, bs, h1, h2, h3, h4, h5⟩
+  · rw [e]; exact hb
+  · obtain ⟨blk₀, hb₀, -, -, ha, hk⟩ := hb
+    rw [h1] at hb₀; cases hb₀
+    refine ⟨{ blk with bytes := writeBytes blk.bytes L.o bs }, ?_, h2, ?_, ha, hk⟩
+    · rw [h5]; simp only [Mem.write]
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+        (Array.getElem?_eq_some_iff.mp h1).1]
+    · show L.o + 4 ≤ (writeBytes blk.bytes L.o bs).size
+      rw [writeBytes_size _ _ _ (by omega)]; exact h4
+
+/-- A step in the lock's code keeps the threads' parts, which have no byte of the word, if each
+new access is atomic, at the word. -/
+theorem Step.owned {t : ThreadId} {m m' : Mem} {own : ThreadId → Heap} (hs : L.Step t m m')
+    (ho : Owned own m) (hoff : ∀ u, L.Off (own u)) (hbl : L.b < m.blocks.size)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ (e.block = L.b ∧ e.off = L.o ∧ e.len = 4)) :
+    Owned own m' := by
+  refine ho.keep (by rw [hs.threads]) hs.csize
+    (fun u l c hc => ?_) (Nat.le_of_eq hs.bsize.symm) (fun u _ => hs.clocks u) (fun e he => ?_)
+  · have hw : ¬ (l.1 = L.b ∧ L.o ≤ l.2 ∧ l.2 < L.o + 4) := by
+      rintro ⟨h1, h2, h3⟩
+      obtain ⟨b, x⟩ := l; simp only at h1 h2 h3; subst h1
+      rw [hoff u x h2 h3] at hc; cases hc
+    rw [hs.heap hw]; exact ho.sub u l c hc
+  · rcases hfp e he with h | ⟨hb, ho', hl⟩
+    · exact .inl h
+    · refine .inr ⟨by rw [hb, hs.bsize]; exact hbl, fun u ⟨x, h1, h2, h3⟩ => ?_⟩
+      rw [hb] at h3; rw [ho'] at h1 h2; rw [hl] at h2
+      exact h3 (hoff u x h1 (by omega))
+
+/-! ## Changes that keep the blocks and the locations -/
+
+/-- A new access that touches no part, no resource and, if it hits the word, is atomic. -/
+def NewOk (G : ThreadId → γ) (m m' : Mem) (e : FootprintEntry) : Prop :=
+  e.block < m.blocks.size ∧ (∀ u, ¬ e.Touches (L.own G m u)) ∧
+    (∀ hL, L.R G hL → L.Off hL → ¬ e.Touches hL) ∧
+    (L.Hits e → e.kind.isAtomic = true ∧ SomeLe m' e.clock)
+
+/-- A memory with the same blocks, threads, atomic locations and futex queue, clocks that are not
+smaller, and new accesses that keep `NewOk`. -/
+theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.threads = m.threads)
+    (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (hw : m'.waiters = m.waiters)
+    (hcs : m'.clocks.size = m.clocks.size)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ L.NewOk G m m' e) : L.Inv G m' := by
+  have hjb : joinedB m' = joinedB m := joinedB_congr ht
+  have hown : L.own G m' = L.own G m := by funext u; unfold Lock.own; rw [hjb]
+  have hheap : m'.heap = m.heap := by funext l; obtain ⟨b, x⟩ := l; simp only [Mem.heap, hb]
+  have hcur : curBytes m' L.b L.o 4 = curBytes m L.b L.o 4 := curBytes_congr hb _ _ _
+  have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold Lock.U32; rw [hcur]
+  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => by unfold Lock.Loc; rw [ha]
+  have hall : ∀ {c}, AllLe m c → AllLe m' c := fun h => allLe_mono ht (fun u _ => hcl u) h
+  have hsome : ∀ {c}, SomeLe m c → SomeLe m' c := fun h => someLe_mono ht (fun u _ => hcl u) h
+  refine ⟨?_, hi.pdisj, hi.idle, fun u hu => ?_, by rw [hb]; exact hi.blk, ?_, hi.one,
+    ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_⟩, fun u => hown ▸ hi.off u,
+    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, fun w hw' => hi.fq w (hw ▸ hw'),
+    fun hp => ?_⟩
+  · rw [hown]
+    refine hi.own.keep (by rw [ht]) hcs (fun u => hheap ▸ hi.own.sub u)
+      (Nat.le_of_eq (by rw [hb])) (fun u _ => hcl u) (fun e he => ?_)
+    rcases hfp e he with h' | ⟨hbl, hno, -⟩
+    · exact .inl h'
+    · exact .inr ⟨by rw [hb]; exact hbl, hno⟩
+  · rw [ht, hjb]; exact hi.live u hu
+  · obtain ⟨w, hw', hu, hz⟩ := hi.word; exact ⟨w, hw', (hU32 _).mpr hu, hz⟩
+  · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i l ((hloc i l).mp hl)
+    exact ⟨h1, h2, h3, h4, by rw [h5, hcur]⟩
+  · rcases hfp e he with h' | ⟨-, -, -, hat⟩
+    · rcases hi.wfp e h' hh with ⟨hat', hle'⟩ | hle'
+      · exact .inl ⟨hat', hsome hle'⟩
+      · exact .inr (hall hle')
+    · exact .inl (hat hh)
+  · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
+    exact ⟨hsome h1, fun u hu => VClock.le_trans (h2 u hu) (hcl u)⟩
+  · obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free hF
+    refine ⟨hL, hR, hheap ▸ hsub, fun u => hown ▸ hdj u, hoff, fun e he htc => ?_⟩
+    rcases hfp e he with h' | ⟨hbl, -, hnR, -⟩
+    · rcases how e h' (by rw [← hb]; exact htc) with h | ⟨i, l, hl, hle⟩
+      · exact .inl (hall h)
+      · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
+    · rcases htc with htc | hb'
+      · exact absurd htc (hnR hL hR hoff)
+      · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ hp)
+    exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 2).mpr (h2 hh)⟩
+
+theorem recordAt_le (m : Mem) (b o n : Nat) (k : AccessKind) (u : Nat) :
+    VClock.le (m.clocks[u]!) ((m.recordAt b o n k).clocks[u]!) = true := by
+  simp only [Mem.recordAt]; rw [getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+  · exact VClock.le_refl _
+
+/-- The record of an atomic access to the word by the current thread. -/
+theorem Inv.record {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessKind}
+    (hk : k.isAtomic = true) (ht : m.current < m.threads.size) :
+    L.Inv G (m.recordAt L.b L.o 4 k) := by
+  have hcs : m.current < m.clocks.size := by rw [hi.own.csize]; exact ht
+  obtain ⟨blk, hblk, -⟩ := hi.blk
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · refine .inr ⟨(Array.getElem?_eq_some_iff.mp hblk).1, fun u ⟨x, h1, h2, h3⟩ => ?_,
+      fun hL _ hoff ⟨x, h1, h2, h3⟩ => ?_, fun _ => ⟨hk, m.current, ht, ?_⟩⟩
+    · dsimp only at h1 h2 h3; exact h3 (hi.off u x h1 (by omega))
+    · dsimp only at h1 h2 h3; exact h3 (hoff x h1 (by omega))
+    · simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
+
+/-- A plain read by the current thread of `n` bytes at `o` of block `b` that no part, no resource
+and not the word has. -/
+theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
+    (hb : b < m.blocks.size) (hn : 0 < n)
+    (hno : ∀ u x, o ≤ x → x < o + n → L.own G m u (b, x) = none)
+    (hnR : ∀ hL, L.R G hL → ∀ x, o ≤ x → x < o + n → hL (b, x) = none)
+    (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
+    L.Inv G (m.recordAt b o n .read) := by
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · refine .inr ⟨hb, fun u ⟨x, h1, h2, h3⟩ => ?_, fun hL hR _ ⟨x, h1, h2, h3⟩ => ?_,
+      fun ⟨hb', x, h1, h2, h3, h4⟩ => ?_⟩
+    · dsimp only at h1 h2 h3; exact h3 (hno u x h1 (by omega))
+    · dsimp only at h1 h2 h3; exact h3 (hnR hL hR x h1 (by omega))
+    · exfalso
+      dsimp only at hb' h1 h2
+      rcases hnw with h | h | h
+      · exact h hb'
+      · rcases h2 with h2 | h2 <;> omega
+      · rcases h2 with h2 | h2 <;> omega
+
+/-! ## The word's atomic location -/
+
+theorem loc_get {m : Mem} {i : Nat} {l : ALoc} (hl : L.Loc m i l) :
+    ∃ h : i < m.atomics.size, m.atomics[i] = l ∧ m.atomics[i]! = l := by
+  obtain ⟨h, e⟩ := Array.getElem?_eq_some_iff.mp hl.2
+  exact ⟨h, e, by rw [getElem!_pos m.atomics i h, e]⟩
+
+theorem loc_unique {m : Mem} {i j : Nat} {l l' : ALoc} (hl : L.Loc m i l) (hl' : L.Loc m j l') :
+    i = j ∧ l = l' := by
+  have e : i = j := by have := hl.1; rw [hl'.1] at this; cases this; rfl
+  subst e
+  have := hl.2; rw [hl'.2] at this; cases this; exact ⟨rfl, rfl⟩
+
+theorem loc_at {m : Mem} {i : Nat} {l : ALoc} (hl : L.Loc m i l) : l.block = L.b ∧ l.off = L.o := by
+  obtain ⟨hi', hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hl.1
+  obtain ⟨h, e, -⟩ := loc_get hl
+  rw [e] at hp
+  simpa using hp
+
+/-- The location after a change of location `i` that keeps its block and offset. -/
+theorem loc_set {m m' : Mem} {i : Nat} {l l' : ALoc} (hl : L.Loc m i l)
+    (ha : m'.atomics = m.atomics.set! i l') (hb : l'.block = l.block) (ho : l'.off = l.off) :
+    L.Loc m' i l' := by
+  obtain ⟨hi', hp, hj⟩ := Array.findIdx?_eq_some_iff_getElem.mp hl.1
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  have hs : (m.atomics.set! i l').size = m.atomics.size := by simp
+  refine ⟨Array.findIdx?_eq_some_iff_getElem.mpr ⟨by rw [ha, hs]; exact hi', ?_, fun j hji => ?_⟩, ?_⟩
+  · simp only [ha, Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds, ↓reduceIte]
+    simp [hb, ho, hlb, hlo]
+  · simp only [ha, Array.set!_eq_setIfInBounds]
+    rw [Array.getElem_setIfInBounds (by omega), if_neg (Nat.ne_of_gt hji)]
+    exact hj j hji
+  · rw [ha, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hi']
+
+/-- The word's location after `locIdx`: the memory is the same, or it has a new location (the
+first atomic op at the word). -/
+theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G m)
+    (ht : m.current < m.threads.size)
+    (h : ((locIdx L.b L.o 4).run m).run = some (.ok (li, m₁))) :
+    ∃ l, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ m₁.blocks = m.blocks ∧ m₁.clocks = m.clocks ∧
+      m₁.threads = m.threads ∧ m₁.footprint = m.footprint ∧ m₁.waiters = m.waiters ∧
+      m₁.current = m.current ∧ m₁.groups = m.groups := by
+  cases hf : m.atomics.findIdx? (fun l => l.block == L.b && l.off == L.o) with
+  | some i =>
+    obtain ⟨hi', -, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
+    have hl : L.Loc m i m.atomics[i] := ⟨hf, Array.getElem?_eq_getElem hi'⟩
+    obtain ⟨hlen, -, -, -, hlast⟩ := hi.loc.ok i _ hl
+    have hg : m.atomics[i]! = m.atomics[i] := getElem!_pos m.atomics i hi'
+    obtain ⟨rfl, rfl⟩ := locIdx_found hf (by rw [hg]; exact hlen) (by rw [hg]; exact hlast) h
+    exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  | none =>
+    obtain ⟨rfl, rfl⟩ := locIdx_new hf h
+    have hno : ∀ i l, ¬ L.Loc m i l := fun i l hl => by rw [hl.1] at hf; cases hf
+    let nl : ALoc := firstLoc m L.b L.o 4
+    have hnl : L.Loc { m with atomics := m.atomics.push nl, nextMsg := m.nextMsg + 1 }
+        m.atomics.size nl := by
+      refine ⟨?_, by simp⟩
+      show (m.atomics.push nl).findIdx? _ = _
+      rw [Array.findIdx?_push, hf]; simp [nl, firstLoc]
+    have honly : ∀ i l, L.Loc { m with atomics := m.atomics.push nl, nextMsg := m.nextMsg + 1 }
+        i l → i = m.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
+    refine ⟨nl, hnl, ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    obtain ⟨w, hw, hu, -⟩ := hi.word
+    exact ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj,
+      hi.idle, hi.live, hi.blk, hi.word, hi.one,
+      ⟨fun l hl hb h1 h2 => by
+        rcases Array.mem_push.mp hl with hl | rfl
+        · exact hi.loc.only l hl hb h1 h2
+        · rfl,
+       fun i l hl => by
+        obtain ⟨rfl, rfl⟩ := honly i l hl
+        refine ⟨rfl, by simp [nl, firstLoc], fun j hj => by simp [nl, firstLoc] at hj,
+          fun j hj => ?_, ?_⟩
+        · simp only [nl, firstLoc, List.size_toArray, List.length_cons, List.length_nil] at hj
+          obtain rfl : j = 0 := by omega
+          exact ⟨w, hw, hu⟩
+        · simp [ALoc.lastBytes, nl, firstLoc, firstMsg, curBytes]⟩,
+      hi.off, hi.wfp,
+      fun i l hl => by
+        obtain ⟨rfl, rfl⟩ := honly i l hl
+        exact ⟨⟨m.current, ht, VClock.le_default _⟩, fun u _ => VClock.le_default _⟩,
+      fun hF => by
+        obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free hF
+        refine ⟨hL, hR, hsub, hdj, hoff, fun e he htc => ?_⟩
+        rcases how e he htc with h' | ⟨i, l, hl, -⟩
+        · exact .inl h'
+        · exact absurd hl (hno i l),
+      hi.res, hi.fq, hi.wit⟩
+
+/-! ## The memory after an RMW at the word -/
+
+/-- An RMW at the word that read its newest message `rd` and wrote `new`. -/
+theorem rmw_eff {m₁ m₂ M : Mem} {li : Nat} {l : ALoc} {ord : AtomicOrder} {rd : Msg}
+    {new : BitVec 32} {blk : Block} (hl : L.Loc m₁ li l) (h0 : 0 < l.msgs.size)
+    (hb : m₁.blocks[L.b]? = some blk) (hm₂ : m₂ = if ord.isAcq then acqM m₁ rd.relClock else m₁)
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) ord rd new) :
+    M.threads = m₁.threads ∧ M.footprint = m₁.footprint ∧ M.waiters = m₁.waiters ∧
+      M.groups = m₁.groups ∧ M.current = m₁.current ∧ M.clocks = m₂.clocks ∧
+      M.blocks = (m₁.write L.b blk L.o (padTo (intSize 32) (intBytes new))).blocks ∧
+      M.atomics = m₁.atomics.set! li { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) } := by
+  obtain ⟨h, -, hl0⟩ := loc_get hl
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  have h2 : m₂.atomics = m₁.atomics ∧ m₂.blocks = m₁.blocks ∧ m₂.threads = m₁.threads ∧
+      m₂.footprint = m₁.footprint ∧ m₂.waiters = m₁.waiters ∧ m₂.current = m₁.current ∧
+      m₂.groups = m₁.groups := by
+    subst hm₂; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨ha₂, hb₂, ht₂, hf₂, hw₂, hc₂, hg₂⟩ := h2
+  have hl₂ : m₂.atomics[li]! = l := by rw [ha₂]; exact hl0
+  have hblk₂ : m₂.blocks[(m₂.atomics[li]!).block]? = some blk := by rw [hl₂, hlb, hb₂]; exact hb
+  have hins := insertM_last (msg := rmwMsg m₂ ord rd new) hblk₂
+  rw [hl₂] at hins
+  have hp : l.msgs.size - 1 + 1 = l.msgs.size := by omega
+  subst hM
+  unfold rmwM
+  rw [← hm₂, hp]
+  dsimp only
+  rw [hins]
+  refine ⟨ht₂, hf₂, hw₂, hg₂, hc₂, rfl, ?_, ?_⟩
+  · simp only [observeM, Mem.write, hlb, hlo, hb₂]; rfl
+  · simp only [observeM, ha₂]
+
+/-! ## The invariant after an RMW at the word -/
+
+theorem merge_le {a b c : VClock} (ha : VClock.le a c = true) (hb : VClock.le b c = true) :
+    VClock.le (VClock.merge a b) c = true :=
+  VClock.le_iff.mpr fun i => by
+    rw [VClock.get_merge]
+    have h1 := VClock.le_iff.mp ha i
+    have h2 := VClock.le_iff.mp hb i
+    simp only [Nat.max_def]; split <;> omega
+
+theorem bs4 (v : BitVec 32) : (padTo (intSize 32) (intBytes v)).size = 4 :=
+  LawfulEnc.size_encode (α := BitVec 32) v
+
+theorem back_push (xs : Array Msg) (x : Msg) : (xs.push x).back! = x := by
+  rw [Array.back!, getElem!_pos _ _ (by simp)]
+  simp
+
+theorem back_eq {xs : Array Msg} (h : 0 < xs.size) : xs.back! = xs[xs.size - 1]! := rfl
+
+/-- The memory `M` after an RMW at the word by thread `t` that read the newest message of `l`
+and wrote the message `msg` with the value `w'`: the invariant with the ghost values `G'`, from
+the facts that depend on them. -/
+theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat} {l : ALoc}
+    {msg : Msg} {blk : Block} {w' : Nat} (hi : L.Inv G m₁) (hl : L.Loc m₁ li l)
+    (hb : m₁.blocks[L.b]? = some blk) (hst : L.Step t m₁ M)
+    (hblocks : M.blocks = (m₁.write L.b blk L.o msg.bytes).blocks)
+    (hat : M.atomics = m₁.atomics.set! li { l with msgs := l.msgs.push msg })
+    (hwq : M.waiters = m₁.waiters)
+    (hmr : msg.rmwOf = some (l.msgs[l.msgs.size - 1]!).id) (hms : msg.bytes.size = 4)
+    (hw' : w' < 3) (hmv : (intOfBytes 32 msg.bytes).run = some (.ok (BitVec.ofNat 32 w')))
+    (hown : Owned (L.own G' M) M)
+    (hpdisj : ∀ u, Heap.Disjoint (L.part (G' u)) (L.held (G' u)))
+    (hidle : ∀ u, L.ph (G' u) ≠ .holds → L.held (G' u) = Heap.empty)
+    (hlive : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
+    (hz : w' = 0 ↔ L.Free G') (hone : ∀ u v, L.ph (G' u) = .holds → L.ph (G' v) = .holds → u = v)
+    (hoff : ∀ u, L.Off (L.own G' M u))
+    (hrel : SomeLe M msg.relClock ∧
+      ∀ u, L.ph (G' u) = .holds → VClock.le msg.relClock (M.clocks[u]!) = true)
+    (hfree : L.Free G' → ∃ hL, L.R G' hL ∧ hL.Sub M.heap ∧
+      (∀ u, Heap.Disjoint hL (L.own G' M u)) ∧ L.Off hL ∧ L.Owns M hL)
+    (hres : ∀ u, L.ph (G' u) = .holds → L.R G' (L.held (G' u)))
+    (hfq : ∀ w ∈ M.waiters, w.2 = L.ptr ∧ L.ph (G' w.1) = .wait)
+    (hwit : L.U32 M (BitVec.ofNat 32 w') → 0 < M.waiters.size → ∃ v, v < M.threads.size ∧
+      M.waiters.any (·.1 == v) = false ∧ (L.ph (G' v)).busy = true ∧
+      (L.ph (G' v) = .holds → L.U32 M 2)) :
+    L.Inv G' M := by
+  obtain ⟨blk₀, hb₀, hlv, hsz, ha4, hk⟩ := hi.blk
+  rw [hb] at hb₀; cases hb₀
+  obtain ⟨hlen, h0, hch, hval, -⟩ := hi.loc.ok li l hl
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  have hli : li < m₁.atomics.size := (loc_get hl).1
+  let l' : ALoc := { l with msgs := l.msgs.push msg }
+  have hl' : L.Loc M li l' := loc_set hl hat rfl rfl
+  have hMb : M.blocks[L.b]? = some { blk with bytes := writeBytes blk.bytes L.o msg.bytes } := by
+    rw [hblocks]; simp only [Mem.write]
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+      (Array.getElem?_eq_some_iff.mp hb).1]
+  have hcur : curBytes M L.b L.o 4 = msg.bytes := by
+    unfold curBytes; rw [hMb]
+    simp only [Option.map_some, Option.getD_some]
+    have := extract_writeBytes blk.bytes L.o msg.bytes (by omega)
+    rwa [hms] at this
+  have hU : L.U32 M (BitVec.ofNat 32 w') := by unfold Lock.U32; rw [hcur]; exact hmv
+  have hjb : joinedB M = joinedB m₁ := joinedB_congr hst.threads
+  have honly : ∀ i l₀, L.Loc M i l₀ → i = li ∧ l₀ = l' := fun i l₀ h => loc_unique h hl'
+  refine ⟨hown, hpdisj, hidle, fun u hu => ?_, ?_, ⟨w', hw', hU, hz⟩, hone, ⟨fun l₀ hl₀ hb' h1 h2 => ?_,
+    fun i l₀ hl₀ => ?_⟩, hoff, fun e he hh => ?_, fun i l₀ hl₀ => ?_, hfree, hres, hfq, hwit hU⟩
+  · rw [hst.threads, hjb]; exact hi.live u (hlive u hu)
+  · refine ⟨_, hMb, hlv, ?_, ha4, hk⟩
+    show L.o + 4 ≤ (writeBytes blk.bytes L.o msg.bytes).size
+    rw [writeBytes_size _ _ _ (by omega)]; exact hsz
+  · rw [hat, Array.set!_eq_setIfInBounds] at hl₀
+    rcases Array.mem_or_eq_of_mem_set (w := hli) (by simpa [Array.setIfInBounds, hli] using hl₀)
+      with h | rfl
+    · exact hi.loc.only l₀ h hb' h1 h2
+    · exact hlo
+  · obtain ⟨rfl, rfl⟩ := honly i l₀ hl₀
+    refine ⟨hlen, by simp [l'], hch.push h0 hmr, fun j hj => ?_, ?_⟩
+    · simp only [l', Array.size_push] at hj
+      simp only [l', Array.getElem_push]
+      split
+      · exact hval j (by assumption)
+      · exact ⟨w', hw', hmv⟩
+    · unfold ALoc.lastBytes; simp [l', hcur]
+  · rcases hst.fp e he with h | ⟨-, -, -, hat', hle⟩
+    · rcases hi.wfp e h hh with ⟨ha', hle⟩ | hle
+      · exact .inl ⟨ha', hst.someLe hle⟩
+      · exact .inr (hst.allLe hle)
+    · exact .inl ⟨hat', hle⟩
+  · obtain ⟨rfl, rfl⟩ := honly i l₀ hl₀
+    simp only [l', back_push]
+    exact hrel
+
+/-- The facts of an RMW at the word by thread `t` that read the newest message `rd`. -/
+theorem Inv.rmwStep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder}
+    {new : BitVec 32} (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
+    (ht : t < m₁.threads.size)
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) new) :
+    ∃ blk m₂, m₁.blocks[L.b]? = some blk ∧
+      m₂ = (if ord.isAcq then acqM m₁ (l.msgs[l.msgs.size - 1]!).relClock else m₁) ∧
+      L.Step t m₁ M ∧ M.current = t ∧ M.waiters = m₁.waiters ∧ M.clocks = m₂.clocks ∧
+      M.blocks = (m₁.write L.b blk L.o (rmwMsg m₂ ord (l.msgs[l.msgs.size - 1]!) new).bytes).blocks ∧
+      M.atomics = m₁.atomics.set! li
+        { l with msgs := l.msgs.push (rmwMsg m₂ ord (l.msgs[l.msgs.size - 1]!) new) } := by
+  obtain ⟨blk, hb, hlv, hsz, -, -⟩ := hi.blk
+  obtain ⟨-, h0, -⟩ := hi.loc.ok li l hl
+  obtain ⟨hth, hfp, hwq, hg, hcur, hcl, hbl, hat⟩ := rmw_eff (new := new) hl h0 hb rfl hM
+  have hcs : m₁.current < m₁.clocks.size := by rw [hi.own.csize, hc]; exact ht
+  have hm₂ : ∀ m₂ : Mem, m₂ = (if ord.isAcq then acqM m₁ (l.msgs[l.msgs.size - 1]!).relClock
+      else m₁) → m₂.clocks.size = m₁.clocks.size ∧ (∀ u, u ≠ t → m₂.clocks[u]! = m₁.clocks[u]!) ∧
+      VClock.le (m₁.clocks[t]!) (m₂.clocks[t]!) = true := by
+    intro m₂ e; subst e
+    split
+    · refine ⟨by simp [acqM], fun u hu => ?_, ?_⟩
+      · simp only [acqM]; rw [getElem!_set!_ite, if_neg (fun h => hu (h.1.trans hc))]
+      · rw [← hc, acqM_clock _ _ hcs]; exact VClock.le_merge_left _ _
+    · exact ⟨rfl, fun _ _ => rfl, VClock.le_refl _⟩
+  obtain ⟨hs1, hs2, hs3⟩ := hm₂ _ rfl
+  refine ⟨blk, _, hb, rfl, ⟨hth, fun e he => .inl (hfp ▸ he), hg, by rw [hcl, hs1],
+    fun u hu => by rw [hcl, hs2 u hu], by rw [hcl]; exact hs3, by rw [hbl]; simp [Mem.write],
+    .inr ⟨blk, _, hb, hlv, bs4 new, hsz, hbl⟩⟩, hcur.trans hc, hwq, hcl, hbl, hat⟩
+
+/-- The heap of the word stays outside the word after a lock step. -/
+theorem Step.sub {t : ThreadId} {m m' : Mem} {h : Heap} (hs : L.Step t m m') (hoff : L.Off h)
+    (hsub : h.Sub m.heap) : h.Sub m'.heap := fun l c hc => by
+  have hw : ¬ (l.1 = L.b ∧ L.o ≤ l.2 ∧ l.2 < L.o + 4) := by
+    rintro ⟨h1, h2, h3⟩
+    obtain ⟨b, x⟩ := l; simp only at h1 h2 h3; subst h1
+    rw [hoff x h2 h3] at hc; cases hc
+  rw [hs.heap hw]; exact hsub l c hc
+
+/-- A new access of a lock step touches no heap without the word's bytes. -/
+theorem Step.fpOff {t : ThreadId} {m m' : Mem} {h : Heap} (hs : L.Step t m m') (hoff : L.Off h)
+    {e : FootprintEntry} (he : e ∈ m'.footprint) (hn : e ∉ m.footprint) : ¬ e.Touches h := by
+  rintro ⟨x, h1, h2, h3⟩
+  rcases hs.fp e he with h' | ⟨hb, ho, hl, -⟩
+  · exact hn h'
+  · rw [hb] at h3; rw [ho] at h1 h2; rw [hl] at h2
+    exact h3 (hoff x h1 (by omega))
+
+theorem not_free_iff {G : ThreadId → γ} : ¬ L.Free G ↔ ∃ u, L.ph (G u) = .holds := by
+  unfold Lock.Free
+  constructor
+  · intro h; exact Classical.byContradiction fun hn => h fun u hu => hn ⟨u, hu⟩
+  · rintro ⟨u, hu⟩ h; exact h u hu
+
+theorem ph_set_upd {G : ThreadId → γ} {t u : ThreadId} {p : LPh} {h : Heap} :
+    L.ph (upd G t (L.set (G t) p h) u) = if u = t then p else L.ph (G u) := by
+  unfold upd; split
+  · rename_i hu; subst hu; exact L.ph_set _ _ _
+  · rfl
+
+/-- `t` is not in the futex queue if its place is not `wait`. -/
+theorem Inv.notQ {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hi : L.Inv G m)
+    (hw : L.ph (G t) ≠ .wait) : m.waiters.any (·.1 == t) = false := by
+  apply Bool.eq_false_iff.mpr
+  intro h
+  obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp h
+  have := (hi.fq _ (Array.getElem_mem hi')).2
+  rw [show (m.waiters[i]).1 = t by simpa using he] at this
+  exact hw this
+
+/-- Thread `t` takes the free lock with an acquire RMW that writes `w'` (`1` from `out`, `2` from
+`spin`): it holds the lock, with a resource `hL` of `R`. -/
+theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {w' : Nat}
+    (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
+    (hph : (L.ph (G t) = .out ∧ w' = 1) ∨ (L.ph (G t) = .spin ∧ w' = 2)) (hF : L.Free G)
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 w')) :
+    L.Step t m₁ M ∧ M.current = t ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) M := by
+  have hpt : L.ph (G t) ≠ .gone := by rcases hph with ⟨h, -⟩ | ⟨h, -⟩ <;> rw [h] <;> decide
+  have hnh : L.ph (G t) ≠ .holds := by rcases hph with ⟨h, -⟩ | ⟨h, -⟩ <;> rw [h] <;> decide
+  have hnw : L.ph (G t) ≠ .wait := by rcases hph with ⟨h, -⟩ | ⟨h, -⟩ <;> rw [h] <;> decide
+  have hw3 : w' < 3 := by rcases hph with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have hw0 : w' ≠ 0 := by rcases hph with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  obtain ⟨ht, hjt⟩ := hi.live t hpt
+  have hheld : L.held (G t) = Heap.empty := hi.idle t hnh
+  have hownt : L.own G m₁ t = L.part (G t) := by simp [Lock.own, hjt, hheld]
+  obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free hF
+  obtain ⟨blk, m₂, hb, hm₂, hst, hcM, hwM, hclM, hbM, haM⟩ := hi.rmwStep hl hc ht hM
+  have hacq : AtomicOrder.acquire.isAcq = true := rfl
+  rw [hacq, if_pos rfl] at hm₂
+  subst hm₂
+  have hcs : m₁.current < m₁.clocks.size := by rw [hi.own.csize, hc]; exact ht
+  have hct : M.clocks[t]! = VClock.merge (m₁.clocks[t]!) (l.msgs[l.msgs.size - 1]!).relClock := by
+    rw [hclM, ← hc, acqM_clock _ _ hcs]
+  have hbl : L.b < m₁.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  have hjb : joinedB M = joinedB m₁ := joinedB_congr hst.threads
+  have hown : L.own (upd G t (L.set (G t) .holds hL)) M = upd (L.own G m₁) t (L.own G m₁ t ∪ hL) := by
+    rw [own_upd hjb hjt, L.part_set, L.held_set, hownt]
+  have hphu := fun u => ph_set_upd (L := L) (G := G) (t := t) (p := .holds) (h := hL) (u := u)
+  have ho1 : Owned (L.own G m₁) M := hst.owned hi.own hi.off hbl fun e he => by
+    rcases hst.fp e he with h | ⟨a, b, c, -⟩
+    · exact .inl h
+    · exact .inr ⟨a, b, c⟩
+  have howns : M.OwnsC (M.clocks[t]!) hL := by
+    intro e he htc
+    by_cases hm : e ∈ m₁.footprint
+    · rcases how e hm (htc.imp id fun h => by rw [← hst.bsize]; exact h) with h | ⟨i, l₀, hl₀, hle⟩
+      · exact VClock.le_trans (h t ht) (hst.clocks t)
+      · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl
+        rw [hct]
+        exact VClock.le_trans hle (VClock.le_merge_right _ _)
+    · rcases htc with htc | hbe
+      · exact absurd htc (hst.fpOff hoff he hm)
+      · rcases hst.fp e he with h | ⟨heb, -⟩
+        · exact absurd h hm
+        · rw [heb, hst.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
+  have ho : Owned (L.own (upd G t (L.set (G t) .holds hL)) M) M := by
+    rw [hown]; exact ho1.add (by rw [hst.threads]; exact ht) (hst.sub hoff hsub) hdj howns
+  refine ⟨hst, hcM, hL, hR, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw3 (intOfBytes_rmw _) ho
+    (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
+    (fun hF' => ?_) (fun u hu => ?_) (fun w hw => ?_) (fun hU hp => ?_)⟩
+  · unfold upd; split
+    · rename_i hu; subst hu; rw [L.part_set, L.held_set]
+      have := hdj u; rw [hownt] at this; exact this.symm
+    · exact hi.pdisj u
+  · rw [hphu] at hu; unfold upd; split
+    · rename_i h; simp [h] at hu
+    · rename_i h; simp only [h, ↓reduceIte] at hu; exact hi.idle u hu
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; exact hpt
+    · exact hu
+  · refine ⟨fun h => absurd h hw0, fun h => absurd (by rw [hphu]; simp) (h t)⟩
+  · rw [hphu] at hu hv
+    split at hu
+    · split at hv
+      · rename_i h1 h2; rw [h1, h2]
+      · exact absurd hv (hF v)
+    · exact absurd hu (hF u)
+  · rw [hown]; unfold upd; split
+    · rename_i hu; subst hu; exact off_union (hi.off u) hoff
+    · exact hi.off u
+  · have hrel : (rmwMsg (acqM m₁ (l.msgs[l.msgs.size - 1]!).relClock) .acquire
+        (l.msgs[l.msgs.size - 1]!) (BitVec.ofNat 32 w')).relClock =
+        (l.msgs[l.msgs.size - 1]!).relClock := rfl
+    rw [hrel]
+    refine ⟨hst.someLe (hi.rel li l hl).1, fun u hu => ?_⟩
+    rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; rw [hct]; exact VClock.le_merge_right _ _
+    · exact absurd hu (hF u)
+  · exact absurd hF' fun h => by have := h t; rw [hphu] at this; simp at this
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h
+      rw [show upd G u (L.set (G u) .holds hL) u = L.set (G u) .holds hL from upd_self _ _ _,
+        L.held_set, L.R_set]
+      exact hR
+    · exact absurd hu (hF u)
+  · obtain ⟨h1, h2⟩ := hi.fq w (hwM ▸ hw)
+    refine ⟨h1, ?_⟩
+    rw [hphu]
+    split
+    · rename_i h; rw [h] at h2; exact absurd h2 hnw
+    · exact h2
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ hp)
+    refine ⟨v, by rw [hst.threads]; exact hv, hwM ▸ hq, ?_, fun hh => ?_⟩
+    · rw [hphu]; split
+      · rfl
+      · exact h1
+    · rw [hphu] at hh
+      split at hh
+      · rename_i h; subst h
+        rcases hph with ⟨h, -⟩ | ⟨-, rfl⟩
+        · rw [h] at h1; cases h1
+        · exact hU
+      · exact absurd hh (hF v)
+
+/-- Thread `t` in `lock`'s loop writes `2` to the held lock (an acquire RMW): the holder stays, and
+`t` goes to the futex wait. -/
+theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
+    (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t) (hph : L.ph (G t) = .spin)
+    (hnF : ¬ L.Free G)
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 2)) :
+    L.Step t m₁ M ∧ M.current = t ∧ L.Inv (upd G t (L.set (G t) .wait Heap.empty)) M := by
+  obtain ⟨ht, hjt⟩ := hi.live t (by rw [hph]; decide)
+  have hheld : L.held (G t) = Heap.empty := hi.idle t (by rw [hph]; decide)
+  obtain ⟨u0, hu0⟩ := not_free_iff.mp hnF
+  have hu0t : u0 ≠ t := fun e => by rw [e, hph] at hu0; cases hu0
+  obtain ⟨blk, m₂, hb, hm₂, hst, hcM, hwM, hclM, hbM, haM⟩ := hi.rmwStep hl hc ht hM
+  have hacq : AtomicOrder.acquire.isAcq = true := rfl
+  rw [hacq, if_pos rfl] at hm₂
+  subst hm₂
+  have hbl : L.b < m₁.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  have hjb : joinedB M = joinedB m₁ := joinedB_congr hst.threads
+  have hown : L.own (upd G t (L.set (G t) .wait Heap.empty)) M = L.own G m₁ := by
+    rw [own_upd hjb hjt, L.part_set, L.held_set]
+    funext u; unfold upd; split
+    · rename_i h; subst h; simp [Lock.own, hjt, hheld]
+    · rfl
+  have hphu := fun u => ph_set_upd (L := L) (G := G) (t := t) (p := .wait) (h := Heap.empty) (u := u)
+  have hholds : ∀ u, L.ph (upd G t (L.set (G t) .wait Heap.empty) u) = .holds ↔
+      L.ph (G u) = .holds := by
+    intro u; rw [hphu]; split
+    · rename_i h; subst h; rw [hph]; decide
+    · exact Iff.rfl
+  have hGu : ∀ u, u ≠ t → upd G t (L.set (G t) .wait Heap.empty) u = G u := fun u h => upd_ne _ _ h
+  have ho : Owned (L.own (upd G t (L.set (G t) .wait Heap.empty)) M) M := by
+    rw [hown]
+    exact hst.owned hi.own hi.off hbl fun e he => by
+      rcases hst.fp e he with h | ⟨a, b, c, -⟩
+      · exact .inl h
+      · exact .inr ⟨a, b, c⟩
+  refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) (by decide) (intOfBytes_rmw _) ho
+    (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
+    (fun hF' => ?_) (fun u hu => ?_) (fun w hw => ?_) (fun hU _ => ?_)⟩
+  · unfold upd; split
+    · rw [L.held_set]; exact Heap.disjoint_empty _
+    · exact hi.pdisj u
+  · rw [hphu] at hu
+    unfold upd; split
+    · exact L.held_set _ _ _
+    · rename_i h; rw [if_neg h] at hu; exact hi.idle u hu
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; rw [hph]; decide
+    · exact hu
+  · refine ⟨fun h => absurd h (by decide), fun h => absurd ((hholds u0).mpr hu0) (h u0)⟩
+  · exact hi.one u v ((hholds u).mp hu) ((hholds v).mp hv)
+  · rw [hown]; exact hi.off u
+  · refine ⟨hst.someLe (hi.rel li l hl).1, fun u hu => ?_⟩
+    exact VClock.le_trans ((hi.rel li l hl).2 u ((hholds u).mp hu)) (hst.clocks u)
+  · exact absurd ((hholds u0).mpr hu0) (hF' u0)
+  · have hut : u ≠ t := fun e => by
+      have := (hholds u).mp hu; rw [e, hph] at this; cases this
+    rw [hGu u hut, L.R_set]; exact hi.res u ((hholds u).mp hu)
+  · obtain ⟨h1, h2⟩ := hi.fq w (hwM ▸ hw)
+    have hwt : w.1 ≠ t := fun e => by rw [e, hph] at h2; cases h2
+    exact ⟨h1, by rw [hGu _ hwt]; exact h2⟩
+  · obtain ⟨hu0s, -⟩ := hi.live u0 (by rw [hu0]; decide)
+    refine ⟨u0, by rw [hst.threads]; exact hu0s, ?_, by rw [hGu u0 hu0t, hu0]; rfl,
+      fun _ => hU⟩
+    rw [hwM]; exact hi.notQ (by rw [hu0]; decide)
+
+/-- The holder `t` writes `0` (`unlock`, a release RMW) where the word was `w`: no thread holds the
+lock, and the lock owns the resource again. `t` goes to `out` (`w = 1`) or to the futex wake
+(`w = 2`). -/
+theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {w : Nat}
+    {p : LPh} (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
+    (hph : L.ph (G t) = .holds) (hw : L.U32 m₁ (BitVec.ofNat 32 w))
+    (hp : (w = 1 ∧ p = .out) ∨ (w = 2 ∧ p = .wake))
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) .release (l.msgs[l.msgs.size - 1]!)
+      (BitVec.ofNat 32 0)) :
+    L.Step t m₁ M ∧ M.current = t ∧ L.Inv (upd G t (L.set (G t) p Heap.empty)) M := by
+  obtain ⟨ht, hjt⟩ := hi.live t (by rw [hph]; decide)
+  have hpg : p ≠ .gone := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have hph' : p ≠ .holds := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have honly : ∀ u, L.ph (G u) = .holds → u = t := fun u hu => hi.one u t hu hph
+  obtain ⟨blk, m₂, hb, hm₂, hst, hcM, hwM, hclM, hbM, haM⟩ := hi.rmwStep hl hc ht hM
+  have hacq : AtomicOrder.release.isAcq = false := rfl
+  rw [hacq] at hm₂
+  simp only [Bool.false_eq_true, ↓reduceIte] at hm₂
+  subst m₂
+  have hbl : L.b < m₁.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  have hjb : joinedB M = joinedB m₁ := joinedB_congr hst.threads
+  have hownt : L.own G m₁ t = L.part (G t) ∪ L.held (G t) := by simp [Lock.own, hjt]
+  have hown : L.own (upd G t (L.set (G t) p Heap.empty)) M = upd (L.own G m₁) t (L.part (G t)) := by
+    rw [own_upd hjb hjt, L.part_set, L.held_set, Heap.union_empty]
+  have hphu := fun u => ph_set_upd (L := L) (G := G) (t := t) (p := p) (h := Heap.empty) (u := u)
+  have hnh : ∀ u, L.ph (upd G t (L.set (G t) p Heap.empty) u) ≠ .holds := by
+    intro u hu; rw [hphu] at hu
+    split at hu
+    · exact hph' hu
+    · rename_i h; exact h (honly u hu)
+  have hGu : ∀ u, u ≠ t → upd G t (L.set (G t) p Heap.empty) u = G u := fun u h => upd_ne _ _ h
+  have hsP : (L.part (G t)).Sub (L.own G m₁ t) := by rw [hownt]; exact Heap.sub_union_left
+  have hsH : (L.held (G t)).Sub (L.own G m₁ t) := by
+    rw [hownt]; exact Heap.sub_union_right (hi.pdisj t)
+  have ho1 : Owned (L.own G m₁) M := hst.owned hi.own hi.off hbl fun e he => by
+    rcases hst.fp e he with h | ⟨a, b, c, -⟩
+    · exact .inl h
+    · exact .inr ⟨a, b, c⟩
+  have ho : Owned (L.own (upd G t (L.set (G t) p Heap.empty)) M) M := by
+    rw [hown]; exact ho1.shrink hsP
+  have hcl : M.clocks = m₁.clocks := hclM
+  have hrelM : (rmwMsg m₁ .release (l.msgs[l.msgs.size - 1]!) (BitVec.ofNat 32 0)).relClock =
+      VClock.merge (l.msgs[l.msgs.size - 1]!).relClock (m₁.clocks[t]!) := by
+    simp [rmwMsg, AtomicOrder.isRel, hc]
+  have hrt : VClock.le (l.msgs[l.msgs.size - 1]!).relClock (m₁.clocks[t]!) = true :=
+    (hi.rel li l hl).2 t hph
+  have hoffH : L.Off (L.held (G t)) := off_sub (hi.off t) fun l h => hsH.ne h
+  refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) (by decide) (intOfBytes_rmw _) ho
+    (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
+    (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u)) (fun w hw => ?_)
+    (fun hU hp' => ?_)⟩
+  · unfold upd; split
+    · rw [L.held_set]; exact Heap.disjoint_empty _
+    · exact hi.pdisj u
+  · unfold upd; split
+    · exact L.held_set _ _ _
+    · rename_i h; exact hi.idle u (fun e => h (honly u e))
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; rw [hph]; decide
+    · exact hu
+  · exact ⟨fun _ => hnh, fun _ => rfl⟩
+  · rw [hown]; unfold upd; split
+    · rename_i h; subst h; exact off_sub (hi.off u) fun l h => hsP.ne h
+    · exact hi.off u
+  · rw [hrelM]
+    refine ⟨⟨t, by rw [hst.threads]; exact ht, ?_⟩, fun u hu => absurd hu (hnh u)⟩
+    rw [hcl]; exact merge_le hrt (VClock.le_refl _)
+  · -- the lock owns the resource again
+    have hl' := loc_set hl haM rfl rfl
+    refine ⟨L.held (G t), by rw [L.R_set]; exact hi.res t hph, hst.sub hoffH (hsH.trans
+      (hi.own.sub t)), fun u => ?_, hoffH, fun e he htc => ?_⟩
+    · rw [hown]; unfold upd; split
+      · rename_i h; subst h; exact (hi.pdisj u).symm
+      · rename_i h; exact Heap.disjoint_sub (hi.own.disj u t h) hsH |>.symm
+    · by_cases hm : e ∈ m₁.footprint
+      · refine .inr ⟨li, _, hl', ?_⟩
+        rw [back_push, hrelM]
+        have := hi.own.owns t ht e hm (htc.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hsH.ne h3⟩)
+          fun h => by rw [← hst.bsize]; exact h)
+        exact VClock.le_trans this (VClock.le_merge_right _ _)
+      · rcases htc with htc | hbe
+        · exact absurd htc (hst.fpOff hoffH he hm)
+        · rcases hst.fp e he with h | ⟨heb, -⟩
+          · exact absurd h hm
+          · rw [heb, hst.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
+  · obtain ⟨h1, h2⟩ := hi.fq w (hwM ▸ hw)
+    have hwt : w.1 ≠ t := fun e => by rw [e, hph] at h2; cases h2
+    exact ⟨h1, by rw [hGu _ hwt]; exact h2⟩
+  · rcases hp with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · -- `w = 1`: the old witness is not `t`
+      obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ hp')
+      have hvt : v ≠ t := fun e => by
+        subst e
+        have := ofNat_inj (by decide) (by decide) (u32_eq hw (h2 hph))
+        cases this
+      refine ⟨v, by rw [hst.threads]; exact hv, hwM ▸ hq, by rw [hGu v hvt]; exact h1,
+        fun hh => absurd hh (hnh v)⟩
+    · -- `w = 2`: `t` is at the wake
+      refine ⟨t, by rw [hst.threads]; exact ht, ?_, by rw [hphu]; simp; rfl,
+        fun hh => absurd hh (hnh t)⟩
+      rw [hwM]; exact hi.notQ (by rw [hph]; decide)
+
+/-! ## The futex queue -/
+
+/-- A change of the futex queue and of the place of thread `t` (`t` does not hold the lock and
+goes to `p`, not `holds`): the memory is the same but `current`, `waiters` and `woken`. -/
+theorem Inv.queue {G : ThreadId → γ} {m : Mem} {t c : ThreadId} {p : LPh}
+    {ws : Array (ThreadId × Ptr)} {wk : Array ThreadId} (hi : L.Inv G m)
+    (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone) (hp : p ≠ .holds) (hpg : p ≠ .gone)
+    (hfq : ∀ w ∈ ws, w.2 = L.ptr ∧ L.ph (upd G t (L.set (G t) p Heap.empty) w.1) = .wait)
+    (hwit : 0 < ws.size → ∃ v, v < m.threads.size ∧ ws.any (·.1 == v) = false ∧
+      (L.ph (upd G t (L.set (G t) p Heap.empty) v)).busy = true ∧
+      (L.ph (upd G t (L.set (G t) p Heap.empty) v) = .holds → L.U32 m 2)) :
+    L.Inv (upd G t (L.set (G t) p Heap.empty))
+      { m with current := c, waiters := ws, woken := wk } := by
+  obtain ⟨ht, hjt⟩ := hi.live t hng
+  have hheld : L.held (G t) = Heap.empty := hi.idle t hnh
+  have hown : L.own (upd G t (L.set (G t) p Heap.empty))
+      { m with current := c, waiters := ws, woken := wk } = L.own G m := by
+    rw [own_upd (m' := { m with current := c, waiters := ws, woken := wk }) (m := m) rfl hjt,
+      L.part_set, L.held_set]
+    funext u; unfold upd; split
+    · rename_i h; subst h; simp [Lock.own, hjt, hheld]
+    · rfl
+  have hphu := fun u => ph_set_upd (L := L) (G := G) (t := t) (p := p) (h := Heap.empty) (u := u)
+  have hholds : ∀ u, L.ph (upd G t (L.set (G t) p Heap.empty) u) = .holds ↔
+      L.ph (G u) = .holds := by
+    intro u; rw [hphu]; split
+    · rename_i h; subst h; exact ⟨fun h => absurd h hp, fun h => absurd h hnh⟩
+    · exact Iff.rfl
+  have hfree : L.Free (upd G t (L.set (G t) p Heap.empty)) ↔ L.Free G := by
+    unfold Lock.Free; exact forall_congr' fun u => not_congr (hholds u)
+  refine ⟨by rw [hown]; exact ⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩,
+    fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_, fun u v hu hv => ?_,
+    ⟨hi.loc.only, hi.loc.ok⟩, fun u => by rw [hown]; exact hi.off u, hi.wfp,
+    fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, hfq, hwit⟩
+  · unfold upd; split
+    · rw [L.held_set, L.part_set]; exact Heap.disjoint_empty _
+    · exact hi.pdisj u
+  · unfold upd; split
+    · exact L.held_set _ _ _
+    · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
+  · rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; exact hi.live _ hng
+    · exact hi.live u hu
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
+  · exact hi.one u v ((hholds u).mp hu) ((hholds v).mp hv)
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    exact ⟨h1, fun u hu => h2 u ((hholds u).mp hu)⟩
+  · obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free (hfree.mp hF)
+    exact ⟨hL, by rw [L.R_set]; exact hR, hsub, fun u => by rw [hown]; exact hdj u, hoff, how⟩
+  · have hut : u ≠ t := fun e => by
+      have := (hholds u).mp hu; rw [e] at this; exact hnh this
+    rw [upd_ne _ _ hut, L.R_set]; exact hi.res u ((hholds u).mp hu)
+
+/-- The futex queue without `t`'s place: the waiters stay. -/
+theorem fq_keep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.Inv G m)
+    (hw : L.ph (G t) ≠ .wait) :
+    ∀ w ∈ m.waiters, w.2 = L.ptr ∧ L.ph (upd G t (L.set (G t) p Heap.empty) w.1) = .wait := by
+  intro w hwm
+  obtain ⟨h1, h2⟩ := hi.fq w hwm
+  have hwt : w.1 ≠ t := fun e => by rw [e] at h2; exact hw h2
+  exact ⟨h1, by rw [ph_set_upd, if_neg hwt]; exact h2⟩
+
+/-- The old witness of the queue, if `t` keeps a busy place or was not busy. -/
+theorem wit_keep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.Inv G m)
+    (hnh : L.ph (G t) ≠ .holds) (hp : p ≠ .holds) (hb : (L.ph (G t)).busy = true → p.busy = true) :
+    0 < m.waiters.size → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
+      (L.ph (upd G t (L.set (G t) p Heap.empty) v)).busy = true ∧
+      (L.ph (upd G t (L.set (G t) p Heap.empty) v) = .holds → L.U32 m 2) := by
+  intro hpos
+  obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hpos
+  refine ⟨v, hv, hq, ?_, fun hh => ?_⟩
+  · rw [ph_set_upd]; split
+    · rename_i h; subst h; exact hb h1
+    · exact h1
+  · rw [ph_set_upd] at hh
+    split at hh
+    · exact absurd hh hp
+    · exact h2 hh
+
+/-- `lock`'s futex wait for `2` by thread `t` (at `wait`, not in the queue). If it sleeps, the
+invariant holds with `t` in the queue: the word is `2`, so a thread holds the lock. Else `t` goes to
+`spin`. -/
+theorem Inv.wait {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {b : Bool} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .wait) (hq : m.waiters.any (·.1 == t) = false)
+    (h : ((Thread.futexWait L.ptr (BitVec.ofNat 32 2)).run { m with current := t }).run =
+      some (.ok (b, m'))) :
+    L.Step t m m' ∧ if b then L.Inv G m' else
+      (m'.current = t ∧ L.Inv (upd G t (L.set (G t) .spin Heap.empty)) m') := by
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  have hspin : ∀ wk : Array ThreadId,
+      L.Inv (upd G t (L.set (G t) .spin Heap.empty))
+        { m with current := t, waiters := m.waiters, woken := wk } := fun wk =>
+    hi.queue hnh hng (by decide) (by decide) (fun w hw => by
+        obtain ⟨h1, h2⟩ := hi.fq w hw
+        have hwt : w.1 ≠ t := fun e => by
+          have : m.waiters.any (·.1 == t) = true :=
+            Array.any_eq_true.mpr (by
+              obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hw
+              exact ⟨i, hi', by simp [e]⟩)
+          rw [hq] at this; cases this
+        exact ⟨h1, by rw [ph_set_upd, if_neg hwt]; exact h2⟩)
+      (wit_keep hi hnh (by decide) fun _ => rfl)
+  rcases futexWait_ok h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  · exact ⟨Step.same rfl rfl rfl rfl rfl, rfl, hspin _⟩
+  · -- it sleeps: the word is `2`
+    refine ⟨Step.same rfl rfl rfl rfl rfl, ?_⟩
+    simp only [↓reduceIte]
+    obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hi.access
+    have : ({ m with current := t } : Mem).access L.ptr 4 4 = m.access L.ptr 4 4 := rfl
+    rw [this, ha₀] at ha
+    cases ha
+    have h2 : L.U32 m (BitVec.ofNat 32 2) := (u32_bytes hb₀).mpr hv
+    obtain ⟨u0, hu0⟩ := not_free_iff.mp fun hF =>
+      absurd ((hi.free_iff (by decide) h2).mpr hF) (by decide)
+    have hu0t : u0 ≠ t := fun e => by rw [e, hph] at hu0; cases hu0
+    have hG : upd G t (L.set (G t) .wait Heap.empty) = G := by
+      rw [← hph, ← hi.idle t hnh]; exact upd_set_self G t
+    have := hi.queue (c := t) (ws := m.waiters.push (t, L.ptr)) (wk := m.woken) (p := .wait) hnh hng
+      (by decide) (by decide) (fun w hw => ?_) (fun _ => ?_)
+    · rw [hG] at this; exact this
+    · rw [hG]
+      rcases Array.mem_push.mp hw with hw | rfl
+      · exact hi.fq w hw
+      · exact ⟨rfl, hph⟩
+    · rw [hG]
+      obtain ⟨hu0s, -⟩ := hi.live u0 (by rw [hu0]; decide)
+      refine ⟨u0, hu0s, ?_, by rw [hu0]; rfl, fun _ => h2⟩
+      rw [Array.any_push, hi.notQ (by rw [hu0]; decide)]
+      simp [Ne.symm hu0t]
+  · exact ⟨Step.same rfl rfl rfl rfl rfl, rfl, hspin _⟩
+
+/-- `unlock`'s futex wake of `n ≥ 1` waiters by thread `t` (at `wake`): `t` goes to `out`; a woken
+thread is the new witness of the queue. -/
+theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .wake) (hn : 1 ≤ n)
+    (h : ((Thread.futexWake L.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    L.Step t m m' ∧ m'.current = t ∧ L.Inv (upd G t (L.set (G t) .out Heap.empty)) m' := by
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  have hm' := Proto.modify_ok h
+  generalize hwk : ((m.waiters.filter (·.2 == L.ptr)).extract 0 n).map (·.1) = woke at hm'
+  have hall : m.waiters.filter (·.2 == L.ptr) = m.waiters :=
+    Array.filter_eq_self.mpr fun w hw => by simp [(hi.fq w hw).1]
+  subst hm'
+  refine ⟨Step.same rfl rfl rfl rfl rfl, rfl, hi.queue hnh hng (by decide) (by decide)
+    (fun w hw => fq_keep hi (by rw [hph]; decide) w (Array.mem_filter.mp hw).1) (fun hpos => ?_)⟩
+  -- the first waiter was woken
+  have h0 : 0 < m.waiters.size := Nat.lt_of_lt_of_le hpos Array.size_filter_le
+  let w0 := m.waiters[0]
+  have hw0 : w0.1 ∈ woke := by
+    rw [← hwk, hall]
+    exact Array.mem_map.mpr ⟨w0, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, rfl⟩
+  obtain ⟨-, hw0p⟩ := hi.fq w0 (Array.getElem_mem h0)
+  have hw0t : w0.1 ≠ t := fun e => by rw [e, hph] at hw0p; cases hw0p
+  obtain ⟨hw0s, -⟩ := hi.live w0.1 (by rw [hw0p]; decide)
+  refine ⟨w0.1, hw0s, ?_, by rw [ph_set_upd, if_neg hw0t, hw0p]; rfl, fun hh => ?_⟩
+  · apply Array.any_eq_false.mpr
+    intro i hi' he
+    have hm := Array.getElem_mem hi'
+    rw [Array.mem_filter] at hm
+    have : woke.contains (m.waiters.filter fun w => !woke.contains w.1)[i].1 = false := by
+      simpa using hm.2
+    simp only [beq_iff_eq] at he
+    rw [he, Array.contains_iff_mem.mpr hw0] at this
+    cases this
+  · rw [ph_set_upd, if_neg hw0t, hw0p] at hh; cases hh
+
+/-! ## The ops of `Io.Mutex` -/
+
+/-- The states of `Io.Mutex` in the generated code: an enum with the bits `0`, `1`, `2`. -/
+structure States (α : Type) [Packed α 32] where
+  unl : α
+  one : α
+  two : α
+  bits0 : Packed.toBits unl = 0
+  bits1 : Packed.toBits one = 1
+  bits2 : Packed.toBits two = 2
+  dec0 : (Packed.ofBits? (α := α) (BitVec.ofNat 32 0)).run = some (.ok unl)
+  dec1 : (Packed.ofBits? (α := α) (BitVec.ofNat 32 1)).run = some (.ok one)
+  dec2 : (Packed.ofBits? (α := α) (BitVec.ofNat 32 2)).run = some (.ok two)
+  ne01 : unl ≠ one
+  ne02 : unl ≠ two
+  ne12 : one ≠ two
+
+theorem intSize32 : intSize 32 = 4 := rfl
+
+/-- The preparation of an atomic write op at the word by thread `t`: the access, the record and
+the location. -/
+theorem Inv.prep {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : Block}
+    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hacc : m.accessW L.ptr (intSize 32) 4 = pure (b, blk, o))
+    (hl : ((Zig.locIdx b o (intSize 32)).run (m.recordAt b o (intSize 32) .atomicWrite)).run =
+      some (.ok (li, m₁))) :
+    b = L.b ∧ o = L.o ∧ ∃ l, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
+      m₁.waiters = m.waiters ∧ m₁.blocks = m.blocks ∧ m₁.atomics[li]! = l := by
+  obtain ⟨blk₀, -, -, -, -, ha₀⟩ := hi.access
+  rw [intSize32] at hacc hl
+  rw [ha₀] at hacc
+  cases hacc
+  have hcs : m.current < m.clocks.size := by rw [hi.own.csize, hc]; exact ht
+  have hir := hi.record (k := .atomicWrite) rfl (hc ▸ ht)
+  obtain ⟨l, hl', hi₁, hb₁, hc₁, ht₁, hf₁, hw₁, hcu₁, hg₁⟩ := hir.locIdx (hc ▸ ht) hl
+  refine ⟨rfl, rfl, l, hl', hi₁, ⟨by rw [ht₁]; rfl, fun e he => ?_, by rw [hg₁]; rfl,
+    by rw [hc₁]; simp [Mem.recordAt], fun u hu => ?_, ?_, by rw [hb₁]; rfl, .inl (by rw [hb₁]; rfl)⟩,
+    by rw [hcu₁, ← hc]; rfl, by rw [hw₁]; rfl, by rw [hb₁]; rfl, (loc_get hl').2.2⟩
+  · rw [hf₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ⟨rfl, rfl, rfl, rfl, m.current, by rw [ht₁]; exact hc ▸ ht, ?_⟩
+      rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
+  · rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite, if_neg (fun h => hu (h.1.trans hc))]
+  · rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_bump]
+
+/-- Each message of the word holds `0`, `1` or `2`; the newest one holds the word. -/
+theorem Inv.msgVal {G : ThreadId → γ} {m : Mem} {li j : Nat} {l : ALoc} {v : BitVec 32}
+    (hi : L.Inv G m) (hl : L.Loc m li l) (hj : j < l.msgs.size)
+    (h : (intOfBytes 32 (l.msgs[j]!).bytes).run = some (.ok v)) :
+    ∃ w < 3, v = BitVec.ofNat 32 w ∧ (j = l.msgs.size - 1 → L.U32 m v) := by
+  obtain ⟨-, -, -, hval, hlast⟩ := hi.loc.ok li l hl
+  obtain ⟨w, hw, hv⟩ := hval j hj
+  rw [getElem!_pos l.msgs _ hj, hv] at h
+  cases h
+  refine ⟨w, hw, rfl, fun e => ?_⟩
+  subst e
+  unfold Lock.U32; rw [← hlast]
+  unfold ALoc.lastBytes
+  rw [Array.back?_eq_getElem?, Array.getElem?_eq_getElem hj]
+  simpa using hv
+
+theorem States.dec {α : Type} [Packed α 32] (S : States α) {w : Nat} (hw : w < 3) :
+    ∃ v, (Packed.ofBits? (α := α) (BitVec.ofNat 32 w)).run = some (.ok v) ∧
+      ((w = 0 ∧ v = S.unl) ∨ (w = 1 ∧ v = S.one) ∨ (w = 2 ∧ v = S.two)) := by
+  rcases (by omega : w = 0 ∨ w = 1 ∨ w = 2) with rfl | rfl | rfl
+  · exact ⟨_, S.dec0, .inl ⟨rfl, rfl⟩⟩
+  · exact ⟨_, S.dec1, .inr (.inl ⟨rfl, rfl⟩)⟩
+  · exact ⟨_, S.dec2, .inr (.inr ⟨rfl, rfl⟩)⟩
+
+theorem decode_eq {α : Type} [Packed α 32] {b : BitVec 32} {v v' : α}
+    (h : (Packed.ofBits? (α := α) b).run = some (.ok v))
+    (h' : (Packed.ofBits? (α := α) b).run = some (.ok v')) : v = v' := by
+  rw [h] at h'; cases h'; rfl
+
+/-- `lock`'s first try, `cmpxchg(unlocked → locked_once)` with an acquire, by thread `t` at `out`:
+on success `t` holds the lock (the word was `0`); else it read `1` (`spin`) or `2` (`wait`). -/
+theorem Inv.cas {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Packed α 32]
+    (S : States α) {r : Option α} (hi : L.Inv G m) (hph : L.ph (G t) = .out) (hc : m.current = t)
+    (h : ((cmpxchgAs c .acquire .relaxed 4 L.ptr S.unl S.one).run m).run = some (.ok (r, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧
+      ((r = none ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
+       (r = some S.one ∧ L.Inv (upd G t (L.set (G t) .spin Heap.empty)) m') ∨
+       (r = some S.two ∧ L.Inv (upd G t (L.set (G t) .wait Heap.empty)) m')) := by
+  obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
+  have core : ∀ o, ((cmpxchgAt c .acquire .relaxed 4 L.ptr (Packed.toBits S.unl)
+      (Packed.toBits S.one)).run m).run = some (.ok (o, m')) →
+      L.Step t m m' ∧ m'.current = t ∧
+      ((o = none ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
+       ∃ w < 3, w ≠ 0 ∧ o = some (BitVec.ofNat 32 w) ∧ L.Inv G m') := by
+    intro o ho
+    obtain ⟨b, blk, off, li, m₁, pos, old, hacc, -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok ho
+    obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
+    obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
+    rw [hl0] at hold
+    rcases hcase with ⟨rfl, rfl, hm'⟩ | ⟨hne, rfl, hm'⟩
+    · -- success: the newest message holds `0`
+      have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos
+        (by rw [hl0]; exact hold)
+      rw [hl0] at hpl hm'
+      rw [hpl] at hold hm'
+      obtain ⟨w, -, -, hU⟩ := hi₁.msgVal hl' (by omega) hold
+      have hU0 : L.U32 m₁ (BitVec.ofNat 32 0) := by
+        have := hU rfl; rw [S.bits0] at this; exact this
+      have hF : L.Free G := (hi₁.free_iff (by decide) hU0).mp rfl
+      rw [S.bits1] at hm'
+      obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₁.acquire (w' := 1) hl' hcu₁ (.inl ⟨hph, rfl⟩) hF hm'
+      exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hL, hR, hi'⟩⟩
+    · -- failure: a relaxed read
+      obtain ⟨hlt, -⟩ := casOpts_pos hpos
+      rw [hl0] at hlt
+      obtain ⟨w, hw, rfl, -⟩ := hi₁.msgVal hl' hlt hold
+      have hw0 : w ≠ 0 := fun e => hne (by rw [e, S.bits0]; rfl)
+      have hmM : m' = observeM m₁ li ((m₁.atomics[li]!).msgs[pos]!).id := by
+        rw [hm']; unfold loadM; rfl
+      refine ⟨hst₁.trans (by rw [hmM]; exact Step.same rfl rfl rfl rfl rfl) (.inl hb₁),
+        by rw [hmM, ← hcu₁]; rfl, .inr ⟨w, hw, hw0, rfl, ?_⟩⟩
+      rw [hmM]
+      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) fun e he => .inl he
+  rcases cmpxchgAs_ok h with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
+  · obtain ⟨hst, hcu, h1 | ⟨w, -, -, he, -⟩⟩ := core none ho
+    · exact ⟨hst, hcu, .inl ⟨rfl, h1.2⟩⟩
+    · cases he
+  · obtain ⟨hst, hcu, ⟨he, -⟩ | ⟨w, hw, hw0, he, hi'⟩⟩ := core (some b) ho
+    · cases he
+    · cases he
+      have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+      have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+      have hnw : L.ph (G t) ≠ .wait := by rw [hph]; decide
+      have hret : ∀ p : LPh, p ≠ .holds → p ≠ .gone →
+          L.Inv (upd G t (L.set (G t) p Heap.empty)) m' := fun p hp hpg => by
+        have := hi'.queue (c := m'.current) (ws := m'.waiters) (wk := m'.woken) hnh hng hp hpg
+          (fq_keep hi' hnw) (wit_keep hi' hnh hp fun h => by rw [hph] at h; cases h)
+        cases m'; exact this
+      obtain ⟨v', hv', hcase⟩ := S.dec hw
+      have := decode_eq hd hv'
+      subst this
+      refine ⟨hst, hcu, .inr ?_⟩
+      rcases hcase with ⟨rfl, -⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact absurd rfl hw0
+      · exact .inl ⟨rfl, hret _ (by decide) (by decide)⟩
+      · exact .inr ⟨rfl, hret _ (by decide) (by decide)⟩
+
+/-- An `xchg` at the word by thread `t`: it reads the newest message (a chain), whose value `w` is
+the word, and writes `v`. -/
+theorem Inv.xchgAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v b : BitVec 32}
+    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (h : ((atomicRmwAt c .xchg false ord 4 L.ptr v).run m).run = some (.ok (b, m'))) :
+    ∃ m₁ li l w, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
+      m₁.blocks = m.blocks ∧ w < 3 ∧ b = BitVec.ofNat 32 w ∧ L.U32 m₁ (BitVec.ofNat 32 w) ∧
+      m' = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) v := by
+  obtain ⟨b0, blk, off, li, m₁, pos, hacc, -, hl, hpos, hold, hm'⟩ := atomicRmwAt_ok h
+  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
+  obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
+  have hpl := rmw_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact h0) (by rw [hl0]; exact hch) hpos
+  rw [hl0] at hpl hold hm'
+  rw [hpl] at hold hm'
+  obtain ⟨w, hw, rfl, hU⟩ := hi₁.msgVal hl' (by omega) hold
+  exact ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU rfl, hm'⟩
+
+/-- `lock`'s loop, `xchg(contended)` with an acquire, by thread `t` at `spin`: if the word was `0`,
+`t` holds the lock; else it goes to the futex wait. -/
+theorem Inv.xchgLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Packed α 32]
+    (S : States α) {r : α} (hi : L.Inv G m) (hph : L.ph (G t) = .spin) (hc : m.current = t)
+    (h : ((atomicRmwAs c .xchg .acquire 4 L.ptr S.two).run m).run = some (.ok (r, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧
+      ((r = S.unl ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
+       (r ≠ S.unl ∧ L.Inv (upd G t (L.set (G t) .wait Heap.empty)) m')) := by
+  obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
+  obtain ⟨b, hb, hd⟩ := atomicRmwAs_ok h
+  obtain ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU, hm'⟩ := hi.xchgAt hc ht hb
+  rw [S.bits2] at hm'
+  obtain ⟨v', hv', hcase⟩ := S.dec hw
+  have := decode_eq hd hv'
+  subst this
+  by_cases hw0 : w = 0
+  · subst hw0
+    have hF : L.Free G := (hi₁.free_iff (by decide) hU).mp rfl
+    obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₁.acquire (w' := 2) hl' hcu₁ (.inr ⟨hph, rfl⟩) hF hm'
+    rcases hcase with ⟨-, rfl⟩ | ⟨h, -⟩ | ⟨h, -⟩
+    · exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hL, hR, hi'⟩⟩
+    · cases h
+    · cases h
+  · have hnF : ¬ L.Free G := fun hF => hw0 ((hi₁.free_iff hw hU).mpr hF)
+    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.contend hl' hcu₁ hph hnF hm'
+    refine ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨?_, hi'⟩⟩
+    rcases hcase with ⟨h, -⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩
+    · exact absurd h hw0
+    · exact S.ne01.symm
+    · exact S.ne02.symm
+
+/-- `unlock`'s `xchg(unlocked)` with a release, by the holder `t`: the word was `1` (`t` goes to
+`out`) or `2` (`t` goes to the futex wake). -/
+theorem Inv.xchgUnlock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Packed α 32]
+    (S : States α) {r : α} (hi : L.Inv G m) (hph : L.ph (G t) = .holds) (hc : m.current = t)
+    (h : ((atomicRmwAs c .xchg .release 4 L.ptr S.unl).run m).run = some (.ok (r, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧
+      ((r = S.one ∧ L.Inv (upd G t (L.set (G t) .out Heap.empty)) m') ∨
+       (r = S.two ∧ L.Inv (upd G t (L.set (G t) .wake Heap.empty)) m')) := by
+  obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
+  obtain ⟨b, hb, hd⟩ := atomicRmwAs_ok h
+  obtain ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU, hm'⟩ := hi.xchgAt hc ht hb
+  rw [S.bits0] at hm'
+  have hw0 : w ≠ 0 := fun e => (hi₁.free_iff hw hU).mp e t hph
+  obtain ⟨v', hv', hcase⟩ := S.dec hw
+  have := decode_eq hd hv'
+  subst this
+  rcases hcase with ⟨h, -⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  · exact absurd h hw0
+  · obtain ⟨hst₂, hcM, hi'⟩ := hi₁.release (p := .out) hl' hcu₁ hph hU (.inl ⟨rfl, rfl⟩) hm'
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hi'⟩⟩
+  · obtain ⟨hst₂, hcM, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨rfl, rfl⟩) hm'
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨rfl, hi'⟩⟩
+
+/-! ## No error at the word -/
+
+/-- The access to the word, its race check and its location do not fail. -/
+theorem Inv.prep_ok {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
+    (ht : m.current < m.threads.size) :
+    ∃ blk, m.accessW L.ptr (intSize 32) 4 = pure (L.b, blk, L.o) ∧
+      NoRace m L.b L.o (intSize 32) .atomicWrite ∧
+      ∀ e, ((Zig.locIdx L.b L.o (intSize 32)).run
+        (m.recordAt L.b L.o (intSize 32) .atomicWrite)).run ≠ some (.error e) := by
+  obtain ⟨blk, -, -, -, -, ha⟩ := hi.access
+  have hir := hi.record (k := .atomicWrite) rfl ht
+  refine ⟨blk, ha, hi.noRace rfl ht, fun e => locIdx_noErr_of (fun i hf => ?_) (fun hn l hl hb h1 h2 => ?_) e⟩
+  · obtain ⟨hi', -, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
+    rw [getElem!_pos _ i hi', intSize32]
+    exact (hir.loc.ok i _ ⟨hf, Array.getElem?_eq_getElem hi'⟩).1
+  · have ho := hir.loc.only l hl hb (by rw [intSize32] at h2; exact h2) h1
+    have := Array.findIdx?_eq_none_iff.mp hn l hl
+    simp [hb, ho] at this
+
+/-- `lock`'s `cmpxchg` does not throw: each option is a message, which holds a state. -/
+theorem Inv.cas_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} {α : Type} [Packed α 32]
+    (S : States α) (hi : L.Inv G m) (ht : m.current < m.threads.size)
+    (hcr : c < casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m ∨
+      casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m = 0 ∧ c = 0) (e : Error) :
+    ((cmpxchgAs c .acquire .relaxed 4 L.ptr S.unl S.one).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prep_ok ht
+  have hprep : ∀ e, ((casPrep 32 4 L.ptr (Packed.toBits S.unl)).run m).run ≠ some (.error e) :=
+    casPrep_noErr hacc hnr hloc
+  refine cmpxchgAs_noErr (cmpxchgAt_noErr hprep ?_) ?_ e
+  · intro li opts m₁ hp
+    obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht ha hl
+    obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
+    have hne := casOpts_ne (e := Packed.toBits S.unl) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
+    have hcnt : casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m =
+        (casOpts m₁ li (Packed.toBits S.unl)).size := by
+      unfold casCount; rw [optCount_eq hp]
+    have hc : c < (casOpts m₁ li (Packed.toBits S.unl)).size := by rw [hcnt] at hcr; omega
+    refine ⟨_, Array.getElem?_eq_getElem hc, ?_⟩
+    have hpl := (casOpts_pos (Array.getElem?_eq_getElem hc)).1
+    rw [hl0] at hpl
+    obtain ⟨w, -, hw⟩ := hval _ hpl
+    exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
+  · intro b m' hb
+    obtain ⟨b0, blk', o, li, m₁, pos, old, hacc', -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok hb
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht hacc' hl
+    rcases hcase with ⟨-, h, -⟩ | ⟨-, h, -⟩
+    · cases h
+    · cases h
+      rw [hl0] at hold
+      have hpl := (casOpts_pos hpos).1
+      rw [hl0] at hpl
+      obtain ⟨w, hw, rfl, -⟩ := hi₁.msgVal hl' hpl hold
+      obtain ⟨v, hv, -⟩ := S.dec hw
+      exact ⟨v, hv⟩
+
+/-- An `xchg` at the word does not throw: it reads the newest message, which holds a state. -/
+theorem Inv.xchg_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} {ord : AtomicOrder} {α : Type}
+    [Packed α 32] (S : States α) {v : α} (hi : L.Inv G m) (ht : m.current < m.threads.size)
+    (hcr : c < rmwCount 32 ord 4 L.ptr m ∨ rmwCount 32 ord 4 L.ptr m = 0 ∧ c = 0) (e : Error) :
+    ((atomicRmwAs c .xchg ord 4 L.ptr v).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prep_ok ht
+  have hprep : ∀ e, ((loadPrep 32 ord 4 L.ptr true).run m).run ≠ some (.error e) :=
+    loadPrep_noErr (by simpa using hacc) (by simpa using hnr) (by simpa using hloc)
+  refine atomicRmwAs_noErr (atomicRmwAt_noErr hprep ?_) ?_ e
+  · intro li opts m₁ hp
+    obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := loadPrep_ok hp
+    simp only [↓reduceIte] at ha hl
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht ha hl
+    obtain ⟨-, hsz, hch, hval, -⟩ := hi₁.loc.ok li l hl'
+    have hro : readOpts m₁ li true = #[l.msgs.size - 1] := by
+      rw [readOpts_chain (by rw [hl0]; exact hsz) (by rw [hl0]; exact hch), hl0]
+    have hcnt : rmwCount 32 ord 4 L.ptr m = 1 := by
+      unfold rmwCount; rw [optCount_eq hp, hro]; rfl
+    have hc0 : c = 0 := by rw [hcnt] at hcr; omega
+    subst hc0
+    refine ⟨l.msgs.size - 1, by rw [hro]; rfl, ?_⟩
+    obtain ⟨w, -, hw⟩ := hval (l.msgs.size - 1) (by omega)
+    exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ (by omega)]; exact hw⟩
+  · intro b m' hb
+    obtain ⟨m₁, li, l, w, -, -, -, -, -, hw, rfl, -, -⟩ := hi.xchgAt rfl ht hb
+    obtain ⟨v, hv, -⟩ := S.dec hw
+    exact ⟨v, hv⟩
+
+/-- The futex wait at the word does not throw. -/
+theorem Inv.wait_ok {G : ThreadId → γ} {m : Mem} {t : ThreadId} {e : BitVec 32}
+    (hi : L.Inv G m) :
+    ∃ b m', ((Thread.futexWait L.ptr e).run { m with current := t }).run = some (.ok (b, m')) := by
+  by_cases hw : ({ m with current := t } : Mem).woken.contains ({ m with current := t } : Mem).current = true
+  · exact ⟨_, _, futexWait_run_woken hw⟩
+  · obtain ⟨blk, hb, -, -, ha, -⟩ := hi.access
+    obtain ⟨w, -, hu, -⟩ := hi.word
+    rw [u32_bytes hb] at hu
+    exact ⟨_, _, futexWait_run_go (by simpa using hw) ha hu⟩
+
+/-! ## A protocol with the lock -/
+
+variable {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
+
+/-- A thread in the futex queue is not the last one: the queue's witness goes on. -/
+theorem Fits.live (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
+    (t : ThreadId) : P.Live t G m := by
+  intro hw hall
+  have hpos : 0 < m.waiters.size := by
+    obtain ⟨i, hi', -⟩ := Array.any_eq_true.mp hw; omega
+  obtain ⟨v, hv, hq, hb, -⟩ := hi.wit hpos
+  rcases hall v hv with h | h | h
+  · rw [hP.fin _ h] at hb; cases hb
+  · rw [hq] at h; cases h
+  · rw [hP.joins _ h] at hb; cases hb
+
+theorem Fits.lock (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) : L.Inv G m :=
+  ((hP.inv G m).mp hi).1
+
+/-- A lock step with `t`'s new place and resource keeps the protocol's invariant. -/
+theorem Fits.step (hP : L.Fits P U) {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh}
+    {h : Heap} (hi : P.inv G m) (hs : L.Step t m m') (hl : L.Inv (upd G t (L.set (G t) p h)) m') :
+    P.inv (upd G t (L.set (G t) p h)) m' :=
+  (hP.inv _ _).mpr ⟨hl, hP.stable G m m' t p h ((hP.inv G m).mp hi).2 hs⟩
+
+/-- A lock step with the same ghost values keeps the protocol's invariant. -/
+theorem Fits.stay (hP : L.Fits P U) {G : ThreadId → γ} {m m' : Mem} {t : ThreadId}
+    (hi : P.inv G m) (hs : L.Step t m m') (hl : L.Inv G m') : P.inv G m' := by
+  have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hs (by rw [upd_set_self]; exact hl)
+  rwa [upd_set_self] at this
+
+end Lock
+
+end Conc
+end Zig

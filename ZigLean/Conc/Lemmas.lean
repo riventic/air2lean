@@ -1015,11 +1015,13 @@ theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[ti
     ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj]
 
 
-theorem locIdx_noErr {m : Mem} {b o len : Nat}
+/-- `locIdx` does not throw: a location at `(b, o)` has the length `len`, and if there is none, no
+location overlaps the bytes. -/
+theorem locIdx_noErr_of {m : Mem} {b o len : Nat}
     (hfound : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
       (m.atomics[i]!).len = len)
     (hnew : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none →
-      ∀ l ∈ m.atomics, l.block ≠ b) (e : Error) :
+      ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len → False) (e : Error) :
     ((locIdx b o len).run m).run ≠ some (.error e) := by
   intro h
   unfold locIdx at h
@@ -1038,13 +1040,21 @@ theorem locIdx_noErr {m : Mem} {b o len : Nat}
     have hno : (m₁.atomics.any fun l => l.block == b && o < l.off + l.len && l.off < o + len) =
         false := by
       rw [Array.any_eq_false]
-      intro j hj
-      have := hnew hi _ (Array.getElem_mem hj)
-      simp [this]
+      intro j hj hc
+      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
+      exact hnew hi _ (Array.getElem_mem hj) hc.1.1 hc.1.2 hc.2
     simp only [hi, hno, Bool.false_eq_true, ↓reduceIte] at h₁
     rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
     · exact MemM.set_err h₂
     · exact MemM.pure_err h₂
+
+theorem locIdx_noErr {m : Mem} {b o len : Nat}
+    (hfound : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
+      (m.atomics[i]!).len = len)
+    (hnew : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none →
+      ∀ l ∈ m.atomics, l.block ≠ b) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) :=
+  locIdx_noErr_of hfound (fun hn l hl hb _ _ => hnew hn l hl hb) e
 
 theorem loadPrep_noErr {n : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {rmw : Bool}
     {m : Mem} {b o : Nat} {blk : Block}
