@@ -1798,6 +1798,78 @@ theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : 
   simp only [isNonErr, ↓reduceIte, StateT.run_pure]
   exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
 
+/-! ## `main`'s event wait -/
+
+/-- The event's writes, for `main` before (`x.vw = false`) or after its `waiting`: write `j` has
+the value `vL[j]`. -/
+theorem ev_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec 32}
+    (hi : proto.inv (upd G 0 (gP x)) m) (hj : j < (WV.hist m).size) (hv : (WV.hist m)[j]!.Val b) :
+    j < (vL x (G 1).2).length ∧ b = BitVec.ofNat 32 (vL x (G 1).2)[j]! := by
+  obtain ⟨hsz, hval⟩ := hi.2.vh
+  rw [upd_self, upd0_1] at hsz hval
+  simp only [gP] at hsz hval
+  exact ⟨by omega, val_eq hv (hval j (by omega))⟩
+
+theorem ofBits_cst' (b : BitVec 32) :
+    (Packed.ofBits? (α := Io_Event) b).run = some (.ok (Packed.ofBits b)) ∨
+      (Packed.ofBits? (α := Io_Event) b).run = some (.error .illegal) := by
+  unfold Packed.ofBits?; split <;> simp [pure, throw, throwThe, MonadExceptOf.throw, ExceptT.pure,
+    ExceptT.mk, ExceptT.run]
+
+/-- `main`'s `cmpxchg(unset → waiting)` (acquire) succeeded at `ev0`: it goes to `ev1`. -/
+theorem inv_ev1 {G : ThreadId → Gh} {m₁ m' : Mem} {c : Bool}
+    (hi : proto.inv (upd G 0 (gP { ph := .ev0, cw := c })) m₁) (hw' : WV.Ok m') (hop : WV.Op 0 m₁ m')
+    (hL : L.Inv (upd G 0 (gP { ph := .ev0, cw := c })) m') (hv : (last (WV.hist m₁)).Val 0)
+    (hh : WV.hist m' = (WV.hist m₁).push (Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) 1)) :
+    proto.inv (upd G 0 (gP { ph := .ev1, cw := c, vw := true })) m' := by
+  have hu := hi.2
+  have hfl := hu.flags
+  rw [upd_self, upd0_1] at hfl
+  obtain ⟨hsz, hval⟩ := hu.vh
+  rw [upd_self, upd0_1] at hsz hval
+  -- the newest write is `unset`: the producer did not write `is_set`
+  have hv1 : (G 1).2.vw = false := by
+    cases e : (G 1).2.vw
+    · rfl
+    · exfalso
+      have hs2 : (WV.hist m₁).size = 2 := by simpa [vL, gP, e] using hsz
+      have := val_eq hv (by
+        rw [show last (WV.hist m₁) = (WV.hist m₁)[1]! by simp [last, hs2]]
+        have := hval 1 (by simp [vL, gP, e])
+        simpa [vL, gP, e] using this)
+      revert this; decide
+  have hs1 : (WV.hist m₁).size = 1 := by simpa [vL, gP, hv1] using hsz
+  have hS := hist_op (.inr (.inr rfl)) (.inl rfl) (by decide) hu hop
+  have hE := hist_op (.inr (.inr rfl)) (.inr (.inl rfl)) (by decide) hu hop
+  have h1 : (WV.hist m')[1]! = Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) 1 := by
+    rw [hh, get_push_eq' hs1.symm]
+  refine inv_mstep (.inr (.inr rfl)) hi hw' hop hL rfl (by simp) rfl (by simp) ?_ ?_
+    ⟨?_, fun k hk => ?_⟩ ?_ ?_ ?_ (fun h => by cases h) (fun _ => ?_)
+    (fun w hw => .inl (qok_out hi (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.away)) w
+      (hop.waiters ▸ hw))) ?_
+  · rw [sok_congr hS]; have := hu.sh; rw [upd_self, upd0_1] at this
+    have e : sN { ph := .ev1, cw := c, vw := true } (G 1).2 = sN (gP { ph := .ev0, cw := c }).2 (G 1).2 :=
+      by cases c <;> rfl
+    rw [e]; exact this
+  · rw [eok_congr hE]; have := hu.eh; rw [upd0_1] at this; exact this
+  · rw [hh]; simp [vL, gP, hv1, hs1]
+  · have hk2 : k < 2 := by simpa [vL, gP, hv1] using hk
+    rcases (by omega : k = 0 ∨ k = 1) with rfl | rfl
+    · rw [hh, get_push_lt (by omega)]
+      have := hval 0 (by simp [vL, gP, hv1]); simpa [vL, gP, hv1] using this
+    · rw [h1]
+      have e : BitVec.ofNat 32 (vL { ph := .ev1, cw := c, vw := true } (G 1).2)[1]! = 1 := by
+        simp [vL, hv1]
+      rw [e]; exact rmwEnt_val
+  · exact ⟨hfl.sig, by simpa [gP, Ph.post] using hfl.mcw, by simpa [gP, Ph.post] using hfl.cons,
+      hfl.pcw, hfl.pcw', (fun _ => .inl rfl), (fun _ => rfl), hfl.pvw,
+      (fun h => absurd (hfl.pvw.mpr (.inl h)) (by rw [hv1]; decide)), hfl.late, hfl.pfin,
+      (fun h => by simpa [gP] using hfl.sg1 h)⟩
+  · exact (reg_x0 hu.reg rfl).mono (by rw [hS]) hop.clocks (fun _ h => before_op hop apV h)
+  · intro h; rw [hS, hE]; exact hu.sig (by rw [upd0_1]; exact h)
+  · rw [h1]; exact VClock.le_refl _
+  · intro h; rw [hS]; exact VClock.le_trans (by have := hu.pc; rw [upd0_1] at this; exact this h) (hop.clocks 1)
+
 /-! ## The producer -/
 
 
