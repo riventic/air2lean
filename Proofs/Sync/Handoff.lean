@@ -435,6 +435,42 @@ theorem before_same {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock} (h :
   obtain ⟨i, l, hl, hle⟩ := h
   exact ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩
 
+/-- A change of the ghost values with the same memory: `U` from the facts that depend on them. -/
+theorem U_upd {G G' : ThreadId → Gh} {m : Mem} (hu : U G m)
+    (hsh : Shape (fun u => (G' u).2) m) (hpart : ∀ u, (G' u).1.part = Heap.empty)
+    (hS : sN (G' 0).2 (G' 1).2 = sN (G 0).2 (G 1).2) (hE : eN (G' 1).2 = eN (G 1).2)
+    (hV : vL (G' 0).2 (G' 1).2 = vL (G 0).2 (G 1).2) (hfl : Flags (G' 0).2 (G' 1).2)
+    (hreg : RegHB G' m)
+    (hseen : (G' 0).2.ph = .seen → VClock.le (WS.hist m)[2]!.clock (m.clocks[0]!) = true)
+    (hvclk : (G' 0).2.vw → VClock.le (WV.hist m)[1]!.clock (m.clocks[0]!) = true)
+    (hq : QOk G' m) : U G' m :=
+  ⟨hsh, hu.io, hpart, hu.blk, hu.ws, hu.we, hu.wv, by rw [hS]; exact hu.sh, by rw [hE]; exact hu.eh,
+    by rw [hV]; exact hu.vh, hfl, hreg, fun h => hu.sig (by rw [← hE]; exact h), hseen, hvclk, hq⟩
+
+/-- A step of thread `t` on its own part (`WP.liftMem_owned`), with the same ghost values. -/
+theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {hQ : Heap}
+    (hi : proto.inv G m) (hs : StepIn (m.heap.diff (L.own G m t)) m m')
+    (hm' : m'.heap = hQ ∪ m.heap.diff (L.own G m t))
+    (hd : Heap.Disjoint hQ (m.heap.diff (L.own G m t))) : U G m' := by
+  have hrest : ∀ x, x < 32 → m.heap.diff (L.own G m t) (0, x) = m.heap (0, x) := fun x hx => by
+    simp [Heap.diff, own_none hi t hx]
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
+    by_cases hu : u = m.current
+    · subst hu; exact hs.mine
+    · rw [hs.others u hu]; exact VClock.le_refl _
+  refine U_keep hi.2 (Word.keep_stepIn hi.2.ws (off_own hi rfl (by decide) t) hs hm' hd)
+    (Word.keep_stepIn hi.2.we (off_own hi rfl (by decide) t) hs hm' hd)
+    (Word.keep_stepIn hi.2.wv (off_own hi rfl (by decide) t) hs hm' hd) hs.threads hs.waiters hcl
+    (fun _ h => before_same hs.atomics h) (fun e he hb ho => ?_) (blk_keep hi.2.blk ?_)
+  · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
+    · rcases hi.2.io e h' hb ho with h'' | h''
+      · exact .inl h''
+      · exact .inr fun u hu => VClock.le_trans (h'' u (hs.threads ▸ hu)) (hcl u)
+    · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+        rw [hb, hrest _ (by omega)]; exact blk_heap hi.2.blk (by omega)⟩ hnt
+  · rw [hm', Heap.union_of_right ((hd (0, 0)).resolve_right (by
+      rw [hrest 0 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 0 (by decide)]
+
 /-! ## `io` -/
 
 theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
@@ -696,5 +732,237 @@ theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
       rw [hh₁] at hj hv hfl hacq hh
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
         (linv_op hW hic hop)).2 j b v hne hd hj hv hfl hacq hh⟩
+
+/-! ## Changes of a ghost value -/
+
+theorem upd1_0 (G : ThreadId → Gh) (g : Gh) : upd G 1 g 0 = G 0 := upd_ne _ _ (by decide)
+theorem upd0_1 (G : ThreadId → Gh) (g : Gh) : upd G 0 g 1 = G 1 := upd_ne _ _ (by decide)
+
+/-- `R` reads only `v` and `ready` of the producer's place. -/
+theorem R_congr {Y Y' : ThreadId → X} (hv : vOf (Y' 1) = vOf (Y 1)) (hr : rdyOf (Y' 1) = rdyOf (Y 1))
+    (h : Heap) : R Y' h ↔ R Y h := by
+  unfold R; rw [hv, hr]
+
+/-- The threads, after a change of the producer's place. -/
+theorem shape_p {G : ThreadId → Gh} {m : Mem} {g g' : Gh}
+    (hs : Shape (fun u => (upd G 1 g u).2) m) (hpx : g.2.ph.isProd) (hpr : g'.2.ph.isProd) :
+    Shape (fun u => (upd G 1 g' u).2) m := by
+  obtain ⟨h00, hc⟩ := hs
+  refine ⟨h00, ?_⟩
+  rcases hc with ⟨-, -, hn⟩ | ⟨h2, h1, hm, hm', -, hrest⟩
+  · have := hn 1 (Nat.le_refl _); simp only [upd_self] at this; rw [this] at hpx; cases hpx
+  · refine .inr ⟨h2, h1, ?_, ?_, by simp only [upd_self]; exact hpr, fun u hu => ?_⟩
+    · simpa [upd1_0] using hm
+    · simpa [upd1_0] using hm'
+    · have hu1 : u ≠ 1 := Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu)
+      have := hrest u hu
+      simp only [upd_ne _ _ hu1] at this ⊢; exact this
+
+theorem parts_p {G : ThreadId → Gh} {g g' : Gh} (hp : ∀ u, (upd G 1 g u).1.part = Heap.empty)
+    (hg : g'.1.part = Heap.empty) : ∀ u, (upd G 1 g' u).1.part = Heap.empty := fun u => by
+  have := hp u; unfold upd at this ⊢; split <;> simp_all
+
+/-- A change of the producer's place and writes, with the same lock part, `v`, `ready` and
+counts of writes. -/
+theorem inv_p {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (hi : proto.inv (upd G 1 (a, x)) m)
+    (hpx : x.ph.isProd) (hpr : x'.ph.isProd) (hv : vOf x' = vOf x) (hr : rdyOf x' = rdyOf x)
+    (hcw : x'.cw = x.cw) (hvw : x'.vw = x.vw) (heN : eN x' = eN x) (hfl : Flags (G 0).2 x')
+    (hreg : RegHB (upd G 1 (a, x')) m) (hq : QOk (upd G 1 (a, x')) m) :
+    proto.inv (upd G 1 (a, x')) m := by
+  have h0 : ∀ g, upd G 1 g 0 = G 0 := upd1_0 G
+  refine ⟨hi.1.congr (fun u => ?_) (fun u => ?_) (fun u => ?_) (fun h => ?_), U_upd hi.2 ?_
+    (fun u => ?_) ?_ (by simp only [upd_self, heN]) ?_ (by rw [h0, upd_self]; exact hfl) hreg
+    (fun h => hi.2.seen (by rw [h0] at h ⊢; exact h))
+    (fun h => hi.2.vclk (by rw [h0] at h ⊢; exact h)) hq⟩
+  · unfold upd; split <;> rfl
+  · unfold upd; split <;> rfl
+  · unfold upd; split <;> rfl
+  · change R (fun u => (upd G 1 (a, x') u).2) h ↔ R (fun u => (upd G 1 (a, x) u).2) h
+    exact R_congr (by simp only [upd_self]; exact hv) (by simp only [upd_self]; exact hr) h
+  · exact shape_p hi.2.shape hpx hpr
+  · exact parts_p hi.2.parts (by have := hi.2.parts 1; simpa using this) u
+  · simp only [h0, upd_self, sN, hcw]
+  · simp only [h0, upd_self, vL, hvw]
+
+/-! ## The producer -/
+
+/-- The producer's ghost value outside the lock's code. -/
+def gP (x : X) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, x)
+
+/-- The producer's ghost value while it holds the mutex and the resource `h`. -/
+def gH (x : X) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, x)
+
+theorem live1 {G : ThreadId → Gh} {m : Mem} {g : Gh} (hi : proto.inv (upd G 1 g) m)
+    (hg : g.1.ph ≠ .gone) : 1 < m.threads.size :=
+  (hi.1.live 1 (by rw [upd_self]; exact hg)).1
+
+/-- The places and the writes agree, after a change of the producer's place before its signal. -/
+theorem Flags.early {x0 x1 x1' : X} (h : Flags x0 x1) (hc : x1.cw = false) (hc' : x1'.cw = false)
+    (hv' : x1'.vw = false) (hp : x1'.ph ≠ .sgp ∧ x1'.ph ≠ .wk ∧ x1'.ph ≠ .setw) :
+    Flags x0 x1' := by
+  refine ⟨fun hx => ?_, h.mcw, fun h1 h2 => ?_, fun hx => ?_, fun hx => ?_, h.mvw, h.mvw', ?_,
+    fun hx => absurd hx hp.2.2⟩
+  · rw [hc'] at hx; cases hx
+  · have := h.cons h1 h2; rw [hc] at this; cases this
+  · rw [hc'] at hx; cases hx
+  · rcases hx with hx | hx
+    · exact absurd hx hp.1
+    · exact absurd hx hp.2.1
+  · rw [hv']
+    simp only [Bool.false_eq_true, false_iff, not_or, and_false, not_false_eq_true, and_true]
+    exact hp.2.2
+
+/-- `RegHB` after a change of the producer's place before its `ready = true`. -/
+theorem RegHB.early {G : ThreadId → Gh} {m : Mem} {g g' : Gh} (h : RegHB (upd G 1 g) m)
+    (hr : g.2.ph.rank ≤ 3) (hr' : g'.2.ph.rank ≤ 3) : RegHB (upd G 1 g') m := by
+  intro hcw
+  rw [upd1_0] at hcw
+  obtain ⟨h1, -⟩ := h (by rw [upd1_0]; exact hcw)
+  have hr'' : ¬ (g'.2.ph = .rdy ∨ g'.2.ph = .sg0 ∨ g'.2.ph = .sg1) := by
+    rintro (h | h | h) <;> rw [h] at hr' <;> simp [Ph.rank] at hr'
+  refine ⟨fun _ => ?_, fun hx => absurd (by rw [upd_self] at hx; exact hx) hr''⟩
+  have := h1 (by rw [upd_self]; exact hr)
+  rw [upd1_0] at this ⊢; exact this
+
+/-- `QOk` after a change of the producer's place. -/
+theorem QOk.p {G : ThreadId → Gh} {m : Mem} {g g' : Gh} (h : QOk (upd G 1 g) m)
+    (hr : g.2.ph.rank < 9 → g'.2.ph.rank < 9) (hf : g'.2.ph = .fin → g.2.ph = .fin) :
+    QOk (upd G 1 g') m := by
+  intro w hw
+  rcases h w hw with h' | ⟨h1, h2, h3, h4⟩ | ⟨h1, h2, h3, h4⟩
+  · exact .inl h'
+  · rw [upd1_0] at h3; rw [upd_self] at h4
+    exact .inr (.inl ⟨h1, h2, by rw [upd1_0]; exact h3, by rw [upd_self]; exact hr h4⟩)
+  · rw [upd1_0] at h3; rw [upd_self] at h4
+    exact .inr (.inr ⟨h1, h2, by rw [upd1_0]; exact h3, by
+      rw [upd_self]; exact fun hx => h4 (hf hx)⟩)
+
+/-- A step of the producer on the resource `hL` that it holds (`TTriple Pa x Qa`): after it the
+producer is at `xb` and holds `hQ`. -/
+theorem wp_pstep {α σ : Type} {x : MemM α} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    {xa xb : X} {hL : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
+    (hi : proto.inv (upd G 1 (gH xa hL)) m) (hc : m.current = 1)
+    (hp : R (fun u => (upd G 1 (gH xa hL) u).2) hL → Pa hL)
+    (hq : ∀ a hQ, Qa a hQ → R (fun u => (upd G 1 (gH xb hQ) u).2) hQ)
+    (hpa : xa.ph.isProd) (hpr : xb.ph.isProd) (hcw : xb.cw = xa.cw) (hvw : xb.vw = xa.vw)
+    (heN : eN xb = eN xa) (hfl : Flags (G 0).2 xb)
+    (hreg : ∀ m' hQ, L.Inv (upd G 1 (gH xb hQ)) m' → RegHB (upd G 1 (gH xa hL)) m' →
+      RegHB (upd G 1 (gH xb hQ)) m')
+    (hqk : ∀ m' hQ, QOk (upd G 1 (gH xa hL)) m' → QOk (upd G 1 (gH xb hQ)) m')
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ a m' hQ, m'.current = 1 → m'.threads = m.threads → Qa a hQ →
+      proto.inv (upd G 1 (gH xb hQ)) m' → Q (a, s) G m' d) :
+    proto.WP 1 ((liftM x : CM Tgt σ α).run s) Q G m d := by
+  have hh : L.ph (upd G 1 (gH xa hL) 1) = .holds := by rw [upd_self]; rfl
+  obtain ⟨ht1, hjt⟩ := hi.1.live 1 (by rw [hh]; decide)
+  have hres : R (fun u => (upd G 1 (gH xa hL) u).2) hL := by
+    have := hi.1.res 1 hh
+    rwa [show L.held (upd G 1 (gH xa hL) 1) = hL by rw [upd_self]; rfl] at this
+  have hown : L.own (upd G 1 (gH xa hL)) m 1 = hL := by
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
+  refine WP.liftM_owned ht hi.1.own hc ht1 (by rw [hown]; exact hp hres)
+    fun a m' hQ hr ho' hq₀ hs hm' hd => ?_
+  have hQe : L.part (gH xb hQ) ∪ L.held (gH xb hQ) = hQ := Heap.empty_union hQ
+  rw [hown] at hs hm' hd
+  have hl := hi.1.stepIn (g := gH xb hQ) hc hjt (by rw [hQe]; exact ho')
+    (by rw [hown]; exact hs) (by rw [hown, hQe]; exact hm') (by rw [hown, hQe]; exact hd)
+    (by rw [upd_self]; rfl) (Heap.disjoint_empty _ |>.symm) (fun h => absurd rfl h)
+    (fun h => absurd hh h) (fun _ => by
+      show R (fun u => (upd (upd G 1 (gH xa hL)) 1 (gH xb hQ) u).2) hQ
+      rw [upd_upd]; exact hq a hQ hq₀)
+  rw [upd_upd] at hl
+  have hu := U_stepIn hi (by rw [hown]; exact hs) (by rw [hown]; exact hm') (by rw [hown]; exact hd)
+  refine h a m' hQ (hs.current.trans hc) hs.threads hq₀ ⟨hl, U_upd hu
+    (shape_p hu.shape hpa hpr) (parts_p hu.parts rfl) ?_ ?_ ?_
+    (by rw [upd1_0, upd_self]; exact hfl) (hreg m' hQ hl hu.reg)
+    (fun h => hu.seen (by rw [upd1_0] at h ⊢; exact h))
+    (fun h => hu.vclk (by rw [upd1_0] at h ⊢; exact h)) (hqk m' hQ hu.q)⟩
+  · simp only [upd1_0, upd_self, sN, gH, hcw]
+  · simp only [upd_self, gH, heN]
+  · simp only [upd1_0, upd_self, vL, gH, hvw]
+
+/-- `signal` by the producer after its `unlock`: it signals iff `main` did `waiters += 1`. -/
+theorem signal_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io)
+    (hi : proto.inv (upd G 1 (gP { ph := .rdy })) m) (hc : m.current = 1) :
+    proto.WP 1 (Io_Condition_signal (bPtr.add 20) io) (fun _ G' m' _ => m'.current = 1 ∧
+      ∃ b, proto.inv (upd G' 1 (gP { ph := .set, cw := b })) m') G m d := by
+  sorry
+
+/-- `Event.set` by the producer: it writes `is_set`, and wakes `main` if it wrote `waiting`. -/
+theorem set_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (b : Bool)
+    (hi : proto.inv (upd G 1 (gP { ph := .set, cw := b })) m) (hc : m.current = 1) :
+    proto.WP 1 (Io_Event_set (bPtr.add 28) io) (fun _ G' m' _ => m'.current = 1 ∧
+      proto.inv (upd G' 1 (gP { ph := .fin, cw := b, vw := true })) m') G m d := by
+  sorry
+
+theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 1 (gP { ph := .lk })) m) (hc : m.current = 1) :
+    proto.WP 1 (producer bPtr) (fun _ G' m' _ => m'.current = 1 ∧
+      ∃ x, x.ph = .fin ∧ proto.inv (upd G' 1 (gP x)) m') G m d := by
+  unfold producer
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [ptr_add_zero]
+  refine WP.bind (wp_io hi hc (live1 hi (by decide)) fun m₁ hc₁ ht₁ hi₁ => ?_)
+  -- `lock`
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr 1 (gP { ph := .lk }) rfl _ G
+    m₁ d hi₁)))
+  rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
+  have hi₂' : proto.inv (upd G₂ 1 (gH { ph := .hl } hL)) m₂ := by
+    have hf := hi₂.2.flags
+    rw [upd1_0, upd_self] at hf
+    exact inv_p (a := ⟨.holds, Heap.empty, hL⟩) (x := { ph := .lk }) hi₂ rfl rfl rfl rfl rfl rfl rfl
+      (hf.early rfl rfl rfl (by decide))
+      (hi₂.2.reg.early (by simp [Lock.prod, gP, Ph.rank]) (by simp [Ph.rank]))
+      (hi₂.2.q.p (fun _ => by simp [Ph.rank]) (fun h => by cases h))
+  -- `v = 7`
+  refine WP.bind (wp_pstep (xa := { ph := .hl }) (xb := { ph := .v7 })
+    ((TTriple.store (p := bPtr.add 32) (a := 4) (v := BitVec.ofNat 32 0) (by decide)
+      (7 : BitVec 32)).frame (R := pts (bPtr.add 36) 1 false))
+    hi₂' hc₂ (fun h => by simpa [R, vOf, rdyOf, gH, Ph.isProd, Ph.rank] using h)
+    (fun _ hQ h => by simpa [R, vOf, rdyOf, gH, Ph.isProd, Ph.rank] using h) rfl rfl rfl rfl rfl
+    (by have hf := hi₂'.2.flags; rw [upd1_0, upd_self] at hf; exact hf.early rfl rfl rfl (by decide))
+    (fun _ _ _ hr => hr.early (by simp [gH, Ph.rank]) (by simp [gH, Ph.rank]))
+    (fun _ _ hq => hq.p (fun _ => by simp [gH, Ph.rank]) (fun h => by cases h))
+    fun _ m₃ hQ hc₃ ht₃ _ hi₃ => ?_)
+  -- `ready = true`
+  refine WP.bind (wp_pstep (xa := { ph := .v7 }) (xb := { ph := .rdy })
+    ((TTriple.store (p := bPtr.add 36) (a := 1) (v := false) (by decide) true).frameL
+      (R := pts (bPtr.add 32) 4 (BitVec.ofNat 32 7)))
+    hi₃ hc₃ (fun h => by simpa [R, vOf, rdyOf, gH, Ph.isProd, Ph.rank] using h)
+    (fun _ hQ h => by simpa [R, vOf, rdyOf, gH, Ph.isProd, Ph.rank] using h) rfl rfl rfl rfl rfl
+    (by have hf := hi₃.2.flags; rw [upd1_0, upd_self] at hf; exact hf.early rfl rfl rfl (by decide))
+    (fun m' hQ' hl hr => ?_) (fun _ _ hq => hq.p (fun _ => by simp [gH, Ph.rank])
+      (fun h => by cases h)) fun _ m₄ hQ' hc₄ ht₄ _ hi₄ => ?_)
+  · -- `ready = true`: write 1 happened before the producer, which holds the mutex
+    intro hcw
+    rw [upd1_0] at hcw
+    obtain ⟨h1, -⟩ := hr (by rw [upd1_0]; exact hcw)
+    refine ⟨fun hx => by rw [upd_self] at hx; simp [gH, Ph.rank] at hx, fun _ => ?_⟩
+    have hh1 : L.ph (upd G₂ 1 (gH { ph := .rdy } hQ') 1) = .holds := by rw [upd_self]; rfl
+    rcases h1 (by rw [upd_self]; simp [gH, Ph.rank]) with ⟨hh0, -⟩ | ⟨i, l, hl', hle⟩ | hle
+    · rw [upd1_0] at hh0
+      have := hl.one 0 1 (by rw [upd1_0]; exact hh0) hh1
+      cases this
+    · exact VClock.le_trans hle ((hl.rel i l hl').2 1 hh1)
+    · exact hle
+  -- `unlock`
+  refine WP.bind (wp_io hi₄ hc₄ (live1 hi₄ (by simp [gH])) fun m₅ hc₅ ht₅ hi₅ => ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr 1 (gH { ph := .rdy } hQ') rfl
+    _ G₂ m₅ d₂ hi₅)))
+  rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
+  have hi₆' : proto.inv (upd G₃ 1 (gP { ph := .rdy })) m₆ := hi₆
+  -- `signal`
+  refine WP.bind (wp_io hi₆' hc₆ (live1 hi₆' (by simp [gP])) fun m₇ hc₇ ht₇ hi₇ => ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (signal_spec G₃ m₇ d₃ _ hi₇ hc₇)))
+  rintro _ G₄ m₈ d₄ ⟨hc₈, b, hi₈⟩
+  -- `Event.set`
+  refine WP.bind (wp_io hi₈ hc₈ (live1 hi₈ (by simp [gP])) fun m₉ hc₉ ht₉ hi₉ => ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (set_spec G₄ m₉ d₄ _ b hi₉ hc₉)))
+  rintro _ G₅ m₁₀ d₅ ⟨hc₁₀, hi₁₀⟩
+  refine WP.pure' ?_
+  exact WP.pure' ⟨hc₁₀, _, rfl, hi₁₀⟩
 
 end Sync.Handoff
