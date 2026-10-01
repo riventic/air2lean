@@ -3194,4 +3194,71 @@ theorem inv_start {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
   · rw [hq] at hw; simp at hw
   · rw [hX1] at h; cases h
 
+/-- The spawn of the producer by `main` (at `pre`): the producer is thread 1, at `lk`; `main` goes
+to `run`. -/
+theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : proto.inv G m)
+    (hg : G 0 = gPre)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 1 ∧ proto.inv (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run })) m' := by
+  have hu := hi.2
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, -, h0, -⟩⟩ := hu.shape
+  rotate_left
+  · exfalso; change (G 0).2.ph ≠ _ at h0; rw [hg] at h0; exact h0 rfl
+  have hcs : m.clocks.size = 1 := by rw [hi.1.own.csize, hs1]
+  have hjb := joinedB_fork hf
+  obtain ⟨hch, hm'⟩ := Lock.fork_eq hf
+  rw [hs1] at hch
+  subst hch
+  have hL := hi.1.fork (t := 0) (g₁ := gP { ph := .run }) (g₀ := gP { ph := .lk })
+    (by rw [hg]; rfl) hf (by rw [hg]; rfl) (fun _ => .inl rfl) rfl rfl rfl rfl (fun hL hR => by
+      change R (fun u => (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) u).2) hL
+      have e : (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) 1).2 = { ph := .lk } := by
+        simp [upd, gP]
+      have e1 : (G 1).2 = {} := hnone 1 (Nat.le_refl _)
+      exact (R_congr (Y := fun u => (G u).2) (by simp only [e, e1]; rfl)
+        (by simp only [e, e1]; rfl) hL).mpr hR)
+  subst hm'
+  have hk : ∀ W : Word, W.Keep m _ := fun W =>
+    Word.keep_fork (by rw [hs1]; decide) (by rw [hcs, hs1]) hf
+  have h0' : (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) 0).2 = { ph := .run } := by simp [gP]
+  have h1' : (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) 1).2 = { ph := .lk } := by
+    simp [upd, gP]
+  have hG0 : (G 0).2 = { ph := .pre } := by rw [hg]; rfl
+  have hG1 : (G 1).2 = {} := hnone 1 (Nat.le_refl _)
+  have hhS := Word.hist_keep hu.ws (hk WS)
+  have hhE := Word.hist_keep hu.we (hk WE)
+  have hhV := Word.hist_keep hu.wv (hk WV)
+  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs]; decide)
+  refine ⟨rfl, hL, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by simp only [h0']; rfl, by simp only [h0']; decide,
+    by simp only [h1']; rfl, fun u hu => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_, hu.blk,
+    hu.ws.keep (hk WS), hu.we.keep (hk WE), hu.wv.keep (hk WV), ?_, ?_, ?_, ?_, fun h => ?_,
+    fun h => ?_, fun h => ?_, fun h => ?_, fun w hw => ?_, fun h => ?_⟩⟩
+  · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+  · simp only [Array.getElem?_push, hs1, ↓reduceIte]
+  · show (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) u).2 = {}
+    rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+    exact hnone u (by unfold ThreadId at *; omega)
+  · rcases hu.io e he hb ho16 with h | h
+    · exact .inl h
+    · refine .inr fun u hu' => ?_
+      simp only [Array.size_push, hs1] at hu'
+      rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+      · exact VClock.le_trans (h 0 (by rw [hs1]; decide)) (hcl 0 (by rw [hcs]; decide))
+      · rw [← hcs]; exact VClock.le_trans (h 0 (by rw [hs1]; decide)) hcn
+  · unfold upd; split
+    · rfl
+    · split
+      · rfl
+      · exact hu.parts u
+  · rw [sok_congr hhS, h0', h1']; have := hu.sh; rw [hG0, hG1] at this; exact this
+  · rw [eok_congr hhE, h1']; have := hu.eh; rw [hG1] at this; exact this
+  · rw [vok_congr hhV, h0', h1']; have := hu.vh; rw [hG0, hG1] at this; exact this
+  · rw [h0', h1']; constructor <;> simp [Ph.rank, Ph.post]
+  · rw [h0'] at h; cases h
+  · rw [h1'] at h; simp [eN] at h
+  · rw [h0'] at h; cases h
+  · rw [h0'] at h; cases h
+  · exact .inl (qok_out hi (by rw [hg]; exact (by decide : LPh.out ≠ LPh.away)) w hw)
+  · rw [h1'] at h; cases h
+
 end Sync.Handoff
