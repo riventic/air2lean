@@ -23,8 +23,12 @@ rest:
   signal. The epoch: `+ 1` by the producer after its signal. The event: `waiting` by `main`,
   `is_set` by the producer.
 - **Clocks**: the producer reads the state after `main`'s `waiters += 1`, which happened before
-  the mutex's release (`RegHB`); a reader of epoch 1 then reads the producer's signal (`sig`,
-  `seen`); `main` reads its own `waiting` or a newer write (`vclk`).
+  the mutex's release (`RegHB`); the producer's signal happened before its `epoch += 1` (`pc`,
+  `sig`), so a reader of epoch 1 reads the signal (`seen`); `main` reads its own `waiting` or a
+  newer write (`vclk`).
+- **`ready` in the resource**: while `main` holds the mutex with `ready = false` in its resource,
+  the producer is before its store of `ready` (`R_rdy`, `rdy_now`); so `main` registers only
+  before the producer's signal (`Flags.late`).
 - **The futex queue** (`QOk`): only `main` sleeps at the epoch or the event, and only while the
   producer has not woken it. So a thread that sleeps there is not the last one.
 -/
@@ -64,10 +68,9 @@ inductive Ph where
   | hl
   /-- The producer stored `v = 7`. -/
   | v7
-  /-- The producer stored `ready = true`. -/
+  /-- The producer stored `ready = true` (until its `unlock`, and in `signal` before its load of
+  the state). -/
   | rdy
-  /-- The producer in `signal`, before its load of the state. -/
-  | sg0
   /-- The producer loaded the state `(1, 0)`: before its `cmpxchg`. -/
   | sg1
   /-- The producer did `signals += 1`. -/
@@ -89,7 +92,7 @@ def Ph.rank : Ph → Nat
   | .ep | .hl => 2
   | .reg | .v7 => 3
   | .wt | .rdy => 4
-  | .seen | .sg0 => 5
+  | .seen => 5
   | .cons | .sg1 => 6
   | .ev0 | .sgp => 7
   | .ev1 | .wk => 8
@@ -104,7 +107,7 @@ def Ph.isMain : Ph → Bool
 
 /-- The producer's places. -/
 def Ph.isProd : Ph → Bool
-  | .lk | .hl | .v7 | .rdy | .sg0 | .sg1 | .sgp | .wk | .set | .setw | .fin => true
+  | .lk | .hl | .v7 | .rdy | .sg1 | .sgp | .wk | .set | .setw | .fin => true
   | _ => false
 
 /-- `main` after it took the signal. -/
@@ -222,7 +225,7 @@ def RegHB (G : ThreadId → Gh) (m : Mem) : Prop :=
     ((G 1).2.ph.rank ≤ 3 → (L.ph (G 0) = .holds ∧
         VClock.le (WS.hist m)[1]!.clock (m.clocks[0]!) = true) ∨
       L.Before m (WS.hist m)[1]!.clock ∨ VClock.le (WS.hist m)[1]!.clock (m.clocks[1]!) = true) ∧
-    ((G 1).2.ph = .rdy ∨ (G 1).2.ph = .sg0 ∨ (G 1).2.ph = .sg1 →
+    ((G 1).2.ph = .rdy ∨ (G 1).2.ph = .sg1 →
       VClock.le (WS.hist m)[1]!.clock (m.clocks[1]!) = true)
 
 /-- The futex queue: a thread at another futex than the mutex is `main`, at the epoch while the
@@ -1237,7 +1240,7 @@ theorem inv_seen {G : ThreadId → Gh} {m₁ m' : Mem} {j : Nat} {v : BitVec 32}
     · intro _
       refine ⟨fun hr => ?_, fun hr => ?_⟩ <;> rw [upd0_1] at hr
       · omega
-      · rcases hr with h | h | h <;> rw [h] at hc1 <;> simp [Ph.rank] at hc1
+      · rcases hr with h | h <;> rw [h] at hc1 <;> simp [Ph.rank] at hc1
     · -- the producer's signal happened before the new epoch, which `main` read with an acquire
       have hsig := hi'.2.sig (by rw [upd0_1]; exact e)
       rw [hh] at hsig
@@ -1293,7 +1296,7 @@ theorem inv_cons {G : ThreadId → Gh} {m₁ m' : Mem} {x : X} (hx : x.ph = .wt 
   have hxp : x.ph ≠ .pre := by rcases hx with h | h <;> rw [h] <;> decide
   refine inv_mstep (.inl rfl) hi hw' hop hL rfl hxp rfl (by decide) ⟨?_, fun k hk => ?_⟩ ?_ ?_ ?_
     (fun _ => ⟨fun h => by rw [upd0_1] at h; omega, fun h => by
-      rw [upd0_1] at h; rcases h with h | h | h <;> rw [h] at hr7 <;> simp [Ph.rank] at hr7⟩)
+      rw [upd0_1] at h; rcases h with h | h <;> rw [h] at hr7 <;> simp [Ph.rank] at hr7⟩)
     (fun h => ?_) (fun h => by cases h) (fun h => by cases h)
     (fun w hw => .inl (qok_out hi (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.away)) w
       (hop.waiters ▸ hw))) (fun h => ?_)
@@ -1418,7 +1421,7 @@ theorem inv_reg {G : ThreadId → Gh} {m₁ m' : Mem} {hL : Heap} {old : BitVec 
       (fun _ => rfl)⟩
   · rw [hlast]; exact VClock.le_refl _
   · rw [upd0_1] at h
-    rcases h with h | h | h <;> rw [h] at hr3 <;> simp [Ph.rank] at hr3
+    rcases h with h | h <;> rw [h] at hr3 <;> simp [Ph.rank] at hr3
   · rw [he0] at h; cases h
   · intro w hw
     rw [hop.waiters] at hw
@@ -2175,8 +2178,8 @@ theorem RegHB.early {G : ThreadId → Gh} {m : Mem} {g g' : Gh} (h : RegHB (upd 
   intro hcw
   rw [upd1_0] at hcw
   obtain ⟨h1, -⟩ := h (by rw [upd1_0]; exact hcw)
-  have hr'' : ¬ (g'.2.ph = .rdy ∨ g'.2.ph = .sg0 ∨ g'.2.ph = .sg1) := by
-    rintro (h | h | h) <;> rw [h] at hr' <;> simp [Ph.rank] at hr'
+  have hr'' : ¬ (g'.2.ph = .rdy ∨ g'.2.ph = .sg1) := by
+    rintro (h | h) <;> rw [h] at hr' <;> simp [Ph.rank] at hr'
   refine ⟨fun _ => ?_, fun hx => absurd (by rw [upd_self] at hx; exact hx) hr''⟩
   have := h1 (by rw [upd_self]; exact hr)
   rw [upd1_0] at this ⊢; exact this
@@ -2460,7 +2463,7 @@ theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {j : Nat} {b : BitVec 32
   -- the new place `x'`, with the same `cw`, `vw`
   have key : ∀ x' : X, x'.ph.isProd → 4 ≤ x'.ph.rank → x'.cw = false → x'.vw = false →
       x'.ph ≠ .sgp → x'.ph ≠ .fin → Flags (G 0).2 x' →
-      (x'.ph = .rdy ∨ x'.ph = .sg0 ∨ x'.ph = .sg1 ∨ (G 0).2.cw = false) →
+      (x'.ph = .rdy ∨ x'.ph = .sg1 ∨ (G 0).2.cw = false) →
       (9 ≤ x'.ph.rank → (G 0).2.ph ≠ .wt) → proto.inv (upd G 1 (gP x')) m' := by
     intro x' hp h4 hc hvw hs hnf hfx hreg' hwt
     refine ⟨linv_x hL ?_ ?_, U_op (.inl rfl) hu hop hw' (shape_p hu.shape rfl hp)
@@ -2506,7 +2509,7 @@ theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {j : Nat} {b : BitVec 32
     have hj1 : j = 1 := by have := hfl 1 (by omega) h2; omega
     subst hj1
     refine .inl ⟨val_eq hv (hval 1 (Nat.le_refl _)), key { ph := .sg1 } rfl (by decide) rfl rfl
-      (by decide) (by decide) ?_ (.inr (.inr (.inl rfl))) (fun h => by simp [Ph.rank] at h)⟩
+      (by decide) (by decide) ?_ (.inr (.inl rfl)) (fun h => by simp [Ph.rank] at h)⟩
     exact ⟨(fun h => by cases h), hfl0.mcw,
       (fun h1 h2 => by have := hfl0.cons h1 h2; simp [gP] at this),
       (fun h => by cases h), (fun h => by rcases h with h | h <;> cases h), hfl0.mvw, hfl0.mvw',
@@ -2519,7 +2522,7 @@ theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {j : Nat} {b : BitVec 32
     have hj0 : j = 0 := by omega
     subst hj0
     refine .inr ⟨val_eq hv (hval 0 (Nat.le_refl _)), key { ph := .set } rfl (by decide) rfl rfl
-      (by decide) (by decide) ?_ (.inr (.inr (.inr hcw'))) (fun _ hw => ?_)⟩
+      (by decide) (by decide) ?_ (.inr (.inr hcw')) (fun _ hw => ?_)⟩
     · exact ⟨(fun h => by cases h), hfl0.mcw, (fun h1 => by rw [hcw'] at h1; cases h1),
         (fun h => by cases h), (fun h => by rcases h with h | h <;> cases h), hfl0.mvw, hfl0.mvw',
         (by simp), (fun h => by cases h), (fun h1 => by rw [hcw'] at h1; cases h1),
@@ -2567,7 +2570,7 @@ theorem sg1_hist {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 1 (gP { 
   have hN : sN (G 0).2 (gP { ph := .sg1 }).2 = 1 := by simp [sN, gP, hcw, hnp]
   rw [hN] at hsz hval
   refine ⟨hsz, hval 1 (Nat.le_refl _), ?_⟩
-  have := (hu.reg (by rw [upd1_0]; exact hcw)).2 (by rw [upd_self]; exact .inr (.inr rfl))
+  have := (hu.reg (by rw [upd1_0]; exact hcw)).2 (by rw [upd_self]; exact .inr rfl)
   exact this
 
 theorem bits10 : Packed.toBits (cst 1 0) = sv 1 := by decide +kernel
@@ -2737,7 +2740,7 @@ theorem inv_xset {G : ThreadId → Gh} {m₁ m' : Mem} {b : Bool} {old : BitVec 
       refine ⟨fun hr => ?_, fun hr => ?_⟩ <;> rw [upd_self] at hr
       · simp [gP] at hr; omega
       · exfalso; simp only [gP] at hr
-        rcases hr with h | h | h <;> rw [h] at h9 <;> simp [Ph.rank] at h9
+        rcases hr with h | h <;> rw [h] at h9 <;> simp [Ph.rank] at h9
     · rw [upd_self] at h; rw [hS, hE]
       have e8 := eN_eq (x := (gP { ph := .set, cw := b }).2) (x' := (gP x').2) (by simp [gP, hc])
         (by simp [gP, Ph.rank]) (by simp [gP]; omega)
