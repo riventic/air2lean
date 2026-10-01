@@ -95,14 +95,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 `parallelCounter_safe` proves in strict mode that no run of `parallelCounter` gives an error. The protocol adds `Ex`: the three stack blocks are live with their sizes and aligned addresses; each footprint entry is a read of a context, an atomic access to the counter, a plain write that happened before every thread (the spawn copies `main`'s clock), or `main`'s access to the handles; every thread was spawned by `main`; the handle slots hold the thread ids. So no access races (`noRace_b0`, `noRace_b1`, `noRace_b2`), and every join is of thread `k + 1`, spawned and not yet joined.
 
-`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error (`mutexCounter_safe`). The ghost value of a thread in `work` is its count and its place in the mutex code (`out`, `wait`, `holds`, `wake`). The invariant (`Inv`):
-
-- The mutex word is `0` if no thread holds the mutex, else `1` or `2`; at most one thread holds it. The mutex's messages are an RMW chain of `0`, `1` and `2`, so an RMW and a successful `cmpxchg` read the newest message.
-- The counter holds the sum of the counts.
-- No data race (`FpOk`, `LockLe`): each access to the counter happened before the holder's clock, or, if no thread holds the mutex, before the release clock of the newest message. An unlock is a release RMW and a lock an acquire RMW, so the next holder's clock is above each access.
-- No deadlock (`FqOk`, `live`): a thread in the futex queue waits at the mutex, and the other thread holds the mutex with the word `2` (so its unlock wakes) or is at that wake.
-
-The steps of the std code (`step_cas`, `step_xlock`, `step_unlock`, `wait_step`, `wake_step`) keep the invariant; `lock_spec`, `unlock_spec` and `work_spec` are the specs of the translated functions.
+`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error (`mutexCounter_safe`). `Proofs/Iogroup/Counter.lean` proves the same for `groupCounter` (three `Io.Group` tasks, each adds 1 under an `Io.Mutex`; 3 after `Group.await`). Both proofs use the lock rules (§A lock that owns a resource).
 
 **What a thread has seen** (`Proofs/Atomics/`). The invariant states it on the messages of an atomic location, with the clocks:
 
@@ -118,11 +111,24 @@ A thread owns a part of the heap, and the parts move between the threads at the 
 |---|---|
 | Ownership (`Mem.OwnsC`, `Mem.Owns`) | The clock `c` owns the heap `h` if every recorded access to a byte of `h` (and to a block that does not exist yet) happened before `c`; thread `t` owns `h` if its clock does. Then a plain access by `t` to `h` does not race (`Mem.Owns.noRace`). A later clock owns what an earlier one owns (`Mem.OwnsC.mono`). |
 | A step of the owner (`StepIn hF`) | A step of the current thread that changes only its part: the rest `hF` and the other threads' clocks are the same, and each new footprint entry touches no byte of `hF`. So every part of `hF` keeps its owner (`Mem.OwnsC.frame`, `Mem.Owns.frame`). |
-| Thread triples (`TTriple`) | `Triple` with ownership in place of `SingleThread`. Rules: `conseq`, `frame`, `frameL`, `ret`, `bind`, `bind_eq`, `ex`, `lift`, `load`, `store`, `loadAt`/`storeAt` (at a byte offset of `bytesAt`), `alloc`, `free`. |
+| Thread triples (`TTriple`) | `Triple` with ownership in place of `SingleThread`. Rules: `conseq`, `frame`, `frameL`, `ret`, `bind`, `bind_eq`, `ex`, `lift`, `load`, `store`, `loadAt`/`storeAt` (at a byte offset of `bytesAt`; `storeAt'` needs only the size of the value's encoding), `alloc`, `alloc_next`, `free`. `bytesAt_split` splits owned bytes at an offset; `bytesAt_blk` reads the block of owned bytes. |
 | The parts (`Owned own m`) | `own u` is thread `u`'s part: in `m.heap` with the same cells, two parts are disjoint, each thread owns its part, a thread that does not exist has none. A proof puts a thread's part in its ghost value: after a stop the thread knows only `inv` and its ghost value, and `Owned` tells it that its part is unchanged. |
-| Transfers | A step with a thread triple (`Owned.step`; `WP.liftMem_owned`, `WP.liftM_owned`, and `WP.liftMem_upd`, `WP.liftM_upd` for the parts `upd own t h`); spawn (`Owned.fork`: the parent gives a part to the new thread, whose clock is the parent's); join (`Owned.join`: the parent takes the joined thread's part, whose clock the join merges); a step that changes no part (`Owned.keep`: an atomic op on a location that no thread owns, a futex op). |
+| Transfers | A step with a thread triple (`Owned.step`; `WP.liftMem_owned`, `WP.liftM_owned`, and `WP.liftMem_upd`, `WP.liftM_upd` for the parts `upd own t h`); spawn (`Owned.fork`: the parent gives a part to the new thread, whose clock is the parent's); join (`Owned.join`: the parent takes the joined thread's part, whose clock the join merges); a step that changes no part (`Owned.keep`: an atomic op on a location that no thread owns, a futex op); the start (`Owned.start`), a smaller part (`Owned.shrink`), a part that gets a heap the thread owns (`Owned.add`). |
 
 `Proofs/Threads/Disjoint.lean` proves that `disjoint a b` (two threads each write their own flag, as in `race` but on two flags) gives `a + b` under every schedule and never errs (`disjoint_spec`, `disjoint_safe`). `writeFlag` is a thread triple over the two blocks that the thread owns (`writeFlag_spec`, from the rules above). `main` owns its four blocks, gives `{c1, x}` and `{c2, y}` at the spawns, and takes them back at the joins, with the flag written. The invariant has no footprint and no clock facts: `Owned` has them.
+
+### A lock that owns a resource
+
+The translated `Io.Mutex` owns a part of the heap (the resource) while it is free; `lock` gives it to the thread that takes the lock, and `unlock` gives it back (`ZigLean/Conc/Lock.lean`, `ZigLean/Conc/LockRules.lean`). The rules are proved once, for every protocol that has the lock (`Lock.Fits`: its invariant is `Lock.Inv` and a rest `U` that a step of the lock's code keeps).
+
+| Part | What |
+|---|---|
+| The lock (`Lock`) | The word (4 bytes at offset `o` of block `b`) and the resource `R`, an assertion that can read the ghost values of all threads (for example: the counter holds the sum of their increments). The ghost value of a thread tells its place in the lock's code (`LPh`: `gone`, `out`, `spin`, `wait`, `holds`, `wake`), its part of the heap, and the resource while it holds the lock. `Lock.prod` is a lock whose ghost value is `LG × X`. |
+| The invariant (`Lock.Inv`) | The threads' parts (`Owned`). The word is `0` iff no thread holds the lock; at most one thread holds it. The word's location is an RMW chain of `0`, `1` and `2`. The free lock owns a heap with `R` (`Lock.Owns`: each access to it happened before every thread, or before the release clock of the newest message); the holder's resource has `R` (`res`). Each thread in the futex queue waits at the word; if the queue is not empty, a thread that is not asleep is in the lock's code, and holds the lock only with the word `2` (`wit`). So a futex wait keeps `Live` (`Fits.live`). |
+| The lock's code | `wp_cas`, `wp_xchgLock`, `wp_wait`, `wp_xchgUnlock`, `wp_wake`: the ops of `lock` and `unlock` in generated code (`States` gives the generated enum of `Io.Mutex`). The acquire RMW that takes the lock adopts the release clock of the newest message, so the thread owns the resource; the release RMW of `unlock` puts the holder's clock in the new message, so the lock owns the resource again. In strict mode no op throws (`Inv.cas_noErr`, `Inv.xchg_noErr`, `Inv.wait_ok`). |
+| Other steps | A step of a thread on its own part (`Inv.stepIn`), a plain read of bytes that no thread owns (`Inv.read`), a change of a ghost value outside the lock's code (`Inv.ghost`), a spawn (`Inv.fork`), a join (`Inv.join`), the start of the lock (`Inv.make`) and its end, when one thread is above all the others (`Inv.take`). |
+
+The futex queue of the model belongs to the lock: each waiter waits at the word. So the rules are for one lock (or one futex user) per protocol.
 
 ## Proved examples
 
@@ -133,6 +139,7 @@ A thread owns a part of the heap, and the parts move between the threads at the 
 | `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
 | `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |
 | `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
+| `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error) |
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |

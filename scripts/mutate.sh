@@ -108,8 +108,8 @@
 #     `parallelCounter_safe` (Proofs/Threads/Counter.lean; a kid's read of its context would race).
 #     The diff test does not see it: a schedule with a race matches any Zig result.
 # (ac) Lean-runtime mutation, sync: a futex wake (ZigLean/Mem/Thread.lean's `futexWake`) wakes no
-#     thread. Detected by the proof build: `mutexCounter_safe` (Proofs/Sync/Mutex.lean; a waiter
-#     stays in the queue: a deadlock).
+#     thread. Detected by the proof build: `Lock.Inv.wake` (ZigLean/Conc/LockRules.lean), which
+#     `mutexCounter_safe` (Proofs/Sync/Mutex.lean) needs: a waiter stays in the queue, a deadlock.
 # (ad) Lean-runtime mutation, atomics: a `cmpxchg` (ZigLean/Mem/Thread.lean's `casPrep`) can
 #     succeed on a message with an RMW after it: two pushes read the same head, one is lost.
 #     Detected by the proof build: `casOpts_pos` (ZigLean/Conc/Lemmas.lean), which

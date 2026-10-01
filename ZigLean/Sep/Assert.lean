@@ -81,6 +81,56 @@ section Bytes
 
 variable {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
 
+theorem extract_getElem! (bs : Array Byte) {a b j : Nat} (hj : a + j < b) (hb : b ≤ bs.size) :
+    (bs.extract a b)[j]! = bs[a + j]! := by
+  rw [getElem!_pos _ _ (by simp; omega), Array.getElem_extract, getElem!_pos _ _ (by omega)]
+
+/-- `bytesAt p … bs` is the bytes before `k` and the bytes from `k` on. -/
+theorem bytesAt_split (hb : bytesAt p A S K bs h) {k : Nat} (hk : k ≤ bs.size) :
+    (bytesAt p A S K (bs.extract 0 k) ∗ bytesAt (p.add k) A S K (bs.extract k bs.size)) h := by
+  obtain ⟨b, hpb, h0, hl⟩ := hb
+  have hoff : (p.add k).off.toNat = p.off.toNat + k := by simp [Ptr.add]; omega
+  refine ⟨fun l => if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + k then h l else none,
+    fun l => if l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + bs.size then h l else none,
+    fun l => ?_, funext fun l => ?_, ⟨b, hpb, h0, fun l => ?_⟩,
+    ⟨b, by simpa [Ptr.add] using hpb, by simp [Ptr.add]; omega, fun l => ?_⟩⟩
+  · dsimp only
+    by_cases h1 : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + k
+    · right
+      have h2 : ¬ (l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) := by omega
+      rw [if_neg h2]
+    · left; rw [if_neg h1]
+  · simp only [Heap.union_apply]
+    by_cases h1 : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + k
+    · have h2 : ¬ (l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) := by omega
+      rw [if_pos h1, if_neg h2, Option.or_none]
+    · rw [if_neg h1, Option.none_or]
+      by_cases h2 : l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+      · rw [if_pos h2]
+      · have h3 : ¬ (l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) :=
+          fun ⟨e1, e2, e3⟩ => by
+            by_cases hlt : l.2 < p.off.toNat + k
+            · exact h1 ⟨e1, e2, hlt⟩
+            · exact h2 ⟨e1, Nat.le_of_not_lt hlt, e3⟩
+        rw [if_neg h2, hl, if_neg h3]
+  · have hs : (bs.extract 0 k).size = k := by simp; omega
+    dsimp only
+    rw [hs]
+    by_cases h1 : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + k
+    · rw [if_pos h1, if_pos h1, hl, if_pos ⟨h1.1, h1.2.1, by omega⟩,
+        extract_getElem! bs (by omega) hk, Nat.zero_add]
+    · rw [if_neg h1, if_neg h1]
+  · have hs : (bs.extract k bs.size).size = bs.size - k := by simp
+    dsimp only
+    rw [hoff, hs]
+    by_cases h2 : l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+    · rw [if_pos h2, if_pos ⟨h2.1, h2.2.1, by omega⟩, hl, if_pos ⟨h2.1, by omega, h2.2.2⟩,
+        extract_getElem! bs (by omega) (Nat.le_refl _)]
+      congr 3; omega
+    · have h2' : ¬ (l.1 = b ∧ p.off.toNat + k ≤ l.2 ∧ l.2 < p.off.toNat + k + (bs.size - k)) :=
+        fun ⟨e1, e2, e3⟩ => h2 ⟨e1, e2, by rw [Nat.add_assoc, Nat.add_sub_of_le hk] at e3; exact e3⟩
+      rw [if_neg h2, if_neg h2']
+
 /-- The cell of an owned byte in the memory. -/
 theorem bytesAt_cell (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {b : BlockId}
     (hpb : p.block = some b) {j : Nat} (hj : j < bs.size) :

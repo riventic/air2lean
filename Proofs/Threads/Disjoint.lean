@@ -170,10 +170,6 @@ def Shape (B : Blks) (G : ThreadId → Gh) (m : Mem) : Ph → Prop
   | .j2 => m.threads.size = 3 ∧ KidRec m 1 true ∧ KidRec m 2 false ∧ IsKid a b B G 1 (some true) ∧
       IsKid a b B G 2 none ∧ ∀ u, 3 ≤ u → G u = .none
 
-/-- Thread `u` was joined (`main` never is). -/
-def joinedB (m : Mem) (u : ThreadId) : Bool :=
-  u != 0 && ((m.threads[u]?).map (·.joined)).getD false
-
 /-- The heaps of the threads: a joined thread owns nothing. -/
 def ownOf (G : ThreadId → Gh) (m : Mem) (u : ThreadId) : Heap :=
   if joinedB m u then Heap.empty else (G u).heap
@@ -300,7 +296,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
       (writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hc0 hac hx0 hax (ctxBytes_size x v)
         (enc_u32 0)
         (ctxBytes_flag x v) (ctxBytes_val x v)) (hi.own.current u) rfl hut
-      (by rw [hown]; simpa [ctxA, flagA] using hcx) fun _ m' hQ ho' hq hs _ => ?_)
+      (by rw [hown]; simpa [ctxA, flagA] using hcx) fun _ m' hQ _ ho' hq hs _ _ => ?_)
     refine ⟨.kid hQ c ac x ax v true, ?_, ⟨_, _, _, _, _, _, rfl⟩, fun _ => ?_⟩
     · refine ⟨?_, fun w h' c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
       · rw [ownOf_upd hs.threads hj]; exact ho'
@@ -357,39 +353,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
 
 /-! ## `main` -/
 
-/-- No thread owns anything: the start. -/
-theorem owned_start : Owned (fun _ => Heap.empty) { mem0 with current := 0 } where
-  sub _ l c h := by cases h
-  disj _ _ _ _ := .inl rfl
-  owns u _ e he := by simp [mem0, Mem.ofGlobals] at he
-  outside _ _ := rfl
-  csize := rfl
-
-/-- An allocation next to the heap `R` that the thread owns. -/
-theorem alloc_next {R : Assn} (size align : Nat) (ha : 0 < align) :
-    TTriple R (Zig.alloc .stack size align) (fun p => R ∗ Assn.ex fun A =>
-      ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size .stack (Array.replicate size .undef)) :=
-  (TTriple.alloc .stack size align ha).frameL.conseq (fun _ h => sep_emp.mpr h) fun _ _ h => h
-
-theorem sep_ex_lift {R : Assn} {φ : Nat → Prop} {P : Nat → Assn} {h : Heap}
-    (hh : (R ∗ Assn.ex fun A => ⌜φ A⌝ ∗ P A) h) : ∃ A, φ A ∧ (R ∗ P A) h := by
-  obtain ⟨h₁, h₂, hd, rfl, hr, A, hp⟩ := hh
-  obtain ⟨hφ, hp⟩ := sep_lift.mp hp
-  exact ⟨A, hφ, h₁, h₂, hd, rfl, hr, hp⟩
-
-theorem joinedB_fork {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    joinedB m' = joinedB m := by
-  rw [fork_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨-, rfl⟩ := hf
-  funext u
-  unfold joinedB
-  simp only [Array.getElem?_push]
-  split
-  · rename_i h; subst h; simp
-  · rfl
-
 /-- `main`'s ghost value and no kid: the parts. -/
 theorem ownOf_main (m : Mem) (g : Gh) :
     ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => Heap.empty) 0 g.heap := by
@@ -409,27 +372,6 @@ theorem split_pre {X Y C1 C2 : Assn} {h : Heap} (hh : (X ∗ (Y ∗ (C1 ∗ C2))
   refine sep_assoc' (sep_mono (fun _ h => h) (fun _ h => ?_) h1)
   exact sep_left_comm (sep_assoc (sep_comm h))
 
-theorem fork_threads {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false } := by
-  rw [fork_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl⟩
-
-theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
-    (hr : m.threads[u]? = some rec)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
-    m'.current = t ∧ m'.threads = m.threads.setIfInBounds u { rec with joined := true } := by
-  obtain ⟨rec', hr', -, rfl⟩ := join_eq hj
-  simp only at hr'
-  rw [hr] at hr'; cases hr'
-  exact ⟨rfl, Array.set!_eq_setIfInBounds⟩
-
-theorem upd_comm {β : Type} (f : ThreadId → β) {t u : ThreadId} (x y : β) (h : t ≠ u) :
-    upd (upd f t x) u y = upd (upd f u y) t x := by
-  funext w; unfold upd; by_cases h1 : w = t <;> by_cases h2 : w = u <;> simp_all
-
 /-- `free` of the first block. -/
 theorem free_front {R : Assn} {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0) (hpos : 0 < S) :
@@ -447,7 +389,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   unfold disjoint
   have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
-    exact owned_start
+    exact (Owned.start rfl rfl)
   -- The four blocks.
   refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by decide) rfl
     fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)

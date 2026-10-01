@@ -21,6 +21,9 @@ invariant:
 - **Other steps** (`Owned.keep`). A step that changes no byte of a part, whose new footprint
   entries touch no part, and that makes no clock smaller keeps `Owned`: an atomic op on a
   location that no thread owns, a futex op, a stop.
+- **The start and a change of a part** (`Owned.start`: no thread owns anything, in a memory with
+  no recorded access; `Owned.shrink`: a part gets smaller; `Owned.add`: a part gets a heap that the
+  thread owns and no part has). A lock (`ZigLean/Conc/Lock.lean`) moves its resource with these.
 -/
 
 namespace Zig
@@ -157,6 +160,68 @@ theorem keep (ho : Owned own m) (hth : m'.threads.size = m.threads.size)
       · exact absurd hb' (Nat.not_le.mpr hb)
   outside u hu := ho.outside u (hth ▸ hu)
   csize := by rw [hcs, hth]; exact ho.csize
+
+/-- No thread owns anything, in a memory with no recorded access: the start. -/
+theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size) :
+    Owned (fun _ => Heap.empty) m where
+  sub _ l c h := by cases h
+  disj _ _ _ _ := .inl rfl
+  owns _ _ e he := by rw [hf] at he; simp at he
+  outside _ _ := rfl
+  csize := hc
+
+/-- A thread's part gets smaller: the rest is no thread's part. -/
+theorem shrink {h : Heap} (ho : Owned own m) (hs : h.Sub (own t)) : Owned (upd own t h) m where
+  sub u := by
+    by_cases hu : u = t
+    · subst hu; rw [upd_self]; exact hs.trans (ho.sub u)
+    · rw [upd_ne _ _ hu]; exact ho.sub u
+  disj u v huv := by
+    by_cases hu : u = t
+    · subst hu; rw [upd_self, upd_ne _ _ (Ne.symm huv)]
+      exact (Heap.disjoint_sub (ho.disj v u (Ne.symm huv)) hs).symm
+    · by_cases hv : v = t
+      · subst hv; rw [upd_self, upd_ne _ _ hu]
+        exact Heap.disjoint_sub (ho.disj u v hu) hs
+      · rw [upd_ne _ _ hu, upd_ne _ _ hv]; exact ho.disj u v huv
+  owns u hu := by
+    by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact (ho.owns u hu).sub fun l hl => hs.ne hl
+    · rw [upd_ne _ _ hut]; exact ho.owns u hu
+  outside u hu := by
+    by_cases hut : u = t
+    · subst hut; rw [upd_self]
+      funext l
+      cases e : h l with
+      | none => rfl
+      | some c => have := hs l c e; rw [ho.outside u hu] at this; cases this
+    · rw [upd_ne _ _ hut]; exact ho.outside u hu
+  csize := ho.csize
+
+/-- A thread's part gets the heap `h`: it is in the heap, in no part, and the thread owns it. -/
+theorem add {h : Heap} (ho : Owned own m) (ht : t < m.threads.size) (hs : h.Sub m.heap)
+    (hd : ∀ u, Heap.Disjoint h (own u)) (hc : m.OwnsC (m.clocks[t]!) h) :
+    Owned (upd own t (own t ∪ h)) m where
+  sub u := by
+    by_cases hu : u = t
+    · subst hu; rw [upd_self]; exact Heap.union_sub (ho.sub u) hs
+    · rw [upd_ne _ _ hu]; exact ho.sub u
+  disj u v huv := by
+    by_cases hu : u = t
+    · subst hu; rw [upd_self, upd_ne _ _ (Ne.symm huv)]
+      exact Heap.disjoint_union_left.mpr ⟨ho.disj u v huv, hd v⟩
+    · by_cases hv : v = t
+      · subst hv; rw [upd_self, upd_ne _ _ hu]
+        exact (Heap.disjoint_union_left.mpr ⟨ho.disj v u (Ne.symm huv), hd u⟩).symm
+      · rw [upd_ne _ _ hu, upd_ne _ _ hv]; exact ho.disj u v huv
+  owns u hu := by
+    by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact Mem.OwnsC.union (ho.owns u hu) hc
+    · rw [upd_ne _ _ hut]; exact ho.owns u hu
+  outside u hu := by
+    rw [upd_ne _ _ (fun e => by subst e; exact absurd ht (Nat.not_lt.mpr hu))]
+    exact ho.outside u hu
+  csize := ho.csize
 
 /-- A stop: only `current` changes. -/
 theorem current (ho : Owned own m) (t : ThreadId) : Owned own { m with current := t } :=
@@ -326,6 +391,50 @@ theorem join {u : ThreadId} (ho : Owned own m) (ht : t < m.threads.size) (hut : 
 
 end Owned
 
+/-! ## Threads: joined, forked -/
+
+namespace Conc
+
+/-- Thread `u` was joined (`main` never is). -/
+def joinedB (m : Mem) (u : ThreadId) : Bool :=
+  u != 0 && ((m.threads[u]?).map (·.joined)).getD false
+
+theorem joinedB_fork {m m' : Mem} {t c : ThreadId}
+    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+    joinedB m' = joinedB m := by
+  rw [Proto.fork_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨-, rfl⟩ := hf
+  funext u
+  unfold joinedB
+  simp only [Array.getElem?_push]
+  split
+  · rename_i h; subst h; simp
+  · rfl
+
+theorem fork_threads {m m' : Mem} {t c : ThreadId}
+    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false } := by
+  rw [Proto.fork_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  exact ⟨rfl, rfl⟩
+
+theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
+    (hr : m.threads[u]? = some rec)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    m'.current = t ∧ m'.threads = m.threads.setIfInBounds u { rec with joined := true } := by
+  obtain ⟨rec', hr', -, rfl⟩ := Proto.join_eq hj
+  simp only at hr'
+  rw [hr] at hr'; cases hr'
+  exact ⟨rfl, Array.set!_eq_setIfInBounds⟩
+
+theorem upd_comm {β : Type} (f : ThreadId → β) {t u : ThreadId} (x y : β) (h : t ≠ u) :
+    upd (upd f t x) u y = upd (upd f u y) t x := by
+  funext w; unfold upd; by_cases h1 : w = t <;> by_cases h2 : w = u <;> simp_all
+
+end Conc
+
 /-! ## In a thread -/
 
 namespace Conc
@@ -339,8 +448,9 @@ is the triple's post, and the other parts are unchanged. -/
 theorem WP.liftMem_owned {x : MemM α} {Pa : Assn} {Qa : α → Assn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa) (ho : Owned own m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' hQ, Owned (upd own t hQ) m' → Qa a hQ → StepIn (m.heap.diff (own t)) m m' →
-      m'.heap = hQ ∪ m.heap.diff (own t) → Q a G m' n) :
+    (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
+      StepIn (m.heap.diff (own t)) m m' → m'.heap = hQ ∪ m.heap.diff (own t) →
+      Heap.Disjoint hQ (m.heap.diff (own t)) → Q a G m' n) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
@@ -351,18 +461,19 @@ theorem WP.liftMem_owned {x : MemM α} {Pa : Assn} {Qa : α → Assn}
     obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
     have ho'' : m'.Owns t hQ := by rw [hs.current, hc] at ho'; exact ho'
     exact ⟨by rw [hs.threads],
-      h a m' hQ (ho.step hc htl hs hm' hd' ho'') hq hs hm'⟩
+      h a m' hQ hr (ho.step hc htl hs hm' hd' ho'') hq hs hm' hd'⟩
 
 /-- `WP.liftMem_owned` for a step of generated code (`liftM`). -/
 theorem WP.liftM_owned {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTriple Pa x Qa) (ho : Owned own m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' hQ, Owned (upd own t hQ) m' → Qa a hQ → StepIn (m.heap.diff (own t)) m m' →
-      m'.heap = hQ ∪ m.heap.diff (own t) → Q (a, s) G m' n) :
+    (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
+      StepIn (m.heap.diff (own t)) m m' → m'.heap = hQ ∪ m.heap.diff (own t) →
+      Heap.Disjoint hQ (m.heap.diff (own t)) → Q (a, s) G m' n) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem_owned ht ho hc htl hp fun a m' hQ ho' hq hs hm' =>
-    WP.pure' (h a m' hQ ho' hq hs hm'))
+  exact WP.bind (WP.liftMem_owned ht ho hc htl hp fun a m' hQ hr ho' hq hs hm' hd =>
+    WP.pure' (h a m' hQ hr ho' hq hs hm' hd))
 
 /-- `WP.liftMem_owned` with the parts `upd own t h`: after the step they are `upd own t h'`. -/
 theorem WP.liftMem_upd {x : MemM α} {Pa : Assn} {Qa : α → Assn} {h : Heap}
@@ -371,7 +482,7 @@ theorem WP.liftMem_upd {x : MemM α} {Pa : Assn} {Qa : α → Assn} {h : Heap}
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
       m'.threads = m.threads → Q a G m' n) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
-  WP.liftMem_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' ho' hq hs _ =>
+  WP.liftMem_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' _ ho' hq hs _ _ =>
     k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads
 
 /-- `WP.liftM_owned` with the parts `upd own t h`. -/
@@ -381,7 +492,7 @@ theorem WP.liftM_upd {x : MemM α} {s : σ} {Pa : Assn} {Qa : α → Assn} {h : 
     (k : ∀ a m' h', Owned (upd own t h') m' → Qa a h' → m'.current = t →
       m'.threads = m.threads → Q (a, s) G m' n) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
-  WP.liftM_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' ho' hq hs _ =>
+  WP.liftM_owned ht ho hc htl (by rw [upd_self]; exact hp) fun a m' h' _ ho' hq hs _ _ =>
     k a m' h' (by rw [upd_upd] at ho'; exact ho') hq (hs.current.trans hc) hs.threads
 
 end Proto
