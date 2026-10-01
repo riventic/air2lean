@@ -2934,4 +2934,75 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
   refine WP.pure' ?_
   exact WP.pure' ⟨hc₁₀, _, rfl, hi₁₀⟩
 
+/-! ## The producer's end -/
+
+/-- The producer at its end: it is `gone`. -/
+theorem inv_end {G : ThreadId → Gh} {m : Mem} {x : X} (hx : x.ph = .fin)
+    (hi : proto.inv (upd G 1 (gP x)) m) :
+    proto.inv (upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x)) m := by
+  have hl := hi.1.ghost (t := 1) (g := (⟨.gone, Heap.empty, Heap.empty⟩, x))
+    (by rw [upd_self]; exact .inl rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
+    (fun h => absurd rfl h) (fun hL hR => by
+      change R (fun u => (upd (upd G 1 (gP x)) 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) u).2) hL
+      rw [upd_upd]
+      exact (R_congr (Y := fun u => (upd G 1 (gP x) u).2) (by simp [upd_self, gP])
+        (by simp [upd_self, gP]) hL).mpr hR)
+  rw [upd_upd] at hl
+  have hu := hi.2
+  have hX : (fun u => (upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) u).2) =
+      fun u => (upd G 1 (gP x) u).2 := by funext u; unfold upd; split <;> rfl
+  have h0 : upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) 0 = upd G 1 (gP x) 0 := by
+    rw [upd1_0, upd1_0]
+  have h1 : (upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) 1).2 = (upd G 1 (gP x) 1).2 := by
+    simp [gP]
+  refine ⟨hl, ⟨by rw [hX]; exact hu.shape, hu.io, parts_p hu.parts rfl, hu.blk, hu.ws, hu.we, hu.wv,
+    by rw [h0, h1]; exact hu.sh, by rw [h1]; exact hu.eh, by rw [h0, h1]; exact hu.vh,
+    by rw [h0, h1]; exact hu.flags, ?_, by rw [h1]; exact hu.sig, by rw [h0]; exact hu.seen,
+    by rw [h0]; exact hu.vclk, ?_, by rw [h1]; exact hu.pc⟩⟩
+  · intro hcw; rw [h0] at hcw ⊢; rw [h1]; exact hu.reg hcw
+  · intro w hw
+    rcases hu.q w hw with h | ⟨a1, a2, a3, a4⟩ | ⟨a1, a2, a3, a4⟩
+    · exact .inl h
+    · exact .inr (.inl ⟨a1, a2, by rw [h0]; exact a3, by rw [h1]; exact a4⟩)
+    · exact .inr (.inr ⟨a1, a2, by rw [h0]; exact a3, by rw [h1]; exact a4⟩)
+
+/-- The producer spawned no thread. -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : proto.inv G m)
+    (hu : 0 < u) : joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, h⟩ := hi.2.shape
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have h0' : ∀ h : 0 < m.threads.size, (m.threads[0]'h).spawner = 0 := by
+    intro h; rw [Array.getElem?_eq_getElem h] at h0; rw [Option.some.inj h0]
+  rcases h with ⟨h1, -, -⟩ | ⟨h2, h1, -⟩
+  · have : i = 0 := by omega
+    subst this
+    rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+  · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+    · rw [Array.getElem?_eq_getElem hi'] at h1
+      rw [Option.some.inj h1] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+/-- The producer: its code, then its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | producer p =>
+    obtain ⟨rfl, rfl⟩ := hg
+    -- the producer is thread 1
+    have hu1 : u = 1 := by
+      obtain ⟨-, hc⟩ := hi.2.shape
+      have hlt := (hi.1.live u (by rw [hgu]; exact (by decide : LPh.out ≠ LPh.gone))).1
+      rcases hc with ⟨hs, -, -⟩ | ⟨hs, -⟩ <;> unfold ThreadId at * <;> omega
+    subst hu1
+    show proto.WP 1 ((fun _ => ()) <$> producer bPtr) _ G _ d
+    refine WP.map (WP.mono ?_ (producer_spec G _ d
+      (by rw [show gP { ph := .lk } = G 1 from hgu.symm, upd_same]; exact inv_cur hi 1) rfl))
+    rintro _ G' m' _ ⟨-, x, hx, hi'⟩
+    exact ⟨_, inv_end hx hi', ⟨rfl, hx⟩, fun _ => joinedAll_kid hi' (by decide)⟩
+  | work p => cases hg
+  | writer p => cases hg
+  | semWork p => cases hg
+
 end Sync.Handoff
