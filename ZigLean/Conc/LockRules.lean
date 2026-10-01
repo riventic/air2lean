@@ -1439,15 +1439,15 @@ theorem Inv.rmwAt {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {op : RmwOp} {o
   exact ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU rfl, hm'⟩
 
 /-- `Thread.Mutex`'s `tryLock`, `or(1)` with an acquire, by thread `t` at `out` (the word's values
-are `0`, `1`, `3`): if the word was `0`, `t` holds the lock; else the word does not change and `t`
-goes to `spin`. -/
+are `0`, `1`, `3`): if the word was `0`, `t` holds the lock; else it read `1` or `3`, the word does
+not change, and `t` goes to `spin`. -/
 theorem Inv.orLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 32} (hc3 : L.c = 3)
     (hi : L.Inv G m) (hph : L.ph (G t) = .out) (hc : m.current = t)
     (h : ((atomicRmwAt c .or false .acquire 4 L.ptr (1 : BitVec 32)).run m).run =
       some (.ok (b, m'))) :
     L.Step t m m' ∧ m'.current = t ∧
       ((b = 0 ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
-       (b ≠ 0 ∧ L.Inv (upd G t (L.set (G t) .spin Heap.empty)) m')) := by
+       ((b = 1 ∨ b = 3) ∧ L.Inv (upd G t (L.set (G t) .spin Heap.empty)) m')) := by
   obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
   obtain ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU, hm'⟩ := hi.rmwAt hc ht h
   rcases hw with rfl | rfl | hwc
@@ -1461,13 +1461,13 @@ theorem Inv.orLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 32
       decide
     rw [he] at hm'
     obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep hl' hcu₁ (.inl hph) (.inl rfl) L.val1 hU (by decide) hm'
-    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨by decide, hi'⟩⟩
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨.inl rfl, hi'⟩⟩
   · subst hwc
     have he : RmwOp.or.apply false (BitVec.ofNat 32 L.c) (1 : BitVec 32) = BitVec.ofNat 32 L.c := by
       rw [hc3]; decide
     rw [he] at hm'
     obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep hl' hcu₁ (.inl hph) (.inl rfl) L.valC hU L.c_ne0 hm'
-    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨by rw [hc3]; decide, hi'⟩⟩
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨.inr (by rw [hc3]; rfl), hi'⟩⟩
 
 /-- An atomic read of the word that is not an acquire, by thread `t`: no place changes. -/
 theorem Inv.load {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec 32}
@@ -1858,7 +1858,7 @@ theorem wp_orLock (hP : L.Fits P U) (hc3 : L.c = 3) {s : σ} {t : ThreadId} {G :
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = 0 ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
-       (r ≠ 0 ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m')) →
+       ((r = 1 ∨ r = 3) ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m')) →
       Q (r, s) G₁ m' k) :
     P.WP t ((atomicRmwC .or false .acquire 4 L.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n := by
