@@ -482,6 +482,10 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
 
+instance : LawfulEnc Bool where
+  size_encode _ := rfl
+  decode_encode v := by cases v <;> rfl
+
 instance : LawfulEnc (BitVec 32) where
   size_encode v := by simp [Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign, alignUp]
   decode_encode v := by
