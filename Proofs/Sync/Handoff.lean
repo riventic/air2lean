@@ -1431,6 +1431,138 @@ theorem inv_reg {G : ThreadId → Gh} {m₁ m' : Mem} {hL : Heap} {old : BitVec 
     · rw [upd_self] at h3; cases h3
   · rw [h] at hr3; simp [Ph.rank] at hr3
 
+/-! ## `main`'s condition wait -/
+
+theorem main_alive {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) : 0 < m.threads.size :=
+  (Array.getElem?_eq_some_iff.mp hi.2.shape.1).1
+
+theorem sub_w : (sub false (Packed.ofBits (sv 2) : Io_Condition_State).waiters (1 : BitVec 16)).run =
+    some (.ok ((Packed.ofBits (sv 2) : Io_Condition_State).waiters - 1)) := rfl
+theorem sub_s : (sub false (Packed.ofBits (sv 2) : Io_Condition_State).signals (1 : BitVec 16)).run =
+    some (.ok ((Packed.ofBits (sv 2) : Io_Condition_State).signals - 1)) := rfl
+theorem dbg_true : (debug_assert true).run = some (.ok ()) := rfl
+
+/-- The inner loop's invariant: `main` at `wt` with epoch 0 and the state value it read, or at
+`seen` with epoch 1 and `(1, 1)`. -/
+def inv56 (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = 0 ∧
+  ((s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m ∧
+      ∃ k ≤ 3, s.prev_state = Packed.ofBits (sv k)) ∨
+    (s.epoch = 1 ∧ proto.inv (upd G 0 (gP { ph := .seen, cw := true })) m ∧
+      s.prev_state = Packed.ofBits (sv 2)))
+
+/-- The inner loop ends with `main` at `wt` (no signal to take), or holding the mutex at `cons`. -/
+def post56 (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
+    (m : Mem) (_ : Nat) : Prop :=
+  m.current = 0 ∧
+  ((r.1 = .br55 ∧ r.2.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) ∨
+    (r.1 = .ret (.ok ()) ∧ ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m))
+
+theorem sig_pos {k : Nat} (hk : k ≤ 3)
+    (h : gt false (Packed.ofBits (sv k) : Io_Condition_State).signals 0 = true) : k = 2 := by
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;>
+    first | rfl | (exfalso; revert h; decide)
+
+theorem loop56_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem)
+    (d : Nat) (h : inv56 s G m d) :
+    proto.WP 0 ((Io_Condition_waitInner.loop56 (bPtr.add 20) io (bPtr.add 16)).run s) (fun r G' m' d' =>
+      if Io_Condition_waitInner.again56 r.1 then inv56 r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
+      else post56 r G' m' d') G m d := by
+  obtain ⟨ep, ps⟩ := s
+  obtain ⟨hc, hcase⟩ := h
+  -- the cases: a signal to take, or none (at `wt`)
+  have key : (ps = Packed.ofBits (sv 2) ∧ ∃ x : X, (x.ph = .wt ∨ x.ph = .seen) ∧ x.cw = true ∧
+        x.vw = false ∧ proto.inv (upd G 0 (gP x)) m ∧ (x.ph = .wt → ep = 0) ∧
+        (x.ph = .seen → ep = 1)) ∨
+      (gt false ps.signals 0 = false ∧ ep = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) := by
+    rcases hcase with ⟨he, hi, k, hk, hp⟩ | ⟨he, hi, hp⟩ <;> simp only at he hp
+    · cases hg : gt false ps.signals 0
+      · exact .inr ⟨rfl, he, hi⟩
+      · rw [hp] at hg
+        have := sig_pos hk hg
+        subst this
+        exact .inl ⟨hp, _, .inl rfl, rfl, rfl, hi, (fun _ => he), (fun h => by cases h)⟩
+    · exact .inl ⟨hp, _, .inr rfl, rfl, rfl, hi, (fun h => by cases h), (fun _ => he)⟩
+  unfold Io_Condition_waitInner.loop56
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  refine WP.bind ?_
+  simp only [StateT.run_pure]
+  simp only [pure_bind]
+  rcases key with ⟨rfl, x, hx, hcw, hvw, hi, hxw, hxs⟩ | ⟨hg, rfl, hi⟩
+  · rw [if_pos (by decide)]
+    simp only [StateT.run_bind, StateT.run_get]
+    simp only [pure_bind]
+    refine WP.bind (WP.bind (WP.callRC (fun e he => by
+      change (sub false _ 1).run = _ at he; rw [sub_w] at he; cases he) fun a ha => ?_))
+    have ha' : a = (Packed.ofBits (sv 2) : Io_Condition_State).waiters - 1 := by
+      change (sub false _ 1).run = _ at ha; rw [sub_w] at ha; cases ha; rfl
+    subst ha'
+    refine WP.bind (WP.callRC (fun e he => by
+      change (sub false _ 1).run = _ at he; rw [sub_s] at he; cases he) fun b hb => ?_)
+    have hb' : b = (Packed.ofBits (sv 2) : Io_Condition_State).signals - 1 := by
+      change (sub false _ 1).run = _ at hb; rw [sub_s] at hb; cases hb; rfl
+    subst hb'
+    dsimp only
+    rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+    refine WP.bind (WP.bind (wp_casAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
+      (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
+        ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩))
+    · -- success: `main` takes the signal
+      rw [bits_sv2] at hv
+      rw [bits_take] at hh
+      have hi₂ := inv_cons hx hcw hvw (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
+        (by rw [upd_g hg₁]; exact hL) hv hh
+      refine WP.pure' ?_
+      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+      simp only [StateT.run_bind]
+      refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr 0 (gP { ph := .cons, cw := true })
+        rfl _ G₁ m' k hi₂)))
+      rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL₂, hi₃⟩
+      simp only [StateT.run_pure]
+      refine WP.pure' (WP.pure' (WP.pure' ?_))
+      simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
+    · -- failure: only at `wt`; `main` read write `j`
+      have hwt : x.ph = .wt := by
+        rcases hx with h | h
+        · exact h
+        · exfalso
+          have hx' : x = { ph := .seen, cw := true } := by
+            cases x; simp only at h hcw hvw; subst h hcw hvw; rfl
+          subst hx'
+          exact seen_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) (by rw [← bits_sv2]; exact hne)
+            hj hv hfl
+      have hx' : x = { ph := .wt, cw := true } := by
+        cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
+      subst hx'
+      have hi₂ := inv_mload (.inl rfl) (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
+        (by rw [upd_g hg₁]; exact hL) hh
+      obtain ⟨hsz, hval⟩ := hi₁.2.sh
+      rw [← upd_g hg₁, upd_self, upd0_1] at hsz hval
+      have hN : sN (gP { ph := .wt, cw := true }).2 (G₁ 1).2 ≤ 3 := by
+        simp only [sN, gP, Ph.post]; cases (G₁ 1).2.cw <;> simp
+      have hbj : b = sv j := val_eq hv (hval j (by omega))
+      have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
+      simp only [StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [Option.isSome_some, ↓reduceIte]
+      simp only [StateT.run_bind]
+      refine WP.bind (WP.callRC_ok (v := r) rfl ?_)
+      simp only [StateT.run_pure, StateT.run_modify]
+      refine WP.pure' (WP.pure' (WP.pure' ?_))
+      simp only [Io_Condition_waitInner.again56, ↓reduceIte]
+      refine ⟨⟨hop.current, .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩⟩,
+        .inl (by omega)⟩
+  · rw [if_neg (by rw [hg]; simp)]
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨hc, .inl ⟨rfl, rfl, hi⟩⟩
+
 /-! ## The producer -/
 
 
