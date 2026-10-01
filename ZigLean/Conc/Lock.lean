@@ -439,6 +439,30 @@ theorem own_upd {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ}
   · subst hu; simp [hjt, upd]
   · simp only [upd, hu, ↓reduceIte]
 
+/-- Other ghost values with the same places, parts and resources, and a resource with the same
+`R`. -/
+theorem Inv.congr {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
+    (hph : ∀ u, L.ph (G' u) = L.ph (G u)) (hpart : ∀ u, L.part (G' u) = L.part (G u))
+    (hheld : ∀ u, L.held (G' u) = L.held (G u)) (hR : ∀ h, L.R G' h ↔ L.R G h) : L.Inv G' m := by
+  have hown : L.own G' m = L.own G m := by
+    funext u; unfold Lock.own; rw [hpart, hheld]
+  have hfree : L.Free G' ↔ L.Free G := by
+    unfold Lock.Free; exact forall_congr' fun u => by rw [hph]
+  refine ⟨hown ▸ hi.own, fun u => by rw [hpart, hheld]; exact hi.pdisj u,
+    fun u hu => by rw [hheld]; exact hi.idle u (by rw [← hph]; exact hu),
+    fun u hu => hi.live u (by rw [← hph]; exact hu), hi.blk, ?_, fun u v hu hv => hi.one u v
+      (by rw [← hph]; exact hu) (by rw [← hph]; exact hv), ⟨hi.loc.only, hi.loc.ok⟩,
+    fun u => hown ▸ hi.off u, hi.wfp, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
+    hi.fq.mono (fun w hw => hw) (fun w _ => hph w.1), fun hp => ?_⟩
+  · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
+  · obtain ⟨h1, h2⟩ := hi.rel i l hl
+    exact ⟨h1, fun u hu => h2 u (by rw [← hph]; exact hu)⟩
+  · obtain ⟨hL, hRL, hs, hdj, hoff, how⟩ := hi.free (hfree.mp hF)
+    exact ⟨hL, (hR hL).mpr hRL, hs, fun u => hown ▸ hdj u, hoff, how⟩
+  · rw [hheld]; exact (hR _).mpr (hi.res u (by rw [← hph]; exact hu))
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
+    exact ⟨v, hv, hq, by rw [hph]; exact h1, fun hh => h2 (by rw [← hph]; exact hh)⟩
+
 /-! ## The word in the heap -/
 
 /-- Each byte of the word is in the heap. -/

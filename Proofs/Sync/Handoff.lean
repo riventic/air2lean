@@ -486,4 +486,215 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
   cases v
   exact ⟨rfl, h _ hc rfl hi'⟩
 
+/-! ## The ops at the shared words -/
+
+/-- One of the three shared words. -/
+def Wd (W : Word) : Prop := W = WS ∨ W = WE ∨ W = WV
+
+theorem Wd.ok {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m : Mem} (hu : U G m) : W.Ok m := by
+  rcases hW with rfl | rfl | rfl
+  · exact hu.ws
+  · exact hu.we
+  · exact hu.wv
+
+theorem Wd.ap {W : Word} (hW : Wd W) : Word.Apart L W := by
+  rcases hW with rfl | rfl | rfl
+  · exact apS
+  · exact apE
+  · exact apV
+
+theorem Wd.blk {W : Word} (hW : Wd W) : W.b = 0 ∧ W.o + 4 ≤ 32 := by
+  rcases hW with rfl | rfl | rfl <;> exact ⟨rfl, by decide⟩
+
+/-- The invariant at a stop of thread `t`: the same, with `current := t`. -/
+theorem inv_cur {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (t : ThreadId) :
+    proto.inv G { m with current := t } :=
+  ⟨hi.1.current t, U_keep hi.2 (Word.keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _)
+    (Word.keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _)
+    (Word.keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _) rfl rfl (fun _ => VClock.le_refl _)
+    (fun _ h => before_same rfl h) hi.2.io hi.2.blk⟩
+
+theorem hcs_of {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) :
+    m.clocks.size = m.threads.size := hi.1.own.csize
+
+/-- An op at a shared word by thread `t` keeps the lock's invariant. -/
+theorem linv_op {W : Word} (hW : Wd W) {G : ThreadId → Gh} {t : ThreadId} {m m' : Mem}
+    (hi : proto.inv G m) (hop : W.Op t m m') : L.Inv G m' :=
+  hi.1.wordOp (hW.ok hi.2) hop hW.ap (fun u => off_own hi (hW.blk).1 (hW.blk).2 u)
+    (off_R (hW.blk).1 (hW.blk).2 G)
+
+theorem op_of_cur {W : Word} {t : ThreadId} {m₁ m' : Mem}
+    (hop : W.Op t { m₁ with current := t } m') : W.Op t m₁ m' :=
+  ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
+    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩⟩
+
+/-- An atomic load at a shared word, with a decode (`atomicLoadAsC`), by thread `t` (`g`). -/
+theorem wp_loadAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {ord : AtomicOrder}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ j < (W.hist m₁).size, ∀ b,
+      (W.hist m₁)[j]!.Val b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' b r j, G₁ t = g → proto.inv G₁ m₁ →
+      (Packed.ofBits? (α := α) b).run = some (.ok r) →
+      j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+      (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → L.Inv G₁ m' → Q (r, s) G₁ m' k) :
+    proto.WP t ((atomicLoadAsC α ord 4 W.ptr : CM Tgt σ α).run s) Q G m n := by
+  unfold atomicLoadAsC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  refine WP.callMC (fun e he => (atomicLoadAs_noErr (hwc.load_noErr htl (hcs_of hic) hcr)
+    (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
+  · obtain ⟨j, hj, hv, -⟩ := hwc.load rfl htl (hcs_of hic) hr
+    have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+    rw [hh₁] at hj hv
+    exact hdec G₁ m₁ hg₁ hi₁ j hj b hv
+  obtain ⟨b, hb, hd⟩ := atomicLoadAs_ok hr
+  obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hwc.load rfl htl (hcs_of hic) hb
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  rw [hh₁] at hj hv hfl hacq hh
+  exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' b r j hg₁ hi₁ hd hj hv hfl hacq hh hw' (op_of_cur hop)
+    (linv_op hW hic hop)⟩
+
+/-- An atomic load of a `u32` at a shared word (`atomicLoadC`), by thread `t` (`g`). -/
+theorem wp_load {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat} {g : Gh}
+    {W : Word} (hW : Wd W) {ord : AtomicOrder} (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' v j, G₁ t = g → proto.inv G₁ m₁ →
+      j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+      (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → L.Inv G₁ m' → Q (v, s) G₁ m' k) :
+    proto.WP t ((atomicLoadC (n := 32) ord 4 W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
+  unfold atomicLoadC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  refine WP.callMC (fun e he => (hwc.load_noErr htl (hcs_of hic) hcr e he).elim) fun v m' hr => ?_
+  obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hwc.load rfl htl (hcs_of hic) hr
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  rw [hh₁] at hj hv hfl hacq hh
+  exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' v j hg₁ hi₁ hj hv hfl hacq hh hw' (op_of_cur hop)
+    (linv_op hW hic hop)⟩
+
+/-- The newest write of a word. -/
+abbrev last (h : Array Word.Entry) : Word.Entry := h[h.size - 1]!
+
+/-- An RMW of a `u32` at a shared word (`atomicRmwC`), by thread `t` (`g`). -/
+theorem wp_rmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat} {g : Gh}
+    {W : Word} (hW : Wd W) {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec 32}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' old, G₁ t = g → proto.inv G₁ m₁ →
+      (last (W.hist m₁)).Val old → W.U32 m' (op.apply signed old v) →
+      W.hist m' = (W.hist m₁).push
+        (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply signed old v)) →
+      (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+      W.Ok m' → W.Op t m₁ m' → L.Inv G₁ m' → Q (old, s) G₁ m' k) :
+    proto.WP t ((atomicRmwC op signed ord 4 W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n := by
+  unfold atomicRmwC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  refine WP.callMC (fun e he => (hwc.rmw_noErr htl (hcs_of hic) hcr e he).elim)
+    fun old m' hr => ?_
+  obtain ⟨hv, hw', hop, hU, hh, hacq⟩ := hwc.rmw rfl htl (hcs_of hic) hr
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  rw [hh₁] at hv hh hacq
+  exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' (op_of_cur hop)
+    (linv_op hW hic hop)⟩
+
+/-- An RMW at a shared word, with a decode (`atomicRmwAsC`), by thread `t` (`g`). -/
+theorem wp_rmwAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {op : RmwOp} {ord : AtomicOrder} {v : α}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ b, (last (W.hist m₁)).Val b →
+      ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' old r, G₁ t = g → proto.inv G₁ m₁ →
+      (Packed.ofBits? (α := α) old).run = some (.ok r) →
+      (last (W.hist m₁)).Val old → W.U32 m' (op.apply false old (Packed.toBits v)) →
+      W.hist m' = (W.hist m₁).push
+        (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply false old (Packed.toBits v))) →
+      (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+      W.Ok m' → W.Op t m₁ m' → L.Inv G₁ m' → Q (r, s) G₁ m' k) :
+    proto.WP t ((atomicRmwAsC op ord 4 W.ptr v : CM Tgt σ α).run s) Q G m n := by
+  unfold atomicRmwAsC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  refine WP.callMC (fun e he => (atomicRmwAs_noErr (hwc.rmw_noErr htl (hcs_of hic) hcr)
+    (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
+  · obtain ⟨hv, -⟩ := hwc.rmw rfl htl (hcs_of hic) hr
+    rw [hh₁] at hv
+    exact hdec G₁ m₁ hg₁ hi₁ b hv
+  obtain ⟨old, hb, hd⟩ := atomicRmwAs_ok hr
+  obtain ⟨hv, hw', hop, hU, hh, hacq⟩ := hwc.rmw rfl htl (hcs_of hic) hb
+  rw [hh₁] at hv hh hacq
+  exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' old r hg₁ hi₁ hd hv hU hh hacq hw' (op_of_cur hop)
+    (linv_op hW hic hop)⟩
+
+/-- A `cmpxchg` at a shared word, with a decode (`cmpxchgAsC`), by thread `t` (`g`): on success
+an RMW of the newest write, which holds `exp`; on failure a read of write `j`. -/
+theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {succ fail : AtomicOrder} {exp new : α}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ j < (W.hist m₁).size, ∀ b,
+      (W.hist m₁)[j]!.Val b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {Q : Option α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m', G₁ t = g → proto.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
+      L.Inv G₁ m' →
+      ((last (W.hist m₁)).Val (Packed.toBits exp) → W.U32 m' (Packed.toBits new) →
+        W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
+        (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j b r, b ≠ Packed.toBits exp → (Packed.ofBits? (α := α) b).run = some (.ok r) →
+        j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
+    proto.WP t ((cmpxchgAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
+  unfold cmpxchgAsC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  refine WP.callMC (fun e he => (cmpxchgAs_noErr (hwc.cas_noErr (fail := fail)
+    (new := Packed.toBits new) htl (hcs_of hic) hcr) (fun b m' hr => ?_) e he).elim)
+    fun r m' hr => ?_
+  · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, -, hj, hv, -⟩⟩ := hwc.cas rfl htl (hcs_of hic) hr
+    · cases he
+    · cases he
+      rw [hh₁] at hj hv
+      exact hdec G₁ m₁ hg₁ hi₁ j hj _ hv
+  rcases cmpxchgAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
+  · obtain ⟨hw', hop, ⟨-, hv, hU, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hwc.cas rfl htl (hcs_of hic) ho
+    · rw [hh₁] at hv hh hacq
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        (linv_op hW hic hop)).1 hv hU hh hacq⟩
+    · cases he
+  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, hacq, hh⟩⟩ :=
+      hwc.cas rfl htl (hcs_of hic) ho
+    · cases he
+    · cases he
+      rw [hh₁] at hj hv hfl hacq hh
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        (linv_op hW hic hop)).2 j b v hne hd hj hv hfl hacq hh⟩
+
 end Sync.Handoff

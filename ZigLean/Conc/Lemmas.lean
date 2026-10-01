@@ -1182,6 +1182,32 @@ theorem atomicRmwAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {op : RmwOp
   obtain ⟨hd, rfl⟩ := MemM.lift_ok h₁
   exact ⟨b, hb, hd⟩
 
+/-- A load of an enum or a `bool` (`atomicLoadAs`): the integer load, then the decode. -/
+theorem atomicLoadAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {ord : AtomicOrder}
+    {align : Nat} {p : Ptr} {r : α} {m m' : Mem}
+    (h : ((atomicLoadAs α c ord align p).run m).run = some (.ok (r, m'))) :
+    ∃ b, ((atomicLoadAt (n := n) c ord align p).run m).run = some (.ok (b, m')) ∧
+      (Packed.ofBits? (α := α) b).run = some (.ok r) := by
+  unfold atomicLoadAs at h
+  obtain ⟨b, m₁, hb, h₁⟩ := MemM.bind_ok h
+  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₁
+  exact ⟨b, hb, hd⟩
+
+theorem atomicLoadAs_noErr {α : Type} {n : Nat} [Packed α n] {c : Nat} {ord : AtomicOrder}
+    {align : Nat} {p : Ptr} {m : Mem}
+    (hld : ∀ e, ((atomicLoadAt (n := n) c ord align p).run m).run ≠ some (.error e))
+    (hdec : ∀ b m', ((atomicLoadAt (n := n) c ord align p).run m).run = some (.ok (b, m')) →
+      ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    (e : Error) : ((atomicLoadAs α c ord align p).run m).run ≠ some (.error e) := by
+  intro h
+  unfold atomicLoadAs at h
+  rcases MemM.bind_err h with he | ⟨b, m₁, hb, h₁⟩
+  · exact hld e he
+  obtain ⟨r, hr⟩ := hdec b m₁ hb
+  have := MemM.lift_err h₁
+  change ExceptT.run (Packed.ofBits? b) = _ at this
+  rw [hr] at this; cases this
+
 /-- A `cmpxchg` on an enum or a `bool` (`cmpxchgAs`): the integer `cmpxchg`, then the decode of
 the value read on failure. -/
 theorem cmpxchgAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : AtomicOrder}
