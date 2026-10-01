@@ -1800,6 +1800,37 @@ theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : 
 
 /-! ## `main`'s event wait -/
 
+theorem ofBits_ev0 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 0)).run = some (.ok .unset) := rfl
+theorem ofBits_ev1 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 1)).run = some (.ok .waiting) := rfl
+theorem ofBits_ev2 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 2)).run = some (.ok .is_set) := rfl
+theorem bits_set : RmwOp.xchg.apply false (0 : BitVec 32) (Packed.toBits Io_Event.is_set) =
+    BitVec.ofNat 32 2 := rfl
+
+theorem sN_cw {x0 x1 x1' : X} (h : x1'.cw = x1.cw) : sN x0 x1' = sN x0 x1 := by simp [sN, h]
+
+theorem eN_eq {x x' : X} (h : x'.cw = x.cw) (h8 : 8 ≤ x.ph.rank) (h8' : 8 ≤ x'.ph.rank) :
+    eN x' = eN x := by
+  unfold eN; rw [h]
+  have a : decide (8 ≤ x'.ph.rank) = true := by simp; omega
+  have b : decide (8 ≤ x.ph.rank) = true := by simp; omega
+  rw [a, b]
+
+theorem vok_push {m m' : Mem} {vs : List Nat} {e : Word.Entry} (hv : VOk m vs)
+    (hh : WV.hist m' = (WV.hist m).push e) (he : e.Val (BitVec.ofNat 32 2)) : VOk m' (vs ++ [2]) := by
+  obtain ⟨hsz, hval⟩ := hv
+  refine ⟨by rw [hh]; simp [hsz], fun k hk => ?_⟩
+  simp only [List.length_append, List.length_singleton] at hk
+  rw [hh]
+  rcases (by omega : k < vs.length ∨ k = vs.length) with hlt | rfl
+  · rw [get_push_lt (by omega)]
+    have := hval k hlt
+    rwa [getElem!_pos (vs ++ [2]) k (by simp; omega), List.getElem_append_left hlt,
+      ← getElem!_pos vs k hlt]
+  · rw [get_push_eq' hsz.symm]
+    rw [getElem!_pos (vs ++ [2]) vs.length (by simp), List.getElem_append_right (Nat.le_refl _)]
+    simpa using he
+
+
 /-- The event's writes, for `main` before (`x.vw = false`) or after its `waiting`: write `j` has
 the value `vL[j]`. -/
 theorem ev_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec 32}
@@ -1869,6 +1900,117 @@ theorem inv_ev1 {G : ThreadId → Gh} {m₁ m' : Mem} {c : Bool}
   · intro h; rw [hS, hE]; exact hu.sig (by rw [upd0_1]; exact h)
   · rw [h1]; exact VClock.le_refl _
   · intro h; rw [hS]; exact VClock.le_trans (by have := hu.pc; rw [upd0_1] at this; exact this h) (hop.clocks 1)
+
+theorem vL_vals (x0 x1 : X) (j : Nat) (hj : j < (vL x0 x1).length) :
+    (vL x0 x1)[j]! = 0 ∨ (vL x0 x1)[j]! = 1 ∨ (vL x0 x1)[j]! = 2 := by
+  have hm : (vL x0 x1)[j]! ∈ vL x0 x1 := by
+    rw [getElem!_pos (vL x0 x1) j hj]; exact List.getElem_mem hj
+  have hall : ∀ v ∈ vL x0 x1, v = 0 ∨ v = 1 ∨ v = 2 := by
+    unfold vL; cases x0.vw <;> cases x1.vw <;> simp
+  exact hall _ hm
+
+theorem ev_dec {x0 x1 : X} {j : Nat} (hj : j < (vL x0 x1).length) :
+    ∃ r, (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 (vL x0 x1)[j]!)).run = some (.ok r) := by
+  rcases vL_vals x0 x1 j hj with h | h | h <;> rw [h]
+  · exact ⟨_, ofBits_ev0⟩
+  · exact ⟨_, ofBits_ev1⟩
+  · exact ⟨_, ofBits_ev2⟩
+
+/-- `main` at `evd`: the event wait ended. -/
+theorem inv_evd {G : ThreadId → Gh} {m : Mem} {c w : Bool} {x : X}
+    (hi : proto.inv (upd G 0 (gP x)) m) (hx : x = { ph := .ev0, cw := c } ∨ x = { ph := .ev1, cw := c, vw := true })
+    (hw : w = x.vw) : proto.inv (upd G 0 (gP { ph := .evd, cw := c, vw := w })) m := by
+  have hfl := hi.2.flags
+  rw [upd_self, upd0_1] at hfl
+  have hp : x.ph ≠ .pre := by rcases hx with rfl | rfl <;> simp
+  refine inv_mx hi hp rfl (by simp) (by rcases hx with rfl | rfl <;> cases c <;> rfl)
+    (by rcases hx with rfl | rfl <;> subst hw <;> rfl) ?_ (reg_x0 hi.2.reg (by rcases hx with rfl | rfl <;> rfl))
+    (fun h => by cases h) (fun h => ?_) (qok_of hi (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.away)))
+  · rcases hx with rfl | rfl <;> subst hw <;>
+      exact ⟨hfl.sig, by simpa [gP, Ph.post] using hfl.mcw, by simpa [gP, Ph.post] using hfl.cons,
+        hfl.pcw, hfl.pcw', (fun _ => .inr (.inl rfl)), (fun h => by cases h), hfl.pvw,
+        (fun h => by simpa [gP] using hfl.setw h), hfl.late, hfl.pfin,
+        (fun h => by simpa [gP] using hfl.sg1 h)⟩
+  · rcases hx with rfl | rfl <;> subst hw
+    · cases h
+    · have := hi.2.vclk; rw [upd_self] at this; exact this rfl
+
+/-- The event loop's invariant: `main` at `ev1`. -/
+def inv17 (c : Bool) (D : Nat) (_ : Io_Event_waitUncancelableLocals) (G : ThreadId → Gh) (m : Mem)
+    (d : Nat) : Prop :=
+  d < D ∧ m.current = 0 ∧ proto.inv (upd G 0 (gP { ph := .ev1, cw := c, vw := true })) m
+
+def post17 (c : Bool) (D : Nat) (r : Io_Event_waitUncancelableExit × Io_Event_waitUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ r.1 = .ret ∧ m.current = 0 ∧ proto.inv (upd G 0 (gP { ph := .evd, cw := c, vw := true })) m
+
+theorem loop17_body (c : Bool) (D : Nat) (io : Io) (s : Io_Event_waitUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : inv17 c D s G m d) :
+    proto.WP 0 ((Io_Event_waitUncancelable.loop17 (bPtr.add 28) io).run s) (fun r G' m' d' =>
+      if Io_Event_waitUncancelable.again17 r.1 then inv17 c D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Event_waitUncancelableLocals) => 0) s)
+      else post17 c D r G' m' d') G m d := by
+  obtain ⟨hD, hc, hi⟩ := h
+  unfold Io_Event_waitUncancelable.loop17
+  simp only [StateT.run_bind]
+  simp only [StateT.run_pure, pure_bind]
+  rw [show bPtr.add 28 = WV.ptr from rfl]
+  refine WP.bind (WP.bind (wp_mwait (.inr (.inr rfl)) (by decide) hi (fun G₁ m₁ hg₁ hi₁ hU => ?_)
+    fun k hk G₁ m₁ hc₁ hi₁ => ?_))
+  · intro w hw
+    rcases Array.mem_push.mp hw with hw | rfl
+    · exact hi₁.2.q w hw
+    refine .inr (.inr ⟨rfl, rfl, by rw [hg₁]; rfl, fun hf => ?_⟩)
+    have hv := (hi₁.2.wv.u32_last).mp hU
+    obtain ⟨hsz, hval⟩ := hi₁.2.vh
+    rw [hg₁] at hsz hval
+    have hfl := hi₁.2.flags
+    have h1 := hfl.pfin hf
+    simp only [vL, gA, h1] at hsz hval
+    have := val_eq hv (by rw [hsz]; exact hval 2 (by simp))
+    revert this; decide
+  simp only [StateT.run_bind]
+  refine WP.bind (wp_loadAs (.inr (.inr rfl)) (g := gP { ph := .ev1, cw := c, vw := true }) hi₁
+    (fun _ _ _ h => main_alive h) (fun G₂ m₂ hg₂ hi₂ j hj b hv => by
+      obtain ⟨hj', rfl⟩ := ev_read (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hj hv
+      exact ev_dec hj')
+    fun k₂ hk₂ G₂ m₂ m₃ b r j hg₂ hi₂ hd hj hv hfl hacq hh hw' hop hL => ?_)
+  have hi₃ := inv_mload (.inr (.inr rfl)) (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hw' hop
+    (by rw [upd_g hg₂]; exact hL) hh
+  obtain ⟨hj', rfl⟩ := ev_read (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hj hv
+  -- `main`'s `waiting` happened before it: it reads `waiting` or `is_set`
+  have hj1 : 1 ≤ j := by
+    have hvc := hi₂.2.vclk (by rw [hg₂]; rfl)
+    obtain ⟨hsz, -⟩ := hi₂.2.vh
+    rw [hg₂] at hsz
+    have h2 : 1 < (WV.hist m₂).size := by
+      rw [hsz]; simp only [vL, gP]; cases (G₂ 1).2.vw <;> simp
+    exact hfl 1 h2 hvc
+  have hlen := hj'
+  simp only [vL] at hlen
+  rcases (by cases e : (G₂ 1).2.vw <;> simp [e] at hlen <;> omega : j = 1 ∨ j = 2) with rfl | rfl
+  · -- `waiting`: the loop goes on
+    have hr : r = .waiting := by
+      have : (vL { ph := .ev1, cw := c, vw := true } (G₂ 1).2)[1]! = 1 := by
+        simp only [vL]; cases (G₂ 1).2.vw <;> rfl
+      rw [this] at hd; rw [ofBits_ev1] at hd; cases hd; rfl
+    subst hr
+    refine WP.pure' ?_
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [Io_Event_waitUncancelable.again17, ↓reduceIte]
+    exact ⟨⟨by omega, hop.current, hi₃⟩, .inl (by omega)⟩
+  · -- `is_set`: the event wait ends
+    have hr : r = .is_set := by
+      have h2 : (G₂ 1).2.vw = true := by cases e : (G₂ 1).2.vw <;> simp [e] at hlen; rfl
+      have : (vL { ph := .ev1, cw := c, vw := true } (G₂ 1).2)[2]! = 2 := by simp [vL, h2]
+      rw [this] at hd; rw [ofBits_ev2] at hd; cases hd; rfl
+    subst hr
+    refine WP.pure' ?_
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [Io_Event_waitUncancelable.again17, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨by omega, rfl, hop.current, inv_evd hi₃ (.inr rfl) rfl⟩
 
 /-! ## The producer -/
 
@@ -2403,36 +2545,6 @@ theorem signal_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io)
     rcases hcase with ⟨rfl, h⟩ | ⟨rfl, h⟩
     · exact .inl ⟨by decide, h⟩
     · exact .inr ⟨by decide, h⟩
-
-theorem ofBits_ev0 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 0)).run = some (.ok .unset) := rfl
-theorem ofBits_ev1 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 1)).run = some (.ok .waiting) := rfl
-theorem ofBits_ev2 : (Packed.ofBits? (α := Io_Event) (BitVec.ofNat 32 2)).run = some (.ok .is_set) := rfl
-theorem bits_set : RmwOp.xchg.apply false (0 : BitVec 32) (Packed.toBits Io_Event.is_set) =
-    BitVec.ofNat 32 2 := rfl
-
-theorem sN_cw {x0 x1 x1' : X} (h : x1'.cw = x1.cw) : sN x0 x1' = sN x0 x1 := by simp [sN, h]
-
-theorem eN_eq {x x' : X} (h : x'.cw = x.cw) (h8 : 8 ≤ x.ph.rank) (h8' : 8 ≤ x'.ph.rank) :
-    eN x' = eN x := by
-  unfold eN; rw [h]
-  have a : decide (8 ≤ x'.ph.rank) = true := by simp; omega
-  have b : decide (8 ≤ x.ph.rank) = true := by simp; omega
-  rw [a, b]
-
-theorem vok_push {m m' : Mem} {vs : List Nat} {e : Word.Entry} (hv : VOk m vs)
-    (hh : WV.hist m' = (WV.hist m).push e) (he : e.Val (BitVec.ofNat 32 2)) : VOk m' (vs ++ [2]) := by
-  obtain ⟨hsz, hval⟩ := hv
-  refine ⟨by rw [hh]; simp [hsz], fun k hk => ?_⟩
-  simp only [List.length_append, List.length_singleton] at hk
-  rw [hh]
-  rcases (by omega : k < vs.length ∨ k = vs.length) with hlt | rfl
-  · rw [get_push_lt (by omega)]
-    have := hval k hlt
-    rwa [getElem!_pos (vs ++ [2]) k (by simp; omega), List.getElem_append_left hlt,
-      ← getElem!_pos vs k hlt]
-  · rw [get_push_eq' hsz.symm]
-    rw [getElem!_pos (vs ++ [2]) vs.length (by simp), List.getElem_append_right (Nat.le_refl _)]
-    simpa using he
 
 /-- The event's newest write, while the producer is before its `xchg`: `waiting` iff `main`
 wrote it. -/
