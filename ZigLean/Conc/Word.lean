@@ -31,6 +31,7 @@ open Assn Proto
 structure Word where
   b : BlockId
   o : Nat
+  deriving DecidableEq
 
 namespace Word
 
