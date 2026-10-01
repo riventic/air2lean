@@ -1692,6 +1692,91 @@ theorem loop23_body (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId �
       subst this
       exact .inr ⟨rfl, hi₅, by rw [hr, hbj]⟩
 
+/-- `main` holds the mutex with the resource `hL`, in which `ready` is `false`: the producer has
+not stored `ready = true`. -/
+theorem rdy_now {G : ThreadId → Gh} {m : Mem} {x : X} {hL : Heap} {Y : ThreadId → X}
+    (hi : proto.inv G m) (hg : G 0 = gH x hL) (hR : R Y hL) (hY : rdyOf (Y 1) = false) :
+    rdyOf (G 1).2 = false := by
+  have hres := hi.1.res 0 (by rw [hg]; rfl)
+  rw [show L.held (G 0) = hL by rw [hg]; rfl] at hres
+  have := R_rdy (Y := fun u => (G u).2) hres hR
+  rw [← hY]; exact this
+
+theorem reg_x0 {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (h : RegHB (upd G 0 (a, x)) m)
+    (hc : x'.cw = x.cw) : RegHB (upd G 0 (a, x')) m := by
+  intro hcw
+  rw [upd_self] at hcw
+  obtain ⟨h1, h2⟩ := h (by rw [upd_self]; rw [← hc]; exact hcw)
+  rw [upd0_1] at h1 h2 ⊢
+  refine ⟨fun hr => ?_, h2⟩
+  rcases h1 hr with ⟨hh, hle⟩ | hb | hle
+  · exact .inl ⟨by rw [upd_self] at hh ⊢; exact hh, hle⟩
+  · exact .inr (.inl hb)
+  · exact .inr (.inr hle)
+
+theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters (65535 : BitVec 16) =
+    true := by decide
+
+theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+    {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Condition_waitInner (bPtr.add 20) io (bPtr.add 16) true) (fun r G' m' _ =>
+      r = .ok () ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
+      G m d := by
+  unfold Io_Condition_waitInner
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  simp only [StateT.run_pure, pure_bind]
+  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gH { ph := .run } hL) hi
+    (fun _ _ _ h => main_alive h) fun k₁ hk₁ G₁ m₁ m₂ v j hg₁ hi₁ hj hv _ _ hh hw' hop hL₁ => ?_))
+  have hrd := rdy_now hi₁ hg₁ hR hY
+  obtain ⟨rfl, hi₂⟩ := inv_ep (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hrd hw' hop
+    (by rw [upd_g hg₁]; exact hL₁) hh hj hv
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  refine WP.bind (WP.bind (WP.bind (wp_rmwAs (.inl rfl) (g := gH { ph := .ep } hL) hi₂
+    (fun _ _ _ h => main_alive h) (fun _ _ _ _ b _ => ⟨_, ofBits_cst b⟩)
+    fun k₂ hk₂ G₂ m₃ m₄ old r hg₂ hi₃ hd hv₂ _ hh₂ _ hw₂ hop₂ hL₂ => ?_)))
+  have hrd₂ := rdy_now hi₃ hg₂ hR hY
+  obtain ⟨rfl, hi₄⟩ := inv_reg (G := G₂) (by rw [upd_g hg₂]; exact hi₃) hrd₂ hw₂ hop₂
+    (by rw [upd_g hg₂]; exact hL₂) hv₂ hh₂
+  have hr : r = Packed.ofBits 0 := by rw [ofBits_cst] at hd; cases hd; rfl
+  subst hr
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  rw [lt_w]
+  refine WP.bind (WP.callRC_ok dbg_true ?_)
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  -- `unlock`
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr 0
+    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄)))
+  rintro _ G₃ m₅ d₃ ⟨hd₃, hc₅, hi₅⟩
+  have hi₅' : proto.inv (upd G₃ 0 (gP { ph := .reg, cw := true })) m₅ := hi₅
+  have hfl := hi₅'.2.flags
+  rw [upd_self, upd0_1] at hfl
+  -- `main` goes to the wait loop (`wt`)
+  have hi₆ : proto.inv (upd G₃ 0 (gP { ph := .wt, cw := true })) m₅ :=
+    inv_mx hi₅' (by decide) rfl (by decide) (by simp [sN, gP, Ph.post]) (by simp [vL, gP])
+      ⟨hfl.sig, ⟨fun _ => .inr (.inl rfl), fun _ => rfl⟩, (fun _ h => by cases h <;> contradiction),
+        hfl.pcw, hfl.pcw', (fun h => by cases h), (fun h => by cases h), hfl.pvw,
+        (fun h => by have := hfl.setw h; simp [gP] at this), hfl.late, hfl.pfin, hfl.sg1⟩
+      (reg_x0 hi₅'.2.reg rfl) (fun h => by cases h) (fun h => by cases h)
+      (qok_of (G := upd G₃ 0 (gP { ph := .reg, cw := true })) hi₅' (by rw [upd_self]; decide))
+  refine WP.mono ?_ (WP.loop _ _ inv23 (fun _ => 0) post23 (loop23_body io) _ G₃ m₅ d₃
+    ⟨hc₅, rfl, hi₆⟩)
+  rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨rfl, hc₆, hL₆, hi₇⟩
+  exact WP.pure' ⟨rfl, hc₆, hL₆, hi₇⟩
+
 /-! ## The producer -/
 
 
