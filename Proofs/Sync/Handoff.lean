@@ -3466,4 +3466,20 @@ theorem main_spec (io : Io) (d : Nat) :
     rw [Array.getElem?_eq_getElem (by omega)] at h00
     rw [Option.some.inj h00]
 
+/-! ## The results -/
+
+/-- **`handoff` gives 7 under every schedule** (every oracle `o`, every `fuel`). -/
+theorem handoff_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (handoff io) mem0).run = some (.ok (v, m))) :
+    v = .ok 7 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+  exact hv
+
+/-- **No run of `handoff` gives an error**: no data race, no deadlock at a futex, no
+`unreachable`, under every schedule. -/
+theorem handoff_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (handoff io) mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+
 end Sync.Handoff
