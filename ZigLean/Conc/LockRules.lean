@@ -80,6 +80,11 @@ theorem Inv.free_iff {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {w : Nat} 
 
 /-! ## A step in the lock's code -/
 
+/-- A clock below one that happened before the newest message of the word. -/
+theorem before_le {m : Mem} {c c' : VClock} (h : L.Before m c') (hle : VClock.le c c' = true) :
+    L.Before m c := by
+  obtain ⟨i, l, hl, h'⟩ := h; exact ⟨i, l, hl, VClock.le_trans hle h'⟩
+
 theorem Step.clocks {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (u : Nat) :
     VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
   by_cases hu : u = t
@@ -729,7 +734,8 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (hp : (w = 1 ∧ p = .out) ∨ (w = 2 ∧ p = .wake))
     (hM : M = rmwM m₁ li (l.msgs.size - 1) .release (l.msgs[l.msgs.size - 1]!)
       (BitVec.ofNat 32 0)) :
-    L.Step t m₁ M ∧ M.current = t ∧ L.Inv (upd G t (L.set (G t) p Heap.empty)) M := by
+    L.Step t m₁ M ∧ M.current = t ∧ L.Before M (m₁.clocks[t]!) ∧
+      L.Inv (upd G t (L.set (G t) p Heap.empty)) M := by
   obtain ⟨ht, hjt⟩ := hi.live t (by rw [hph]; decide)
   have hpg : p ≠ .gone := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
   have hph' : p ≠ .holds := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
@@ -767,7 +773,9 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   have hrt : VClock.le (l.msgs[l.msgs.size - 1]!).relClock (m₁.clocks[t]!) = true :=
     (hi.rel li l hl).2 t hph
   have hoffH : L.Off (L.held (G t)) := off_sub (hi.off t) fun l h => hsH.ne h
-  refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) (by decide) (intOfBytes_rmw _) ho
+  refine ⟨hst, hcM, ⟨li, _, loc_set hl haM rfl rfl, by
+      rw [back_push, hrelM]; exact VClock.le_merge_right _ _⟩,
+    hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) (by decide) (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
     (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u))
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))
@@ -1284,7 +1292,7 @@ theorem Inv.xchgLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} 
 theorem Inv.xchgUnlock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Packed α 32]
     (S : States α) {r : α} (hi : L.Inv G m) (hph : L.ph (G t) = .holds) (hc : m.current = t)
     (h : ((atomicRmwAs c .xchg .release 4 L.ptr S.unl).run m).run = some (.ok (r, m'))) :
-    L.Step t m m' ∧ m'.current = t ∧
+    L.Step t m m' ∧ m'.current = t ∧ L.Before m' (m.clocks[t]!) ∧
       ((r = S.one ∧ L.Inv (upd G t (L.set (G t) .out Heap.empty)) m') ∨
        (r = S.two ∧ L.Inv (upd G t (L.set (G t) .wake Heap.empty)) m')) := by
   obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
@@ -1297,10 +1305,10 @@ theorem Inv.xchgUnlock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type
   subst this
   rcases hcase with ⟨h, -⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
   · exact absurd h hw0
-  · obtain ⟨hst₂, hcM, hi'⟩ := hi₁.release (p := .out) hl' hcu₁ hph hU (.inl ⟨rfl, rfl⟩) hm'
-    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hi'⟩⟩
-  · obtain ⟨hst₂, hcM, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨rfl, rfl⟩) hm'
-    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨rfl, hi'⟩⟩
+  · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .out) hl' hcu₁ hph hU (.inl ⟨rfl, rfl⟩) hm'
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inl ⟨rfl, hi'⟩⟩
+  · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨rfl, rfl⟩) hm'
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inr ⟨rfl, hi'⟩⟩
 
 /-! ## No error at the word -/
 
@@ -1429,14 +1437,16 @@ theorem Fits.lock (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (hi : P.inv 
 /-- A lock step with `t`'s new place and resource keeps the protocol's invariant. -/
 theorem Fits.step (hP : L.Fits P U) {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh}
     {h : Heap} (hi : P.inv G m) (hph : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
     (hl : L.Inv (upd G t (L.set (G t) p h)) m') : P.inv (upd G t (L.set (G t) p h)) m' :=
-  (hP.inv _ _).mpr ⟨hl, hP.stable G m m' t p h hph ((hP.inv G m).mp hi).2 hs⟩
+  (hP.inv _ _).mpr ⟨hl, hP.stable G m m' t p h hph ((hP.inv G m).mp hi).2 hs hrel⟩
 
 /-- A lock step with the same ghost values keeps the protocol's invariant. -/
 theorem Fits.stay (hP : L.Fits P U) {G : ThreadId → γ} {m m' : Mem} {t : ThreadId}
     (hi : P.inv G m) (hph : L.ph (G t) ≠ .gone) (hs : L.Step t m m') (hl : L.Inv G m') :
     P.inv G m' := by
-  have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hph hs (by rw [upd_set_self]; exact hl)
+  have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hph hs (fun h1 h2 => absurd h1 h2)
+    (by rw [upd_set_self]; exact hl)
   rwa [upd_set_self] at this
 
 /-! ## The ops in generated code (`WP`) -/
@@ -1477,13 +1487,16 @@ theorem wp_cas (hP : L.Fits P U) (S : States α) {s : σ} {t : ThreadId} {G : Th
   rw [hg₁] at hcase
   rcases hcase with ⟨rfl, hL, -, hl⟩ | ⟨rfl, hl⟩ | ⟨rfl, hl⟩
   · refine .inl ⟨rfl, hL, ?_⟩
-    have := hP.step (p := .holds) (h := hL) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .holds) (h := hL) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
   · refine .inr (.inl ⟨rfl, ?_⟩)
-    have := hP.step (p := .spin) (h := Heap.empty) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .spin) (h := Heap.empty) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
   · refine .inr (.inr ⟨rfl, ?_⟩)
-    have := hP.step (p := .wait) (h := Heap.empty) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .wait) (h := Heap.empty) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
 
 /-- `lock`'s loop, `xchg(contended)`, by thread `t` at `spin` (`g`). -/
@@ -1508,10 +1521,12 @@ theorem wp_xchgLock (hP : L.Fits P U) (S : States α) {s : σ} {t : ThreadId} {G
   rw [hg₁] at hcase
   rcases hcase with ⟨hr', hL, -, hl⟩ | ⟨hr', hl⟩
   · refine .inl ⟨hr', hL, ?_⟩
-    have := hP.step (p := .holds) (h := hL) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .holds) (h := hL) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
   · refine .inr ⟨hr', ?_⟩
-    have := hP.step (p := .wait) (h := Heap.empty) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .wait) (h := Heap.empty) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
 
 /-- `unlock`'s `xchg(unlocked)`, by the holder `t` (`g`). -/
@@ -1531,15 +1546,17 @@ theorem wp_xchgUnlock (hP : L.Fits P U) (S : States α) {s : σ} {t : ThreadId}
   have hiL := hP.lock hiP
   have ht := hP.alive hiP hg₁ (by rw [hg]; decide)
   refine WP.callMC (fun e he => (hiL.xchg_noErr S ht hcr e he).elim) fun r m' hr => ?_
-  obtain ⟨hst, hcu, hcase⟩ := hiL.xchgUnlock S (by rw [hg₁]; exact hg) rfl hr
+  obtain ⟨hst, hcu, hbf, hcase⟩ := hiL.xchgUnlock S (by rw [hg₁]; exact hg) rfl hr
   refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
   rw [hg₁] at hcase
   rcases hcase with ⟨hr', hl⟩ | ⟨hr', hl⟩
   · refine .inl ⟨hr', ?_⟩
-    have := hP.step (p := .out) (h := Heap.empty) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .out) (h := Heap.empty) hiP hgone hst
+      (fun _ _ => hbf) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
   · refine .inr ⟨hr', ?_⟩
-    have := hP.step (p := .wake) (h := Heap.empty) hiP hgone hst (by rw [hg₁]; exact hl)
+    have := hP.step (p := .wake) (h := Heap.empty) hiP hgone hst
+      (fun _ _ => hbf) (by rw [hg₁]; exact hl)
     rwa [hg₁] at this
 
 /-- `lock`'s futex wait for `contended`, by thread `t` at `wait` (`g`): it goes on at `spin`. -/
@@ -1559,7 +1576,8 @@ theorem wp_wait (hP : L.Fits P U) (S : States α) {io : Io} {s : σ} {t : Thread
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
     obtain ⟨hcu, hl⟩ := hb
     refine h k hk G₁ m' hcu ?_
-    have := hP.step (p := .spin) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst hl
+    have := hP.step (p := .spin) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) hl
     rwa [hg₁] at this
   · simp only [↓reduceIte] at hb ⊢
     exact hP.stay hi₁ (by rw [hg₁, hg]; decide) hst hb
@@ -1574,7 +1592,8 @@ theorem wp_wake (hP : L.Fits P U) {io : Io} {s : σ} {t : ThreadId} {G : ThreadI
   refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ m' hw => ?_⟩
   obtain ⟨hst, hcu, hl⟩ := (hP.lock hi₁).wake (by rw [hg₁]; exact hg) (by decide) hw
   refine h k hk G₁ m' hcu ?_
-  have := hP.step (p := .out) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst hl
+  have := hP.step (p := .out) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst
+    (fun h => absurd h (by rw [hg₁, hg]; decide)) hl
   rwa [hg₁] at this
 
 end Lock

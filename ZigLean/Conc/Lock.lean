@@ -351,8 +351,10 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem �
   inv : ∀ G m, P.inv G m ↔ L.Inv G m ∧ U G m
   fin : ∀ g, P.fin g → L.ph g = .gone
   joins : ∀ g, P.joins g → L.ph g = .out
-  /-- A step of a thread in the lock's code keeps `U`. -/
+  /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
+before the newest message of the word. -/
   stable : ∀ G m m' t p h, L.ph (G t) ≠ .gone → U G m → L.Step t m m' →
+    (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) m'
 
 variable {L}

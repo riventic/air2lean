@@ -121,7 +121,8 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 /-! ## The protocol has the lock -/
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Heap)
-    (_ : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m') :
+    (_ : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m')
+    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) m' := by
   obtain ⟨hsh, hio, hpart, hblk⟩ := hu
   refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, ?_⟩

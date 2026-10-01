@@ -143,7 +143,8 @@ theorem blk1_step {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
     rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simpa using hb
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Heap)
-    (hg : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m') :
+    (hg : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m')
+    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) m' := by
   obtain ⟨hsh, hio, hpart, hblk, hblk1, hjle⟩ := hu
   have hjb : joinedB m' = joinedB m := joinedB_congr hs.threads
