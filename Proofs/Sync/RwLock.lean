@@ -4189,6 +4189,138 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
     hat hq (fun e he W hb h1 h2 hh => hfpW e he 32 4 W hb (by omega) (by omega) hh)
   exact ⟨hL, hU, hE⟩
 
+/-- A thread out of the semaphore's mutex that is not the waiting writer is out of the condition's
+code. -/
+theorem sph_none {G : ThreadId → Gh SPh} {m : Mem} (hs : Sm.Inv G m) (hq : Wq G m) {u : ThreadId}
+    (hph : (G u).1.ph ≠ .holds) (hws : (G u).2.2.isWs = false) : (G u).2.1 = .none := by
+  cases e : (G u).2.1 with
+  | none => rfl
+  | reg i jr sn e' => have := hq.wx u (by rw [e]; rfl); rw [hws] at this; cases this
+  | ld i e' => exact absurd (hs.crit u (by rw [e]; rfl)) hph
+  | pst => exact absurd (hs.crit u (by rw [e]; rfl)) hph
+  | inc => exact absurd (hs.crit u (by rw [e]; rfl)) hph
+  | wk => exact absurd (hs.crit u (by rw [e]; rfl)) hph
+
+/-- After the spawn: `main` at `ls false`, the writer at `wo 0`. -/
+theorem inv_spawn {G₁ : ThreadId → Gh SPh} {m₅ m₆ : Mem} {c : ThreadId}
+    (hi : (proto E₀).inv G₁ m₅) (hg₁ : G₁ 0 = gPre)
+    (hf : (Thread.fork.run { m₅ with current := 0 }).run = some (.ok (c, m₆))) :
+    c = 1 ∧ m₆.current = 0 ∧ (proto E₀).inv
+      (upd (upd G₁ 1 (gA (.wo 0) Heap.empty default)) 0 (gA (.ls false) Heap.empty default)) m₆ := by
+  obtain ⟨hl, hu, hs, hq⟩ := hi
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hu.shape
+  rotate_left
+  · exfalso; change (G₁ 0).2.2.isMain at h0; rw [hg₁] at h0; cases h0
+  have hcs : m₅.clocks.size = 1 := by rw [hl.own.csize, hs1]
+  have hk : ∀ {n nb : Nat} (W : Word n nb), W.Keep m₅ m₆ := fun _ =>
+    Word.keep_fork (t := 0) (by rw [hs1]; decide) (by rw [hcs, hs1]) hf
+  have hL := hl.fork (t := 0) (g₁ := gA (.ls false) Heap.empty default)
+    (g₀ := gA (.wo 0) Heap.empty default) (by rw [hg₁]; rfl) hf (by rw [hg₁]; rfl)
+    (Heap.disjoint_empty _) rfl rfl rfl rfl (fun hL hR => ?_)
+  rotate_left
+  · obtain ⟨hch, -⟩ := Lock.fork_eq hf
+    rw [hs1] at hch; subst hch
+    refine (R_nohas ?_ ?_ hL).mpr hR
+    · simp [hasP, upd_self, upd0_1, gA, Ph.isWs]
+    · show ((G₁ 1).2.2.isWs && (G₁ 0).2.2.gave) = false
+      have := hnone 1 (Nat.le_refl _); change (G₁ 1).2.2 = _ at this; rw [this]; rfl
+  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  rw [hs1] at hch
+  subst hch hm₆
+  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs]; decide)
+  have hcl' : ∀ u : Nat, VClock.le (m₅.clocks[u]!) (((m₅.clocks.set! 0 (VClock.bump (m₅.clocks[0]!) 0)).push
+      (VClock.bump (m₅.clocks[0]!) 0))[u]!) = true := fun u => by
+    by_cases hu : u < m₅.clocks.size
+    · exact hcl u hu
+    · rw [getElem!_neg m₅.clocks u hu]
+      exact VClock.le_iff.mpr fun i => by show (#[] : Array Nat).getD i 0 ≤ _; simp
+  have hG1 : (G₁ 1).2.2 = .none := hnone 1 (Nat.le_refl _)
+  have hph1 : (G₁ 1).1.ph = .gone := by
+    by_cases e : (G₁ 1).1.ph = .gone
+    · exact e
+    · exact absurd (hl.live 1 e).1 (by rw [hs1]; decide)
+  generalize hG' : upd (upd G₁ 1 (gA (.wo 0) Heap.empty default)) 0
+    (gA (.ls false) Heap.empty default) = G' at hL ⊢
+  have hGo : ∀ u, 2 ≤ u → G' u = G₁ u := fun u hu => by
+    rw [← hG', upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+  have hG'0 : G' 0 = gA (.ls false) Heap.empty default := by rw [← hG']; exact upd_self _ _ _
+  have hG'1 : G' 1 = gA (.wo 0) Heap.empty default := by
+    rw [← hG', upd_ne _ _ (by decide)]; exact upd_self _ _ _
+  have hmp : ∀ u, (G' u).2.2.mp = (G₁ u).2.2.mp := fun u => by
+    by_cases e0 : u = 0
+    · subst e0; rw [hG'0, hg₁]; rfl
+    · by_cases e1 : u = 1
+      · subst e1; rw [hG'1, hG1]; rfl
+      · rw [hGo u (by unfold ThreadId at *; omega)]
+  have hkS := hk WS
+  have hkM := hk WM
+  have hhS := Word.hist_keep hu.ws hkS
+  have hhM := Word.hist_keep hu.wm hkM
+  refine ⟨rfl, rfl, hL, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by show (G' 0).2.2.isMain = true; rw [hG'0]; rfl,
+      by show (G' 1).2.2.isW = true; rw [hG'1]; rfl, fun u hu => ?_⟩⟩, by rw [hG'0, hG'1]; exact ⟨(fun _ h => by cases h), (fun h => by cases h),
+        (fun h => by cases h.1), (fun _ _ h => by cases h), (fun h => by cases h)⟩,
+      fun e he hb ho => (hu.io e he hb ho).imp id fun h => hkS.all _ h, hu.blk, hu.ws.keep hkS,
+      hu.wm.keep hkM, by rw [hhS]; exact hu.shist, ?_, by rw [hhM]; exact hu.mhist, ?_,
+      fun w hw hp => ?_, fun u hu' => ?_, fun u => ?_, fun _ => ?_⟩, ?_, fun w hw => hq.q w hw,
+      fun u h => ?_⟩
+  · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+  · left; show (m₅.threads.push _)[1]? = _
+    rw [show (1 : Nat) = m₅.threads.size from hs1.symm, Array.getElem?_push_size]
+  · show (G' u).2.2 = _; rw [hGo u hu]; exact hnone u (by unfold ThreadId at *; omega)
+  · have := hu.slast; rw [hg₁, hG1] at this; rw [hhS, hG'0, hG'1]; exact this
+  · obtain ⟨v, hv, hl', hz⟩ := hu.mlast
+    exact ⟨v, hv, by rw [hhM]; exact hl', hz.trans (forall_congr' fun u => by rw [hmp])⟩
+  · have := mq_wait hu hw hp
+    rcases mp_lt hu (u := w.1) (by rw [this]; simp) with e | e <;> rw [e] at this
+    · rw [hg₁] at this; cases this
+    · rw [hG1] at this; cases this
+  · by_cases e0 : u = 0
+    · subst e0; rw [hG'0]; exact .inl rfl
+    · by_cases e1 : u = 1
+      · subst e1; rw [hG'1]; exact .inl rfl
+      · rw [hGo u (by unfold ThreadId at *; omega)] at hu' ⊢; exact hu.lph u hu'
+  · by_cases e0 : u = 0
+    · subst e0; rw [hG'0]; rfl
+    · by_cases e1 : u = 1
+      · subst e1; rw [hG'1]; rfl
+      · rw [hGo u (by unfold ThreadId at *; omega)]
+        have := hu.parts u
+        have hn := hnone u (by unfold ThreadId at *; omega)
+        change (G₁ u).2.2 = _ at hn
+        rw [hn] at this ⊢; simp only [Ph.mustN, Bool.false_eq_true, ↓reduceIte] at this ⊢; exact this
+  · obtain ⟨hn, hp, hsb, hok⟩ := hu.car (by rw [hg₁, hG1]; exact ⟨rfl, rfl, rfl⟩)
+    rw [hG1] at hp
+    refine ⟨hn, by rw [hG'1]; exact hp, hsb, fun e he ht => ?_⟩
+    rcases hok e he ht with h | h
+    · exact .inl (by rw [hhS]; exact h)
+    · exact .inr (hkS.all _ h)
+  · -- the condition's invariant
+    have hs' := hs.mono (hs.ws.keep (hk _)) (hs.we.keep (hk _)) (Word.hist_keep hs.ws (hk _))
+      (Word.hist_keep hs.we (hk _)) hcl' (fun c ⟨i, l, h1, h2⟩ => ⟨i, l, h1, h2⟩) (fun h => .inl h)
+      (fun w hw _ => .inl hw) (fun c h => (hk WS).all c h)
+    refine hs'.congrG (fun u => ?_) (fun u => ?_) (fun u x h1 h2 => ?_)
+    · by_cases e0 : u = 0
+      · subst e0; rw [hG'0, hg₁]; rfl
+      · by_cases e1 : u = 1
+        · subst e1; rw [hG'1, sph_none hs hq (by rw [hph1]; decide) (by rw [hG1]; rfl)]; rfl
+        · rw [hGo u (by unfold ThreadId at *; omega)]
+    · by_cases e0 : u = 0
+      · subst e0; rw [hG'0, hg₁]; exact Iff.rfl
+      · by_cases e1 : u = 1
+        · subst e1; rw [hG'1, hph1]; exact ⟨(fun h => by cases h), (fun h => by cases h)⟩
+        · rw [hGo u (by unfold ThreadId at *; omega)]
+    · by_cases e0 : u = 0
+      · subst e0; rw [hG'0]; rfl
+      · by_cases e1 : u = 1
+        · subst e1; rw [hG'1]; rfl
+        · rw [hGo u (by unfold ThreadId at *; omega)]
+          exact part_none hu u (by simp only [Sm] at h2; omega)
+  · by_cases e0 : u = 0
+    · subst e0; rw [hG'0] at h; cases h
+    · by_cases e1 : u = 1
+      · subst e1; rw [hG'1] at h; cases h
+      · rw [hGo u (by unfold ThreadId at *; omega)] at h ⊢; exact hq.wx u h
+
 theorem main_spec (io : Io) (d : Nat) :
     (proto E₀).WP 0 (rwLockRead io) QM G0 { mem0 with current := 0 } d := by
   unfold rwLockRead
