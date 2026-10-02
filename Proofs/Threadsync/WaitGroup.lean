@@ -586,4 +586,66 @@ theorem wp_cas {n nb : Nat} {W : Word n nb} (hW : Sh W) {σ : Type} {s : σ} {t 
   · rw [hh₁] at hv hh hacq; exact hH.1 hv hU hh hacq
   · rw [hh₁] at hj hv hfl hacq hh; exact hH.2 j old hne hj hv hfl hacq hh
 
+/-! ## A step of a thread on its own part -/
+
+/-- A step of thread `t` on its own part (`WP.liftM_owned`) keeps `U`, with `t`'s new ghost value
+`g`: the same for `Pre` (`XEq`), and the facts of `U` that read the ghost values. -/
+theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ : Heap}
+    (hi : proto.inv G m) (hs : StepIn (m.heap.diff (L.own G m t)) m m')
+    (hm' : m'.heap = hQ ∪ m.heap.diff (L.own G m t))
+    (hd : Heap.Disjoint hQ (m.heap.diff (L.own G m t))) (hc : m.current = t) (ht : t < 3)
+    (hX : XEq (G t).2 g.2) (hfz : g.2.frozen = false)
+    (hsh : Shape (upd (fun u => (G u).2) t g.2) m)
+    (hpart : t ≠ 0 → g.1.part = Heap.empty) (hpart0 : t = 0 → ∀ x, g.1.part (0, x) = none)
+    (hq : QOk (upd G t g) m') (hsx1 : g.2.sx → g.2.ph = .wk ∨ g.2.ph = .dn ∨ g.2.ph = .fin)
+    (hlg : g.2.fd → g.1.ph = .gone)
+    (hdone : 6 ≤ (upd G t g 0).2.ph.rank → (upd G t g 1).2.frozen ∧ (upd G t g 2).2.frozen ∧
+      VClock.le (upd G t g 1).2.fz (m'.clocks[0]!) = true ∧
+      VClock.le (upd G t g 2).2.fz (m'.clocks[0]!) = true)
+    (hpre : (upd G t g 0).2.ph.rank ≤ 7 → (G 0).2.ph.rank ≤ 7) :
+    U (upd G t g) m' := by
+  have hrest : ∀ x, x < 20 → m.heap.diff (L.own G m t) (0, x) = m.heap (0, x) := fun x hx => by
+    simp [Heap.diff, own_none hi t hx]
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hs.clock
+  have hXu : ∀ u, XEq (G u).2 (upd G t g u).2 := fun u => by
+    unfold upd; split
+    · rename_i e; subst e; exact hX
+    · exact XEq.refl _
+  refine ⟨by rw [snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh, fun u hu => ?_,
+    fun x => ?_, fun u h3 => ?_, blk_keep hi.2.blk ?_, hq, fun u => ?_, fun u => ?_, fun u => ?_,
+    fun hr => ?_, hdone⟩
+  · unfold upd; split
+    · rename_i e; subst e; exact hpart hu
+    · exact hi.2.parts u hu
+  · unfold upd; split
+    · rename_i e; exact hpart0 e.symm x
+    · exact hi.2.part0 x
+  · unfold upd; split
+    · rename_i e; subst e; exact absurd h3 (by unfold ThreadId at *; omega)
+    · exact hi.2.out3 u h3
+  · rw [hm', Heap.union_of_right ((hd (0, 0)).resolve_right (by
+      rw [hrest 0 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 0 (by decide)]
+  · unfold upd; split
+    · exact hsx1
+    · exact hi.2.sx1 u
+  · unfold upd; split
+    · rename_i e; subst e
+      intro hf; rw [hfz] at hf; cases hf
+    · exact hi.2.fzc u
+  · unfold upd; split
+    · exact hlg
+    · exact hi.2.lg u
+  · have hp := hi.2.pre (hpre hr)
+    have hoff : ∀ {n nb : Nat} (W : Word n nb), W.b = 0 → W.o + nb ≤ 16 →
+        W.Off (L.own G m t) := fun W hb ho => off_own hi hb ho t
+    have hkG := Word.keep_stepIn hp.wg (hoff WG rfl (by decide)) hs hm' hd
+    have hkE := Word.keep_stepIn hp.ev (hoff EV rfl (by decide)) hs hm' hd
+    refine Pre.keep hp hXu (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
+      (Word.hist_keep hp.ev hkE) hcl ht (by rw [upd_self]; exact hfz) fun e he => ?_
+    rcases hs.fp e he with h' | ⟨het, -, -⟩
+    · exact .inl h'
+    · rcases hs.fpc e he with h'' | hle
+      · exact .inl h''
+      · rw [hc] at het hle; exact .inr ⟨het, hle⟩
+
 end Threadsync.WG
