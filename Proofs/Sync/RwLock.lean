@@ -3835,4 +3835,84 @@ theorem wait₀ (k : Nat) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : Io
       · subst e; rw [upd_self] at h; cases h
       · rw [upd_ne _ _ e] at h ⊢; have := hq.wx u; rw [upd_ne _ _ e] at this; exact this h
 
+/-- `E₀` satisfies `Sem.Spec.post`: the kit's `post`, which gives `n` to the waiting writer. -/
+theorem post₀ (h : Heap) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : Io)
+    (hi : (proto E₀).inv (upd G 0 (⟨.out, h, Heap.empty⟩, (default, .po))) m) (_ : m.current = 0) :
+    (proto E₀).WP 0 (Io_Semaphore_post semPtr io)
+      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 0 ∧
+        (proto E₀).inv (upd G' 0 (⟨.out, Heap.empty, Heap.empty⟩, (default, .pd))) m') G m d := by
+  rw [semPtr_eq]
+  refine WP.mono (fun _ _ _ _ h => h) (Sync.Sem.post_spec fits 0 Heap.empty h .po .pd io rfl rfl ?_ ?_
+    (Heap.disjoint_empty _).symm G m d (by rw [Heap.empty_union]; exact hi))
+  · -- the permit count and the resource
+    intro G' m' hL hi'
+    have hu := hi'.2.1
+    have hg0 : (upd G' 0 (⟨.holds, Heap.empty ∪ h, hL⟩, .pst, .po) 0).2.2 = .po := by rw [upd_self]
+    obtain ⟨k, hk⟩ := hu.flags.po hg0
+    rw [upd0_1] at hk
+    have hpart := hu.parts 0
+    rw [hg0, upd0_1] at hpart
+    simp only [Ph.mustN, ↓reduceIte] at hpart
+    rw [upd_self] at hpart
+    have hP : hasP (Sync.Sem.xs fun u => (upd G' 0 (⟨.holds, Heap.empty ∪ h, hL⟩, .pst, .po) u).2) =
+        false := by
+      show ((upd G' 0 _ 1).2.2.isWs && (upd G' 0 _ 0).2.2.gave) = false
+      rw [upd0_1, upd_self, hk]; rfl
+    have hP' : hasP (upd (Sync.Sem.xs fun u => (upd G' 0 (⟨.holds, Heap.empty ∪ h, hL⟩, .pst, .po) u).2)
+        0 .pd) = true := by
+      show ((upd _ 0 Ph.pd 1).isWs && (upd _ 0 Ph.pd 0).gave) = true
+      rw [upd_ne _ _ (by decide), upd_self]
+      show ((upd G' 0 _ 1).2.2.isWs && true) = true
+      rw [upd0_1, hk]; rfl
+    refine ⟨?_, ?_, fun hr hR hd => ?_⟩
+    · show pv _ = pv _ + 1
+      unfold pv; rw [hP, hP']; rfl
+    · show (pv _).toNat + 1 < _
+      unfold pv; rw [hP]; decide
+    · have : Res _ hr := hR
+      unfold Res at this; rw [hP] at this
+      change hr = Heap.empty at this
+      subst this
+      show Res _ (h ∪ Heap.empty)
+      unfold Res; rw [hP', Heap.union_empty]; simp only [↓reduceIte]
+      show NPts (upd _ 0 Ph.pd 1).cnt h
+      rw [upd_ne _ _ (by decide)]
+      show NPts (upd G' 0 _ 1).2.2.cnt h
+      rw [Heap.empty_union] at hpart; exact hpart
+  · -- `U`: `main` at `pd` has no part
+    intro G' m' h₁ h₂ ⟨hu, hq⟩
+    have hg0 : (upd G' 0 (⟨.holds, Heap.empty ∪ h, h₁⟩, .pst, .po) 0).2.2 = .po := by rw [upd_self]
+    obtain ⟨k, hk⟩ := hu.flags.po hg0
+    rw [upd0_1] at hk
+    have hf := hu.flags
+    rw [hg0, upd0_1] at hf
+    refine ⟨U_ghost (G' := upd G' 0 (⟨.holds, Heap.empty, h₂⟩, .pst, .pd)) hu ?_ ?_ ?_ ?_ ?_ ?_ ?_,
+      fun w hw => hq.q w hw, fun u hw => ?_⟩
+    · have hsh := hu.shape
+      rw [ph_upd] at hsh ⊢
+      have := shape_upd hsh (t := 0) (y := Ph.pd) (.inl (by rw [upd_self]; rfl))
+        (fun _ => rfl) (fun hw => by rw [upd_self] at hw; cases hw)
+      rw [upd_upd] at this
+      exact this
+    · rw [upd_self, upd0_1, hk]
+      exact ⟨fun _ _ => .inr rfl, (fun h => by cases h), (fun h => by cases h.1),
+        (fun _ _ h => by cases h), (fun h => by cases h)⟩
+    · rw [upd_self, upd_self, upd0_1, upd0_1]; rfl
+    · intro u; by_cases e : u = 0
+      · subst e; rw [upd_self, upd_self]; rfl
+      · rw [upd_ne _ _ e, upd_ne _ _ e]
+    · intro u hu'
+      by_cases e : u = 0
+      · subst e; rw [upd_self] at hu'; cases hu'
+      · rw [upd_ne _ _ e] at hu' ⊢; have := hu.lph u; rw [upd_ne _ _ e] at this; exact this hu'
+    · intro u
+      by_cases e : u = 0
+      · subst e; rw [upd_self]; rfl
+      · rw [upd_ne _ _ e, upd0_1]
+        have := hu.parts u; rw [upd_ne _ _ e, upd0_1] at this; exact this
+    · intro hc; rw [upd0_1, hk] at hc; rw [upd_self] at hc; cases hc.2.2
+    · by_cases e : u = 0
+      · subst e; rw [upd_self] at hw; cases hw
+      · rw [upd_ne _ _ e] at hw ⊢; have := hq.wx u; rw [upd_ne _ _ e] at this; exact this hw
+
 end Sync.RwLockRead
