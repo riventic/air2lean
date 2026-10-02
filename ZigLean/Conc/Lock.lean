@@ -388,7 +388,24 @@ before the newest message of the word. -/
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) m'
 
+/-- `Fits` where only a thread with `ok` runs the lock's code: `U` must stay only under its steps
+(`Io.Semaphore`: a thread in the semaphore's critical code does no lock step). -/
+structure FitsOn {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem → Prop) (ok : γ → Prop) :
+    Prop where
+  inv : ∀ G m, P.inv G m ↔ L.Inv G m ∧ U G m
+  fin : ∀ g, P.fin g → L.ph g = .gone
+  joins : ∀ g, P.joins g → L.ph g = .out
+  ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g
+  stable : ∀ G m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G m → L.Step t m m' →
+    (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+    U (upd G t (L.set (G t) p h)) m'
+
 variable {L}
+
+/-- `Fits` is `FitsOn` with every thread. -/
+theorem Fits.on {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop} (hP : L.Fits P U) :
+    L.FitsOn P U (fun _ => True) :=
+  ⟨hP.inv, hP.fin, hP.joins, fun _ _ _ => Iff.rfl, fun G m m' t p h _ => hP.stable G m m' t p h⟩
 
 theorem Owns.weaken {G G' : ThreadId → γ} {m : Mem} {h : Heap}
     (hg : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) (ho : L.Owns G m h) : L.Owns G' m h :=
