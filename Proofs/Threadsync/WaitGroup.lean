@@ -2430,4 +2430,113 @@ theorem ev2_last {G : ThreadId → Gh} {m : Mem} (hp : Pre G m) {j : Nat}
   refine ⟨hs, ?_⟩
   unfold last; rw [hp.evh.1, show (evL (G 0).2 (G 1).2 (G 2).2).length - 1 = j by omega]
 
+/-- The threads after a step of `main` that keeps it at rank 3 or more (and not at `j1`). -/
+theorem shape_m {Y : ThreadId → X} {m m' : Mem} {x : X} (h : Shape Y m)
+    (ht : m'.threads = m.threads) (h3 : 3 ≤ (Y 0).ph.rank) (hj : (Y 0).ph ≠ .j1)
+    (hm : x.ph.isMain) (h3' : 3 ≤ x.ph.rank) (hj' : x.ph ≠ .j1) : Shape (upd Y 0 x) m' := by
+  obtain ⟨a, -, c, d⟩ := h
+  rcases d with ⟨-, d2, -⟩ | ⟨-, d2, -⟩ | ⟨d1, -, d3, d4, d5, d6⟩
+  · omega
+  · rw [d2] at h3; simp [Ph.rank] at h3
+  · refine ⟨by rw [ht]; exact a, by rw [upd_self]; exact hm,
+      fun u hu => by rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu))]; exact c u hu,
+      .inr (.inr ⟨by rw [ht]; exact d1, by rw [upd_self]; exact h3',
+        by rw [upd_ne _ _ (by decide)]; exact d3, by rw [upd_ne _ _ (by decide)]; exact d4, ?_,
+        by rw [ht]; exact d6⟩)⟩
+    rw [ht, d5, upd_self]; simp [hj, hj']
+
+/-- A value other than `2` at the event, at or after `main`'s write of `1` if there is one. -/
+theorem evL_low (x0 x1 x2 : X) (j : Nat) (hj : j < (evL x0 x1 x2).length) {b : BitVec 32}
+    (hb : b = BitVec.ofNat 32 (evL x0 x1 x2)[j]) (h1 : x0.e1 → 1 ≤ j) (h : b ≠ 2) :
+    b = if x0.e1 then 1 else 0 := by
+  subst hb
+  revert h1 hj
+  unfold evL
+  cases x0.e1 <;> cases (x1.sx || x2.sx) <;> intro hj h1 h <;>
+    simp only [Bool.false_eq_true, ↓reduceIte, List.append_nil, List.nil_append, List.cons_append,
+      List.length_cons, List.length_nil, forall_const] at hj h1 h ⊢ <;>
+    rcases j with _ | _ | _ | j <;> simp_all
+  all_goals omega
+
+/-- `main` in the event's `wait`: `ev0` before its write of `1`, `ev1` after it. -/
+def EvX (x : X) : Prop := x = { ph := .ev0 } ∨ x = { ph := .ev1, e1 := true }
+
+/-- A step of `main` (part `h`, from `x` to `x'`) at the event that keeps the writes: an atomic
+read, or a `cmpxchg` that failed. -/
+theorem inv_mx {G : ThreadId → Gh} {m₁ m' : Mem} {h : Heap} {x x' : X}
+    (hi : proto.inv G m₁) (hg : G 0 = gM h x) (h3 : 3 ≤ x.ph.rank) (hr : x.ph.rank ≤ 7)
+    (hj1 : x.ph ≠ .j1) (hm' : x'.ph.isMain) (h3' : 3 ≤ x'.ph.rank) (hj1' : x'.ph ≠ .j1)
+    (hpre : x'.isPre = x.isPre) (hwa : x'.wa = x.wa) (he1 : x'.e1 = x.e1)
+    (hx' : x'.sx = false ∧ x'.ph ≠ .wk ∧ x'.frozen = false ∧ x'.fd = false)
+    (hlast3 : x'.e01 → (G 1).2.fd → (G 2).2.fd →
+      ((G 1).2.st || (G 1).2.sx || (G 2).2.st || (G 2).2.sx) = true)
+    (hm1e : x'.isEv1 → x'.e1)
+    (hdone : 6 ≤ x'.ph.rank → (G 1).2.frozen ∧ (G 2).2.frozen ∧
+      VClock.le (G 1).2.fz (m'.clocks[0]!) = true ∧ VClock.le (G 2).2.fz (m'.clocks[0]!) = true)
+    (hw' : EV.Ok m') (hop : EV.Op 0 m₁ m') (hh : EV.hist m' = EV.hist m₁) (hL : L.Inv G m') :
+    proto.inv (upd G 0 (gM h x')) m' := by
+  have hgx : (G 0).2 = x := by rw [hg]; rfl
+  have hp := hi.2.pre (by rw [hgx]; exact hr)
+  have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
+  refine ⟨linv_task hL (by rw [hg]; rfl) ?_, ?_⟩
+  · rw [hg]; unfold gM X.cnt
+    have hm := hi.2.shape.2.1; change (G 0).2.ph.isMain = true at hm; rw [hgx] at hm
+    have nt : ∀ y : Ph, y.isMain = true → y.isTask = false := fun y hy => by cases y <;> simp_all [Ph.isMain, Ph.isTask]
+    simp [nt _ hm, nt _ hm']
+  refine U_main hi (by
+      rw [show (fun u => (upd G 0 (gM h x') u).2) = upd (fun u => (G u).2) 0 x' by
+        funext u; unfold upd; split <;> rfl]
+      exact shape_m hi.2.shape hop.threads (by rw [hgx]; exact h3) (by rw [hgx]; exact hj1) hm' h3' hj1')
+    (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega))
+    (fun y => by have := hi.2.part0 y; rw [hg] at this; exact this)
+    (qok_run hi (by rw [hg]; rfl) hop.waiters _) (fun _ => ?_) (fun hr' => ?_) hx'
+  · have hf0 := (main_x hi).2.2.1
+    refine Pre.mx hp (by rw [hgx]; exact hpre) (by rw [hgx]; exact hwa) (by rw [hgx]; exact he1) hf0
+      hx'.2.2.1 (hp.wg.keep hkG) hw' (Word.hist_keep hp.wg hkG) hh hop.clocks hop.fpt hlast3 hm1e
+  · rw [upd_self] at hr'; exact hdone hr'
+
+/-- `main`'s read of the event (a load, or a `cmpxchg` that failed) at `ev0`/`ev1`, of write `j`
+with the value `b`: `2` (the set) ends the wait at `rd`; else `b` is `main`'s own value. -/
+theorem inv_mread {G : ThreadId → Gh} {m₁ m' : Mem} {h : Heap} {x : X} {j : Nat} {b : BitVec 32}
+    (hi : proto.inv G m₁) (hg : G 0 = gM h x) (hx : EvX x)
+    (hj : j < (EV.hist m₁).size) (hv : (EV.hist m₁)[j]!.Val b)
+    (hfl : Word.Floor (EV.hist m₁) (m₁.clocks[0]!) j)
+    (hacq : VClock.le (EV.hist m₁)[j]!.relClock (m'.clocks[0]!) = true)
+    (hh : EV.hist m' = EV.hist m₁) (hw' : EV.Ok m') (hop : EV.Op 0 m₁ m') (hL : L.Inv G m') :
+    (b = 2 ∧ proto.inv (upd G 0 (gM h { ph := .rd, e1 := x.e1 })) m') ∨
+    (b = (if x.e1 then 1 else 0) ∧ proto.inv G m') := by
+  have hgx : (G 0).2 = x := by rw [hg]; rfl
+  have hr : x.ph.rank ≤ 7 := by rcases hx with rfl | rfl <;> decide
+  have hp := hi.2.pre (by rw [hgx]; exact hr)
+  have h3 : 3 ≤ x.ph.rank := by rcases hx with rfl | rfl <;> decide
+  have hj1 : x.ph ≠ .j1 := by rcases hx with rfl | rfl <;> decide
+  obtain ⟨hj', hb⟩ := ev_val hp.evh hj hv
+  by_cases h2 : b = 2
+  · subst h2
+    left; refine ⟨rfl, ?_⟩
+    obtain ⟨hs, hl⟩ := ev2_last hp hj hv
+    obtain ⟨f1, f2, c1, c2⟩ := set_done hi hp hs
+    rw [← hl] at c1 c2
+    refine inv_mx hi hg h3 hr hj1 rfl (by show 3 ≤ Ph.rd.rank; decide) (by show Ph.rd ≠ .j1; decide)
+      ?_ ?_ rfl ⟨rfl, by show Ph.rd ≠ .wk; decide, rfl, rfl⟩
+      (fun h => by cases h) (fun h => by cases h)
+      (fun _ => ⟨f1, f2, VClock.le_trans c1 hacq, VClock.le_trans c2 hacq⟩) hw' hop hh hL
+    · rcases hx with rfl | rfl <;> rfl
+    · rcases hx with rfl | rfl <;> rfl
+  · right
+    have h1 : (G 0).2.e1 → 1 ≤ j := fun he => by
+      have hs1 : 1 < (EV.hist m₁).size := by
+        rw [hp.evh.1]; unfold evL; simp [he]
+      exact hfl 1 hs1 (hp.e1c he)
+    have := evL_low _ _ _ j hj' hb h1 h2
+    rw [hgx] at this
+    refine ⟨this, ?_⟩
+    have e : upd G 0 (gM h x) = G := upd_g hg
+    rw [← e]
+    exact inv_mx hi hg h3 hr hj1 (by rcases hx with rfl | rfl <;> rfl) h3 hj1 rfl rfl rfl
+      (by rcases hx with rfl | rfl <;> exact ⟨rfl, by decide, rfl, rfl⟩)
+      (fun h0 h1 h2 => by have := hp.last3; rw [hgx] at this; exact this h0 h1 h2)
+      (fun h => by have := hp.m1e; rw [hgx] at this; exact this h)
+      (fun h6 => by rcases hx with rfl | rfl <;> simp [Ph.rank] at h6) hw' hop hh hL
+
 end Threadsync.WG
