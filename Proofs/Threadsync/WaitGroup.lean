@@ -3126,4 +3126,101 @@ theorem wus_spec (p0 : Ptr) (hp1 : (p0.add 0).add 0 = EV.ptr) (hp2 : p0.add 0 = 
         exact ⟨rfl, hop₅.current, hQ, _, false, by simp, hdl, hi₅⟩
       · exact absurd hb₅ hne
 
+/-! ## `main`'s `wait` -/
+
+/-- The event's `wait` (`ResetEvent.wait`) by `main` at `ev0`: it ends at `rd`. -/
+theorem evwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .ev0 })) m) (hc : m.current = 0) :
+    proto.WP 0 (Thread_ResetEvent_wait (((bPtr.add 0).add 8)))
+      (fun _ G' m' _ => m'.current = 0 ∧
+        ∃ e1, proto.inv (upd G' 0 (gM Heap.empty { ph := .rd, e1 := e1 })) m') G m d := by
+  unfold Thread_ResetEvent_wait
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callC ?_)
+  unfold Thread_ResetEvent_FutexImpl_wait
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.bind (WP.callC ?_))
+  unfold Thread_ResetEvent_FutexImpl_isSet
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  rw [evptr]
+  refine WP.bind (WP.bind (wp_load shE hi (fun G₂ m₂ hg hi₂ =>
+      ⟨main_lt hi₂, by rw [hg]; show Ph.ev0.rank ≤ 7; decide⟩)
+    fun k hk G₂ m₂ m₃ v j hg₂ hi₂ hr hj hv hfl hacq hh hw' hop hL => ?_))
+  rcases inv_mread hi₂ hg₂ (.inl rfl) hj hv hfl (hacq rfl) hh hw' hop hL with ⟨rfl, hi₃⟩ | ⟨hb, hi₃⟩
+  · repeat (first
+      | exact ⟨hop.current, false, hi₃⟩
+      | refine WP.pure' ?_
+      | simp only [StateT.run_pure, StateT.run_bind, pure_bind, show ((2 : BitVec 32) == 2) = true from rfl,
+          Bool.not_true, Bool.false_eq_true, ↓reduceIte, isNonErr])
+    done
+  · simp only [Bool.false_eq_true, ↓reduceIte] at hb
+    subst hb
+    rw [← upd_g hg₂] at hi₃
+    repeat (first
+      | refine WP.pure' ?_
+      | simp only [StateT.run_pure, StateT.run_bind, pure_bind, show ((0 : BitVec 32) == 2) = false from rfl,
+          Bool.not_false, ↓reduceIte])
+    refine WP.bind (WP.callC (WP.mono ?_ (wus_spec _ rfl rfl G₂ m₃ k hi₃ hop.current)))
+    rintro r G₄ m₄ d₄ ⟨rfl, hc₄, e1, hi₄⟩
+    repeat (first
+      | exact ⟨hc₄, e1, hi₄⟩
+      | refine WP.pure' ?_
+      | simp only [StateT.run_pure, StateT.run_bind, pure_bind, isNonErr, ↓reduceIte])
+    done
+
+/-- `WaitGroup.wait` by `main` at `run`: it ends at `rd`. -/
+theorem wgwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .run })) m) (hc : m.current = 0) :
+    proto.WP 0 (Thread_WaitGroup_wait (bPtr.add 0))
+      (fun _ G' m' _ => m'.current = 0 ∧
+        ∃ e1, proto.inv (upd G' 0 (gM Heap.empty { ph := .rd, e1 := e1 })) m') G m d := by
+  unfold Thread_WaitGroup_wait
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (WP.bind (wp_rmw shG hi (fun G₁ m₁ hg hi₁ =>
+      ⟨main_lt hi₁, by rw [hg]; show Ph.run.rank ≤ 7; decide⟩)
+    fun k hk G₁ m₁ m' old hg₁ hi₁ hr hv _ hh hacq hw' hop hL => ?_))
+  obtain ⟨w, rfl, hw, hi'⟩ := inv_add hi₁ hg₁ hv hh (hacq rfl) hw' hop hL
+  refine WP.pure' ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  have hd : (BitVec.ofNat 64 w &&& 1 == 0) = true := by rcases hw with rfl | rfl | rfl <;> rfl
+  rw [hd]
+  refine WP.bind (WP.callRC_ok dbg_true ?_)
+  simp only [StateT.run_pure, pure_bind, StateT.run_bind]
+  have hdiv : (divTrunc false (BitVec.ofNat 64 w) 2).run = some (.ok (BitVec.ofNat 64 (w / 2))) := by
+    rcases hw with rfl | rfl | rfl <;> rfl
+  refine WP.bind (WP.bind (WP.callRC_ok hdiv ?_))
+  by_cases h0 : w = 0
+  · subst h0
+    simp only [show gt false (BitVec.ofNat 64 (0 / 2)) 0 = false from rfl, Bool.false_eq_true,
+      ↓reduceIte, StateT.run_pure, pure_bind]
+    repeat (first
+      | exact ⟨hop.current, false, hi'⟩
+      | refine WP.pure' ?_
+      | simp only [StateT.run_pure, StateT.run_bind, pure_bind])
+    done
+  · have hg : gt false (BitVec.ofNat 64 (w / 2)) 0 = true := by
+      rcases hw with rfl | rfl | rfl <;> first | exact absurd rfl h0 | rfl
+    have hp : phA w = .ev0 := by simp [phA, h0]
+    rw [hp] at hi'
+    simp only [hg, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
+    refine WP.bind (WP.callC (WP.mono ?_ (evwait_spec G₁ m' k hi' hop.current)))
+    rintro _ G₂ m₂ d₂ ⟨hc₂, e1, hi₂⟩
+    repeat (first
+      | exact ⟨hc₂, e1, hi₂⟩
+      | refine WP.pure' ?_
+      | simp only [StateT.run_pure, StateT.run_bind, pure_bind])
+    done
+
 end Threadsync.WG
