@@ -261,19 +261,19 @@ inductive Ph where
   /-- `main` before its spawn. -/
   | pre
   /-- `main` in `lockShared`'s loop (`cmpxchg` of `state + reader`). -/
-  | ls
+  | ls (j : Bool)
   /-- `main` in `lockShared`'s slow path: in the mutex's `lock`, or it holds the mutex. -/
-  | sl (p : MP)
+  | sl (j : Bool) (p : MP)
   /-- `main` did `state += reader` (it owns `n`) and holds the mutex, or is in its `unlock`. -/
-  | sr (p : MP)
+  | sr (j : Bool) (p : MP)
   /-- `main` holds the shared lock: it owns `n`. -/
-  | sh
+  | sh (j : Bool)
   /-- `main` was the last reader while the writer waits: it posts the semaphore (it owns `n`). -/
   | po
   /-- `main` gave `n` to the semaphore, in its `post`. -/
   | pd
   /-- `main` after `readShared`. -/
-  | dn
+  | dn (j : Bool)
   /-- `main` at its join. -/
   | joins
   /-- The writer out of the lock. -/
@@ -294,14 +294,14 @@ namespace Ph
 
 /-- The place in the mutex's code. -/
 def mp : Ph → Option MP
-  | sl p | sr p | wa _ p | wr _ p => some p
+  | sl _ p | sr _ p | wa _ p | wr _ p => some p
   | ws _ | wn _ => some .holds
   | _ => Option.none
 
 /-- The same place, at `p` in the mutex's code. -/
 def setM : Ph → MP → Ph
-  | sl _, p => sl p
-  | sr _, p => sr p
+  | sl j _, p => sl j p
+  | sr j _, p => sr j p
   | wa k _, p => wa k p
   | wr k _, p => wr k p
   | x, _ => x
@@ -322,12 +322,12 @@ def ib : Ph → Nat
   | _ => 0
 
 def rb : Ph → Nat
-  | sr _ | sh => 1
+  | sr _ _ | sh _ => 1
   | _ => 0
 
 /-- The thread owns `n`. -/
 def mustN : Ph → Bool
-  | sr _ | sh | po | wn _ => true
+  | sr _ _ | sh _ | po | wn _ => true
   | _ => false
 
 /-- The writer waits at the semaphore. -/
@@ -337,7 +337,7 @@ def isWs : Ph → Bool
 
 /-- `main` gave `n` to the semaphore (or has no shared lock, after it). -/
 def gave : Ph → Bool
-  | pd | dn | joins => true
+  | pd | dn _ | joins => true
   | _ => false
 
 /-- A thread that has started and not ended. -/
@@ -352,7 +352,17 @@ def inSem : Ph → Bool
 
 /-- `main`'s places after its spawn. -/
 def isMain : Ph → Bool
-  | ls | sl _ | sr _ | sh | po | pd | dn | joins => true
+  | ls _ | sl _ _ | sr _ _ | sh _ | po | pd | dn _ | joins => true
+  | _ => false
+
+/-- `main` after its join of the writer. -/
+def jd : Ph → Bool
+  | ls j | sl j _ | sr j _ | sh j | dn j => j
+  | _ => false
+
+/-- `main` while the writer waits at the semaphore: it holds the shared lock or posts. -/
+def pw : Ph → Bool
+  | sh _ | po | pd | sr _ .wake => true
   | _ => false
 
 /-- The writer's places (`k ≤ 2` increments). -/
@@ -397,13 +407,15 @@ def NPts (k : Nat) : Assn := pts nPtr 4 (BitVec.ofNat 32 k)
 /-- `main` at `a`, the writer at `b` (module doc). -/
 structure Flags (a b : Ph) : Prop where
   /-- The writer waits at the semaphore only while `main` holds the shared lock, or after. -/
-  ws : ∀ k, b = .ws k → a = .sh ∨ a = .po ∨ a.gave ∨ a = .sr .wake
+  ws : ∀ k, b = .ws k → a.pw ∨ a.gave
   /-- `main` posts only while the writer waits. -/
   po : a = .po → ∃ k, b = .ws k
   /-- At most one thread holds the mutex. -/
   one : ¬ (a.mp = some .holds ∧ b.mp = some .holds)
   /-- `main` at `sr` holds the mutex, or is at its `unlock`'s wake. -/
-  sr : ∀ p, a = .sr p → p = .holds ∨ p = .wake
+  sr : ∀ j p, a = .sr j p → p = .holds ∨ p = .wake
+  /-- After its join, `main` knows the writer has ended. -/
+  jd : a.jd → b = .wf
 
 /-- The threads: `main` alone before its spawn; then `main` and the writer, which `main`
 joins only after its end. -/
@@ -454,7 +466,7 @@ namespace Ph
 
 /-- A place with a place in the mutex's code (`setM` changes it). -/
 def isMx : Ph → Bool
-  | sl _ | sr _ | wa _ _ | wr _ _ => true
+  | sl _ _ | sr _ _ | wa _ _ | wr _ _ => true
   | _ => false
 
 theorem mp_setM {x : Ph} (h : x.isMx) (p : MP) : (x.setM p).mp = some p := by
@@ -471,10 +483,11 @@ theorem mp_setM {x : Ph} (h : x.isMx) (p : MP) : (x.setM p).mp = some p := by
 @[simp] theorem isW_setM (x : Ph) (p : MP) : (x.setM p).isW = x.isW := by cases x <;> rfl
 @[simp] theorem inSem_setM (x : Ph) (p : MP) : (x.setM p).inSem = x.inSem := by cases x <;> rfl
 @[simp] theorem isMx_setM (x : Ph) (p : MP) : (x.setM p).isMx = x.isMx := by cases x <;> rfl
+@[simp] theorem jd_setM (x : Ph) (p : MP) : (x.setM p).jd = x.jd := by cases x <;> rfl
 
 theorem mx_ne {x : Ph} (h : x.isMx) :
-    x ≠ .po ∧ x ≠ .sh ∧ x ≠ .dn ∧ x ≠ .joins ∧ (∀ k, x ≠ .ws k) ∧ x ≠ .pd := by
-  cases x <;> simp_all [isMx]
+    x ≠ .po ∧ x.gave = false ∧ x ≠ .joins ∧ (∀ k, x ≠ .ws k) := by
+  cases x <;> simp_all [isMx, gave]
 
 theorem wb_ib (x : Ph) : x.wb + x.ib ≤ 1 := by cases x <;> simp [wb, ib]
 theorem rb_le (x : Ph) : x.rb ≤ 1 := by cases x <;> simp [rb]
@@ -639,7 +652,7 @@ structure Sem.Spec : Prop where
   not ended its `post`. -/
   live : ∀ G m, (proto E).inv G m → ∀ w ∈ m.waiters, w.2 ≠ (L S).ptr → w.2 ≠ WM.ptr →
     w.1 = 1 ∧ (∃ k, (G 1).2.2 = .ws k) ∧
-      ((G 0).2.2 = .sh ∨ (G 0).2.2 = .po ∨ (G 0).2.2 = .pd ∨ (G 0).2.2 = .sr .wake)
+      (G 0).2.2.pw
   /-- A step out of the semaphore's code keeps its invariant. -/
   frame : ∀ G G' m m', E.inv G m → Frame m m' →
     (∀ u, (G' u).2.1 = (G u).2.1 ∧ (G' u).1.held = (G u).1.held ∧
@@ -964,6 +977,27 @@ theorem MSet.ph {G : ThreadId → Gh S} {t : ThreadId} {y : Ph} {g' : Gh S} (h :
   · exact h.2.2.2.2.1
   · rfl
 
+theorem flags_setM0 {a b : Ph} {p : MP} (hf : Flags a b) (hx : a.isMx)
+    (hnw : a.mp = some .cas ∨ a.mp = some .spin ∨ a.mp = some .wait ∨ p = .wake)
+    (hone : ¬ ((a.setM p).mp = some .holds ∧ b.mp = some .holds)) : Flags (a.setM p) b := by
+  obtain ⟨f1, f2, -, f4, f5⟩ := hf
+  cases a with
+  | sr j p₀ =>
+    cases p₀ <;> cases p <;>
+      exact ⟨fun k hk => by simp_all [Ph.setM, Ph.pw, Ph.gave, Ph.mp], fun h => by simp_all [Ph.setM],
+        hone, fun j q h => by simp_all [Ph.setM, Ph.mp], fun h => by simp_all [Ph.setM, Ph.jd]⟩
+  | _ =>
+    simp only [Ph.isMx, Bool.false_eq_true] at hx <;> cases p <;>
+      exact ⟨fun k hk => by simp_all [Ph.setM, Ph.pw, Ph.gave, Ph.mp], fun h => by simp_all [Ph.setM],
+        hone, fun j q h => by simp_all [Ph.setM, Ph.mp], fun h => by simp_all [Ph.setM, Ph.jd]⟩
+
+theorem flags_setM1 {a b : Ph} {p : MP} (hf : Flags a b) (hx : b.isMx)
+    (hone : ¬ (a.mp = some .holds ∧ (b.setM p).mp = some .holds)) : Flags a (b.setM p) := by
+  obtain ⟨f1, f2, -, f4, f5⟩ := hf
+  cases b <;> simp only [Ph.isMx, Bool.false_eq_true] at hx <;>
+    exact ⟨fun k hk => by simp_all [Ph.setM], fun h => by obtain ⟨k, hk⟩ := f2 h; simp_all [Ph.setM],
+      hone, f4, fun h => by have := f5 h; simp_all [Ph.setM]⟩
+
 /-- The flags after a change of the place in the mutex's code. -/
 theorem flags_setM {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {p : MP} {g' : Gh S}
     (hu : U G m) (hx : (G t).2.2.isMx) (hph : g'.2.2 = (G t).2.2.setM p)
@@ -971,28 +1005,11 @@ theorem flags_setM {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {p : MP} {g'
       p = .wake)
     (hone : ¬ ((upd G t g' 0).2.2.mp = some .holds ∧ (upd G t g' 1).2.2.mp = some .holds)) :
     Flags (upd G t g' 0).2.2 (upd G t g' 1).2.2 := by
-  obtain ⟨f1, f2, -, f4⟩ := hu.flags
-  have hx' := Ph.mx_ne (x := (G t).2.2.setM p) (by simpa using hx)
-  have hx0 := Ph.mx_ne hx
-  have hg0 : (G t).2.2.gave = false := by cases e : (G t).2.2 <;> simp_all [Ph.isMx, Ph.gave]
-  have ht01 : t = 0 ∨ t = 1 := mp_lt hu (by cases e : (G t).2.2 <;> simp_all [Ph.isMx, Ph.mp])
-  rcases ht01 with rfl | rfl
+  rcases mp_lt hu (by cases e : (G t).2.2 <;> simp_all [Ph.isMx, Ph.mp]) with rfl | rfl
   · simp only [upd_self, upd0_1, hph] at hone ⊢
-    refine ⟨fun k hk => ?_, fun h => absurd h hx'.1, hone, fun p' hp' => ?_⟩
-    · rcases f1 k hk with h | h | h | h
-      · exact absurd h hx0.2.1
-      · exact absurd h hx0.1
-      · rw [hg0] at h; cases h
-      · rcases hnw with hnw | hnw | hnw | rfl <;> (try (rw [h] at hnw; cases hnw))
-        exact .inr (.inr (.inr (by rw [h]; rfl)))
-    · cases e : (G 0).2.2 <;> rw [e] at hp' <;> simp only [Ph.setM] at hp' <;> try cases hp'
-      rename_i p₀
-      rcases f4 p₀ e with h | h <;> subst h <;>
-        rcases hnw with hnw | hnw | hnw | rfl <;> (try (rw [e] at hnw; cases hnw)) <;> exact .inr rfl
+    exact flags_setM0 hu.flags hx hnw hone
   · simp only [upd_self, upd1_0, hph] at hone ⊢
-    refine ⟨fun k hk => absurd hk (hx'.2.2.2.2.1 k), fun ha => ?_, hone, f4⟩
-    obtain ⟨k, hk⟩ := f2 ha
-    exact absurd hk (hx0.2.2.2.2.1 k)
+    exact flags_setM1 hu.flags hx hone
 
 theorem MSet.setM {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {p : MP} {g' : Gh S}
     (hu : U G m) (hx : (G t).2.2.isMx) (hph : g'.2.2 = (G t).2.2.setM p)
@@ -1267,10 +1284,9 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
     obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp h
     exact ⟨_, Array.getElem_mem hi', by simpa using he⟩
   have hu := hi.2.1
-  have hmpf : ∀ x : Ph, x.mp = some .wait → x ≠ .sh ∧ x ≠ .po ∧ x ≠ .wf ∧ x ≠ .joins ∧ x ≠ .pd ∧
-      x ≠ .sr .wake :=
+  have hmpf : ∀ x : Ph, x.mp = some .wait → x.pw = false :=
     fun x h => by
-    cases x <;> simp_all [Ph.mp]
+    cases x <;> simp_all [Ph.mp, Ph.pw]
   have hmpf' : ∀ x : Ph, (x.mp = some .holds ∨ x.mp = some .wake) → x ≠ .wf ∧ x ≠ .joins ∧
       x.mp ≠ some .wait := fun x h => by
     cases x <;> rcases h with h | h <;> simp_all [Ph.mp]
@@ -1289,7 +1305,7 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
     · exact hs
   -- thread `u` goes on
   have hgo : ∀ u, u < 2 → (G u).2.2.mp ≠ some .wait → (G u).2.2 ≠ .wf →
-      (G u).2.2 ≠ .joins → (u = 1 → (G 0).2.2 ≠ .sh ∧ (G 0).2.2 ≠ .po ∧ (G 0).2.2 ≠ .pd ∧ (G 0).2.2 ≠ .sr .wake) → False := by
+      (G u).2.2 ≠ .joins → (u = 1 → (G 0).2.2.pw = false) → False := by
     intro u hu2 hmp hwf hj hm
     rcases hall u (by rw [h2]; exact hu2) with h | h | h
     · exact hwf h.2
@@ -1297,23 +1313,19 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
       by_cases hl : w'.2 = WM.ptr
       · exact hmp (mq_wait hu hw' hl)
       · obtain ⟨h1, -, h0⟩ := hE.live G m hi w' hw' (hnot w' hw') hl
-        obtain ⟨a, b, c, d'⟩ := hm h1
-        rcases h0 with h0 | h0 | h0 | h0
-        · exact a h0
-        · exact b h0
-        · exact c h0
-        · exact d' h0
+        rw [hm h1] at h0; cases h0
     · exact hj h.2
   obtain ⟨w, hwm, rfl⟩ := hwait t hw
   by_cases hl : w.2 = WM.ptr
   · rcases hu.mq w hwm hl with ⟨h0, hx, ho⟩ | ⟨h1, hx, ho⟩
     · have := hmpf' _ (ho.imp_left And.left)
-      exact hgo 1 (by decide) this.2.2 this.1 this.2.1 fun _ => ⟨(hmpf _ hx).1, (hmpf _ hx).2.1, (hmpf _ hx).2.2.2.2.1, (hmpf _ hx).2.2.2.2.2⟩
+      exact hgo 1 (by decide) this.2.2 this.1 this.2.1 fun _ => hmpf _ hx
     · have := hmpf' _ (ho.imp_left And.left)
       exact hgo 0 (by decide) this.2.2 this.1 this.2.1 fun h => absurd h (by decide)
   · obtain ⟨-, -, h0⟩ := hE.live G m hi w hwm (hnot w hwm) hl
     have hx : (G 0).2.2.mp ≠ some .wait ∧ (G 0).2.2 ≠ .wf ∧ (G 0).2.2 ≠ .joins := by
-      rcases h0 with h0 | h0 | h0 | h0 <;> rw [h0] <;> simp [Ph.mp]
+      revert h0; cases (G 0).2.2 <;> simp [Ph.pw, Ph.mp]
+      rename_i p; cases p <;> simp
     exact hgo 0 (by decide) hx.1 hx.2.1 hx.2.2 fun h => absurd h (by decide)
 
 /-! ## The futex of the mutex -/
@@ -1735,13 +1747,13 @@ theorem mlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) (hxc : x.
 
 /-- The place after the mutex's `unlock`. -/
 def Ph.unl : Ph → Ph
-  | sr _ => sh
+  | sr j _ => sh j
   | wr k _ => wo k
   | x => x
 
 /-- A thread that unlocks the mutex: `main` after its `+ reader`, or the writer. -/
 def Ph.isUnl : Ph → Bool
-  | sr _ | wr _ _ => true
+  | sr _ _ | wr _ _ => true
   | _ => false
 
 theorem Ph.same_unl {x : Ph} (h : x.isUnl) : x.Same x.unl := by
@@ -1751,21 +1763,24 @@ theorem Ph.isMx_of_unl {x : Ph} (h : x.isUnl) : x.isMx := by cases x <;> simp_al
 
 /-- A thread that unlocks the mutex: `main` at `sr`, the writer at `wr`. -/
 def UnlAt (G : ThreadId → Gh S) (t : ThreadId) : Prop :=
-  (t = 0 ∧ ∃ p, (G 0).2.2 = .sr p) ∨ (t = 1 ∧ ∃ k p, (G 1).2.2 = .wr k p)
+  (t = 0 ∧ ∃ j p, (G 0).2.2 = .sr j p) ∨ (t = 1 ∧ ∃ k p, (G 1).2.2 = .wr k p)
 
 theorem UnlAt.isUnl {G : ThreadId → Gh S} {t : ThreadId} (h : UnlAt G t) : (G t).2.2.isUnl := by
-  rcases h with ⟨rfl, p, hp⟩ | ⟨rfl, k, p, hp⟩ <;> rw [hp] <;> rfl
+  rcases h with ⟨rfl, j, p, hp⟩ | ⟨rfl, k, p, hp⟩ <;> rw [hp] <;> rfl
 
 /-- The flags after an `unlock`. -/
 theorem flags_unl {G : ThreadId → Gh S} {t : ThreadId} {g' : Gh S} (hf : Flags (G 0).2.2 (G 1).2.2)
     (hx : UnlAt G t) (hph : g'.2.2 = (G t).2.2.unl) :
     Flags (upd G t g' 0).2.2 (upd G t g' 1).2.2 := by
-  obtain ⟨-, f2, -, f4⟩ := hf
-  rcases hx with ⟨rfl, p, hp⟩ | ⟨rfl, k, p, hp⟩
+  obtain ⟨-, f2, -, f4, f5⟩ := hf
+  rcases hx with ⟨rfl, j, p, hp⟩ | ⟨rfl, k, p, hp⟩
   · simp only [upd_self, upd0_1, hph, hp, Ph.unl]
-    exact ⟨fun _ _ => .inl rfl, (fun h => by cases h), (fun hh => by cases hh.1), fun _ h => by cases h⟩
+    rw [hp] at f5
+    exact ⟨fun _ _ => .inl rfl, (fun h => by cases h), (fun hh => by cases hh.1), (fun _ _ h => by cases h),
+      f5⟩
   · simp only [upd_self, upd1_0, hph, hp, Ph.unl]
-    refine ⟨(fun _ h => by cases h), (fun ha => ?_), (fun hh => by cases hh.2), f4⟩
+    refine ⟨(fun _ h => by cases h), (fun ha => ?_), (fun hh => by cases hh.2), f4,
+      fun h => by have := f5 h; rw [hp] at this; cases this⟩
     obtain ⟨k', hk⟩ := f2 ha; rw [hp] at hk; cases hk
 
 /-- A change of a thread's place to one of the same kind, with the same memory and the same place
@@ -1825,8 +1840,8 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
   have hu₁ := hi₁.2.1
   have hgt : (G₁ t).2.2 = x := by rw [hg₁]; rfl
   have hux : UnlAt G₁ t := by
-    rcases hx with ⟨rfl, p, hp⟩ | ⟨rfl, k', p, hp⟩
-    · exact .inl ⟨rfl, p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
+    rcases hx with ⟨rfl, j, p, hp⟩ | ⟨rfl, k', p, hp⟩
+    · exact .inl ⟨rfl, j, p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
     · exact .inr ⟨rfl, k', p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
   have ht01 : t = 0 ∨ t = 1 := by rcases hux with ⟨h, -⟩ | ⟨h, -⟩ <;> simp [h]
   have hm' := Proto.modify_ok hw
@@ -1916,8 +1931,8 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
   have hu₁ := hi₁.2.1
   have hgt : (G₁ t).2.2 = x := by rw [hg₁]; rfl
   have hux : UnlAt G₁ t := by
-    rcases hx with ⟨rfl, p, hp⟩ | ⟨rfl, k', p, hp⟩
-    · exact .inl ⟨rfl, p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
+    rcases hx with ⟨rfl, j, p, hp⟩ | ⟨rfl, k', p, hp⟩
+    · exact .inl ⟨rfl, j, p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
     · exact .inr ⟨rfl, k', p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
   have ht01 : t = 0 ∨ t = 1 := by rcases hux with ⟨h, -⟩ | ⟨h, -⟩ <;> simp [h]
   have hxu : x.isUnl := by rw [← hgt]; exact hux.isUnl
@@ -1993,8 +2008,8 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
         · rw [upd_self] at h1; change (x.setM .wake).mp = _ at h1; rw [Ph.mp_setM hx'] at h1; cases h1)
     simp only [StateT.run_bind, bind_assoc]
     refine WP.bind (wp_mwake hE (x := x.setM .wake) (by
-        rcases hux with ⟨rfl, p, hp⟩ | ⟨rfl, k', p, hp⟩
-        · exact .inl ⟨rfl, .wake, by rw [upd_self]; show (x.setM .wake) = _; rw [← hgt, hp]; rfl⟩
+        rcases hux with ⟨rfl, j, p, hp⟩ | ⟨rfl, k', p, hp⟩
+        · exact .inl ⟨rfl, j, .wake, by rw [upd_self]; show (x.setM .wake) = _; rw [← hgt, hp]; rfl⟩
         · exact .inr ⟨rfl, k', .wake, by rw [upd_self]; show (x.setM .wake) = _; rw [← hgt, hp]; rfl⟩)
       (Ph.mp_setM hx' _) hiw fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     simp only [StateT.run_pure, pure_bind]
@@ -2329,7 +2344,8 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
       (by rfl) (by simp [Ph.isW]; omega) rfl (.inr (by simp [Ph.mp])) ?_ (by rfl) (fun hc => ?_)
       (lws_keep hi₁ hop hg₁ (by simp only [hasP, upd_self]; rfl) (by simp [hasP, hg1, Ph.isWs]))
     · rw [upd1_0, upd_self]
-      exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => by cases h.2), hu₁.flags.sr⟩
+      exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => by cases h.2), hu₁.flags.sr,
+        fun h => by have := hu₁.flags.jd h; rw [hg1] at this; cases this⟩
     · simp only [upd1_0, upd_self] at hc ⊢
       obtain ⟨hn, hp, hs, hok⟩ := hu₁.car (by rw [hg1]; exact ⟨hc.1, rfl, by simpa [Ph.isWs] using hc.2.2⟩)
       rw [hg1] at hp
@@ -2346,8 +2362,8 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
   rw [hg3] at hold'; simp only [Ph.wb, Ph.ib] at hold'
   have hr' := Ph.rb_le (G₃ 0).2.2
   obtain ⟨hdec, htest⟩ := sv3_dec hr'
-  obtain ⟨-, f2, f3, f4⟩ := hu₄.flags
-  rw [hg3] at f3 f2
+  obtain ⟨-, f2, f3, f4, f5⟩ := hu₄.flags
+  rw [hg3] at f3 f2 f5
   have hm0 : (G₃ 0).2.2.mp ≠ some .holds := fun h => f3 ⟨h, rfl⟩
   have hnp : (G₃ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := f2 h; cases hk'
   have he : ∀ y : Ph, y.wb = 0 → y.ib = 1 →
@@ -2380,7 +2396,8 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
         rfl rfl (fun h => by cases h) rfl (by simp [Ph.isW, Ph.setM]; omega) rfl (.inl rfl)
         (by
           rw [upd1_0, upd_self]
-          exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => hm0 h.1), f4⟩)
+          exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => hm0 h.1), f4,
+            fun h => by have := f5 h; cases this⟩)
         (by rw [upd_self]; exact hpn)
         (fun hc' => absurd hc'.2.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
         (lws_gain hi₄ hop₄ hg₃ hc hpn hsn' ho (by simp [hasP, upd_self, upd1_0, gA, Ph.isWs]))
@@ -2390,21 +2407,20 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
       ↓reduceIte, StateT.run_pure]
     exact WP.pure' (WP.pure' ⟨by omega, hop₄.current, hn, hpn, hi₅⟩)
   · -- a reader: the writer waits at the semaphore
-    have hms : (G₃ 0).2.2 = .sh ∨ (G₃ 0).2.2 = .sr .wake := by
-      cases e : (G₃ 0).2.2 <;> rw [e] at hr1 <;> simp [Ph.rb] at hr1 ⊢
-      rename_i p
-      rcases f4 p e with rfl | rfl
-      · rw [e] at hm0; exact absurd rfl hm0
-      · rfl
+    have hms : (G₃ 0).2.2.pw ∧ (G₃ 0).2.2.mustN ∧ (G₃ 0).2.2.gave = false := by
+      cases e : (G₃ 0).2.2 <;> rw [e] at hr1 <;> simp [Ph.rb] at hr1 <;>
+        simp [Ph.pw, Ph.mustN, Ph.gave]
+      rename_i j p
+      rcases f4 j p e with rfl | rfl <;> simp_all [Ph.mp]
     have hi₅ : (proto E).inv (upd G₃ 1 (gA (.ws k) Heap.empty default)) m₄ :=
       inv_sstep hE hi₄ hg₃ hop₄ hw₄ hh' (he (.ws k) rfl rfl) rfl rfl (fun h => by cases h) rfl rfl rfl
         (.inl rfl) (by
           rw [upd1_0, upd_self]
-          exact ⟨fun _ _ => by rcases hms with h | h; exact .inl h; exact .inr (.inr (.inr h)),
-            fun h => absurd h hnp, fun h => hm0 h.1, f4⟩) (by rfl)
-        (fun hc => absurd hc.1 (by rw [upd1_0]; rcases hms with h | h <;> simp [h, Ph.mustN]))
+          exact ⟨fun _ _ => .inl hms.1, fun h => absurd h hnp, fun h => hm0 h.1, f4,
+            fun h => by have := f5 h; cases this⟩) (by rfl)
+        (fun hc => absurd hc.1 (by rw [upd1_0]; simp [hms.2.1]))
         (lws_keep hi₄ hop₄ hg₃
-          (by simp only [hasP, upd_self, upd1_0]; rcases hms with h | h <;> simp [h, Ph.isWs, Ph.gave])
+          (by simp only [hasP, upd_self, upd1_0]; simp [hms.2.2])
           (by simp [hasP, hg3, Ph.isWs]))
     simp only [StateT.run_bind, StateT.run_pure, pure_bind]
     rw [hold', htest]
@@ -2461,8 +2477,8 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
   have hr := Ph.rb_le (G₁ 0).2.2
   have hm0 : (G₁ 0).2.2.mustN = false :=
     Bool.eq_false_iff.mpr fun h => not_both hi₁ h (by rw [hg1]; rfl)
-  obtain ⟨-, f2, f3, f4⟩ := hu₁.flags
-  rw [hg1] at f3 f2
+  obtain ⟨-, f2, f3, f4, f5⟩ := hu₁.flags
+  rw [hg1] at f3 f2 f5
   have hnp : (G₁ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := f2 h; cases hk'
   -- `n` from the writer's part
   have htl : 1 < m₁.threads.size := (hi₁.1.live 1 (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))).1
@@ -2479,7 +2495,8 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
       rfl rfl (fun h => by cases h) rfl rfl rfl (.inl rfl)
       (by
         rw [upd1_0, upd_self]
-        exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => f3 ⟨h.1, rfl⟩), f4⟩)
+        exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => f3 ⟨h.1, rfl⟩), f4,
+          fun h => by have := f5 h; cases this⟩)
       (by rfl) (fun _ => ⟨hn, by rw [upd_self]; exact hp, hcl⟩)
       (lws_lose hi₁ hop hg₁ (by simp [hasP, upd_self, gA, Ph.isWs]) (by simp [hasP, hg1, Ph.isWs]))
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
@@ -2667,16 +2684,16 @@ theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} 
           · rename_i e; subst e; show _ = (upd G _ _ _).2.2; rw [upd_self]; rfl
           · rfl
         rw [e, e]; exact hu.flags
-      · obtain ⟨-, f2, f3, f4⟩ := hu.flags
+      · obtain ⟨-, f2, f3, f4, f5⟩ := hu.flags
         rcases ht01 with e | e <;> subst e
         · exfalso; obtain ⟨-, ⟨-, hp, -⟩ | ⟨-, -, hM0, -, -⟩⟩ := hu.shape
           · change (G₀ 0).2.2 = _ at hp; rw [hgt] at hp; cases hp
           · change (G₀ 0).2.2.isMain at hM0; rw [hgt] at hM0; cases hM0
         · rw [upd1_0, upd_self]
           change Flags (G₀ 0).2.2 (.wn (k + 1))
-          rw [hgt] at f2 f3
+          rw [hgt] at f2 f3 f5
           exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨_, h'⟩ := f2 h; cases h'),
-            (fun h => f3 ⟨h.1, rfl⟩), f4⟩
+            (fun h => f3 ⟨h.1, rfl⟩), f4, fun h => by have := f5 h; cases this⟩
     · rcases hst.fp e he with h' | ⟨-, hnt, -⟩
       · rcases hu.io e h' hb ho with h'' | h''
         · exact .inl h''
