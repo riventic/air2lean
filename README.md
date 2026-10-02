@@ -25,6 +25,7 @@ Proofs over threads hold under every schedule: each gives the result, and no sch
 | `atomics.mpRelAcq`, `stackPush` | 0 or 42; 120 or 210 | — | `Proofs/Atomics/` |
 | `sync.mutexCounter` | 4 | `Io.Mutex` | `Proofs/Sync/Mutex.lean` |
 | `sync.handoff` | 7 | `Io.Mutex`, `Io.Condition`, `Io.Event` | `Proofs/Sync/Handoff.lean` |
+| `sync.semaphoreCounter` | 4 | `Io.Semaphore` (with its `Io.Mutex`, `Io.Condition`) | `Proofs/Sync/SemCounter.lean` |
 | `iogroup.groupCounter` | 3 | `Io.Group`, `Io.Mutex` | `Proofs/Iogroup/Counter.lean` |
 | `threadsync.mutexCounter` | 4 | `Thread.Mutex` | `Proofs/Threadsync/Mutex.lean` |
 | `threadsync.waitGroup` | 2 | `Thread.WaitGroup`, `Thread.ResetEvent`, `Thread.Mutex` | `Proofs/Threadsync/WaitGroup.lean` |
