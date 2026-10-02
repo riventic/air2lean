@@ -578,7 +578,7 @@ theorem linv_op {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {t : ThreadId}
 theorem op_of_cur {W : Word 32 4} {t : ThreadId} {m₁ m' : Mem}
     (hop : W.Op t { m₁ with current := t } m') : W.Op t m₁ m' :=
   ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
-    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩⟩
+    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩, hop.fpt⟩
 
 /-- An atomic load at a shared word, with a decode (`atomicLoadAsC`), by thread `t` (`g`). -/
 theorem wp_loadAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}

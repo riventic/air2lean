@@ -419,6 +419,8 @@ structure Op (t : ThreadId) (m m' : Mem) : Prop where
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
     (e.block = W.b ∧ e.off = W.o ∧ e.len = nb ∧ e.kind.isAtomic = true ∧ SomeLe m' e.clock)
   locs : LocsKeep W.b W.o nb m m'
+  /-- A new access is by thread `t`, below its new clock. -/
+  fpt : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true)
 
 theorem Op.clocks {t : ThreadId} {m m' : Mem} (h : W.Op t m m') (u : Nat) :
     VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
@@ -440,12 +442,17 @@ theorem Op.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : W.Op t m₁ m₂)
     h₂.woken.trans h₁.woken, h₂.groups.trans h₁.groups, h₂.csize.trans h₁.csize,
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, fun l hl => (h₂.cells l hl).trans (h₁.cells l hl), fun e he => ?_,
-    h₁.locs.trans h₂.locs⟩
-  rcases h₂.fp e he with h | h
-  · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
-    · exact .inl h'
-    · exact .inr ⟨a, b, c, d, h₂.someLe f⟩
-  · exact .inr h
+    h₁.locs.trans h₂.locs, fun e he => ?_⟩
+  · rcases h₂.fp e he with h | h
+    · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
+      · exact .inl h'
+      · exact .inr ⟨a, b, c, d, h₂.someLe f⟩
+    · exact .inr h
+  · rcases h₂.fpt e he with h | h
+    · rcases h₁.fpt e h with h' | ⟨ht, hle⟩
+      · exact .inl h'
+      · exact .inr ⟨ht, VClock.le_trans hle h₂.mine⟩
+    · exact .inr h
 
 /-- An op at the word keeps a word apart from it. -/
 theorem keep_op {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h : W.Op t m m')
@@ -525,13 +532,20 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
       rw [hrt]; exact VClock.le_refl _
   have hopr : W.Op m.current m mr := by
     refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [mr, Mem.recordAt], hro,
-      by rw [hrt]; exact VClock.le_bump _ _, rfl, fun l _ => rfl, fun e he => ?_, .of_eq rfl⟩
-    simp only [mr, Mem.recordAt, Array.mem_push] at he
-    rcases he with he | rfl
-    · exact .inl he
-    · refine .inr ⟨rfl, rfl, rfl, hk, m.current, ht, ?_⟩
-      show VClock.le _ (mr.clocks[m.current]!) = true
-      rw [hrt]; exact VClock.le_refl _
+      by rw [hrt]; exact VClock.le_bump _ _, rfl, fun l _ => rfl, fun e he => ?_, .of_eq rfl,
+      fun e he => ?_⟩
+    · simp only [mr, Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · refine .inr ⟨rfl, rfl, rfl, hk, m.current, ht, ?_⟩
+        show VClock.le _ (mr.clocks[m.current]!) = true
+        rw [hrt]; exact VClock.le_refl _
+    · simp only [mr, Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · refine .inr ⟨rfl, ?_⟩
+        show VClock.le _ (mr.clocks[m.current]!) = true
+        rw [hrt]; exact VClock.le_refl _
   -- the location
   cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i =>
@@ -552,7 +566,7 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
         i l → i = mr.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
     refine ⟨nl, hnl, ⟨hw.blk, fun l hl hb h1 h2 => ?_, fun i l hl => ?_, hwr.wfp, hwr.val⟩,
       hopr.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
-        fun _ _ => rfl, fun e he => .inl he, .push rfl rfl rfl rfl⟩, ?_, rfl, rfl⟩
+        fun _ _ => rfl, fun e he => .inl he, .push rfl rfl rfl rfl, fun e he => .inl he⟩, ?_, rfl, rfl⟩
     · rcases Array.mem_push.mp hl with hl | rfl
       · exact hw.only l hl hb h1 h2
       · rfl
@@ -687,7 +701,8 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     fun l₀ hl₀ hb' h1 h2 => ?_, fun i l₀ hl₀ => ?_, fun e he hh => ?_,
     ⟨new, by unfold Word.Holds; rw [hcur]; exact W.enc_val new⟩⟩, ⟨?_, ?_, ?_, ?_, ?_, ?_,
     fun u hu => by rw [hMc]; exact hcl₂ u hu, by rw [hMc]; exact hct₂, hMbs, fun x hx => ?_,
-    fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he), ?_⟩,
+    fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he), ?_,
+    fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he)⟩,
     by unfold Word.Holds; rw [hcur]; exact W.enc_val new, ?_, fun hq => ?_⟩
   · rw [hMa, Array.set!_eq_setIfInBounds] at hl₀
     rcases Array.mem_or_eq_of_mem_set (w := hli) (by simpa [Array.setIfInBounds, hli] using hl₀)
@@ -800,7 +815,8 @@ theorem Ok.read {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder} (
     ⟨hcu, hg.threads, hg.waiters, by unfold loadM; split <;> rfl, by unfold loadM; split <;> rfl,
       hg.csize, fun u hu => loadM_others _ _ _ _ (by rw [hop.current]; exact hu),
       hg.cle t, by rw [hg.blocks], fun x _ => by simp only [Mem.heap, hg.blocks],
-      fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics⟩⟩
+      fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics,
+      fun e he => .inl (hg.footprint ▸ he)⟩⟩
   · by_cases hk0 : k = 0
     · omega
     · rw [hist_size hl] at hk
