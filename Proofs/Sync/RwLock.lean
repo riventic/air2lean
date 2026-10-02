@@ -3298,4 +3298,44 @@ theorem unlockS_spec (hE : E.Spec) {j : Bool} {h : Heap} {io : Io} {G : ThreadId
     simp only [StateT.run_pure, pure_bind]
     exact WP.pure' (WP.pure' (WP.pure' ⟨by omega, hc₂, hi₄⟩))
 
+/-! ## `readShared` -/
+
+theorem cnt_le {x : Ph} (h : x.isW) : x.cnt ≤ 2 := by
+  cases x <;> simp_all [Ph.isW, Ph.cnt] <;> omega
+
+/-- `readShared` by `main` at `ls j`: it reads the writer's count `k` (2 after the join). -/
+theorem readS_spec (hE : E.Spec) {j : Bool} {G : ThreadId → Gh S} {m : Mem} {d : Nat}
+    (hi : (proto E).inv (upd G 0 (gA (.ls j) Heap.empty default)) m) (hc : m.current = 0) :
+    (proto E).WP 0 (readShared bPtr) (fun v G' m' _ => m'.current = 0 ∧
+      (∃ k ≤ 2, v = BitVec.ofNat 32 k ∧ (j = true → k = 2)) ∧
+      (proto E).inv (upd G' 0 (gA (.dn j) Heap.empty default)) m') G m d := by
+  unfold readShared
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [show bPtr.add 0 = bPtr from rfl]
+  have htl : 0 < m.threads.size :=
+    (hi.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
+  refine WP.bind (wp_io hE hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (lockS_spec hE hi₁)))
+  rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h, hi₂⟩
+  rw [show bPtr.add 56 = nPtr from rfl]
+  -- the value of `n`
+  have hu₂ := hi₂.2.1
+  have hW := w_isW hu₂ (by rw [upd_self]; simp [gA])
+  rw [upd0_1] at hW
+  have hjd : j = true → (G₂ 1).2.2 = .wf := fun hj => by
+    have := hu₂.flags.jd; rw [upd_self, upd0_1] at this; exact this (by simp [gA, Ph.jd, hj])
+  refine WP.bind (wp_n hE (y := .sh j) hi₂ hc₂ rfl (.inl rfl) (TTriple.load (by decide))
+    fun m₃ h₃ hc₃ ht₃ hi₃ => ?_)
+  have htl₃ : 0 < m₃.threads.size :=
+    (hi₃.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
+  refine WP.bind (wp_io hE hi₃ hc₃ htl₃ fun m₄ hc₄ ht₄ hi₄ => ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (unlockS_spec hE hi₄)))
+  rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
+  simp only [StateT.run_pure, pure_bind]
+  refine WP.pure' (WP.pure' ⟨hc₅, ⟨(G₂ 1).2.2.cnt, cnt_le hW, by rw [upd0_1], fun hj => by
+    rw [hjd hj]; rfl⟩, hi₅⟩)
+
 end Sync.RwLockRead
