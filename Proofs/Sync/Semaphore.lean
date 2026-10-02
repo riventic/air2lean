@@ -1370,16 +1370,16 @@ theorem Fits.toPst (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : Thr
 
 /-- `signal`'s loop: `t` at `pst` read the state `b`; if `b` is not `(1, 0)`, no waiter is before
 a signal. -/
-def sInv (P : Proto Tgt (SGh X)) (t : ThreadId) (a : LG) (x : X) (s : Io_Condition_signalLocals)
-    (G : ThreadId → SGh X) (m : Mem) (_ : Nat) : Prop :=
-  m.current = t ∧ ∃ b, s.prev_state = Packed.ofBits b ∧ SV b ∧ P.inv (upd G t (a, .pst, x)) m ∧
+def sInv (P : Proto Tgt (SGh X)) (t : ThreadId) (a : LG) (x : X) (D : Nat) (s : Io_Condition_signalLocals)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat) : Prop :=
+  d ≤ D ∧ m.current = t ∧ ∃ b, s.prev_state = Packed.ofBits b ∧ SV b ∧ P.inv (upd G t (a, .pst, x)) m ∧
     (b ≠ 1 → ∀ R i jr sn e, (upd G t (a, .pst, x) R).2.1 = .reg i jr sn e → (S.WS.hist m).size ≠ jr + 1)
 
 /-- `signal`'s loop ends with `t` outside the condition. -/
-def sPost (P : Proto Tgt (SGh X)) (t : ThreadId) (a : LG) (x : X)
+def sPost (P : Proto Tgt (SGh X)) (t : ThreadId) (a : LG) (x : X) (D : Nat)
     (r : Io_Condition_signalExit × Io_Condition_signalLocals) (G : ThreadId → SGh X) (m : Mem)
-    (_ : Nat) : Prop :=
-  (r.1 = .ret ∨ r.1 = .br10) ∧ m.current = t ∧ P.inv (upd G t (a, .none, x)) m
+    (d : Nat) : Prop :=
+  d ≤ D ∧ (r.1 = .ret ∨ r.1 = .br10) ∧ m.current = t ∧ P.inv (upd G t (a, .none, x)) m
 
 theorem sv_of {G : ThreadId → SGh X} {m : Mem} (hs : S.Inv G m) {j : Nat} {b : BitVec 32}
     (hj : j < (S.WS.hist m).size) (hv : (S.WS.hist m)[j]!.Val b) : SV b := by
@@ -1397,15 +1397,15 @@ theorem read_noR {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} {j : Nat} {b 
   subst hj'
   exact hb (val_eq hv (hs.era R i j sn e hR).s0)
 
-theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = .holds) (io : Io)
+theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = .holds) (io : Io) (D : Nat)
     (s : Io_Condition_signalLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
-    (h : S.sInv P t a x s G m d) :
+    (h : S.sInv P t a x D s G m d) :
     P.WP t ((Io_Condition_signal.loop11 (S.ptr.add 12) io).run s) (fun r G' m' d' =>
-      if Io_Condition_signal.again11 r.1 then S.sInv P t a x r.2 G' m' d' ∧
+      if Io_Condition_signal.again11 r.1 then S.sInv P t a x D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
-      else sPost P t a x r G' m' d') G m d := by
+      else sPost P t a x D r G' m' d') G m d := by
   obtain ⟨ps⟩ := s
-  obtain ⟨hc, b, hps, hsv, hi, hn⟩ := h
+  obtain ⟨hD, hc, b, hps, hsv, hi, hn⟩ := h
   simp only at hps
   subst hps
   unfold Io_Condition_signal.loop11
@@ -1453,7 +1453,7 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, Bool.false_eq_true, ↓reduceIte]
-      exact ⟨.inl rfl, hc₅, hi₆⟩
+      exact ⟨by omega, .inl rfl, hc₅, hi₆⟩
     · -- no signal: `t` read write `j`
       rw [bits1] at hne
       obtain ⟨hl₁, hs₁, -⟩ := hP.split hi₁
@@ -1469,7 +1469,7 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       simp only [StateT.run_pure, StateT.run_modify]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, ↓reduceIte]
-      refine ⟨⟨hop.current, b, hr, sv_of hs₁ hj hv, by rw [← hg₁, upd_same]; exact hi₂, fun _ => ?_⟩,
+      refine ⟨⟨by omega, hop.current, b, hr, sv_of hs₁ hj hv, by rw [← hg₁, upd_same]; exact hi₂, fun _ => ?_⟩,
         .inl (by omega)⟩
       intro R i jr sn e hR
       rw [hh]; rw [← hg₁, upd_same] at hR; exact hn₂ R i jr sn e hR
@@ -1478,12 +1478,12 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     simp only [Io_Condition_signal.again11, Bool.false_eq_true, ↓reduceIte]
-    exact ⟨.inr rfl, hc, hP.pstNone hi ha (hn hb)⟩
+    exact ⟨hD, .inr rfl, hc, hP.pstNone hi ha (hn hb)⟩
 
 /-- `signal` by the holder `t`: it goes on outside the condition, with the same lock part. -/
 theorem signal_spec (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = .holds)
     (io : Io) (G : ThreadId → SGh X) (m : Mem) (d : Nat) (hi : P.inv (upd G t (a, .pst, x)) m) :
-    P.WP t (Io_Condition_signal (S.ptr.add 12) io) (fun _ G' m' _ => m'.current = t ∧
+    P.WP t (Io_Condition_signal (S.ptr.add 12) io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (a, .none, x)) m') G m d := by
   unfold Io_Condition_signal
   refine WP.bind ?_
@@ -1501,13 +1501,13 @@ theorem signal_spec (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph
   subst hr
   simp only [StateT.run_bind]
   simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (sInv P t a x) (fun _ => 0) (sPost P t a x)
-    (sig_body hP t a x ha io) _ G₁ m' k ⟨hop.current, b, rfl, sv_of hs₁ hj hv,
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (sInv P t a x d) (fun _ => 0) (sPost P t a x d)
+    (sig_body hP t a x ha io d) _ G₁ m' k ⟨by omega, hop.current, b, rfl, sv_of hs₁ hj hv,
       by rw [← hg₁, upd_same]; exact hi₂, fun hb R i jr sn e hR => ?_⟩))
-  · rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨he, hc₂, hi₃⟩
+  · rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, he, hc₂, hi₃⟩
     rcases he with rfl | rfl <;>
     · simp only [StateT.run_pure]
-      exact WP.pure' (WP.pure' ⟨hc₂, hi₃⟩)
+      exact WP.pure' (WP.pure' ⟨hd₂, hc₂, hi₃⟩)
   · rw [hh]; rw [← hg₁, upd_same] at hR; exact read_noR hl₁ hs₁ hh₁ hv hj hfl hb R i jr sn e hR
 
 /-! ## The permit count -/
@@ -1564,19 +1564,19 @@ theorem Inv.congrG {G G' : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m)
 /-- The holder `t`'s step `c` on the permit count, `v` to `v'`; the rest of its bytes is the
 frame. Its part becomes `pa'` and its ghost value `x'`, as `hmv` says. -/
 theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadId}
-    {G : ThreadId → SGh X} {m : Mem} {n : Nat} {pa pa' hL : Heap} {sp : SPh} {x x' : X}
+    {G : ThreadId → SGh X} {m : Mem} {n : Nat} {pa hL : Heap} {Mv : Heap → Prop} {sp : SPh} {x x' : X}
     {v v' : BitVec 64} {r₀ : β} {Q : β × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, sp, x)) m) (hc : m.current = t)
     (ht : TTriple (pts S.ptr 8 v) c (fun r => ⌜r = r₀⌝ ∗ pts S.ptr 8 v'))
     (hv : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2) = v)
     (hmv : ∀ hr, S.Res (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2) hr →
-      Heap.Disjoint pa hr → ∃ hr', pa' ∪ hr' = pa ∪ hr ∧ Heap.Disjoint pa' hr' ∧
-        S.Res (xs fun u => (upd G t (⟨.holds, pa', hL⟩, sp, x') u).2) hr' ∧
-        S.pv (xs fun u => (upd G t (⟨.holds, pa', hL⟩, sp, x') u).2) = v')
+      Heap.Disjoint pa hr → ∃ pa' hr', pa' ∪ hr' = pa ∪ hr ∧ Heap.Disjoint pa' hr' ∧
+        S.Res (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x') u).2) hr' ∧
+        S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x') u).2) = v' ∧ Mv pa')
     (hpz : v' = v ∨ v ≠ 0 ∨ sp = .pst)
-    (hU : ∀ m' h₁ h₂, U (upd G t (⟨.holds, pa, h₁⟩, sp, x)) m' →
+    (hU : ∀ m' h₁ h₂ pa', Mv pa' → U (upd G t (⟨.holds, pa, h₁⟩, sp, x)) m' →
       U (upd G t (⟨.holds, pa', h₂⟩, sp, x')) m')
-    (h : ∀ m' hL', m'.current = t → m'.threads = m.threads →
+    (h : ∀ m' pa' hL', Mv pa' → m'.current = t → m'.threads = m.threads →
       P.inv (upd G t (⟨.holds, pa', hL'⟩, sp, x')) m' → Q (r₀, s) G m' n) :
     P.WP t ((liftM c : CM Tgt σ β).run s) Q G m n := by
   subst hv
@@ -1598,7 +1598,7 @@ theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadI
     (by rw [hown, hown2]; exact ⟨hp, _, hdp', rfl, hpp, rfl⟩) fun a m' hQ _ ho' hq hst hm' hd => ?_
   obtain ⟨hp', hrest, hd', rfl, hq1, rfl⟩ := hq
   obtain ⟨rfl, hpp'⟩ := sep_lift.mp hq1
-  obtain ⟨hr₂, he, hd₂, hres₂, hpv₂⟩ := hmv hr hrr hdr
+  obtain ⟨pa', hr₂, he, hd₂, hres₂, hpv₂, hmv'⟩ := hmv hr hrr hdr
   have hd'' : Heap.Disjoint hp' (pa' ∪ hr₂) := by rw [he]; exact hd'
   obtain ⟨hdp₂, hdr₂⟩ := Heap.disjoint_union_right.mp hd''
   have hQe : pa' ∪ (hp' ∪ hr₂) = hp' ∪ (pa ∪ hr) := by
@@ -1636,7 +1636,7 @@ theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadI
         (by rw [upd_self]) rfl (by rw [upd_self]) (by rw [upd_self])
         (Heap.union_left_comm (Heap.disjoint_union_right.mp hd').1.symm)
       rw [upd_upd] at hu'
-      exact h m' _ (hst.current.trans hc) hst.threads (hP.pack hl' hs' (hU m' _ _ hu'))
+      exact h m' pa' _ hmv' (hst.current.trans hc) hst.threads (hP.pack hl' hs' (hU m' _ _ pa' hmv' hu'))
     · unfold upd; split
       · rename_i e; subst e
         show pa' (S.b, y) = none
@@ -1653,7 +1653,7 @@ theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadI
   · show S.R _ (hp' ∪ hr₂)
     have hx : xs (fun u => (upd (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x)) t
         (⟨.holds, pa', hp' ∪ hr₂⟩, sp, x') u).2) =
-        xs (fun u => (upd G t (⟨.holds, pa', hp ∪ hr⟩, sp, x') u).2) := by
+        xs (fun u => (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x') u).2) := by
       rw [upd_upd]; funext u; simp only [xs, upd]; split <;> rfl
     unfold Sem.R; rw [hx, hpv₂]
     exact ⟨hp', hr₂, hdr₂, rfl, hpp', hres₂⟩
