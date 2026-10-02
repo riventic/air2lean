@@ -233,8 +233,6 @@ structure Pre (G : ThreadId → Gh) (m : Mem) : Prop where
   /-- After `main`'s `add`, the last finish reads `3`. -/
   last3 : (G 0).2.e01 → (G 1).2.fd → (G 2).2.fd →
     ((G 1).2.st || (G 1).2.sx || (G 2).2.st || (G 2).2.sx) = true
-  /-- `main` wrote `1` exactly at `ev1` (and after it, at `evd`). -/
-  e1m : (G 0).2.e1 → ((G 0).2.isEv1 || (G 0).2.isEvd) = true
   m1e : (G 0).2.isEv1 → (G 0).2.e1
   /-- `main`'s write of `1` happened before it. -/
   e1c : (G 0).2.e1 → VClock.le (EV.hist m)[1]!.clock (m.clocks[0]!) = true
@@ -311,7 +309,7 @@ theorem Pre.keep {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hp : Pre 
     · exact hcl u
   refine ⟨hwg, hev, by rw [hhg, hwgv]; exact hp.gv, fun u hu hf => ?_,
     by unfold EVOk; rw [hhe, hevL]; exact hp.evh, fun h => ?_, fun u v huv hu => ?_,
-    fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun h => ?_, fun h => ?_,
+    fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun h => ?_,
     fun h => ?_, fun e he hb => ?_⟩
   · rw [(hX u).fd] at hf; rw [hhg, (hX u).fc]; exact hp.gw u hu hf
   · rw [(hX 1).sx, (hX 2).sx] at h; rw [hhe, (hX 1).fz, (hX 2).fz]; exact hp.setc h
@@ -323,7 +321,6 @@ theorem Pre.keep {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hp : Pre 
   · rw [(hX u).st, (hX u).sx] at hs; rw [(hX 0).wa]; exact hp.swa u hu hs
   · rw [(hX 0).e01] at h0; rw [(hX 1).fd] at h1; rw [(hX 2).fd] at h2
     rw [(hX 1).st, (hX 1).sx, (hX 2).st, (hX 2).sx]; exact hp.last3 h0 h1 h2
-  · rw [(hX 0).e1] at h; rw [(hX 0).isEv1, (hX 0).isEvd]; exact hp.e1m h
   · rw [(hX 0).isEv1] at h; rw [(hX 0).e1]; exact hp.m1e h
   · rw [(hX 0).e1] at h; rw [hhe]; exact VClock.le_trans (hp.e1c h) (hcl 0)
   · have hold : e ∈ m.footprint → e.tid < 3 ∧ VClock.le e.clock (ac G' m' e.tid) = true :=
@@ -484,7 +481,7 @@ theorem U_mem {G : ThreadId → Gh} {m m' : Mem} (hu : U G m) (hb : m'.blocks = 
       fun u h1 h2 => by rw [Word.hist_keep hp.wg hkG]; exact hp.gw u h1 h2,
       by unfold EVOk; rw [Word.hist_keep hp.ev hkE]; exact hp.evh,
       fun h => by rw [Word.hist_keep hp.ev hkE]; exact hp.setc h,
-      fun u v h1 h2 => by rw [hc]; exact hp.sto u v h1 h2, hp.sfd, hp.swa, hp.last3, hp.e1m, hp.m1e,
+      fun u v h1 h2 => by rw [hc]; exact hp.sto u v h1 h2, hp.sfd, hp.swa, hp.last3, hp.m1e,
       fun h => by rw [Word.hist_keep hp.ev hkE, hc]; exact hp.e1c h,
       fun e he hb' => by rw [hf] at he; unfold ac; rw [hc]; exact hp.attr e he hb'⟩
   · rw [hc]; exact hu.done hr
@@ -1027,7 +1024,7 @@ theorem inv_finish {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {old : B
       · rename_i e; subst e; rw [hgt]; rfl
       · rfl
     refine ⟨hw', hp.ev.keep hkE, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
-      fun u v huv hu => ?_, fun u hu hs => ?_, fun h0' h1 h2 => ?_, ?_, ?_, fun h => ?_, fun e he hb => ?_⟩
+      fun u v huv hu => ?_, fun u hu hs => ?_, fun h0' h1 h2 => ?_, ?_, fun h => ?_, fun e he hb => ?_⟩
     · rw [hlast]
       have : wgv (G' 0).2 (G' 1).2 (G' 2).2 = k - 2 := by
         have e : ∀ u, (G' u).2 = upd (fun u => (G u).2) t (gF k c).2 u := fun u => by
@@ -1099,7 +1096,6 @@ theorem inv_finish {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {old : B
       have h3 := hk3.mpr ⟨hwa, hfo⟩
       have hst : (G' t).2.st = true := by rw [hGt]; unfold gF X.st; simp [h3]
       rcases ht with rfl | rfl <;> simp [hst]
-    · rw [hX0]; exact hp.e1m
     · rw [hX0]; exact hp.m1e
     · rw [hX0] at h; rw [hhE]; exact VClock.le_trans (hp.e1c h) (hop.clocks 0)
     · rcases hop.fpt e he with h' | ⟨het, hle⟩
@@ -1362,7 +1358,7 @@ theorem inv_sxchg {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {a b : VC
     have hsxG' : ((G' 1).2.sx || (G' 2).2.sx) = true := by
       rcases ht with rfl | rfl <;> simp [hGt, gS]
     refine ⟨hp.wg.keep hkG, hw', ?_, fun u hu hf => ?_, ?_, fun _ => ?_, fun u v huv hu => ?_,
-      fun u v huv hu => ?_, fun u hu hs => ?_, fun _ _ _ => ?_, by rw [hX0]; exact hp.e1m,
+      fun u v huv hu => ?_, fun u hu hs => ?_, fun _ _ _ => ?_,
       by rw [hX0]; exact hp.m1e, fun h => ?_, fun e he hb => ?_⟩
     · rw [hhG]
       have : wgv (G' 0).2 (G' 1).2 (G' 2).2 = wgv (G 0).2 (G 1).2 (G 2).2 := by
@@ -1907,7 +1903,7 @@ theorem inv_start {m : Mem} {A : Nat} {h : Heap}
   · have hX1 := hXu 1 (by decide); have hX2 := hXu 2 (by decide)
     refine ⟨hwgOk, hevOk, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
       fun u v huv hu => ?_, fun u hu hs => ?_, fun h => ?_, fun h => ?_, fun h => ?_,
-      fun h => ?_, fun e he hb' => ?_⟩
+      fun e he hb' => ?_⟩
     · rw [hX0, hX1, hX2]; unfold last; rw [hwgz]; exact hwgv
     · rcases hu with rfl | rfl
       · rw [hX1] at hf; cases hf
@@ -1923,7 +1919,6 @@ theorem inv_start {m : Mem} {A : Nat} {h : Heap}
     · rcases hu with rfl | rfl
       · rw [hX1] at hs; cases hs
       · rw [hX2] at hs; cases hs
-    · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
@@ -2002,7 +1997,7 @@ theorem inv_sm {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pro
     have hX2 : (upd G 0 (gM Heap.empty { ph := .sm }) 2).2 = {} := by rw [hGu 2 (by decide)]; exact d4
     refine ⟨hw', hp.ev.keep hkE, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
       fun u v huv hu => ?_, fun u hu hs => ?_, fun h => ?_, fun h => ?_, fun h => ?_,
-      fun h => ?_, fun e he hb => ?_⟩
+      fun e he hb => ?_⟩
     · rw [hh, last_push, hX0, hX1, hX2]; exact WG.enc_val _
     · rcases hu with rfl | rfl
       · rw [hX1] at hf; cases hf
@@ -2019,7 +2014,6 @@ theorem inv_sm {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pro
     · rcases hu with rfl | rfl
       · rw [hX1] at hs; cases hs
       · rw [hX2] at hs; cases hs
-    · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
     · rw [hX0] at h; cases h
@@ -2262,7 +2256,7 @@ theorem inv_add {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pr
     have hrel : (last (WG.hist m')).relClock = (last (WG.hist m₁)).relClock := by
       rw [hh, last_push]; rfl
     refine ⟨hw', hp.ev.keep hkE, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
-      fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun h => ?_, fun h => ?_,
+      fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun h => ?_,
       fun h => ?_, fun e he hb => ?_⟩
     · rw [hh, last_push, hX0, hX1, hX2]
       have : wgv { ph := phA w } (G 1).2 (G 2).2 = w + 1 := by
@@ -2293,7 +2287,6 @@ theorem inv_add {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pr
       have := hw; unfold wgv at this; rw [hgx] at this
       simp only [X.isPre, X.wa, Ph.isMain, Ph.rank, h1, h2] at this
       simp at this; omega
-    · rw [hX0] at h; cases h
     · rw [hX0] at h; simp [phA, X.isEv1] at h; split at h <;> cases h
     · rw [hX0] at h; cases h
     · rcases hop.fpt e he with h' | ⟨het, hle⟩
