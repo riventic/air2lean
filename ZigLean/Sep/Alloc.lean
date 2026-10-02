@@ -19,7 +19,7 @@ theorem Mem.heap_allocs (m : Mem) (k : Nat) : ({ m with allocs := k } : Mem).hea
 /-- `rawAlloc` gives `none` and changes no byte, or a new heap block, as `alloc_run`. -/
 theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
     (n align : Nat) (ha : 0 < align) (hst : m.Seq) :
-    ∃ r m', (rawAlloc n align).run m = pure (r, m') ∧ m'.Seq ∧
+    ∃ r m', (rawAlloc n align).run m = pure (r, m') ∧ m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧
       match r with
       | none => m'.heap = h ∪ hF
       | some p => p.off = 0 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧
@@ -30,11 +30,12 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
   have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
   have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
   by_cases hc : m.failAt = some m.allocs ∨ maxAllocBytes < n
-  · refine ⟨none, m₁, ?_, hst₁, hm₁⟩
+  · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
     simp [rawAlloc, hc, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
-  · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', A, hA, hb, hab⟩ :=
+  · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
       alloc_run hd hm₁ .heap n align ha hst₁
-    refine ⟨some p, m', ?_, hst', h0, h', hd', hm', hdd, A, hA, hb, hab⟩
+    refine ⟨some p, m', ?_, hst', by rw [hsz]; exact Nat.le_succ _, h0, h', hd', hm', hdd, A, hA, hb,
+      hab⟩
     simp only [StateT.run] at hr
     simp [rawAlloc, hc, zig_unfold, set, StateT.set, MonadStateOf.set, m₁] at hr ⊢
     simp [hr, ExceptT.bindCont]
@@ -43,7 +44,8 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
 theorem rawFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
     (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
-    ∃ m', (rawFree p S).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq := by
+    ∃ m', (rawFree p S).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
+      m'.blocks.size = m.blocks.size := by
   obtain ⟨b, blk, hacc, hblk, -, hsz, -⟩ := bytesAt_access (q := p) (k := 0) (n := S) (a := 1) hb hm
     (by simp [Ptr.add]) hpos (by omega) (Nat.mod_one _)
   have hK : blk.kind = .heap := by
@@ -55,8 +57,8 @@ theorem rawFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array By
     subst this
     rw [hblk] at hblk'; cases hblk'
     simp only [Cell.mk.injEq] at hc; exact hc.2.2.2.symm
-  obtain ⟨m', hr, hm', hst'⟩ := free_run hb hm hd hS h0 hpos hst
-  refine ⟨m', ?_, hm', hst'⟩
+  obtain ⟨m', hr, hm', hst', hsz'⟩ := free_run hb hm hd hS h0 hpos hst
+  refine ⟨m', ?_, hm', hst', hsz'⟩
   simp only [StateT.run] at hr
   simp [rawFree, zig_unfold, hacc, hK, h0, hsz, hr]
 
@@ -72,7 +74,7 @@ theorem create_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.hea
     (a : Allocator) (size align : Nat) (hs : 0 < size) (ha : 0 < align) (hst : m.Seq) :
     ∃ r m' h', (a.create size align).run m = pure (r, m') ∧ Heap.Disjoint (h ∪ h') hF ∧
       m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.Seq ∧ newBlock size align r h' := by
-  obtain ⟨r, m', hr, hst', hpost⟩ := rawAlloc_run hd hm size align ha hst
+  obtain ⟨r, m', hr, hst', -, hpost⟩ := rawAlloc_run hd hm size align ha hst
   have hns : ¬ size = 0 := by omega
   simp only [StateT.run] at hr
   cases r with
@@ -97,7 +99,7 @@ theorem Triple.create (a : Allocator) (size align : Nat) (hs : 0 < size) (ha : 0
 theorem Triple.destroy (a : Allocator) {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0) (hpos : 0 < S) : Triple (bytesAt p A S .heap bs) (a.destroy S p) (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb hst => by
-    obtain ⟨m', hr, hm', hst'⟩ := rawFree_run hb hm hd hS h0 hpos hst
+    obtain ⟨m', hr, hm', hst', -⟩ := rawFree_run hb hm hd hS h0 hpos hst
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.destroy, show ¬ S = 0 by omega, hr]
 
@@ -107,7 +109,7 @@ theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Arr
     Triple (bytesAt s.ptr A (size * (s.len.toNat + 1)) .heap bs) (a.freeSentinel size s)
       (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb hst => by
-    obtain ⟨m', hr, hm', hst'⟩ :=
+    obtain ⟨m', hr, hm', hst', -⟩ :=
       rawFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.freeSentinel, show ¬ size = 0 by omega, hr]

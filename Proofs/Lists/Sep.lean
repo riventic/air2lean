@@ -97,7 +97,7 @@ theorem node_free_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Di
     (hst : m.Seq) (a : Allocator) :
     ∃ m', (a.destroy 16 p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq := by
   obtain ⟨h0, A, -, hb⟩ := hn
-  obtain ⟨m', hr, hm', hst'⟩ := rawFree_run hb hm hd (nodeBytes_size v q) h0 (by decide) hst
+  obtain ⟨m', hr, hm', hst', -⟩ := rawFree_run hb hm hd (nodeBytes_size v q) h0 (by decide) hst
   exact ⟨m', by simpa [Allocator.destroy] using hr, hm', hst'⟩
 
 end Node
