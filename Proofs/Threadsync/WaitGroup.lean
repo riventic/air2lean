@@ -1464,4 +1464,61 @@ theorem inv_frozen {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {ph ph' : P
     · rw [upd_self, upd_ne _ _ (by decide)]; rw [hg] at b' d'
       exact ⟨a', by rcases hph' with rfl | rfl <;> rfl, c', d'⟩
 
+/-! ## A task's facts at a stop -/
+
+theorem task_size {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {t : ThreadId}
+    (ht : t = 1 ∨ t = 2) (htk : (G t).2.ph.isTask) : t < m.threads.size := by
+  obtain ⟨-, -, -, d⟩ := hi.2.shape
+  rcases d with ⟨-, -, d3, d4⟩ | ⟨d1, -, -, -, d5⟩ | ⟨d1, -⟩
+  · exfalso; rcases ht with rfl | rfl
+    · change (G 1).2 = {} at d3; rw [d3] at htk; cases htk
+    · change (G 2).2 = {} at d4; rw [d4] at htk; cases htk
+  · rcases ht with rfl | rfl
+    · rw [d1]; decide
+    · exfalso; change (G 2).2 = {} at d5; rw [d5] at htk; cases htk
+  · rcases ht with rfl | rfl <;> rw [d1] <;> decide
+
+theorem task_rank {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {t : ThreadId}
+    (ht : t = 1 ∨ t = 2) (hfz : (G t).2.frozen = false) : (G 0).2.ph.rank ≤ 7 := by
+  by_cases h : 6 ≤ (G 0).2.ph.rank
+  · obtain ⟨a, b, -⟩ := hi.2.done h
+    rcases ht with rfl | rfl
+    · rw [hfz] at a; cases a
+    · rw [hfz] at b; cases b
+  · omega
+
+/-- The futex wake of the setter (`wk`) at the event: no thread waits at the event after it. -/
+theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (hn : 1 ≤ n)
+    (hq : QOk G m)
+    (hw : ((Thread.futexWake EV.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    QOk G' m' ∧ m'.blocks = m.blocks ∧ m'.atomics = m.atomics ∧ m'.footprint = m.footprint ∧
+      m'.threads = m.threads ∧ m'.clocks = m.clocks := by
+  have hm' := Proto.modify_ok hw
+  subst hm'
+  refine ⟨fun w hw' => .inl ?_, rfl, rfl, rfl, rfl, rfl⟩
+  simp only [Array.mem_filter] at hw'
+  obtain ⟨hwm, hnot⟩ := hw'
+  rcases hq w hwm with h | ⟨h1, h2, -⟩
+  · exact h
+  · exfalso
+    -- the first waiter at the event is `main`, so `main` is woken
+    have hne : (m.waiters.filter (·.2 == EV.ptr)).size ≠ 0 := by
+      intro h0
+      have : w ∈ m.waiters.filter (·.2 == EV.ptr) := Array.mem_filter.mpr ⟨hwm, by simp [h2]⟩
+      rw [Array.size_eq_zero_iff.mp h0] at this; simp at this
+    have hf0 := Array.getElem_mem (xs := m.waiters.filter (·.2 == EV.ptr)) (i := 0) (by omega)
+    obtain ⟨hf0m, hf0p⟩ := Array.mem_filter.mp hf0
+    have hf01 : ((m.waiters.filter (·.2 == EV.ptr))[0]'(by omega)).1 = 0 := by
+      rcases hq _ hf0m with h | ⟨a, b, -⟩
+      · exfalso; rw [beq_iff_eq.mp hf0p] at h; exact absurd h (by decide)
+      · exact a
+    have hin : (0 : ThreadId) ∈ ((m.waiters.filter (·.2 == EV.ptr)).extract 0 n).map (·.1) := by
+      rw [Array.mem_map]
+      refine ⟨_, ?_, hf01⟩
+      rw [Array.mem_extract_iff_getElem]
+      exact ⟨0, by simp; omega, by simp⟩
+    rw [h1] at hnot
+    simp only [Bool.not_eq_eq_eq_not, Bool.not_true] at hnot
+    rw [Array.contains_iff_mem.mpr hin] at hnot; cases hnot
+
 end Threadsync.WG
