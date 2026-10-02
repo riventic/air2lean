@@ -1632,4 +1632,124 @@ theorem finish_spec {t : ThreadId} (ht : t = 1 ∨ t = 2) (G : ThreadId → Gh) 
     rw [gF_dn h3] at hi'
     exact WP.pure' (WP.pure' (WP.pure' ⟨_, _, _, hi'⟩))
 
+/-! ## A task -/
+
+theorem cnt_le {Y : ThreadId → X} {t : ThreadId} (ht : t = 1 ∨ t = 2) (hy : (Y t).cnt = 0) :
+    cnt Y ≤ 1 := by
+  unfold cnt
+  have : ∀ x : X, x.cnt ≤ 1 := fun x => by unfold X.cnt; split <;> omega
+  rcases ht with rfl | rfl
+  · rw [hy]; exact Nat.le_trans (Nat.le_of_eq (Nat.zero_add _)) (this _)
+  · rw [hy]; exact this _
+
+theorem cnt_inc {G : ThreadId → Gh} {t : ThreadId} (ht : t = 1 ∨ t = 2) (hL hL' : Heap) :
+    cnt (fun u => (upd G t (gH .inc hL') u).2) = cnt (fun u => (upd G t (gH .lk hL) u).2) + 1 := by
+  unfold cnt
+  rcases ht with rfl | rfl
+  · simp only [upd_self, upd_ne _ _ (show (2 : ThreadId) ≠ 1 by decide)]
+    simp [gH, X.cnt, Ph.isTask, Ph.rank]; omega
+  · simp only [upd_self, upd_ne _ _ (show (1 : ThreadId) ≠ 2 by decide)]
+    simp [gH, X.cnt, Ph.isTask, Ph.rank]
+
+/-- A task: `lock`, the counter `+= 1`, `unlock`, `finish`; it ends at `dn`. -/
+theorem task_spec {t : ThreadId} (ht : t = 1 ∨ t = 2) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G t (gT .lk)) m) (hc : m.current = t) :
+    proto.WP t (task bPtr)
+      (fun _ G' m' _ => ∃ a c sx, proto.inv (upd G' t (gS .dn a c sx)) m') G m d := by
+  unfold task
+  refine WP.bind ?_
+  rw [StateT.run'_eq, map_eq_pure_bind]
+  refine WP.bind ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  -- `lock`
+  refine WP.bind (WP.callC (WP.mono ?_ (lock_spec fits rfl mptr t (gT .lk) rfl G m d hi)))
+  rintro _ G₂ m₂ d₂ ⟨-, hc₂, hL, hi₂⟩
+  have hi₂' : proto.inv (upd G₂ t (gH .lk hL)) m₂ := hi₂
+  -- the load of the counter
+  refine WP.bind (wp_cntLoad ht hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
+  have hle := cnt_le (Y := fun u => (upd G₂ t (gH .lk hL) u).2) ht (by
+    show (upd G₂ t (gH .lk hL) t).2.cnt = 0; rw [upd_self]; rfl)
+  generalize hS : cnt (fun u => (upd G₂ t (gH .lk hL) u).2) = S at hle ⊢
+  have hS3 : S + 1 < 2 ^ 32 := Nat.lt_of_le_of_lt (by omega : S + 1 ≤ 2) (by decide)
+  have hS32 : (BitVec.ofNat 32 S).toNat = S := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  -- the add
+  refine WP.bind (WP.callRC (fun e he => (add_one_noErr (by rw [hS32]; exact hS3) e he).elim)
+    fun v₃ hadd => ?_)
+  have hv₃ := add_one_ok hadd (by rw [hS32]; exact hS3)
+  rw [hS32] at hv₃
+  -- the store
+  refine WP.bind (wp_cntStore v₃ ht hi₃ hc₃ (by
+    apply BitVec.eq_of_toNat_eq
+    rw [hv₃, cnt_inc ht hL hQ, hS, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3])
+    fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
+  -- `unlock`
+  refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec fits rfl mptr t (gH .inc hQ') rfl G₂ m₄ d₂ hi₄)))
+  rintro _ G₃ m₅ d₃ ⟨-, -, hi₅⟩
+  have hi₅' : proto.inv (upd G₃ t (gT .inc)) m₅ := hi₅
+  -- `finish`
+  refine WP.bind (WP.callC (WP.mono ?_ (finish_spec ht G₃ m₅ d₃ hi₅')))
+  rintro _ G₄ m₆ d₄ ⟨a, c, sx, hi₆⟩
+  simp only [StateT.run_pure, pure_bind]
+  exact WP.pure' (WP.pure' (WP.pure' ⟨a, c, sx, hi₆⟩))
+
+/-- The tasks spawned no thread. -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : proto.inv G m)
+    (hu : 0 < u) : joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, -, -, h⟩ := hi.2.shape
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have hsp : ∀ j (hj : j < m.threads.size), (m.threads[j]'hj).spawner = 0 := by
+    intro j hj
+    rcases h with ⟨h1, -⟩ | ⟨h2, -, h1, -⟩ | ⟨h3, -, -, -, h1, h2⟩
+    · obtain rfl : j = 0 := by omega
+      rw [Array.getElem?_eq_getElem hj] at h0; rw [Option.some.inj h0]
+    · rcases (by omega : j = 0 ∨ j = 1) with rfl | rfl
+      · rw [Array.getElem?_eq_getElem hj] at h0; rw [Option.some.inj h0]
+      · rw [Array.getElem?_eq_getElem hj] at h1; rw [Option.some.inj h1]
+    · rcases (by omega : j = 0 ∨ j = 1 ∨ j = 2) with rfl | rfl | rfl
+      · rw [Array.getElem?_eq_getElem hj] at h0; rw [Option.some.inj h0]
+      · rw [Array.getElem?_eq_getElem hj] at h1; rw [Option.some.inj h1]
+      · rw [Array.getElem?_eq_getElem hj] at h2; rw [Option.some.inj h2]
+  rw [hsp i hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+theorem discard_eq (x : ConcM Tgt Unit) : discard x = (fun _ => ()) <$> x := rfl
+
+theorem dispatch_task (p : Ptr) : dispatch (Tgt.task p) = (fun _ => ()) <$> task p := by
+  rw [show dispatch (Tgt.task p) = discard (task p) from rfl]; exact discard_eq _
+
+/-- A task: `task` on the `Tally`, then its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | task p =>
+    obtain ⟨rfl, rfl⟩ := hg
+    have hu12 : u = 1 ∨ u = 2 := by
+      have := hi.2.out3 u
+      by_cases h3 : 3 ≤ u
+      · rw [hgu] at this; exact absurd (this h3) (by decide)
+      · unfold ThreadId at *; omega
+    rw [dispatch_task]
+    refine WP.map (WP.mono ?_ (task_spec hu12 G _ d
+      (by rw [show gT .lk = G u from hgu.symm, upd_same]; exact inv_cur hi u) rfl))
+    rintro _ G' m' _ ⟨a, c, sx, hi'⟩
+    have hq : QOk (upd G' u (gS .fin a c sx)) m' := by
+      intro w hw
+      rcases hi'.2.q w hw with h | ⟨a', b', c', d'⟩
+      · exact .inl h
+      · have hu0 : (0 : ThreadId) ≠ u := Nat.ne_of_lt hu
+        refine .inr ⟨a', b', by rw [upd_ne _ _ hu0] at c' ⊢; exact c', ?_⟩
+        rcases hu12 with rfl | rfl
+        · simp only [upd_self, upd_ne _ _ (show (2 : ThreadId) ≠ 1 by decide)] at d' ⊢
+          simpa [gS] using d'
+        · simp only [upd_self, upd_ne _ _ (show (1 : ThreadId) ≠ 2 by decide)] at d' ⊢
+          simpa [gS] using d'
+    have hfin := inv_frozen (ph := .dn) (ph' := .fin) hu12 hi' (upd_self _ _ _) (.inr rfl) (.inr rfl)
+      (fun h => by cases h) hi'.1 rfl rfl rfl rfl rfl (by rw [upd_upd]; exact hq)
+    rw [upd_upd] at hfin
+    exact ⟨_, hfin, ⟨rfl, rfl⟩, fun _ => joinedAll_kid hfin hu⟩
+  | producer p => cases hg
+  | work p => cases hg
+
 end Threadsync.WG
