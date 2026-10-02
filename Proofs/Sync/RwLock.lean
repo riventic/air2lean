@@ -282,6 +282,8 @@ inductive Ph where
   | wa (k : Nat) (p : MP)
   /-- The writer saw a reader: it waits at the semaphore. -/
   | ws (k : Nat)
+  /-- The writer took the semaphore's permit and `n`; it is still in the semaphore's `wait`. -/
+  | wg (k : Nat)
   /-- The writer owns `n`. -/
   | wn (k : Nat)
   /-- The writer did `state &= ~is_writing`; it holds the mutex, or is in its `unlock`. -/
@@ -295,7 +297,7 @@ namespace Ph
 /-- The place in the mutex's code. -/
 def mp : Ph → Option MP
   | sl _ p | sr _ p | wa _ p | wr _ p => some p
-  | ws _ | wn _ => some .holds
+  | ws _ | wg _ | wn _ => some .holds
   | _ => Option.none
 
 /-- The same place, at `p` in the mutex's code. -/
@@ -308,7 +310,7 @@ def setM : Ph → MP → Ph
 
 /-- The writer's increments (`n`). -/
 def cnt : Ph → Nat
-  | wo k | wa k _ | ws k | wn k | wr k _ => k
+  | wo k | wa k _ | ws k | wg k | wn k | wr k _ => k
   | wf => 2
   | _ => 0
 
@@ -318,7 +320,7 @@ def wb : Ph → Nat
   | _ => 0
 
 def ib : Ph → Nat
-  | ws _ | wn _ => 1
+  | ws _ | wg _ | wn _ => 1
   | _ => 0
 
 def rb : Ph → Nat
@@ -327,7 +329,7 @@ def rb : Ph → Nat
 
 /-- The thread owns `n`. -/
 def mustN : Ph → Bool
-  | sr _ _ | sh _ | po | wn _ => true
+  | sr _ _ | sh _ | po | wg _ | wn _ => true
   | _ => false
 
 /-- The writer waits at the semaphore. -/
@@ -347,7 +349,7 @@ def live : Ph → Bool
 
 /-- In the semaphore's code. -/
 def inSem : Ph → Bool
-  | po | pd | ws _ => true
+  | po | pd | ws _ | wg _ => true
   | _ => false
 
 /-- `main`'s places after its spawn. -/
@@ -368,7 +370,7 @@ def pw : Ph → Bool
 /-- The writer's places (`k ≤ 2` increments). -/
 def isW : Ph → Bool
   | wo k | wn k => decide (k ≤ 2)
-  | wa k _ | ws k => decide (k < 2)
+  | wa k _ | ws k | wg k => decide (k < 2)
   | wr k _ => decide (k ≤ 2)
   | wf => true
   | _ => false
@@ -2438,25 +2440,15 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
 theorem not_both {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m)
     (h0 : (G 0).2.2.mustN) (h1 : (G 1).2.2.mustN) : False := by
   have hu := hi.2.1
-  have hj : ∀ u, (G u).2.2.mustN → (G u).2.2.inSem = false → joinedB m u = false := fun u hm hns => by
-    have hlv : (G u).2.2.live := by cases e : (G u).2.2 <;> simp_all [Ph.mustN, Ph.live]
-    refine (hi.1.live u ?_).2
-    rcases hu.lph u hns with h | h | ⟨-, h⟩
-    · show (G u).1.ph ≠ _; rw [h]; decide
-    · show (G u).1.ph ≠ _; rw [h]; decide
-    · rw [hlv] at h; cases h
-  have hW : (G 1).2.2.isW := by
-    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, -, hW, -⟩⟩ := hu.shape
+  have hj1 : joinedB m 1 = false := by
+    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, h1' | ⟨-, hwf⟩, -⟩⟩ := hu.shape
     · have := hn 1 (Nat.le_refl _); change (G 1).2.2 = _ at this; rw [this] at h1; cases h1
-    · exact hW
-  have hn0 : (G 0).2.2.inSem = false := by
-    cases e : (G 0).2.2 <;> simp_all [Ph.mustN, Ph.inSem]
-    obtain ⟨k, hk⟩ := hu.flags.po e; rw [hk] at h1; cases h1
-  have hn1 : (G 1).2.2.inSem = false := by cases e : (G 1).2.2 <;> simp_all [Ph.mustN, Ph.inSem, Ph.isW]
+    · simp [joinedB, h1']
+    · change (G 1).2.2 = _ at hwf; rw [hwf] at h1; cases h1
   have a := hu.parts 0; simp only [h0, ↓reduceIte] at a
   have b := hu.parts 1; simp only [h1, ↓reduceIte] at b
   have hd := hi.1.own.disj 0 1 (by decide)
-  rw [Lock.own_live (hj 0 h0 hn0), Lock.own_live (hj 1 h1 hn1)] at hd
+  rw [Lock.own_live (by rfl : joinedB m 0 = false), Lock.own_live hj1] at hd
   exact npts_meet a b (Heap.disjoint_union_right.mp (Heap.disjoint_union_left.mp hd).1).1
 
 /-- `unlock` of the `RwLock` by the writer at `wn k`, which owns `n` (`hn`): it gives `n` to the
@@ -3263,6 +3255,7 @@ theorem unlockS_spec (hE : E.Spec) {j : Bool} {h : Heap} {io : Io} {G : ThreadId
     obtain ⟨k, hk⟩ : ∃ k, (G₁ 1).2.2 = .ws k := by
       cases e : (G₁ 1).2.2 <;> rw [e] at hi1 <;> simp [Ph.ib] at hi1
       · exact ⟨_, rfl⟩
+      · exact absurd (by rw [e]; rfl) (fun h => not_both hi₁ (by rw [hg0]; rfl) h)
       · exact absurd (by rw [e]; rfl) (fun h => not_both hi₁ (by rw [hg0]; rfl) h)
     have hjf : j = false := by
       cases j
