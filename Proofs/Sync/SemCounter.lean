@@ -538,4 +538,92 @@ theorem wp_n {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} {G : ThreadId 
     · rw [upd_ne _ _ e] at hu' ⊢; have := hu.wx u (by rw [upd_ne _ _ e]; exact hu')
       rwa [upd_ne _ _ e] at this
 
+
+/-! ## The semaphore's specs for this protocol -/
+
+/-- A new ghost value `g'` of thread `t`, with the same memory and the same sum. -/
+theorem U_retag {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g g' : Gh} (hu : U (upd G t g) m)
+    (hsh : Shape (XG (upd G t g')) m)
+    (hpt : if g'.2.2.holds then NP (XG (upd G t g')) g'.1.part else g'.1.part = Heap.empty)
+    (hsum : sum (XG (upd G t g')) = sum (XG (upd G t g)))
+    (hone : g'.2.2.holds = false ∨ ∀ u, u ≠ t → (G u).2.2.holds = false)
+    (hwx : g'.2.1.waits = true → ∃ k, g'.2.2 = .work k false) : U (upd G t g') m := by
+  refine ⟨hsh, hu.io, fun u => ?_, hu.blk, hu.q, ?_, fun u hu' => ?_⟩
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; exact hpt
+    · have := hu.parts u
+      rw [upd_ne _ _ e] at this ⊢
+      unfold NP at this ⊢; rw [hsum]; exact this
+  · have h0 := hu.one
+    rcases hone with h | h
+    · by_cases e0 : t = 0
+      · subst e0; exact .inl (by rw [upd_self]; exact h)
+      · by_cases e1 : t = 1
+        · subst e1; exact .inr (by rw [upd_self]; exact h)
+        · rw [upd_ne _ _ (Ne.symm e0), upd_ne _ _ (Ne.symm e1)] at h0 ⊢; exact h0
+    · by_cases e0 : t = 0
+      · subst e0; exact .inr (by rw [upd_ne _ _ (by decide)]; exact h 1 (by decide))
+      · exact .inl (by rw [upd_ne _ _ (Ne.symm e0)]; exact h 0 (Ne.symm e0))
+  · by_cases e : u = t
+    · subst e; rw [upd_self] at hu' ⊢; exact hwx hu'
+    · rw [upd_ne _ _ e] at hu' ⊢; have := hu.wx u (by rw [upd_ne _ _ e]; exact hu')
+      rwa [upd_ne _ _ e] at this
+
+/-- `n` has a byte. -/
+theorem np_cell {v : BitVec 32} {h : Heap} (hp : pts nPtr 4 v h) : h (0, 40) ≠ none := by
+  obtain ⟨A, Sz, K, bs, -, hs, -, hb, -⟩ := hp
+  exact bytesAt_in hb rfl (by simp [nPtr, cPtr, Ptr.add]) (by
+    rw [hs, show Enc.size (BitVec 32) = 4 from rfl]; simp [nPtr, cPtr, Ptr.add])
+
+/-- The sum after a change of the permit flag of thread `t`. -/
+theorem sum_flag (X : ThreadId → Ph) (t k : Nat) (b b' : Bool) (hx : X t = .work k b) :
+    sum (upd X t (.work k b')) = sum X := by
+  unfold sum
+  by_cases h0 : t = 0
+  · subst h0; rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), hx]; rfl
+  · by_cases h1 : t = 1
+    · subst h1; rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), hx]; rfl
+    · rw [upd_ne _ _ (Ne.symm h0), upd_ne _ _ (Ne.symm h1)]
+
+section Specs
+
+variable (t : ThreadId) (k : Nat)
+
+/-- In `wait`, no other thread waits at the condition: the thread with the permit is neither
+`t` nor a waiter. -/
+theorem hone_w : ∀ G' m', proto.inv G' m' → (G' t).2.2 = .work k false →
+    (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t → ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e := by
+  intro G' m' hi hx _ hpz u hut i jr sn e hr
+  obtain ⟨hl, -, hu⟩ := hi
+  obtain ⟨ku, hku⟩ := hu.wx u (by rw [hr]; rfl)
+  have hh := held_of_pz hl hpz
+  obtain ⟨ht2, -, -⟩ := shape_work hu.shape hx
+  obtain ⟨hu2, -, -⟩ := shape_work hu.shape hku
+  simp only [held, Bool.or_eq_true, XG] at hh
+  have : t = 0 ∧ u = 1 ∨ t = 1 ∧ u = 0 := by unfold ThreadId at *; omega
+  rcases this with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rw [hx, hku] at hh <;> simp [Ph.holds] at hh
+
+theorem hmv_w (ht : t < 2) : ∀ Y : ThreadId → Ph, Y t = .work k false → S.pv Y ≠ 0 →
+    S.pv (upd Y t (.work k true)) = S.pv Y - 1 ∧
+    ∀ hr, S.Res Y hr → ∃ h₁ h₂, hr = h₁ ∪ h₂ ∧ Heap.Disjoint h₁ h₂ ∧
+      S.Res (upd Y t (.work k true)) h₁ ∧ (fun h => ∃ v : BitVec 32, pts nPtr 4 v h) h₂ := by
+  intro Y hY hpv
+  have hn : held Y = false := by
+    cases h : held Y
+    · rfl
+    · exact absurd (by show (if held Y then (0 : BitVec 64) else 1) = 0; rw [h]; rfl) hpv
+  have hy : held (upd Y t (.work k true)) = true := by
+    simp only [held, Bool.or_eq_true]
+    rcases (show t = 0 ∨ t = 1 by unfold ThreadId at *; omega) with rfl | rfl
+    · exact .inl (by rw [upd_self]; rfl)
+    · exact .inr (by rw [upd_self]; rfl)
+  refine ⟨?_, fun hr hR => ⟨Heap.empty, hr, (Heap.empty_union hr).symm, Heap.disjoint_empty _ |>.symm, ?_, ?_⟩⟩
+  · show (if held _ then (0 : BitVec 64) else 1) = (if held Y then (0 : BitVec 64) else 1) - 1
+    rw [hy, hn]; rfl
+  · show (if held _ then emp else NP _) Heap.empty; rw [hy]; rfl
+  · have : (if held Y then emp else NP Y) hr := hR
+    rw [hn] at this; exact ⟨_, this⟩
+
+end Specs
+
 end Sync.SemCounter
