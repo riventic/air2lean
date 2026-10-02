@@ -1193,7 +1193,6 @@ theorem main_spec (io : Io) (d : Nat) :
       writeBytes_all (by rw [hsN, enc_u32])] at F₄
     exact F₄
   -- the spawn
-  simp only [StateT.run_bind]
   refine WP.bind (WP.spawnC fun k _ => ⟨gPre, inv_pre ho₄ hPa hA8 hth₄ hat₄ hq₄, fun G₁ m₅ hg₁ hi₅ =>
     ⟨gOut 0, ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
   -- after the stop: `main` alone, at `gPre`
@@ -1338,7 +1337,7 @@ theorem main_spec (io : Io) (d : Nat) :
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
-    simp only [true_and, show 0 < m₈.clocks.size by omega, ↓reduceIte, show (0 : Nat) = 0 from rfl]
+    simp only [true_and, show 0 < m₈.clocks.size by omega, ↓reduceIte]
     rw [hs₉] at hu
     by_cases h0 : u = 0
     · subst h0; simp [VClock.le_refl]

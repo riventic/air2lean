@@ -7,15 +7,16 @@ import ZigLean.Conc.Word
 An `Io.Semaphore` (Zig 0.16.0's std code, translated; the futex under it is the model) is a
 permit count (8 bytes at offset `o` of block `b`), an `Io.Mutex` (offset `o + 8`) and an
 `Io.Condition` (state at `o + 12`, epoch at `o + 16`). This file gives the specs of its two ops
-for every protocol that has the semaphore (`Sem.Fits`): `SemOps.wait_spec` (the thread gets one
-permit and its resource) and `SemOps.post_spec` (the thread gives one back).
+for every protocol that has the semaphore (`Sem.Fits`): `Sem.wait_spec` (the thread gets one
+permit and its resource) and `Sem.post_spec` (the thread gives one back).
 
 - **The mutex** is a lock (`ZigLean/Conc/Lock.lean`) that owns the permit count, whose value is
   `pv` of the protocol's ghost values, and the resource of the free permits (`Res`). `wait` takes a
-  part of `Res` to the thread's part (`Tk`), `post` gives a part back.
+  part of `Res` to the thread's part (`T`), `post` gives a part back.
 - **The condition** (`Sem.Inv`). Its state and epoch are shared words (`ZigLean/Conc/Word.lean`).
   At most one thread waits at the condition (`one`; the protocol shows it at each `wait` with no
-  permit): its `waiters += 1` is state write `jr`, and it loaded epoch write `i` (`SPh.reg`). After
+  permit): its `waiters += 1` is state write `jr`, and it loaded epoch write `i` with the value `e` (`SPh.reg`). Only a thread with a ghost value
+  that the protocol allows (`Sem.wx`) waits there. After
   that the state has at most one more write (`signals += 1`, by a `signal`), and the epoch at most
   one more (`+ 1`, after that signal: `Era`). A thread in the critical code of the condition
   (`SPh.crit`) holds the mutex, so these writes cannot interleave.
@@ -416,7 +417,7 @@ theorem Inv.congr {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (ha : m
 /-- A step that changes only `current` and the woken threads. -/
 theorem Step.cur (t : ThreadId) (m : Mem) (c : ThreadId) (wk : Array ThreadId) :
     S.Step t m { m with current := c, woken := wk } :=
-  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun e he => .inl he,
+  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun _ he => .inl he,
     fun _ hw _ _ => hw, rfl, fun _ _ _ _ _ => Iff.rfl, fun _ hl => .inl hl⟩
 
 theorem Step.refl (t : ThreadId) (m : Mem) : S.Step t m m := by
@@ -1294,7 +1295,7 @@ theorem bits_take' : Packed.toBits (cst ((Packed.ofBits (0x10001 : BitVec 32) : 
 theorem Step.wake {t : ThreadId} {m : Mem} (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId)
     (hw : ∀ w ∈ ws, w ∈ m.waiters) :
     S.Step t m { m with current := t, waiters := ws, woken := wk } :=
-  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun e he => .inl he,
+  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun _ he => .inl he,
     fun w h _ _ => hw w h, rfl, fun _ _ _ _ _ => Iff.rfl, fun _ hl => .inl hl⟩
 
 /-- A new futex queue `ws` (a part of the old one, with no thread at the epoch's futex) and
@@ -1483,7 +1484,7 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       simp only [StateT.run_bind]
       refine WP.bind (WP.bind (show P.WP t ((callRC (optPayload (some r)) : CM Tgt _ _).run _) _ _ _ _ from
         WP.callRC_ok (v := r) rfl ?_))
-      simp only [StateT.run_pure, StateT.run_modify]
+      simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, ↓reduceIte]
       refine ⟨⟨by omega, hop.current, b, hr, sv_of hs₁ hj hv, by rw [← hg₁, upd_same]; exact hi₂, fun _ => ?_⟩,
@@ -1742,7 +1743,7 @@ theorem live_reg (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {r i jr : 
 theorem Step.sleep {t : ThreadId} {m : Mem} (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId)
     (hw : ∀ w ∈ ws, w ∈ m.waiters ∨ w.2 = S.WE.ptr) :
     S.Step t m { m with current := t, waiters := ws, woken := wk } :=
-  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun e he => .inl he,
+  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun _ he => .inl he,
     fun w h _ h2 => (hw w h).resolve_right h2, rfl, fun _ _ _ _ _ => Iff.rfl, fun _ hl => .inl hl⟩
 
 /-- The waiter `t`'s futex wait at the epoch, with the value `e` of epoch write `i`. It sleeps
@@ -2053,7 +2054,7 @@ theorem loop56_body (hP : S.Fits P U) (D : Nat) (s : Io_Condition_waitInnerLocal
       simp only [Option.isSome_some, ↓reduceIte]
       simp only [StateT.run_bind]
       refine WP.bind (WP.callRC_ok (v := r) rfl ?_)
-      simp only [StateT.run_pure, StateT.run_modify]
+      simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, ↓reduceIte]
       refine ⟨⟨by omega, hop.current, false, b, hr, sv_of hs₁ hj hv, hep,
@@ -2097,7 +2098,7 @@ theorem loop23_body (hP : S.Fits P U) (D : Nat) (s : Io_Condition_waitInnerLocal
   simp only at he
   subst ep
   unfold Io_Condition_waitInner.loop23
-  simp only [StateT.run_bind, StateT.run_get]
+  simp only [StateT.run_bind]
   simp only [pure_bind]
   refine WP.bind ?_
   simp only [↓reduceIte]
@@ -2157,7 +2158,7 @@ theorem loop23_body (hP : S.Fits P U) (D : Nat) (s : Io_Condition_waitInnerLocal
   · simp only [StateT.run_pure]
     refine WP.pure' ?_
     dsimp only
-    simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+    simp only [isNonErr]
     refine WP.pure' (WP.pure' ?_)
     simp only [Io_Condition_waitInner.again23, ↓reduceIte]
     exact ⟨⟨by omega, hc₆, hep, hi₆⟩, .inl (by omega)⟩
@@ -2221,7 +2222,7 @@ theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (i
   rintro r G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, hL₁, hi₁⟩
   simp only [StateT.run_pure]
   simp only [pure_bind]
-  simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+  simp only [isNonErr]
   exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
 
 
@@ -2296,7 +2297,6 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
   simp only [StateT.run_bind, pure_bind]
   rw [ptr0 (S := S)]
   refine WP.bind (WP.bind (wp_cntLoad hP hi hc fun m' hL' hc' hi' => ?_))
-  simp only [StateT.run_pure, pure_bind]
   by_cases hz : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) = 0
   · rw [hz]
     simp only [beq_self_eq_true, ↓reduceIte, StateT.run_bind]
@@ -2360,12 +2360,10 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
     (post5 (S := S) (P := P) t pa x d₁) (loop5_body t pa x hP io hone hwx d₁) _ G₁ m₁ d₁
     ⟨by omega, hc₁, hL₁, hi₁⟩))
   rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, rfl, hc₂, hL₂, hi₂, hz₂⟩
-  simp only [StateT.run_bind, pure_bind]
+  simp only [StateT.run_bind]
   rw [ptr0 (S := S)]
   refine WP.bind (wp_cntLoad hP hi₂ hc₂ fun m₃ hL₃ hc₃ hi₃ => ?_)
-  simp only [StateT.run_bind, pure_bind]
   refine WP.bind (WP.callRC_ok (sub1_run hz₂) ?_)
-  simp only [StateT.run_bind, pure_bind]
   have hY := xs_self G₂ t (⟨.holds, pa, hL₃⟩, .none, x)
   have hxs := xs_eq G₂ t ⟨.holds, pa, hL₃⟩ ⟨.holds, pa, hL₂⟩ .none .none x
   refine WP.bind (wp_cnt hP (Mv := fun pa' => ∃ h₃ h₄, T h₃ ∧ pa' = pa ∪ h₃ ∧ Heap.Disjoint h₄ h₃ ∧
@@ -2385,7 +2383,6 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
     · rw [xs_upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x)]; exact hpv
   subst hpa
   refine WP.bind (wp_cntLoad hP hi₄ hc₄ fun m₅ hL₅ hc₅ hi₅ => ?_)
-  simp only [StateT.run_pure, pure_bind]
   have hfin : ∀ G₆ m₆ d₆ hL₆, d₆ ≤ d₁ → m₆.current = t →
       P.inv (upd G₆ t (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x')) m₆ →
       P.WP t ((do
@@ -2439,7 +2436,7 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
-  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  simp only [StateT.run_bind, pure_bind]
   refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
     (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x) rfl rfl io G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
