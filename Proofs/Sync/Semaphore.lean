@@ -88,9 +88,10 @@ def WE : Word 32 4 := { b := S.b, o := S.o + 16 }
 /-- The newest write of a word. -/
 abbrev last (h : Array Word.Entry) : Word.Entry := h[h.size - 1]!
 
-/-- The clock `c` happened before the mutex's holder, or before its newest message. -/
+/-- The clock `c` happened before the mutex's holder, before its newest message, or before every
+thread. -/
 def HBH (G : ThreadId → SGh X) (m : Mem) (c : VClock) : Prop :=
-  (∃ u, (G u).1.ph = .holds ∧ VClock.le c (m.clocks[u]!) = true) ∨ S.L.Before m c
+  (∃ u, (G u).1.ph = .holds ∧ VClock.le c (m.clocks[u]!) = true) ∨ S.L.Before m c ∨ AllLe m c
 
 /-- The values of the condition's state: `(0, 0)`, `(1, 0)`, `(1, 1)` (`waiters` low). -/
 def SV (v : BitVec 32) : Prop := v = 0 ∨ v = 1 ∨ v = 0x10001
@@ -224,12 +225,14 @@ theorem PZ.mono {m m' : Mem} (h : S.PZ m)
 theorem HBH.mono {G G' : ThreadId → SGh X} {m m' : Mem} {c : VClock} (h : S.HBH G m c)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hh : ∀ u, (G u).1.ph = .holds → (G' u).1.ph = .holds ∨ S.L.Before m' (m.clocks[u]!))
-    (hb : ∀ c, S.L.Before m c → S.L.Before m' c) : S.HBH G' m' c := by
-  rcases h with ⟨u, hu, hle⟩ | hbf
+    (hb : ∀ c, S.L.Before m c → S.L.Before m' c) (hth : m'.threads.size = m.threads.size) :
+    S.HBH G' m' c := by
+  rcases h with ⟨u, hu, hle⟩ | hbf | hal
   · rcases hh u hu with h' | h'
     · exact .inl ⟨u, h', VClock.le_trans hle (hcl u)⟩
-    · exact .inr (before_le h' hle)
-  · exact .inr (hb _ hbf)
+    · exact .inr (.inl (before_le h' hle))
+  · exact .inr (.inl (hb _ hbf))
+  · exact .inr (.inr fun u hu => VClock.le_trans (hal u (by omega)) (hcl u))
 
 theorem Era.mono {G G' : ThreadId → SGh X} {m m' : Mem} {u i jr : Nat} {sn : Bool}
     (h : S.Era G m u i jr sn e) (hS : S.WS.hist m' = S.WS.hist m) (hE : S.WE.hist m' = S.WE.hist m)
@@ -321,7 +324,7 @@ theorem Inv.lockStep (G : ThreadId → SGh X) (m m' : Mem) (t : ThreadId) (p : L
         by_cases hp : p = .holds
         · subst hp; exact .inl (by rw [upd_self]; rfl)
         · exact .inr (hrel hu hp)
-      · exact .inl (by rw [hph u hut]; exact hu)) (fun c => hs.before c)
+      · exact .inl (by rw [hph u hut]; exact hu)) (fun c => hs.before c) (by rw [hs.threads])
   have hpz : S.PZ m → S.PZ m' := fun h' => PZ.mono h' fun x h1 h2 => hs.heap (by
     simp only [Lock.prod, not_and, Nat.not_lt]; intro _ h3; omega)
   refine ⟨hi.ws.keep hkS, hi.we.keep hkE, by rw [hhS]; exact hi.sv,
@@ -387,7 +390,7 @@ theorem Inv.congr {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (ha : m
   have hbf : ∀ c, S.L.Before m c → S.L.Before m' c := fun c ⟨i, l, hl, hle⟩ =>
     ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩
   have hhb : ∀ c, S.HBH G m c → S.HBH G m' c := fun c h =>
-    HBH.mono h hcl (fun u hu => .inl hu) hbf
+    HBH.mono h hcl (fun u hu => .inl hu) hbf (by rw [ht])
   have hpz : S.PZ m → S.PZ m' := fun h => PZ.mono h fun x _ _ => by simp only [Mem.heap, hb]
   refine ⟨hi.ws.keep (hk _), hi.we.keep (hk _), by rw [hS]; exact hi.sv, hi.one,
     fun hn => by rw [hS]; exact hi.idle hn, fun u i jr sn e hu => ?_, by rw [hE]; exact hhb _ hi.hbE,
@@ -649,9 +652,10 @@ theorem Inv.mono {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (hws : S
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hbf : ∀ c, S.L.Before m c → S.L.Before m' c) (hpz : S.PZ m → S.PZ m' ∨ ∃ v, (G v).2.1 = .pst)
     (hwt : ∀ w ∈ m'.waiters, w.2 = S.WE.ptr → w ∈ m.waiters ∨
-      ∃ i jr e, (G w.1).2.1 = .reg i jr false e ∧ (S.WE.hist m).size = i + 1) : S.Inv G m' := by
+      ∃ i jr e, (G w.1).2.1 = .reg i jr false e ∧ (S.WE.hist m).size = i + 1)
+    (hth : m'.threads.size = m.threads.size) : S.Inv G m' := by
   have hhb : ∀ c, S.HBH G m c → S.HBH G m' c := fun c h =>
-    HBH.mono h hcl (fun u hu => .inl hu) hbf
+    HBH.mono h hcl (fun u hu => .inl hu) hbf hth
   refine ⟨hws, hwe, by rw [hS]; exact hi.sv, hi.one, fun hn => by rw [hS]; exact hi.idle hn,
     fun u i jr sn e hu => (hi.era u i jr sn e hu).mono hS hE hcl hhb hpz fun v _ _ hv => ⟨v, hv⟩,
     by rw [hE]; exact hhb _ hi.hbE, hi.crit, fun u i e hu => by rw [hE]; exact hi.ld u i e hu,
@@ -687,7 +691,7 @@ theorem Inv.opKeep {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {G : ThreadId �
   refine hi.mono (hok _ (.inl rfl)).1 (hok _ (.inr rfl)).1 (hok _ (.inl rfl)).2 (hok _ (.inr rfl)).2
     hop.clocks (fun c ⟨i, l, hl, hle⟩ => ⟨i, l, (hop.locs.same _ _ ?_ i l).mpr hl, hle⟩)
     (fun h => .inl (PZ.mono h fun x _ h2 => hop.cells _ ?_))
-    (fun w hw _ => .inl (by rw [hop.waiters] at hw; exact hw))
+    (fun w hw _ => .inl (by rw [hop.waiters] at hw; exact hw)) (by rw [hop.threads])
   · by_cases e : S.L.b = W.b
     · exact .inr (by simp only [Lock.prod]; omega)
     · exact .inl e
@@ -712,7 +716,7 @@ theorem Inv.retag {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} {g : SGh X} 
     HBH.mono h (fun _ => VClock.le_refl _) (fun u hu => .inl (by
       by_cases e : u = t
       · subst e; rw [upd_self]; exact hhold hu
-      · rw [hne u e]; exact hu)) fun _ h => h
+      · rw [hne u e]; exact hu)) (fun _ h => h) rfl
   have hinc' : ∀ u, (upd G t g u).2.1 = .inc ↔ (G u).2.1 = .inc := fun u => by
     rw [hsp]; split
     · rename_i e; subst e; exact hinc
@@ -831,7 +835,7 @@ theorem op_keep {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {t : ThreadId} {m m
 
 theorem HBH.op {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {G : ThreadId → SGh X} {t : ThreadId}
     {m m' : Mem} (hop : W.Op t m m') {c : VClock} (h : S.HBH G m c) : S.HBH G m' c :=
-  HBH.mono h hop.clocks (fun _ hu => .inl hu) (op_keep hW hop).1
+  HBH.mono h hop.clocks (fun _ hu => .inl hu) (op_keep hW hop).1 (by rw [hop.threads])
 
 /-- Thread `t` waits at the condition: `waiters += 1` (state write `jr`). -/
 theorem Inv.reg {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {i : Nat} {ord : AtomicOrder}
@@ -851,7 +855,7 @@ theorem Inv.reg {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {i : Nat} {
     fun c h => HBH.mono h hop.clocks (fun u hu => .inl (by
       by_cases e : u = t
       · subst e; rw [upd_self]; exact hu
-      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1
+      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1 (by rw [hop.threads])
   have hsz : (S.WS.hist m').size = (S.WS.hist m).size + 1 := by rw [hS]; simp
   have hnew : (S.WS.hist m')[(S.WS.hist m).size]! =
       Word.rmwEnt m' t ord (last (S.WS.hist m)) (1 : BitVec 32) := by
@@ -938,7 +942,7 @@ theorem Inv.consume {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {i jr :
     fun c h => HBH.mono h hop.clocks (fun u hu => .inl (by
       by_cases e : u = t
       · subst e; rw [upd_self]; exact hu
-      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1
+      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1 (by rw [hop.threads])
   have hsz : (S.WS.hist m').size = (S.WS.hist m).size + 1 := by rw [hS]; simp
   refine ⟨hw', hwe, fun k hk => ?_, fun u _ _ _ _ _ _ _ _ _ hu => absurd hu (hnr u _ _ _ _),
     fun _ => by rw [hS, last_push]; exact rmwEnt_val, fun u _ _ _ _ hu => absurd hu (hnr u _ _ _ _),
@@ -985,7 +989,7 @@ theorem Inv.sig {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {ord : Atom
     fun c h => HBH.mono h hop.clocks (fun u hu => .inl (by
       by_cases e : u = t
       · subst e; rw [upd_self]; exact hu
-      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1
+      · rw [hne u e]; exact hu)) (op_keep (.inl rfl) hop).1 (by rw [hop.threads])
   have hsz : (S.WS.hist m').size = jr + 2 := by rw [hS]; simp [hsR]
   have hnew : (S.WS.hist m')[jr + 1]! =
       Word.rmwEnt m' t ord (last (S.WS.hist m)) (0x10001 : BitVec 32) := by
@@ -1074,7 +1078,7 @@ theorem Inv.epoch {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {old : Bi
     fun c h => HBH.mono h hop.clocks (fun u hu => .inl (by
       by_cases e : u = t
       · subst e; rw [upd_self]; exact hu
-      · rw [hne u e]; exact hu)) (op_keep (.inr rfl) hop).1
+      · rw [hne u e]; exact hu)) (op_keep (.inr rfl) hop).1 (by rw [hop.threads])
   have hsz : (S.WE.hist m').size = (S.WE.hist m).size + 1 := by rw [hE]; simp
   have hold : ∀ k, k < (S.WE.hist m).size → (S.WE.hist m')[k]! = (S.WE.hist m)[k]! := fun k hk => by
     rw [hE, push_lt hk]
@@ -1171,7 +1175,7 @@ theorem Inv.stepIn {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {hQ : He
     · rw [hs.others u hu]; exact VClock.le_refl _
   exact hi.mono (hi.ws.keep hkS) (hi.we.keep hkE) (Word.hist_keep hi.ws hkS)
     (Word.hist_keep hi.we hkE) hcl (fun c ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold Lock.Loc; rw [hs.atomics]; exact hl, hle⟩)
-    hpz (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
+    hpz (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw)) (by rw [hs.threads])
 
 /-! ## The holder -/
 
@@ -1179,9 +1183,10 @@ theorem Inv.stepIn {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {hQ : He
 holder `t`. -/
 theorem HBH.le {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} {c : VClock} (hl : S.L.Inv G m)
     (hh : (G t).1.ph = .holds) (h : S.HBH G m c) : VClock.le c (m.clocks[t]!) = true := by
-  rcases h with ⟨u, hu, hle⟩ | ⟨i, l, hloc, hle⟩
+  rcases h with ⟨u, hu, hle⟩ | ⟨i, l, hloc, hle⟩ | hal
   · have := hl.one u t hu hh; subst this; exact hle
   · exact VClock.le_trans hle ((hl.rel i l hloc).2 t hh)
+  · exact hal t (hl.live t (by change (G t).1.ph ≠ _; rw [hh]; decide)).1
 
 /-- Only the holder `t` is in the critical code. -/
 theorem crit_one {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} (hl : S.L.Inv G m)
@@ -1292,7 +1297,7 @@ theorem Fits.requeue (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : T
     fun _ => Word.keep_same m t m.seen m.nextMsg ws wk m.groups
   have hs' := hs.mono (hs.ws.keep (hk _)) (hs.we.keep (hk _)) (Word.hist_congr rfl rfl)
     (Word.hist_congr rfl rfl) (fun _ => VClock.le_refl _) (fun _ h => h) (fun h => .inl h)
-    fun w hw _ => .inl (hsub w hw)
+    (fun w hw _ => .inl (hsub w hw)) rfl
   have hs'' := hs'.retag (t := t) (g := (a, .none, x)) (hhold := by rw [upd_self]; exact id)
     (hcrit := fun h => by cases h)
     (hreg := fun i jr _ => by rw [upd_self]; exact ⟨fun ⟨_, h⟩ => (by simp at h), fun ⟨_, h⟩ => (by simp at h)⟩)
@@ -1542,7 +1547,7 @@ theorem Inv.congrG {G G' : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m)
     (h1 : ∀ u, (G' u).2.1 = (G u).2.1) (h2 : ∀ u, (G' u).1.ph = .holds ↔ (G u).1.ph = .holds)
     (h3 : ∀ u x, S.o + 12 ≤ x → x < S.o + 20 → (G' u).1.part (S.b, x) = none) : S.Inv G' m := by
   have hhb : ∀ c, S.HBH G m c → S.HBH G' m c := fun c h =>
-    HBH.mono h (fun _ => VClock.le_refl _) (fun u hu => .inl ((h2 u).mpr hu)) fun _ h => h
+    HBH.mono h (fun _ => VClock.le_refl _) (fun u hu => .inl ((h2 u).mpr hu)) (fun _ h => h) rfl
   refine ⟨hi.ws, hi.we, hi.sv, fun u v i jr sn e i' jr' sn' e' hu hv => ?_, fun hn => hi.idle ?_,
     fun u i jr sn e hu => ?_, hhb _ hi.hbE, fun u hu => ?_, fun u i _ hu => ?_,
     fun u hu v i jr sn e hv => ?_, fun u hu v i jr sn e hv => ?_, fun w hw he => ?_, h3⟩
@@ -1793,7 +1798,7 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
       fun _ => Word.keep_same m₁ t m₁.seen m₁.nextMsg _ m₁.woken m₁.groups
     refine hP.pack hl (hs₁.mono (hs₁.ws.keep (hk _)) (hs₁.we.keep (hk _)) (Word.hist_congr rfl rfl)
       (Word.hist_congr rfl rfl) (fun _ => VClock.le_refl _) (fun _ h => h) (fun h => .inl h)
-      fun w hw _ => ?_) ?_
+      (fun w hw _ => ?_) rfl) ?_
     · rcases Array.mem_push.mp hw with hw | rfl
       · exact .inl hw
       · exact .inr ⟨i, jr, e, by rw [hg₁], hsz⟩
@@ -1927,7 +1932,7 @@ theorem Inv.see {G : ThreadId → SGh X} {m : Mem} {t i jr : Nat} {e : BitVec 32
           (fun _ => VClock.le_refl _) (fun u hu => .inl (by
             unfold upd; split
             · rename_i e; subst e; exact hu
-            · exact hu)) fun _ h => h) (fun h => .inl h) (fun v p hp hv => ⟨v, by
+            · exact hu)) (fun _ h => h) rfl) (fun h => .inl h) (fun v p hp hv => ⟨v, by
           unfold upd; split
           · rename_i e; subst e; rw [hg] at hv; rcases hp with rfl | rfl <;> cases hv
           · exact hv⟩)) with seen := fun _ => ⟨hsz, hc⟩ })
