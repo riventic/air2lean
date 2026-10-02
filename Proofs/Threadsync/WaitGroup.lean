@@ -2026,4 +2026,147 @@ theorem inv_sm {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pro
       · refine ⟨by rw [het]; decide, ?_⟩
         unfold ac; rw [het, hX0]; exact hle
 
+theorem nil_le (x : VClock) : VClock.le #[] x = true := by
+  unfold VClock.le VClock.get
+  rw [Array.all_eq_true]; intro i _; simp
+
+/-- The spawn of task `k` (the thread count before it) by `main` (at `p`, which goes to `p'`). -/
+theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {k : Nat} {p p' : Ph}
+    (hi : proto.inv G m) (hg : G 0 = gM Heap.empty { ph := p })
+    (hk : (k = 1 ∧ p = .sm ∧ p' = .sp1) ∨ (k = 2 ∧ p = .sp1 ∧ p' = .run))
+    (hsz : m.threads.size = k)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = k ∧ proto.inv (upd (upd G k (gT .lk)) 0 (gM Heap.empty { ph := p' })) m' := by
+  have hu := hi.2
+  have hk12 : k = 1 ∨ k = 2 := by rcases hk with ⟨h, -⟩ | ⟨h, -⟩ <;> simp [h]
+  have hk0 : (0 : ThreadId) ≠ k := by rcases hk12 with rfl | rfl <;> decide
+  have hcs : m.clocks.size = k := by rw [hi.1.own.csize, hsz]
+  have hjb := joinedB_fork hf
+  obtain ⟨hch, hm'⟩ := Lock.fork_eq hf
+  rw [hsz] at hch
+  subst hch
+  have hGk : (G c).2 = {} := by
+    obtain ⟨-, -, -, d⟩ := hu.shape
+    rcases hk with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
+    · rcases d with ⟨-, -, d3, -⟩ | ⟨d1, -⟩ | ⟨d1, -⟩
+      · exact d3
+      · omega
+      · omega
+    · rcases d with ⟨d1, -⟩ | ⟨-, -, -, -, d5⟩ | ⟨d1, -⟩
+      · omega
+      · exact d5
+      · omega
+  have hR : ∀ hL, L.R G hL → L.R (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' })) hL := by
+    intro hL hR
+    show R (fun u => (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) u).2) hL
+    refine (R_cnt (Y := fun u => (G u).2) ?_ ?_ hL).mpr hR <;>
+    · show (upd (upd G c (gT .lk)) 0 _ _).2.cnt = (G _).2.cnt
+      rw [upd_ne _ _ (by decide)]
+      unfold upd; split
+      · rename_i e; subst e; rw [hGk]; rfl
+      · rfl
+  have hL := hi.1.fork (t := 0) (g₁ := gM Heap.empty { ph := p' }) (g₀ := gT .lk)
+    (by rw [hg]; rfl) hf (by rw [hg]; rfl) (fun _ => .inl rfl) rfl rfl rfl rfl hR
+  subst hm'
+  have hth : ∀ u, u ≠ 0 → u ≠ c → upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) u = G u :=
+    fun u h0 hc => by rw [upd_ne _ _ h0, upd_ne _ _ hc]
+  have hX0 : (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) 0).2 = { ph := p' } := by
+    rw [upd_self]; rfl
+  have hXc : (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) c).2 = { ph := .lk } := by
+    rw [upd_ne _ _ (Ne.symm hk0), upd_self]; rfl
+  have hG0 : (G 0).2 = { ph := p } := by rw [hg]; rfl
+  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m.clocks) (t := 0)
+    (by rw [hcs]; rcases hk12 with rfl | rfl <;> decide)
+  have hcl' : ∀ u : Nat, VClock.le (m.clocks[u]!) (((m.clocks.set! 0 (VClock.bump (m.clocks[0]!) 0)).push
+      (VClock.bump (m.clocks[0]!) 0))[u]!) = true := fun u => by
+    by_cases hu' : u < m.clocks.size
+    · exact hcl u hu'
+    · rw [getElem!_neg m.clocks u hu']; exact nil_le _
+  have hXeq : ∀ u, XEq (G u).2 (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) u).2 := by
+    intro u
+    by_cases h0 : u = 0
+    · subst h0; rw [hX0, hG0]
+      rcases hk with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩ <;>
+        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · by_cases hc : u = c
+      · subst hc; rw [hXc, hGk]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · rw [hth u h0 hc]; exact XEq.refl _
+  refine ⟨rfl, hL, ?_⟩
+  obtain ⟨h00, -, h3, d⟩ := hu.shape
+  generalize hG' : upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) = G' at hX0 hXc hth hXeq ⊢
+  have hcne : ∀ u : ThreadId, 3 ≤ u → u ≠ c := fun u hu' e => by
+    subst e; rcases hk12 with rfl | rfl <;> exact absurd hu' (by decide)
+  have h3ne : ∀ u : ThreadId, 3 ≤ u → u ≠ 0 := fun u hu' =>
+    Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu')
+  have hsh' : Shape (fun u => (G' u).2)
+      { m with
+        current := 0
+        clocks := (m.clocks.set! 0 (VClock.bump (m.clocks[0]!) 0)).push (VClock.bump (m.clocks[0]!) 0)
+        threads := m.threads.push { spawner := 0, joined := false } } := by
+    refine ⟨by simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00, ?_,
+      fun u hu' => by show (G' u).2 = {}; rw [hth u (h3ne u hu') (hcne u hu')]; exact h3 u hu', ?_⟩
+    · show (G' 0).2.ph.isMain = true; rw [hX0]; rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> rfl
+    · rcases hk with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
+      · rcases d with ⟨-, -, -, d4⟩ | ⟨d1, -⟩ | ⟨d1, -⟩
+        · refine .inr (.inl ⟨by simp [hsz], by show (G' 0).2.ph = _; rw [hX0],
+            by simp only [Array.getElem?_push, hsz, ↓reduceIte],
+            by show (G' 1).2.ph.isTask = true; rw [hXc]; rfl,
+            by show (G' 2).2 = _; rw [hth 2 (by decide) (by decide)]; exact d4⟩)
+        · omega
+        · omega
+      · rcases d with ⟨d1, -⟩ | ⟨-, -, d3, d4, -⟩ | ⟨d1, -⟩
+        · omega
+        · refine .inr (.inr ⟨by simp [hsz], by show 3 ≤ (G' 0).2.ph.rank; rw [hX0]; decide,
+            by show (G' 1).2.ph.isTask = true; rw [hth 1 (by decide) (by decide)]; exact d4,
+            by show (G' 2).2.ph.isTask = true; rw [hXc]; rfl, ?_,
+            by simp only [Array.getElem?_push, hsz, ↓reduceIte]⟩)
+          simp only [Array.getElem?_push]; rw [if_neg (by omega), d3]; simp [hG0, hX0]
+        · omega
+  refine ⟨hsh', fun u hu' => ?_, fun x => ?_, fun u h3' => ?_,
+    blk_keep hu.blk rfl, fun w hw => ?_, fun u => ?_, fun u => ?_, fun u => ?_, fun u => ?_,
+    fun hr => ?_, fun hr => ?_⟩
+  · rw [← hG']; unfold upd; split
+    · rename_i e; exact absurd e hu'
+    · split
+      · rfl
+      · exact hu.parts u hu'
+  · rw [← hG', upd_self]; rfl
+  · rw [hth u (h3ne u h3') (hcne u h3')]; exact hu.out3 u h3'
+  · rcases hu.q w hw with h | ⟨-, -, c', -⟩
+    · exact .inl h
+    · rw [hG0] at c'; rcases hk with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩ <;> cases c'
+  · by_cases h0 : u = 0
+    · subst h0; rw [← hG', upd_self]
+      rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp [gM, X.frozen, X.fd, Ph.isTask]
+    · by_cases hc : u = c
+      · subst hc; rw [← hG', upd_ne _ _ (Ne.symm hk0), upd_self]; simp [gT, X.frozen, X.fd, Ph.isTask]
+      · rw [hth u h0 hc]; exact hu.sx1 u
+  · by_cases h0 : u = 0
+    · subst h0; rw [← hG', upd_self]
+      rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp [gM, X.frozen, X.fd, Ph.isTask]
+    · by_cases hc : u = c
+      · subst hc; rw [← hG', upd_ne _ _ (Ne.symm hk0), upd_self]; simp [gT, X.frozen, X.fd, Ph.isTask]
+      · rw [hth u h0 hc]; exact hu.wks u
+  · by_cases h0 : u = 0
+    · subst h0; rw [← hG', upd_self]
+      rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp [gM, X.frozen, X.fd, Ph.isTask]
+    · by_cases hc : u = c
+      · subst hc; rw [← hG', upd_ne _ _ (Ne.symm hk0), upd_self]; simp [gT, X.frozen, X.fd, Ph.isTask]
+      · rw [hth u h0 hc]; exact hu.fzc u
+  · by_cases h0 : u = 0
+    · subst h0; rw [← hG', upd_self]
+      rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp [gM, X.frozen, X.fd, Ph.isTask]
+    · by_cases hc : u = c
+      · subst hc; rw [← hG', upd_ne _ _ (Ne.symm hk0), upd_self]
+        simp [gT, X.frozen, X.fd, Ph.isTask, Ph.rank]
+      · rw [hth u h0 hc]; exact hu.lg u
+  · have hp := hu.pre (by rw [hG0]; rcases hk with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩ <;> decide)
+    have hkG : WG.Keep m _ := Word.keep_fork (by rw [hsz]; rcases hk12 with rfl | rfl <;> decide)
+      (by rw [hcs, hsz]) hf
+    have hkE : EV.Keep m _ := Word.keep_fork (by rw [hsz]; rcases hk12 with rfl | rfl <;> decide)
+      (by rw [hcs, hsz]) hf
+    exact Pre.keep (t := 0) hp hXeq (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
+      (Word.hist_keep hp.ev hkE) hcl' (by decide) (.inr fun e he => he) fun e he => .inl he
+  · exfalso; rw [hX0] at hr; rcases hk with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp [Ph.rank] at hr
+
 end Threadsync.WG
