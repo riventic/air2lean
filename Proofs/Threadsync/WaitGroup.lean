@@ -1174,4 +1174,78 @@ theorem linv_task {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} (hL : 
         · rename_i e; subst e; exact hc
         · rfl
 
+/-! ## The setter -/
+
+/-- The event's writes: the value of write `j`. -/
+theorem ev_val {m : Mem} {vs : List Nat} (h : EVOk m vs) {j : Nat} {v : BitVec 32}
+    (hj : j < (EV.hist m).size) (hv : (EV.hist m)[j]!.Val v) :
+    ∃ hj' : j < vs.length, v = BitVec.ofNat 32 vs[j] := by
+  have hj' : j < vs.length := h.1 ▸ hj
+  exact ⟨hj', val_eq hv (h.2 j hj')⟩
+
+theorem ev_last {m : Mem} {vs : List Nat} (h : EVOk m vs) (hne : vs ≠ []) :
+    (last (EV.hist m)).Val (BitVec.ofNat 32 (vs.getLast hne)) := by
+  have hl : vs.length - 1 < vs.length := by
+    cases vs with
+    | nil => exact absurd rfl hne
+    | cons _ _ => simp
+  have := h.2 _ hl
+  unfold last; rw [h.1]
+  rwa [List.getLast_eq_getElem]
+
+theorem evL_ne (x0 x1 x2 : X) : evL x0 x1 x2 ≠ [] := by simp [evL]
+
+/-- A task after its finish, `gone` for the lock. -/
+def gS (ph : Ph) (a b : VClock) (sx : Bool) : Gh :=
+  (⟨.gone, Heap.empty, Heap.empty⟩, { ph := ph, fc := a, fz := b, sx := sx })
+
+/-- The setter's relaxed load of the event (at `s0`): it read `0` or `1`, and goes to `s1`. -/
+theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {a b : VClock} {j : Nat}
+    {v : BitVec 32} (ht : t = 1 ∨ t = 2) (hi : proto.inv G m₁) (hg : G t = gS .s0 a b false)
+    (hr : (G 0).2.ph.rank ≤ 7) (hj : j < (EV.hist m₁).size) (hv : (EV.hist m₁)[j]!.Val v)
+    (hh : EV.hist m' = EV.hist m₁) (hw' : EV.Ok m') (hop : EV.Op t m₁ m') (hL : L.Inv G m') :
+    (v = 0 ∨ v = 1) ∧ proto.inv (upd G t (gS .s1 a b false)) m' := by
+  have hp := hi.2.pre hr
+  obtain ⟨hot, ho0, ho12⟩ := oth_ne ht
+  have hst : (G t).2.st := by rw [hg]; rfl
+  obtain ⟨-, hsxo, -⟩ := hp.sfd t (oth t) (pair_oth ht) (by rw [hst]; rfl)
+  have hsx : ((G 1).2.sx || (G 2).2.sx) = false := by
+    have hsxt : (G t).2.sx = false := by rw [hg]; rfl
+    rcases ht with rfl | rfl
+    · simp [hsxt, show (G 2).2.sx = false from hsxo]
+    · simp [hsxt, show (G 1).2.sx = false from hsxo]
+  have hv01 : v = 0 ∨ v = 1 := by
+    obtain ⟨hj', hve⟩ := ev_val hp.evh hj hv
+    have hm := List.getElem_mem hj'
+    generalize (evL (G 0).2 (G 1).2 (G 2).2)[j] = x at hm hve
+    subst hve
+    unfold evL at hm; rw [hsx] at hm
+    have hx : x = 0 ∨ x = 1 := by
+      by_cases he : (G 0).2.e1 = true <;> simp [he] at hm <;> omega
+    rcases hx with rfl | rfl <;> simp
+  refine ⟨hv01, linv_task hL (by rw [hg]; rfl) (by rw [hg]; rfl), ?_⟩
+  have hX : XEq (G t).2 (gS .s1 a b false).2 := by
+    rw [hg]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  refine U_task ht hi hop.threads (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega))
+    (by rw [hg]; rfl) rfl rfl (fun w hw => ?_) (fun h => by cases h) (fun h => by cases h)
+    (fun h => by cases h) (fun _ => rfl) (fun _ => ?_) (fun hr' => ?_)
+  · rw [hop.waiters] at hw
+    rcases hi.2.q w hw with h | ⟨a', b', c', d⟩
+    · exact .inl h
+    · refine .inr ⟨a', b', by rw [upd_ne _ _ (Ne.symm (task_ne ht))]; exact c', ?_⟩
+      rcases ht with rfl | rfl
+      · rw [hg] at d; rw [upd_self, upd_ne _ _ (by decide)]; simpa [gS] using d
+      · rw [hg] at d; rw [upd_self, upd_ne _ _ (by decide)]; simpa [gS] using d
+  · have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
+    refine Pre.keep hp (fun u => ?_) (hp.wg.keep hkG) hw' (Word.hist_keep hp.wg hkG) hh hop.clocks
+      (task_lt ht) (by rw [upd_self]; rfl) hop.fpt
+    unfold upd; split
+    · rename_i e; subst e; exact hX
+    · exact XEq.refl _
+  · exfalso
+    obtain ⟨a', b', -⟩ := hi.2.done hr'
+    rcases ht with rfl | rfl
+    · rw [hg] at a'; cases a'
+    · rw [hg] at b'; cases b'
+
 end Threadsync.WG
