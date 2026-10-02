@@ -2447,5 +2447,23 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
   rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
   exact WP.pure' (WP.pure' ⟨by omega, hc₅, hi₅⟩)
 
+
+/-- The condition's invariant at the semaphore's start: each word has one write, `0`, and no
+thread is in the condition's code. -/
+theorem Inv.start {G : ThreadId → SGh X} {m : Mem} (hws : S.WS.Ok m) (hwe : S.WE.Ok m)
+    (hsz : (S.WS.hist m).size = 1) (hs0 : (S.WS.hist m)[0]!.Val (0 : BitVec 32))
+    (hez : (S.WE.hist m).size = 1) (hal : AllLe m (S.WE.hist m)[0]!.clock)
+    (hnone : ∀ u, (G u).2.1 = .none) (hq : ∀ w ∈ m.waiters, w.2 ≠ S.WE.ptr)
+    (hoff : ∀ u x, S.o + 12 ≤ x → x < S.o + 20 → (G u).1.part (S.b, x) = none) : S.Inv G m := by
+  have hn : ∀ u p, (G u).2.1 = p → p = .none := fun u p h => h ▸ hnone u
+  refine ⟨hws, hwe, fun k hk => ⟨0, .inl rfl, by rw [show k = 0 by omega]; exact hs0⟩,
+    fun u _ _ _ _ _ _ _ _ _ hu => absurd (hn u _ hu) (by simp),
+    fun _ => by simp only [last, hsz]; exact hs0,
+    fun u _ _ _ _ hu => absurd (hn u _ hu) (by simp),
+    .inr (.inr (by simp only [last, hez]; exact hal)),
+    fun u hu => absurd hu (by rw [hnone u]; decide), fun u _ _ hu => absurd (hn u _ hu) (by simp),
+    fun u hu => absurd (hn u _ hu) (by simp), fun u hu => absurd (hn u _ hu) (by simp),
+    fun w hw he => absurd he (hq w hw), hoff⟩
+
 end Sem
 end Sync
