@@ -1455,7 +1455,8 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
       simp only [Option.isSome_some, ↓reduceIte]
       simp only [StateT.run_bind]
-      refine WP.bind (WP.callRC_ok (x := optPayload (some r)) (v := r) rfl ?_)
+      refine WP.bind (WP.bind (show P.WP t ((callRC (optPayload (some r)) : CM Tgt _ _).run _) _ _ _ _ from
+        WP.callRC_ok (v := r) rfl ?_))
       simp only [StateT.run_pure, StateT.run_modify]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, ↓reduceIte]
