@@ -178,10 +178,10 @@ structure Lock (γ : Type) where
   b : BlockId
   /-- The offset of the word in its block. -/
   o : Nat
-  /-- The word's value while a thread can wait for the lock: `2` (`Io.Mutex`) or `3`
-  (`Thread.Mutex`). -/
+  /-- The word's value while a thread can wait for the lock: `2` (`Io.Mutex`), `3` (`Thread.Mutex`,
+  Linux) or `1` (`Thread.Mutex`, macOS: the word is only `0` or `1`). -/
   c : Nat := 2
-  c_ok : c = 2 ∨ c = 3 := by decide
+  c_ok : c = 1 ∨ c = 2 ∨ c = 3 := by decide
   /-- The resource, with the ghost values of all threads. -/
   R : (ThreadId → γ) → Assn
   /-- Where the thread is in the lock's code. -/
@@ -209,7 +209,7 @@ structure LG where
 /-- A lock whose ghost value is `LG × X`: `X` is the rest of the protocol's ghost value. The
 resource reads only `X`. -/
 def Lock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → Assn) (c : Nat := 2)
-    (c_ok : c = 2 ∨ c = 3 := by decide) : Lock (LG × X) where
+    (c_ok : c = 1 ∨ c = 2 ∨ c = 3 := by decide) : Lock (LG × X) where
   b := b
   o := o
   c := c
@@ -240,7 +240,7 @@ theorem snd_upd {X : Type} (G : ThreadId → LG × X) (t : ThreadId) (g : LG × 
   funext u; unfold upd; split <;> rfl
 
 /-- A step of a thread in the lock's code keeps the ghost values `X`. -/
-theorem snd_set {X : Type} {b o c : Nat} {R : (ThreadId → X) → Assn} {hc : c = 2 ∨ c = 3}
+theorem snd_set {X : Type} {b o c : Nat} {R : (ThreadId → X) → Assn} {hc : c = 1 ∨ c = 2 ∨ c = 3}
     (G : ThreadId → LG × X) (t : ThreadId) (p : LPh) (h : Heap) :
     (fun u => (upd G t ((Lock.prod b o R c hc).set (G t) p h) u).2) = fun u => (G u).2 := by
   rw [snd_upd]; funext u; unfold upd; split
@@ -263,11 +263,10 @@ def ptr : Ptr := ⟨some L.b, (L.o : Int)⟩
 def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
 
 theorem Val.lt {w : Nat} (h : L.Val w) : w < 4 := by
-  rcases L.c_ok with hc | hc <;> rcases h with rfl | rfl | rfl <;> omega
+  rcases L.c_ok with hc | hc | hc <;> rcases h with rfl | rfl | rfl <;> omega
 
-theorem c_ne0 : L.c ≠ 0 := by rcases L.c_ok with h | h <;> omega
-theorem c_ne1 : L.c ≠ 1 := by rcases L.c_ok with h | h <;> omega
-theorem c_lt : L.c < 4 := by rcases L.c_ok with h | h <;> omega
+theorem c_ne0 : L.c ≠ 0 := by rcases L.c_ok with h | h | h <;> omega
+theorem c_lt : L.c < 4 := by rcases L.c_ok with h | h | h <;> omega
 theorem val0 : L.Val 0 := .inl rfl
 theorem val1 : L.Val 1 := .inr (.inl rfl)
 theorem valC : L.Val L.c := .inr (.inr rfl)

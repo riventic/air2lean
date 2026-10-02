@@ -1,19 +1,35 @@
+import Lean.Elab.Command
 import Proofs.Threadsync.Gen
 import ZigLean.Conc.LockRules
 
 /-!
-# `lock` and `unlock` of the translated `Thread.Mutex` (0.15.2, Linux)
+# `lock` and `unlock` of the translated `Thread.Mutex` (0.15.2, Linux and macOS)
 
-The control flow of the generated `Thread_Mutex_lock` and `Thread_Mutex_unlock` (`FutexImpl`:
-`tryLock` is an acquire `or(1)`, `lockSlow` a relaxed load and a loop of `xchg(3)` with a futex
-wait, `unlock` an `xchg(0)` with a release and a wake), with the rules of a lock
-(`ZigLean/Conc/LockRules.lean`) whose contended value is `3`, for every protocol that has the lock
-(`Lock.Fits`).
+The control flow of the generated `Thread_Mutex_lock` and `Thread_Mutex_unlock`, with the rules of
+a lock (`ZigLean/Conc/LockRules.lean`), for every protocol that has the lock (`Lock.Fits`). The
+translation depends on the OS (`tests/golden/0.15.2/threadsync/Gen-darwin.lean`); this file proves
+`lock_spec` and `unlock_spec` for both, and the other files do not tell them apart:
+
+- **Linux** (`FutexImpl`, the committed `Gen.lean`): `tryLock` is an acquire `or(1)`, `lockSlow` a
+  relaxed load and a loop of `xchg(3)` with a futex wait, `unlock` an `xchg(0)` with a release and
+  a wake. The contended value is `3`.
+- **macOS** (`DarwinImpl`): `lock` is `os_unfair_lock_lock`, a model of the C function
+  (`Zig.osUnfairLockC`): a loop of an acquire `cmpxchg 0 → 1` with a futex wait while the word is
+  `1`. `unlock` is a release `xchg 0` and a wake. The contended value is `1`.
+
+The code of the other translation does not exist, so `if_decl` checks the translation before it
+compiles the proofs that name it.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock
 
 namespace Threadsync
+
+/-- Compile the commands only if the translation declares `id` (the `Thread.Mutex` of one OS). -/
+elab "if_decl " id:ident " in " cmds:command* " end_if" : command => do
+  let found ← Lean.Elab.Command.liftCoreM
+    (try discard <| Lean.resolveGlobalConstNoOverload id; pure true catch _ => pure false)
+  if found then cmds.forM Lean.Elab.Command.elabCommand
 
 /-- The states of `Thread.Mutex.FutexImpl`: `unlocked`, `locked`, `contended` (`3`). -/
 def threadMutexS : States (BitVec 32) where
@@ -33,9 +49,30 @@ def threadMutexS : States (BitVec 32) where
 
 theorem add0 (p : Ptr) : p.add 0 = p := by cases p; simp [Ptr.add]
 
+if_decl Thread_Mutex_FutexImpl_lock in
+/-- The contended value of the mutex word (Linux `FutexImpl`). The lock of the proofs has this
+`Lock.c`. -/
+def mutexC : Nat := 3
+
+/-- The `Thread.Mutex` with the word `w`. -/
+abbrev mutexOf (w : BitVec 32) : Thread_Mutex := { impl := { state := { raw := w } } }
+end_if
+
+if_decl Thread_Mutex_DarwinImpl in
+/-- The contended value of the mutex word (macOS: the word is only `0` or `1`). The lock of the
+proofs has this `Lock.c`. -/
+def mutexC : Nat := 1
+
+/-- The `Thread.Mutex` with the word `w`. -/
+abbrev mutexOf (w : BitVec 32) : Thread_Mutex :=
+  { impl := { oul := { _os_unfair_lock_opaque := w } } }
+end_if
+
 namespace ThreadMutexOps
 
 variable {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
+
+if_decl Thread_Mutex_FutexImpl_lock in
 
 /-- `tryLock` by thread `t` at `out` (`g`): `true` and `t` holds the mutex, or `false` and `t` is
 at `spin`. -/
@@ -189,8 +226,8 @@ theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
 
-/-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
-theorem lock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+/-- `lock` (Linux) by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
+theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
@@ -238,8 +275,8 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
 
-/-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+/-- `unlock` (Linux) by the holder `t` (`g`): it goes to `out`. -/
+theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
@@ -248,5 +285,126 @@ theorem unlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
     (futexUnlock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi))
 
+end_if
+
+if_decl Thread_Mutex_DarwinImpl in
+
+/-- The loop invariant of `os_unfair_lock_lock`: thread `t` is at `out` (`g`, the first try) or at
+`spin` (after a futex wait). -/
+def lockInvD (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
+    (_ : Thread_Mutex_lockLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d ≤ D ∧ ∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin Heap.empty) ∧ P.inv (upd G t g₀) m
+
+/-- The loop ends when thread `t` holds the mutex. -/
+def lockPostD (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
+    (r : Bool × Thread_Mutex_lockLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  r.1 = false ∧ d < D ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (L.set g .holds hL)) m
+
+/-- One repeat of the loop: the `cmpxchg 0 → 1`; the thread holds the mutex, or it waits at the
+futex (a stop, so the depth gets smaller). -/
+theorem loopD_body (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+    (g : γ) (hg : L.ph g = .out) (D : Nat) (s : Thread_Mutex_lockLocals) (G : ThreadId → γ)
+    (m : Mem) (d : Nat) (h : lockInvD P L t g D s G m d) :
+    P.WP t ((osUnfairLockTry p : CM Tgt Thread_Mutex_lockLocals Bool).run s) (fun r G' m' d' =>
+      if id r.1 then lockInvD P L t g D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Mutex_lockLocals) => 0) s)
+      else lockPostD P L t g D r G' m' d') G m d := by
+  obtain ⟨hD, g₀, hg₀, hi⟩ := h
+  have hset : ∀ q h, L.set g₀ q h = L.set g q h := by
+    intro q h; rcases hg₀ with rfl | rfl
+    · rfl
+    · exact L.set_set _ _ _ _ _
+  have hph : L.ph g₀ = .out ∨ L.ph g₀ = .spin := by
+    rcases hg₀ with rfl | rfl
+    · exact .inl hg
+    · exact .inr (L.ph_set _ _ _)
+  unfold osUnfairLockTry
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [hp]
+  refine WP.bind (wp_casD hP hc1 hph hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
+  rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨rfl, hi₁⟩
+  · simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [id, Bool.false_eq_true, ↓reduceIte]
+    rw [hset] at hi₁
+    exact ⟨rfl, by omega, hc₁, hL, hi₁⟩
+  · simp only [StateT.run_bind, bind_assoc, pure_bind]
+    rw [hset] at hi₁
+    refine WP.bind (wp_waitD hP (g := L.set g .wait Heap.empty) (L.ph_set _ _ _) hi₁
+      fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [id, ↓reduceIte]
+    rw [L.set_set] at hi₂
+    exact ⟨⟨by omega, _, .inr rfl, hi₂⟩, .inl (by omega)⟩
+
+/-- `lock` (macOS) by thread `t` at `out` (`g`): it holds the mutex. -/
+theorem lockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+    (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
+      m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
+  unfold Thread_Mutex_lock
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  unfold osUnfairLockC
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [add0]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInvD P L t g d) (fun _ => 0) (lockPostD P L t g d)
+    (loopD_body hP hc1 hp t g hg d) default G m d ⟨by omega, g, .inl rfl, hi⟩))
+  rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hL, hi'⟩
+  simp only [StateT.run_pure, pure_bind]
+  exact WP.pure' (WP.pure' ⟨hd', hc', hL, hi'⟩)
+
+/-- `unlock` (macOS) by the holder `t` (`g`): it goes to `out`. -/
+theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+    (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
+      m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
+  unfold Thread_Mutex_unlock
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  unfold osUnfairUnlockC
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [add0, hp]
+  refine WP.bind (wp_xchgRel hP hc1 hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hi₁ => ?_)
+  simp only [StateT.run_pure, pure_bind]
+  rw [threadFutexWakeC_eq]
+  refine WP.bind (wp_wake hP (g := L.set g .wake Heap.empty) (L.ph_set _ _ _) hi₁
+    fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
+  simp only [StateT.run_pure, pure_bind]
+  rw [L.set_set] at hi₂
+  exact WP.pure' (WP.pure' ⟨by omega, hc₂, hi₂⟩)
+
+end_if
+
+/- The rules need `WP` only as a name: unfolding it runs the program. -/
+attribute [local irreducible] Proto.WP
+
+/-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. The proof is the
+one of the translation of the OS. -/
+theorem lock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+    (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧
+      m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
+  first
+  | (have hc3 : L.c = 3 := (by unfold mutexC at hc; exact hc); exact lockL_spec hP hc3 hp t g hg G m d hi)
+  | exact lockD_spec hP hc hp t g hg G m d hi
+
+/-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
+theorem unlock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
+    (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
+      m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
+  first
+  | (have hc3 : L.c = 3 := (by unfold mutexC at hc; exact hc); exact unlockL_spec hP hc3 hp t g hg G m d hi)
+  | exact unlockD_spec hP hc hp t g hg G m d hi
 end ThreadMutexOps
 end Threadsync

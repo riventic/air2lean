@@ -162,9 +162,10 @@ def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
   let _ ← loop (osUnfairLockTry p) id
   pure ()
 
-/-- `os_unfair_lock_unlock`: a release store of 0, then a wake of one waiter. -/
+/-- `os_unfair_lock_unlock`: a release `xchg` of 0 (the C function is a release `cmpxchg` of the
+owner to 0, an RMW), then a wake of one waiter. -/
 def osUnfairUnlockC (p : Ptr) : CM Tgt σ Unit := do
-  atomicStoreC .release 4 p (0 : BitVec 32)
+  let _ ← atomicRmwC .xchg false .release 4 p (0 : BitVec 32)
   threadFutexWakeC p 1
 
 /-- `os_unfair_lock_trylock`: one acquire `cmpxchg` 0 → 1. -/
