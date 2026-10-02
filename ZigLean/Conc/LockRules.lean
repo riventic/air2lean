@@ -170,11 +170,12 @@ theorem Step.owned {t : ThreadId} {m m' : Mem} {own : ThreadId → Heap} (hs : L
 
 /-! ## Changes that keep the blocks and the locations -/
 
-/-- A new access that touches no part, no resource and, if it hits the word, is atomic. -/
+/-- A new access that touches no part; it touches no resource and, if it hits the word, is
+atomic, or it happened before each thread that has not ended. -/
 def NewOk (G : ThreadId → γ) (m m' : Mem) (e : FootprintEntry) : Prop :=
   e.block < m.blocks.size ∧ (∀ u, ¬ e.Touches (L.own G m u)) ∧
-    (∀ hL, L.R G hL → L.Off hL → ¬ e.Touches hL) ∧
-    (L.Hits e → e.kind.isAtomic = true ∧ SomeLe m' e.clock)
+    ((∀ hL, L.R G hL → L.Off hL → ¬ e.Touches hL) ∨ L.LiveLe G m' e.clock) ∧
+    (L.Hits e → (e.kind.isAtomic = true ∧ SomeLe m' e.clock) ∨ L.LiveLe G m' e.clock)
 
 /-- A memory with the same blocks, threads, atomic locations and futex queue, clocks that are not
 smaller, and new accesses that keep `NewOk`. -/
@@ -209,7 +210,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
     · rcases hi.wfp e h' hh with ⟨hat', hle'⟩ | hle'
       · exact .inl ⟨hat', hsome hle'⟩
       · exact .inr (hall hle')
-    · exact .inl (hat hh)
+    · exact hat hh
   · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
     exact ⟨hsome h1, fun u hu => VClock.le_trans (h2 u hu) (hcl u)⟩
   · obtain ⟨hL, hR, hsub, hdj, hoff, how⟩ := hi.free hF
@@ -218,9 +219,11 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
     · rcases how e h' (by rw [← hb]; exact htc) with h | ⟨i, l, hl, hle⟩
       · exact .inl (hall h)
       · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
-    · rcases htc with htc | hb'
-      · exact absurd htc (hnR hL hR hoff)
-      · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
+    · rcases hnR with hnR | hle
+      · rcases htc with htc | hb'
+        · exact absurd htc (hnR hL hR hoff)
+        · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
+      · exact .inl hle
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ hp)
     exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
@@ -242,7 +245,7 @@ theorem Inv.record {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessK
   rcases he with he | rfl
   · exact .inl he
   · refine .inr ⟨(Array.getElem?_eq_some_iff.mp hblk).1, fun u ⟨x, h1, h2, h3⟩ => ?_,
-      fun hL _ hoff ⟨x, h1, h2, h3⟩ => ?_, fun _ => ⟨hk, m.current, ht, ?_⟩⟩
+      .inl fun hL _ hoff ⟨x, h1, h2, h3⟩ => ?_, fun _ => .inl ⟨hk, m.current, ht, ?_⟩⟩
     · dsimp only at h1 h2 h3; exact h3 (hi.off u x h1 (by omega))
     · dsimp only at h1 h2 h3; exact h3 (hoff x h1 (by omega))
     · simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
@@ -259,7 +262,7 @@ theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
-  · refine .inr ⟨hb, fun u ⟨x, h1, h2, h3⟩ => ?_, fun hL hR _ ⟨x, h1, h2, h3⟩ => ?_,
+  · refine .inr ⟨hb, fun u ⟨x, h1, h2, h3⟩ => ?_, .inl fun hL hR _ ⟨x, h1, h2, h3⟩ => ?_,
       fun ⟨hb', x, h1, h2, h3, h4⟩ => ?_⟩
     · dsimp only at h1 h2 h3; exact h3 (hno u x h1 (by omega))
     · dsimp only at h1 h2 h3; exact h3 (hnR hL hR x h1 (by omega))
@@ -269,6 +272,28 @@ theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
       · exact h hb'
       · rcases h2 with h2 | h2 <;> omega
       · rcases h2 with h2 | h2 <;> omega
+
+/-- A plain read by the current thread `t`, the only thread that has not ended, of `n` bytes at
+`o` of block `b` that no part has: it can read the word and the resource. The caller shows that
+the read does not race. -/
+theorem Inv.readAll {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
+    (hb : b < m.blocks.size) (hn : 0 < n) (ht : m.current < m.threads.size)
+    (hsole : ∀ u < m.threads.size, u ≠ m.current → L.ph (G u) = .gone)
+    (hno : ∀ u x, o ≤ x → x < o + n → L.own G m u (b, x) = none) :
+    L.Inv G (m.recordAt b o n .read) := by
+  have hcs : m.current < m.clocks.size := by rw [hi.own.csize]; exact ht
+  have hle : L.LiveLe G (m.recordAt b o n .read) (VClock.bump (m.clocks[m.current]!) m.current) := by
+    intro u hu hg
+    simp only [Mem.recordAt] at hu ⊢
+    by_cases hu' : u = m.current
+    · subst hu'; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
+    · exact absurd (hsole u hu hu') hg
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · refine .inr ⟨hb, fun u ⟨x, h1, h2, h3⟩ => ?_, .inr hle, fun _ => .inr hle⟩
+    dsimp only at h1 h2 h3; exact h3 (hno u x h1 (by rcases h2 with h2 | h2 <;> omega))
 
 /-! ## The word's atomic location -/
 
