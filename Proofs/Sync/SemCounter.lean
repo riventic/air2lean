@@ -84,7 +84,7 @@ def S : Sem Ph where
     by_cases hh : held X = true
     · simp only [hh, ↓reduceIte] at hR; rw [hR]; rfl
     · simp only [hh, Bool.false_eq_true, ↓reduceIte] at hR; exact np_off hR (by omega)
-  wx p := p.holds = false
+  wx p := ∃ k, p = .work k false
 
 abbrev Gh := SGh Ph
 
@@ -117,7 +117,7 @@ structure U (G : ThreadId → Gh) (m : Mem) : Prop where
   blk : BlkOk m
   q : ∀ w ∈ m.waiters, w.2 = S.L.ptr ∨ w.2 = S.WE.ptr
   one : (G 0).2.2.holds = false ∨ (G 1).2.2.holds = false
-  wx : ∀ u, (G u).2.1.waits = true → (G u).2.2.holds = false
+  wx : ∀ u, (G u).2.1.waits = true → ∃ k, (G u).2.2 = .work k false
 
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
@@ -321,8 +321,79 @@ theorem fits : S.Fits proto U where
         · rw [show S.L.ph (G v') = .out from h.1] at hb; cases hb
       · obtain ⟨i'', jr', e', h1, -⟩ := hs.q _ hw hE
         rw [he] at h1
-        have := hu.wx v (by rw [h1]; rfl)
-        rw [hv] at this; cases this
+        obtain ⟨k', hk'⟩ := hu.wx v (by rw [h1]; rfl)
+        rw [hk'] at hv; cases hv
     · rw [hj.2] at hv; cases hv
+
+
+/-! ## `io` -/
+
+/-- The mutex's resource has no byte of `io`. -/
+theorem R_io {Y : ThreadId → SPh × Ph} {h : Heap} (hR : S.R Y h) {x : Nat} (hx : x < 16) :
+    h (0, x) = none := by
+  obtain ⟨hp, hr, -, rfl, hpp, hrr⟩ := hR
+  have h1 : hp (0, x) = none := by
+    cases hc : hp (0, x) with
+    | none => rfl
+    | some c =>
+      have := (Sem.pts_cells (S := S) hpp (l := (0, x)) (by rw [hc]; simp)).2.1
+      simp [S] at this; omega
+  have h2 : hr (0, x) = none := by
+    change (if held _ then emp else NP _) hr at hrr
+    split at hrr
+    · rw [hrr]; rfl
+    · exact np_off hrr (by omega)
+  simp [Heap.union_apply, h1, h2]
+
+theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
+    NoRace m 0 0 16 .read :=
+  noRace_of fun e he hb _ h2 => by
+    rcases hio e he hb (by omega) with h | h
+    · exact .inr (by rw [h]; rfl)
+    · exact .inl (h _ ht)
+
+/-- A read of `io` (bytes 0..16): no race, and the invariant holds after it. -/
+theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
+    (ht : m.current < m.threads.size) :
+    (load Io 8 cPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) ∧
+      proto.inv G (m.recordAt 0 0 16 .read) := by
+  obtain ⟨hl, hs, hu⟩ := hi
+  obtain ⟨blk, hblk, hlv, hsz, ha, hk⟩ := hu.blk
+  have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
+    access_of (p := cPtr) rfl hblk hlv (by decide)
+      (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hsz]) (by simpa [cPtr] using ha)
+  have hk' : ∀ (W : Word 32 4), (W = S.WS ∨ W = S.WE) → W.Keep m (m.recordAt 0 0 16 .read) :=
+    fun W hW => Word.keep_read m (by decide) (.inr (.inl (by rcases hW with rfl | rfl <;> decide)))
+  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16)
+      (Array.getElem?_eq_some_iff.mp hblk).1 (by decide)
+      (fun u x _ hx => own_io hl hu u (by omega)) (fun hL hR x _ hx => R_io hR (by omega))
+      (.inr (.inl (by decide))),
+    hs.mono (hs.ws.keep (hk' _ (.inl rfl))) (hs.we.keep (hk' _ (.inr rfl)))
+      (Word.hist_keep hs.ws (hk' _ (.inl rfl))) (Word.hist_keep hs.we (hk' _ (.inr rfl)))
+      (recordAt_le m _ _ _ _) (fun c ⟨i, l, h1, h2⟩ => ⟨i, l, h1, h2⟩) (fun h => .inl h)
+      (fun w hw _ => .inl hw) (by simp [Mem.recordAt]),
+    ⟨hu.shape, fun e he hb ho => ?_, hu.parts, hu.blk, hu.q, hu.one, hu.wx⟩⟩
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · rcases hu.io e he hb ho with h | h
+    · exact .inl h
+    · exact .inr fun u hu => VClock.le_trans (h u hu) (recordAt_le m 0 0 16 .read u)
+  · exact .inl rfl
+
+/-- A read of `io` by thread `t` in generated code. -/
+theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
+    (hi : proto.inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
+    {Q : Io × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ m', m'.current = t → m'.threads = m.threads → proto.inv (upd G t g) m' →
+      Q (⟨⟩, s) G m' d) :
+    proto.WP t ((liftM (load Io 8 cPtr) : CM Tgt σ Io).run s) Q G m d := by
+  obtain ⟨hrun, hi'⟩ := step_io hi (hc ▸ ht)
+  refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
+  rw [hrun] at hr
+  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
+    Prod.mk.injEq] at hr
+  obtain ⟨-, rfl⟩ := hr
+  cases v
+  exact ⟨rfl, h _ hc rfl hi'⟩
 
 end Sync.SemCounter
