@@ -88,6 +88,9 @@ theorem hdr_set_cap (ptr : Ptr) (len cap cap' : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 16 (Enc.encode cap') = hdrBytes ptr len cap' := by
   simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
 
+/-- `ptrAddr` of the items pointer does not throw: its block exists. -/
+def ptrOk (m : Mem) (ptr : Ptr) : Prop := ∀ b, ptr.block = some b → b < m.blocks.size
+
 /-! ## Loads from owned bytes -/
 
 section Load
@@ -173,7 +176,7 @@ theorem alloc_slice_run (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hst 
     ∃ r m', (a.alloc 4 4 g).run m = pure (r, m') ∧ m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧
       match r with
       | .error e => e = "OutOfMemory" ∧ m'.heap = h ∪ hF
-      | .ok s => s.len = g ∧ s.ptr.off = 0 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧
+      | .ok s => s.len = g ∧ s.ptr.off = 0 ∧ 4 * g.toNat < 2 ^ 64 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧
           m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ ∃ A, A % 4 = 0 ∧
           bytesAt s.ptr A (4 * g.toNat) .heap (Array.replicate (4 * g.toNat) .undef) h' ∧
           ∀ l c, m.heap l = some c → c.addr + c.size < A := by
@@ -189,7 +192,7 @@ theorem alloc_slice_run (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hst 
       simp [Allocator.alloc, allocBytes, hbig, hne, zig_unfold, hr]
     | some q =>
       obtain ⟨h0, h', hd', hm', hdd, A, hA, hb, hab⟩ := hpost
-      refine ⟨.ok ⟨q, g⟩, m', ?_, hst', hsz, rfl, h0, h', hd', hm', hdd, A, hA, hb, hab⟩
+      refine ⟨.ok ⟨q, g⟩, m', ?_, hst', hsz, rfl, h0, by omega, h', hd', hm', hdd, A, hA, hb, hab⟩
       simp [Allocator.alloc, allocBytes, hbig, hne, zig_unfold, hr]
 
 /-- `free` of the whole buffer of `cap > 0` items. -/
@@ -208,6 +211,28 @@ theorem free_slice_run {ptr : Ptr} {A : Nat} {bs : Array Byte} {cap : BitVec 64}
   have hq : ∀ q : Ptr, q = ptr → rawFree q (4 * cap.toNat) m = pure ((), m') := by
     rintro q rfl; exact hr
   exact hq _ (by simp [Ptr.elem, Ptr.add])
+
+/-- `ptrAddr` reads the block's address and changes nothing. -/
+theorem ptrAddr_run {q : Ptr} {b : BlockId} {blk : Block} (hq : q.block = some b)
+    (hb : m.blocks[b]? = some blk) : (ptrAddr q).run m = pure ((blk.addr : Int) + q.off, m) := by
+  simp [ptrAddr, hq, hb, zig_unfold]
+
+theorem ptrAddr_none {q : Ptr} (hq : q.block = none) : (ptrAddr q).run m = pure (q.off, m) := by
+  simp [ptrAddr, hq, zig_unfold]
+
+/-- `ptrAddr` of a pointer whose block exists does not throw. -/
+theorem ptrAddr_ok {q : Ptr} (hq : ptrOk m q) : ∃ x, (ptrAddr q).run m = pure (x, m) := by
+  cases hb : q.block with
+  | none => exact ⟨_, ptrAddr_none hb⟩
+  | some b =>
+    obtain ⟨blk, hblk⟩ : ∃ blk, m.blocks[b]? = some blk :=
+      ⟨_, Array.getElem?_eq_getElem (hq b hb)⟩
+    exact ⟨_, ptrAddr_run hb hblk⟩
+
+theorem ptrLe_run {q r : Ptr} {x y : Int} (hq : (ptrAddr q).run m = pure (x, m))
+    (hr : (ptrAddr r).run m = pure (y, m)) : (ptrLe q r).run m = pure (decide (x ≤ y), m) := by
+  simp only [StateT.run] at hq hr
+  simp [ptrLe, zig_unfold, hq, hr]
 
 end Load
 
@@ -233,9 +258,39 @@ def alist (p ptr : Ptr) (cap : BitVec 64) (xs : List (BitVec 32)) : Assn := fun 
   xs.length ≤ cap.toNat ∧ 4 * cap.toNat < 2 ^ 64 ∧
     (hdr p ptr (BitVec.ofNat 64 xs.length) cap ∗ buf ptr cap.toNat xs) h
 
-/-- `ptrAddr` of the items pointer does not throw: its block exists. -/
-def ptrOk (m : Mem) (ptr : Ptr) : Prop := ∀ b, ptr.block = some b → b < m.blocks.size
 
+
+/-! ## Heaps of three and four parts -/
+
+section Parts
+open Heap
+
+theorem heap3 {x a b c : Heap} (hx : x = (a ∪ b) ∪ c) (dab : Disjoint a b) (dac : Disjoint a c)
+    (dbc : Disjoint b c) :
+    x = a ∪ (b ∪ c) ∧ Disjoint a (b ∪ c) ∧ x = b ∪ (a ∪ c) ∧ Disjoint b (a ∪ c) := by
+  refine ⟨by rw [hx, union_assoc], disjoint_union_right.mpr ⟨dab, dac⟩, ?_,
+    disjoint_union_right.mpr ⟨dab.symm, dbc⟩⟩
+  rw [hx, union_comm dab, union_assoc]
+
+/-- The parts `a`, `b`, `n` and the frame `c`. -/
+theorem heap4 {x a b n c : Heap} (hx : x = ((a ∪ b) ∪ n) ∪ c) (dab : Disjoint a b)
+    (dan : Disjoint a n) (dbn : Disjoint b n) (dac : Disjoint a c) (dbc : Disjoint b c)
+    (dnc : Disjoint n c) :
+    x = a ∪ (b ∪ n ∪ c) ∧ Disjoint a (b ∪ n ∪ c) ∧
+    x = b ∪ (a ∪ n ∪ c) ∧ Disjoint b (a ∪ n ∪ c) ∧
+    x = n ∪ (a ∪ b ∪ c) ∧ Disjoint n (a ∪ b ∪ c) := by
+  have e1 : x = a ∪ (b ∪ n ∪ c) := by rw [hx]; simp only [union_assoc]
+  have e2 : x = b ∪ (a ∪ n ∪ c) := by
+    rw [hx, union_comm dab]; simp only [union_assoc]
+  have e3 : x = n ∪ (a ∪ b ∪ c) := by
+    rw [hx, union_assoc (a ∪ b) n c, union_left_comm (disjoint_union_left.mpr ⟨dan, dbn⟩),
+      ← union_assoc]
+  refine ⟨e1, ?_, e2, ?_, e3, ?_⟩
+  · exact disjoint_union_right.mpr ⟨disjoint_union_right.mpr ⟨dab, dan⟩, dac⟩
+  · exact disjoint_union_right.mpr ⟨disjoint_union_right.mpr ⟨dab.symm, dbn⟩, dbc⟩
+  · exact disjoint_union_right.mpr ⟨disjoint_union_right.mpr ⟨dan.symm, dbn.symm⟩, dnc⟩
+
+end Parts
 
 /-! ## `addOneAssumeCapacity` -/
 
@@ -295,6 +350,201 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
   have hsub : len + 1#64 - 1#64 = len := BitVec.add_sub_cancel len 1#64
   simp [array_list_Aligned_u32_null_addOneAssumeCapacity, zig_unfold, l₁, l₂, l₃, s₄, l₅, l₆,
     debug_assert, Zig.lt, hu1, hu2, hno', hmod, hsub]
+
+/-! ## `ensureTotalCapacityPrecise` -/
+
+@[simp] theorem Ptr.elem_zero (q : Ptr) (n : Nat) : q.elem n 0#64 = q := by
+  simp [Ptr.elem, Ptr.add]
+
+theorem ptrOk_mono {m m' : Mem} {q : Ptr} (h : ptrOk m q) (hs : m.blocks.size ≤ m'.blocks.size) :
+    ptrOk m' q := fun b hb => Nat.lt_of_lt_of_le (h b hb) hs
+
+/-- `ensureTotalCapacityPrecise` with `cap < g`: a new buffer of `g` items with the same items,
+or `error.OutOfMemory` and the same list. -/
+theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH hB : Heap}
+    (hh : hdr p ptr len cap hH) (hbf : buf ptr cap.toNat xs hB) (dHB : Heap.Disjoint hH hB)
+    (hm : m.heap = (hH ∪ hB) ∪ hF) (hd : Heap.Disjoint (hH ∪ hB) hF) (hst : m.Seq)
+    (hok : ptrOk m ptr) (hlen : xs.length = len.toNat) (hle : len.toNat ≤ cap.toNat)
+    (hgt : cap.toNat < g.toNat) :
+    ∃ r m', (array_list_Aligned_u32_null_ensureTotalCapacityPrecise p a g).run m =
+        pure (r, m') ∧ m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧ ∃ hH' hB',
+      Heap.Disjoint hH' hB' ∧ Heap.Disjoint (hH' ∪ hB') hF ∧ m'.heap = (hH' ∪ hB') ∪ hF ∧
+      match r with
+      | .ok _ => ∃ ptr', hdr p ptr' len g hH' ∧ buf ptr' g.toNat xs hB' ∧
+          4 * g.toNat < 2 ^ 64 ∧ ptrOk m' ptr'
+      | .error e => e = "OutOfMemory" ∧ hdr p ptr len cap hH' ∧ buf ptr cap.toNat xs hB' ∧
+          ptrOk m' ptr := by
+  obtain ⟨A, S, K, hA, hK, hb⟩ := hh
+  obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
+  obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
+  have hs := hdrBytes_size ptr len cap
+  have e8 : Enc.size (BitVec 64) = 8 := rfl
+  have e24 : Enc.size array_list_Aligned_u32_null = 24 := rfl
+  have q16 : p.add 16 = p.add ((16 : Nat) : Int) := rfl
+  have q0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
+  have dcap : Enc.decode ((hdrBytes ptr len cap).extract 16 (16 + Enc.size (BitVec 64))) =
+      pure cap := by rw [e8, hdr_cap, dec_u64]
+  have dall : Enc.decode ((hdrBytes ptr len cap).extract 0
+      (0 + Enc.size array_list_Aligned_u32_null)) =
+      pure ({ items := ⟨ptr, len⟩, capacity := cap } : array_list_Aligned_u32_null) := by
+    rw [e24, Nat.zero_add, ← hs, Array.extract_size]; exact decode_hdr ptr len cap
+  obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hmH hst q16 (by decide)
+    (by omega) (by omega) dcap
+  obtain ⟨m₂, l₂, hm₂, hs₂, hb₂⟩ := bytesAt_load_run (a := 8) hb hm₁ hs₁ q0 (by decide)
+    (by omega) (by omega) dall
+  have hm₂' : m₂.heap = (hH ∪ hB) ∪ hF := hm₂.trans (hmH.symm.trans hm)
+  have hz₂ : m₂.blocks.size = m.blocks.size := by rw [hb₂, hb₁]
+  have hge : Zig.ge false cap g = false := by
+    simp [Zig.ge, Zig.le, BitVec.ule]; omega
+  have hg0 : ¬ g.toNat = 0 := by omega
+  obtain ⟨r, m₃, ha₃, hs₃, hz₃, hpost⟩ := alloc_slice_run hd hm₂' hs₂ a g (by omega)
+  have hz : m.blocks.size ≤ m₃.blocks.size := hz₂ ▸ hz₃
+  simp only [StateT.run] at l₁ l₂ ha₃
+  cases r with
+  | error e =>
+    obtain ⟨rfl, hm₃⟩ := hpost
+    refine ⟨.error "OutOfMemory", m₃, ?_, hs₃, hz, hH, hB, dHB, hd, hm₃, rfl, ⟨A, S, K, hA, hK, hb⟩,
+      hbf, ptrOk_mono hok hz⟩
+    simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+      array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, Zig.unwrapErr]
+  | ok sl =>
+    obtain ⟨hsl, hoff, hg4, hN, dN, hm₃, dHBN, A', hA', hbN, habove⟩ := hpost
+    obtain ⟨dHN, dBN⟩ := Heap.disjoint_union_left.mp dHBN
+    obtain ⟨-, dNF⟩ := Heap.disjoint_union_left.mp dN
+    obtain ⟨vH, dvH, vB, dvB, vN, dvN⟩ := heap4 hm₃ dHB dHN dBN dHF dBF dNF
+    have e16 : Enc.size Slice = 16 := rfl
+    have q8 : (p.add 0).add 8 = p.add ((8 : Nat) : Int) := by simp [Ptr.add]
+    have q0' : p.add 0 = p.add ((0 : Nat) : Int) := rfl
+    have dlen : Enc.decode ((hdrBytes ptr len cap).extract 8 (8 + Enc.size (BitVec 64))) =
+        pure len := by rw [e8, hdr_len, dec_u64]
+    have dsl : Enc.decode ((hdrBytes ptr len cap).extract 0 (0 + Enc.size Slice)) =
+        (pure ⟨ptr, len⟩ : Result Slice) := by
+      rw [show Enc.size Slice = 16 from rfl, hdr_slice, decode_slice]
+    obtain ⟨m₄, l₄, hm₄, hs₄, hb₄⟩ := bytesAt_load_run (a := 8) hb vH hs₃ q8 (by decide)
+      (by omega) (by omega) dlen
+    obtain ⟨m₅, l₅, hm₅, hs₅, hb₅⟩ := bytesAt_load_run (a := 8) hb hm₄ hs₄ q0' (by decide)
+      (by omega) (by omega) dsl
+    have hz₅ : m₅.blocks = m₃.blocks := by rw [hb₅, hb₄]
+    have hm₅' : m₅.heap = m₃.heap := hm₅.trans vH.symm
+    obtain ⟨bN, blkN, haccN, hblkN, haddrN, -, -⟩ := bytesAt_access (q := sl.ptr) (k := 0)
+      (n := 4 * g.toNat) (a := 1) hbN (hm₅'.trans vN) (by simp [Ptr.add]) (by omega) (by simp)
+      (Nat.mod_one _)
+    have hpN : sl.ptr.block = some bN := (access_eq haccN).1
+    have aN : ∀ k : BitVec 64, (ptrAddr (sl.ptr.elem 4 k)).run m₅ =
+        pure ((blkN.addr : Int) + (sl.ptr.elem 4 k).off, m₅) := fun k => ptrAddr_run hpN hblkN
+    have aN0 : (ptrAddr sl.ptr).run m₅ = pure ((blkN.addr : Int) + sl.ptr.off, m₅) :=
+      ptrAddr_run hpN hblkN
+    have hbN5 : bN < m₅.blocks.size := (Array.getElem?_eq_some_iff.mp hblkN).1
+    have hz5 : m.blocks.size ≤ m₅.blocks.size := by rw [hz₅]; exact hz
+    simp only [StateT.run] at l₄ l₅
+    have dHN' : Heap.Disjoint hH (hN ∪ hF) := Heap.disjoint_union_right.mpr ⟨dHN, dHF⟩
+    by_cases hc0 : cap.toNat = 0
+    · -- No buffer yet: nothing to copy and nothing to free.
+      have hlen0 : len.toNat = 0 := by omega
+      have hl : len = 0#64 := BitVec.eq_of_toNat_eq (by simp [hlen0])
+      subst hl
+      have hxs : xs = [] := List.eq_nil_of_length_eq_zero (by simpa using hlen)
+      subst hxs
+      have hB0 : hB = Heap.empty := by simpa [buf, hc0] using hbf
+      subst hB0
+      obtain ⟨x, aO⟩ := ptrAddr_ok (ptrOk_mono hok hz5)
+      have vH' : m₅.heap = hH ∪ (hN ∪ hF) := by
+        rw [hm₅', vH]; simp only [Heap.empty_union]
+      obtain ⟨m₆, s₆, hs₆, hz₆, hH₆, dH₆, hm₆, hb₆⟩ := bytesAt_store_run (a := 8) hb vH' dHN' hs₅
+        sl.ptr (q := (p.add 0).add 0) (k := 0) (by simp [Ptr.add]) (by decide) (by rw [hs]; decide)
+        (by omega) hK
+      rw [hdr_set_ptr] at hb₆
+      obtain ⟨m₇, s₇, hs₇, hz₇, hH₇, dH₇, hm₇, hb₇⟩ := bytesAt_store_run (a := 8) hb₆ hm₆ dH₆ hs₆
+        g (q := p.add 16) (k := 16) rfl (by decide)
+        (by rw [hdrBytes_size]; decide) (by omega) hK
+      rw [hdr_set_cap] at hb₇
+      obtain ⟨dHN₇, dHF₇⟩ := Heap.disjoint_union_right.mp dH₇
+      have hor : x ≤ (blkN.addr : Int) + sl.ptr.off ∨ (blkN.addr : Int) + sl.ptr.off ≤ x :=
+        Int.le_total _ _
+      refine ⟨.ok (), m₇, ?_, hs₇, by rw [hz₇, hz₆]; exact hz5, hH₇, hN, dHN₇,
+        Heap.disjoint_union_left.mpr ⟨dHF₇, dNF⟩, by rw [hm₇, Heap.union_assoc], sl.ptr,
+        ⟨A, S, K, hA, hK, hb₇⟩, ?_, hg4, ?_⟩
+      · have r₁ := ptrLe_run aO aN0
+        have r₂ := ptrLe_run aN0 aO
+        simp only [StateT.run] at s₆ s₇ r₁ r₂
+        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+          array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
+          r₁, r₂, hor, memmove, Allocator.free, hc0, s₆, s₇, Zig.le, BitVec.ule]
+      · simp only [buf, hg0, ↓reduceIte]
+        exact ⟨hoff, A', _, hA', by simp, fun i hi => absurd hi (by simp), hbN⟩
+      · intro b hb'; rw [hpN] at hb'; cases hb'; rw [hz₇, hz₆]; exact hbN5
+    · -- A buffer: copy the items to the new block, then free the old block.
+      obtain ⟨hoffO, A₀, bs, hA₀, hbsz, hit, hbO⟩ : ptr.off = 0 ∧ ∃ A bs, A % 4 = 0 ∧
+          bs.size = 4 * cap.toNat ∧ ItemsOk bs xs ∧ bytesAt ptr A (4 * cap.toNat) .heap bs hB := by
+        simpa [buf, hc0] using hbf
+      obtain ⟨bO, blkO, haccO, hblkO, haddrO, -, -⟩ := bytesAt_access (q := ptr) (k := 0)
+        (n := 4 * cap.toNat) (a := 1) hbO (hm₅'.trans vB) (by simp [Ptr.add]) (by omega)
+        (by omega) (Nat.mod_one _)
+      have hpO : ptr.block = some bO := (access_eq haccO).1
+      -- The old block ends below the new one (`alloc_run`).
+      have hcell : m₂.heap (bO, 0) = some ⟨bs[0]!, A₀, 4 * cap.toNat, .heap⟩ := by
+        obtain ⟨b', hb', -, hown⟩ := hbO
+        rw [hpO] at hb'; cases hb'
+        have hB0 : hB (bO, 0) = some ⟨bs[0]!, A₀, 4 * cap.toNat, .heap⟩ := by
+          rw [hown]; simp [hoffO, hbsz]; omega
+        have hH0 : hH (bO, 0) = none := (dHB (bO, 0)).resolve_right (by rw [hB0]; simp)
+        rw [hm₂', Heap.union_apply, Heap.union_apply, hH0, hB0]; rfl
+      have hlt := habove _ _ hcell
+      simp only at hlt
+      have aO1 : (ptrAddr (ptr.elem 4 len)).run m₅ =
+          pure ((blkO.addr : Int) + (ptr.elem 4 len).off, m₅) := ptrAddr_run hpO hblkO
+      have aO0 : (ptrAddr ptr).run m₅ = pure ((blkO.addr : Int) + ptr.off, m₅) :=
+        ptrAddr_run hpO hblkO
+      have hle1 : (blkO.addr : Int) + (ptr.elem 4 len).off ≤ (blkN.addr : Int) + sl.ptr.off := by
+        simp [Ptr.elem, Ptr.add, hoffO, hoff, haddrO, haddrN]; omega
+      obtain ⟨m₆, mv, hs₆, hz₆, hN', dN', hm₆, hbN'⟩ : ∃ m₆,
+          (memmove 4 4 4 sl.ptr ptr len).run m₅ = pure ((), m₆) ∧ m₆.Seq ∧
+          m₆.blocks.size = m₅.blocks.size ∧ ∃ hN', Heap.Disjoint hN' (hH ∪ hB ∪ hF) ∧
+          m₆.heap = hN' ∪ (hH ∪ hB ∪ hF) ∧ bytesAt sl.ptr A' (4 * g.toNat) .heap
+            (writeBytes (Array.replicate (4 * g.toNat) .undef) 0
+              (bs.extract 0 (len.toNat * 4))) hN' := by
+        by_cases hl0 : len.toNat = 0
+        · refine ⟨m₅, by simp [memmove, hl0, zig_unfold], hs₅, rfl, hN, dvN, hm₅'.trans vN, ?_⟩
+          rw [hl0]; simpa [writeBytes] using hbN
+        · exact memmove_two_run hbO (hm₅'.trans vB) hbN (hm₅'.trans vN) dvN hs₅ len (by omega)
+            (by omega) (by simp; omega) (by simp [hoffO, hA₀]) (by simp [hoff, hA']) (by decide)
+      obtain ⟨dN'HB, dN'F⟩ := Heap.disjoint_union_right.mp dN'
+      obtain ⟨dN'H, dN'B⟩ := Heap.disjoint_union_right.mp dN'HB
+      have hm₆' : m₆.heap = ((hH ∪ hB) ∪ hN') ∪ hF := by
+        rw [hm₆, Heap.union_comm dN', Heap.union_assoc, Heap.union_comm dN'F.symm,
+          ← Heap.union_assoc]
+      obtain ⟨-, -, wB, dwB, -, -⟩ := heap4 hm₆' dHB dN'H.symm dN'B.symm dHF dBF dN'F
+      obtain ⟨m₇, fr, hm₇, hs₇, hz₇⟩ := free_slice_run hbO wB dwB hbsz hoffO (by omega) hs₆ a
+        (s := ⟨ptr, cap⟩) (by simp)
+      have vH' : m₇.heap = hH ∪ (hN' ∪ hF) := by rw [hm₇]; simp only [Heap.empty_union, Heap.union_assoc]
+      have dHN'' : Heap.Disjoint hH (hN' ∪ hF) := Heap.disjoint_union_right.mpr ⟨dN'H.symm, dHF⟩
+      obtain ⟨m₈, s₈, hs₈, hz₈, hH₈, dH₈, hm₈, hb₈⟩ := bytesAt_store_run (a := 8) hb vH' dHN'' hs₇
+        sl.ptr (q := (p.add 0).add 0) (k := 0) (by simp [Ptr.add]) (by decide) (by rw [hs]; decide)
+        (by omega) hK
+      rw [hdr_set_ptr] at hb₈
+      obtain ⟨m₉, s₉, hs₉, hz₉, hH₉, dH₉, hm₉, hb₉⟩ := bytesAt_store_run (a := 8) hb₈ hm₈ dH₈ hs₈
+        g (q := p.add 16) (k := 16) rfl (by decide)
+        (by rw [hdrBytes_size]; decide) (by omega) hK
+      rw [hdr_set_cap] at hb₉
+      obtain ⟨dHN₉, dHF₉⟩ := Heap.disjoint_union_right.mp dH₉
+      refine ⟨.ok (), m₉, ?_, hs₉, by rw [hz₉, hz₈, hz₇, hz₆]; exact hz5, hH₉, hN', dHN₉,
+        Heap.disjoint_union_left.mpr ⟨dHF₉, dN'F⟩, by rw [hm₉, Heap.union_assoc], sl.ptr,
+        ⟨A, S, K, hA, hK, hb₉⟩, ?_, hg4, ?_⟩
+      · have r₁ := ptrLe_run aO1 aN0
+        have r₂ := ptrLe_run (aN len) aO0
+        simp only [StateT.run] at s₈ s₉ r₁ r₂ mv fr
+        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+          array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
+          r₁, r₂, hle1, mv, fr, s₈, s₉, Zig.le, BitVec.ule, show len.toNat ≤ g.toNat by omega]
+      · simp only [buf, hg0, ↓reduceIte]
+        refine ⟨hoff, A', _, hA', ?_, ?_, hbN'⟩
+        · rw [writeBytes_size _ _ _ (by simp; omega)]; simp
+        · intro i hi
+          rw [extract_writeBytes_in _ _ _ _ _ (by simp; omega) (Nat.zero_le _) (by simp; omega)]
+          simp only [Nat.sub_zero, Array.extract_extract]
+          rw [Nat.min_eq_left (by omega)]
+          simpa using hit i hi
+      · intro b hb'; rw [hpN] at hb'; cases hb'; rw [hz₉, hz₈, hz₇, hz₆]; exact hbN5
 
 end Ops
 
