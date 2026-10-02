@@ -1923,4 +1923,107 @@ theorem inv_start {m : Mem} {A : Nat} {h : Heap}
       unfold ac; rw [ht0, hX0]; exact hle
   · rw [hX0] at *; exact absurd h (by decide)
 
+/-! ## `main`'s steps -/
+
+/-- `U` after a step of `main` with its new ghost value `g`: the facts of `U` that read it. -/
+theorem U_main {G : ThreadId → Gh} {m m' : Mem} {g : Gh} (hi : proto.inv G m)
+    (hsh : Shape (fun u => (upd G 0 g u).2) m') (hcell : m'.heap (0, 12) = m.heap (0, 12))
+    (hp0 : ∀ x, g.1.part (0, x) = none) (hq : QOk (upd G 0 g) m')
+    (hpre : (upd G 0 g 0).2.ph.rank ≤ 7 → Pre (upd G 0 g) m')
+    (hdone : 6 ≤ (upd G 0 g 0).2.ph.rank → (G 1).2.frozen ∧ (G 2).2.frozen ∧
+      VClock.le (G 1).2.fz (m'.clocks[0]!) = true ∧ VClock.le (G 2).2.fz (m'.clocks[0]!) = true)
+    (hx : g.2.sx = false ∧ g.2.ph ≠ .wk ∧ g.2.frozen = false ∧ g.2.fd = false) :
+    U (upd G 0 g) m' := by
+  obtain ⟨hsx, hwk, hfz, hfd⟩ := hx
+  have hGu : ∀ u, u ≠ 0 → upd G 0 g u = G u := fun u h => upd_ne _ _ h
+  refine ⟨hsh, fun u hu => by rw [hGu u hu]; exact hi.2.parts u hu, fun x => by rw [upd_self]; exact hp0 x,
+    fun u h3 => by rw [hGu u (Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) h3))]; exact hi.2.out3 u h3,
+    blk_keep hi.2.blk hcell, hq, fun u => ?_, fun u => ?_, fun u => ?_, fun u => ?_, hpre,
+    fun hr => ?_⟩
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self, hsx]; intro h; cases h
+    · rw [hGu u hu]; exact hi.2.sx1 u
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; intro h; exact absurd h hwk
+    · rw [hGu u hu]; exact hi.2.wks u
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self, hfz]; intro h; cases h
+    · rw [hGu u hu]; exact hi.2.fzc u
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self, hfd]; intro h; cases h
+    · rw [hGu u hu]; exact hi.2.lg u
+  · obtain ⟨a, b, c, d⟩ := hdone hr
+    rw [hGu 1 (by decide), hGu 2 (by decide)]; exact ⟨a, b, c, d⟩
+
+/-- `main`'s `startMany(2)`: a relaxed `add(4)` at the group's state, which read `0`. -/
+theorem inv_sm {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : proto.inv G m₁)
+    (hg : G 0 = gM Heap.empty { ph := .pre }) (hv : (last (WG.hist m₁)).Val old)
+    (hh : WG.hist m' = (WG.hist m₁).push
+      (Word.rmwEnt m' 0 .relaxed (last (WG.hist m₁)) (RmwOp.add.apply false old 4)))
+    (hw' : WG.Ok m') (hop : WG.Op 0 m₁ m') (hL : L.Inv G m') :
+    old = 0 ∧ proto.inv (upd G 0 (gM Heap.empty { ph := .sm })) m' := by
+  have hp := hi.2.pre (by rw [hg]; decide)
+  have hgx : (G 0).2 = { ph := .pre } := by rw [hg]; rfl
+  have hold : old = 0 := val_eq hv (by
+    have := hp.gv; unfold wgv at this; rw [hgx] at this; exact this)
+  subst hold
+  refine ⟨rfl, linv_task hL (by rw [hg]; rfl) (by rw [hg]; rfl), ?_⟩
+  -- the tasks do not exist yet
+  obtain ⟨h00, -, h3, d⟩ := hi.2.shape
+  rcases d with ⟨d1, -, d3, d4⟩ | ⟨-, d2, -⟩ | ⟨-, d2, -⟩
+  rotate_left
+  · exfalso; change (G 0).2.ph = .sp1 at d2; rw [hgx] at d2; cases d2
+  · exfalso; change 3 ≤ (G 0).2.ph.rank at d2; rw [hgx] at d2; simp [Ph.rank] at d2
+  change (G 1).2 = {} at d3; change (G 2).2 = {} at d4
+  have hGu : ∀ u, u ≠ 0 → upd G 0 (gM Heap.empty { ph := .sm }) u = G u := fun u h => upd_ne _ _ h
+  have hX0 : (upd G 0 (gM Heap.empty { ph := .sm }) 0).2 = { ph := .sm } := by rw [upd_self]; rfl
+  refine U_main hi ⟨by rw [hop.threads]; exact h00, by show (upd G 0 (gM Heap.empty { ph := .sm }) 0).2.ph.isMain = true; rw [hX0]; rfl,
+      fun u hu => by show (upd G 0 (gM Heap.empty { ph := .sm }) u).2 = _; rw [hGu u (Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu))]; exact h3 u hu,
+      .inl ⟨by rw [hop.threads]; exact d1, by show (upd G 0 (gM Heap.empty { ph := .sm }) 0).2.ph.rank ≤ 1; rw [hX0]; decide,
+        by show (upd G 0 (gM Heap.empty { ph := .sm }) 1).2 = _; rw [hGu 1 (by decide)]; exact d3,
+        by show (upd G 0 (gM Heap.empty { ph := .sm }) 2).2 = _; rw [hGu 2 (by decide)]; exact d4⟩⟩
+    (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [WG] at h; omega)) (fun x => rfl)
+    (fun w hw => ?_) (fun _ => ?_) (fun h => by rw [hX0] at h; simp [Ph.rank] at h) ⟨rfl, by decide, rfl, rfl⟩
+  · rw [hop.waiters] at hw
+    rcases hi.2.q w hw with h | ⟨-, -, c', -⟩
+    · exact .inl h
+    · rw [hgx] at c'; cases c'
+  · have hkE := Word.keep_op hop (W' := EV) (.inr (.inl (by decide)))
+    have hX1 : (upd G 0 (gM Heap.empty { ph := .sm }) 1).2 = {} := by rw [hGu 1 (by decide)]; exact d3
+    have hX2 : (upd G 0 (gM Heap.empty { ph := .sm }) 2).2 = {} := by rw [hGu 2 (by decide)]; exact d4
+    refine ⟨hw', hp.ev.keep hkE, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
+      fun u v huv hu => ?_, fun u hu hs => ?_, fun h => ?_, fun h => ?_, fun h => ?_,
+      fun e he hb => ?_⟩
+    · rw [hh, last_push, hX0, hX1, hX2]; exact WG.enc_val _
+    · rcases hu with rfl | rfl
+      · rw [hX1] at hf; cases hf
+      · rw [hX2] at hf; cases hf
+    · unfold EVOk; rw [Word.hist_keep hp.ev hkE, hX0, hX1, hX2]
+      have := hp.evh; rw [hgx, d3, d4] at this; exact this
+    · rw [hX1, hX2] at h; cases h
+    · rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩
+      · rw [hX1] at hu; cases hu
+      · rw [hX2] at hu; cases hu
+    · rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩
+      · rw [hX1] at hu; cases hu
+      · rw [hX2] at hu; cases hu
+    · rcases hu with rfl | rfl
+      · rw [hX1] at hs; cases hs
+      · rw [hX2] at hs; cases hs
+    · rw [hX0] at h; cases h
+    · rw [hX0] at h; cases h
+    · rw [hX0] at h; cases h
+    · rcases hop.fpt e he with h' | ⟨het, hle⟩
+      · obtain ⟨a, b⟩ := hp.attr e h' hb
+        refine ⟨a, VClock.le_trans b ?_⟩
+        unfold ac
+        by_cases h0 : e.tid = 0
+        · rw [h0, hX0, hgx]; exact hop.clocks 0
+        · rw [show (upd G 0 (gM Heap.empty { ph := .sm }) e.tid) = G e.tid from upd_ne _ _ h0]
+          split
+          · exact VClock.le_refl _
+          · exact hop.clocks _
+      · refine ⟨by rw [het]; decide, ?_⟩
+        unfold ac; rw [het, hX0]; exact hle
+
 end Threadsync.WG
