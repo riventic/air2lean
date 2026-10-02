@@ -1807,5 +1807,67 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     rw [upd_same] at this
     exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
 
+
+/-! ## `Condition.wait` by a holder that saw no permit -/
+
+theorem dbg_true : (debug_assert true).run = some (.ok ()) := rfl
+theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters (65535 : BitVec 16) =
+    true := by decide +kernel
+theorem bits_add1 : RmwOp.add.apply false (0 : BitVec 32)
+    (Packed.toBits (Packed.ofBits (1 : BitVec 32) : Io_Condition_State)) = 1 := by decide +kernel
+
+/-- The holder's bytes are in the heap. -/
+theorem held_sub (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} {pa hL : Heap}
+    {sp : SPh} {x : X} (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, sp, x)) m) : hL.Sub m.heap := by
+  obtain ⟨hl, -, -⟩ := hP.split hi
+  have hh : S.L.ph (upd G t (⟨.holds, pa, hL⟩, sp, x) t) = .holds := by rw [upd_self]; rfl
+  obtain ⟨-, hjt⟩ := hl.live t (by rw [hh]; decide)
+  have hs := hl.own.sub t
+  rw [Lock.own_live hjt, upd_self] at hs
+  have hpd := hl.pdisj t
+  rw [upd_self] at hpd
+  change Heap.Disjoint pa hL at hpd
+  change (pa ∪ hL).Sub m.heap at hs
+  intro l c hl₁
+  refine hs l c ?_
+  show (pa ∪ hL) l = some c
+  rcases hpd l with e | e
+  · simp [e, hl₁]
+  · rw [hl₁] at e; cases e
+
+/-- A thread at `out` is not in the futex queue. -/
+theorem out_notQ (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} (hi : P.inv G m)
+    (ho : (G t).1.ph = .out) : ∀ w ∈ m.waiters, w.2 = S.WE.ptr → w.1 ≠ t := fun w hw _ e => by
+  rcases (hP.split hi).1.fq w hw with ⟨-, h⟩ | ⟨-, h⟩ <;> rw [e] at h <;>
+    change (G t).1.ph = _ at h <;> rw [ho] at h <;> cases h
+
+/-- The holder `t`'s acquire load of the epoch, outside the condition: it reads the newest write
+`i`, with the value `e`, and goes to `ld i e`. -/
+theorem wp_ldE (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X} {m : Mem} {n : Nat}
+    {a : LG} {x : X} (ha : a.ph = .holds) (hi : P.inv (upd G t (a, .none, x)) m)
+    {Q : BitVec 32 × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' i e, m'.current = t → P.inv (upd G₁ t (a, .ld i e, x)) m' →
+      Q (e, s) G₁ m' k) :
+    P.WP t ((atomicLoadC (n := 32) .acquire 4 S.WE.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
+  refine wp_load hP (.inr rfl) (g := (a, .none, x)) (by rw [ha]; decide) hi
+    fun k hk G₁ m₁ m' v j hg₁ hi₁ hj hv hfl _ hh hw' hop hL hU => ?_
+  obtain ⟨hl₁, hs₁, -⟩ := hP.split hi₁
+  have hh₁ : (G₁ t).1.ph = .holds := by rw [hg₁]; exact ha
+  have hs' := hs₁.opKeep (.inr rfl) hop hw' hh
+  have hpos := hist_pos hs₁.we
+  have hjl : j = (S.WE.hist m₁).size - 1 := by
+    have := hfl _ (by omega) (HBH.le hl₁ hh₁ hs₁.hbE); omega
+  have hrt := hs'.retag (t := t) (g := (a, .ld j v, x)) (by rw [hg₁]; exact id) (fun _ => ha)
+    (fun i jr e => by rw [hg₁]; exact ⟨fun ⟨_, h⟩ => (by cases h), fun ⟨_, h⟩ => (by cases h)⟩)
+    (fun _ _ _ _ h => by cases h) (by rw [hg₁]; exact ⟨fun h => (by cases h), fun h => (by cases h)⟩)
+    (fun h => by cases h) (fun h => by rw [hg₁] at h; cases h)
+    (fun i e h => by
+      simp only [SPh.ld.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+      rw [hh]; exact ⟨by omega, hv⟩)
+    (fun h => by rw [hg₁] at h; cases h)
+    (fun y h1 h2 => by have := hs₁.off t y h1 h2; rwa [hg₁] at this)
+    (holds_notQ hL hh₁)
+  exact h k hk G₁ m' j v hop.current (hP.retag hL hU hrt (by rw [hg₁]) (by rw [hg₁]))
+
 end Sem
 end Sync
