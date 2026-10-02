@@ -1527,17 +1527,17 @@ theorem signal_spec (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph
 
 theorem enc_u64 : Enc.size (BitVec 64) = 8 := rfl
 
-/-- Two `pts` of the permit count in one heap have the same value. -/
-theorem pts_eq {v w : BitVec 64} {h₁ h₂ M : Heap} (hv : pts S.ptr 8 v h₁) (s₁ : h₁.Sub M)
-    (hw : pts S.ptr 8 w h₂) (s₂ : h₂.Sub M) : v = w := by
-  obtain ⟨A, Sz, K, bs, -, hs, hd, ⟨b, hb, -, ho⟩, -⟩ := hv
+/-- Two `pts` at one pointer, in one heap, have the same value. -/
+theorem pts_same {T : Type} [Enc T] {p : Ptr} {a : Nat} {v w : T} {h₁ h₂ M : Heap}
+    (hv : pts p a v h₁) (s₁ : h₁.Sub M) (hw : pts p a w h₂) (s₂ : h₂.Sub M) : v = w := by
+  obtain ⟨A, Sz, K, bs, -, hs, hd, ⟨b, hb, h0, ho⟩, -⟩ := hv
   obtain ⟨A', Sz', K', bs', -, hs', hd', ⟨b', hb', -, ho'⟩, -⟩ := hw
-  cases hb; cases hb'
+  rw [hb] at hb'; cases hb'
   have hbs : bs = bs' := by
     refine Array.ext (by rw [hs, hs']) fun i h1 h2 => ?_
-    have e₁ := ho (S.b, S.o + i); have e₂ := ho' (S.b, S.o + i)
-    simp only [Sem.ptr, Int.toNat_natCast, true_and, Nat.le_add_right,
-      Nat.add_lt_add_iff_left, h1, h2, ↓reduceIte, Nat.add_sub_cancel_left] at e₁ e₂
+    have e₁ := ho (b, p.off.toNat + i); have e₂ := ho' (b, p.off.toNat + i)
+    simp only [true_and, Nat.le_add_right, Nat.add_lt_add_iff_left, h1, h2, ↓reduceIte,
+      Nat.add_sub_cancel_left] at e₁ e₂
     have := (s₁ _ _ e₁).symm.trans (s₂ _ _ e₂)
     simp only [Option.some.injEq, Cell.mk.injEq] at this
     rw [getElem!_pos bs i h1, getElem!_pos bs' i h2] at this; exact this.1
@@ -1545,6 +1545,11 @@ theorem pts_eq {v w : BitVec 64} {h₁ h₂ M : Heap} (hv : pts S.ptr 8 v h₁) 
   have := congrArg ExceptT.run (hd.symm.trans hd')
   simp only [pure, ExceptT.pure, ExceptT.run_mk, Option.some.injEq, Except.ok.injEq] at this
   exact this
+
+/-- Two `pts` of the permit count in one heap have the same value. -/
+theorem pts_eq {v w : BitVec 64} {h₁ h₂ M : Heap} (hv : pts S.ptr 8 v h₁) (s₁ : h₁.Sub M)
+    (hw : pts S.ptr 8 w h₂) (s₂ : h₂.Sub M) : v = w :=
+  pts_same hv s₁ hw s₂
 
 theorem sub_union_left {h₁ h₂ M : Heap} (h : (h₁ ∪ h₂).Sub M) : h₁.Sub M := fun l c hl =>
   h l c (by simp [hl])
@@ -1889,7 +1894,7 @@ theorem wp_regS (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh 
     {pa hL : Heap} {x : X} {i : Nat} {e : BitVec 32}
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .ld i e, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
-    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e)
     {Q : Io_Condition_State × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' jr, m'.current = t →
@@ -1900,10 +1905,14 @@ theorem wp_regS (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh 
     (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' old r hg₁ hi₁ hd hv _ hh hw' hop hL' hU' => ?_
   obtain ⟨hl₁, hs₁, -⟩ := hP.split hi₁
   have hh₁ : (G₁ t).1.ph = .holds := by rw [hg₁]
+  have hpz₁ : S.PZ m₁ := by
+    obtain ⟨hp, hpp, hps⟩ := hz
+    have hsub := held_sub hP (G := G₁) (t := t) (by rw [← hg₁, upd_same]; exact hi₁)
+    exact ⟨hp, hpp, fun l c h => hsub l c (hps l c h)⟩
   have hnr : ∀ u i' jr sn e', (G₁ u).2.1 ≠ .reg i' jr sn e' := fun u i' jr sn e' hu => by
     by_cases hut : u = t
     · subst hut; rw [hg₁] at hu; cases hu
-    · exact hone G₁ m₁ hi₁ (by rw [hg₁]) hh₁ u hut i' jr sn e' hu
+    · exact hone G₁ m₁ hi₁ (by rw [hg₁]) hh₁ hpz₁ u hut i' jr sn e' hu
   have hold : old = 0 := val_eq hv (hs₁.idle hnr)
   subst hold
   rw [bits_add1] at hh
@@ -1914,10 +1923,7 @@ theorem wp_regS (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh 
     have := HBH.le hl₁ hh₁ hs₁.hbE
     simp only [last, hsz, Nat.add_sub_cancel] at this
     exact VClock.le_trans this (hop.clocks t)
-  have hpz : S.PZ m' := by
-    obtain ⟨hp, hpp, hps⟩ := hz
-    have hsub := held_sub hP (G := G₁) (t := t) (by rw [← hg₁, upd_same]; exact hi₁)
-    exact (op_keep (.inl rfl) hop).2 ⟨hp, hpp, fun l c h => hsub l c (hps l c h)⟩
+  have hpz : S.PZ m' := (op_keep (.inl rfl) hop).2 hpz₁
   have hs' := hs₁.reg (by rw [hg₁]) hh₁ (crit_one hl₁ hs₁ hh₁) hnr hop hw' hh hpz he hce
   have := hP.retag hL' hU' hs' rfl rfl (fun _ => .inl (by rw [hg₁]; rfl))
   rw [hg₁] at this
@@ -2164,7 +2170,7 @@ theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (i
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
-    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) :
     P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
       d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
@@ -2273,7 +2279,7 @@ def post5 (D : Nat) (r : Io_Semaphore_waitUncancelableExit × Io_Semaphore_waitU
     S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) ≠ 0
 
 theorem loop5_body (hP : S.Fits P U) (io : Io)
-    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x)
     (D : Nat) (s : Io_Semaphore_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
     (h : inv5 (P := P) t pa x D s G m d) :
@@ -2327,7 +2333,7 @@ theorem xs_eq (G : ThreadId → SGh X) (t : ThreadId) (a a' : LG) (sp sp' : SPh)
 /-- `wait` by `t` at `x`, out of the semaphore: it takes a permit, and with it the resource `T`
 (`hmv`); its part grows by `T`, its ghost value is `x'`. -/
 theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : Assn) (io : Io)
-    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x)
     (hmv : ∀ Y : ThreadId → X, Y t = x → S.pv Y ≠ 0 → S.pv (upd Y t x') = S.pv Y - 1 ∧
       ∀ hr, S.Res Y hr → ∃ h₁ h₂, hr = h₁ ∪ h₂ ∧ Heap.Disjoint h₁ h₂ ∧ S.Res (upd Y t x') h₁ ∧ T h₂)
@@ -2412,9 +2418,13 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
 /-- `post` by `t` at `x`, with the resource `h₃` of a permit in its part: it gives the permit and
 `h₃` back (`hmv`); its part is `pa`, its ghost value `x'`. -/
 theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (io : Io)
-    (hmv : ∀ Y : ThreadId → X, Y t = x → S.pv (upd Y t x') = S.pv Y + 1 ∧
-      (S.pv Y).toNat + 1 < 2 ^ 64 ∧
-      ∀ hr, S.Res Y hr → Heap.Disjoint h₃ hr → S.Res (upd Y t x') (h₃ ∪ hr))
+    (hmv : ∀ G m hL, P.inv (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x)) m →
+      S.pv (upd (xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2) t x') =
+        S.pv (xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2) + 1 ∧
+      (S.pv (xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2)).toNat + 1 < 2 ^ 64 ∧
+      ∀ hr, S.Res (xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2) hr →
+        Heap.Disjoint h₃ hr →
+        S.Res (upd (xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2) t x') (h₃ ∪ hr))
     (hU : ∀ G m h₁ h₂, U (upd G t (⟨.holds, pa ∪ h₃, h₁⟩, .pst, x)) m →
       U (upd G t (⟨.holds, pa, h₂⟩, .pst, x')) m)
     (hdj : Heap.Disjoint pa h₃) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
@@ -2432,8 +2442,7 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
   have hp₁ := hP.toPst hi₁ rfl
   rw [ptr0 (S := S)]
   refine WP.bind (wp_cntLoad hP hp₁ hc₁ fun m₂ hL₂ hc₂ hi₂ => ?_)
-  have hY := xs_self G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)
-  obtain ⟨hpv, hlt, hres⟩ := hmv _ hY
+  obtain ⟨hpv, hlt, hres⟩ := hmv G₁ m₁ hL₁ hp₁
   refine WP.bind (WP.callRC_ok (add1_run hlt) ?_)
   have hxs := xs_eq G₁ t ⟨.holds, pa ∪ h₃, hL₂⟩ ⟨.holds, pa ∪ h₃, hL₁⟩ .pst .pst x
   refine WP.bind (wp_cnt hP (Mv := (· = pa)) (x' := x') (r₀ := ()) hi₂ hc₂
