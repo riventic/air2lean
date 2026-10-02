@@ -200,6 +200,15 @@ structure XEq (x x' : X) : Prop where
 
 theorem XEq.refl (x : X) : XEq x x := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
+theorem XEq.symm {x y : X} (h : XEq x y) : XEq y x :=
+  ⟨h.isPre.symm, h.wa.symm, h.fd.symm, h.frozen.symm, h.sx.symm, h.e1.symm, h.st.symm,
+    h.e01.symm, h.isEv1.symm, h.isEvd.symm, h.fc.symm, h.fz.symm⟩
+
+theorem XEq.trans {x y z : X} (h : XEq x y) (h' : XEq y z) : XEq x z :=
+  ⟨h'.isPre.trans h.isPre, h'.wa.trans h.wa, h'.fd.trans h.fd, h'.frozen.trans h.frozen,
+    h'.sx.trans h.sx, h'.e1.trans h.e1, h'.st.trans h.st, h'.e01.trans h.e01,
+    h'.isEv1.trans h.isEv1, h'.isEvd.trans h.isEvd, h'.fc.trans h.fc, h'.fz.trans h.fz⟩
+
 /-- The two tasks. -/
 def Pair (u v : ThreadId) : Prop := u = 1 ∧ v = 2 ∨ u = 2 ∧ v = 1
 
@@ -647,5 +656,105 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     · rcases hs.fpc e he with h'' | hle
       · exact .inl h''
       · rw [hc] at het hle; exact .inr ⟨het, hle⟩
+
+/-! ## A task's counter -/
+
+/-- A task at `out`, at the place `ph`. -/
+def gT (ph : Ph) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, { ph := ph })
+
+/-- A task that holds the mutex and the counter `h`, at the place `ph`. -/
+def gH (ph : Ph) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, { ph := ph })
+
+/-- The stores of both tasks. -/
+def cnt (X : ThreadId → X) : Nat := (X 1).cnt + (X 2).cnt
+
+theorem task_ne {t : ThreadId} (ht : t = 1 ∨ t = 2) : t ≠ 0 := by
+  rcases ht with rfl | rfl <;> decide
+
+theorem task_lt {t : ThreadId} (ht : t = 1 ∨ t = 2) : t < 3 := by
+  rcases ht with rfl | rfl <;> decide
+
+theorem shape_task {Y : ThreadId → X} {m : Mem} {t : ThreadId} {x x' : X} (ht : t = 1 ∨ t = 2)
+    (h : Shape (upd Y t x) m) (hx : x.ph.isTask) (hx' : x'.ph.isTask) : Shape (upd Y t x') m := by
+  have h0 := task_ne ht
+  obtain ⟨a, b, c, d⟩ := h
+  have hne3 : ∀ u, 3 ≤ u → u ≠ t := fun u hu e => by
+    subst e; rcases ht with rfl | rfl <;> unfold ThreadId at * <;> omega
+  refine ⟨a, by rw [upd_ne _ _ (Ne.symm h0)] at b ⊢; exact b,
+    fun u hu => by have := c u hu; rw [upd_ne _ _ (hne3 u hu)] at this ⊢; exact this, ?_⟩
+  rcases d with ⟨d1, d2, d3, d4⟩ | ⟨d1, d2, d3, d4, d5⟩ | ⟨d1, d2, d3, d4, d5, d6⟩
+  · exfalso; rcases ht with rfl | rfl
+    · rw [upd_self] at d3; rw [d3] at hx; cases hx
+    · rw [upd_self] at d4; rw [d4] at hx; cases hx
+  · rcases ht with rfl | rfl
+    · exact .inr (.inl ⟨d1, by rw [upd_ne _ _ (by decide)] at d2 ⊢; exact d2, d3,
+        by rw [upd_self]; exact hx', by rw [upd_ne _ _ (by decide)] at d5 ⊢; exact d5⟩)
+    · exfalso; rw [upd_self] at d5; rw [d5] at hx; cases hx
+  · refine .inr (.inr ⟨d1, by rw [upd_ne _ _ (Ne.symm h0)] at d2 ⊢; exact d2, ?_, ?_,
+      by rw [upd_ne _ _ (Ne.symm h0)] at d5 ⊢; exact d5, d6⟩)
+    · rcases ht with rfl | rfl
+      · rw [upd_self]; exact hx'
+      · rw [upd_ne _ _ (by decide)] at d3 ⊢; exact d3
+    · rcases ht with rfl | rfl
+      · rw [upd_ne _ _ (by decide)] at d4 ⊢; exact d4
+      · rw [upd_self]; exact hx'
+
+/-- A holder's step on the counter: `U` with the ghost value `g'` (a holder at `lk` or `inc`). -/
+theorem U_hold {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g' : Gh} {hQ : Heap}
+    (ht : t = 1 ∨ t = 2) (hi : proto.inv G m)
+    (hs : StepIn (m.heap.diff (L.own G m t)) m m')
+    (hm' : m'.heap = hQ ∪ m.heap.diff (L.own G m t))
+    (hd : Heap.Disjoint hQ (m.heap.diff (L.own G m t))) (hc : m.current = t)
+    (hg : (G t).2 = { ph := .lk } ∨ (G t).2 = { ph := .inc })
+    (hg' : g'.2 = { ph := .lk } ∨ g'.2 = { ph := .inc })
+    (hp : g'.1.part = Heap.empty) (hlg : g'.1.ph = .holds) :
+    U (upd G t g') m' := by
+  have h0 := task_ne ht
+  have hrk : ∀ x : X, x = { ph := .lk } ∨ x = { ph := .inc } → XEq x { ph := .lk } := by
+    rintro x (rfl | rfl)
+    · exact XEq.refl _
+    · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hT : ∀ x : X, x = { ph := .lk } ∨ x = { ph := .inc } → x.ph.isTask := by
+    rintro x (rfl | rfl) <;> rfl
+  have hG : upd G t (G t) = G := upd_same G t
+  have hi' : proto.inv (upd G t (G t)) m := by rw [hG]; exact hi
+  have hU := U_stepIn (g := g') hi hs hm' hd hc (task_lt ht) ((hrk _ hg).trans (hrk _ hg').symm)
+    (by rcases hg' with h | h <;> rw [h] <;> rfl)
+    (by
+      have hsh := hi.2.shape
+      rw [← hG, snd_upd] at hsh
+      exact shape_task ht hsh (hT _ hg) (hT _ hg'))
+    (fun _ => hp) (fun e => absurd e h0)
+    (fun w hw => by
+      rw [hs.waiters] at hw
+      rcases hi.2.q w hw with h | ⟨a, b, c, d⟩
+      · exact .inl h
+      · have hsx : (G t).2.sx = false := by rcases hg with h | h <;> rw [h]
+        have hsx' : g'.2.sx = false := by rcases hg' with h | h <;> rw [h]
+        have hwk : (G t).2.ph ≠ .wk := by rcases hg with h | h <;> rw [h] <;> decide
+        have hwk' : g'.2.ph ≠ .wk := by rcases hg' with h | h <;> rw [h] <;> decide
+        refine .inr ⟨a, b, by rw [upd_ne _ _ (Ne.symm h0)]; exact c, ?_⟩
+        rcases ht with rfl | rfl
+        · rw [upd_self, upd_ne _ _ (by decide), hsx']
+          rcases d with d | d | d
+          · left; rw [hsx] at d; exact d
+          · exact absurd d hwk
+          · exact .inr (.inr d)
+        · rw [upd_self, upd_ne _ _ (by decide), hsx']
+          rcases d with d | d | d
+          · left; rw [hsx] at d; simpa using d
+          · exact .inr (.inl d)
+          · exact absurd d hwk)
+    (fun h => by rcases hg' with h' | h' <;> rw [h'] at h <;> cases h)
+    (fun h => by rcases hg' with h' | h' <;> rw [h'] at h <;> cases h)
+    (fun hr => by
+      have hr' : 6 ≤ (G 0).2.ph.rank := by rwa [upd_ne _ _ (Ne.symm h0)] at hr
+      obtain ⟨a, b, -⟩ := hi.2.done hr'
+      exfalso
+      rcases ht with rfl | rfl
+      · rcases hg with h | h <;> rw [h] at a <;> cases a
+      · rcases hg with h | h <;> rw [h] at b <;> cases b)
+    (fun hr => by rwa [upd_ne _ _ (Ne.symm h0)] at hr)
+  exact hU
 
 end Threadsync.WG
