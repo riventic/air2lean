@@ -42,7 +42,7 @@ theorem hdrBytes_size (ptr : Ptr) (len cap : BitVec 64) : (hdrBytes ptr len cap)
 
 theorem hdr_ptr (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 0 (0 + 8) = Enc.encode ptr := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size]
 
 theorem hdr_len (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 8 (8 + 8) = Enc.encode len := by
@@ -54,7 +54,7 @@ theorem hdr_cap (ptr : Ptr) (len cap : BitVec 64) :
 
 theorem hdr_slice (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 0 (0 + 16) = Enc.encode ptr ++ Enc.encode len := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size]
 
 theorem decode_slice (ptr : Ptr) (len : BitVec 64) :
     Enc.decode (Enc.encode ptr ++ Enc.encode len : Array Byte) = (pure ⟨ptr, len⟩ : Result Slice) := by
