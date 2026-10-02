@@ -977,4 +977,159 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
   | work p => cases hg
   | writer p => cases hg
 
+
+/-! ## `main`'s start -/
+
+theorem enc_io (io : Io) : (Enc.encode io).size = 16 := by
+  show (Array.replicate 16 _).size = 16; simp
+
+/-- The initial semaphore: one permit. -/
+def sem0 : Io_Semaphore :=
+  { mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex),
+    cond := ({ state := ({ raw := (Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } :
+      atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } :
+      Io_Condition),
+    permits := (1 : BitVec 64) }
+
+theorem sem_size : (Enc.encode sem0).size = 24 := by decide +kernel
+theorem sem_c : (Enc.encode sem0).extract 0 8 = Enc.encode (1 : BitVec 64) := by decide +kernel
+theorem sem_m : ((Enc.encode sem0).extract 8 24).extract 0 4 = Enc.encode (0 : BitVec 32) := by
+  decide +kernel
+theorem sem_w : (Enc.encode sem0).extract 8 12 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_s : (Enc.encode sem0).extract 12 16 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_e : (Enc.encode sem0).extract 16 20 = Enc.encode (0 : BitVec 32) := by decide +kernel
+
+/-- `main`'s ghost value before its spawn. -/
+def gPre : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .none, .pre)
+
+/-- The start: no thread. -/
+def G0 : ThreadId → Gh := fun _ => (⟨.gone, Heap.empty, Heap.empty⟩, .none, .none)
+
+/-- `main` at its join. -/
+def gJoin : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .none, .joins)
+
+/-- The `SemCounter` in four parts, after `main`'s stores: `io`, the semaphore, `n`, the
+padding. -/
+def Parts (io : Io) (A : Nat) (pb : Array Byte) : Assn :=
+  bytesAt cPtr A 48 .stack (Enc.encode io) ∗ (bytesAt (cPtr.add 16) A 48 .stack (Enc.encode sem0) ∗
+    (bytesAt nPtr A 48 .stack (Enc.encode (0 : BitVec 32)) ∗ bytesAt (cPtr.add 44) A 48 .stack pb))
+
+theorem allLe_one {m : Mem} {c : VClock} (h1 : m.threads.size = 1)
+    (h : VClock.le c (m.clocks[0]!) = true) : AllLe m c := fun u hu => by
+  rw [h1] at hu
+  have : u = 0 := by omega
+  subst this; exact h
+
+/-- Before the spawn: `main` alone owns the `SemCounter`. The semaphore starts: its mutex owns the
+permit count and `n`; the rest belongs to no thread. -/
+theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
+    (ho : Owned (upd (fun _ => Heap.empty) 0 h) m) (hp : Parts io A pb h) (hA : A % 8 = 0)
+    (hth : m.threads = #[{ spawner := 0, joined := true }]) (hat : m.atomics = #[])
+    (hq : m.waiters = #[]) : proto.inv (upd G0 0 gPre) m := by
+  obtain ⟨hI, h2, dI, rfl, hio, hS, h3, dS, rfl, hs, hN, hP, dN, rfl, hn, -⟩ := hp
+  obtain ⟨hC, hR1, dC, rfl, hC₁, hR1'⟩ := bytesAt_split hs (k := 8) (by rw [sem_size]; decide)
+  obtain ⟨hW, hCo, dW, rfl, hW₁, -⟩ := bytesAt_split hR1' (k := 4) (by simp [sem_size])
+  have hsub := ho.sub 0; rw [upd_self] at hsub
+  have h1 : m.threads.size = 1 := by rw [hth]; rfl
+  have sI : hI.Sub m.heap := Heap.sub_union_left.trans hsub
+  have s2 : (((hC ∪ (hW ∪ hCo)) ∪ (hN ∪ hP))).Sub m.heap :=
+    (Heap.sub_union_right dI).trans hsub
+  have sS : (hC ∪ (hW ∪ hCo)).Sub m.heap := Heap.sub_union_left.trans s2
+  have sN : hN.Sub m.heap := (Heap.sub_union_left.trans (Heap.sub_union_right dS)).trans s2
+  have sW : hW.Sub m.heap := (Heap.sub_union_left.trans (Heap.sub_union_right dC)).trans sS
+  -- block 0 and its bytes
+  obtain ⟨blk, hblk, hl, hA', hS', hK', -⟩ := bytesAt_blk (m := m) hio sI rfl
+    (by rw [enc_io]; decide)
+  obtain ⟨blk₂, hblk₂, -, -, -, -, hxs⟩ := bytesAt_blk (m := m) hs sS rfl (by rw [sem_size]; decide)
+  rw [hblk] at hblk₂; cases hblk₂
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hword : ∀ o, 16 ≤ o → o + 4 ≤ 40 → blk.bytes.extract o (o + 4) =
+      (Enc.encode sem0).extract (o - 16) (o - 12) := by
+    intro o h1 h2
+    have := congrArg (fun a => Array.extract a (o - 16) (o - 12)) hxs
+    simp only [Array.extract_extract] at this
+    rw [← this]
+    simp only [show (cPtr.add 16).off.toNat = 16 from rfl, sem_size]
+    congr 1 <;> omega
+  -- each access to a byte of `main`'s part happened before `main`
+  have hown : ∀ e ∈ m.footprint, e.Touches (hI ∪ ((hC ∪ (hW ∪ hCo)) ∪ (hN ∪ hP))) →
+      AllLe m e.clock := fun e he ht => allLe_one h1 (by
+    have := ho.owns 0 (by rw [h1]; decide) e he (.inl (by rw [upd_self]; exact ht)); exact this)
+  have hcellS : ∀ x, 16 ≤ x → x < 40 → (hI ∪ ((hC ∪ (hW ∪ hCo)) ∪ (hN ∪ hP))) (0, x) ≠ none :=
+    fun x a b => ((Heap.sub_union_left.trans (Heap.sub_union_right dI))).ne
+      (bytesAt_in hs rfl (by simp [cPtr, Ptr.add]; omega) (by simp [cPtr, Ptr.add, sem_size]; omega))
+  have hwi : ∀ W : Word 32 4, W.b = 0 → W.o % 4 = 0 → 28 ≤ W.o → W.o + 4 ≤ 36 →
+      (Enc.encode sem0).extract (W.o - 16) (W.o - 12) = Enc.encode (0 : BitVec 32) →
+      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := fun W hb h4 h1' h2' he =>
+    Sem.word_init hb hblk hl (by omega) (by rw [hA']; omega) hK' hat
+      (by rw [hword W.o (by omega) (by omega), he]; exact intOfBytes_rmw 0)
+      (fun e he' hh => hown e he' (Word.touches_of hh fun x a b => by
+        rw [hb]; exact hcellS x (by omega) (by omega)))
+  obtain ⟨hwsOk, hwsz, hwsv⟩ := hwi S.WS rfl (by decide) (by decide) (by decide) sem_s
+  obtain ⟨hweOk, hwez, -⟩ := hwi S.WE rfl (by decide) (by decide) (by decide) sem_e
+  have hno : ∀ i l, ¬ S.WE.Loc m i l := fun i l hl => by
+    have := (Word.loc_get hl).1; rw [hat] at this; simp at this
+  have hE0 : (S.WE.hist m)[0]!.clock = #[] := by rw [Word.hist_none hno]; rfl
+  have hcellW : ∀ x, 24 ≤ x → x < 24 + 4 → hW (0, x) ≠ none := fun x h1 h2 =>
+    bytesAt_in hW₁ rfl (by simp [cPtr, Ptr.add]; omega)
+      (by simp [cPtr, Ptr.add, sem_size]; omega)
+  have h0 : S.L.U32 m 0 := by
+    show (intOfBytes 32 (curBytes m 0 24 4)).run = _
+    unfold curBytes; rw [hblk]
+    simp only [Option.map_some, Option.getD_some]
+    rw [hword 24 (by decide) (by decide), sem_w]
+    exact intOfBytes_rmw 0
+  -- `main` keeps the permit count, `n` and the mutex; the rest belongs to no thread
+  obtain ⟨dCW, dCCo⟩ := Heap.disjoint_union_right.mp dC
+  obtain ⟨dSN, dSP⟩ := Heap.disjoint_union_right.mp dS
+  obtain ⟨dCN, dWCoN⟩ := Heap.disjoint_union_left.mp dSN
+  obtain ⟨dWN, -⟩ := Heap.disjoint_union_left.mp dWCoN
+  have hsub : (Heap.empty ∪ ((hC ∪ hN) ∪ hW)).Sub (hI ∪ ((hC ∪ (hW ∪ hCo)) ∪ (hN ∪ hP))) := by
+    rw [Heap.empty_union]
+    refine Heap.union_sub (Heap.union_sub ?_ ?_) ?_
+    · exact (Heap.sub_union_left.trans Heap.sub_union_left).trans (Heap.sub_union_right dI)
+    · exact (Heap.sub_union_left.trans (Heap.sub_union_right dS)).trans (Heap.sub_union_right dI)
+    · exact ((Heap.sub_union_left.trans (Heap.sub_union_right dC)).trans Heap.sub_union_left).trans
+        (Heap.sub_union_right dI)
+  have ho' := ho.shrink (t := 0) (by rw [upd_self]; exact hsub)
+  rw [upd_upd] at ho'
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 gPre u = G0 u := fun u h => upd_ne _ _ h
+  have hjt : joinedB m 0 = false := rfl
+  have hpC : pts S.ptr 8 (1 : BitVec 64) hC :=
+    ⟨A, 48, .stack, _, by simp [S, Sem.ptr]; omega, by rw [sem_c]; exact LawfulEnc.size_encode _,
+      by rw [sem_c]; exact LawfulEnc.decode_encode _, hC₁, by decide⟩
+  have hpN : NP (XG (upd G0 0 gPre)) hN :=
+    ⟨A, 48, .stack, Enc.encode (0 : BitVec 32), by simp [nPtr, cPtr, Ptr.add]; omega, enc_u32 0,
+      LawfulEnc.decode_encode _, hn, by decide⟩
+  refine ⟨Inv.make (t := 0) (hL := hC ∪ hN) (hW := hW) ho' hjt (fun u hu => ?_)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; exact fun _ => .inl rfl)
+    (Heap.disjoint_union_left.mpr ⟨dCW, dWN.symm⟩) (fun u => ?_) (fun u => ?_)
+    ⟨hC, hN, dCN, rfl, hpC, hpN⟩ hcellW
+    ⟨blk, hblk, hl, by rw [hS']; decide, by show (blk.addr + 24) % 4 = 0; rw [hA']; omega,
+      by rw [hK']; decide⟩ h0 (by rw [hat]; simp) hq (fun u hu => ?_) (by rw [h1]; decide),
+    Sem.Inv.start (S := S) hwsOk hweOk hwsz hwsv hwez (by rw [hE0]; exact Sem.allLe_nil m)
+      (fun u => by unfold upd; split <;> rfl) (fun w hw => by rw [hq] at hw; simp at hw)
+      (fun u x _ _ => by unfold upd; split <;> rfl),
+    ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 gPre 0).2.2 = _; rw [upd_self]; rfl,
+      fun u hu => by show (upd G0 0 gPre u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl⟩⟩,
+      fun e he hb ho16 => .inr (hown e he ⟨e.off, Nat.le_refl _, .inr rfl, by
+        rw [hb]; simp only [Heap.union_apply]
+        have := bytesAt_in hio rfl (by simp [cPtr]) (by simp [cPtr, enc_io]; omega) (x := e.off)
+        cases e' : hI (0, e.off) with
+        | none => exact absurd e' this
+        | some c => simp⟩),
+      fun u => by unfold upd; split <;> rfl, hbk, fun w hw => by rw [hq] at hw; simp at hw,
+      .inl (by show (upd G0 0 gPre 0).2.2.holds = false; rw [upd_self]; rfl),
+      fun u hu => by unfold upd at hu; split at hu <;> cases hu⟩⟩
+  · rw [upd_ne _ _ hu]
+    unfold Lock.own; rw [hGu u hu]; split <;> rfl
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; exact .inl ⟨rfl, by rw [h1]; decide, rfl⟩
+    · rw [hGu u hu]; exact .inr rfl
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; rfl
+    · rw [hGu u hu]; rfl
+  · have : u = 0 := by rw [h1] at hu; omega
+    subst this; exact VClock.le_refl _
+
 end Sync.SemCounter
