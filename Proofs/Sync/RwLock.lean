@@ -670,13 +670,6 @@ structure Sem.Spec : Prop where
       (G 0).2.2.pw
   /-- A step out of the semaphore's code keeps its invariant. -/
   frame : FrameOk E
-  /-- The start, after the spawn: the semaphore's bytes hold `sem0`, no atomic op was done, no
-  thread waits, and each access happened before every thread. -/
-  start : ∀ G m, (∀ u, (G u).2.1 = default) →
-    (∀ u, (G u).1.ph = .out ∨ (G u).1.ph = .gone) →
-    (∀ u x, 24 ≤ x → x < 48 → (G u).1.part (0, x) = none) → BlkOk m →
-    curBytes m 0 24 24 = Enc.encode sem0 → m.atomics = #[] → m.waiters = #[] →
-    (∀ e ∈ m.footprint, AllLe m e.clock) → E.inv G m
 
 /-! ## Basic facts -/
 
@@ -3977,12 +3970,14 @@ theorem sem_size : (Enc.encode sem0).size = 24 := by decide +kernel
 theorem sem_s : (Enc.encode sem0).extract 12 16 = Enc.encode (0 : BitVec 32) := by decide +kernel
 theorem sem_e : (Enc.encode sem0).extract 16 20 = Enc.encode (0 : BitVec 32) := by decide +kernel
 
-/-- `E₀` satisfies `Sem.Spec.start`. -/
+/-- The semaphore's part at its start: the semaphore's bytes hold `sem0`, no atomic op was done,
+no thread waits, and each access to the semaphore's words happened before every thread. -/
 theorem start₀ : ∀ G m, (∀ u, (G u).2.1 = default) →
     (∀ u, (G u).1.ph = .out ∨ (G u).1.ph = .gone) →
     (∀ u x, 24 ≤ x → x < 48 → (G u).1.part (0, x) = none) → BlkOk m →
     curBytes m 0 24 24 = Enc.encode sem0 → m.atomics = #[] → m.waiters = #[] →
-    (∀ e ∈ m.footprint, AllLe m e.clock) → E₀.inv G m := by
+    (∀ e ∈ m.footprint, ∀ W : Word 32 4, W.b = 0 → 24 ≤ W.o → W.o + 4 ≤ 48 → W.Hits e →
+      AllLe m e.clock) → E₀.inv G m := by
   intro G m hd _ hoff hb hc hat hq hall
   obtain ⟨blk, hblk, hlv, hsz, ha, hk⟩ := hb
   have hxs : blk.bytes.extract 24 48 = Enc.encode sem0 := by
@@ -3995,7 +3990,7 @@ theorem start₀ : ∀ G m, (∀ u, (G u).2.1 = default) →
       W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := fun W hW h1 h2 h4 he =>
     Sync.Sem.word_init hW hblk hlv (by omega) (by omega) hk hat
       (by rw [hword W.o (by omega) (by omega), he]; exact intOfBytes_rmw 0)
-      (fun e he' _ => hall e he')
+      (fun e he' hh => hall e he' W hW (by omega) (by omega) hh)
   obtain ⟨hwsOk, hwsz, hwsv⟩ := hwi Sm.WS rfl (by decide) (by decide) (by decide) sem_s
   obtain ⟨hweOk, hwez, -⟩ := hwi Sm.WE rfl (by decide) (by decide) (by decide) sem_e
   have hno : ∀ i l, ¬ Sm.WE.Loc m i l := fun i l hl => by
@@ -4012,6 +4007,5 @@ theorem spec₀ : E₀.Spec where
   post := post₀
   live := live₀
   frame := frame₀
-  start := start₀
 
 end Sync.RwLockRead
