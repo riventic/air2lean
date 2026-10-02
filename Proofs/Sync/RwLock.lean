@@ -4008,4 +4008,210 @@ theorem spec₀ : E₀.Spec where
   live := live₀
   frame := frame₀
 
+/-! ## `main` -/
+
+/-- The `RwLock` that `main` stores. -/
+def rw0 : Io_RwLock :=
+  { state := 0, mutex := { state := { raw := Io_Mutex_State.unlocked } }, semaphore := sem0 }
+
+theorem rw_size : (Enc.encode rw0).size = 40 := by decide +kernel
+theorem rw_state : (Enc.encode rw0).extract 0 8 = Enc.encode (0 : BitVec 64) := by decide +kernel
+theorem rw_sem : (Enc.encode rw0).extract 8 32 = Enc.encode sem0 := by decide +kernel
+theorem rw_mutex : (Enc.encode rw0).extract 32 36 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_c : (Enc.encode sem0).extract 0 8 = Enc.encode (0 : BitVec 64) := by decide +kernel
+theorem sem_m : (Enc.encode sem0).extract 8 12 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem enc_io (io : Io) : (Enc.encode io).size = 16 := by
+  show (Array.replicate 16 _).size = 16; simp
+theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
+
+/-- The start: no thread. -/
+def G0 : ThreadId → Gh SPh := fun _ => (⟨.gone, Heap.empty, Heap.empty⟩, (default, .none))
+
+/-- `main` before its spawn. -/
+def gPre : Gh SPh := gA .pre Heap.empty default
+
+/-- `rwLockRead` gives `10 * a + 2`, with `a` the writer's count at `main`'s first read. -/
+def QM : Except ErrName (BitVec 32) → (ThreadId → Gh SPh) → Mem → Nat → Prop :=
+  fun v _ m _ => (v = .ok 2 ∨ v = .ok 12 ∨ v = .ok 22) ∧ joinedAll 0 m
+
+/-- The `Shared` in four parts, after `main`'s stores: `io`, the `RwLock`, `n`, the padding. -/
+def Parts (io : Io) (A : Nat) (pb : Array Byte) : Assn :=
+  bytesAt bPtr A 64 .stack (Enc.encode io) ∗ (bytesAt (bPtr.add 16) A 64 .stack (Enc.encode rw0) ∗
+    (bytesAt nPtr A 64 .stack (Enc.encode (0 : BitVec 32)) ∗ bytesAt (bPtr.add 60) A 64 .stack pb))
+
+theorem rw_smx : (Enc.encode rw0).extract 16 20 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem rw_c : ((Enc.encode rw0).extract 8 (Enc.encode rw0).size).extract 0 8 =
+    Enc.encode (0 : BitVec 64) := by decide +kernel
+
+theorem allLe_one {m : Mem} {c : VClock} (h1 : m.threads.size = 1)
+    (h : VClock.le c (m.clocks[0]!) = true) : AllLe m c := fun u hu => by
+  rw [h1] at hu
+  have : u = 0 := by omega
+  subst this; exact h
+
+/-- The bytes of block 0 after `main`'s stores. -/
+theorem blk_rw {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap} (hp : Parts io A pb h)
+    (hs : h.Sub m.heap) : ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.addr = A ∧
+      blk.bytes.size = 64 ∧ blk.kind = .stack ∧ blk.bytes.extract 16 56 = Enc.encode rw0 := by
+  obtain ⟨hI, h2, dI, he, -, hS, h3, dS, he2, hrw, -⟩ := hp
+  subst he2; rw [he] at hs
+  have := bytesAt_blk (m := m) hrw ((Heap.sub_union_left.trans (Heap.sub_union_right dI)).trans hs)
+    rfl (by rw [rw_size]; decide)
+  obtain ⟨blk, hb, hl, ha, hsz, hk, hx⟩ := this
+  exact ⟨blk, hb, hl, ha, hsz, hk, by rw [← hx, rw_size]; rfl⟩
+
+/-- Before the spawn: `main` alone, at `pre`, owns nothing; the semaphore's mutex owns the permit
+count; `n` is in the state word. -/
+theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
+    (ho : Owned (upd (fun _ => Heap.empty) 0 h) m) (hp : Parts io A pb h) (hA : A % 8 = 0)
+    (hth : m.threads = #[{ spawner := 0, joined := true }]) (hat : m.atomics = #[])
+    (hq : m.waiters = #[]) : (proto E₀).inv (upd G0 0 gPre) m := by
+  have hsub := ho.sub 0; rw [upd_self] at hsub
+  have h1 : m.threads.size = 1 := by rw [hth]; rfl
+  obtain ⟨blk, hblk, hl, hA', hS', hK', hx⟩ := blk_rw hp hsub
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hword : ∀ o k, 16 ≤ o → o + k ≤ 56 →
+      blk.bytes.extract o (o + k) = (Enc.encode rw0).extract (o - 16) (o - 16 + k) := by
+    intro o k h1 h2
+    rw [← hx, Array.extract_extract]; congr 1 <;> omega
+  obtain ⟨hI, h2, dI, rfl, hio, hS, h3, dS, rfl, hrw, hN, hP, dN, rfl, hn, -⟩ := hp
+  obtain ⟨hSt, hR1, dSt, rfl, -, hR1'⟩ := bytesAt_split hrw (k := 8) (by rw [rw_size]; decide)
+  obtain ⟨hC, hR2, dC, rfl, hC₁, hR2'⟩ := bytesAt_split hR1' (k := 8) (by simp [rw_size])
+  obtain ⟨hW, hR3, dW, rfl, hW₁, -⟩ := bytesAt_split hR2' (k := 4) (by simp [rw_size])
+  rw [rw_c] at hC₁
+  -- each access to a byte of `main`'s part happened before `main`
+  have hown : ∀ e ∈ m.footprint, (e.Touches (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) ∨
+      m.blocks.size ≤ e.block) → AllLe m e.clock := fun e he ht => allLe_one h1 (by
+    have := ho.owns 0 (by rw [h1]; decide) e he (ht.imp (fun h => by rw [upd_self]; exact h) id)
+    exact this)
+  have hin : ∀ x, 16 ≤ x → x < 56 → (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) (0, x) ≠ none :=
+    fun x a b => ((Heap.sub_union_left.trans (Heap.sub_union_right dI))).ne
+      (bytesAt_in hrw rfl (by simp [bPtr, Ptr.add]; omega) (by simp [bPtr, Ptr.add, rw_size]; omega))
+  have hfpW : ∀ e ∈ m.footprint, ∀ (n nb : Nat) (W : Word n nb), W.b = 0 → 16 ≤ W.o → W.o + nb ≤ 56 →
+      W.Hits e → AllLe m e.clock := fun e he _ _ W hb h1 h2 hh =>
+    hown e he (.inl (Word.touches_of hh fun x a b => by rw [hb]; exact hin x (by omega) (by omega)))
+  have hwi : ∀ (n nb : Nat) [LawfulEnc (BitVec n)] (W : Word n nb), W.b = 0 → 16 ≤ W.o →
+      W.o + nb ≤ 56 → (A + W.o) % nb = 0 →
+      (Enc.encode rw0).extract (W.o - 16) (W.o - 16 + nb) = Enc.encode (0 : BitVec n) →
+      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec n) :=
+    fun n nb _ W hb h1 h2 h4 he =>
+      Sync.Sem.word_init hb hblk hl (by omega) (by rw [hA']; exact h4) hK' hat
+        (by rw [hword W.o nb h1 h2, he]; exact intOfBytes_rmw 0)
+        (fun e he' hh => hfpW e he' n nb W hb h1 h2 hh)
+  obtain ⟨hwsOk, hwsz, hwsv⟩ := hwi 64 8 WS rfl (by decide) (by decide)
+    (by show (A + 16) % 8 = 0; omega) rw_state
+  obtain ⟨hwmOk, hwmz, hwmv⟩ := hwi 32 4 WM rfl (by decide) (by decide)
+    (by show (A + 48) % 4 = 0; omega) rw_mutex
+  -- the parts
+  have sAll := hsub
+  have sR : ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP)).Sub
+      (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) := Heap.sub_union_right dI
+  have sRw : (hSt ∪ (hC ∪ (hW ∪ hR3))).Sub ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP)) :=
+    Heap.sub_union_left
+  have sSem : (hC ∪ (hW ∪ hR3)).Sub (hSt ∪ (hC ∪ (hW ∪ hR3))) := Heap.sub_union_right dSt
+  have sC : hC.Sub (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) :=
+    ((Heap.sub_union_left.trans sSem).trans sRw).trans sR
+  have sW : hW.Sub (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) :=
+    (((Heap.sub_union_left.trans (Heap.sub_union_right dC)).trans sSem).trans sRw).trans sR
+  have sN : hN.Sub (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) :=
+    (Heap.sub_union_left.trans (Heap.sub_union_right dS)).trans sR
+  have hsubCW : (Heap.empty ∪ (hC ∪ hW)).Sub (hI ∪ ((hSt ∪ (hC ∪ (hW ∪ hR3))) ∪ (hN ∪ hP))) := by
+    rw [Heap.empty_union]; exact Heap.union_sub sC sW
+  have ho' := ho.shrink (t := 0) (by rw [upd_self]; exact hsubCW)
+  rw [upd_upd] at ho'
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 gPre u = G0 u := fun u h => upd_ne _ _ h
+  have hpC : pts semPtr 8 (0 : BitVec 64) hC :=
+    ⟨A, 64, .stack, _, by simp [semPtr]; omega, LawfulEnc.size_encode _, LawfulEnc.decode_encode _,
+      hC₁, by decide⟩
+  have hpN : NPts 0 hN :=
+    ⟨A, 64, .stack, Enc.encode (0 : BitVec 32), by simp [nPtr, bPtr, Ptr.add]; omega, enc_u32 0,
+      LawfulEnc.decode_encode _, hn, by decide⟩
+  have hL : (L SPh).Inv (upd G0 0 gPre) m := by
+    refine Inv.make (t := 0) (hL := hC) (hW := hW) ho' rfl (fun u hu => ?_) (by rw [upd_self]; rfl)
+      (by rw [upd_self]; exact (Heap.disjoint_empty _).symm)
+      (Heap.disjoint_union_right.mp dC).1 (fun u => ?_) (fun u => ?_)
+      ⟨hC, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty _).symm, hpC, rfl⟩
+      (fun x h1 h2 => by
+        simp only [L, Lock.prod] at h1 h2
+        exact bytesAt_in hW₁ rfl (by simp [bPtr, Ptr.add]; omega) (by simp [bPtr, Ptr.add, rw_size]; omega))
+      ⟨blk, hblk, hl, by rw [hS']; decide, by show (blk.addr + 32) % 4 = 0; rw [hA']; omega,
+        by rw [hK']; decide⟩ ?_ (by rw [hat]; simp) hq (allLe_one h1 (VClock.le_refl _))
+      (by rw [h1]; decide)
+    · rw [upd_ne _ _ hu]; unfold Lock.own; rw [hGu u hu]; split <;> rfl
+    · by_cases hu : u = 0
+      · subst hu; rw [upd_self]; exact .inl ⟨rfl, by rw [h1]; decide, rfl⟩
+      · rw [hGu u hu]; exact .inr rfl
+    · by_cases hu : u = 0
+      · subst hu; rw [upd_self]; rfl
+      · rw [hGu u hu]; rfl
+    · show (intOfBytes 32 (curBytes m 0 32 4)).run = _
+      unfold curBytes; rw [hblk]
+      simp only [Option.map_some, Option.getD_some]
+      rw [hword 32 4 (by decide) (by decide)]
+      exact (show (Enc.encode rw0).extract 16 20 = _ from rw_smx) ▸ intOfBytes_rmw 0
+  have hU : U (upd G0 0 gPre) m := by
+    refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 gPre 0).2.2 = _; rw [upd_self]; rfl,
+      fun u hu => by
+        show (upd G0 0 gPre u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl⟩⟩,
+      ?_, fun e he hb ho16 => .inr (hown e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, by
+        rw [hb]
+        exact Heap.sub_union_left.ne (bytesAt_in hio rfl (by simp [bPtr]) (by simp [bPtr, enc_io]; omega))⟩)),
+      hbk, hwsOk, hwmOk, fun j hj => ⟨0, by simp [sVals], by
+        rw [hwsz] at hj; rw [show j = 0 by omega]; exact hwsv⟩,
+      by simp only [last, hwsz]; exact hwsv, fun j hj => ⟨0, by simp [mVals], by
+        rw [hwmz] at hj; rw [show j = 0 by omega]; exact hwmv⟩,
+      ⟨0, by simp [mVals], by simp only [last, hwmz]; exact hwmv, iff_of_true rfl fun u => by
+        unfold upd; split <;> simp [gPre, G0, gA, Ph.mp]⟩,
+      fun w hw => by rw [hq] at hw; simp at hw, fun u _ => ?_, fun u => ?_, fun _ => ⟨hN, ?_, sN.trans hsub,
+        fun e he ht => .inr (hown e he (ht.imp (fun ⟨x, a, b, c⟩ => ⟨x, a, b, sN.ne c⟩) id))⟩⟩
+    · rw [upd_self, upd0_1]
+      exact ⟨(fun _ h => by cases h), (fun h => by cases h), (fun h => by cases h.1),
+        (fun _ _ h => by cases h), (fun h => by cases h)⟩
+    · by_cases hu : u = 0
+      · subst hu; rw [upd_self]; exact .inl rfl
+      · rw [hGu u hu]; exact .inr (.inr ⟨rfl, rfl⟩)
+    · by_cases hu : u = 0
+      · subst hu; rw [upd_self]; rfl
+      · rw [hGu u hu]; rfl
+    · rw [upd0_1]; exact hpN
+  have hE : E₀.inv (upd G0 0 gPre) m := start₀ _ m
+    (fun u => by unfold upd; split <;> rfl)
+    (fun u => by
+      by_cases hu : u = 0
+      · subst hu; rw [upd_self]; exact .inl rfl
+      · rw [hGu u hu]; exact .inr rfl)
+    (fun u x _ _ => by unfold upd; split <;> rfl) hbk
+    (by
+      unfold curBytes; rw [hblk]
+      simp only [Option.map_some, Option.getD_some]
+      rw [hword 24 24 (by decide) (by decide)]
+      exact rw_sem)
+    hat hq (fun e he W hb h1 h2 hh => hfpW e he 32 4 W hb (by omega) (by omega) hh)
+  exact ⟨hL, hU, hE⟩
+
+theorem main_spec (io : Io) (d : Nat) :
+    (proto E₀).WP 0 (rwLockRead io) QM G0 { mem0 with current := 0 } d := by
+  unfold rwLockRead
+  -- the `Shared`: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 64 8 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  -- its four parts
+  obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
+  obtain ⟨hS, hR₂, dS, rfl, hS₁, hR₂'⟩ := bytesAt_split hR₁' (k := 40) (by simp)
+  obtain ⟨hN, hP, dN, rfl, hN₁, hP₁⟩ := bytesAt_split hR₂' (k := 4) (by simp)
+  have hsI : ((Array.replicate 64 Byte.undef).extract 0 16).size = 16 := by simp
+  have hsS : (((Array.replicate 64 Byte.undef).extract 16).extract 0 40).size = 40 := by simp
+  have hsN : ((((Array.replicate 64 Byte.undef).extract 16).extract 40).extract 0 4).size = 4 := by
+    simp
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  sorry
+
 end Sync.RwLockRead
