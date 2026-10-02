@@ -2013,13 +2013,14 @@ theorem own_rmw {m m' : Mem} {t : ThreadId} {hn : Heap} {k : Nat} (hp : NPts k h
 /-- Thread `t` takes `n` (`hn`) from the state word: no thread owns anything. -/
 theorem linv_gain {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {g' : Gh S}
     {hn : Heap} {k : Nat} (hl : (L S).Inv G m) (ht : t < m.threads.size)
-    (hjt : joinedB m t = false) (hown0 : ∀ u, (L S).own G m u = Heap.empty) (hp : NPts k hn)
+    (hjt : joinedB m t = false) (hdj : ∀ u, Heap.Disjoint hn ((L S).own G m u)) (hp : NPts k hn)
     (hs : hn.Sub m.heap) (hc : m.OwnsC (m.clocks[t]!) hn)
-    (hnh : hasP (fun u => (G u).2.2) = false) (hheld : (G t).1.held = Heap.empty)
+    (hnh : hasP (fun u => (G u).2.2) = false) (hown0 : (L S).own G m t = Heap.empty)
+    (hheld : (G t).1.held = Heap.empty)
     (hg' : g'.1 = ⟨(G t).1.ph, hn, Heap.empty⟩)
     (hR : ∀ h, (L S).R (upd G t g') h ↔ (L S).R G h) :
     (L S).Inv (upd G t g') m := by
-  have ho := hl.own.add ht hs (fun u => by rw [hown0]; exact Heap.disjoint_empty _) hc
+  have ho := hl.own.add ht hs hdj hc
   rw [hown0, Heap.empty_union] at ho
   refine hl.repart hjt ?_ (by show g'.1.ph = _; rw [hg']; rfl)
     (by show g'.1.held = _; rw [hg', show (L S).held (G t) = (G t).1.held from rfl, hheld])
@@ -2111,5 +2112,162 @@ theorem U_sop {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} {e
     · exact .inr (.inl h)
     · rw [hlv] at h; cases h
   · rw [upd_ne _ _ e] at hu' ⊢; exact hu.lph u hu'
+
+/-- The resource when the semaphore has no `n` before and after. -/
+theorem R_nohas {G G' : ThreadId → Gh S} (h1 : hasP (fun u => (G' u).2.2) = false)
+    (h2 : hasP (fun u => (G u).2.2) = false) (h : Heap) : (L S).R G' h ↔ (L S).R G h :=
+  semR_congr (by rw [h1, h2]) (fun hh => by rw [h2] at hh; cases hh) h
+
+/-- An RMW of the state word by thread `t` at `x` (part `hx`), which goes to `y` (part `hy`):
+the protocol, from the lock's invariant and the new facts. -/
+theorem inv_sstep (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {x y : Ph}
+    {hx hy : Heap} {sx : S} {e : Word.Entry} (hi : (proto E).inv G m)
+    (hg : G t = gA x hx sx) (hop : WS.Op t m m') (hw' : WS.Ok m')
+    (hh : WS.hist m' = (WS.hist m).push e)
+    (he : e.Val (sv (upd G t (gA y hy sx) 0).2.2 (upd G t (gA y hy sx) 1).2.2))
+    (hlv : x.live) (hns : x.inSem = false) (hnp : x ≠ .pre) (hM : y.isMain = x.isMain)
+    (hW : y.isW = x.isW) (hcnt : y.cnt = x.cnt)
+    (hmp : y.mp = x.mp ∨ (x.mp ≠ some .holds ∧ x.mp ≠ some .wake ∧ x.mp ≠ some .wait ∧
+      y.mp ≠ some .holds ∧ y.mp ≠ some .wake))
+    (hfl : Flags (upd G t (gA y hy sx) 0).2.2 (upd G t (gA y hy sx) 1).2.2)
+    (hpy : if y.mustN then NPts (upd G t (gA y hy sx) 1).2.2.cnt hy else hy = Heap.empty)
+    (hcar : Car (upd G t (gA y hy sx) 0).2.2 (upd G t (gA y hy sx) 1).2.2 →
+      ∃ hn, NPts (upd G t (gA y hy sx) 1).2.2.cnt hn ∧ hn.Sub m'.heap ∧ CarOk m' hn)
+    (hL : (L S).Inv (upd G t (gA y hy sx)) m') :
+    (proto E).inv (upd G t (gA y hy sx)) m' := by
+  have hu := hi.2.1
+  have hgt : (G t).2.2 = x := by rw [hg]; rfl
+  have hY : (G t).2.2.isMain ∨ ((G t).2.2.isW ∧ (G t).2.2 ≠ .wf) := by
+    rw [hgt]
+    obtain ⟨-, ⟨-, hp0, hn⟩ | ⟨-, -, hM0, hW0, hn⟩⟩ := hu.shape
+    · exfalso
+      rcases Nat.eq_zero_or_pos t with rfl | h
+      · change (G 0).2.2 = _ at hp0; rw [hgt] at hp0; exact hnp hp0
+      · have := hn t h; change (G t).2.2 = _ at this; rw [hgt] at this; subst this; cases hlv
+    · rcases Nat.lt_or_ge t 2 with h | h
+      · rcases (by unfold ThreadId at *; omega : t = 0 ∨ t = 1) with rfl | rfl
+        · exact .inl (by rw [← hgt]; exact hM0)
+        · exact .inr ⟨by rw [← hgt]; exact hW0, fun e => by subst e; cases hlv⟩
+      · have := hn t h; change (G t).2.2 = _ at this; rw [hgt] at this; subst this; cases hlv
+  obtain ⟨hml, hmq⟩ := mfacts (g' := gA y hy sx) hu (Word.keep_op hop (W' := WM) (.inr (.inl (by decide))))
+    hop.waiters (by rw [hgt]; exact hmp)
+  have hpt : ∀ x', 24 ≤ x' → x' < 48 → hy (0, x') = none := fun x' _ h2 => by
+    split at hpy
+    · exact npts_none hpy (by omega)
+    · rw [hpy]; rfl
+  refine ⟨hL, U_sop hu hop hw' hh he (by rw [hg]; rfl) (by rw [hg]; rfl) (by rw [hgt]; exact hlv)
+    (by rw [hgt]; exact hns) hml hmq (by
+      rw [ph_upd]; exact shape_upd hu.shape hY (by rw [hgt]; simp [gA, hM]) (by rw [hgt]; simp [gA, hW]))
+    hfl (fun u => ?_) hcar,
+    hE.frame G _ m m' hi.2.2 (frame_op hop (.inr (.inl (by decide))))
+      (econd hu (by rw [hg]; rfl) (by rw [hg]; rfl) hpt (.inl (by rw [hg]; rfl)))⟩
+  have h1 : (upd G t (gA y hy sx) 1).2.2.cnt = (G 1).2.2.cnt := by
+    unfold upd; split
+    · rename_i e1; subst e1; rw [hgt]; exact hcnt
+    · rfl
+  by_cases e' : u = t
+  · subst e'; rw [upd_self]; exact hpy
+  · rw [upd_ne _ _ e', h1]; exact hu.parts u
+
+/-- A release RMW of the state word by `t`, which owns `hn`: `n` goes to the state word. -/
+theorem car_lose {m m' : Mem} {t : ThreadId} {hn : Heap} {v : BitVec 64} (hw : WS.Ok m)
+    (ho : m.OwnsC (m.clocks[t]!) hn) (hs : hn.Sub m.heap) {k : Nat} (hp : NPts k hn)
+    (hop : WS.Op t m m')
+    (hh : WS.hist m' = (WS.hist m).push (Word.rmwEnt m' t .seqCst (last (WS.hist m)) v)) :
+    hn.Sub m'.heap ∧ CarOk m' hn := by
+  obtain ⟨hfp, -⟩ := op_fp hop hw (by decide) (by decide)
+  refine ⟨fun l c hl => ?_, fun e he htc => ?_⟩
+  · obtain ⟨hb, h1, h2⟩ := (npts_at hp l).mp (by rw [hl]; simp)
+    rw [hop.cells l (by simp [WS]; omega)]; exact hs l c hl
+  · rcases hfp e he with he' | ⟨hno, hb⟩
+    · refine .inl (VClock.le_trans (ho e he' (htc.imp id fun h => by rw [← hop.bsize]; exact h))
+        (VClock.le_trans hop.mine ?_))
+      rw [hh, last_push]; exact VClock.le_merge_right _ _
+    · rcases htc with h | h
+      · exact absurd h (hno.not hp)
+      · exact absurd hb (Nat.not_lt.mpr h)
+
+/-- The parts and the resource have no byte of `n` while the semaphore does not have it and no
+place owns it. -/
+theorem own_nN {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m)
+    (hc : Car (G 0).2.2 (G 1).2.2) {k : Nat} {hn : Heap} (hp : NPts k hn) (u : ThreadId) :
+    Heap.Disjoint hn ((L S).own G m u) := fun l => by
+  by_cases hl : hn l = none
+  · exact .inl hl
+  right
+  obtain ⟨b, o⟩ := l
+  obtain ⟨rfl, h1, h2⟩ := (npts_at hp _).mp hl
+  unfold Lock.own; split
+  · rfl
+  show ((G u).1.part ∪ (G u).1.held) (0, o) = none
+  have hpart : (G u).1.part = Heap.empty := by
+    have := hi.2.1.parts u
+    split at this
+    · rename_i hm
+      exfalso
+      have hu01 : u = 0 ∨ u = 1 := by
+        rcases Nat.lt_or_ge u 2 with h | h
+        · unfold ThreadId at *; omega
+        · obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, -, -, hn⟩⟩ := hi.2.1.shape
+          · have := hn u (by unfold ThreadId at *; omega); change (G u).2.2 = _ at this
+            rw [this] at hm; cases hm
+          · have := hn u h; change (G u).2.2 = _ at this; rw [this] at hm; cases hm
+      rcases hu01 with rfl | rfl
+      · rw [hc.1] at hm; cases hm
+      · rw [hc.2.1] at hm; cases hm
+    · exact this
+  rw [hpart, Heap.empty_union]
+  by_cases hh : (L S).ph (G u) = .holds
+  · cases e : (G u).1.held (0, o) with
+    | none => rfl
+    | some c =>
+      obtain ⟨-, h3 | ⟨hh', -⟩⟩ := semR_at (hi.1.res u hh) (0, o) (by
+        show (L S).held (G u) (0, o) ≠ none; rw [show (L S).held (G u) = (G u).1.held from rfl, e]
+        simp)
+      · dsimp only at h3; omega
+      · rw [show hasP (fun u => (G u).2.2) = ((G 1).2.2.isWs && (G 0).2.2.gave) from rfl,
+          hc.2.2] at hh'
+        cases hh'
+  · rw [show (G u).1.held = (L S).held (G u) from rfl, hi.1.idle u hh]; rfl
+
+/-- The lock's invariant after an op at the state word by `t`, with the same part. -/
+theorem lws_keep {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {x y : Ph} {hx : Heap} {sx : S}
+    (hi : (proto E).inv G m) (hop : WS.Op t m m') (hg : G t = gA x hx sx)
+    (h1 : hasP (fun u => (upd G t (gA y hx sx) u).2.2) = false)
+    (h2 : hasP (fun u => (G u).2.2) = false) : (L S).Inv (upd G t (gA y hx sx)) m' := by
+  have hf : ∀ u, (upd G t (gA y hx sx) u).1 = (G u).1 := fun u => by
+    unfold upd; split
+    · rename_i e; subst e; rw [hg]; rfl
+    · rfl
+  exact (hi.1.wordOp hi.2.1.ws hop apS (off_own hi rfl ws_free) (off_R rfl ws_free G)).congr
+    (fun u => by show (upd G t _ u).1.ph = _; rw [hf]; rfl)
+    (fun u => by show (upd G t _ u).1.part = _; rw [hf]; rfl)
+    (fun u => by show (upd G t _ u).1.held = _; rw [hf]; rfl) (R_nohas h1 h2)
+
+/-- The lock's invariant after an acquire RMW of the state word by `t`, which takes `n` (`hn`). -/
+theorem lws_gain {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {x y : Ph} {sx : S} {hn : Heap}
+    {k : Nat} (hi : (proto E).inv G m) (hop : WS.Op t m m') (hg : G t = gA x Heap.empty sx)
+    (hc : Car (G 0).2.2 (G 1).2.2) (hp : NPts k hn) (hs : hn.Sub m'.heap)
+    (ho : m'.OwnsC (m'.clocks[t]!) hn)
+    (h1 : hasP (fun u => (upd G t (gA y hn sx) u).2.2) = false) :
+    (L S).Inv (upd G t (gA y hn sx)) m' := by
+  have hl := hi.1.wordOp hi.2.1.ws hop apS (off_own hi rfl ws_free) (off_R rfl ws_free G)
+  have hjt : joinedB m t = false := (hi.1.live t (by rw [hg]; exact (by decide : LPh.out ≠ LPh.gone))).2
+  have hjb : joinedB m' = joinedB m := Lock.joinedB_congr hop.threads
+  have hown : (L S).own G m' = (L S).own G m := by funext u; unfold Lock.own; rw [hjb]
+  refine linv_gain hl (by rw [hop.threads]; exact (hi.1.live t (by rw [hg]; exact (by decide :
+      LPh.out ≠ LPh.gone))).1) (by rw [hjb]; exact hjt) (fun u => by rw [hown]; exact own_nN hi hc hp u)
+    hp hs ho hc.2.2 (by rw [hown, Lock.own_live hjt, hg]; simp [L, Lock.prod, gA]) (by rw [hg]; rfl)
+    (by rw [hg]; rfl) (R_nohas h1 hc.2.2)
+
+/-- The lock's invariant after a release RMW of the state word by `t`, which gives its part. -/
+theorem lws_lose {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {x y : Ph} {sx : S} {hx : Heap}
+    (hi : (proto E).inv G m) (hop : WS.Op t m m') (hg : G t = gA x hx sx)
+    (h1 : hasP (fun u => (upd G t (gA y Heap.empty sx) u).2.2) = false)
+    (h2 : hasP (fun u => (G u).2.2) = false) : (L S).Inv (upd G t (gA y Heap.empty sx)) m' := by
+  have hl := hi.1.wordOp hi.2.1.ws hop apS (off_own hi rfl ws_free) (off_R rfl ws_free G)
+  have hjt : joinedB m t = false := (hi.1.live t (by rw [hg]; exact (by decide : LPh.out ≠ LPh.gone))).2
+  exact linv_lose hl (by rw [Lock.joinedB_congr hop.threads]; exact hjt) (by rw [hg]; rfl)
+    (by rw [hg]; rfl) (R_nohas h1 h2)
 
 end Sync.RwLockRead
