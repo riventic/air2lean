@@ -2488,4 +2488,222 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
   exact WP.pure' (WP.pure' ⟨by omega, hc₂, hi₃⟩)
 
+/-! ## Plain accesses: `io`, and `n` by its owner -/
+
+theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
+    NoRace m 0 0 16 .read :=
+  noRace_of fun e he hb _ h2 => by
+    rcases hio e he hb (by omega) with h | h
+    · exact .inr (by rw [h]; rfl)
+    · exact .inl (h _ ht)
+
+/-- A read of `io` (bytes 0..16): no race, and the invariant holds after it. -/
+theorem step_io (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m)
+    (ht : m.current < m.threads.size) :
+    (load Io 8 bPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) ∧
+      (proto E).inv G (m.recordAt 0 0 16 .read) := by
+  obtain ⟨hl, hu, he⟩ := hi
+  obtain ⟨blk, hblk, hlv, hsz, ha, hk⟩ := hu.blk
+  have hb0 := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hacc : m.access bPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
+    access_of (p := bPtr) rfl hblk hlv (by decide)
+      (by rw [show Enc.size Io = 16 from rfl]; simp [bPtr, hsz]) (by simpa [bPtr] using ha)
+  have hk' : ∀ {n nb : Nat} (W : Word n nb), 16 ≤ W.o → W.Keep m (m.recordAt 0 0 16 .read) :=
+    fun _ h => Word.keep_read m (by decide) (.inr (.inl h))
+  have hcl := recordAt_le m 0 0 16 .read
+  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16) hb0 (by decide)
+      (fun u x _ hx => own_none ⟨hl, hu, he⟩ u (.inl (by omega)))
+      (fun hL hR x _ hx => R_none hR (.inl (by omega))) (.inr (.inl (by simp [L, Lock.prod]))),
+    U_keep hu (hk' WS (by decide)) (hk' WM (by decide)) rfl (fun w hw _ => hw) (fun e he' hb ho => ?_)
+      (blk_keep hu.blk rfl) (fun e he' => ?_) (by simp [Mem.recordAt]) (fun _ _ _ => rfl) hcl,
+    hE.frame G G m _ he ⟨fun W _ h1 _ => hk' W (by omega), rfl, fun _ _ => Iff.rfl, hcl⟩ (econd0 hu)⟩
+  · simp only [Mem.recordAt, Array.mem_push] at he'
+    rcases he' with he' | rfl
+    · rcases hu.io e he' hb ho with h | h
+      · exact .inl h
+      · exact .inr fun u hu => VClock.le_trans (h u hu) (hcl u)
+    · exact .inl rfl
+  · simp only [Mem.recordAt, Array.mem_push] at he'
+    rcases he' with he' | rfl
+    · exact .inl he'
+    · exact .inr ⟨.inr (.inl ⟨by simp, by simp⟩), hb0⟩
+
+/-- A read of `io` by thread `t` in generated code. -/
+theorem wp_io (hE : E.Spec) {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh S} {m : Mem}
+    {d : Nat} {g : Gh S} (hi : (proto E).inv (upd G t g) m) (hc : m.current = t)
+    (ht : t < m.threads.size) {Q : Io × σ → (ThreadId → Gh S) → Mem → Nat → Prop}
+    (h : ∀ m', m'.current = t → m'.threads = m.threads → (proto E).inv (upd G t g) m' →
+      Q (⟨⟩, s) G m' d) :
+    (proto E).WP t ((liftM (load Io 8 bPtr) : CM Tgt σ Io).run s) Q G m d := by
+  obtain ⟨hrun, hi'⟩ := step_io hE hi (hc ▸ ht)
+  refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
+  rw [hrun] at hr
+  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
+    Prod.mk.injEq] at hr
+  obtain ⟨-, rfl⟩ := hr
+  cases v
+  exact ⟨rfl, h _ hc rfl hi'⟩
+
+/-- The bytes of block 0 out of `n` are in the heap out of `n`'s part. -/
+theorem diff_n {m : Mem} {h : Heap} {k : Nat} (hb : BlkOk m) (hp : NPts k h) {x : Nat}
+    (hx : x < 56 ∨ (60 ≤ x ∧ x < 64)) : m.heap.diff h (0, x) ≠ none := by
+  have : h (0, x) = none := npts_none hp (by simp only; omega)
+  simp only [Heap.diff, this, ↓reduceIte]; exact blk_heap hb (by omega)
+
+/-- `main` or the writer owns `n`. -/
+theorem mustN_lt {G : ThreadId → Gh S} {m : Mem} (hu : U G m) {u : ThreadId}
+    (h : (G u).2.2.mustN) : u = 0 ∨ u = 1 := by
+  obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, -, -, hn⟩⟩ := hu.shape
+  · rcases Nat.eq_zero_or_pos u with e | e
+    · exact .inl e
+    · have := hn u e; change (G u).2.2 = _ at this; rw [this] at h; cases h
+  · rcases Nat.lt_or_ge u 2 with e | e
+    · unfold ThreadId at *; omega
+    · have := hn u e; change (G u).2.2 = _ at this; rw [this] at h; cases h
+
+/-- The thread other than the owner of `n` does not own it. -/
+theorem other_nN {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m) {t u : ThreadId}
+    (ht : (G t).2.2.mustN) (hut : u ≠ t) : (G u).2.2.mustN = false := by
+  refine Bool.eq_false_iff.mpr fun hu => ?_
+  rcases mustN_lt hi.2.1 ht with rfl | rfl <;> rcases mustN_lt hi.2.1 hu with rfl | rfl
+  · exact hut rfl
+  · exact not_both hi ht hu
+  · exact not_both hi hu ht
+  · exact hut rfl
+
+theorem mustN_noP {x : Ph} (h : x.mustN) : x.isWs = false ∧ x.gave = false := by
+  cases x <;> simp_all [Ph.mustN, Ph.isWs, Ph.gave]
+
+/-- The load or the store of `n` by thread `t` at `x`, which owns it (`h`); after it, `t` is at
+`y`: the same place, or the writer after its increment. -/
+theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} {G : ThreadId → Gh S}
+    {m : Mem} {d : Nat} {x y : Ph} {h : Heap} {sx : S} {r₀ : β}
+    {Q : β × σ → (ThreadId → Gh S) → Mem → Nat → Prop}
+    (hi : (proto E).inv (upd G t (gA x h sx)) m) (hc : m.current = t) (hxm : x.mustN)
+    (hy : y = x ∨ ∃ k, x = .wn k ∧ y = .wn (k + 1) ∧ k + 1 ≤ 2)
+    (ht : TTriple (NPts (upd G t (gA x h sx) 1).2.2.cnt) c
+      (fun r => ⌜r = r₀⌝ ∗ NPts (upd G t (gA y h sx) 1).2.2.cnt))
+    (hq : ∀ m' h', m'.current = t → m'.threads = m.threads →
+      (proto E).inv (upd G t (gA y h' sx)) m' → Q (r₀, s) G m' d) :
+    (proto E).WP t ((liftM c : CM Tgt σ β).run s) Q G m d := by
+  obtain ⟨hl, hu, hE₀⟩ := hi
+  have hi : (proto E).inv (upd G t (gA x h sx)) m := ⟨hl, hu, hE₀⟩
+  have hgt : (upd G t (gA x h sx) t).2.2 = x := by rw [upd_self]; rfl
+  have hxm' : (upd G t (gA x h sx) t).2.2.mustN := by rw [hgt]; exact hxm
+  have ht01 := mustN_lt hu hxm'
+  obtain ⟨htl, hjt⟩ := hl.live t (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))
+  have hown : (L S).own (upd G t (gA x h sx)) m t = h := by
+    rw [Lock.own_live hjt, upd_self]; exact Heap.union_empty h
+  have hpart : NPts (upd G t (gA x h sx) 1).2.2.cnt h := by
+    have := hu.parts t; rw [upd_self] at this; simp only [gA, hxm, ↓reduceIte] at this; exact this
+  -- the facts of `y`
+  have hyx : y.wb = x.wb ∧ y.ib = x.ib ∧ y.rb = x.rb ∧ y.isWs = x.isWs ∧ y.gave = x.gave ∧
+      y.mustN = x.mustN ∧ y.isMain = x.isMain ∧ y.inSem = x.inSem ∧ y.live = x.live ∧
+      y.mp = x.mp ∧ (x.isW → y.isW) := by
+    rcases hy with rfl | ⟨k, rfl, rfl, hk⟩
+    · simp
+    · simp [Ph.wb, Ph.ib, Ph.rb, Ph.isWs, Ph.gave, Ph.mustN, Ph.isMain, Ph.inSem, Ph.live, Ph.mp,
+        Ph.isW]; omega
+  obtain ⟨hwb, hib, hrb, hiw, hgv, hmu, hM, hns, hlv, hmp, hW⟩ := hyx
+  refine WP.liftM_owned ht hl.own hc htl (by rw [hown]; exact hpart)
+    fun a m' hQ _ ho' hq' hst hm' hd => ?_
+  obtain ⟨rfl, hpQ⟩ := sep_lift.mp hq'
+  rw [hown] at hst hm' hd
+  let G₀ := upd G t (gA x h sx)
+  let g' : Gh S := gA y hQ sx
+  have hG : upd G₀ t g' = upd G t g' := upd_upd _ _ _ _
+  have hcnt : (upd G t (gA y h sx) 1).2.2.cnt = (upd G₀ t g' 1).2.2.cnt := by
+    rw [hG]; unfold upd; split <;> rfl
+  rw [hcnt] at hpQ
+  have hf : ∀ {β : Type} (f : Ph → β), f y = f x → ∀ u, f (upd G₀ t g' u).2.2 = f (G₀ u).2.2 :=
+    fun f hfx u => by
+      unfold upd; split
+      · rename_i e; subst e; show f y = f (upd G _ (gA x h sx) _).2.2; rw [upd_self]; exact hfx
+      · rfl
+  have hnoP : ∀ (G' : ThreadId → Gh S) (z : Ph) (hz : Heap), z.mustN →
+      hasP (fun u => (upd G' t (gA z hz sx) u).2.2) = false := fun G' z hz h => by
+    have := mustN_noP h
+    rcases ht01 with rfl | rfl <;> simp [hasP, upd_self, upd1_0, upd0_1, gA, this]
+  have hl' := hl.stepIn (g := g') hc hjt
+    (by show Owned (upd _ t (hQ ∪ Heap.empty)) m'; rw [Heap.union_empty]; exact ho')
+    (by rw [hown]; exact hst)
+    (by rw [hown]; show m'.heap = (hQ ∪ Heap.empty) ∪ _; rw [Heap.union_empty]; exact hm')
+    (by rw [hown]; show Heap.Disjoint (hQ ∪ Heap.empty) _; rw [Heap.union_empty]; exact hd)
+    (by rw [upd_self]; rfl) (Heap.disjoint_empty _) (fun _ => rfl)
+    (fun _ hL hR => (R_nohas (hnoP G₀ y hQ (by rw [hmu]; exact hxm)) (hnoP G x h hxm) hL).mpr hR)
+    (fun h₀ => by cases h₀)
+  have hkW : ∀ {n nb : Nat} (W : Word n nb), W.b = 0 → W.o + nb ≤ 56 → W.Keep m m' :=
+    fun W hb ho => Word.keep_stepIn_of (fun x h1 h2 => by
+      rw [hb]; exact diff_n hu.blk hpart (.inl (by omega))) hst hm' hd
+  have hkS := hkW WS rfl (by decide)
+  have hkM := hkW WM rfl (by decide)
+  have hnone : ∀ x, ¬ (56 ≤ x ∧ x < 60) → x < 64 → m'.heap (0, x) = m.heap (0, x) := fun x hx _ => by
+    rw [hm', Heap.union_apply, npts_none hpQ (by simp only; omega), Option.none_or]
+    simp [Heap.diff, npts_none hpart (show ¬ ((0, x).1 = 0 ∧ 56 ≤ (0, x).2 ∧ (0, x).2 < 60) by
+      simp only; omega)]
+  obtain ⟨hml, hmq⟩ := mfacts (g' := g') hu hkM hst.waiters (.inl (by rw [upd_self]; exact hmp))
+  have hY : (G₀ t).2.2.isMain ∨ ((G₀ t).2.2.isW ∧ (G₀ t).2.2 ≠ .wf) := by
+    obtain ⟨-, ⟨-, hp, hn⟩ | ⟨-, -, hM0, hW0, -⟩⟩ := hu.shape
+    · exfalso; rcases ht01 with e | e <;> subst e
+      · change (G₀ 0).2.2 = _ at hp; rw [hgt] at hp; subst hp; cases hxm
+      · have := hn 1 (Nat.le_refl _); change (G₀ 1).2.2 = _ at this; rw [this] at hxm'; cases hxm'
+    · rcases ht01 with e | e <;> subst e
+      · exact .inl hM0
+      · exact .inr ⟨hW0, fun e => by rw [e] at hxm'; cases hxm'⟩
+  have hU : U (upd G t g') m' := by
+    rw [← hG]
+    refine ⟨?_, ?_, fun e he hb ho => ?_, blk_keep hu.blk (hnone 0 (by omega) (by omega)),
+      hu.ws.keep hkS, hu.wm.keep hkM, by rw [Word.hist_keep hu.ws hkS]; exact hu.shist,
+      (by rw [Word.hist_keep hu.ws hkS, sv_eq, hf Ph.wb hwb, hf Ph.ib hib, hf Ph.rb hrb, ← sv_eq]; exact hu.slast),
+      by rw [Word.hist_keep hu.wm hkM]; exact hu.mhist, hml, hmq, fun u hu' => ?_, fun u => ?_,
+      fun hc' => ?_⟩
+    · rw [ph_upd]
+      have := shape_upd hu.shape hY (y := g'.2.2) (by rw [hgt]; show _ → y.isMain; rw [hM]; exact id)
+        (by rw [hgt]; exact hW)
+      unfold Shape at this ⊢; rw [hst.threads]; exact this
+    · rcases hy with rfl | ⟨k, rfl, rfl, -⟩
+      · have e : ∀ u, (upd G₀ t g' u).2.2 = (G₀ u).2.2 := fun u => by
+          unfold upd; split
+          · rename_i e; subst e; show _ = (upd G _ _ _).2.2; rw [upd_self]; rfl
+          · rfl
+        rw [e, e]; exact hu.flags
+      · obtain ⟨-, f2, f3, f4⟩ := hu.flags
+        rcases ht01 with e | e <;> subst e
+        · exfalso; obtain ⟨-, ⟨-, hp, -⟩ | ⟨-, -, hM0, -, -⟩⟩ := hu.shape
+          · change (G₀ 0).2.2 = _ at hp; rw [hgt] at hp; cases hp
+          · change (G₀ 0).2.2.isMain at hM0; rw [hgt] at hM0; cases hM0
+        · rw [upd1_0, upd_self]
+          change Flags (G₀ 0).2.2 (.wn (k + 1))
+          rw [hgt] at f2 f3
+          exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨_, h'⟩ := f2 h; cases h'),
+            (fun h => f3 ⟨h.1, rfl⟩), f4⟩
+    · rcases hst.fp e he with h' | ⟨-, hnt, -⟩
+      · rcases hu.io e h' hb ho with h'' | h''
+        · exact .inl h''
+        · exact .inr (allLe_stepIn hst h'')
+      · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+          rw [hb]; exact diff_n hu.blk hpart (.inl (by omega))⟩ hnt
+    · by_cases e : u = t
+      · subst e; rw [upd_self]; exact .inl rfl
+      · rw [upd_ne _ _ e] at hu' ⊢; exact hu.lph u hu'
+    · by_cases e : u = t
+      · subst e; rw [upd_self]; simp only [g', gA, hmu, hxm, ↓reduceIte]; exact hpQ
+      · rw [upd_ne _ _ e]
+        have h₁ := other_nN hi hxm' e
+        have := hu.parts u; rw [h₁] at this ⊢; exact this
+    · exfalso
+      rcases ht01 with e | e <;> subst e
+      · have := hc'.1; rw [upd_self] at this; simp [g', gA, hmu, hxm] at this
+      · have := hc'.2.1; rw [upd_self] at this; simp [g', gA, hmu, hxm] at this
+  have hE' : E.inv (upd G t g') m' := by
+    rw [← hG]
+    exact hE.frame G₀ _ m m' hE₀ ⟨fun W hb h1 h2 => hkW W hb (by omega), by rw [hst.threads],
+      fun _ _ => by rw [hst.waiters], hst.clock⟩
+      (econd hu (by show _ = (upd G t (gA x h sx) t).2.1; rw [upd_self]; rfl)
+        (by show _ = (upd G t (gA x h sx) t).1.held; rw [upd_self]; rfl)
+        (fun x _ h2 => npts_none hpQ (by simp only; omega))
+        (.inl (by show _ = (upd G t (gA x h sx) t).1.ph; rw [upd_self]; rfl)))
+  rw [upd_upd] at hl'
+  exact hq m' hQ (hst.current.trans hc) hst.threads ⟨hl', hU, hE'⟩
+
 end Sync.RwLockRead
