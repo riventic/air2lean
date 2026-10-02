@@ -3650,4 +3650,93 @@ theorem fits : Sm.Fits (proto E₀) (fun G m => U G m ∧ Wq G m) where
         revert hpw this; cases (G 0).2.2 <;> simp [Ph.pw, Ph.isWs]
     · rw [h.2] at hpw; cases hpw
 
+/-- `E₀` satisfies `Sem.Spec.frame`. -/
+theorem frame₀ : FrameOk E₀ := by
+  intro G G' m m' ⟨hs, hq⟩ hF hc
+  have hcl := hF.clocks
+  have hkS := hF.keep Sm.WS rfl (by decide) (by decide)
+  have hkE := hF.keep Sm.WE rfl (by decide) (by decide)
+  have hkL := hF.keep ({ b := 0, o := 32 } : Word 32 4) rfl (by decide) (by decide)
+  have hk24 := hF.keep ({ b := 0, o := 24 } : Word 32 4) rfl (by decide) (by decide)
+  have hk28 := hF.keep ({ b := 0, o := 28 } : Word 32 4) rfl (by decide) (by decide)
+  have hs' : Sm.Inv G m' := hs.mono (hs.ws.keep hkS) (hs.we.keep hkE) (Word.hist_keep hs.ws hkS)
+    (Word.hist_keep hs.we hkE) hcl (fun c ⟨i, l, hl, hle⟩ => ⟨i, l, (hkL.loc i l).mpr hl, hle⟩)
+    (fun h => .inl (Sync.Sem.PZ.mono h fun x h1 h2 => by
+      simp only [Sm] at h1 h2
+      by_cases hx : x < 28
+      · exact hk24.cells x h1 (show x < 24 + 4 by omega)
+      · exact hk28.cells x (show 28 ≤ x by omega) (show x < 28 + 4 by omega)))
+    (fun w hw he => .inl ((hF.waiters w (by rw [he]; simp [WM, Sm, Sync.Sem.WE, Word.ptr])).mp hw))
+    (Sync.Sem.allLe_keep hcl hF.threads)
+  refine ⟨hs'.congrG (fun u => (hc u).1) (fun u => ?_) (fun u x h1 h2 => (hc u).2.2.1 x
+    (by simp only [Sm] at h1; omega) (by simp only [Sm] at h2; omega)), fun w hw => ?_, fun u h => ?_⟩
+  · rcases (hc u).2.2.2.1 with h | ⟨h1, h2⟩
+    · rw [h]
+    · exact ⟨fun h => absurd h h2, fun h => absurd h h1⟩
+  · by_cases hM : w.2 = WM.ptr
+    · exact .inr (.inl hM)
+    · exact hq.q w ((hF.waiters w hM).mp hw)
+  · rw [(hc u).1] at h
+    have hw := hq.wx u h
+    rw [(hc u).2.2.2.2 hw]; exact hw
+
+/-- The writer leaves the semaphore's `wait`: `wg k` goes to `wn k`. -/
+theorem inv_wgn (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {k : Nat} {h : Heap}
+    (hi : (proto E).inv (upd G 1 (gA (.wg k) h default)) m) :
+    (proto E).inv (upd G 1 (gA (.wn k) h default)) m := by
+  obtain ⟨hl, hu, he⟩ := hi
+  have hG : upd (upd G 1 (gA (.wg k) h default)) 1 (gA (.wn k) h default) =
+      upd G 1 (gA (.wn k) h default) := upd_upd _ _ _ _
+  have h1 : ∀ u, (upd (upd G 1 (gA (.wg k) h default)) 1 (gA (.wn k) h default) u).1 =
+      (upd G 1 (gA (.wg k) h default) u).1 := fun u => by
+    by_cases e : u = 1
+    · subst e; rw [upd_self, upd_self]; rfl
+    · rw [upd_ne _ _ e]
+  have hl' := hl.congr (G' := upd (upd G 1 (gA (.wg k) h default)) 1 (gA (.wn k) h default))
+    (fun u => congrArg LG.ph (h1 u)) (fun u => congrArg LG.part (h1 u))
+    (fun u => congrArg LG.held (h1 u))
+    (R_upd (by rw [upd_self]; rfl) (by rw [upd_self]; rfl) (by rw [upd_self]; rfl))
+  have hf := hu.flags
+  rw [upd1_0, upd_self] at hf
+  have hP : ∀ u, u ≠ 1 → (upd (upd G 1 (gA (.wg k) h default)) 1 (gA (.wn k) h default) u) =
+      upd G 1 (gA (.wg k) h default) u := fun u e => upd_ne _ _ e
+  have hnp : (upd G 1 (gA (.wg k) h default) 0).2.2 ≠ .pre := fun hp => by
+    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, hM, -, -⟩⟩ := hu.shape
+    · have := hn 1 (Nat.le_refl _); change (upd G 1 _ 1).2.2 = _ at this; rw [upd_self] at this
+      cases this
+    · change (upd G 1 _ 0).2.2.isMain at hM; rw [hp] at hM; cases hM
+  have hW1 := w_isW hu hnp
+  have hW1' : (gA (S := S) (.wg k) h default).2.2.isW := by rw [upd_self] at hW1; exact hW1
+  have hU := U_ghost (G' := upd (upd G 1 (gA (.wg k) h default)) 1 (gA (.wn k) h default)) hu
+    (by
+      rw [ph_upd]
+      exact shape_upd hu.shape (.inr ⟨by rw [upd_self]; exact hW1', by rw [upd_self]; simp [gA]⟩)
+        (fun hm => by rw [upd_self] at hm; cases hm)
+        (fun _ => by simp [gA, Ph.isW] at hW1' ⊢; omega))
+    (by
+      rw [upd1_0, upd1_0, upd_self]
+      exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨_, h'⟩ := hf.po h; cases h'),
+        (fun h => hf.one ⟨h.1, h.2⟩), hf.sr, fun h => by have := hf.jd h; cases this⟩)
+    (by rw [upd1_0, upd1_0, upd_self, upd_self]; rfl)
+    (fun u => by
+      by_cases e : u = 1
+      · subst e; rw [upd_self, upd_self]; rfl
+      · rw [hP u e])
+    (fun u hu' => by
+      by_cases e : u = 1
+      · subst e; rw [upd_self]; exact .inl rfl
+      · rw [hP u e] at hu' ⊢; exact hu.lph u hu')
+    (fun u => by
+      have := hu.parts u
+      by_cases e : u = 1
+      · subst e; rw [upd_self] at this ⊢; exact this
+      · rw [hP u e, upd_self]; rw [upd_self] at this; exact this)
+    (fun hc => absurd hc.2.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
+  have he' := hfr _ _ m m he (Frame.refl m) (econd hu (t := 1) (g' := gA (.wn k) h default)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+    (fun x _ h2 => by have := part_none hu 1 (x := x) (by omega); rw [upd_self] at this; exact this)
+    (.inl (by rw [upd_self]; rfl)) (by rw [upd_self]; rfl))
+  rw [hG] at hl' hU he'
+  exact ⟨hl', hU, he'⟩
+
 end Sync.RwLockRead
