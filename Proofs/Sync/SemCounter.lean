@@ -299,7 +299,7 @@ theorem fits : S.Fits proto U where
   joins _ h := h.1
   stable := stable
   own G m m' t g hQ hl hu hs hm' hd _ _ h2 hp _ := own_step G m m' t g hQ hl hu hs hm' hd h2 hp
-  waits _ _ w hi hw _ := hi.2.2.q w hw
+  waits _ _ w _ _ _ _ hi hw _ := hi.2.2.q w hw
   live G m r i jr sn e hi hr hpz hall := by
     obtain ⟨hl, hs, hu⟩ := hi
     have hh := held_of_pz hl hpz

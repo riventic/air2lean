@@ -182,8 +182,8 @@ structure Fits {Tgt : Type} (P : Proto Tgt (SGh X)) (U : (ThreadId → SGh X) �
     m'.heap = hQ ∪ m.heap.diff (S.L.own G m t) → Heap.Disjoint hQ (m.heap.diff (S.L.own G m t)) →
     (G t).1.ph = .holds → g.1.ph = .holds → g.2 = (G t).2 → g.1.part = (G t).1.part →
     g.1.part ∪ g.1.held = hQ → U (upd G t g) m'
-  /-- A thread in the condition's code sleeps only at the mutex or the epoch. -/
-  waits : ∀ G m w, P.inv G m → w ∈ m.waiters → (G w.1).2.1 ≠ .none →
+  /-- A thread that waits at the condition sleeps only at the mutex or the epoch. -/
+  waits : ∀ G m w i jr sn e, P.inv G m → w ∈ m.waiters → (G w.1).2.1 = .reg i jr sn e →
     w.2 = S.L.ptr ∨ w.2 = S.WE.ptr
   /-- A thread waits at the condition and the permit count is 0: a thread goes on. -/
   live : ∀ G m r i jr sn e, P.inv G m → (G r).2.1 = .reg i jr sn e → S.PZ m →
@@ -1733,7 +1733,7 @@ theorem live_reg (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {r i jr : 
     · obtain ⟨k, hk, hek⟩ := Array.any_eq_true.mp hw
       have hwm := Array.getElem_mem hk
       have hr' : m.waiters[k].1 = r := by simpa using hek
-      rcases hP.waits G m _ hi hwm (by rw [hr', hr]; simp) with hL | hE
+      rcases hP.waits G m _ i jr sn e hi hwm (by rw [hr', hr]) with hL | hE
       · rcases hl.fq _ hwm with ⟨-, h'⟩ | ⟨h'', -⟩
         · rw [hr'] at h'; change (G r).1.ph = _ at h'; rw [hph] at h'; cases h'
         · exact h'' hL
