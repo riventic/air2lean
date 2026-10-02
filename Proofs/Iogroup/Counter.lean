@@ -670,7 +670,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
     rw [hX]; unfold sum; unfold upd
     split <;> split <;> split <;> simp_all [Ph.count]
   have hl := hi.1.ghost (t := t) (g := (⟨.gone, Heap.empty, Heap.empty⟩, .fin))
-    (by rw [upd_self]; exact .inl rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
+    (by rw [upd_self]; rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
     (fun h => absurd rfl h)
     (fun hL hR => by
       have hR' : R (fun u => (upd G t (gTask true) u).2) hL := hR
@@ -958,7 +958,7 @@ theorem inv_await {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gSpa
   · exfalso; change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0
   have : j = 3 := by change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0; rfl
   subst this
-  have hl := hi.1.ghost (t := 0) (g := gJoins 0) (by rw [upd_self]; exact .inl rfl) (.inl rfl)
+  have hl := hi.1.ghost (t := 0) (g := gJoins 0) (by rw [upd_self]; rfl) (.inl rfl)
     (by rw [upd_self]; rfl) rfl (fun _ => ⟨by rw [hsz]; decide, rfl⟩) fun hL hR => R_main hR
   rw [upd_upd] at hl
   have hX : ∀ u, u ≠ 0 → (upd G 0 (gJoins 0) u).2 = (upd G 0 (gSpawn 3) u).2 := fun u hu => by
@@ -1199,7 +1199,7 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoi
         cases hu
       · have := (hi.1.live u (by rw [hu]; decide)).1
         rw [hsz] at this; unfold ThreadId at *; omega
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hi.1.take (t := 0) (by rw [hsz]; decide) hF fun u hu => by
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hi.1.take (t := 0) (by rw [hsz]; decide) hF (by rw [upd_self]; decide) fun u hu => by
     by_cases h0 : u = 0
     · subst h0; exact VClock.le_refl _
     · rw [hsz] at hu

@@ -59,6 +59,8 @@ structure StepIn (hF : Heap) (m m' : Mem) : Prop where
   blocks : m.blocks.size ≤ m'.blocks.size
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
     (e.tid = m.current ∧ ¬ e.Touches hF ∧ e.block < m'.blocks.size)
+  /-- A new access happened before the thread's new clock. -/
+  fpc : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[m.current]!) = true
 
 section Owns
 
@@ -140,20 +142,25 @@ theorem clock (hs : StepIn hF m m') (u : ThreadId) :
 
 theorem refl (m : Mem) (hF : Heap) : StepIn hF m m :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, Nat.le_refl _,
-    fun _ he => .inl he⟩
+    fun _ he => .inl he, fun _ he => .inl he⟩
 
 theorem trans (h₁ : StepIn hF m m') (h₂ : StepIn hF m' m'') : StepIn hF m m'' := by
   refine ⟨h₂.current.trans h₁.current, h₂.threads.trans h₁.threads, h₂.atomics.trans h₁.atomics,
     h₂.seen.trans h₁.seen, h₂.nextMsg.trans h₁.nextMsg, h₂.waiters.trans h₁.waiters,
     h₂.woken.trans h₁.woken, h₂.groups.trans h₁.groups, h₂.size.trans h₁.size,
     fun u hu => (h₂.others u (h₁.current ▸ hu)).trans (h₁.others u hu), ?_,
-    Nat.le_trans h₁.blocks h₂.blocks, fun e he => ?_⟩
+    Nat.le_trans h₁.blocks h₂.blocks, fun e he => ?_, fun e he => ?_⟩
   · have := h₂.mine; rw [h₁.current] at this; exact VClock.le_trans h₁.mine this
   · rcases h₂.fp e he with he' | ⟨ht, hnt, hb⟩
     · rcases h₁.fp e he' with he'' | ⟨ht, hnt, hb⟩
       · exact .inl he''
       · exact .inr ⟨ht, hnt, Nat.lt_of_lt_of_le hb h₂.blocks⟩
     · exact .inr ⟨ht.trans h₁.current, hnt, hb⟩
+  · rcases h₂.fpc e he with he' | hle
+    · rcases h₁.fpc e he' with he'' | hle
+      · exact .inl he''
+      · have := h₂.mine; rw [h₁.current] at this; exact .inr (VClock.le_trans hle this)
+    · rw [h₁.current] at hle; exact .inr hle
 
 /-- A step in a larger frame is a step in a part of it. -/
 theorem weaken (hs : StepIn hF m m') (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) : StepIn hF' m m' :=
@@ -165,7 +172,7 @@ theorem weaken (hs : StepIn hF m m') (hsub : ∀ l, hF' l ≠ none → hF l ≠ 
 theorem write (m : Mem) (hF : Heap) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) :
     StepIn hF m (m.write b blk o bs) :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-    by simp [Mem.write], fun _ he => .inl he⟩
+    by simp [Mem.write], fun _ he => .inl he, fun _ he => .inl he⟩
 
 end StepIn
 
@@ -182,7 +189,7 @@ theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h h
     (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
     (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) := by
   refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp [Mem.recordAt], fun u hu => ?_, ?_,
-    Nat.le_refl _, fun e he => ?_⟩
+    Nat.le_refl _, fun e he => ?_, fun e he => ?_⟩
   · show (m.clocks.set! m.current _)[u]! = _
     rw [Conc.Proto.getElem!_set!_ite]; simp [hu]
   · rw [recordAt_clock hc]; exact VClock.le_bump _ _
@@ -195,6 +202,11 @@ theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h h
       rcases hd (b, x) with e | e
       · exact this e
       · exact h3 e
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · right; show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
+      rw [Array.getElem!_set!_self _ _ _ hc]; exact VClock.le_refl _
 
 /-- The current thread keeps what it owns over one of its recorded accesses. -/
 theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :
@@ -489,6 +501,7 @@ theorem StepIn.sameThreads {m' : Mem} (hs : m.SameThreads m') (hb : m.blocks.siz
   mine := by rw [hs.clocks]; exact VClock.le_refl _
   blocks := hb
   fp e he := .inl (hs.footprint ▸ he)
+  fpc e he := .inl (hs.footprint ▸ he)
 
 theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     TTriple emp (Zig.alloc kind size align) (fun p => Assn.ex fun A =>

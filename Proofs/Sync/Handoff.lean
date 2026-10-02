@@ -143,9 +143,9 @@ def R (X : ThreadId → X) : Assn :=
 abbrev L : Lock Gh := Lock.prod 0 16 R
 
 /-- The condition's state (bytes 20..24), its epoch (24..28), and the event (28..32). -/
-def WS : Word := ⟨0, 20⟩
-def WE : Word := ⟨0, 24⟩
-def WV : Word := ⟨0, 28⟩
+def WS : Word 32 4 := { b := 0, o := 20 }
+def WE : Word 32 4 := { b := 0, o := 24 }
+def WV : Word 32 4 := { b := 0, o := 28 }
 
 /-- The number of writes of the state after the first. -/
 def sN (x0 x1 : X) : Nat :=
@@ -390,11 +390,11 @@ theorem own_none {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (u : Threa
     · rw [show (G u).1.held = L.held (G u) from rfl, hi.1.idle u hh]; rfl
 
 /-- A word before `v` has no byte of a part or of the resource. -/
-theorem off_own {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {W : Word} (hb : W.b = 0)
+theorem off_own {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {W : Word 32 4} (hb : W.b = 0)
     (ho : W.o + 4 ≤ 32) (u : ThreadId) : W.Off (L.own G m u) := fun x _ h2 => by
   rw [hb]; exact own_none hi u (by omega)
 
-theorem off_R {W : Word} (hb : W.b = 0) (ho : W.o + 4 ≤ 32) :
+theorem off_R {W : Word 32 4} (hb : W.b = 0) (ho : W.o + 4 ≤ 32) :
     ∀ G hL, L.R G hL → W.Off hL := fun G _ hR x _ h2 => by
   rw [hb]; exact R_none (X := fun u => (G u).2) hR (by omega)
 
@@ -541,21 +541,21 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
 /-! ## The ops at the shared words -/
 
 /-- One of the three shared words. -/
-def Wd (W : Word) : Prop := W = WS ∨ W = WE ∨ W = WV
+def Wd (W : Word 32 4) : Prop := W = WS ∨ W = WE ∨ W = WV
 
-theorem Wd.ok {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m : Mem} (hu : U G m) : W.Ok m := by
+theorem Wd.ok {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m : Mem} (hu : U G m) : W.Ok m := by
   rcases hW with rfl | rfl | rfl
   · exact hu.ws
   · exact hu.we
   · exact hu.wv
 
-theorem Wd.ap {W : Word} (hW : Wd W) : Word.Apart L W := by
+theorem Wd.ap {W : Word 32 4} (hW : Wd W) : Word.Apart L W := by
   rcases hW with rfl | rfl | rfl
   · exact apS
   · exact apE
   · exact apV
 
-theorem Wd.blk {W : Word} (hW : Wd W) : W.b = 0 ∧ W.o + 4 ≤ 32 := by
+theorem Wd.blk {W : Word 32 4} (hW : Wd W) : W.b = 0 ∧ W.o + 4 ≤ 32 := by
   rcases hW with rfl | rfl | rfl <;> exact ⟨rfl, by decide⟩
 
 /-- The invariant at a stop of thread `t`: the same, with `current := t`. -/
@@ -570,19 +570,19 @@ theorem hcs_of {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) :
     m.clocks.size = m.threads.size := hi.1.own.csize
 
 /-- An op at a shared word by thread `t` keeps the lock's invariant. -/
-theorem linv_op {W : Word} (hW : Wd W) {G : ThreadId → Gh} {t : ThreadId} {m m' : Mem}
+theorem linv_op {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {t : ThreadId} {m m' : Mem}
     (hi : proto.inv G m) (hop : W.Op t m m') : L.Inv G m' :=
   hi.1.wordOp (hW.ok hi.2) hop hW.ap (fun u => off_own hi (hW.blk).1 (hW.blk).2 u)
     (off_R (hW.blk).1 (hW.blk).2 G)
 
-theorem op_of_cur {W : Word} {t : ThreadId} {m₁ m' : Mem}
+theorem op_of_cur {W : Word 32 4} {t : ThreadId} {m₁ m' : Mem}
     (hop : W.Op t { m₁ with current := t } m') : W.Op t m₁ m' :=
   ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
-    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩⟩
+    hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩, hop.fpt⟩
 
 /-- An atomic load at a shared word, with a decode (`atomicLoadAsC`), by thread `t` (`g`). -/
 theorem wp_loadAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
-    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {ord : AtomicOrder}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word 32 4} (hW : Wd W) {ord : AtomicOrder}
     (hi : proto.inv (upd G t g) m)
     (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
     (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ j < (W.hist m₁).size, ∀ b,
@@ -615,7 +615,7 @@ theorem wp_loadAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId}
 
 /-- An atomic load of a `u32` at a shared word (`atomicLoadC`), by thread `t` (`g`). -/
 theorem wp_load {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat} {g : Gh}
-    {W : Word} (hW : Wd W) {ord : AtomicOrder} (hi : proto.inv (upd G t g) m)
+    {W : Word 32 4} (hW : Wd W) {ord : AtomicOrder} (hi : proto.inv (upd G t g) m)
     (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
     {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' v j, G₁ t = g → proto.inv G₁ m₁ →
@@ -641,12 +641,12 @@ abbrev last (h : Array Word.Entry) : Word.Entry := h[h.size - 1]!
 
 /-- An RMW of a `u32` at a shared word (`atomicRmwC`), by thread `t` (`g`). -/
 theorem wp_rmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat} {g : Gh}
-    {W : Word} (hW : Wd W) {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec 32}
+    {W : Word 32 4} (hW : Wd W) {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec 32}
     (hi : proto.inv (upd G t g) m)
     (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
     {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' old, G₁ t = g → proto.inv G₁ m₁ →
-      (last (W.hist m₁)).Val old → W.U32 m' (op.apply signed old v) →
+      (last (W.hist m₁)).Val old → W.Holds m' (op.apply signed old v) →
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply signed old v)) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
@@ -668,7 +668,7 @@ theorem wp_rmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Me
 
 /-- An RMW at a shared word, with a decode (`atomicRmwAsC`), by thread `t` (`g`). -/
 theorem wp_rmwAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
-    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {op : RmwOp} {ord : AtomicOrder} {v : α}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word 32 4} (hW : Wd W) {op : RmwOp} {ord : AtomicOrder} {v : α}
     (hi : proto.inv (upd G t g) m)
     (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
     (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ b, (last (W.hist m₁)).Val b →
@@ -676,7 +676,7 @@ theorem wp_rmwAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
     {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m' old r, G₁ t = g → proto.inv G₁ m₁ →
       (Packed.ofBits? (α := α) old).run = some (.ok r) →
-      (last (W.hist m₁)).Val old → W.U32 m' (op.apply false old (Packed.toBits v)) →
+      (last (W.hist m₁)).Val old → W.Holds m' (op.apply false old (Packed.toBits v)) →
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply false old (Packed.toBits v))) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
@@ -703,7 +703,7 @@ theorem wp_rmwAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
 /-- A `cmpxchg` at a shared word, with a decode (`cmpxchgAsC`), by thread `t` (`g`): on success
 an RMW of the newest write, which holds `exp`; on failure a read of write `j`. -/
 theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
-    {m : Mem} {n : Nat} {g : Gh} {W : Word} (hW : Wd W) {succ fail : AtomicOrder} {exp new : α}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word 32 4} (hW : Wd W) {succ fail : AtomicOrder} {exp new : α}
     (hi : proto.inv (upd G t g) m)
     (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
     (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ j < (W.hist m₁).size, ∀ b,
@@ -711,7 +711,7 @@ theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
     {Q : Option α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m', G₁ t = g → proto.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
       L.Inv G₁ m' →
-      ((last (W.hist m₁)).Val (Packed.toBits exp) → W.U32 m' (Packed.toBits new) →
+      ((last (W.hist m₁)).Val (Packed.toBits exp) → W.Holds m' (Packed.toBits new) →
         W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
         (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
         Q (none, s) G₁ m' k) ∧
@@ -751,23 +751,23 @@ theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
 
 /-! ## `U` after an op at a shared word -/
 
-theorem Wd.lo {W : Word} (hW : Wd W) : 20 ≤ W.o := by
+theorem Wd.lo {W : Word 32 4} (hW : Wd W) : 20 ≤ W.o := by
   rcases hW with rfl | rfl | rfl <;> decide
 
 /-- Two shared words do not overlap. -/
-theorem Wd.apart {W W' : Word} (hW : Wd W) (hW' : Wd W') (hne : W' ≠ W) :
+theorem Wd.apart {W W' : Word 32 4} (hW : Wd W) (hW' : Wd W') (hne : W' ≠ W) :
     W.b ≠ W'.b ∨ W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ W.o := by
   rcases hW with rfl | rfl | rfl <;> rcases hW' with rfl | rfl | rfl <;>
     first | exact absurd rfl hne | decide
 
 /-- An op at `W` keeps the writes of another shared word. -/
-theorem hist_op {W W' : Word} (hW : Wd W) (hW' : Wd W') (hne : W' ≠ W) {G : ThreadId → Gh}
+theorem hist_op {W W' : Word 32 4} (hW : Wd W) (hW' : Wd W') (hne : W' ≠ W) {G : ThreadId → Gh}
     {t : ThreadId} {m₁ m' : Mem} (hu : U G m₁) (hop : W.Op t m₁ m') : W'.hist m' = W'.hist m₁ :=
   Word.hist_keep (hW'.ok hu) (Word.keep_op hop (hW.apart hW' hne))
 
 /-- `U` after an op at a shared word, from the facts that depend on the ghost values and the
 writes. -/
-theorem U_op {W : Word} (hW : Wd W) {G G' : ThreadId → Gh} {t : ThreadId} {m₁ m' : Mem}
+theorem U_op {W : Word 32 4} (hW : Wd W) {G G' : ThreadId → Gh} {t : ThreadId} {m₁ m' : Mem}
     (hu : U G m₁) (hop : W.Op t m₁ m') (hw' : W.Ok m')
     (hsh : Shape (fun u => (G' u).2) m₁) (hpart : ∀ u, (G' u).1.part = Heap.empty)
     (hS : SOk m' (sN (G' 0).2 (G' 1).2)) (hE : EOk m' (eN (G' 1).2))
@@ -926,7 +926,7 @@ theorem U_mem {G : ThreadId → Gh} {m m' : Mem} (hu : U G m) (hb : m'.blocks = 
     (hc : m'.clocks = m.clocks) (hq : QOk G m') : U G m' := by
   have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
     rw [hc]; exact VClock.le_refl _
-  have hk : ∀ W : Word, W.Keep m m' := fun W => Word.keep_of hb ha hf ht hcl
+  have hk : ∀ W : Word 32 4, W.Keep m m' := fun W => Word.keep_of hb ha hf ht hcl
   exact U_keep hu (hk WS) (hk WE) (hk WV) ht hq hcl (fun _ h => before_same ha h)
     (by unfold IoOk AllLe; rw [hf, ht, hc]; exact hu.io) (by unfold BlkOk; rw [hb]; exact hu.blk)
 
@@ -1030,7 +1030,7 @@ def gA (x : X) : Gh := (⟨.away, Heap.empty, Heap.empty⟩, x)
 /-- `main` goes to the futex wait of another sync object (`away`). -/
 theorem inv_away {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 0 (gP x)) m) :
     proto.inv (upd G 0 (gA x)) m := by
-  have hl := hi.1.ghost (t := 0) (g := gA x) (by rw [upd_self]; exact .inl rfl) (.inr (.inr rfl))
+  have hl := hi.1.ghost (t := 0) (g := gA x) (by rw [upd_self]; rfl) (.inr (.inr rfl))
     (by rw [upd_self]; rfl) rfl (fun _ => hi.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)))
     (fun hL hR => by
       change R (fun u => (upd (upd G 0 (gP x)) 0 (gA x) u).2) hL
@@ -1044,9 +1044,9 @@ theorem inv_away {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 
 can sleep while the word is `e` (`hq`: then the futex queue keeps `QOk`). It goes on at `out`
 with the same place. -/
 theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : ThreadId → Gh}
-    {m : Mem} {n : Nat} {x : X} {W : Word} (hW : Wd W) (hWL : W.ptr ≠ L.ptr) {io : Io} {e : α}
+    {m : Mem} {n : Nat} {x : X} {W : Word 32 4} (hW : Wd W) (hWL : W.ptr ≠ L.ptr) {io : Io} {e : α}
     (hi : proto.inv (upd G 0 (gP x)) m)
-    (hq : ∀ G₁ m₁, G₁ 0 = gA x → proto.inv G₁ m₁ → W.U32 m₁ ((Packed.toBits e).setWidth 32) →
+    (hq : ∀ G₁ m₁, G₁ 0 = gA x → proto.inv G₁ m₁ → W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       QOk G₁ { m₁ with current := 0, waiters := m₁.waiters.push (0, W.ptr) })
     {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = 0 → proto.inv (upd G₁ 0 (gP x)) m' →
@@ -1061,7 +1061,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     · exact ⟨_, _, futexWait_run_woken hwk⟩
     · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
       obtain ⟨v, hv⟩ := hw.val
-      rw [Word.u32_bytes hb] at hv
+      rw [Word.holds_bytes hb] at hv
       exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
   have hl := hi₁.1.waitOff hph hWL hq0 hr
   rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
@@ -1079,8 +1079,8 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     have : ({ m₁ with current := 0 } : Mem).access W.ptr 4 4 = m₁.access W.ptr 4 4 := rfl
     rw [this, ha₀] at ha
     cases ha
-    have hU32 : W.U32 m₁ ((Packed.toBits e).setWidth 32) := by
-      rw [Word.u32_bytes hb₀, ← hve]; exact hv
+    have hU32 : W.Holds m₁ ((Packed.toBits e).setWidth 32) := by
+      rw [Word.holds_bytes hb₀, ← hve]; exact hv
     have hq' := hq G₁ m₁ hg₁ hi₁ hU32
     exact ⟨hl, U_mem hi₁.2 rfl rfl rfl rfl rfl hq'⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
@@ -1092,7 +1092,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
       exact U_lock0 this rfl (fun h => absurd h (by decide))
 
 /-- An op of `main` at a shared word, with `main`'s new place `x'` and the same lock part. -/
-theorem inv_mstep {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {a : LG} {x x' : X}
+theorem inv_mstep {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {a : LG} {x x' : X}
     (hi : proto.inv (upd G 0 (a, x)) m₁) (hw' : W.Ok m') (hop : W.Op 0 m₁ m')
     (hL : L.Inv (upd G 0 (a, x)) m') (hpa : a.part = Heap.empty) (hx : x.ph ≠ .pre)
     (hm : x'.ph.isMain) (hpre : x'.ph ≠ .pre)
@@ -1141,7 +1141,7 @@ theorem RegHB.mono {G : ThreadId → Gh} {m m' : Mem} (h : RegHB G m)
   · exact .inr (.inl (hbef _ hb))
   · exact .inr (.inr (VClock.le_trans hle (hcl 1)))
 
-theorem before_op {W : Word} {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hap : Word.Apart L W)
+theorem before_op {W : Word 32 4} {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hap : Word.Apart L W)
     {c : VClock} (h : L.Before m c) : L.Before m' c := by
   obtain ⟨i, l, hl, hle⟩ := h
   have hne : L.b ≠ W.b ∨ L.o ≠ W.o := by
@@ -1152,7 +1152,7 @@ theorem before_op {W : Word} {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (ha
   exact ⟨i, l, (hop.locs.same L.b L.o hne i l).mpr hl, hle⟩
 
 /-- A load by `main` at a shared word, with the same ghost values. -/
-theorem inv_mload {W : Word} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {g : Gh}
+theorem inv_mload {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {g : Gh}
     (hi : proto.inv (upd G 0 g) m₁) (hw' : W.Ok m') (hop : W.Op 0 m₁ m')
     (hL : L.Inv (upd G 0 g) m') (hh : W.hist m' = W.hist m₁) : proto.inv (upd G 0 g) m' := by
   have hu := hi.2
@@ -1461,11 +1461,11 @@ theorem state_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec
 
 /-- `main` sleeps at the epoch only while it is 0: the producer has not done its wake. -/
 theorem wt_sleep {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
-    (hg : G 0 = gA { ph := .wt, cw := true }) (hU : WE.U32 m 0) : (G 1).2.ph.rank < 9 := by
+    (hg : G 0 = gA { ph := .wt, cw := true }) (hU : WE.Holds m 0) : (G 1).2.ph.rank < 9 := by
   have hf := hi.2.flags
   rw [hg] at hf
   obtain ⟨hsz, hval⟩ := hi.2.eh
-  have hl := (hi.2.we.u32_last).mp hU
+  have hl := (hi.2.we.holds_last).mp hU
   have h0 : eN (G 1).2 = 0 := by
     have := val_eq hl (by rw [hsz]; exact hval _ (by simp))
     simp only [Nat.add_sub_cancel] at this
@@ -1841,8 +1841,8 @@ theorem ev_read {G : ThreadId → Gh} {m : Mem} {x : X} {j : Nat} {b : BitVec 32
 /-- `main`'s `cmpxchg(unset → waiting)` (acquire) succeeded at `ev0`: it goes to `ev1`. -/
 theorem inv_ev1 {G : ThreadId → Gh} {m₁ m' : Mem} {c : Bool}
     (hi : proto.inv (upd G 0 (gP { ph := .ev0, cw := c })) m₁) (hw' : WV.Ok m') (hop : WV.Op 0 m₁ m')
-    (hL : L.Inv (upd G 0 (gP { ph := .ev0, cw := c })) m') (hv : (last (WV.hist m₁)).Val 0)
-    (hh : WV.hist m' = (WV.hist m₁).push (Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) 1)) :
+    (hL : L.Inv (upd G 0 (gP { ph := .ev0, cw := c })) m') (hv : (last (WV.hist m₁)).Val (0 : BitVec 32))
+    (hh : WV.hist m' = (WV.hist m₁).push (Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) (1 : BitVec 32))) :
     proto.inv (upd G 0 (gP { ph := .ev1, cw := c, vw := true })) m' := by
   have hu := hi.2
   have hfl := hu.flags
@@ -1863,7 +1863,7 @@ theorem inv_ev1 {G : ThreadId → Gh} {m₁ m' : Mem} {c : Bool}
   have hs1 : (WV.hist m₁).size = 1 := by simpa [vL, gP, hv1] using hsz
   have hS := hist_op (.inr (.inr rfl)) (.inl rfl) (by decide) hu hop
   have hE := hist_op (.inr (.inr rfl)) (.inr (.inl rfl)) (by decide) hu hop
-  have h1 : (WV.hist m')[1]! = Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) 1 := by
+  have h1 : (WV.hist m')[1]! = Word.rmwEnt m' 0 .acquire (last (WV.hist m₁)) (1 : BitVec 32) := by
     rw [hh, get_push_eq' hs1.symm]
   refine inv_mstep (.inr (.inr rfl)) hi hw' hop hL rfl (by simp) rfl (by simp) ?_ ?_
     ⟨?_, fun k hk => ?_⟩ ?_ ?_ ?_ (fun h => by cases h) (fun _ => ?_)
@@ -1952,7 +1952,7 @@ theorem loop17_body (c : Bool) (D : Nat) (io : Io) (s : Io_Event_waitUncancelabl
     rcases Array.mem_push.mp hw with hw | rfl
     · exact hi₁.2.q w hw
     refine .inr (.inr ⟨rfl, rfl, by rw [hg₁]; rfl, fun hf => ?_⟩)
-    have hv := (hi₁.2.wv.u32_last).mp hU
+    have hv := (hi₁.2.wv.holds_last).mp hU
     obtain ⟨hsz, hval⟩ := hi₁.2.vh
     rw [hg₁] at hsz hval
     have hfl := hi₁.2.flags
@@ -2377,7 +2377,7 @@ theorem inv_wk {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 32}
   · intro h; rw [upd_self] at h; cases h
 
 /-- After a futex wake of `n ≥ 1` at a shared word, no thread waits at it. -/
-theorem wake_w {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {W : Word} {n : Nat} (hq : QOk G m)
+theorem wake_w {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {W : Word 32 4} {n : Nat} (hq : QOk G m)
     (hW : W.ptr ≠ L.ptr) (hn : 1 ≤ n)
     (h : ((Thread.futexWake W.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
     m'.current = t ∧ m'.threads = m.threads ∧ (∀ w ∈ m'.waiters, w ∈ m.waiters ∧ w.2 ≠ W.ptr) ∧
@@ -2412,7 +2412,7 @@ theorem inv_set {G : ThreadId → Gh} {m₁ m' : Mem}
   have hu := hi.2
   obtain ⟨hc', ht', hws, hm'⟩ := wake_w hu.q (by decide) (Nat.le_refl _) h
   have hL := hi.1.wakeOff (by decide) h
-  have hk : ∀ W : Word, W.Keep m₁ m' := fun W => by
+  have hk : ∀ W : Word 32 4, W.Keep m₁ m' := fun W => by
     rw [hm']; exact Word.keep_same m₁ 1 m₁.seen m₁.nextMsg _ _ m₁.groups
   have hfl := hu.flags
   rw [upd1_0, upd_self] at hfl
@@ -2681,7 +2681,7 @@ theorem signal_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io)
 wrote it. -/
 theorem ev_last {G : ThreadId → Gh} {m : Mem} {b : Bool}
     (hi : proto.inv (upd G 1 (gP { ph := .set, cw := b })) m) :
-    (last (WV.hist m)).Val (if (G 0).2.vw then 1 else 0) := by
+    (last (WV.hist m)).Val (if (G 0).2.vw then (1 : BitVec 32) else 0) := by
   obtain ⟨hsz, hval⟩ := hi.2.vh
   rw [upd1_0, upd_self] at hsz hval
   cases e : (G 0).2.vw
@@ -2794,7 +2794,7 @@ theorem inv_fin {G : ThreadId → Gh} {m₁ m' : Mem} {b : Bool} {n : Nat} (hn :
   obtain ⟨hb', ha', hf', ht'', hc''⟩ := same_q hm'
   have hcl : ∀ u : Nat, VClock.le (m₁.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
     rw [hc'']; exact VClock.le_refl _
-  have hk : ∀ W : Word, W.Keep m₁ m' := fun W => Word.keep_of hb' ha' hf' ht'' hcl
+  have hk : ∀ W : Word 32 4, W.Keep m₁ m' := fun W => Word.keep_of hb' ha' hf' ht'' hcl
   have hfl := hu.flags
   rw [upd1_0, upd_self] at hfl
   have hu' : U (upd G 1 (gP { ph := .setw, cw := b, vw := true })) m' :=
@@ -2930,7 +2930,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {x : X} (hx : x.ph = .fin)
     (hi : proto.inv (upd G 1 (gP x)) m) :
     proto.inv (upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x)) m := by
   have hl := hi.1.ghost (t := 1) (g := (⟨.gone, Heap.empty, Heap.empty⟩, x))
-    (by rw [upd_self]; exact .inl rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
+    (by rw [upd_self]; rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
     (fun h => absurd rfl h) (fun hL hR => by
       change R (fun u => (upd (upd G 1 (gP x)) 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) u).2) hL
       rw [upd_upd]
@@ -3022,16 +3022,16 @@ theorem enc_mutex : Enc.encode mutex0 = Enc.encode (0 : BitVec 32) := by decide 
 
 /-- A shared word at the start: no atomic location, each access happened before every thread,
 and the value 0. -/
-theorem word_init {W : Word} {m : Mem} {blk : Block} (hW : W.b = 0) (h4 : W.o % 4 = 0)
+theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0) (h4 : W.o % 4 = 0)
     (hlo : 20 ≤ W.o) (hhi : W.o + 4 ≤ 32) (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
     (hs : blk.bytes.size = 40) (ha : blk.addr % 8 = 0) (hk : blk.kind = .stack)
     (hat : m.atomics = #[])
     (hv : (intOfBytes 32 (blk.bytes.extract W.o (W.o + 4))).run = some (.ok 0))
     (hfp : ∀ e ∈ m.footprint, W.Hits e → AllLe m e.clock) :
-    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val 0 := by
+    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := by
   have hno : ∀ i l, ¬ W.Loc m i l := fun i l hl => by
     have := (Word.loc_get hl).1; rw [hat] at this; simp at this
-  have hu : W.U32 m 0 := by unfold Word.U32 curBytes; rw [hW, hb]; exact hv
+  have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, by omega, by omega, by rw [hk]; decide⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
     fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩⟩, ?_, ?_⟩
@@ -3100,9 +3100,9 @@ theorem inv_start {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
     Heap.sub_union_left.trans ((Heap.sub_union_right dW).trans s2)
   have hcellS : ∀ x, 20 ≤ x → x < 32 → (hI ∪ (hW ∪ (hS ∪ (hR ∪ hP)))) (0, x) ≠ none := fun x a b =>
     sS'.ne (bytesAt_in hs rfl (by simp [bPtr, Ptr.add]; omega) (by simp [bPtr, Ptr.add, wb_size]; omega))
-  have hwi : ∀ W : Word, W.b = 0 → W.o % 4 = 0 → 20 ≤ W.o → W.o + 4 ≤ 32 →
+  have hwi : ∀ W : Word 32 4, W.b = 0 → W.o % 4 = 0 → 20 ≤ W.o → W.o + 4 ≤ 32 →
       wb.extract (W.o - 20) (W.o - 16) = Enc.encode (0 : BitVec 32) →
-      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val 0 := fun W hb h4 h1' h2' he =>
+      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := fun W hb h4 h1' h2' he =>
     word_init hb h4 h1' h2' hblk hl hS' (by rw [hA']; exact hA) hK' hat
       (by rw [hword W.o h1' h2', he]; exact intOfBytes_rmw 0)
       (fun e he' hh => hown e he' (Word.touches_of hh fun x a b => by
@@ -3207,7 +3207,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : proto.
       exact (R_congr (Y := fun u => (G u).2) (by simp only [e, e1]; rfl)
         (by simp only [e, e1]; rfl) hL).mpr hR)
   subst hm'
-  have hk : ∀ W : Word, W.Keep m _ := fun W =>
+  have hk : ∀ W : Word 32 4, W.Keep m _ := fun W =>
     Word.keep_fork (by rw [hs1]; decide) (by rw [hcs, hs1]) hf
   have h0' : (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) 0).2 = { ph := .run } := by simp [gP]
   have h1' : (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) 1).2 = { ph := .lk } := by
