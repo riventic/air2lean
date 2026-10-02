@@ -165,7 +165,7 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   akeep : ∀ b' o', ¬ (b' = S.b ∧ S.o + 8 ≤ o' ∧ o' < S.o + 20) → ∀ i l,
     (m'.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m'.atomics[i]? = some l) ↔
     (m.atomics.findIdx? (fun l => l.block == b' && l.off == o') = some i ∧ m.atomics[i]? = some l)
-  anew : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = S.b ∧ S.o + 8 ≤ l.off ∧ l.off < S.o + 20)
+  anew : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = S.b ∧ S.o + 8 ≤ l.off ∧ l.off + l.len ≤ S.o + 20)
 
 /-- A protocol with the semaphore `S` (module doc). -/
 structure Fits {Tgt : Type} (P : Proto Tgt (SGh X)) (U : (ThreadId → SGh X) → Mem → Prop) :
@@ -292,8 +292,8 @@ theorem Step.of_lock {t : ThreadId} {m m' : Mem} (hs : S.L.Step t m m') : S.Step
     by_cases hb : b' = S.b
     · exact .inr (by simp only [Lock.prod]; intro e; exact hn ⟨hb, by omega, by omega⟩)
     · exact .inl (by simp only [Lock.prod]; exact hb)) i l
-  anew l hl := (hs.locs.new l hl).imp id fun ⟨hb, ho, _⟩ =>
-    ⟨hb, by simp [Lock.prod] at ho; omega, by simp [Lock.prod] at ho; omega⟩
+  anew l hl := (hs.locs.new l hl).imp id fun ⟨hb, ho, hk⟩ =>
+    ⟨hb, by simp [Lock.prod] at ho; omega, by simp [Lock.prod] at ho hk; omega⟩
 
 /-- An op at the state or the epoch. -/
 theorem Step.of_op {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {t : ThreadId} {m m' : Mem}
@@ -313,7 +313,7 @@ theorem Step.of_op {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {t : ThreadId} {
   · by_cases h : b' = W.b
     · exact .inr (fun e => hn ⟨hb ▸ h, by omega, by omega⟩)
     · exact .inl h
-  · rcases hop.locs.new l hl with h | ⟨h1, h2, -⟩
+  · rcases hop.locs.new l hl with h | ⟨h1, h2, h3⟩
     · exact .inl h
     · exact .inr ⟨hb ▸ h1, by omega, by omega⟩
 
