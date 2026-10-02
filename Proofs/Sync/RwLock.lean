@@ -425,7 +425,7 @@ def Shape (Y : ThreadId → Ph) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧
   ((m.threads.size = 1 ∧ Y 0 = .pre ∧ ∀ u, 1 ≤ u → Y u = .none) ∨
    (m.threads.size = 2 ∧ (m.threads[1]? = some { spawner := 0, joined := false } ∨
-      (m.threads[1]? = some { spawner := 0, joined := true } ∧ Y 1 = .wf)) ∧
+      (m.threads[1]? = some { spawner := 0, joined := true } ∧ Y 1 = .wf ∧ (Y 0).jd)) ∧
     (Y 0).isMain ∧ (Y 1).isW ∧ ∀ u, 2 ≤ u → Y u = .none))
 
 /-- Each access to the bytes of `io` (0..16) is a read, or happened before every thread. -/
@@ -684,7 +684,7 @@ theorem upd0_1 (G : ThreadId → Gh S) (g : Gh S) : upd G 0 g 1 = G 1 := upd_ne 
 /-- A change of a running thread's place keeps the threads. -/
 theorem shape_upd {Y : ThreadId → Ph} {m : Mem} {t : ThreadId} {y : Ph} (h : Shape Y m)
     (hY : (Y t).isMain ∨ ((Y t).isW ∧ Y t ≠ .wf)) (hm : (Y t).isMain → y.isMain)
-    (hw : (Y t).isW → y.isW) : Shape (upd Y t y) m := by
+    (hw : (Y t).isW → y.isW) (hjd : (Y t).jd → y.jd) : Shape (upd Y t y) m := by
   obtain ⟨h0, ⟨-, hp, hn⟩ | ⟨hs, hj, hM, hW, hn⟩⟩ := h
   · exfalso
     rcases Nat.eq_zero_or_pos t with rfl | ht
@@ -695,12 +695,12 @@ theorem shape_upd {Y : ThreadId → Ph} {m : Mem} {t : ThreadId} {y : Ph} (h : S
     · have hm' : (Y 0).isW = false := by revert hM; cases Y 0 <;> simp [Ph.isMain, Ph.isW]
       refine ⟨h0, .inr ⟨hs, ?_, by rw [upd_self]; exact hm hM, by rw [upd_ne _ _ (by decide)]; exact hW,
         fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn u hu⟩⟩
-      rcases hj with hj | ⟨hj, hf⟩
+      rcases hj with hj | ⟨hj, hf, hd⟩
       · exact .inl hj
-      · exact .inr ⟨hj, by rw [upd_ne _ _ (by decide)]; exact hf⟩
+      · exact .inr ⟨hj, by rw [upd_ne _ _ (by decide)]; exact hf, by rw [upd_self]; exact hjd hd⟩
     · refine ⟨h0, .inr ⟨hs, ?_, by rw [upd_ne _ _ (by decide)]; exact hM, by rw [upd_self]; exact hw hW,
         fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn u hu⟩⟩
-      rcases hj with hj | ⟨hj, hf⟩
+      rcases hj with hj | ⟨hj, hf, -⟩
       · exact .inl hj
       · rw [hf] at hY; simp [Ph.isMain, Ph.isW] at hY
   · rw [hn t ht] at hY; simp [Ph.isMain, Ph.isW] at hY
@@ -968,10 +968,11 @@ structure Ph.Same (x y : Ph) : Prop where
   isW : y.isW = x.isW
   inSem : y.inSem = x.inSem
   live : y.live = x.live
+  jd : y.jd = x.jd
   nwf : y ≠ .wf
 
 theorem Ph.same_setM {x : Ph} (h : x.isMx) (p : MP) : x.Same (x.setM p) := by
-  cases x <;> simp_all [isMx] <;> constructor <;> simp [setM, wb, ib, rb, gave, isWs, mustN, cnt, isMain, isW, inSem, live]
+  cases x <;> simp_all [isMx] <;> constructor <;> simp [setM, wb, ib, rb, gave, isWs, mustN, cnt, isMain, isW, inSem, live, jd]
 
 /-- Thread `t`, running and out of the semaphore's code, goes to a place `y` of the same kind
 (`g'`). -/
@@ -1045,7 +1046,7 @@ theorem U_mx {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {y : Ph} {g' : 
     (hfl : Flags (upd G t g' 0).2.2 (upd G t g' 1).2.2) :
     U (upd G t g') m' := by
   have hP := hg.ph
-  obtain ⟨hlv, hns, hnp, ⟨hwb, hib, hrb, hgv, hiw, hmust, hcn, hM, hW, hS, hL, hwf⟩, hph, hs, hpart, -⟩ := hg
+  obtain ⟨hlv, hns, hnp, ⟨hwb, hib, hrb, hgv, hiw, hmust, hcn, hM, hW, hS, hL, hJ, hwf⟩, hph, hs, hpart, -⟩ := hg
   have hhS := Word.hist_keep hu.ws hkS
   have hall : ∀ c, AllLe m c → AllLe m' c := fun c h u hu' =>
     VClock.le_trans (h u (ht ▸ hu')) (hcl u)
@@ -1072,7 +1073,7 @@ theorem U_mx {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {y : Ph} {g' : 
   refine ⟨?_, hfl, hio, hblk, hu.ws.keep hkS, hw', by rw [hhS]; exact hu.shist,
     by rw [hhS, hsv']; exact hu.slast, hmh, hml, hmq, fun u hu' => ?_, fun u => ?_, fun hc => ?_⟩
   · rw [ph_upd]; have := shape_upd hu.shape hY (y := g'.2.2) (by rw [hph, hM]; exact id)
-      (by rw [hph, hW]; exact id)
+      (by rw [hph, hW]; exact id) (by rw [hph, hJ]; exact id)
     unfold Shape at this ⊢; rw [ht]; exact this
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu' ⊢
@@ -1774,7 +1775,7 @@ def Ph.isUnl : Ph → Bool
   | _ => false
 
 theorem Ph.same_unl {x : Ph} (h : x.isUnl) : x.Same x.unl := by
-  cases x <;> simp_all [isUnl] <;> constructor <;> simp [unl, wb, ib, rb, gave, isWs, mustN, cnt, isMain, isW, inSem, live]
+  cases x <;> simp_all [isUnl] <;> constructor <;> simp [unl, wb, ib, rb, gave, isWs, mustN, cnt, isMain, isW, inSem, live, jd]
 
 theorem Ph.isMx_of_unl {x : Ph} (h : x.isUnl) : x.isMx := by cases x <;> simp_all [isUnl, isMx]
 
@@ -2185,7 +2186,8 @@ theorem inv_sstep (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : Thread
     (hpy : if y.mustN then NPts (upd G t (gA y hy sx) 1).2.2.cnt hy else hy = Heap.empty)
     (hcar : Car (upd G t (gA y hy sx) 0).2.2 (upd G t (gA y hy sx) 1).2.2 →
       ∃ hn, NPts (upd G t (gA y hy sx) 1).2.2.cnt hn ∧ hn.Sub m'.heap ∧ CarOk m' hn)
-    (hL : (L S).Inv (upd G t (gA y hy sx)) m') :
+    (hL : (L S).Inv (upd G t (gA y hy sx)) m')
+    (hJ : x.jd → y.jd := by first | exact id | exact fun h => by cases h) :
     (proto E).inv (upd G t (gA y hy sx)) m' := by
   have hu := hi.2.1
   have hgt : (G t).2.2 = x := by rw [hg]; rfl
@@ -2209,7 +2211,8 @@ theorem inv_sstep (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : Thread
     · rw [hpy]; rfl
   refine ⟨hL, U_sop hu hop hw' hh he (by rw [hg]; rfl) (by rw [hg]; rfl) (by rw [hgt]; exact hlv)
     (by rw [hgt]; exact hns) hml hmq (by
-      rw [ph_upd]; exact shape_upd hu.shape hY (by rw [hgt]; simp [gA, hM]) (by rw [hgt]; simp [gA, hW]))
+      rw [ph_upd]; exact shape_upd hu.shape hY (by rw [hgt]; simp [gA, hM]) (by rw [hgt]; simp [gA, hW])
+        (by rw [hgt]; exact hJ))
     hfl (fun u => ?_) hcar,
     hE.frame G _ m m' hi.2.2 (frame_op hop (.inr (.inl (by decide))))
       (econd hu (by rw [hg]; rfl) (by rw [hg]; rfl) hpt (.inl (by rw [hg]; rfl))
@@ -2455,7 +2458,7 @@ theorem not_both {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m)
     (h0 : (G 0).2.2.mustN) (h1 : (G 1).2.2.mustN) : False := by
   have hu := hi.2.1
   have hj1 : joinedB m 1 = false := by
-    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, h1' | ⟨-, hwf⟩, -⟩⟩ := hu.shape
+    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, h1' | ⟨-, hwf, -⟩, -⟩⟩ := hu.shape
     · have := hn 1 (Nat.le_refl _); change (G 1).2.2 = _ at this; rw [this] at h1; cases h1
     · simp [joinedB, h1']
     · change (G 1).2.2 = _ at hwf; rw [hwf] at h1; cases h1
@@ -2686,6 +2689,8 @@ theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} 
     · rw [ph_upd]
       have := shape_upd hu.shape hY (y := g'.2.2) (by rw [hgt]; show _ → y.isMain; rw [hM]; exact id)
         (by rw [hgt]; exact hW)
+        (by rw [hgt]; show _ → y.jd; rw [show y.jd = x.jd by rcases hy with rfl | ⟨k, rfl, rfl, -⟩ <;> rfl]
+            exact id)
       unfold Shape at this ⊢; rw [hst.threads]; exact this
     · rcases hy with rfl | ⟨k, rfl, rfl, -⟩
       · have e : ∀ u, (upd G₀ t g' u).2.2 = (G₀ u).2.2 := fun u => by
@@ -2857,7 +2862,7 @@ theorem inv_wend (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem}
     have := U_ghost (G' := upd G 1 g) hu (by
         rw [hY]
         exact shape_upd hu.shape (.inr ⟨by rw [upd_self]; rfl, by rw [upd_self]; simp [gA]⟩)
-          (by rw [upd_self]; simp [gA, Ph.isMain]) (fun _ => rfl))
+          (by rw [upd_self]; simp [gA, Ph.isMain]) (fun _ => rfl) (fun h => by rw [upd_self] at h; cases h))
       (by
         rw [upd1_0, upd_self]
         exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨k, hk⟩ := hf.po h; cases hk),
@@ -3161,7 +3166,8 @@ theorem inv_g0 (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h
     (hi : (proto E).inv (upd G 0 (gA x h default)) m) (hxM : x.isMain) (hyM : y.isMain)
     (hwb : y.wb = x.wb) (hib : y.ib = x.ib) (hrb : y.rb = x.rb) (hmp : y.mp = x.mp)
     (hgv : y.gave = x.gave) (hiw : y.isWs = x.isWs) (hmu : y.mustN = x.mustN) (hcn : y.cnt = x.cnt)
-    (hns : y.inSem = false) (hfl : Flags y (G 1).2.2) :
+    (hns : y.inSem = false) (hfl : Flags y (G 1).2.2)
+    (hJ : x.jd → y.jd := by first | exact id | exact fun h => by cases h) :
     (proto E).inv (upd G 0 (gA y h default)) m := by
   obtain ⟨hl, hu, he⟩ := hi
   have hG : upd (upd G 0 (gA x h default)) 0 (gA y h default) = upd G 0 (gA y h default) :=
@@ -3186,7 +3192,8 @@ theorem inv_g0 (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h
     (by
       rw [ph_upd]
       exact shape_upd hu.shape (.inl (by rw [hx0]; exact hxM)) (fun _ => by rw [show (gA y h default).2.2 = y from rfl]; exact hyM)
-        (fun hw => by rw [hx0] at hw; revert hxM hw; cases x <;> simp [Ph.isMain, Ph.isW]))
+        (fun hw => by rw [hx0] at hw; revert hxM hw; cases x <;> simp [Ph.isMain, Ph.isW])
+        (fun hj => by rw [hx0] at hj; exact hJ hj))
     (by rw [upd_self, upd0_1]; rw [upd0_1]; exact hfl)
     (by rw [sv_eq, sv_eq, hf Ph.wb hwb, hf Ph.ib hib, hf Ph.rb hrb])
     (fun u => hf Ph.mp hmp u)
@@ -3705,7 +3712,7 @@ theorem inv_wgn (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {k : Nat} {h
       rw [ph_upd]
       exact shape_upd hu.shape (.inr ⟨by rw [upd_self]; exact hW1', by rw [upd_self]; simp [gA]⟩)
         (fun hm => by rw [upd_self] at hm; cases hm)
-        (fun _ => by simp [gA, Ph.isW] at hW1' ⊢; omega))
+        (fun _ => by simp [gA, Ph.isW] at hW1' ⊢; omega) (fun h => by rw [upd_self] at h; cases h))
     (by
       rw [upd1_0, upd1_0, upd_self]
       exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨_, h'⟩ := hf.po h; cases h'),
@@ -3804,7 +3811,7 @@ theorem wait₀ (k : Nat) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : Io
       rw [ph_upd] at hsh ⊢
       have := shape_upd hsh (t := 1) (y := Ph.wg k) (.inr ⟨by rw [upd_self]; exact hW,
         by rw [upd_self]; simp⟩) (fun hm => by rw [upd_self] at hm; cases hm)
-        (fun _ => by simpa [Ph.isW] using hW)
+        (fun _ => by simpa [Ph.isW] using hW) (fun h => by rw [upd_self] at h; cases h)
       rw [upd_upd] at this
       exact this
     · rw [upd1_0, upd_self]
@@ -3884,7 +3891,7 @@ theorem post₀ (h : Heap) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : I
     · have hsh := hu.shape
       rw [ph_upd] at hsh ⊢
       have := shape_upd hsh (t := 0) (y := Ph.pd) (.inl (by rw [upd_self]; rfl))
-        (fun _ => rfl) (fun hw => by rw [upd_self] at hw; cases hw)
+        (fun _ => rfl) (fun hw => by rw [upd_self] at hw; cases hw) (fun h => by rw [upd_self] at h; cases h)
       rw [upd_upd] at this
       exact this
     · rw [upd_self, upd0_1, hk]
@@ -4370,7 +4377,8 @@ theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E�
   subst hrec'
   have hU : U (upd G₃ 0 (gA (.ls true) Heap.empty default)) m₉ := by
     refine ⟨⟨?_, .inr ⟨by rw [hsz, hs2], .inr ⟨?_, by
-          show (upd G₃ 0 _ 1).2.2 = _; rw [hGu 1 (by decide)]; exact hg1⟩,
+          show (upd G₃ 0 _ 1).2.2 = _; rw [hGu 1 (by decide)]; exact hg1,
+          by show (upd G₃ 0 _ 0).2.2.jd = true; rw [upd_self]; rfl⟩,
         by show (upd G₃ 0 _ 0).2.2.isMain = true; rw [upd_self]; rfl,
         by show (upd G₃ 0 _ 1).2.2.isW = true; rw [hGu 1 (by decide), hg1]; rfl,
         fun u hu' => by show (upd G₃ 0 _ u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]
