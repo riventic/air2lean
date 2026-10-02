@@ -4537,4 +4537,21 @@ theorem main_spec (io : Io) (d : Nat) :
   · rw [Array.getElem?_eq_getElem hi'] at h0; rw [Option.some.inj h0]
   · rw [Array.getElem?_eq_getElem hi'] at hj1; rw [Option.some.inj hj1]
 
+/-! ## The results -/
+
+/-- **`rwLockRead` gives 2, 12 or 22 under every schedule** (every oracle `o`, every `fuel`): the
+first read sees 0, 1 or 2 increments, the read after the join sees both. -/
+theorem rwLockRead_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (rwLockRead io) mem0).run = some (.ok (v, m))) :
+    v = .ok 2 ∨ v = .ok 12 ∨ v = .ok 22 := by
+  obtain ⟨_, _, hv, -⟩ := (proto E₀).run_sound dispatch G0 (dispatch_spec spec₀)
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+  exact hv
+
+/-- **No run of `rwLockRead` gives an error**: no data race on `n`, no deadlock, no panic, under
+every schedule. -/
+theorem rwLockRead_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (rwLockRead io) mem0).run ≠ some (.error e) :=
+  (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+
 end Sync.RwLockRead
