@@ -47,6 +47,8 @@ inductive SPh where
   | wk
   deriving DecidableEq
 
+instance : Inhabited SPh := ⟨.none⟩
+
 /-- The critical code of the condition: the thread holds the mutex. -/
 def SPh.crit : SPh → Bool
   | .ld _ _ | .pst | .inc | .wk => true

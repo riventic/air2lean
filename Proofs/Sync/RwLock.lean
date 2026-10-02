@@ -620,21 +620,21 @@ def sem0 : Io_Semaphore :=
 /-- What the proof of `rwLockRead` needs of the semaphore's ops (module doc). -/
 structure Sem.Spec : Prop where
   /-- `wait` by the writer, who saw a reader: it takes `n` (`Res`). -/
-  wait : ∀ (k : Nat) (s : S) (G : ThreadId → Gh S) (m : Mem) (d : Nat) (io : Io),
-    (proto E).inv (upd G 1 (⟨.out, Heap.empty, Heap.empty⟩, (s, .ws k))) m → m.current = 1 →
+  wait : ∀ (k : Nat) (G : ThreadId → Gh S) (m : Mem) (d : Nat) (io : Io),
+    (proto E).inv (upd G 1 (⟨.out, Heap.empty, Heap.empty⟩, (default, .ws k))) m → m.current = 1 →
     (proto E).WP 1 (Io_Semaphore_waitUncancelable semPtr io)
-      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 1 ∧ ∃ h s', NPts k h ∧
-        (proto E).inv (upd G' 1 (⟨.out, h, Heap.empty⟩, (s', .wn k))) m') G m d
+      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 1 ∧ ∃ h, NPts k h ∧
+        (proto E).inv (upd G' 1 (⟨.out, h, Heap.empty⟩, (default, .wn k))) m') G m d
   /-- `post` by `main`, the last reader: it gives `n` to the semaphore. -/
-  post : ∀ (h : Heap) (s : S) (G : ThreadId → Gh S) (m : Mem) (d : Nat) (io : Io),
-    (proto E).inv (upd G 0 (⟨.out, h, Heap.empty⟩, (s, .po))) m → m.current = 0 →
+  post : ∀ (h : Heap) (G : ThreadId → Gh S) (m : Mem) (d : Nat) (io : Io),
+    (proto E).inv (upd G 0 (⟨.out, h, Heap.empty⟩, (default, .po))) m → m.current = 0 →
     (proto E).WP 0 (Io_Semaphore_post semPtr io)
-      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 0 ∧ ∃ s',
-        (proto E).inv (upd G' 0 (⟨.out, Heap.empty, Heap.empty⟩, (s', .pd))) m') G m d
+      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 0 ∧
+        (proto E).inv (upd G' 0 (⟨.out, Heap.empty, Heap.empty⟩, (default, .pd))) m') G m d
   /-- A thread asleep at a futex of the semaphore's condition is the writer, while `main` has
-  not posted. -/
+  not ended its `post`. -/
   live : ∀ G m, (proto E).inv G m → ∀ w ∈ m.waiters, w.2 ≠ (L S).ptr → w.2 ≠ WM.ptr →
-    w.1 = 1 ∧ (∃ k, (G 1).2.2 = .ws k) ∧ ((G 0).2.2 = .sh ∨ (G 0).2.2 = .po)
+    w.1 = 1 ∧ (∃ k, (G 1).2.2 = .ws k) ∧ ((G 0).2.2 = .sh ∨ (G 0).2.2 = .po ∨ (G 0).2.2 = .pd)
   /-- A step out of the semaphore's code keeps its invariant. -/
   frame : ∀ G G' m m', E.inv G m → Frame m m' →
     (∀ u, (G' u).2.1 = (G u).2.1 ∧ (G' u).1.held = (G u).1.held ∧
@@ -1254,7 +1254,8 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
     obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp h
     exact ⟨_, Array.getElem_mem hi', by simpa using he⟩
   have hu := hi.2.1
-  have hmpf : ∀ x : Ph, x.mp = some .wait → x ≠ .sh ∧ x ≠ .po ∧ x ≠ .wf ∧ x ≠ .joins := fun x h => by
+  have hmpf : ∀ x : Ph, x.mp = some .wait → x ≠ .sh ∧ x ≠ .po ∧ x ≠ .wf ∧ x ≠ .joins ∧ x ≠ .pd :=
+    fun x h => by
     cases x <;> simp_all [Ph.mp]
   have hmpf' : ∀ x : Ph, (x.mp = some .holds ∨ x.mp = some .wake) → x ≠ .wf ∧ x ≠ .joins ∧
       x.mp ≠ some .wait := fun x h => by
@@ -1274,7 +1275,7 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
     · exact hs
   -- thread `u` goes on
   have hgo : ∀ u, u < 2 → (G u).2.2.mp ≠ some .wait → (G u).2.2 ≠ .wf →
-      (G u).2.2 ≠ .joins → (u = 1 → (G 0).2.2 ≠ .sh ∧ (G 0).2.2 ≠ .po) → False := by
+      (G u).2.2 ≠ .joins → (u = 1 → (G 0).2.2 ≠ .sh ∧ (G 0).2.2 ≠ .po ∧ (G 0).2.2 ≠ .pd) → False := by
     intro u hu2 hmp hwf hj hm
     rcases hall u (by rw [h2]; exact hu2) with h | h | h
     · exact hwf h.2
@@ -1282,21 +1283,22 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
       by_cases hl : w'.2 = WM.ptr
       · exact hmp (mq_wait hu hw' hl)
       · obtain ⟨h1, -, h0⟩ := hE.live G m hi w' hw' (hnot w' hw') hl
-        obtain ⟨a, b⟩ := hm h1
-        rcases h0 with h0 | h0
+        obtain ⟨a, b, c⟩ := hm h1
+        rcases h0 with h0 | h0 | h0
         · exact a h0
         · exact b h0
+        · exact c h0
     · exact hj h.2
   obtain ⟨w, hwm, rfl⟩ := hwait t hw
   by_cases hl : w.2 = WM.ptr
   · rcases hu.mq w hwm hl with ⟨h0, hx, ho⟩ | ⟨h1, hx, ho⟩
     · have := hmpf' _ (ho.imp_left And.left)
-      exact hgo 1 (by decide) this.2.2 this.1 this.2.1 fun _ => ⟨(hmpf _ hx).1, (hmpf _ hx).2.1⟩
+      exact hgo 1 (by decide) this.2.2 this.1 this.2.1 fun _ => ⟨(hmpf _ hx).1, (hmpf _ hx).2.1, (hmpf _ hx).2.2.2.2⟩
     · have := hmpf' _ (ho.imp_left And.left)
       exact hgo 0 (by decide) this.2.2 this.1 this.2.1 fun h => absurd h (by decide)
   · obtain ⟨-, -, h0⟩ := hE.live G m hi w hwm (hnot w hwm) hl
     have hx : (G 0).2.2.mp ≠ some .wait ∧ (G 0).2.2 ≠ .wf ∧ (G 0).2.2 ≠ .joins := by
-      rcases h0 with h0 | h0 <;> rw [h0] <;> simp [Ph.mp]
+      rcases h0 with h0 | h0 | h0 <;> rw [h0] <;> simp [Ph.mp]
     exact hgo 0 (by decide) hx.1 hx.2.1 hx.2.2 fun h => absurd h (by decide)
 
 /-! ## The futex of the mutex -/
