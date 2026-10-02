@@ -373,7 +373,7 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
     hs.mono (hs.ws.keep (hk' _ (.inl rfl))) (hs.we.keep (hk' _ (.inr rfl)))
       (Word.hist_keep hs.ws (hk' _ (.inl rfl))) (Word.hist_keep hs.we (hk' _ (.inr rfl)))
       (recordAt_le m _ _ _ _) (fun c ⟨i, l, h1, h2⟩ => ⟨i, l, h1, h2⟩) (fun h => .inl h)
-      (fun w hw _ => .inl hw) (by simp [Mem.recordAt]),
+      (fun w hw _ => .inl hw) (Sem.allLe_keep (recordAt_le m _ _ _ _) (by simp [Mem.recordAt])),
     ⟨hu.shape, fun e he hb ho => ?_, hu.parts, hu.blk, hu.q, hu.one, hu.wx⟩⟩
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
