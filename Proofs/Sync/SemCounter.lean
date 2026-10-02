@@ -1132,4 +1132,66 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
   · have : u = 0 := by rw [h1] at hu; omega
     subst this; exact VClock.le_refl _
 
+
+theorem main_spec (io : Io) (d : Nat) :
+    proto.WP 0 (semaphoreCounter io) QM G0 { mem0 with current := 0 } d := by
+  unfold semaphoreCounter
+  -- the `SemCounter`: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 48 8 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  -- its four parts
+  obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
+  obtain ⟨hS, hR₂, dS, rfl, hS₁, hR₂'⟩ := bytesAt_split hR₁' (k := 24) (by simp)
+  obtain ⟨hN, hP, dN, rfl, hN₁, hP₁⟩ := bytesAt_split hR₂' (k := 4) (by simp)
+  have hsI : ((Array.replicate 48 Byte.undef).extract 0 16).size = 16 := by simp
+  have hsS : (((Array.replicate 48 Byte.undef).extract 16).extract 0 24).size = 24 := by simp
+  have hsN : ((((Array.replicate 48 Byte.undef).extract 16).extract 24).extract 0 4).size = 4 := by
+    simp
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  -- `io`, the semaphore, `n`
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 (hI ∪ (hS ∪ (hN ∪ hP)))) m₁ := ho₁
+  have F₁ : (bytesAt cPtr A 48 .stack ((Array.replicate 48 Byte.undef).extract 0 16) ∗
+      (bytesAt (cPtr.add 16) A 48 .stack (((Array.replicate 48 Byte.undef).extract 16).extract 0 24) ∗
+        (bytesAt ((cPtr.add 16).add 24) A 48 .stack
+          ((((Array.replicate 48 Byte.undef).extract 16).extract 24).extract 0 4) ∗
+         bytesAt (((cPtr.add 16).add 24).add 4) A 48 .stack
+          ((((Array.replicate 48 Byte.undef).extract 16).extract 24).extract 4))))
+      (hI ∪ (hS ∪ (hN ∪ hP))) := ⟨hI, _, dI, rfl, hI₁, hS, _, dS, rfl, hS₁, hN, hP, dN, rfl, hN₁, hP₁⟩
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr) (A := A) (S := 48) (K := .stack) (k := 0)
+    (a := 8) io rfl (by decide) (by rw [hsI]; decide) (by simp [cPtr]; omega) (by decide)).frame)
+    ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
+    fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr.add 16) (A := A) (S := 48) (K := .stack)
+    (k := 0) (a := 8) sem0 (by rw [sem_size]; rfl) rfl (by decide)
+    (by rw [hsS]; decide) (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
+  rw [upd_upd] at ho₃
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 16).add 24) (A := A) (S := 48)
+    (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
+    (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃
+    (hs₃.current.trans (hs₂.current.trans hc₁))
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
+  rw [upd_upd] at ho₄
+  have hc₄ : m₄.current = 0 := hs₄.current.trans (hs₃.current.trans (hs₂.current.trans hc₁))
+  have hth₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by
+    rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; rfl
+  have hat₄ : m₄.atomics = #[] := by rw [hs₄.atomics, hs₃.atomics, hs₂.atomics, hs₁.atomics]; rfl
+  have hq₄ : m₄.waiters = #[] := by rw [hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
+  have hPa : Parts io A ((((Array.replicate 48 Byte.undef).extract 16).extract 24).extract 4) h₄ := by
+    rw [writeBytes_all (by rw [hsI, enc_io]), writeBytes_all (by rw [hsS, sem_size]),
+      writeBytes_all (by rw [hsN, enc_u32])] at F₄
+    exact F₄
+  sorry
+
 end Sync.SemCounter
