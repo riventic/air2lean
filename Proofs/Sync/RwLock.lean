@@ -3739,4 +3739,100 @@ theorem inv_wgn (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {k : Nat} {h
   rw [hG] at hl' hU he'
   exact ⟨hl', hU, he'⟩
 
+theorem semPtr_eq : semPtr = Sm.ptr := rfl
+
+/-- A thread at `ws`: the writer. -/
+theorem ws_one {G : ThreadId → Gh SPh} {m : Mem} (hu : U G m) {u k : Nat} (h : (G u).2.2 = .ws k) :
+    u = 1 := by
+  rcases mp_lt hu (u := u) (by rw [h]; simp [Ph.mp]) with rfl | rfl
+  · exfalso; obtain ⟨-, ⟨-, hp, -⟩ | ⟨-, -, hM, -, -⟩⟩ := hu.shape
+    · change (G 0).2.2 = _ at hp; rw [h] at hp; cases hp
+    · change (G 0).2.2.isMain at hM; rw [h] at hM; cases hM
+  · rfl
+
+/-- `E₀` satisfies `Sem.Spec.wait`: the kit's `wait`, then the writer's step out of it. -/
+theorem wait₀ (k : Nat) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : Io)
+    (hi : (proto E₀).inv (upd G 1 (⟨.out, Heap.empty, Heap.empty⟩, (default, .ws k))) m)
+    (_ : m.current = 1) :
+    (proto E₀).WP 1 (Io_Semaphore_waitUncancelable semPtr io)
+      (fun _ G' m' d' => d' ≤ d ∧ m'.current = 1 ∧ ∃ h, NPts k h ∧
+        (proto E₀).inv (upd G' 1 (⟨.out, h, Heap.empty⟩, (default, .wn k))) m') G m d := by
+  rw [semPtr_eq]
+  refine WP.mono ?_ (Sync.Sem.wait_spec fits 1 Heap.empty (.ws k) (.wg k) (NPts k) io
+    ?_ rfl rfl rfl ?_ ?_ G m d hi)
+  · rintro _ G' m' d' ⟨hd, hc, h₃, hT, hi'⟩
+    exact ⟨by omega, hc, Heap.empty ∪ h₃, by rw [Heap.empty_union]; exact hT, inv_wgn frame₀ hi'⟩
+  · -- no thread other than the writer waits at the condition
+    intro G' m' hi' _ _ _ u hu i jr sn e hr
+    have := hi'.2.2.2.wx u (by rw [hr]; rfl)
+    obtain ⟨k', hk'⟩ : ∃ k', (G' u).2.2 = .ws k' := by
+      cases e : (G' u).2.2 <;> rw [e] at this <;> simp [Ph.isWs] at this; exact ⟨_, rfl⟩
+    exact hu (ws_one hi'.2.1 hk')
+  · -- the permit and `n`
+    intro Y hY hpv
+    have hP : hasP Y = true := by
+      cases e : hasP Y
+      · exact absurd (by show (if hasP Y then (1 : BitVec 64) else 0) = 0; rw [e]; rfl) hpv
+      · rfl
+    have hP' : hasP (upd Y 1 (.wg k)) = false := by
+      simp [hasP, upd_self, Ph.isWs]
+    refine ⟨?_, fun hr hR => ⟨Heap.empty, hr, (Heap.empty_union hr).symm,
+      (Heap.disjoint_empty _).symm, ?_, ?_⟩⟩
+    · show pv (upd Y 1 (.wg k)) = pv Y - 1
+      unfold pv; rw [hP, hP']; rfl
+    · show Res (upd Y 1 (.wg k)) Heap.empty
+      unfold Res; rw [hP']; rfl
+    · have : Res Y hr := hR
+      unfold Res at this; rw [hP] at this; simp only [↓reduceIte] at this; rw [hY] at this; exact this
+  · -- `U` with the writer at `wg k`, which owns `n`
+    intro G' m' h₁ h₂ h₃ h₄ hT hd hR hu
+    obtain ⟨hu, hq⟩ := hu
+    have hg1 : (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) 1).2.2 = .ws k := by rw [upd_self]
+    have hR' : (if hasP (fun u => (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) u).2.2) then
+        NPts (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) 1).2.2.cnt else emp) (h₄ ∪ h₃) := hR
+    have hgv : (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) 0).2.2.gave = true := by
+      cases e : (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) 0).2.2.gave
+      · exfalso
+        rw [show hasP (fun u => (upd G' 1 (⟨.holds, Heap.empty, h₁⟩, .none, .ws k) u).2.2) = false by
+          simp [hasP, hg1, Ph.isWs, e]] at hR'
+        have := congrFun hR' (0, 56)
+        simp only [Heap.union_apply, Heap.empty, Option.or_eq_none_iff] at this
+        exact (npts_at hT (0, 56)).mpr ⟨rfl, by decide, by decide⟩ this.2
+      · rfl
+    have hf := hu.flags
+    rw [upd1_0] at hgv; rw [upd1_0, upd_self] at hf
+    have hm0 : (G' 0).2.2.mustN = false := by
+      cases e : (G' 0).2.2 <;> rw [e] at hgv <;> simp_all [Ph.gave, Ph.mustN]
+    refine ⟨U_ghost (G' := upd G' 1 (⟨.holds, Heap.empty ∪ h₃, h₂⟩, .none, .wg k)) hu ?_ ?_ ?_ ?_ ?_ ?_ ?_,
+      fun w hw => hq.q w hw, fun u h => ?_⟩
+    · have hsh := hu.shape
+      have hW := w_isW hu (by rw [upd1_0]; intro hp; rw [hp] at hgv; cases hgv)
+      rw [upd_self] at hW
+      rw [ph_upd] at hsh ⊢
+      have := shape_upd hsh (t := 1) (y := Ph.wg k) (.inr ⟨by rw [upd_self]; exact hW,
+        by rw [upd_self]; simp⟩) (fun hm => by rw [upd_self] at hm; cases hm)
+        (fun _ => by simpa [Ph.isW] using hW)
+      rw [upd_upd] at this
+      exact this
+    · rw [upd1_0, upd_self]
+      exact ⟨(fun _ h => by cases h), (fun h => by rw [h] at hgv; cases hgv), (fun h => hf.one ⟨h.1, rfl⟩),
+        hf.sr, fun h => by have := hf.jd h; cases this⟩
+    · rw [upd1_0, upd1_0, upd_self, upd_self]; rfl
+    · intro u; by_cases e : u = 1
+      · subst e; rw [upd_self, upd_self]; rfl
+      · rw [upd_ne _ _ e, upd_ne _ _ e]
+    · intro u hu'
+      by_cases e : u = 1
+      · subst e; rw [upd_self] at hu'; cases hu'
+      · rw [upd_ne _ _ e] at hu' ⊢; have := hu.lph u; rw [upd_ne _ _ e] at this; exact this hu'
+    · intro u
+      by_cases e : u = 1
+      · subst e; rw [upd_self]; show NPts k (Heap.empty ∪ h₃); rw [Heap.empty_union]; exact hT
+      · rw [upd_ne _ _ e, upd_self]
+        have := hu.parts u; rw [upd_ne _ _ e, upd_self] at this; exact this
+    · intro hc; rw [upd_self] at hc; cases hc.2.1
+    · by_cases e : u = 1
+      · subst e; rw [upd_self] at h; cases h
+      · rw [upd_ne _ _ e] at h ⊢; have := hq.wx u; rw [upd_ne _ _ e] at this; exact this h
+
 end Sync.RwLockRead
