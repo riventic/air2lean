@@ -373,6 +373,8 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   before : ∀ c, L.Before m c → L.Before m' c
   /-- The atomic locations at other addresses stay. -/
   locs : LocsKeep L.b L.o 4 m m'
+  /-- A new access is by thread `t`, and happened before its new clock. -/
+  fpt : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true)
 
 /-- A protocol with the lock `L` (module doc): its invariant is `Lock.Inv` and `U`. -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Mem → Prop) : Prop where
@@ -436,7 +438,8 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hw : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
     by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw,
-    fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩, .of_eq ha⟩
+    fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩, .of_eq ha,
+    fun e he => .inl (hf ▸ he)⟩
 
 /-- The same memory, but `current`, `seen`, `nextMsg` and `woken`. -/
 theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)

@@ -118,7 +118,13 @@ theorem Step.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : L.Step t m₁ m
     h₂.csize.trans h₁.csize,
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, ?_, fun w hw => (h₂.waiters w hw).trans (h₁.waiters w hw),
-    fun c h => h₂.before c (h₁.before c h), h₁.locs.trans h₂.locs⟩
+    fun c h => h₂.before c (h₁.before c h), h₁.locs.trans h₂.locs, fun e he => ?_⟩
+  rotate_right
+  · rcases h₂.fpt e he with h | h
+    · rcases h₁.fpt e h with h' | ⟨ht, hle⟩
+      · exact .inl h'
+      · exact .inr ⟨ht, VClock.le_trans hle h₂.mine⟩
+    · exact .inr h
   · rcases h₂.fp e he with h | h
     · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
       · exact .inl h'
@@ -507,8 +513,8 @@ theorem Inv.rmwStep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     fun u hu => by rw [hcl, hs2 u hu], by rw [hcl]; exact hs3, by rw [hbl]; simp [Mem.write],
     .inr ⟨blk, _, hb, hlv, bs4 new, hsz, hbl⟩, fun _ _ => by rw [hwq],
     fun c ⟨i, l₀, hl₀, hle⟩ => ?_, LocsKeep.set hl.2 (loc_at hl).1 (loc_at hl).2
-      (by exact (loc_at hl).1) (by exact (loc_at hl).2) (by exact (hi.loc.ok li l hl).1) hat⟩,
-    hcur.trans hc, hwq, hcl, hbl, hat⟩
+      (by exact (loc_at hl).1) (by exact (loc_at hl).2) (by exact (hi.loc.ok li l hl).1) hat,
+    fun e he => .inl (hfp ▸ he)⟩, hcur.trans hc, hwq, hcl, hbl, hat⟩
   obtain ⟨rfl, rfl⟩ := loc_unique hl hl₀
   refine ⟨_, _, loc_set hl hat rfl rfl, ?_⟩
   have hbk : l.msgs.back! = l.msgs[l.msgs.size - 1]! := rfl
@@ -1228,7 +1234,7 @@ theorem Inv.prep {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : Bl
   refine ⟨rfl, rfl, l, hl', hi₁, ⟨by rw [ht₁]; rfl, fun e he => ?_, by rw [hg₁]; rfl,
     by rw [hc₁]; simp [Mem.recordAt], fun u hu => ?_, ?_, by rw [hb₁]; rfl, .inl (by rw [hb₁]; rfl),
     fun _ _ => by rw [hw₁]; rfl, fun _ ⟨i, l₀, h₀, hle⟩ => ⟨i, l₀, hlk i l₀ h₀, hle⟩,
-    (LocsKeep.of_eq (m := m) (m' := m.recordAt L.b L.o 4 .atomicWrite) rfl).trans hks⟩,
+    (LocsKeep.of_eq (m := m) (m' := m.recordAt L.b L.o 4 .atomicWrite) rfl).trans hks, fun e he => ?_⟩,
     by rw [hcu₁, ← hc]; rfl, by rw [hw₁]; rfl, by rw [hb₁]; rfl, (loc_get hl').2.2⟩
   · rw [hf₁] at he
     simp only [Mem.recordAt, Array.mem_push] at he
@@ -1238,6 +1244,12 @@ theorem Inv.prep {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : Bl
       rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
   · rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite, if_neg (fun h => hu (h.1.trans hc))]
   · rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_bump]
+  · rw [hf₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ⟨hc, ?_⟩
+      rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
 
 /-- The preparation of an atomic read at the word by thread `t`: the access, the record and
 the location. -/
@@ -1258,7 +1270,7 @@ theorem Inv.prepR {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : B
   refine ⟨rfl, rfl, l, hl', hi₁, ⟨by rw [ht₁]; rfl, fun e he => ?_, by rw [hg₁]; rfl,
     by rw [hc₁]; simp [Mem.recordAt], fun u hu => ?_, ?_, by rw [hb₁]; rfl, .inl (by rw [hb₁]; rfl),
     fun _ _ => by rw [hw₁]; rfl, fun _ ⟨i, l₀, h₀, hle⟩ => ⟨i, l₀, hlk i l₀ h₀, hle⟩,
-    (LocsKeep.of_eq (m := m) (m' := m.recordAt L.b L.o 4 .atomicRead) rfl).trans hks⟩,
+    (LocsKeep.of_eq (m := m) (m' := m.recordAt L.b L.o 4 .atomicRead) rfl).trans hks, fun e he => ?_⟩,
     by rw [hcu₁, ← hc]; rfl, by rw [hw₁]; rfl, by rw [hb₁]; rfl, (loc_get hl').2.2⟩
   · rw [hf₁] at he
     simp only [Mem.recordAt, Array.mem_push] at he
@@ -1268,6 +1280,12 @@ theorem Inv.prepR {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : B
       rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
   · rw [hc₁]; simp only [Mem.recordAt]; rw [getElem!_set!_ite, if_neg (fun h => hu (h.1.trans hc))]
   · rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_bump]
+  · rw [hf₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ⟨hc, ?_⟩
+      rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
 
 /-- Each message of the word holds `0`, `1` or `2`; the newest one holds the word. -/
 theorem Inv.msgVal {G : ThreadId → γ} {m : Mem} {li j : Nat} {l : ALoc} {v : BitVec 32}
