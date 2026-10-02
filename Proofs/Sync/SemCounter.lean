@@ -1299,6 +1299,117 @@ theorem main_spec (io : Io) (d : Nat) :
       · by_cases e1 : u = 1
         · subst e1; rw [upd_ne _ _ (by decide), upd_self] at hu; cases hu
         · rw [hGo u (by unfold ThreadId at *; omega)] at hu ⊢; exact hu₅.wx u hu
-  sorry
+  simp only [StateT.run_bind]
+  -- `semWork`
+  refine WP.bind (WP.callC (WP.mono ?_ (work_spec 0 _ _ k hi₆ rfl)))
+  rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
+  -- the join of the kid
+  have hiJ := inv_end (g := gJoin) hi₇ (.inl rfl) rfl (.inl ⟨rfl, rfl⟩)
+  refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gJoin, hiJ, fun G₃ m₈ hg₃ hi₈ => ?_⟩)
+  have hsh₈ := hi₈.2.2.shape
+  obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
+  · exfalso; change (G₃ 0).2.2 = _ at h0; rw [hg₃] at h0; cases h0
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, rfl, rfl⟩, fun hfin => ⟨fun _ =>
+    join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
+  -- `main` takes the kid's part, then the semaphore's resource
+  let gEnd : Gh := (⟨.out, S.L.part (G₃ 0) ∪ S.L.own G₃ m₈ 1, Heap.empty⟩, .none, .joins)
+  have hX₃ : (fun u => (upd G₃ 0 gEnd u).2) = fun u => (G₃ u).2 := by
+    funext u; unfold upd; split
+    · rename_i h; subst h; rw [hg₃]; rfl
+    · rfl
+  have hL₉ := hi₈.1.join (t := 0) (u := 1) (g := gEnd) (by decide) (by decide)
+    (by rw [hg₃]; rfl) hfin.1 hj rfl rfl rfl (fun hL hR => by
+      show S.R _ hL; rw [hX₃]; exact hR)
+  obtain ⟨rec, hrec, -, hm₉⟩ := join_eq hj
+  have hth₉ : m₉.threads = m₈.threads.set! 1 { rec with joined := true } := by rw [hm₉]
+  have hs₉ : m₉.threads.size = 2 := by rw [hth₉, Array.size_set!, hs2]
+  have hc₉ : m₉.current = 0 := by rw [hm₉]
+  have hcs₈ : m₈.clocks.size = 2 := by rw [hi₈.1.own.csize, hs2]
+  have hfree : S.L.Free (upd G₃ 0 gEnd) := by
+    intro u hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu
+      obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
+      have : u = 1 := by unfold ThreadId at *; omega
+      subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree
+    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
+    rw [hm₉]
+    simp only
+    rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
+    simp only [true_and, show 0 < m₈.clocks.size by omega, ↓reduceIte, show (0 : Nat) = 0 from rfl]
+    rw [hs₉] at hu
+    by_cases h0 : u = 0
+    · subst h0; simp [VClock.le_refl]
+    · have : u = 1 := by omega
+      subst this
+      exact VClock.le_merge_right _ _)
+  -- `n` holds 4
+  have hR' : S.R (fun u => (G₃ u).2) hL := by
+    have : S.L.R (upd G₃ 0 gEnd) hL := hR
+    change S.R _ hL at this; rwa [hX₃] at this
+  have hh : held (XG G₃) = false := by
+    simp only [held, XG, hg₃, hfin.2]; rfl
+  have h4 : sum (XG G₃) = 4 := by simp only [sum, XG, hg₃, hfin.2]; rfl
+  obtain ⟨hp, hr, dpr, rfl, -, hnr⟩ := hR'
+  have hn4 : pts nPtr 4 (BitVec.ofNat 32 4) hr := by
+    have : (if held (XG G₃) then emp else NP (XG G₃)) hr := hnr
+    rw [hh] at this; simp only [Bool.false_eq_true, ↓reduceIte] at this
+    unfold NP at this; rw [h4] at this; exact this
+  let own₉ := S.L.own (upd G₃ 0 gEnd) m₉
+  obtain ⟨dpW, drW⟩ := Heap.disjoint_union_left.mp hdLW
+  have hd₀ := (Heap.disjoint_union_right.mp hd).1
+  obtain ⟨dp0, dr0⟩ := Heap.disjoint_union_right.mp hd₀
+  have hd' : Heap.Disjoint hr (hp ∪ (own₉ 0 ∪ S.L.wordH m₉)) :=
+    Heap.disjoint_union_right.mpr ⟨dpr.symm, Heap.disjoint_union_right.mpr ⟨dr0.symm, drW⟩⟩
+  have heq : own₉ 0 ∪ ((hp ∪ hr) ∪ S.L.wordH m₉) = hr ∪ (hp ∪ (own₉ 0 ∪ S.L.wordH m₉)) := by
+    rw [Heap.union_left_comm hd₀, Heap.union_comm dpr, Heap.union_assoc]
+  -- the load of `n`
+  refine WP.bind (WP.liftM_owned (TTriple.load (p := nPtr) (a := 4) (v := BitVec.ofNat 32 4)
+    (by decide)).frame ho hc₉ (by rw [hs₉]; decide)
+    (by rw [upd_self, heq]; exact ⟨hr, _, hd', rfl, hn4, rfl⟩) fun a m₁₀ hQ hr' ho' hq hs₁₀ _ _ => ?_)
+  obtain ⟨h₁, h₂, -, -, hq₁, -⟩ := hq
+  obtain ⟨rfl, -⟩ := sep_lift.mp hq₁
+  obtain ⟨b, blk, o, -, -, -, hm₁₀⟩ := load_ok hr'
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  -- the free of the `SemCounter`
+  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₈.2.2.blk
+  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+    fun _ m₁₁ hfr => ?_)
+  obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
+  -- every thread is joined
+  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀]; rfl
+  simp only [hth₁₀, hth₉] at hr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  simp only [Array.size_set!] at hi'
+  simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hi'] at hsp ⊢
+  split
+  · rfl
+  · rename_i hne
+    have : i = 0 := by omega
+    subst this
+    rw [Array.getElem?_eq_getElem (by omega)] at h08
+    rw [Option.some.inj h08]
+
+/-! ## The results -/
+
+/-- **`semaphoreCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
+theorem semaphoreCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+    {m : Mem} (io : Io)
+    (h : (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run = some (.ok (v, m))) :
+    v = .ok 4 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+  exact hv
+
+/-- **No run of `semaphoreCounter` gives an error**: no data race on `n`, no deadlock, no panic,
+under every schedule. -/
+theorem semaphoreCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
 
 end Sync.SemCounter
