@@ -11,6 +11,8 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
 
 set_option linter.unusedSectionVars false
 
+attribute [local irreducible] Proto.WP
+
 /-! ## A change of a thread's part, outside the lock's code -/
 
 namespace Zig.Conc.Lock
@@ -2299,10 +2301,10 @@ theorem wmptr : (bPtr.add 16).add 32 = WM.ptr := rfl
 theorem semptr : (bPtr.add 16).add 8 = semPtr := rfl
 
 /-- `lock` of the `RwLock` by the writer at `wo k`: it owns `n`. -/
-theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {sx : S} {io : Io} {G : ThreadId → Gh S}
-    {m : Mem} {d : Nat} (hi : (proto E).inv (upd G 1 (gA (.wo k) Heap.empty sx)) m) :
+theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId → Gh S}
+    {m : Mem} {d : Nat} (hi : (proto E).inv (upd G 1 (gA (.wo k) Heap.empty default)) m) :
     (proto E).WP 1 (Io_RwLock_lockUncancelable (bPtr.add 16) io) (fun _ G' m' d' => d' < d ∧
-      m'.current = 1 ∧ ∃ h sx', NPts k h ∧ (proto E).inv (upd G' 1 (gA (.wn k) h sx')) m') G m d := by
+      m'.current = 1 ∧ ∃ h, NPts k h ∧ (proto E).inv (upd G' 1 (gA (.wn k) h default)) m') G m d := by
   unfold Io_RwLock_lockUncancelable
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -2317,7 +2319,7 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {sx : S} {io : Io} {G : 
   rw [hg1] at hold; simp only [Ph.wb, Ph.ib] at hold
   have hr := Ph.rb_le (G₁ 0).2.2
   -- `state += writer`
-  have hi₂ : (proto E).inv (upd G₁ 1 (gA (.wa k .cas) Heap.empty sx)) m' := by
+  have hi₂ : (proto E).inv (upd G₁ 1 (gA (.wa k .cas) Heap.empty default)) m' := by
     have hnp : (G₁ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := hu₁.flags.po h; rw [hg1] at hk'; cases hk'
     have hval : RmwOp.add.apply false old (2 : BitVec 64) = sv (G₁ 0).2.2 (.wa k .cas) := by
       rw [hold, sv3_add2 hr, sv_eq]; rfl
@@ -2332,6 +2334,55 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {sx : S} {io : Io} {G : 
       obtain ⟨hn, hp, hs, hok⟩ := hu₁.car (by rw [hg1]; exact ⟨hc.1, rfl, by simpa [Ph.isWs] using hc.2.2⟩)
       rw [hg1] at hp
       exact ⟨hn, hp, car_rmw hp hs hok hu₁.ws hop hh⟩
-  done
+  -- the mutex
+  refine WP.bind (WP.callC (WP.mono ?_ (mlock_spec hE (t := 1) (x := .wa k .cas) rfl rfl hi₂)))
+  rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
+  -- `state += is_writing -% writer`
+  refine WP.bind (wp_rmw (W := WS) hi₃ (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+    fun k₃ hk₃ G₃ m₃ m₄ old' hg₃ hi₄ hv' hU' hh' hacq' hw₄ hop₄ => ?_)
+  have hu₄ := hi₄.2.1
+  have hg3 : (G₃ 1).2.2 = .wa k .holds := by rw [hg₃]; rfl
+  have hold' := sold hu₄ hv'
+  rw [hg3] at hold'; simp only [Ph.wb, Ph.ib] at hold'
+  have hr' := Ph.rb_le (G₃ 0).2.2
+  obtain ⟨hdec, htest⟩ := sv3_dec hr'
+  obtain ⟨-, f2, f3, f4⟩ := hu₄.flags
+  rw [hg3] at f3 f2
+  have hm0 : (G₃ 0).2.2.mp ≠ some .holds := fun h => f3 ⟨h, rfl⟩
+  have hnp : (G₃ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := f2 h; cases hk'
+  have he : ∀ y : Ph, y.wb = 0 → y.ib = 1 →
+      (Word.rmwEnt m₄ 1 .seqCst (last (WS.hist m₃)) (RmwOp.add.apply false old' 18446744073709551615)).Val
+        (sv (upd G₃ 1 (gA y Heap.empty default) 0).2.2 (upd G₃ 1 (gA y Heap.empty default) 1).2.2) := by
+    intro y h1 h2
+    rw [upd1_0, upd_self]
+    show Word.Entry.Val _ (sv (G₃ 0).2.2 y)
+    rw [sv_eq, h1, h2, ← hdec, ← hold']; exact rmwEnt_val WS
+  rcases (by omega : (G₃ 0).2.2.rb = 0 ∨ (G₃ 0).2.2.rb = 1) with hr0 | hr1
+  · sorry
+  · -- a reader: the writer waits at the semaphore
+    have hms : (G₃ 0).2.2 = .sh ∨ (G₃ 0).2.2 = .sr .wake := by
+      cases e : (G₃ 0).2.2 <;> rw [e] at hr1 <;> simp [Ph.rb] at hr1 ⊢
+      rename_i p
+      rcases f4 p e with rfl | rfl
+      · rw [e] at hm0; exact absurd rfl hm0
+      · rfl
+    have hi₅ : (proto E).inv (upd G₃ 1 (gA (.ws k) Heap.empty default)) m₄ :=
+      inv_sstep hE hi₄ hg₃ hop₄ hw₄ hh' (he (.ws k) rfl rfl) rfl rfl (fun h => by cases h) rfl rfl rfl
+        (.inl rfl) (by
+          rw [upd1_0, upd_self]
+          exact ⟨fun _ _ => by rcases hms with h | h; exact .inl h; exact .inr (.inr (.inr h)),
+            fun h => absurd h hnp, fun h => hm0 h.1, f4⟩) (by rfl)
+        (fun hc => absurd hc.1 (by rw [upd1_0]; rcases hms with h | h <;> simp [h, Ph.mustN]))
+        (lws_keep hi₄ hop₄ hg₃
+          (by simp only [hasP, upd_self, upd1_0]; rcases hms with h | h <;> simp [h, Ph.isWs, Ph.gave])
+          (by simp [hasP, hg3, Ph.isWs]))
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [hold', htest]
+    simp only [hr1, decide_true, ↓reduceIte, StateT.run_bind]
+    rw [semptr]
+    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (hE.wait k G₃ m₄ k₃ io hi₅ hop₄.current))))
+    rintro _ G₄ m₅ d₄ ⟨hd₄, hc₅, h, hnk, hi₆⟩
+    simp only [StateT.run_pure, pure_bind]
+    exact WP.pure' (WP.pure' (WP.pure' ⟨by omega, hc₅, h, hnk, hi₆⟩))
 
 end Sync.RwLockRead
