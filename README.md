@@ -4,7 +4,31 @@
 
 Translate a subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 179 functions in 17 examples translate and match the compiled Zig on 86,721 differential tests (x86_64-linux), including the panic kind and the memory after each call: `basic`, `recursion`, `options`, `errors`, `variants`, the memory examples `pointers`, `slices` and `lists` (heap memory, an allocator, translated std code), `threads` (atomics and fork-join threads that take turns at sync ops, with a data-race check; the diff test searches the schedules; [docs/std-models.md](docs/std-models.md)), `atomics` (the RC11 memory model: message passing, store buffering, 2+2W, a lock-free stack), `sync` (0.16.0's `Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore` and `Io.RwLock`, translated from their std code, on a futex model), `layout` (casts, `packed` and `extern` layout, function pointers, unions and error unions in memory), `vectors` (`@Vector`), `asm` (inline asm with register operands, x86_64 only), and the float examples `floatops`, `floatconv`, `floats` (f16 to f128, bit-exact on x86_64-linux; [docs/floats.md](docs/floats.md)). Every example has machine-checked proofs (`Proofs/`; `floatops`, a float test bench, only for the parts that do not depend on the Zig version), including loops, mutual recursion, optionals, `try`, enums, tagged unions, pointer aliasing and IEEE-754 rounding; `threads`' `parallelCounter` gives `4 * n` under every schedule, and no schedule gives a data race, a deadlock or another error (`Proofs/Threads/Counter.lean`, a rely–guarantee logic over the scheduler); the same holds for `mutexCounter`, a counter under the translated std `Io.Mutex` with its futex waits (`Proofs/Sync/Mutex.lean`), for `groupCounter`, three `Io.Group` tasks under the same mutex (`Proofs/Iogroup/Counter.lean`), for `handoff`, a value handed over with an `Io.Condition` and an `Io.Event` (`Proofs/Sync/Handoff.lean`), for 0.15.2's `threadsync.mutexCounter` under the translated `Thread.Mutex` (`Proofs/Threadsync/Mutex.lean`), `threadsync.waitGroup` under `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex` (`Proofs/Threadsync/WaitGroup.lean`), `threadsync.handoff` under `Thread.Condition`, `Thread.ResetEvent` and `Thread.Mutex` (`Proofs/Threadsync/Handoff.lean`), and for `atomics`' message passing and lock-free stack (`Proofs/Atomics/`). Memory proofs use a separation logic, and proofs over threads a concurrent separation logic: each thread owns a part of the heap, and the parts move at a spawn, a join, a lock and an unlock (a lock owns a resource while it is free; `Proofs/Threads/Disjoint.lean`; [docs/proofs.md](docs/proofs.md)). See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 185 functions in 19 examples translate and match the compiled Zig on 87,121 differential tests (x86_64-linux), including the panic kind and the memory after each call. Every example has machine-checked proofs (`Proofs/`; `floatops`, a float test bench, only for the parts that do not depend on the Zig version). See [PLAN.md](PLAN.md).
+
+| Examples | What they cover |
+|---|---|
+| `basic`, `recursion`, `options`, `errors`, `variants` | loops, mutual recursion, optionals, `try`, enums, tagged unions |
+| `pointers`, `slices`, `lists` | byte-level memory, pointer aliasing, heap memory, an allocator, translated std code |
+| `layout`, `vectors`, `asm` | casts, `packed` and `extern` layout, function pointers, unions in memory; `@Vector`; inline asm with register operands (x86_64 only) |
+| `floatops`, `floatconv`, `floats` | f16 to f128, bit-exact on x86_64-linux, IEEE-754 rounding ([docs/floats.md](docs/floats.md)) |
+| `threads`, `atomics` | atomics and fork-join threads that take turns at sync ops, with a data-race check; the RC11 memory model (message passing, store buffering, 2+2W, a lock-free stack) ([docs/std-models.md](docs/std-models.md)) |
+| `sync`, `iogroup` (0.16.0) | `Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock`, translated from their std code, on a futex model; `Io.Group` (a model: a task is a thread) |
+| `threadsync` (0.15.2) | `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup`, translated from their std code |
+
+Proofs over threads hold under every schedule: each gives the result, and no schedule gives a data race, a deadlock or another error. They use a rely–guarantee logic over the scheduler and a concurrent separation logic: each thread owns a part of the heap, and the parts move at a spawn, a join, a lock and an unlock ([docs/proofs.md](docs/proofs.md)).
+
+| Function | Result | Std code under it | Proof |
+|---|---|---|---|
+| `threads.parallelCounter` | `4 * n` | — | `Proofs/Threads/Counter.lean` |
+| `threads.disjoint` | `a + b` | — | `Proofs/Threads/Disjoint.lean` |
+| `atomics.mpRelAcq`, `stackPush` | 0 or 42; 120 or 210 | — | `Proofs/Atomics/` |
+| `sync.mutexCounter` | 4 | `Io.Mutex` | `Proofs/Sync/Mutex.lean` |
+| `sync.handoff` | 7 | `Io.Mutex`, `Io.Condition`, `Io.Event` | `Proofs/Sync/Handoff.lean` |
+| `iogroup.groupCounter` | 3 | `Io.Group`, `Io.Mutex` | `Proofs/Iogroup/Counter.lean` |
+| `threadsync.mutexCounter` | 4 | `Thread.Mutex` | `Proofs/Threadsync/Mutex.lean` |
+| `threadsync.waitGroup` | 2 | `Thread.WaitGroup`, `Thread.ResetEvent`, `Thread.Mutex` | `Proofs/Threadsync/WaitGroup.lean` |
+| `threadsync.handoff` | 7 | `Thread.Condition`, `Thread.ResetEvent`, `Thread.Mutex` | `Proofs/Threadsync/Handoff.lean` |
 
 ## How it works
 
@@ -83,7 +107,7 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 | local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
 | enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays (also `[N:s]T`) | |
-| atomics on an integer, enum or `bool` pointee, fork-join threads that take turns at sync ops, with a data-race check | |
+| atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model) | `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a vector in memory of a type other than an integer or float |
@@ -100,7 +124,7 @@ The trusted base is: Zig `Sema`, the AIR export patch, the translator, and the L
 
 ## Zig versions
 
-Supported: Zig **0.16.0** (default), **0.15.2** and **0.14.1** (Linux only; no `floatconv`, `slices`, `lists`). One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
+Supported: Zig **0.16.0** (default), **0.15.2** and **0.14.1** (Linux only; `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers`, `layout`). `sync` and `iogroup` run on 0.16.0 only, `threadsync` on 0.15.2 only. One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
 
 ## License
 
