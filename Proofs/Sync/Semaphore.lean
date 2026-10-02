@@ -164,6 +164,12 @@ structure Fits {Tgt : Type} (P : Proto Tgt (SGh X)) (U : (ThreadId → SGh X) �
   condition changes, its part and the rest of its ghost value stay. -/
   stable : ∀ G m m' t g, U G m → S.Step t m m' → g.2.2 = (G t).2.2 → g.1.part = (G t).1.part →
     U (upd G t g) m'
+  /-- A step of the holder on its own bytes keeps `U`; its part and the rest of its ghost value
+  stay. -/
+  own : ∀ G m m' t g hQ, U G m → StepIn (m.heap.diff (S.L.own G m t)) m m' →
+    m'.heap = hQ ∪ m.heap.diff (S.L.own G m t) → Heap.Disjoint hQ (m.heap.diff (S.L.own G m t)) →
+    (G t).1.ph = .holds → g.1.ph = .holds → g.2 = (G t).2 → g.1.part = (G t).1.part →
+    g.1.part ∪ g.1.held = hQ → U (upd G t g) m'
   /-- A thread waits at the condition and the permit count is 0: a thread goes on. -/
   live : ∀ G m r i jr sn, P.inv G m → (G r).2.1 = .reg i jr sn → S.PZ m →
     (∀ u < m.threads.size, P.fin (G u) ∨ m.waiters.any (·.1 == u) = true ∨ P.joins (G u)) → False
@@ -1500,6 +1506,154 @@ theorem signal_spec (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph
     · simp only [StateT.run_pure]
       exact WP.pure' (WP.pure' ⟨hc₂, hi₃⟩)
   · rw [hh]; rw [← hg₁, upd_same] at hR; exact read_noR hl₁ hs₁ hh₁ hv hj hfl hb R i jr sn hR
+
+/-! ## The permit count -/
+
+theorem enc_u64 : Enc.size (BitVec 64) = 8 := rfl
+
+/-- Two `pts` of the permit count in one heap have the same value. -/
+theorem pts_eq {v w : BitVec 64} {h₁ h₂ M : Heap} (hv : pts S.ptr 8 v h₁) (s₁ : h₁.Sub M)
+    (hw : pts S.ptr 8 w h₂) (s₂ : h₂.Sub M) : v = w := by
+  obtain ⟨A, Sz, K, bs, -, hs, hd, ⟨b, hb, -, ho⟩, -⟩ := hv
+  obtain ⟨A', Sz', K', bs', -, hs', hd', ⟨b', hb', -, ho'⟩, -⟩ := hw
+  cases hb; cases hb'
+  have hbs : bs = bs' := by
+    refine Array.ext (by rw [hs, hs']) fun i h1 h2 => ?_
+    have e₁ := ho (S.b, S.o + i); have e₂ := ho' (S.b, S.o + i)
+    simp only [Sem.ptr, Int.toNat_natCast, true_and, Nat.le_add_right,
+      Nat.add_lt_add_iff_left, h1, h2, ↓reduceIte, Nat.add_sub_cancel_left] at e₁ e₂
+    have := (s₁ _ _ e₁).symm.trans (s₂ _ _ e₂)
+    simp only [Option.some.injEq, Cell.mk.injEq] at this
+    rw [getElem!_pos bs i h1, getElem!_pos bs' i h2] at this; exact this.1
+  subst hbs
+  have := congrArg ExceptT.run (hd.symm.trans hd')
+  simp only [pure, ExceptT.pure, ExceptT.run_mk, Option.some.injEq, Except.ok.injEq] at this
+  exact this
+
+theorem sub_union_left {h₁ h₂ M : Heap} (h : (h₁ ∪ h₂).Sub M) : h₁.Sub M := fun l c hl =>
+  h l c (by simp [hl])
+
+/-- The condition's invariant reads of each thread only its place in the condition, its place in
+the mutex and its part. -/
+theorem Inv.congrG {G G' : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m)
+    (h1 : ∀ u, (G' u).2.1 = (G u).2.1) (h2 : ∀ u, (G' u).1.ph = (G u).1.ph)
+    (h3 : ∀ u x, S.o + 12 ≤ x → x < S.o + 20 → (G' u).1.part (S.b, x) = none) : S.Inv G' m := by
+  have hhb : ∀ c, S.HBH G m c → S.HBH G' m c := fun c h =>
+    HBH.mono h (fun _ => VClock.le_refl _) (fun u hu => .inl (by rw [h2]; exact hu)) fun _ h => h
+  refine ⟨hi.ws, hi.we, hi.sv, fun u v i jr sn i' jr' sn' hu hv => ?_, fun hn => hi.idle ?_,
+    fun u i jr sn hu => ?_, hhb _ hi.hbE, fun u hu => ?_, fun u i hu => ?_,
+    fun u hu v i jr sn hv => ?_, fun u hu v i jr sn hv => ?_, fun w hw he => ?_, h3⟩
+  · rw [h1] at hu hv; exact hi.one u v i jr sn i' jr' sn' hu hv
+  · intro u i jr sn hu; exact hn u i jr sn (by rw [h1]; exact hu)
+  · rw [h1] at hu
+    exact (hi.era u i jr sn hu).mono rfl rfl (fun _ => VClock.le_refl _) hhb (fun h => .inl h)
+      fun v p _ hv => ⟨v, by rw [h1]; exact hv⟩
+  · rw [h1] at hu; rw [h2]; exact hi.crit u hu
+  · rw [h1] at hu; exact hi.ld u i hu
+  · rw [h1] at hu hv; exact hi.inc u hu v i jr sn hv
+  · rw [h1] at hu hv; exact hi.wk u hu v i jr sn hv
+  · obtain ⟨i, jr, a, b⟩ := hi.q w hw he
+    refine ⟨i, jr, by rw [h1]; exact a, ?_⟩
+    rcases b with b | ⟨v, hv⟩
+    · exact .inl b
+    · exact .inr ⟨v, by rw [h1]; exact hv⟩
+
+/-- The holder `t`'s step `c` on the permit count, `v` to `v'`; the rest of its bytes is the
+frame. Its part becomes `pa'` and its ghost value `x'`, as `hmv` says. -/
+theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadId}
+    {G : ThreadId → SGh X} {m : Mem} {n : Nat} {pa pa' hL : Heap} {sp : SPh} {x x' : X}
+    {v v' : BitVec 64} {r₀ : β} {Q : β × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, sp, x)) m) (hc : m.current = t)
+    (ht : TTriple (pts S.ptr 8 v) c (fun r => ⌜r = r₀⌝ ∗ pts S.ptr 8 v'))
+    (hv : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2) = v)
+    (hmv : ∀ hr, S.Res (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2) hr →
+      Heap.Disjoint pa hr → ∃ hr', pa' ∪ hr' = pa ∪ hr ∧ Heap.Disjoint pa' hr' ∧
+        S.Res (xs fun u => (upd G t (⟨.holds, pa', hL⟩, sp, x') u).2) hr' ∧
+        S.pv (xs fun u => (upd G t (⟨.holds, pa', hL⟩, sp, x') u).2) = v')
+    (hpz : v' = v ∨ v ≠ 0 ∨ sp = .pst)
+    (hU : ∀ m' h₁ h₂, U (upd G t (⟨.holds, pa, h₁⟩, sp, x)) m' →
+      U (upd G t (⟨.holds, pa', h₂⟩, sp, x')) m')
+    (h : ∀ m' hL', m'.current = t → m'.threads = m.threads →
+      P.inv (upd G t (⟨.holds, pa', hL'⟩, sp, x')) m' → Q (r₀, s) G m' n) :
+    P.WP t ((liftM c : CM Tgt σ β).run s) Q G m n := by
+  subst hv
+  obtain ⟨hl, hs, hu⟩ := hP.split hi
+  have hh : S.L.ph (upd G t (⟨.holds, pa, hL⟩, sp, x) t) = .holds := by rw [upd_self]; rfl
+  obtain ⟨htl, hjt⟩ := hl.live t (by rw [hh]; decide)
+  have hres := hl.res t hh
+  rw [show S.L.held (upd G t (⟨.holds, pa, hL⟩, sp, x) t) = hL by rw [upd_self]; rfl] at hres
+  obtain ⟨hp, hr, hdpr, rfl, hpp, hrr⟩ := hres
+  have hpd := hl.pdisj t
+  rw [show S.L.part (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x) t) = pa by rw [upd_self]; rfl,
+    show S.L.held (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x) t) = hp ∪ hr by rw [upd_self]; rfl] at hpd
+  obtain ⟨hdp, hdr⟩ := Heap.disjoint_union_right.mp hpd
+  have hown : S.L.own (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x)) m t = pa ∪ (hp ∪ hr) := by
+    rw [Lock.own_live hjt, upd_self]; rfl
+  have hown2 : pa ∪ (hp ∪ hr) = hp ∪ (pa ∪ hr) := Heap.union_left_comm hdp
+  have hdp' : Heap.Disjoint hp (pa ∪ hr) := Heap.disjoint_union_right.mpr ⟨hdp.symm, hdpr⟩
+  refine WP.liftM_owned (TTriple.frame (R := fun h => h = pa ∪ hr) ht) hl.own hc htl
+    (by rw [hown, hown2]; exact ⟨hp, _, hdp', rfl, hpp, rfl⟩) fun a m' hQ _ ho' hq hst hm' hd => ?_
+  obtain ⟨hp', hrest, hd', rfl, hq1, rfl⟩ := hq
+  obtain ⟨rfl, hpp'⟩ := sep_lift.mp hq1
+  obtain ⟨hr₂, he, hd₂, hres₂, hpv₂⟩ := hmv hr hrr hdr
+  have hd'' : Heap.Disjoint hp' (pa' ∪ hr₂) := by rw [he]; exact hd'
+  obtain ⟨hdp₂, hdr₂⟩ := Heap.disjoint_union_right.mp hd''
+  have hQe : pa' ∪ (hp' ∪ hr₂) = hp' ∪ (pa ∪ hr) := by
+    rw [Heap.union_left_comm hdp₂.symm, he]
+  rw [hown] at hst hm' hd
+  have hl' := hl.stepIn (g := (({ ph := .holds, part := pa', held := hp' ∪ hr₂ } : LG), sp, x')) hc hjt
+    (by show Owned (upd _ t (pa' ∪ (hp' ∪ hr₂))) m'; rw [hQe]; exact ho')
+    (by rw [hown]; exact hst) (by rw [hown]; show _ = (pa' ∪ (hp' ∪ hr₂)) ∪ _; rw [hQe]; exact hm')
+    (by rw [hown]; show Heap.Disjoint (pa' ∪ (hp' ∪ hr₂)) _; rw [hQe]; exact hd)
+    (by rw [upd_self]; rfl) (Heap.disjoint_union_right.mpr ⟨hdp₂.symm, hd₂⟩) (fun h => absurd rfl h)
+    (fun h => absurd hh h) (fun _ => ?_)
+  · rw [upd_upd] at hl'
+    have hpzm : S.PZ m → S.PZ m' ∨
+        ∃ u, (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x) u).2.1 = .pst := by
+      intro ⟨hz, hzp, hzs⟩
+      have hps : hp.Sub m.heap := fun l c hl₁ => by
+        have := hl.own.sub t l c
+        rw [hown] at this
+        refine this ?_
+        rcases hdp l with e | e
+        · simp [e, hl₁]
+        · rw [hl₁] at e; cases e
+      have hv0 := pts_eq hpp hps hzp hzs
+      rcases hpz with rfl | hne | hpst
+      · refine .inl ⟨hp', by rw [hv0] at hpp'; exact hpp', fun l c hl => ?_⟩
+        rw [hm']; simp [hl]
+      · exact absurd hv0 hne
+      · exact .inr ⟨t, by rw [upd_self]; exact hpst⟩
+    have hs' := (hs.stepIn hl (by rw [hown]; exact hst) (by rw [hown]; exact hm')
+      (by rw [hown]; exact hd) hpzm).congrG (G' := upd G t (⟨.holds, pa', hp' ∪ hr₂⟩, sp, x'))
+      (fun u => by unfold upd; split <;> rfl) (fun u => by unfold upd; split <;> rfl)
+      (fun u y h1 h2 => ?_)
+    · have hu' := hP.own _ m m' t (⟨.holds, pa, hp' ∪ hr⟩, sp, x) _ hu
+        (by rw [hown]; exact hst) (by rw [hown]; exact hm') (by rw [hown]; exact hd)
+        (by rw [upd_self]) rfl (by rw [upd_self]) (by rw [upd_self])
+        (Heap.union_left_comm (Heap.disjoint_union_right.mp hd').1.symm)
+      rw [upd_upd] at hu'
+      exact h m' _ (hst.current.trans hc) hst.threads (hP.pack hl' hs' (hU m' _ _ hu'))
+    · unfold upd; split
+      · rename_i e; subst e
+        show pa' (S.b, y) = none
+        have hpe := congrFun he (S.b, y)
+        have hpa := hs.off u y h1 h2
+        rw [upd_self] at hpa
+        have hro := S.res_off _ _ hrr y (by omega) h2
+        simp only [Heap.union_apply, show pa (S.b, y) = none from hpa, hro, Option.none_or]
+          at hpe
+        cases e : pa' (S.b, y) with
+        | none => rfl
+        | some _ => rw [e] at hpe; cases hpe
+      · rename_i hne; have := hs.off u y h1 h2; rwa [upd_ne _ _ hne] at this
+  · show S.R _ (hp' ∪ hr₂)
+    have hx : xs (fun u => (upd (upd G t (⟨.holds, pa, hp ∪ hr⟩, sp, x)) t
+        (⟨.holds, pa', hp' ∪ hr₂⟩, sp, x') u).2) =
+        xs (fun u => (upd G t (⟨.holds, pa', hp ∪ hr⟩, sp, x') u).2) := by
+      rw [upd_upd]; funext u; simp only [xs, upd]; split <;> rfl
+    unfold Sem.R; rw [hx, hpv₂]
+    exact ⟨hp', hr₂, hdr₂, rfl, hpp', hres₂⟩
 
 end Sem
 end Sync
