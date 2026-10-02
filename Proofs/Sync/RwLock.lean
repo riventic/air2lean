@@ -2358,7 +2358,37 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
     show Word.Entry.Val _ (sv (G₃ 0).2.2 y)
     rw [sv_eq, h1, h2, ← hdec, ← hold']; exact rmwEnt_val WS
   rcases (by omega : (G₃ 0).2.2.rb = 0 ∨ (G₃ 0).2.2.rb = 1) with hr0 | hr1
-  · sorry
+  · -- no reader: the writer takes `n` from the state word
+    have hM : (G₃ 0).2.2.isMain := by
+      obtain ⟨-, ⟨-, -, hn1⟩ | ⟨-, -, hM, -, -⟩⟩ := hu₄.shape
+      · exfalso; have := hn1 1 (Nat.le_refl _); change (G₃ 1).2.2 = _ at this; rw [hg3] at this
+        cases this
+      · exact hM
+    have hm0' : (G₃ 0).2.2.mustN = false := by
+      cases e : (G₃ 0).2.2 <;> rw [e] at hr0 hnp hM <;> simp_all [Ph.rb, Ph.mustN, Ph.isMain]
+    have hc : Car (G₃ 0).2.2 (G₃ 1).2.2 := ⟨hm0', by rw [hg3]; rfl, by rw [hg3]; rfl⟩
+    obtain ⟨hn, hpn, hsn, hokn⟩ := hu₄.car hc
+    rw [hg3] at hpn
+    have htl : 1 < m₃.threads.size := (hi₄.1.live 1 (by rw [hg₃]; exact (by decide : LPh.out ≠ LPh.gone))).1
+    have ho := own_rmw hpn hokn hu₄.ws hop₄ htl (hacq' rfl)
+    have hsn' := (car_rmw hpn hsn hokn hu₄.ws hop₄ hh').1
+    have hi₅ : (proto E).inv (upd G₃ 1 (gA (.wn k) hn default)) m₄ :=
+      inv_sstep hE hi₄ hg₃ hop₄ hw₄ hh' (by
+          rw [upd1_0, upd_self]
+          show Word.Entry.Val _ (sv (G₃ 0).2.2 (.wn k))
+          rw [sv_eq]; show Word.Entry.Val _ (sv3 0 1 _); rw [← hdec, ← hold']; exact rmwEnt_val WS)
+        rfl rfl (fun h => by cases h) rfl (by simp [Ph.isW, Ph.setM]; omega) rfl (.inl rfl)
+        (by
+          rw [upd1_0, upd_self]
+          exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => hm0 h.1), f4⟩)
+        (by rw [upd_self]; exact hpn)
+        (fun hc' => absurd hc'.2.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
+        (lws_gain hi₄ hop₄ hg₃ hc hpn hsn' ho (by simp [hasP, upd_self, upd1_0, gA, Ph.isWs]))
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [hold', htest]
+    simp only [hr0, show ((0 : Nat) = 1) = False from by decide, decide_false, Bool.false_eq_true,
+      ↓reduceIte, StateT.run_pure]
+    exact WP.pure' (WP.pure' ⟨by omega, hop₄.current, hn, hpn, hi₅⟩)
   · -- a reader: the writer waits at the semaphore
     have hms : (G₃ 0).2.2 = .sh ∨ (G₃ 0).2.2 = .sr .wake := by
       cases e : (G₃ 0).2.2 <;> rw [e] at hr1 <;> simp [Ph.rb] at hr1 ⊢
