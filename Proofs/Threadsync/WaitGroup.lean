@@ -2629,4 +2629,88 @@ theorem inv_mev1 {G : ThreadId → Gh} {m₁ m' : Mem} {h : Heap}
     · refine ⟨by rw [het]; decide, ?_⟩
       unfold ac; rw [het, hX0]; exact hle
 
+/-! ## `main`'s own part: the deadline -/
+
+/-- A step of `main` (at `gM h x0`) on its own part `h`, which is `hQ` after it. -/
+theorem inv_mown {G : ThreadId → Gh} {m m' : Mem} {x0 : X} {h hQ : Heap}
+    (hi : proto.inv (upd G 0 (gM h x0)) m) (hc : m.current = 0)
+    (ho' : Owned (upd (L.own (upd G 0 (gM h x0)) m) 0 hQ) m')
+    (hs : StepIn (m.heap.diff (L.own (upd G 0 (gM h x0)) m 0)) m m')
+    (hm' : m'.heap = hQ ∪ m.heap.diff (L.own (upd G 0 (gM h x0)) m 0))
+    (hd : Heap.Disjoint hQ (m.heap.diff (L.own (upd G 0 (gM h x0)) m 0)))
+    (hb0 : ∀ y, hQ (0, y) = none) :
+    proto.inv (upd G 0 (gM hQ x0)) m' := by
+  have hph : L.ph (upd G 0 (gM h x0) 0) = .out := by rw [upd_self]; rfl
+  obtain ⟨-, hjt⟩ := hi.1.live 0 (by rw [hph]; decide)
+  have hQe : L.part (gM hQ x0) ∪ L.held (gM hQ x0) = hQ := Heap.union_empty hQ
+  have hl := hi.1.stepIn (g := gM hQ x0) hc hjt (by rw [hQe]; exact ho') hs
+    (by rw [hQe]; exact hm') (by rw [hQe]; exact hd) (by rw [upd_self]; rfl)
+    (Heap.disjoint_empty _) (fun _ => rfl)
+    (fun _ hL hR => by
+      show R (fun u => (upd (upd G 0 (gM h x0)) 0 (gM hQ x0) u).2) hL
+      rw [snd_upd_upd G 0 (gM h x0) (gM hQ x0) rfl]; exact hR)
+    (fun h' => absurd h' (by show ¬(LPh.out = LPh.holds); decide))
+  rw [upd_upd] at hl
+  refine ⟨hl, ?_⟩
+  obtain ⟨hsx, hwk, hfz, hfd⟩ := main_x hi
+  rw [upd_self] at hsx hwk hfz hfd
+  change x0.sx = false at hsx; change x0.ph ≠ .wk at hwk
+  change x0.frozen = false at hfz; change x0.fd = false at hfd
+  have hU := U_stepIn (g := gM hQ x0) hi hs hm' hd hc (by decide)
+    (by rw [upd_self]; exact XEq.refl _) hfz
+    (by
+      rw [show (gM hQ x0).2 = (fun u => (upd G 0 (gM h x0) u).2) 0 by
+        show x0 = (upd G 0 (gM h x0) 0).2; rw [upd_self]; rfl, upd_same]
+      exact hi.2.shape)
+    (fun h0 => absurd rfl h0) (fun _ => hb0) (qok_run hi hph hs.waiters _)
+    (fun h' => by change x0.sx = true at h'; rw [hsx] at h'; cases h')
+    (fun h' => absurd h' hwk) (fun h' => by change x0.fd = true at h'; rw [hfd] at h'; cases h')
+    (fun hr => by
+      rw [upd_self] at hr
+      have h1 : upd (upd G 0 (gM h x0)) 0 (gM hQ x0) 1 = upd G 0 (gM h x0) 1 :=
+        upd_ne _ _ (by decide)
+      have h2 : upd (upd G 0 (gM h x0)) 0 (gM hQ x0) 2 = upd G 0 (gM h x0) 2 :=
+        upd_ne _ _ (by decide)
+      rw [h1, h2]
+      obtain ⟨a, b, c, d⟩ := hi.2.done (by rw [upd_self]; exact hr)
+      exact ⟨a, b, VClock.le_trans c (hs.clock 0), VClock.le_trans d (hs.clock 0)⟩)
+    (fun hr => by rw [upd_self] at hr; rw [upd_self]; exact hr)
+  rwa [upd_upd] at hU
+
+/-- A step of `main` on its own part `h` (`TTriple Pa x Qa`), in `ConcM`. -/
+theorem wp_mown {α : Type} {x : MemM α} {G : ThreadId → Gh} {m : Mem} {d : Nat} {x0 : X}
+    {h : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
+    (hi : proto.inv (upd G 0 (gM h x0)) m) (hc : m.current = 0) (hp : Pa h)
+    (hb0 : ∀ a hQ, Qa a hQ → ∀ y, hQ (0, y) = none)
+    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hQ : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → m'.current = 0 →
+      m'.threads = m.threads → Qa a hQ → proto.inv (upd G 0 (gM hQ x0)) m' → Q a G m' d) :
+    proto.WP 0 (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
+  have hph : L.ph (upd G 0 (gM h x0) 0) = .out := by rw [upd_self]; rfl
+  obtain ⟨ht0, hjt⟩ := hi.1.live 0 (by rw [hph]; decide)
+  have hown : L.own (upd G 0 (gM h x0)) m 0 = h := by
+    rw [L.own_live hjt, upd_self]; exact Heap.union_empty h
+  refine WP.liftMem_owned ht hi.1.own hc ht0 (by rw [hown]; exact hp)
+    fun a m' hQ' hr ho' hq hs hm' hd => ?_
+  exact hQ a m' hQ' hr (hs.current.trans hc) hs.threads hq
+    (inv_mown hi hc ho' hs hm' hd (hb0 a hQ' hq))
+
+/-- A step of `main` on its own part `h` (`TTriple Pa x Qa`), in `CM`. -/
+theorem wp_mownM {α σ : Type} {x : MemM α} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    {x0 : X} {h : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
+    (hi : proto.inv (upd G 0 (gM h x0)) m) (hc : m.current = 0) (hp : Pa h)
+    (hb0 : ∀ a hQ, Qa a hQ → ∀ y, hQ (0, y) = none)
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hQ : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → m'.current = 0 →
+      m'.threads = m.threads → Qa a hQ → proto.inv (upd G 0 (gM hQ x0)) m' → Q (a, s) G m' d) :
+    proto.WP 0 ((liftM x : CM Tgt σ α).run s) Q G m d := by
+  have hph : L.ph (upd G 0 (gM h x0) 0) = .out := by rw [upd_self]; rfl
+  obtain ⟨ht0, hjt⟩ := hi.1.live 0 (by rw [hph]; decide)
+  have hown : L.own (upd G 0 (gM h x0)) m 0 = h := by
+    rw [L.own_live hjt, upd_self]; exact Heap.union_empty h
+  refine WP.liftM_owned ht hi.1.own hc ht0 (by rw [hown]; exact hp)
+    fun a m' hQ' hr ho' hq hs hm' hd => ?_
+  exact hQ a m' hQ' hr (hs.current.trans hc) hs.threads hq
+    (inv_mown hi hc ho' hs hm' hd (hb0 a hQ' hq))
+
 end Threadsync.WG
