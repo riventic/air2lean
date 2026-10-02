@@ -134,7 +134,7 @@ A proof file over all schedules can set `attribute [local irreducible] Proto.WP`
 
 ### A shared atomic word
 
-A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant.
+A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant.
 
 | Part | What |
 |---|---|
@@ -153,6 +153,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error) |
 | `Proofs/Threadsync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Thread.Mutex` of 0.15.2), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Threadsync/WaitGroup.lean` | `waitGroup_spec` (2 under every schedule, with the std `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex` of 0.15.2), `waitGroup_safe` (no data race, the plain read of the whole `Tally` included; no deadlock at a futex, no other error) |
+| `Proofs/Threadsync/Handoff.lean` | `handoff_spec` (7 under every schedule, with the std `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent` of 0.15.2), `handoff_safe` (no data race, no deadlock at a futex, no `unreachable`) |
 | `Proofs/Sync/Handoff.lean` | `handoff_spec` (7 under every schedule, with the std `Io.Mutex`, `Io.Condition` and `Io.Event`), `handoff_safe` (no data race, no deadlock at a futex, no `unreachable`) |
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
