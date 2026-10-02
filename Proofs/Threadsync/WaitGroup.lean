@@ -2312,4 +2312,122 @@ theorem inv_add {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 64} (hi : pr
     obtain ⟨a2, b2⟩ := hboth h0 2 (.inr rfl)
     exact ⟨a1, a2, b1, b2⟩
 
+/-! ## `main` at the event -/
+
+/-- A running `main` (`out` for the lock) is not in the futex queue: the queue keeps `QOk` for
+each ghost value. -/
+theorem qok_run {G : ThreadId → Gh} {m m' : Mem} (hi : proto.inv G m) (h0 : L.ph (G 0) = .out)
+    (hw : m'.waiters = m.waiters) (G' : ThreadId → Gh) : QOk G' m' := by
+  intro w hw'
+  rw [hw] at hw'
+  rcases hi.2.q w hw' with h | ⟨h1, h2, -⟩
+  · exact .inl h
+  · exfalso
+    rcases hi.1.fq w hw' with ⟨h, -⟩ | ⟨-, h⟩
+    · rw [h2] at h; exact absurd h (by decide)
+    · rw [h1, h0] at h; cases h
+
+/-- `main`'s ghost value: no task flags. -/
+theorem main_x {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) :
+    (G 0).2.sx = false ∧ (G 0).2.ph ≠ .wk ∧ (G 0).2.frozen = false ∧ (G 0).2.fd = false := by
+  have hm : (G 0).2.ph.isMain = true := hi.2.shape.2.1
+  have hs := hi.2.sx1 0
+  unfold X.frozen X.fd
+  cases e : (G 0).2.ph <;> rw [e] at hm hs <;> simp_all [Ph.isMain, Ph.isTask]
+
+/-- `Pre` after a step of `main` to the ghost value `g`, with the same writes: `g` agrees on what
+`Pre` reads, except `main`'s place in the event's `wait`. -/
+theorem Pre.mx {G : ThreadId → Gh} {m m' : Mem} {g : Gh} (hp : Pre G m)
+    (hpre : g.2.isPre = (G 0).2.isPre) (hwa : g.2.wa = (G 0).2.wa) (he1 : g.2.e1 = (G 0).2.e1)
+    (hf0 : (G 0).2.frozen = false) (hf : g.2.frozen = false)
+    (hwg : WG.Ok m') (hev : EV.Ok m') (hhg : WG.hist m' = WG.hist m) (hhe : EV.hist m' = EV.hist m)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
+      (e.tid = 0 ∧ VClock.le e.clock (m'.clocks[0]!) = true))
+    (hlast3 : g.2.e01 → (G 1).2.fd → (G 2).2.fd →
+      ((G 1).2.st || (G 1).2.sx || (G 2).2.st || (G 2).2.sx) = true)
+    (hm1e : g.2.isEv1 → g.2.e1) : Pre (upd G 0 g) m' := by
+  have hX : ∀ u, u ≠ 0 → (upd G 0 g u).2 = (G u).2 := fun u h => by rw [upd_ne _ _ h]
+  have h0 : (upd G 0 g 0).2 = g.2 := by rw [upd_self]
+  have h1 := hX 1 (by decide)
+  have h2 := hX 2 (by decide)
+  have hwgv : wgv (upd G 0 g 0).2 (upd G 0 g 1).2 (upd G 0 g 2).2 =
+      wgv (G 0).2 (G 1).2 (G 2).2 := by
+    unfold wgv; rw [h0, h1, h2, hpre, hwa]
+  have hevL : evL (upd G 0 g 0).2 (upd G 0 g 1).2 (upd G 0 g 2).2 =
+      evL (G 0).2 (G 1).2 (G 2).2 := by
+    unfold evL; rw [h0, h1, h2, he1]
+  have hac : ∀ u, VClock.le (ac G m u) (ac (upd G 0 g) m' u) = true := fun u => by
+    by_cases hu : u = 0
+    · subst hu; unfold ac; rw [h0, hf, hf0]; exact hcl 0
+    · unfold ac; rw [hX u hu]; split
+      · exact VClock.le_refl _
+      · exact hcl u
+  have hu12 : ∀ u : ThreadId, u = 1 ∨ u = 2 → u ≠ 0 := fun u h => by
+    rcases h with rfl | rfl <;> decide
+  have hpair : ∀ u v, Pair u v → u ≠ 0 ∧ v ≠ 0 := fun u v h => by
+    rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> exact ⟨by decide, by decide⟩
+  refine ⟨hwg, hev, by rw [hhg, hwgv]; exact hp.gv, fun u hu hf' => ?_,
+    by unfold EVOk; rw [hhe, hevL]; exact hp.evh, fun h => ?_, fun u v huv hu => ?_,
+    fun u v huv hu => ?_, fun u hu hs => ?_, fun h0' h1' h2' => ?_, fun h => ?_,
+    fun h => ?_, fun e he hb => ?_⟩
+  · rw [hX u (hu12 u hu)] at hf' ⊢; rw [hhg]; exact hp.gw u hu hf'
+  · rw [h1, h2] at h ⊢; rw [hhe]; exact hp.setc h
+  · obtain ⟨hu0, hv0⟩ := hpair u v huv
+    rw [hX u hu0] at hu; rw [hX v hv0]
+    obtain ⟨a, b⟩ := hp.sto u v huv hu
+    exact ⟨a, VClock.le_trans b (hcl u)⟩
+  · obtain ⟨hu0, hv0⟩ := hpair u v huv
+    rw [hX u hu0] at hu; rw [hX v hv0]; exact hp.sfd u v huv hu
+  · rw [hX u (hu12 u hu)] at hs; rw [h0, hwa]; exact hp.swa u hu hs
+  · rw [h0] at h0'; rw [h1] at h1'; rw [h2] at h2'; rw [h1, h2]; exact hlast3 h0' h1' h2'
+  · rw [h0] at h ⊢; exact hm1e h
+  · rw [h0, he1] at h; rw [hhe]; exact VClock.le_trans (hp.e1c h) (hcl 0)
+  · rcases hfp e he with h' | ⟨het, hle⟩
+    · obtain ⟨a, b⟩ := hp.attr e h' hb
+      exact ⟨a, VClock.le_trans b (hac _)⟩
+    · refine ⟨by rw [het]; decide, ?_⟩
+      unfold ac; rw [het, h0, hf]; exact hle
+
+/-- After the set, both tasks are frozen, below the set's release clock. -/
+theorem set_done {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (hp : Pre G m)
+    (hs : ((G 1).2.sx || (G 2).2.sx) = true) :
+    (G 1).2.frozen ∧ (G 2).2.frozen ∧
+      VClock.le (G 1).2.fz (last (EV.hist m)).relClock = true ∧
+      VClock.le (G 2).2.fz (last (EV.hist m)).relClock = true := by
+  have hfr : ∀ u, (G u).2.sx → (G u).2.frozen := fun u h => by
+    unfold X.frozen
+    rcases hi.2.sx1 u h with e | e | e <;> rw [e] <;> rfl
+  have hoth : ∀ u v, Pair u v → (G u).2.sx → (G v).2.frozen := fun u v huv h => by
+    obtain ⟨hfd, hsx, hst⟩ := hp.sfd u v huv (by simp [h])
+    have hwk : (G v).2.ph ≠ .wk := fun e => by rw [hi.2.wks v e] at hsx; cases hsx
+    unfold X.fd at hfd; unfold X.st at hst; unfold X.frozen
+    cases e : (G v).2.ph <;> simp_all [Ph.isTask, Ph.rank]
+  obtain ⟨c1, c2⟩ := hp.setc hs
+  refine ⟨?_, ?_, c1, c2⟩
+  · cases e1 : (G 1).2.sx
+    · rw [e1] at hs; simp at hs; exact hoth 2 1 (.inr ⟨rfl, rfl⟩) hs
+    · exact hfr 1 e1
+  · cases e2 : (G 2).2.sx
+    · rw [e2] at hs; simp at hs; exact hoth 1 2 (.inl ⟨rfl, rfl⟩) hs
+    · exact hfr 2 e2
+
+/-- The value `2` is only the set, the last of the event's writes. -/
+theorem evL_two (x0 x1 x2 : X) (j : Nat) (hj : j < (evL x0 x1 x2).length)
+    (h : BitVec.ofNat 32 2 = BitVec.ofNat 32 (evL x0 x1 x2)[j]) :
+    (x1.sx || x2.sx) = true ∧ j + 1 = (evL x0 x1 x2).length := by
+  unfold evL at *
+  cases e0 : x0.e1 <;> cases es : (x1.sx || x2.sx) <;> simp only [e0, es] at hj h ⊢ <;>
+    rcases j with _ | _ | _ | j <;> simp_all
+  all_goals omega
+
+/-- A write of `2` at the event is the set, its newest write. -/
+theorem ev2_last {G : ThreadId → Gh} {m : Mem} (hp : Pre G m) {j : Nat}
+    (hj : j < (EV.hist m).size) (hv : (EV.hist m)[j]!.Val (BitVec.ofNat 32 2)) :
+    ((G 1).2.sx || (G 2).2.sx) = true ∧ (EV.hist m)[j]! = last (EV.hist m) := by
+  obtain ⟨hj', h2⟩ := ev_val hp.evh hj hv
+  obtain ⟨hs, hl⟩ := evL_two _ _ _ j hj' h2
+  refine ⟨hs, ?_⟩
+  unfold last; rw [hp.evh.1, show (evL (G 0).2 (G 1).2 (G 2).2).length - 1 = j by omega]
+
 end Threadsync.WG
