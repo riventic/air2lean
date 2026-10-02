@@ -639,6 +639,16 @@ def sem0 : Io_Semaphore :=
     cond := { state := { raw := Packed.ofBits (0 : BitVec 32) }, epoch := { raw := 0 } }
     permits := 0 }
 
+/-- A step out of the semaphore's code keeps its invariant: the semaphore's bytes, the threads in
+its code and the waiting writer stay. -/
+def FrameOk : Prop :=
+  ∀ G G' m m', E.inv G m → Frame m m' →
+    (∀ u, (G' u).2.1 = (G u).2.1 ∧ (G' u).1.held = (G u).1.held ∧
+      (∀ x, 24 ≤ x → x < 48 → (G' u).1.part (0, x) = none) ∧
+      ((G' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G' u).1.ph ≠ .holds)) ∧
+      ((G u).2.2.isWs → (G' u).2.2 = (G u).2.2)) →
+    E.inv G' m'
+
 /-- What the proof of `rwLockRead` needs of the semaphore's ops (module doc). -/
 structure Sem.Spec : Prop where
   /-- `wait` by the writer, who saw a reader: it takes `n` (`Res`). -/
@@ -659,16 +669,12 @@ structure Sem.Spec : Prop where
     w.1 = 1 ∧ (∃ k, (G 1).2.2 = .ws k) ∧
       (G 0).2.2.pw
   /-- A step out of the semaphore's code keeps its invariant. -/
-  frame : ∀ G G' m m', E.inv G m → Frame m m' →
-    (∀ u, (G' u).2.1 = (G u).2.1 ∧ (G' u).1.held = (G u).1.held ∧
-      (∀ x, 24 ≤ x → x < 48 → (G' u).1.part (0, x) = none) ∧
-      ((G' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G' u).1.ph ≠ .holds)) ∧
-      ((G u).2.2.isWs → (G' u).2.2 = (G u).2.2)) →
-    E.inv G' m'
+  frame : FrameOk E
   /-- The start, after the spawn: the semaphore's bytes hold `sem0`, no atomic op was done, no
   thread waits, and each access happened before every thread. -/
   start : ∀ G m, (∀ u, (G u).2.1 = default) →
-    (∀ u, (G u).1.ph = .out ∨ (G u).1.ph = .gone) → BlkOk m →
+    (∀ u, (G u).1.ph = .out ∨ (G u).1.ph = .gone) →
+    (∀ u x, 24 ≤ x → x < 48 → (G u).1.part (0, x) = none) → BlkOk m →
     curBytes m 0 24 24 = Enc.encode sem0 → m.atomics = #[] → m.waiters = #[] →
     (∀ e ∈ m.footprint, AllLe m e.clock) → E.inv G m
 
@@ -3158,7 +3164,7 @@ theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m
 /-! ## `unlockShared` -/
 
 /-- `main` changes its place from `x` to `y`, with the same memory, part and fields. -/
-theorem inv_g0 (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h : Heap}
+theorem inv_g0 (hfr : FrameOk E) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h : Heap}
     (hi : (proto E).inv (upd G 0 (gA x h default)) m) (hxM : x.isMain) (hyM : y.isMain)
     (hwb : y.wb = x.wb) (hib : y.ib = x.ib) (hrb : y.rb = x.rb) (hmp : y.mp = x.mp)
     (hgv : y.gave = x.gave) (hiw : y.isWs = x.isWs) (hmu : y.mustN = x.mustN) (hcn : y.cnt = x.cnt)
@@ -3206,7 +3212,7 @@ theorem inv_g0 (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h : H
         unfold Car at hc ⊢
         rwa [hf Ph.mustN hmu 0, hf Ph.mustN hmu 1, hf Ph.isWs hiw 1, hf Ph.gave hgv 0] at hc)
       exact ⟨hn, by rw [upd0_1] at hp; rw [upd0_1, upd0_1]; exact hp, hs, hok⟩)
-  have he' := hE.frame _ _ m m he (Frame.refl m) (econd hu (t := 0) (g' := gA y h default)
+  have he' := hfr _ _ m m he (Frame.refl m) (econd hu (t := 0) (g' := gA y h default)
     (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
     (fun x _ h2 => by have := part_none hu 0 (x := x) (by omega); rw [upd_self] at this; exact this)
     (.inl (by rw [upd_self]; rfl))
@@ -3303,7 +3309,7 @@ theorem unlockS_spec (hE : E.Spec) {j : Bool} {h : Heap} {io : Io} {G : ThreadId
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
     have hf₃ := hi₃.2.1.flags
     rw [upd_self, upd0_1] at hf₃
-    have hi₄ := inv_g0 hE (y := .dn false) hi₃ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    have hi₄ := inv_g0 hE.frame (y := .dn false) hi₃ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       ⟨fun _ _ => .inr rfl, (fun h => by cases h), (fun h => by cases h.1), (fun _ _ h => by cases h),
         (fun h => by cases h)⟩
     simp only [StateT.run_pure, pure_bind]
