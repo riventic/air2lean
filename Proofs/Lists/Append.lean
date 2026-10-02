@@ -318,36 +318,47 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
       pure len := by rw [show Enc.size (BitVec 64) = 8 from rfl, hdr_len, dec_u64]
   have dcap : Enc.decode ((hdrBytes ptr len cap).extract 16 (16 + Enc.size (BitVec 64))) =
       pure cap := by rw [show Enc.size (BitVec 64) = 8 from rfl, hdr_cap, dec_u64]
-  obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hm hst q8 (by decide) (by omega)
-    (by omega) dlen
-  obtain ⟨m₂, l₂, hm₂, hs₂, hb₂⟩ := bytesAt_load_run (a := 8) hb hm₁ hs₁ q16 (by decide) (by omega)
-    (by omega) dcap
-  obtain ⟨m₃, l₃, hm₃, hs₃, hb₃⟩ := bytesAt_load_run (a := 8) hb hm₂ hs₂ q8 (by decide) (by omega)
-    (by omega) dlen
-  obtain ⟨m₄, s₄, hs₄, hz₄, h₄, hd₄, hm₄, hb₄⟩ := bytesAt_store_run (a := 8) hb hm₃ hd hs₃ (len + 1#64) q8
-    (by decide) (by rw [hs]; decide) (by omega) hK
-  rw [hdr_set_len, show (1#64 : BitVec 64) = 1 from rfl] at hb₄
+  have dslL : Enc.decode ((hdrBytes ptr len cap).extract 0 (0 + Enc.size Slice)) =
+      (pure ⟨ptr, len⟩ : Result Slice) := by rw [e16, hdr_slice, decode_slice]
   have hs' := hdrBytes_size ptr (len + 1) cap
-  have dlen' : Enc.decode ((hdrBytes ptr (len + 1) cap).extract 8 (8 + Enc.size (BitVec 64))) =
-      pure (len + 1) := by rw [show Enc.size (BitVec 64) = 8 from rfl, hdr_len, dec_u64]
   have dsl : Enc.decode ((hdrBytes ptr (len + 1) cap).extract 0 (0 + Enc.size Slice)) =
-      (pure ⟨ptr, len + 1⟩ : Result Slice) := by
-    rw [show Enc.size Slice = 16 from rfl, hdr_slice, decode_slice]
-  obtain ⟨m₅, l₅, hm₅, hs₅, hb₅⟩ := bytesAt_load_run (a := 8) hb₄ hm₄ hs₄ q8 (by decide) (by omega)
-    (by omega) dlen'
-  obtain ⟨m₆, l₆, hm₆, hs₆, hb₆⟩ := bytesAt_load_run (a := 8) hb₄ hm₅ hs₅ q0 (by decide) (by omega)
-    (by omega) dsl
+      (pure ⟨ptr, len + 1⟩ : Result Slice) := by rw [e16, hdr_slice, decode_slice]
+  have dlen' : Enc.decode ((hdrBytes ptr (len + 1) cap).extract 8 (8 + Enc.size (BitVec 64))) =
+      pure (len + 1) := by rw [e8, hdr_len, dec_u64]
   have hno : len.toNat + 1 < 2 ^ 64 := by have := cap.isLt; omega
-  have hl1 : (len + 1).toNat = len.toNat + 1 := by
-    rw [BitVec.toNat_add]; simp; omega
-  refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], h₄, hd₄, hm₆,
-    A, S, K, hA, hK, hb₄⟩
-  simp only [StateT.run] at l₁ l₂ l₃ s₄ l₅ l₆
+  have hl1 : (len + 1).toNat = len.toNat + 1 := by rw [BitVec.toNat_add]; simp; omega
   have hu1 : len.ult cap = true := by simp [BitVec.ult, hlt]
-  have hu2 : len.ult (len + 1#64) = true := by unfold BitVec.ult; rw [show (1#64 : BitVec 64) = 1 from rfl, hl1]; simp
+  have hu2 : len.ult (len + 1#64) = true := by
+    unfold BitVec.ult; rw [show (1#64 : BitVec 64) = 1 from rfl, hl1]; simp
   have hno' : ¬ 18446744073709551615 ≤ len.toNat := by omega
   have hmod : ¬ (len.toNat + 1) % 18446744073709551616 = 0 := by omega
   have hsub : len + 1#64 - 1#64 = len := BitVec.add_sub_cancel len 1#64
+  -- Zig 0.15.2 reads `items.len` with a load of the whole `items` slice (the guard names a
+  -- definition that only its translation has); Zig 0.16.0 reads `items.len` alone.
+  first
+  | have _ := @array_list_Aligned_u32_null_growCapacity.loop4
+    obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hm hst q0 (by decide)
+      (by omega) (by omega) dslL
+  | obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hm hst q8 (by decide)
+      (by omega) (by omega) dlen
+  obtain ⟨m₂, l₂, hm₂, hs₂, hb₂⟩ := bytesAt_load_run (a := 8) hb hm₁ hs₁ q16 (by decide)
+    (by omega) (by omega) dcap
+  obtain ⟨m₃, l₃, hm₃, hs₃, hb₃⟩ := bytesAt_load_run (a := 8) hb hm₂ hs₂ q8 (by decide)
+    (by omega) (by omega) dlen
+  obtain ⟨m₄, s₄, hs₄, hz₄, h₄, hd₄, hm₄, hb₄⟩ := bytesAt_store_run (a := 8) hb hm₃ hd hs₃
+    (len + 1#64) q8 (by decide) (by rw [hs]; decide) (by omega) hK
+  rw [hdr_set_len, show (1#64 : BitVec 64) = 1 from rfl] at hb₄
+  first
+  | have _ := @array_list_Aligned_u32_null_growCapacity.loop4
+    obtain ⟨m₅, l₅, hm₅, hs₅, hb₅⟩ := bytesAt_load_run (a := 8) hb₄ hm₄ hs₄ q0 (by decide)
+      (by omega) (by omega) dsl
+  | obtain ⟨m₅, l₅, hm₅, hs₅, hb₅⟩ := bytesAt_load_run (a := 8) hb₄ hm₄ hs₄ q8 (by decide)
+      (by omega) (by omega) dlen'
+  obtain ⟨m₆, l₆, hm₆, hs₆, hb₆⟩ := bytesAt_load_run (a := 8) hb₄ hm₅ hs₅ q0 (by decide)
+    (by omega) (by omega) dsl
+  refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], h₄, hd₄, hm₆,
+    A, S, K, hA, hK, hb₄⟩
+  simp only [StateT.run] at l₁ l₂ l₃ s₄ l₅ l₆
   simp [array_list_Aligned_u32_null_addOneAssumeCapacity, zig_unfold, l₁, l₂, l₃, s₄, l₅, l₆,
     debug_assert, Zig.lt, hu1, hu2, hno', hmod, hsub]
 
@@ -420,8 +431,13 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
     have dsl : Enc.decode ((hdrBytes ptr len cap).extract 0 (0 + Enc.size Slice)) =
         (pure ⟨ptr, len⟩ : Result Slice) := by
       rw [show Enc.size Slice = 16 from rfl, hdr_slice, decode_slice]
-    obtain ⟨m₄, l₄, hm₄, hs₄, hb₄⟩ := bytesAt_load_run (a := 8) hb vH hs₃ q8 (by decide)
-      (by omega) (by omega) dlen
+    -- Zig 0.15.2 reads `items.len` with a load of the whole `items` slice.
+    first
+    | have _ := @array_list_Aligned_u32_null_growCapacity.loop4
+      obtain ⟨m₄, l₄, hm₄, hs₄, hb₄⟩ := bytesAt_load_run (a := 8) hb vH hs₃ q0' (by decide)
+        (by omega) (by omega) dsl
+    | obtain ⟨m₄, l₄, hm₄, hs₄, hb₄⟩ := bytesAt_load_run (a := 8) hb vH hs₃ q8 (by decide)
+        (by omega) (by omega) dlen
     obtain ⟨m₅, l₅, hm₅, hs₅, hb₅⟩ := bytesAt_load_run (a := 8) hb hm₄ hs₄ q0' (by decide)
       (by omega) (by omega) dsl
     have hz₅ : m₅.blocks = m₃.blocks := by rw [hb₅, hb₄]
@@ -545,6 +561,226 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
           rw [Nat.min_eq_left (by omega)]
           simpa using hit i hi
       · intro b hb'; rw [hpN] at hb'; cases hb'; rw [hz₉, hz₈, hz₇, hz₆]; exact hbN5
+
+/-! ## `ensureTotalCapacity` -/
+
+theorem addSat_toNat (a b : BitVec 64) :
+    (Zig.addSat false a b).toNat = min (a.toNat + b.toNat) (2 ^ 64 - 1) := by
+  unfold Zig.addSat Zig.clamp Zig.val
+  simp only [Bool.false_eq_true, ↓reduceIte]
+  rw [BitVec.toNat_ofInt]
+  have ha := a.isLt; have hb := b.isLt
+  omega
+
+/-- What `ensureTotalCapacity` gives: a buffer of at least `n` items with the same items, or
+`error.OutOfMemory` and the same list. -/
+def Ensured (p ptr : Ptr) (len cap n : BitVec 64) (xs : List (BitVec 32)) (m' : Mem)
+    (hH' hB' : Heap) : Except ErrName Unit → Prop
+  | .ok _ => ∃ ptr' cap', hdr p ptr' len cap' hH' ∧ buf ptr' cap'.toNat xs hB' ∧
+      n.toNat ≤ cap'.toNat ∧ 4 * cap'.toNat < 2 ^ 64 ∧ ptrOk m' ptr'
+  | .error e => e = "OutOfMemory" ∧ hdr p ptr len cap hH' ∧ buf ptr cap.toNat xs hB' ∧
+      ptrOk m' ptr
+
+/-- `ensureTotalCapacity` (the translation of each Zig version: 0.15.2's `growCapacity` is a loop
+from the old capacity, 0.16.0's a step from `n`). -/
+theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : BitVec 64}
+    (hh : hdr p ptr len cap hH) (hbf : buf ptr cap.toNat xs hB) (dHB : Heap.Disjoint hH hB)
+    (hm : m.heap = (hH ∪ hB) ∪ hF) (hd : Heap.Disjoint (hH ∪ hB) hF) (hst : m.Seq)
+    (hok : ptrOk m ptr) (hlen : xs.length = len.toNat) (hle : len.toNat ≤ cap.toNat)
+    (hc4 : 4 * cap.toNat < 2 ^ 64) :
+    ∃ r m', (array_list_Aligned_u32_null_ensureTotalCapacity p a n).run m = pure (r, m') ∧
+      m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧ ∃ hH' hB', Heap.Disjoint hH' hB' ∧
+      Heap.Disjoint (hH' ∪ hB') hF ∧ m'.heap = (hH' ∪ hB') ∪ hF ∧
+      Ensured p ptr len cap n xs m' hH' hB' r := by
+  have hh₀ := hh
+  obtain ⟨A, S, K, hA, hK, hb⟩ := hh
+  obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
+  obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
+  have hs := hdrBytes_size ptr len cap
+  have e8 : Enc.size (BitVec 64) = 8 := rfl
+  have q16 : p.add 16 = p.add ((16 : Nat) : Int) := rfl
+  have dcap : Enc.decode ((hdrBytes ptr len cap).extract 16 (16 + Enc.size (BitVec 64))) =
+      pure cap := by rw [e8, hdr_cap, dec_u64]
+  obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hmH hst q16 (by decide)
+    (by omega) (by omega) dcap
+  have hm₁' : m₁.heap = (hH ∪ hB) ∪ hF := hm₁.trans (hmH.symm.trans hm)
+  have hz₁ : m.blocks.size = m₁.blocks.size := by rw [hb₁]
+  simp only [StateT.run] at l₁
+  by_cases hroom : n.toNat ≤ cap.toNat
+  · have hge : Zig.ge false cap n = true := by simp [Zig.ge, Zig.le, BitVec.ule, hroom]
+    refine ⟨.ok (), m₁, ?_, hs₁, Nat.le_of_eq hz₁, hH, hB, dHB, hd, hm₁', ptr, cap, hh₀, hbf,
+      hroom, hc4, ptrOk_mono hok (Nat.le_of_eq hz₁)⟩
+    simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, hge]
+  · have hge : Zig.ge false cap n = false := by simp [Zig.ge, Zig.le, BitVec.ule]; omega
+    have hok₁ : ptrOk m₁ ptr := ptrOk_mono hok (Nat.le_of_eq hz₁)
+    first
+    | -- Zig 0.16.0: `growCapacity(n)`.
+      obtain ⟨g, hg, hng⟩ : ∃ g, array_list_Aligned_u32_null_growCapacity n = pure g ∧
+          n.toNat ≤ g.toNat := by
+        have hno : ¬ 18446744073709551584 ≤ n.toNat / 2 := by have := n.isLt; omega
+        refine ⟨Zig.addSat false n (n / 2#64 + 32#64), ?_, ?_⟩
+        · simp [array_list_Aligned_u32_null_growCapacity, zig_unfold, Zig.divTrunc, hno]
+        · rw [addSat_toNat]; omega
+      obtain ⟨r, m', hr, hs', hz', hH', hB', d₁, d₂, hm', hpost⟩ :=
+        precise_run a g hh₀ hbf dHB hm₁' hd hs₁ hok₁ hlen hle (by omega)
+      refine ⟨r, m', ?_, hs', by omega, hH', hB', d₁, d₂, hm', ?_⟩
+      · simp only [StateT.run] at hr
+        simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, hge, hg, hr]
+      · cases r with
+        | ok u => obtain ⟨ptr', h1, h2, h3, h4⟩ := hpost; exact ⟨ptr', g, h1, h2, hng, h3, h4⟩
+        | error e => exact hpost
+    | -- Zig 0.15.2: `growCapacity(capacity, n)`, a loop.
+      obtain ⟨m₂, l₂, hm₂, hs₂, hb₂⟩ := bytesAt_load_run (a := 8) hb hm₁ hs₁ q16 (by decide)
+        (by omega) (by omega) dcap
+      have hm₂' : m₂.heap = (hH ∪ hB) ∪ hF := hm₂.trans (hmH.symm.trans hm)
+      have hok₂ : ptrOk m₂ ptr := ptrOk_mono hok₁ (Nat.le_of_eq (by rw [hb₂]))
+      simp only [StateT.run] at l₂
+      obtain ⟨g, hg, hng⟩ : ∃ g, array_list_Aligned_u32_null_growCapacity cap n = pure g ∧
+          n.toNat ≤ g.toNat := by
+        have step : ∀ s : array_list_Aligned_u32_null_growCapacityLocals, True → ∃ e s',
+            (array_list_Aligned_u32_null_growCapacity.loop4 n).run s = pure (e, s') ∧
+            (if array_list_Aligned_u32_null_growCapacity.again4 e then True ∧
+              2 ^ 64 - s'.new.toNat < 2 ^ 64 - s.new.toNat
+            else ∃ v, e = .ret v ∧ n.toNat ≤ v.toNat) := by
+          intro s _
+          have hno : ¬ 18446744073709551584 ≤ s.new.toNat / 2 := by have := s.new.isLt; omega
+          have hv := addSat_toNat s.new (s.new / 2#64 + 32#64)
+          have hd : (s.new / 2#64 + 32#64).toNat = s.new.toNat / 2 + 32 := by
+            rw [BitVec.toNat_add, BitVec.toNat_udiv]; simp; omega
+          by_cases hge : n.toNat ≤ (Zig.addSat false s.new (s.new / 2#64 + 32#64)).toNat
+          · refine ⟨.ret (Zig.addSat false s.new (s.new / 2#64 + 32#64)),
+              { s with new := Zig.addSat false s.new (s.new / 2#64 + 32#64) }, ?_, ?_⟩
+            · simp [array_list_Aligned_u32_null_growCapacity.loop4, zig_unfold, Zig.divTrunc, hno,
+                Zig.ge, Zig.le, BitVec.ule, hge]
+            · exact ⟨_, rfl, hge⟩
+          · refine ⟨.rep4, { s with new := Zig.addSat false s.new (s.new / 2#64 + 32#64) }, ?_, ?_⟩
+            · simp [array_list_Aligned_u32_null_growCapacity.loop4, zig_unfold, Zig.divTrunc, hno,
+                Zig.ge, Zig.le, BitVec.ule, hge]
+            · refine ⟨trivial, ?_⟩
+              simp only; have := n.isLt; omega
+        obtain ⟨r, hr, v, hv, hle⟩ := loop_spec (array_list_Aligned_u32_null_growCapacity.loop4 n)
+          array_list_Aligned_u32_null_growCapacity.again4 (fun _ => True)
+          (fun s : array_list_Aligned_u32_null_growCapacityLocals => 2 ^ 64 - s.new.toNat)
+          (fun r : array_list_Aligned_u32_null_growCapacityExit ×
+              array_list_Aligned_u32_null_growCapacityLocals =>
+            ∃ v, r.1 = .ret v ∧ n.toNat ≤ v.toNat)
+          (fun s hs => by
+            obtain ⟨e, s', h1, h2⟩ := step s hs
+            exact ⟨e, s', h1, by split at h2 <;> simp_all⟩) { new := cap } trivial
+        refine ⟨v, ?_, hle⟩
+        simp only [StateT.run] at hr
+        simp [array_list_Aligned_u32_null_growCapacity, zig_unfold, hr, hv]
+      obtain ⟨r, m', hr, hs', hz', hH', hB', d₁, d₂, hm', hpost⟩ :=
+        precise_run a g hh₀ hbf dHB hm₂' hd hs₂ hok₂ hlen hle (by omega)
+      refine ⟨r, m', ?_, hs', by rw [hz₁, ← hb₂]; omega, hH', hB', d₁, d₂, hm', ?_⟩
+      · simp only [StateT.run] at hr
+        simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, l₂, hge, hg, hr]
+      · cases r with
+        | ok u => obtain ⟨ptr', h1, h2, h3, h4⟩ := hpost; exact ⟨ptr', g, h1, h2, hng, h3, h4⟩
+        | error e => exact hpost
+
+/-! ## `append` -/
+
+/-- What `append` gives: the list with `v` at the end, or `error.OutOfMemory` and the same
+list. -/
+def Appended (p ptr : Ptr) (cap : BitVec 64) (xs : List (BitVec 32)) (v : BitVec 32) (m' : Mem)
+    (hL' : Heap) : Except ErrName Unit → Prop
+  | .ok _ => ∃ ptr' cap', alist p ptr' cap' (xs ++ [v]) hL' ∧ ptrOk m' ptr'
+  | .error e => e = "OutOfMemory" ∧ alist p ptr cap xs hL' ∧ ptrOk m' ptr
+
+/-- `ArrayListUnmanaged(u32).append`. -/
+theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL : Heap}
+    (hl : alist p ptr cap xs hL) (hm : m.heap = hL ∪ hF) (hd : Heap.Disjoint hL hF)
+    (hst : m.Seq) (hok : ptrOk m ptr) :
+    ∃ r m', (array_list_Aligned_u32_null_append p a v).run m = pure (r, m') ∧ m'.Seq ∧
+      ∃ hL', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧ Appended p ptr cap xs v m' hL' r := by
+  obtain ⟨hlc, hc4, hH, hB, dHB, rfl, hh, hbf⟩ := hl
+  have hxl : xs.length < 2 ^ 64 := by omega
+  have hlen : xs.length = (BitVec.ofNat 64 xs.length).toNat := by simp; omega
+  generalize hL : BitVec.ofNat 64 xs.length = len at hh hlen
+  have hh₀ := hh
+  obtain ⟨A, S, K, hA, hK, hb⟩ := hh
+  obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
+  obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
+  have hs := hdrBytes_size ptr len cap
+  have e8 : Enc.size (BitVec 64) = 8 := rfl
+  have q8 : (p.add 0).add 8 = p.add ((8 : Nat) : Int) := by simp [Ptr.add]
+  have dlen : Enc.decode ((hdrBytes ptr len cap).extract 8 (8 + Enc.size (BitVec 64))) =
+      pure len := by rw [e8, hdr_len, dec_u64]
+  have q0 : p.add 0 = p.add ((0 : Nat) : Int) := rfl
+  have e16 : Enc.size Slice = 16 := rfl
+  have dslL : Enc.decode ((hdrBytes ptr len cap).extract 0 (0 + Enc.size Slice)) =
+      (pure ⟨ptr, len⟩ : Result Slice) := by rw [e16, hdr_slice, decode_slice]
+  -- Zig 0.15.2 reads `items.len` with a load of the whole `items` slice.
+  first
+  | have _ := @array_list_Aligned_u32_null_growCapacity.loop4
+    obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hmH hst q0 (by decide)
+      (by omega) (by omega) dslL
+  | obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hmH hst q8 (by decide)
+      (by omega) (by omega) dlen
+  have hm₁' : m₁.heap = (hH ∪ hB) ∪ hF := hm₁.trans (hmH.symm.trans hm)
+  have hok₁ : ptrOk m₁ ptr := ptrOk_mono hok (Nat.le_of_eq (by rw [hb₁]))
+  have hno : ¬ 18446744073709551615 ≤ len.toNat := by omega
+  obtain ⟨r, m₂, he, hs₂, hz₂, hH₂, hB₂, d₁, d₂, hm₂, hpost⟩ := ensure_run (n := len + 1#64) a
+    hh₀ hbf dHB hm₁' hd hs₁ hok₁ hlen (by omega) hc4
+  simp only [StateT.run] at l₁ he
+  have hl1 : (len + 1#64).toNat = len.toNat + 1 := by
+    rw [BitVec.toNat_add]; simp; omega
+  cases r with
+  | error e =>
+    obtain ⟨rfl, h1, h2, h3⟩ := hpost
+    refine ⟨.error "OutOfMemory", m₂, ?_, hs₂, hH₂ ∪ hB₂, d₂, hm₂, rfl,
+      ⟨hlc, hc4, hH₂, hB₂, d₁, rfl, hL ▸ h1, h2⟩, h3⟩
+    simp [array_list_Aligned_u32_null_append, array_list_Aligned_u32_null_addOne, zig_unfold, l₁,
+      hno, he, Zig.unwrapErr]
+  | ok u =>
+    obtain ⟨ptr', cap', h1, h2, hn', h4c, hok'⟩ := hpost
+    rw [hl1] at hn'
+    have hc0 : cap'.toNat ≠ 0 := by omega
+    obtain ⟨dHF₂, dBF₂⟩ := Heap.disjoint_union_left.mp d₂
+    obtain ⟨vH, dvH, vB, dvB⟩ := heap3 hm₂ d₁ dHF₂ dBF₂
+    obtain ⟨m₃, a₃, hs₃, hz₃, hH₃, dH₃, hm₃, h3⟩ := addOneAssumeCapacity_run h1 vH dvH hs₂
+      (by omega)
+    obtain ⟨hoff, A', bs, hA', hbsz, hit, hbuf⟩ : ptr'.off = 0 ∧ ∃ A bs, A % 4 = 0 ∧
+        bs.size = 4 * cap'.toNat ∧ ItemsOk bs xs ∧ bytesAt ptr' A (4 * cap'.toNat) .heap bs hB₂ := by
+      simpa [buf, hc0] using h2
+    obtain ⟨dH₃B, dH₃F⟩ := Heap.disjoint_union_right.mp dH₃
+    have vB₃ : m₃.heap = hB₂ ∪ (hH₃ ∪ hF) := by
+      rw [hm₃, ← Heap.union_assoc, Heap.union_comm dH₃B, Heap.union_assoc]
+    have dB₃ : Heap.Disjoint hB₂ (hH₃ ∪ hF) := Heap.disjoint_union_right.mpr ⟨dH₃B.symm, dBF₂⟩
+    obtain ⟨m₄, s₄, hs₄, hz₄, hB₄, dB₄, hm₄, hb₄⟩ := bytesAt_store_run (a := 4) hbuf vB₃ dB₃ hs₃ v
+      (q := ptr'.elem 4 len) (k := 4 * len.toNat) (by simp [Ptr.elem, Ptr.add])
+      (by decide) (by rw [hbsz, show Enc.size (BitVec 32) = 4 from rfl]; omega)
+      (by simp [hoff]; omega) (by decide)
+    obtain ⟨dB₄H, dB₄F⟩ := Heap.disjoint_union_right.mp dB₄
+    refine ⟨.ok (), m₄, ?_, hs₄, hH₃ ∪ hB₄, Heap.disjoint_union_left.mpr ⟨dH₃F, dB₄F⟩, ?_,
+      ptr', cap', ⟨by simp; omega, h4c, hH₃, hB₄, dB₄H.symm, rfl, ?_, ?_⟩, ?_⟩
+    · simp only [StateT.run] at a₃ s₄
+      simp [array_list_Aligned_u32_null_append, array_list_Aligned_u32_null_addOne, zig_unfold,
+        l₁, hno, he, a₃, s₄]
+    · rw [hm₄, Heap.union_comm dB₄, Heap.union_assoc, Heap.union_comm dB₄F.symm,
+        ← Heap.union_assoc]
+    · have e : len + 1 = BitVec.ofNat 64 (xs ++ [v]).length := by
+        apply BitVec.eq_of_toNat_eq; rw [← hL]; simp
+      rw [← e]; exact h3
+    · simp only [buf, hc0, ↓reduceIte]
+      have e4 : Enc.size (BitVec 32) = 4 := rfl
+      have hw := LawfulEnc.size_encode v
+      refine ⟨hoff, A', _, hA', by rw [writeBytes_size _ _ _ (by omega)]; exact hbsz, ?_, hb₄⟩
+      intro i hi
+      simp only [List.length_append, List.length_singleton] at hi
+      by_cases hil : i < xs.length
+      · rw [extract_writeBytes_disjoint _ _ _ _ _ (by omega) (by omega) (by omega),
+          List.getElem_append_left hil]
+        exact hit i hil
+      · have hi' : i = len.toNat := by omega
+        subst hi'
+        rw [show 4 * len.toNat + 4 = 4 * len.toNat + (Enc.encode v).size by rw [hw]; rfl,
+          extract_writeBytes_in _ _ _ _ _ (by omega) (Nat.le_refl _) (Nat.le_refl _)]
+        simp only [Nat.sub_self, Nat.zero_add]
+        rw [List.getElem_append_right (by omega)]
+        simp [Array.extract_size]
+    · exact ptrOk_mono hok' (Nat.le_of_eq (by rw [hz₄, hz₃]))
 
 end Ops
 
