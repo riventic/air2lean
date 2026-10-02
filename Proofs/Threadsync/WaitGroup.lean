@@ -757,4 +757,68 @@ theorem U_hold {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g' : Gh} {hQ :
     (fun hr => by rwa [upd_ne _ _ (Ne.symm h0)] at hr)
   exact hU
 
+/-- The holder's load of the counter: the stores of both tasks. -/
+theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {hL : Heap} {G : ThreadId → Gh}
+    {m : Mem} {d : Nat} (ht : t = 1 ∨ t = 2) (hi : proto.inv (upd G t (gH .lk hL)) m)
+    (hc : m.current = t)
+    {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ m' hQ, m'.current = t → m'.threads = m.threads →
+      proto.inv (upd G t (gH .lk hQ)) m' →
+      Q (BitVec.ofNat 32 (cnt fun u => (upd G t (gH .lk hL) u).2), s) G m' d) :
+    proto.WP t ((liftM (load (BitVec 32) 4 (bPtr.add 20)) : CM Tgt σ (BitVec 32)).run s) Q G m d := by
+  have hh : L.ph (upd G t (gH .lk hL) t) = .holds := by rw [upd_self]; rfl
+  obtain ⟨htl, hjt⟩ := hi.1.live t (by rw [hh]; decide)
+  have hres : R (fun u => (upd G t (gH .lk hL) u).2) hL := by
+    have := hi.1.res t hh
+    rwa [show L.held (upd G t (gH .lk hL) t) = hL by rw [upd_self]; rfl] at this
+  have hown : L.own (upd G t (gH .lk hL)) m t = hL := by
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
+  refine WP.liftM_owned (TTriple.load (by decide)) hi.1.own hc htl (by rw [hown]; exact hres)
+    fun a m' hQ hr ho' hq hs hm' hd => ?_
+  obtain ⟨rfl, hq'⟩ := sep_lift.mp hq
+  have hQe : L.part (gH .lk hQ) ∪ L.held (gH .lk hQ) = hQ := Heap.empty_union hQ
+  have hl := hi.1.stepIn (g := gH .lk hQ) hc hjt (by rw [hQe]; exact ho') hs (by rw [hQe]; exact hm')
+    (by rw [hQe]; exact hd) (by rw [upd_self]; rfl) (fun _ => .inl rfl) (fun h => absurd rfl h)
+    (fun h => absurd hh h) (fun _ => by
+      show R (fun u => (upd (upd G t (gH .lk hL)) t (gH .lk hQ) u).2) hQ
+      rw [snd_upd_upd G t (gH .lk hL) (gH .lk hQ) rfl]; exact hq')
+  rw [upd_upd] at hl
+  refine h m' hQ (hs.current.trans hc) hs.threads ⟨hl, ?_⟩
+  have := U_hold (g' := gH .lk hQ) ht hi hs hm' hd hc (by rw [upd_self]; exact .inl rfl) (.inl rfl)
+    rfl rfl
+  rwa [upd_upd] at this
+
+/-- The holder's store of `w`, the stores of both tasks after its own. -/
+theorem wp_cntStore {σ : Type} {s : σ} {t : ThreadId} {hL : Heap} {G : ThreadId → Gh}
+    {m : Mem} {d : Nat} (w : BitVec 32) (ht : t = 1 ∨ t = 2) (hi : proto.inv (upd G t (gH .lk hL)) m)
+    (hc : m.current = t)
+    (hw : w = BitVec.ofNat 32 (cnt fun u => (upd G t (gH .inc hL) u).2))
+    {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ m' hQ, m'.current = t → m'.threads = m.threads →
+      proto.inv (upd G t (gH .inc hQ)) m' → Q ((), s) G m' d) :
+    proto.WP t ((liftM (store (α := BitVec 32) 4 (bPtr.add 20) w) : CM Tgt σ Unit).run s) Q G m d := by
+  have hh : L.ph (upd G t (gH .lk hL) t) = .holds := by rw [upd_self]; rfl
+  obtain ⟨htl, hjt⟩ := hi.1.live t (by rw [hh]; decide)
+  have hres : R (fun u => (upd G t (gH .lk hL) u).2) hL := by
+    have := hi.1.res t hh
+    rwa [show L.held (upd G t (gH .lk hL) t) = hL by rw [upd_self]; rfl] at this
+  have hown : L.own (upd G t (gH .lk hL)) m t = hL := by
+    rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
+  refine WP.liftM_owned (TTriple.store (by decide) w) hi.1.own hc htl (by rw [hown]; exact hres)
+    fun a m' hQ hr ho' hq hs hm' hd => ?_
+  have hQe : L.part (gH .inc hQ) ∪ L.held (gH .inc hQ) = hQ := Heap.empty_union hQ
+  have hX : (fun u => (upd (upd G t (gH .lk hL)) t (gH .inc hQ) u).2) =
+      fun u => (upd G t (gH .inc hL) u).2 := by
+    rw [upd_upd]; funext u; unfold upd; split <;> rfl
+  have hl := hi.1.stepIn (g := gH .inc hQ) hc hjt (by rw [hQe]; exact ho') hs
+    (by rw [hQe]; exact hm') (by rw [hQe]; exact hd) (by rw [upd_self]; rfl) (fun _ => .inl rfl)
+    (fun h => absurd rfl h) (fun h => absurd hh h) (fun _ => by
+      show R (fun u => (upd (upd G t (gH .lk hL)) t (gH .inc hQ) u).2) hQ
+      rw [hX]; unfold R; exact hw ▸ hq)
+  rw [upd_upd] at hl
+  refine h m' hQ (hs.current.trans hc) hs.threads ⟨hl, ?_⟩
+  have := U_hold (g' := gH .inc hQ) ht hi hs hm' hd hc (by rw [upd_self]; exact .inl rfl) (.inr rfl)
+    rfl rfl
+  rwa [upd_upd] at this
+
 end Threadsync.WG
