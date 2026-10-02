@@ -2047,5 +2047,159 @@ theorem loop56_body (hP : S.Fits P U) (D : Nat) (s : Io_Condition_waitInnerLocal
 
 end Wait
 
+
+section Wait2
+
+variable (t : ThreadId) (pa : Heap) (x : X) (io : Io) (i jr : Nat) (e : BitVec 32)
+
+/-- The outer loop's invariant: the waiter at `reg`, with the value `e` of epoch write `i`. -/
+def inv23 (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat) :
+    Prop :=
+  d < D ∧ m.current = t ∧ s.epoch = e ∧ P.inv (upd G t (gw pa x i jr e false)) m
+
+/-- The outer loop ends with the waiter holding the mutex. -/
+def post23 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLocals)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ r.1 = .ret (.ok ()) ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m
+
+theorem loop23_body (hP : S.Fits P U) (D : Nat) (s : Io_Condition_waitInnerLocals)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat) (h : inv23 (P := P) t pa x i jr e D s G m d) :
+    P.WP t ((Io_Condition_waitInner.loop23 (S.ptr.add 12) io (S.ptr.add 8) true).run s)
+      (fun r G' m' d' =>
+        if Io_Condition_waitInner.again23 r.1 then inv23 (P := P) t pa x i jr e D r.2 G' m' d' ∧
+          (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
+        else post23 (P := P) t pa x D r G' m' d') G m d := by
+  obtain ⟨ep, ps⟩ := s
+  obtain ⟨hD, hc, he, hi⟩ := h
+  simp only at he
+  subst ep
+  unfold Io_Condition_waitInner.loop23
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  refine WP.bind ?_
+  simp only [↓reduceIte]
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  rw [ptr_epoch]
+  refine WP.bind (WP.bind (wp_ewait hP hi fun k hk G₁ m₁ hc₁ hi₁ => ?_))
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.bind (wp_load hP (.inr rfl) (g := gw pa x i jr e false) (fun h => by cases h) hi₁
+    fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL hU => ?_))
+  obtain ⟨-, hs₂, -⟩ := hP.split hi₂
+  have he₂ := hs₂.era t i jr false e (by rw [hg₂])
+  have hle : i + 1 ≤ (S.WE.hist m₂).size ∧ (S.WE.hist m₂).size ≤ i + 2 := by
+    rcases he₂.esz with h1 | ⟨h1, -⟩ <;> omega
+  have hij : i ≤ j := hfl i (by omega) he₂.ce
+  have hs₃ := hs₂.opKeep (.inr rfl) hop hw' hh
+  have hp₃ : P.inv G₂ m₃ := hP.pack hL hs₃ hU
+  obtain ⟨sn, hvsn, hi₃⟩ : ∃ sn, v = (if sn then e + 1 else e) ∧ P.inv (upd G₂ t (gw pa x i jr e sn)) m₃ := by
+    rcases (by omega : j = i ∨ j = i + 1) with rfl | rfl
+    · exact ⟨false, val_eq hv he₂.eval.1, by rw [← hg₂, upd_same]; exact hp₃⟩
+    · have hsz : (S.WE.hist m₂).size = i + 2 := by omega
+      refine ⟨true, val_eq hv (he₂.eval.2 hsz), ?_⟩
+      have := hP.retag hL hU (hs₃.see (by rw [hg₂]) (by rw [hh]; exact hsz)
+        (by rw [hh]; exact hacq rfl) (out_notQ hP hp₃ (by rw [hg₂]))) rfl rfl
+      rwa [hg₂] at this
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  rw [ptr_state]
+  refine WP.bind (WP.bind (WP.bind (wp_loadAs hP (.inl rfl) (g := gw pa x i jr e sn) (fun h => by cases h)
+    hi₃ (fun b => ⟨_, ofBits_cst b⟩)
+    fun k₃ hk₃ G₃ m₄ m₅ b r j' hg₃ hi₄ hd hj' hv' hfl' hh' hw₅ hop₅ hL₅ hU₅ => ?_)))
+  obtain ⟨-, hs₄, -⟩ := hP.split hi₄
+  have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
+  have hsb : sn = true → b = 0x10001 := fun hsn => by
+    subst hsn
+    have he₄ := hs₄.era t i jr true e (by rw [hg₃])
+    obtain ⟨hsz, hcl⟩ := he₄.seen rfl
+    rcases he₄.esz with h1 | ⟨-, h2, h3⟩
+    · omega
+    · have := hfl' (jr + 1) (by omega) (VClock.le_trans h3 hcl)
+      obtain rfl : j' = jr + 1 := by omega
+      exact val_eq hv' (he₄.s1 h2)
+  have hi₅ : P.inv G₃ m₅ := hP.pack hL₅ (hs₄.opKeep (.inl rfl) hop₅ hw₅ hh') hU₅
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv56 (P := P) t pa x i jr e d) (fun _ => 0)
+    (post56 (P := P) t pa x i jr e d) (loop56_body t pa x io i jr e hP d) _ G₃ m₅ k₃
+    ⟨by omega, hop₅.current, sn, b, hr, sv_of hs₄ hj' hv', hvsn, hsb,
+      by rw [← hg₃, upd_same]; exact hi₅⟩))
+  rintro ⟨e', s'⟩ G₄ m₆ d₄ ⟨hd₄, hc₆, ⟨rfl, hep, hi₆⟩ | ⟨rfl, hL₆, hi₆⟩⟩
+  · simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    dsimp only
+    simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    simp only [Io_Condition_waitInner.again23, ↓reduceIte]
+    exact ⟨⟨by omega, hc₆, hep, hi₆⟩, .inl (by omega)⟩
+  · simp only [StateT.run_pure]
+    refine WP.pure' (WP.pure' (WP.pure' ?_))
+    simp only [Io_Condition_waitInner.again23, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨by omega, rfl, hc₆, hL₆, hi₆⟩
+
+end Wait2
+
+/-- `Condition.wait` by the holder `t`, which saw no permit (`hz`) while no other thread waits
+at the condition (`hone`): it holds the mutex again, at the same place. -/
+theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
+    (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) :
+    P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
+  have hwi : P.WP t (Io_Condition_waitInner (S.ptr.add 12) io (S.ptr.add 8) true) (fun r G' m' d' =>
+      d' < d ∧ r = .ok () ∧ m'.current = t ∧
+        ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
+    unfold Io_Condition_waitInner
+    refine WP.bind ?_
+    rw [StateT.run'_eq]
+    refine WP.map ?_
+    simp only [StateT.run_bind]
+    simp only [StateT.run_pure, pure_bind]
+    rw [ptr_epoch]
+    refine WP.bind (WP.bind (wp_ldE hP rfl hi fun k₁ hk₁ G₁ m₁ i ev hc₁ hi₁ => ?_))
+    refine WP.pure' ?_
+    dsimp only
+    simp only [StateT.run_bind, StateT.run_modify]
+    simp only [pure_bind]
+    rw [ptr_state]
+    refine WP.bind (WP.bind (WP.bind (wp_regS hP hi₁ hz hone fun k₂ hk₂ G₂ m₂ jr hc₂ hi₂ => ?_)))
+    refine WP.pure' ?_
+    dsimp only
+    simp only [StateT.run_bind]
+    rw [lt_w]
+    refine WP.bind (WP.callRC_ok dbg_true ?_)
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    dsimp only
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf ptr_mutex rfl t
+      (⟨.holds, pa, hL⟩, .reg i jr false ev, x) rfl rfl io G₂ m₂ k₂ hi₂)))
+    rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₃⟩
+    refine WP.mono ?_ (WP.loop _ _ (inv23 (P := P) t pa x i jr ev d) (fun _ => 0)
+      (post23 (P := P) t pa x d) (loop23_body t pa x io i jr ev hP d) _ G₃ m₃ d₃
+      ⟨by omega, hc₃, rfl, hi₃⟩)
+    rintro ⟨e', s'⟩ G₄ m₄ d₄ ⟨hd₄, rfl, hc₄, hL₄, hi₄⟩
+    exact WP.pure' ⟨hd₄, rfl, hc₄, hL₄, hi₄⟩
+  unfold Io_Condition_waitUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callC (WP.mono ?_ hwi))
+  rintro r G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, hL₁, hi₁⟩
+  simp only [StateT.run_pure]
+  simp only [pure_bind]
+  simp only [isNonErr, ↓reduceIte, StateT.run_pure]
+  exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
+
 end Sem
 end Sync
