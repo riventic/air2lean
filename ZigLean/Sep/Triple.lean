@@ -61,8 +61,8 @@ theorem Ptr.elem_eq (p : Ptr) (size : Nat) (i : BitVec 64) :
   simp [Ptr.elem, Ptr.add]
 
 theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap = h ∪ hF)
-    (hn : 0 < Enc.size T) (hst : m.SingleThread) :
-    ∃ m', (load T a p).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧ m'.SingleThread := by
+    (hn : 0 < Enc.size T) (hst : m.Seq) :
+    ∃ m', (load T a p).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧ m'.Seq := by
   obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (q := p) (k := 0) (n := Enc.size T) (a := a) hb hm (by simp [Ptr.add])
@@ -70,14 +70,14 @@ theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap
   simp only [Nat.add_zero] at hx
   have hv' : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
     rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
-  refine ⟨_, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  refine ⟨_, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact singleThread_recordAt hst _ _ _ _
+  · exact hst.recordAt _ _ _ _
 
 theorem pts_store_run [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h)
-    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (hst : m.SingleThread)
+    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (hst : m.Seq)
     (w : T) :
-    ∃ m', (store a p w).run m = pure ((), m') ∧ m'.SingleThread ∧
+    ∃ m', (store a p w).run m = pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ pts p a w h' := by
   obtain ⟨A, S, K, bs, ha, hs, -, hb, hK⟩ := hp
   have hw := LawfulEnc.size_encode w
@@ -98,9 +98,9 @@ theorem item_aligned {A o a i : Nat} (hA : (A + o) % Enc.align T = 0) (ha : a �
 
 theorem arr_load_run {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64} (hp : arr p vs h)
     (hm : m.heap = h ∪ hF) (hn : 0 < Enc.size T) (ha : a ∣ Enc.align T)
-    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (hst : m.SingleThread) :
+    (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) (hst : m.Seq) :
     ∃ m', (load T a (p.elem (Enc.size T) i)).run m = pure (vs[i.toNat], m') ∧ m'.heap = h ∪ hF ∧
-      m'.SingleThread := by
+      m'.Seq := by
   obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩ := hp
   have hk : Enc.size T * i.toNat + Enc.size T ≤ bs.size := by
     rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
@@ -110,15 +110,15 @@ theorem arr_load_run {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64} (hp : arr
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + Enc.size T * i.toNat)
       (p.off.toNat + Enc.size T * i.toNat + Enc.size T)) = pure vs[i.toNat] := by
     rw [hx]; exact hv _ hi
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact singleThread_recordAt hst _ _ _ _
+  · exact hst.recordAt _ _ _ _
 
 theorem arr_store_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64}
     (hp : arr p vs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
     (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length)
-    (hst : m.SingleThread) (w : T) :
-    ∃ m', (store a (p.elem (Enc.size T) i) w).run m = pure ((), m') ∧ m'.SingleThread ∧
+    (hst : m.Seq) (w : T) :
+    ∃ m', (store a (p.elem (Enc.size T) i) w).run m = pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ arr p (vs.set i.toNat w) h' := by
   obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩ := hp
   have hw := LawfulEnc.size_encode w
@@ -175,8 +175,8 @@ theorem Array.extract_flatten_replicate {α : Type} (x : Array α) (n j : Nat) (
 
 theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitVec 64}
     (hp : arr p vs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
-    (ha : a ∣ Enc.align T) (hn' : n.toNat = vs.length) (hst : m.SingleThread) (w : T) :
-    ∃ m', (memset a p n (some w)).run m = pure ((), m') ∧ m'.SingleThread ∧
+    (ha : a ∣ Enc.align T) (hn' : n.toNat = vs.length) (hst : m.Seq) (w : T) :
+    ∃ m', (memset a p n (some w)).run m = pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ arr p (List.replicate vs.length w) h' := by
   by_cases h0 : n.toNat = 0
   · refine ⟨m, ?_, hst, h, hd, hm, ?_⟩
@@ -216,9 +216,9 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
     (ha : a ∣ Enc.align T) (hs : Enc.align T ∣ Enc.size T)
     (hdn : d.toNat + n.toNat ≤ vs.length) (hsn : s.toNat + n.toNat ≤ vs.length)
-    (hst : m.SingleThread) :
+    (hst : m.Seq) :
     ∃ m', (memmove (Enc.size T) a a (p.elem (Enc.size T) d) (p.elem (Enc.size T) s) n).run m =
-        pure ((), m') ∧ m'.SingleThread ∧
+        pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧
         arr p (copyItems vs d.toNat s.toNat n.toNat) h' := by
   have hlen : (copyItems vs d.toNat s.toNat n.toNat).length = vs.length := by simp [copyItems]
@@ -242,19 +242,19 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
   have hsrc : src.size = (Enc.size T) * n.toNat := by simp [src]; omega
   -- `memmove` reads `src` before it writes `dst`, and the read (`loadBytes_run`) mutates memory via
   -- `Mem.recordAt` under M22. So the write step must be proved against the memory *after* the read,
-  -- not against `m` directly (heap and `SingleThread` both carry across `recordAt`, access doesn't
+  -- not against `m` directly (heap and `Seq` both carry across `recordAt`, access doesn't
   -- change at all).
   have hm2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
       AccessKind.read).heap = h ∪ hF := by
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
   have hst2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
-      AccessKind.read).SingleThread :=
-    singleThread_recordAt hst b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+      AccessKind.read).Seq :=
+    hst.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
       AccessKind.read
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (k := (Enc.size T) * d.toNat) (a := a)
     (bs' := src) hb hm2 hd (Ptr.elem_eq p _ d) (by omega) (by omega) (item_aligned hA ha hs) hst2 hK
   refine ⟨m', ?_, hst', h', hd', hm', A, S, K, _, hA, ?_, ?_, hb', hK⟩
-  · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst b₂
+  · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst.single b₂
       (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat) AccessKind.read)
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun
@@ -301,17 +301,17 @@ end Lemmas
 
 /-! ## Triples -/
 
-/-- `Triple P c Q` (module doc). `m.SingleThread` is a precondition and, on a return, a guarantee
+/-- `Triple P c Q` (module doc). `m.Seq` is a precondition and, on a return, a guarantee
 about the result memory: every rule below carries it through, so a caller that never spawns a
 thread (all `M17`/`M22`-example proofs before `Threads`) never re-derives it, and every `NoRace`
-obligation a memory-operation lemma needs is `noRace_of_singleThread` for free. -/
+obligation a memory-operation lemma needs is `noRace_of_singleThread hst.single` for free. -/
 def Triple {α : Type} (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
-  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.SingleThread →
+  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq →
     match (c.run m).run with
     | none => True
     | some (.error _) => False
     | some (.ok (v, m')) =>
-      ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.SingleThread
+      ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
 
 
 namespace Triple
@@ -320,9 +320,9 @@ variable {α β : Type} {P P' R : Assn} {Q Q' : α → Assn} {c : MemM α}
 
 /-- A triple from the run: `c` returns, and the post-condition holds. -/
 theorem of_run
-    (h : ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.SingleThread →
+    (h : ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq →
       ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧
-        m'.SingleThread) :
+        m'.Seq) :
     Triple P c Q := by
   intro m hP hF hd hm hp hs
   obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := h m hP hF hd hm hp hs

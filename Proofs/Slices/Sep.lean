@@ -90,9 +90,9 @@ def revMeas (s : reverseLocals) : Nat := s.j.toNat + 1 - s.i.toNat
 
 theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length)
     (hF : Heap) (s : reverseLocals) (m : Mem) (h : Heap) (hd : Heap.Disjoint h hF)
-    (hm : m.heap = h ∪ hF) (hi : revInv sl.ptr vs s h) (hst : m.SingleThread) :
+    (hm : m.heap = h ∪ hF) (hi : revInv sl.ptr vs s h) (hst : m.Seq) :
     ∃ e s' m' h', ((reverse.loop15 sl).run s).run m = pure ((e, s'), m') ∧
-      Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
+      Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ m'.Seq ∧
       (if reverse.again15 e then revInv sl.ptr vs s' h' ∧ revMeas s' < revMeas s
        else e = .br14 ∧ arr sl.ptr vs.reverse h') := by
   obtain ⟨ws, hw, hwl, hij, hk⟩ := hi

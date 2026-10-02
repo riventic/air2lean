@@ -509,7 +509,7 @@ theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
   TTriple.of_run fun m hP hF hd hm hp _ ho => by
     have hP0 : hP = Heap.empty := hp
     subst hP0
-    obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, hA, hb⟩ :=
+    obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, -, hA, hb⟩ :=
       alloc_run_core hd hm kind size align ha
     simp only [Heap.empty_union] at hd' hm'
     refine ⟨p, m', h', hr, hd', hm', ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩, ?_,
@@ -538,7 +538,7 @@ theorem sep_ex_lift {R : Assn} {φ : Nat → Prop} {P : Nat → Assn} {h : Heap}
 theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0) (hpos : 0 < S) : TTriple (bytesAt p A S K bs) (Zig.free p) (fun _ => emp) :=
   TTriple.of_run fun m _ hF hd hm hb _ ho => by
-    obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
+    obtain ⟨m', hr, hm', hsz, hs, -⟩ := free_run_core hb hm hd hS h0 hpos
     refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_,
       StepIn.sameThreads hs (by omega)⟩
     intro e he ht

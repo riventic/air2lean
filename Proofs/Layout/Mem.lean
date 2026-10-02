@@ -109,9 +109,9 @@ theorem numInt_spec (p : Ptr) (x : BitVec 32) :
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 0) (p.off.toNat + 0 + Enc.size (BitVec 32))) =
       pure x := by
     rw [show Enc.size (BitVec 32) = 4 from rfl, hx]; exact Num.decode_int hv
-  have hl2 := load_run (α := BitVec 32) hacc hv' (noRace_of_singleThread hstA _ _ _ _)
+  have hl2 := load_run (α := BitVec 32) hacc hv' (noRace_of_singleThread hstA.single _ _ _ _)
   refine ⟨x, mA.recordAt b (p.off.toNat + 0) (Enc.size (BitVec 32)) .read, hP, ?_, hd, ?_,
-    sep_lift.mpr ⟨rfl, hp⟩, singleThread_recordAt hstA _ _ _ _⟩
+    sep_lift.mpr ⟨rfl, hp⟩, hstA.recordAt _ _ _ _⟩
   · simp only [StateT.run] at hl hl2
     simp [numInt, zig_unfold, hl, hl2, Num.tag]
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
@@ -213,12 +213,12 @@ theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + 2) (p.off.toNat + 2 + Enc.size (BitVec 8))) =
       pure x := by
     rw [show Enc.size (BitVec 8) = 1 from rfl, hx]; exact hpay
-  have hl2 := load_run (α := BitVec 8) hacc hv' (noRace_of_singleThread hstA _ _ _ _)
+  have hl2 := load_run (α := BitVec 8) hacc hv' (noRace_of_singleThread hstA.single _ _ _ _)
   have hmB : (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read).heap = hP ∪ hF := by funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
   have hx1 : (Enc.encode (x + 1)).size = 1 := LawfulEnc.size_encode _
   obtain ⟨mC, hr₃, hstC, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p.add 2) (k := 2) (a := 1)
     (bs' := Enc.encode (x + 1)) hb hmB hd rfl (by omega) (by omega) (Nat.mod_one _)
-    (singleThread_recordAt hstA _ _ _ _) hK
+    (hstA.recordAt _ _ _ _) hK
   refine ⟨(), mC, h₃, ?_, hd₃, hm₃, ⟨A, S, K, _, ha, ?_, ?_, hb₃, hK⟩, hstC⟩
   · have e₃ : (store 1 (p.add 2) (x + 1#8)).run
         (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read) = pure ((), mC) := hr₃
