@@ -396,4 +396,146 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
   cases v
   exact ⟨rfl, h _ hc rfl hi'⟩
 
+
+/-! ## `n`, by the thread with the permit -/
+
+theorem XG_upd (G : ThreadId → Gh) (t : ThreadId) (g : Gh) :
+    XG (upd G t g) = upd (XG G) t g.2.2 := by
+  funext u; show (upd G t g u).2.2 = _; unfold upd; split <;> rfl
+
+/-- A thread in `semWork` goes to `work k' b'`, or `main` to `joins`, or the kid to `fin`. -/
+theorem shape_set {X : ThreadId → Ph} {m : Mem} {t k : Nat} {b : Bool} (h : Shape X m)
+    (hx : X t = .work k b) (p : Ph) (hp : (∃ k' ≤ 2, ∃ b', p = .work k' b') ∨ (t = 0 ∧ p = .joins) ∨
+      (t = 1 ∧ p = .fin)) : Shape (upd X t p) m := by
+  obtain ⟨htl, -, -⟩ := shape_work h hx
+  obtain ⟨h00, ⟨-, h0, h1⟩ | ⟨hs, hr, h0, h1, h2⟩⟩ := h
+  · rcases (by omega : t = 0 ∨ t = 1) with rfl | rfl
+    · rw [h0] at hx; cases hx
+    · rw [h1 1 (Nat.le_refl _)] at hx; cases hx
+  refine ⟨h00, .inr ⟨hs, hr, ?_, ?_, fun u hu => ?_⟩⟩
+  · by_cases ht : t = 0
+    · subst ht; rw [upd_self]
+      rcases hp with ⟨k', hk, b', rfl⟩ | ⟨-, rfl⟩ | ⟨h, -⟩
+      · exact .inr ⟨k', hk, b', rfl⟩
+      · exact .inl rfl
+      · cases h
+    · rw [upd_ne _ _ (Ne.symm ht)]; exact h0
+  · by_cases ht : t = 1
+    · subst ht; rw [upd_self]
+      rcases hp with ⟨k', hk, b', rfl⟩ | ⟨h, -⟩ | ⟨-, rfl⟩
+      · exact .inr ⟨k', hk, b', rfl⟩
+      · cases h
+      · exact .inl rfl
+    · rw [upd_ne _ _ (Ne.symm ht)]; exact h1
+  · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact h2 u hu
+
+/-- With a thread that has the permit, the mutex's resource is the permit count 0. -/
+theorem R_held {Y Y' : ThreadId → SPh × Ph} (h : held (Sem.xs Y) = true) (h' : held (Sem.xs Y') = true)
+    (hL : Heap) : S.R Y hL ↔ S.R Y' hL := by
+  show (pts S.ptr 8 (if held _ then 0 else 1) ∗ (if held _ then emp else NP _)) hL ↔
+    (pts S.ptr 8 (if held _ then 0 else 1) ∗ (if held _ then emp else NP _)) hL
+  rw [h, h']; simp
+
+/-- The other thread has no permit. -/
+theorem other_free {G : ThreadId → Gh} {m : Mem} (hu : U G m) {t k : Nat} (hk : (G t).2.2 = .work k true)
+    {u : ThreadId} (hut : u ≠ t) : (G u).2.2.holds = false := by
+  cases hu' : (G u).2.2.holds
+  · rfl
+  · exfalso
+    obtain ⟨k', hk'⟩ := holds_work hu'
+    obtain ⟨ht2, -, -⟩ := shape_work hu.shape hk
+    obtain ⟨hu2, -, -⟩ := shape_work hu.shape hk'
+    have : t = 0 ∧ u = 1 ∨ t = 1 ∧ u = 0 := by unfold ThreadId at *; omega
+    rcases this with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rcases hu.one with h | h <;> simp_all [Ph.holds]
+
+/-- The load or the store of `n` by thread `t`, which has the permit, after `k` increments; after
+it, `t` did `k'` increments. -/
+theorem wp_n {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem}
+    {d : Nat} {h : Heap} {k k' : Nat} {v' : BitVec 32} {r₀ : β}
+    {Q : β × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hi : proto.inv (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true)) m) (hc : m.current = t)
+    (ht : TTriple (pts nPtr 4 (BitVec.ofNat 32 (sum (XG (upd G t (⟨.out, h, Heap.empty⟩, .none,
+      .work k true)))))) c (fun r => ⌜r = r₀⌝ ∗ pts nPtr 4 v'))
+    (hv' : v' = BitVec.ofNat 32 (sum (XG (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k' true)))))
+    (hk' : k' ≤ 2)
+    (hq : ∀ m' h', m'.current = t → m'.threads = m.threads →
+      proto.inv (upd G t (⟨.out, h', Heap.empty⟩, .none, .work k' true)) m' → Q (r₀, s) G m' d) :
+    proto.WP t ((liftM c : CM Tgt σ β).run s) Q G m d := by
+  obtain ⟨hl, hs, hu⟩ := hi
+  have hgt : (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true) t).2.2 = .work k true := by
+    rw [upd_self]
+  obtain ⟨ht2, hs2, -⟩ := shape_work hu.shape hgt
+  have hph : S.L.ph (upd G t (⟨.out, h, Heap.empty⟩, SPh.none, Ph.work k true) t) = .out := by
+    rw [upd_self]; rfl
+  obtain ⟨htl, hjt⟩ := hl.live t (by rw [hph]; decide)
+  have hown : S.L.own (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true)) m t = h := by
+    rw [Lock.own_live hjt, upd_self]; exact Heap.union_empty h
+  have hpart : NP (XG (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true))) h := by
+    have := hu.parts t; rw [upd_self] at this; simp only [Ph.holds, ↓reduceIte] at this; exact this
+  refine WP.liftM_owned ht hl.own hc htl (by rw [hown]; exact hpart)
+    fun a m' hQ _ ho' hq' hst hm' hd => ?_
+  obtain ⟨rfl, hpQ⟩ := sep_lift.mp hq'
+  rw [hown] at hst hm' hd
+  let g' : Gh := (⟨.out, hQ, Heap.empty⟩, .none, .work k' true)
+  have hX : XG (upd (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true)) t g') =
+      XG (upd G t g') := by rw [upd_upd]
+  have hheld : ∀ G₀ : ThreadId → Gh, (G₀ t).2.2.holds = true → held (XG G₀) = true := fun G₀ h₀ => by
+    simp only [held, Bool.or_eq_true]
+    rcases (show t = 0 ∨ t = 1 by unfold ThreadId at *; omega) with rfl | rfl
+    · exact .inl h₀
+    · exact .inr h₀
+  have hl' := hl.stepIn (g := g') hc hjt
+    (by show Owned (upd _ t (hQ ∪ Heap.empty)) m'; rw [Heap.union_empty]; exact ho')
+    (by rw [hown]; exact hst)
+    (by rw [hown]; show m'.heap = (hQ ∪ Heap.empty) ∪ _; rw [Heap.union_empty]; exact hm')
+    (by rw [hown]; show Heap.Disjoint (hQ ∪ Heap.empty) _; rw [Heap.union_empty]; exact hd)
+    (by rw [upd_self]; rfl) (Heap.disjoint_empty _) (fun _ => rfl)
+    (fun _ hL hR => (R_held (hheld _ (by rw [upd_self]; rfl)) (hheld _ (by rw [upd_self]; rfl)) hL).mp hR)
+    (fun h₀ => by cases h₀)
+  rw [upd_upd] at hl'
+  have hnone : ∀ x, ¬ (40 ≤ x ∧ x < 44) → m'.heap (0, x) = m.heap (0, x) := fun x hx => by
+    rw [hm', Heap.union_apply, np_off hpQ hx, Option.none_or]
+    simp [Heap.diff, np_off hpart hx]
+  have hpz : S.PZ m → S.PZ m' ∨ ∃ v, (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true) v).2.1 = .pst :=
+    fun hz => .inl (Sem.PZ.mono hz fun x h1 h2 => hnone x (by simp [S] at h1 h2; omega))
+  have hs' := (hs.stepIn hl (by rw [hown]; exact hst) (by rw [hown]; exact hm')
+    (by rw [hown]; exact hd) hpz).congrG (G' := upd G t g') (fun u => by unfold upd; split <;> rfl)
+    (fun u => by unfold upd; split <;> exact Iff.rfl) (fun u x h1 h2 => by
+      by_cases e : u = t
+      · subst e; rw [upd_self]; exact np_off hpQ (by simp [S] at h1 h2; omega)
+      · rw [upd_ne _ _ e]; have := hs.off u x h1 h2; rwa [upd_ne _ _ e] at this)
+  have hXn : XG (upd G t g') = upd (XG (upd G t (⟨.out, h, Heap.empty⟩, .none, .work k true))) t
+      (.work k' true) := by rw [XG_upd, XG_upd, upd_upd]
+  have hoth : ∀ u, u ≠ t → (G u).2.2.holds = false := fun u hut => by
+    have := other_free hu hgt hut; rwa [upd_ne _ _ hut] at this
+  refine hq m' hQ (hst.current.trans hc) hst.threads ⟨hl', hs', ⟨?_, fun e he hb ho => ?_,
+    fun u => ?_, blk_keep hu.blk (hnone 0 (by omega)), fun w hw => ?_, ?_, fun u hu' => ?_⟩⟩
+  · rw [hXn]; have := shape_set hu.shape hgt (.work k' true) (.inl ⟨k', hk', true, rfl⟩)
+    unfold Shape at this ⊢; rw [hst.threads]; exact this
+  · rcases hst.fp e he with h' | ⟨-, hnt, -⟩
+    · rcases hu.io e h' hb ho with h'' | h''
+      · exact .inl h''
+      · exact .inr (allLe_stepIn hst h'')
+    · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+        rw [hb]; simp [Heap.diff, np_off hpart (show ¬ (40 ≤ e.off ∧ e.off < 44) by omega)]
+        exact blk_heap hu.blk (by omega)⟩ hnt
+  · by_cases e : u = t
+    · subst e; rw [upd_self]
+      show NP (XG (upd G u g')) hQ
+      rw [hv'] at hpQ; unfold NP
+      rw [show XG (upd G u g') = XG (upd G u (⟨.out, h, Heap.empty⟩, .none, .work k' true)) by
+        rw [XG_upd, XG_upd]]
+      exact hpQ
+    · rw [upd_ne _ _ e]
+      have := hu.parts u; rw [upd_ne _ _ e, hoth u e] at this
+      rw [hoth u e]; exact this
+  · rw [hst.waiters] at hw; exact hu.q w hw
+  · rcases (show t = 0 ∨ t = 1 by unfold ThreadId at *; omega) with rfl | rfl
+    · exact .inr (by rw [upd_ne _ _ (by decide)]; exact hoth 1 (by decide))
+    · exact .inl (by rw [upd_ne _ _ (by decide)]; exact hoth 0 (by decide))
+  · by_cases e : u = t
+    · subst e; rw [upd_self] at hu'; cases hu'
+    · rw [upd_ne _ _ e] at hu' ⊢; have := hu.wx u (by rw [upd_ne _ _ e]; exact hu')
+      rwa [upd_ne _ _ e] at this
+
 end Sync.SemCounter
