@@ -2539,4 +2539,94 @@ theorem inv_mread {G : ThreadId → Gh} {m₁ m' : Mem} {h : Heap} {x : X} {j : 
       (fun h => by have := hp.m1e; rw [hgx] at this; exact this h)
       (fun h6 => by rcases hx with rfl | rfl <;> simp [Ph.rank] at h6) hw' hop hh hL
 
+/-- `main`'s `cmpxchg(0 → 1)` (acquire) at `ev0` succeeded: it wrote `1`, and goes to `ev1`. -/
+theorem inv_mev1 {G : ThreadId → Gh} {m₁ m' : Mem} {h : Heap}
+    (hi : proto.inv G m₁) (hg : G 0 = gM h { ph := .ev0 })
+    (hv : (last (EV.hist m₁)).Val (0 : BitVec 32))
+    (hh : EV.hist m' = (EV.hist m₁).push
+      (Word.rmwEnt m' 0 .acquire (last (EV.hist m₁)) (1 : BitVec 32)))
+    (hw' : EV.Ok m') (hop : EV.Op 0 m₁ m') (hL : L.Inv G m') :
+    proto.inv (upd G 0 (gM h { ph := .ev1, e1 := true })) m' := by
+  have hgx : (G 0).2 = { ph := .ev0 } := by rw [hg]; rfl
+  have hp := hi.2.pre (by rw [hgx]; decide)
+  -- no set yet: the newest write is `0`
+  have hsx : ((G 1).2.sx || (G 2).2.sx) = false := by
+    cases e : ((G 1).2.sx || (G 2).2.sx)
+    · rfl
+    · exfalso
+      have := ev_lastOf hp.evh (l := [0]) (x := 2) (by unfold evL; rw [hgx, e]; rfl)
+      have := val_eq hv this
+      revert this; decide
+  have hs1 : (EV.hist m₁).size = 1 := by
+    rw [hp.evh.1]; unfold evL; rw [hgx, hsx]; rfl
+  have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
+  have hhG := Word.hist_keep hp.wg hkG
+  obtain ⟨G', hG'⟩ : ∃ G', G' = upd G 0 (gM h { ph := .ev1, e1 := true }) := ⟨_, rfl⟩
+  rw [← hG']
+  have hGu : ∀ u, u ≠ 0 → G' u = G u := fun u hu => by rw [hG']; exact upd_ne _ _ hu
+  have hX0 : (G' 0).2 = { ph := .ev1, e1 := true } := by rw [hG', upd_self]; rfl
+  have hX1 : (G' 1).2 = (G 1).2 := by rw [hGu 1 (by decide)]
+  have hX2 : (G' 2).2 = (G 2).2 := by rw [hGu 2 (by decide)]
+  refine ⟨by rw [hG']; exact linv_task hL (by rw [hg]; rfl) (by rw [hg]; rfl), ?_⟩
+  rw [hG']
+  refine U_main hi (by
+      rw [show (fun u => (upd G 0 (gM h { ph := .ev1, e1 := true }) u).2) =
+        upd (fun u => (G u).2) 0 { ph := .ev1, e1 := true } by funext u; unfold upd; split <;> rfl]
+      exact shape_m hi.2.shape hop.threads (by rw [hgx]; decide) (by rw [hgx]; decide) rfl
+        (by decide) (by decide))
+    (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega))
+    (fun y => by have := hi.2.part0 y; rw [hg] at this; exact this)
+    (qok_run hi (by rw [hg]; rfl) hop.waiters _) (fun _ => ?_)
+    (fun hr => by rw [upd_self] at hr; exact absurd hr (by show ¬6 ≤ Ph.ev1.rank; decide))
+    ⟨rfl, by show Ph.ev1 ≠ .wk; decide, rfl, rfl⟩
+  rw [← hG']
+  refine ⟨hp.wg.keep hkG, hw', ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
+    fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun _ => ?_, fun _ => ?_,
+    fun e he hb => ?_⟩
+  · rw [hhG, hX0, hX1, hX2]
+    have := hp.gv; rw [hgx] at this
+    have e : wgv { ph := .ev1, e1 := true } (G 1).2 (G 2).2 = wgv { ph := .ev0 } (G 1).2 (G 2).2 :=
+      rfl
+    rw [e]; exact this
+  · have hu0 : u ≠ 0 := by rcases hu with rfl | rfl <;> decide
+    rw [hGu u hu0] at hf ⊢; rw [hhG]; exact hp.gw u hu hf
+  · have e : evL (G' 0).2 (G' 1).2 (G' 2).2 = [0, 1] := by
+      unfold evL; rw [hX0, hX1, hX2, hsx]; rfl
+    rw [e]
+    refine ⟨by rw [hh, Array.size_push, hs1]; rfl, fun j hj => ?_⟩
+    rcases (by simp at hj; omega : j = 0 ∨ j = 1) with rfl | rfl
+    · rw [hh, push_get_lt (by rw [hs1]; decide)]
+      have := hp.evh.2 0 (by rw [show evL (G 0).2 (G 1).2 (G 2).2 = [0] by
+        unfold evL; rw [hgx, hsx]; rfl]; decide)
+      simpa [evL, hgx, hsx] using this
+    · have e : (EV.hist m')[1]! = Word.rmwEnt m' 0 .acquire (last (EV.hist m₁)) (1 : BitVec 32) := by
+        rw [hh, show (1 : Nat) = (EV.hist m₁).size from hs1.symm, push_get_eq]
+      rw [e]; exact EV.enc_val _
+  · rw [hX1, hX2, hsx] at h; cases h
+  · have hu0 : u ≠ 0 := by rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+    have hv0 : v ≠ 0 := by rcases huv with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+    rw [hGu u hu0] at hu; rw [hGu v hv0, hop.others u hu0]; exact hp.sto u v huv hu
+  · have hu0 : u ≠ 0 := by rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+    have hv0 : v ≠ 0 := by rcases huv with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+    rw [hGu u hu0] at hu; rw [hGu v hv0]; exact hp.sfd u v huv hu
+  · have hu0 : u ≠ 0 := by rcases hu with rfl | rfl <;> decide
+    rw [hGu u hu0] at hs; rw [hX0]; rfl
+  · rw [hX1] at h1; rw [hX2] at h2; rw [hX1, hX2]
+    exact hp.last3 (by rw [hgx]; rfl) h1 h2
+  · rw [hX0]
+  · have e : (EV.hist m')[1]! = Word.rmwEnt m' 0 .acquire (last (EV.hist m₁)) (1 : BitVec 32) := by
+      rw [hh, show (1 : Nat) = (EV.hist m₁).size from hs1.symm, push_get_eq]
+    rw [e]; exact VClock.le_refl _
+  · rcases hop.fpt e he with h' | ⟨het, hle⟩
+    · obtain ⟨a, b⟩ := hp.attr e h' hb
+      refine ⟨a, VClock.le_trans b ?_⟩
+      unfold ac
+      by_cases h0 : e.tid = 0
+      · rw [h0, hX0, hgx]; exact hop.clocks 0
+      · rw [hGu _ h0]; split
+        · exact VClock.le_refl _
+        · exact hop.clocks _
+    · refine ⟨by rw [het]; decide, ?_⟩
+      unfold ac; rw [het, hX0]; exact hle
+
 end Threadsync.WG
