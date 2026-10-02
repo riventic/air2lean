@@ -1869,5 +1869,46 @@ theorem wp_ldE (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X
     (holds_notQ hL hh₁)
   exact h k hk G₁ m' j v hop.current (hP.retag hL hU hrt (by rw [hg₁]) (by rw [hg₁]))
 
+
+/-- The holder `t`'s `waiters += 1` at `ld i e`, while no other thread waits at the condition and
+the permit count in its bytes `hL` is 0: it waits at the condition (state write `jr`). -/
+theorem wp_regS (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X} {m : Mem} {n : Nat}
+    {pa hL : Heap} {x : X} {i : Nat} {e : BitVec 32}
+    (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .ld i e, x)) m)
+    (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e)
+    {Q : Io_Condition_State × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' jr, m'.current = t →
+      P.inv (upd G₁ t (⟨.holds, pa, hL⟩, .reg i jr false e, x)) m' → Q (Packed.ofBits 0, s) G₁ m' k) :
+    P.WP t ((atomicRmwAsC .add .relaxed 4 S.WS.ptr (Packed.ofBits 1 : Io_Condition_State) :
+      CM Tgt σ Io_Condition_State).run s) Q G m n := by
+  refine wp_rmwAs hP (.inl rfl) (g := (⟨.holds, pa, hL⟩, .ld i e, x)) (fun h => by cases h) hi
+    (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' old r hg₁ hi₁ hd hv _ hh hw' hop hL' hU' => ?_
+  obtain ⟨hl₁, hs₁, -⟩ := hP.split hi₁
+  have hh₁ : (G₁ t).1.ph = .holds := by rw [hg₁]
+  have hnr : ∀ u i' jr sn e', (G₁ u).2.1 ≠ .reg i' jr sn e' := fun u i' jr sn e' hu => by
+    by_cases hut : u = t
+    · subst hut; rw [hg₁] at hu; cases hu
+    · exact hone G₁ m₁ hi₁ (by rw [hg₁]) hh₁ u hut i' jr sn e' hu
+  have hold : old = 0 := val_eq hv (hs₁.idle hnr)
+  subst hold
+  rw [bits_add1] at hh
+  have hr : r = Packed.ofBits 0 := by rw [ofBits_cst] at hd; cases hd; rfl
+  subst hr
+  obtain ⟨hsz, he⟩ := hs₁.ld t i e (by rw [hg₁])
+  have hce : VClock.le (S.WE.hist m₁)[i]!.clock (m'.clocks[t]!) = true := by
+    have := HBH.le hl₁ hh₁ hs₁.hbE
+    simp only [last, hsz, Nat.add_sub_cancel] at this
+    exact VClock.le_trans this (hop.clocks t)
+  have hpz : S.PZ m' := by
+    obtain ⟨hp, hpp, hps⟩ := hz
+    have hsub := held_sub hP (G := G₁) (t := t) (by rw [← hg₁, upd_same]; exact hi₁)
+    exact (op_keep (.inl rfl) hop).2 ⟨hp, hpp, fun l c h => hsub l c (hps l c h)⟩
+  have hs' := hs₁.reg (by rw [hg₁]) hh₁ (crit_one hl₁ hs₁ hh₁) hnr hop hw' hh hpz he hce
+  have := hP.retag hL' hU' hs' rfl rfl
+  rw [hg₁] at this
+  exact h k hk G₁ m' _ hop.current this
+
 end Sem
 end Sync
