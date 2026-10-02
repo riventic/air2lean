@@ -2201,5 +2201,110 @@ theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (i
   simp only [isNonErr, ↓reduceIte, StateT.run_pure]
   exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
 
+
+/-! ## `wait` and `post` -/
+
+theorem ptr0 : S.ptr.add 0 = S.ptr := by simp [Sem.ptr, Ptr.add]
+
+theorem sub1_run {a : BitVec 64} (h : a ≠ 0) : (sub false a 1).run = some (.ok (a - 1)) := by
+  have h0 : a.toNat ≠ 0 := fun e => h (BitVec.eq_of_toNat_eq (by simpa using e))
+  simp only [sub, Bool.false_eq_true, ↓reduceIte]
+  split
+  · rename_i ho; simp [BitVec.usubOverflow] at ho; try omega
+  · rfl
+
+theorem add1_run {a : BitVec 64} (h : a.toNat + 1 < 2 ^ 64) : (add false a 1).run = some (.ok (a + 1)) := by
+  simp only [add, Bool.false_eq_true, ↓reduceIte]
+  split
+  · rename_i ho; simp [BitVec.uaddOverflow] at ho; try omega
+  · rfl
+
+/-- The ghost values without the semaphore's part, after a change of `t`'s value. -/
+theorem xs_upd (G : ThreadId → SGh X) (t : ThreadId) (g g' : SGh X) :
+    xs (fun u => (upd G t g' u).2) = upd (xs fun u => (upd G t g u).2) t g'.2.2 := by
+  funext u; simp only [xs, upd]; split <;> rfl
+
+theorem xs_self (G : ThreadId → SGh X) (t : ThreadId) (g : SGh X) :
+    xs (fun u => (upd G t g u).2) t = g.2.2 := by simp only [xs, upd_self]
+
+/-- The holder's load of the permit count. -/
+theorem wp_cntLoad (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X} {m : Mem}
+    {n : Nat} {pa hL : Heap} {sp : SPh} {x : X}
+    {Q : BitVec 64 × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, sp, x)) m) (hc : m.current = t)
+    (h : ∀ m' hL', m'.current = t → P.inv (upd G t (⟨.holds, pa, hL'⟩, sp, x)) m' →
+      Q (S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2), s) G m' n) :
+    P.WP t ((liftM (load (BitVec 64) 8 S.ptr) : CM Tgt σ (BitVec 64)).run s) Q G m n :=
+  wp_cnt hP (Mv := (· = pa)) hi hc (TTriple.load (by decide)) rfl
+    (fun hr hrr hd => ⟨pa, hr, rfl, hd, hrr, rfl, rfl⟩) (.inl rfl)
+    (fun m' h₁ h₂ pa' hpa hu => by
+      subst hpa
+      have := hP.stable _ m' m' t (⟨.holds, pa', h₂⟩, sp, x) hu (Step.refl t m') (by rw [upd_self])
+        (by rw [upd_self])
+      rwa [upd_upd] at this)
+    fun m' pa' hL' hpa hc' _ hi' => by subst hpa; exact h m' hL' hc' hi'
+
+section SemWait
+
+variable (t : ThreadId) (pa : Heap) (x : X)
+
+/-- `wait`'s loop: `t` holds the mutex at `x`. -/
+def inv5 (D : Nat) (_ : Io_Semaphore_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem)
+    (d : Nat) : Prop :=
+  d ≤ D ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m
+
+/-- `wait`'s loop ends when `t` sees a permit. -/
+def post5 (D : Nat) (r : Io_Semaphore_waitUncancelableExit × Io_Semaphore_waitUncancelableLocals)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat) : Prop :=
+  d ≤ D ∧ r.1 = .br4 ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m ∧
+    S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) ≠ 0
+
+theorem loop5_body (hP : S.Fits P U) (io : Io)
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e)
+    (D : Nat) (s : Io_Semaphore_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
+    (h : inv5 (P := P) t pa x D s G m d) :
+    P.WP t ((Io_Semaphore_waitUncancelable.loop5 S.ptr io).run s) (fun r G' m' d' =>
+      if Io_Semaphore_waitUncancelable.again5 r.1 then inv5 (P := P) t pa x D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Semaphore_waitUncancelableLocals) => 0) s)
+      else post5 (S := S) (P := P) t pa x D r G' m' d') G m d := by
+  obtain ⟨hD, hc, hL, hi⟩ := h
+  unfold Io_Semaphore_waitUncancelable.loop5
+  simp only [StateT.run_bind, pure_bind]
+  rw [ptr0 (S := S)]
+  refine WP.bind (WP.bind (wp_cntLoad hP hi hc fun m' hL' hc' hi' => ?_))
+  simp only [StateT.run_pure, pure_bind]
+  by_cases hz : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) = 0
+  · rw [hz]
+    simp only [beq_self_eq_true, ↓reduceIte, StateT.run_bind]
+    have hz' : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL' := by
+      obtain ⟨hl', -, -⟩ := hP.split hi'
+      have := hl'.res t (by rw [upd_self]; rfl)
+      rw [show S.L.held (upd G t (⟨.holds, pa, hL'⟩, .none, x) t) = hL' by rw [upd_self]; rfl] at this
+      obtain ⟨hp, hr, -, rfl, hpp, -⟩ := this
+      refine ⟨hp, ?_, fun l c h => by simp [h]⟩
+      have e : xs (fun u => (upd G t (⟨.holds, pa, hp ∪ hr⟩, .none, x) u).2) =
+          xs (fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) := by
+        funext u; simp only [xs, upd]; split <;> rfl
+      rw [e, hz] at hpp; exact hpp
+    refine WP.bind (WP.callC (WP.mono ?_ (condWait_spec hP t pa hL' x io G m' d hi' hz' hone)))
+    rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
+    simp only [StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    simp only [Io_Semaphore_waitUncancelable.again5, ↓reduceIte]
+    exact ⟨⟨by omega, hc₁, hL₁, hi₁⟩, .inl hd₁⟩
+  · have hne : (S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) == 0) = false := by
+      simpa using hz
+    simp only [hne, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
+    refine WP.pure' (WP.pure' ?_)
+    simp only [Io_Semaphore_waitUncancelable.again5, Bool.false_eq_true, ↓reduceIte]
+    refine ⟨hD, rfl, hc', hL', hi', ?_⟩
+    have e : xs (fun u => (upd G t (⟨.holds, pa, hL'⟩, .none, x) u).2) =
+        xs (fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) := by
+      funext u; simp only [xs, upd]; split <;> rfl
+    rw [e]; exact hz
+
+end SemWait
+
 end Sem
 end Sync
