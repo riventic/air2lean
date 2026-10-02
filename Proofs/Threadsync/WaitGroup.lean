@@ -323,4 +323,108 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
     obtain ⟨a, b, c, d⟩ := hu.done hr
     exact ⟨a, b, VClock.le_trans c (hs.clocks 0), VClock.le_trans d (hs.clocks 0)⟩
 
+theorem fits : L.Fits proto U :=
+  ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
+
+/-- The mutex word: `L.ptr`. -/
+theorem mptr : bPtr.add 16 = L.ptr := rfl
+
+/-! ## The heap -/
+
+/-- The counter's bytes: none before byte 20. -/
+theorem R_none {X : ThreadId → X} {h : Heap} (hR : R X h) {x : Nat} (hx : x < 20) :
+    h (0, x) = none := by
+  obtain ⟨A, S, K, bs, -, -, -, ⟨b, hb, -, hl⟩, -⟩ := hR
+  cases hb
+  rw [hl, if_neg]
+  simp only [bPtr, Ptr.add, not_and, Nat.not_lt]
+  intro _ h; simp at h; omega
+
+/-- No thread owns a byte before the counter. -/
+theorem own_none {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (u : ThreadId) {x : Nat}
+    (hx : x < 20) : L.own G m u (0, x) = none := by
+  unfold Lock.own; split
+  · rfl
+  · show ((G u).1.part ∪ (G u).1.held) (0, x) = none
+    have hp : (G u).1.part (0, x) = none := by
+      by_cases hu : u = 0
+      · subst hu; exact hi.2.part0 x
+      · rw [hi.2.parts u hu]; rfl
+    rw [Heap.union_apply, hp, Option.none_or]
+    by_cases hh : L.ph (G u) = .holds
+    · exact R_none (X := fun u => (G u).2) (hi.1.res u hh) hx
+    · rw [show (G u).1.held = L.held (G u) from rfl, hi.1.idle u hh]; rfl
+
+/-- If no thread holds the mutex, no thread owns a byte of the `Tally`. -/
+theorem own_free {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (hF : L.Free G) (u : ThreadId)
+    (x : Nat) : L.own G m u (0, x) = none := by
+  unfold Lock.own; split
+  · rfl
+  · show ((G u).1.part ∪ (G u).1.held) (0, x) = none
+    have hp : (G u).1.part (0, x) = none := by
+      by_cases hu : u = 0
+      · subst hu; exact hi.2.part0 x
+      · rw [hi.2.parts u hu]; rfl
+    rw [Heap.union_apply, hp, Option.none_or,
+      show (G u).1.held = L.held (G u) from rfl, hi.1.idle u (hF u)]; rfl
+
+theorem off_own {n nb : Nat} {W : Word n nb} {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
+    (hb : W.b = 0) (ho : W.o + nb ≤ 16) (u : ThreadId) : W.Off (L.own G m u) := fun x _ h2 => by
+  rw [hb]; exact own_none hi u (by omega)
+
+theorem off_R {n nb : Nat} {W : Word n nb} (hb : W.b = 0) (ho : W.o + nb ≤ 16) :
+    ∀ G hL, L.R G hL → W.Off hL := fun G _ hR x _ h2 => by
+  rw [hb]; exact R_none (X := fun u => (G u).2) hR (by omega)
+
+/-- The cell of byte `x < 24` of the `Tally`. -/
+theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x) ≠ none := by
+  obtain ⟨blk, hblk, hl, hs, -⟩ := hb
+  simp only [Mem.heap, hblk]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  simp
+
+/-- The same first cell: the same block 0. -/
+theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
+  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
+  have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [hc] at h
+  obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
+  simp only [Cell.mk.injEq] at he
+  obtain ⟨-, hA, hS, hK⟩ := he
+  exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk]⟩
+
+theorem hcs_of {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) :
+    m.clocks.size = m.threads.size := hi.1.own.csize
+
+/-- A memory with the same blocks, atomic locations, footprint, threads and clocks, and a futex
+queue that keeps `QOk`. -/
+theorem U_mem {G : ThreadId → Gh} {m m' : Mem} (hu : U G m) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint) (ht : m'.threads = m.threads)
+    (hc : m'.clocks = m.clocks) (hq : QOk G m') : U G m' := by
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
+    rw [hc]; exact VClock.le_refl _
+  have hsh := hu.shape
+  refine ⟨by unfold Shape at hsh ⊢; rw [ht]; exact hsh, hu.parts, hu.part0, hu.out3,
+    by obtain ⟨blk, h1, h2, h3, h4, h5⟩ := hu.blk; exact ⟨blk, by rw [hb]; exact h1, h2, h3, h4, h5⟩,
+    hq, hu.sx1, hu.fzc, hu.lg, fun hr => ?_, fun hr => ?_⟩
+  · have hp := hu.pre hr
+    have hkG : WG.Keep m m' := Word.keep_of hb ha hf ht hcl
+    have hkE : EV.Keep m m' := Word.keep_of hb ha hf ht hcl
+    exact ⟨hp.wg.keep hkG, hp.ev.keep hkE, by rw [Word.hist_keep hp.wg hkG]; exact hp.gv,
+      fun u h1 h2 => by rw [Word.hist_keep hp.wg hkG]; exact hp.gw u h1 h2,
+      by unfold EVOk; rw [Word.hist_keep hp.ev hkE]; exact hp.evh,
+      fun h => by rw [Word.hist_keep hp.ev hkE]; exact hp.setc h,
+      fun u v h1 h2 => by rw [hc]; exact hp.sto u v h1 h2, hp.last3, hp.e1m,
+      fun e he hb' => by rw [hf] at he; unfold ac; rw [hc]; exact hp.attr e he hb'⟩
+  · rw [hc]; exact hu.done hr
+
+/-- The invariant at a stop of thread `t`: the same, with `current := t`. -/
+theorem inv_cur {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (t : ThreadId) :
+    proto.inv G { m with current := t } :=
+  ⟨hi.1.current t, U_mem hi.2 rfl rfl rfl rfl rfl hi.2.q⟩
+
+theorem upd_g {G : ThreadId → Gh} {t : ThreadId} {g : Gh} (hg : G t = g) : upd G t g = G := by
+  rw [← hg]; exact upd_same G t
+
 end Threadsync.WG
