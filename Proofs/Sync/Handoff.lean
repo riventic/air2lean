@@ -1030,7 +1030,7 @@ def gA (x : X) : Gh := (⟨.away, Heap.empty, Heap.empty⟩, x)
 /-- `main` goes to the futex wait of another sync object (`away`). -/
 theorem inv_away {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 0 (gP x)) m) :
     proto.inv (upd G 0 (gA x)) m := by
-  have hl := hi.1.ghost (t := 0) (g := gA x) (by rw [upd_self]; exact .inl rfl) (.inr (.inr rfl))
+  have hl := hi.1.ghost (t := 0) (g := gA x) (by rw [upd_self]; rfl) (.inr (.inr rfl))
     (by rw [upd_self]; rfl) rfl (fun _ => hi.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)))
     (fun hL hR => by
       change R (fun u => (upd (upd G 0 (gP x)) 0 (gA x) u).2) hL
@@ -2930,7 +2930,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {x : X} (hx : x.ph = .fin)
     (hi : proto.inv (upd G 1 (gP x)) m) :
     proto.inv (upd G 1 (⟨.gone, Heap.empty, Heap.empty⟩, x)) m := by
   have hl := hi.1.ghost (t := 1) (g := (⟨.gone, Heap.empty, Heap.empty⟩, x))
-    (by rw [upd_self]; exact .inl rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
+    (by rw [upd_self]; rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
     (fun h => absurd rfl h) (fun hL hR => by
       change R (fun u => (upd (upd G 1 (gP x)) 1 (⟨.gone, Heap.empty, Heap.empty⟩, x) u).2) hL
       rw [upd_upd]

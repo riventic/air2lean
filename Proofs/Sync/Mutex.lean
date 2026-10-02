@@ -513,7 +513,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     rcases hp with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
     · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0)]; show 2 + _ = _; rw [hx]; rfl
     · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1)]; show _ + 2 = _; rw [hx]; rfl
-  have hl := hi.1.ghost (t := t) (g := g) (by rw [upd_self]; exact .inl rfl)
+  have hl := hi.1.ghost (t := t) (g := g) (by rw [upd_self]; rfl)
     (by rcases hg with h | h <;> simp [Lock.prod, L, h])
     (by rw [upd_self]; rcases hg with h | h <;> simp [L, Lock.prod, h, gOut])
     (by rcases hg with h | h <;> simp [L, Lock.prod, h])
@@ -826,7 +826,7 @@ theorem main_spec (io : Io) (d : Nat) :
       obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
       have : u = 1 := by unfold ThreadId at *; omega
       subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (fun u hu => by
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]

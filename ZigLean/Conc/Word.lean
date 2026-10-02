@@ -1058,7 +1058,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
   · rcases hop.fp e he with h' | ⟨hb, heo, hl, -⟩
     · rcases hi.wfp e h' hh with ⟨ha, hs⟩ | ha
       · exact .inl ⟨ha, hop.someLe hs⟩
-      · exact .inr (hop.allLe ha)
+      · exact .inr (Lock.LiveLe.mono hop.threads (fun u _ => hop.clocks u) ha)
     · exfalso
       obtain ⟨hb', x, h1, h2, h3, h4⟩ := hh
       rw [hb] at hb'; rw [heo] at h1; rw [heo, hl] at h2
@@ -1072,7 +1072,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
     refine ⟨hL, hRL, hsub (hR hL hRL) hsL, fun u => hown ▸ hdj u, hoffL, fun e he htc => ?_⟩
     by_cases hm : e ∈ m.footprint
     · rcases how e hm (htc.imp id fun h => by rw [← hop.bsize]; exact h) with h | ⟨i, l, hl, hle⟩
-      · exact .inl (hop.allLe h)
+      · exact .inl (Lock.LiveLe.mono hop.threads (fun u _ => hop.clocks u) h)
       · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
     · rcases htc with htc | hbe
       · exact absurd htc (hnt (hR hL hRL) e he hm)
