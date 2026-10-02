@@ -2337,7 +2337,7 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x)
     (hmv : ∀ Y : ThreadId → X, Y t = x → S.pv Y ≠ 0 → S.pv (upd Y t x') = S.pv Y - 1 ∧
       ∀ hr, S.Res Y hr → ∃ h₁ h₂, hr = h₁ ∪ h₂ ∧ Heap.Disjoint h₁ h₂ ∧ S.Res (upd Y t x') h₁ ∧ T h₂)
-    (hU : ∀ G m h₁ h₂ h₃ h₄, T h₃ →
+    (hU : ∀ G m h₁ h₂ h₃ h₄, T h₃ → Heap.Disjoint h₄ h₃ →
       S.Res (xs fun u => (upd G t (⟨.holds, pa, h₁⟩, .none, x) u).2) (h₄ ∪ h₃) →
       U (upd G t (⟨.holds, pa, h₁⟩, .none, x)) m → U (upd G t (⟨.holds, pa ∪ h₃, h₂⟩, .none, x')) m)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
@@ -2364,18 +2364,18 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
   simp only [StateT.run_bind, pure_bind]
   have hY := xs_self G₂ t (⟨.holds, pa, hL₃⟩, .none, x)
   have hxs := xs_eq G₂ t ⟨.holds, pa, hL₃⟩ ⟨.holds, pa, hL₂⟩ .none .none x
-  refine WP.bind (wp_cnt hP (Mv := fun pa' => ∃ h₃ h₄, T h₃ ∧ pa' = pa ∪ h₃ ∧
+  refine WP.bind (wp_cnt hP (Mv := fun pa' => ∃ h₃ h₄, T h₃ ∧ pa' = pa ∪ h₃ ∧ Heap.Disjoint h₄ h₃ ∧
       S.Res (xs fun u => (upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x) u).2) (h₄ ∪ h₃)) (x' := x') (r₀ := ()) hi₃ hc₃
     (TTriple.conseq (TTriple.store (by decide) _) (fun _ h => h) fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩)
     (by rw [hxs]) (fun hr hrr hdr => ?_) (.inr (.inl hz₂))
-    (fun m' h₁ h₂ pa' ⟨h₃, h₄, hT, hpa, hR4⟩ hu => by
-      subst hpa; exact hU _ _ _ _ _ _ hT (by rw [xs_eq G₂ t _ ⟨.holds, pa, hL₂⟩]; exact hR4) hu)
-    fun m₄ pa' hL₄ ⟨h₃, _, hT, hpa, _⟩ hc₄ _ hi₄ => ?_)
+    (fun m' h₁ h₂ pa' ⟨h₃, h₄, hT, hpa, hd4, hR4⟩ hu => by
+      subst hpa; exact hU _ _ _ _ _ _ hT hd4 (by rw [xs_eq G₂ t _ ⟨.holds, pa, hL₂⟩]; exact hR4) hu)
+    fun m₄ pa' hL₄ ⟨h₃, _, hT, hpa, _, _⟩ hc₄ _ hi₄ => ?_)
   · rw [hxs] at hrr hY
     obtain ⟨hpv, hres⟩ := hmv (xs fun u => (upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x) u).2) hY hz₂
     obtain ⟨h₁, h₂, rfl, hd12, hr1, hT2⟩ := hres hr hrr
     obtain ⟨hdp1, hdp2⟩ := Heap.disjoint_union_right.mp hdr
-    refine ⟨pa ∪ h₂, h₁, ?_, Heap.disjoint_union_left.mpr ⟨hdp1, hd12.symm⟩, ?_, ?_, h₂, h₁, hT2, rfl, hrr⟩
+    refine ⟨pa ∪ h₂, h₁, ?_, Heap.disjoint_union_left.mpr ⟨hdp1, hd12.symm⟩, ?_, ?_, h₂, h₁, hT2, rfl, hd12, hrr⟩
     · rw [Heap.union_assoc, Heap.union_comm hd12.symm]
     · rw [xs_upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x)]; exact hr1
     · rw [xs_upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x)]; exact hpv

@@ -542,6 +542,9 @@ theorem wp_n {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} {G : ThreadId 
 /-! ## The semaphore's specs for this protocol -/
 
 /-- A new ghost value `g'` of thread `t`, with the same memory and the same sum. -/
+theorem np_e {X : ThreadId → Ph} {h : Heap} : NP X (Heap.empty ∪ h) ↔ NP X h := by
+  rw [Heap.empty_union]
+
 theorem U_retag {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g g' : Gh} (hu : U (upd G t g) m)
     (hsh : Shape (XG (upd G t g')) m)
     (hpt : if g'.2.2.holds then NP (XG (upd G t g')) g'.1.part else g'.1.part = Heap.empty)
@@ -623,6 +626,117 @@ theorem hmv_w (ht : t < 2) : ∀ Y : ThreadId → Ph, Y t = .work k false → S.
   · show (if held _ then emp else NP _) Heap.empty; rw [hy]; rfl
   · have : (if held Y then emp else NP Y) hr := hR
     rw [hn] at this; exact ⟨_, this⟩
+
+/-- With no permit taken, no thread has it. -/
+theorem holds_of_held {X : ThreadId → Ph} {m : Mem} (hs : Shape X m) (hn : held X = false) (u : ThreadId) :
+    (X u).holds = false := by
+  simp only [held, Bool.or_eq_false_iff] at hn
+  by_cases h0 : u = 0
+  · subst h0; exact hn.1
+  · by_cases h1 : u = 1
+    · subst h1; exact hn.2
+    · rcases hs.2 with ⟨-, -, h⟩ | ⟨-, -, -, -, h⟩
+      · rw [h u (by unfold ThreadId at *; omega)]; rfl
+      · rw [h u (by unfold ThreadId at *; omega)]; rfl
+
+theorem hU_w : ∀ G m h₁ h₂ h₃ h₄, (fun h => ∃ v : BitVec 32, pts nPtr 4 v h) h₃ →
+    Heap.Disjoint h₄ h₃ →
+    S.Res (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false) u).2) (h₄ ∪ h₃) →
+    U (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false)) m →
+    U (upd G t (⟨.holds, Heap.empty ∪ h₃, h₂⟩, .none, .work k true)) m := by
+  intro G m h₁ h₂ h₃ h₄ ⟨v, hv⟩ hd hR hu
+  have hx : XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false)) t = .work k false := by
+    show (upd G t _ t).2.2 = _; rw [upd_self]
+  have hR' : (if held (XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false))) then emp
+      else NP (XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false)))) (h₄ ∪ h₃) := hR
+  have hn : held (XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false))) = false := by
+    cases h : held (XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false)))
+    · rfl
+    · exfalso; rw [h] at hR'
+      have := congrFun hR' (0, 40)
+      simp only [Heap.union_apply, Heap.empty, Option.or_eq_none_iff] at this
+      exact np_cell hv this.2
+  rw [hn] at hR'
+  simp only [Bool.false_eq_true, ↓reduceIte] at hR'
+  have hve := Sem.pts_same hv (Heap.sub_union_right hd) hR' (fun _ _ h => h)
+  have hX' : XG (upd G t (⟨.holds, Heap.empty ∪ h₃, h₂⟩, .none, .work k true)) =
+      upd (XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false))) t (.work k true) := by
+    rw [XG_upd, XG_upd, upd_upd]
+  have hsum := sum_flag _ t k false true hx
+  refine U_retag hu (by rw [hX']; exact shape_set hu.shape hx _ (.inl ⟨k, (shape_work hu.shape hx).2.2,
+    true, rfl⟩)) ?_ (by rw [hX', hsum]) (.inr fun u hut => ?_) (fun h => by cases h)
+  · show NP _ (Heap.empty ∪ h₃)
+    refine np_e.mpr ?_
+    unfold NP; rw [hX', hsum, ← hve]; exact hv
+  · have := holds_of_held hu.shape hn u
+    show (G u).2.2.holds = false
+    have e : XG (upd G t (⟨.holds, Heap.empty, h₁⟩, .none, .work k false)) u = (G u).2.2 := by
+      show (upd G t _ u).2.2 = _; rw [upd_ne _ _ hut]
+    rwa [e] at this
+
+variable (h₃ : Heap)
+
+theorem hmv_p (ht : t < 2) : ∀ G m hL,
+    proto.inv (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true)) m →
+    S.pv (upd (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2) t
+        (.work k false)) =
+      S.pv (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2) + 1 ∧
+    (S.pv (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2)).toNat
+      + 1 < 2 ^ 64 ∧
+    ∀ hr, S.Res (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2) hr →
+      Heap.Disjoint h₃ hr →
+      S.Res (upd (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2) t
+        (.work k false)) (h₃ ∪ hr) := by
+  intro G m hL hi
+  obtain ⟨-, -, hu⟩ := hi
+  have hx : XG (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true)) t = .work k true := by
+    show (upd G t _ t).2.2 = _; rw [upd_self]
+  have hy : held (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2)
+      = true := by
+    change held (XG _) = true
+    simp only [held, Bool.or_eq_true]
+    rcases (show t = 0 ∨ t = 1 by unfold ThreadId at *; omega) with rfl | rfl
+    · exact .inl (by rw [hx]; rfl)
+    · exact .inr (by rw [hx]; rfl)
+  have hoth : ∀ u, u ≠ t → (XG (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true)) u).holds
+      = false := fun u hut => other_free hu hx hut
+  have hn : held (upd (Sem.xs fun u => (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true) u).2) t
+      (.work k false)) = false := by
+    change held (upd (XG _) t _) = false
+    simp only [held, Bool.or_eq_false_iff]
+    rcases (show t = 0 ∨ t = 1 by unfold ThreadId at *; omega) with rfl | rfl
+    · exact ⟨by rw [upd_self]; rfl, by rw [upd_ne _ _ (by decide)]; exact hoth 1 (by decide)⟩
+    · exact ⟨by rw [upd_ne _ _ (by decide)]; exact hoth 0 (by decide), by rw [upd_self]; rfl⟩
+  refine ⟨?_, ?_, fun hr hR hd => ?_⟩
+  · show (if held _ then (0 : BitVec 64) else 1) = (if held _ then (0 : BitVec 64) else 1) + 1
+    rw [hn, hy]; rfl
+  · show (if held _ then (0 : BitVec 64) else 1).toNat + 1 < _
+    rw [hy]; decide
+  · have hR' : (if held _ then emp else NP _) hr := hR
+    rw [hy] at hR'
+    change hr = Heap.empty at hR'
+    subst hR'
+    show (if held _ then emp else NP _) (h₃ ∪ Heap.empty)
+    rw [hn, Heap.union_empty]; simp only [Bool.false_eq_true, ↓reduceIte]
+    change NP (upd (XG (upd G t (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .work k true))) t (.work k false)) h₃
+    have := hu.parts t
+    rw [upd_self] at this
+    simp only [Ph.holds, ↓reduceIte] at this
+    refine np_e.mp ?_
+    unfold NP at this ⊢
+    rw [sum_flag _ t k true false hx]; exact this
+
+theorem hU_p : ∀ G m h₁ h₂, U (upd G t (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .work k true)) m →
+    U (upd G t (⟨.holds, Heap.empty, h₂⟩, .pst, .work k false)) m := by
+  intro G m h₁ h₂ hu
+  have hx : XG (upd G t (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .work k true)) t = .work k true := by
+    show (upd G t _ t).2.2 = _; rw [upd_self]
+  have hX' : XG (upd G t (⟨.holds, Heap.empty, h₂⟩, .pst, .work k false)) =
+      upd (XG (upd G t (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .work k true))) t (.work k false) := by
+    rw [XG_upd, XG_upd, upd_upd]
+  refine U_retag hu (by rw [hX']; exact shape_set hu.shape hx _ (.inl ⟨k, (shape_work hu.shape hx).2.2,
+    false, rfl⟩)) (by show Heap.empty = Heap.empty; rfl) (by rw [hX', sum_flag _ t k true false hx])
+    (.inl rfl) (fun h => by cases h)
 
 end Specs
 
