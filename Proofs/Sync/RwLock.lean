@@ -3915,4 +3915,103 @@ theorem post₀ (h : Heap) (G : ThreadId → Gh SPh) (m : Mem) (d : Nat) (io : I
       · subst e; rw [upd_self] at hw; cases hw
       · rw [upd_ne _ _ e] at hw ⊢; have := hq.wx u; rw [upd_ne _ _ e] at this; exact this hw
 
+/-- `E₀` satisfies `Sem.Spec.live`: the writer sleeps at the epoch only while `main` holds the
+shared lock or posts. -/
+theorem live₀ : ∀ G m, (proto E₀).inv G m → ∀ w ∈ m.waiters, w.2 ≠ (L SPh).ptr → w.2 ≠ WM.ptr →
+    w.1 = 1 ∧ (∃ k, (G 1).2.2 = .ws k) ∧ (G 0).2.2.pw := by
+  intro G m ⟨hl, hu, hs, hq⟩ w hw hL hM
+  have hE : w.2 = Sm.WE.ptr := by
+    rcases hq.q w hw with h | h | h
+    · exact absurd h hL
+    · exact absurd h hM
+    · exact h
+  obtain ⟨i, jr, e, hr, hsz⟩ := hs.q w hw hE
+  obtain ⟨k, hk⟩ : ∃ k, (G w.1).2.2 = .ws k := by
+    have := hq.wx w.1 (by rw [hr]; rfl)
+    cases e : (G w.1).2.2 <;> rw [e] at this <;> simp [Ph.isWs] at this; exact ⟨_, rfl⟩
+  have h1 := ws_one hu hk
+  rw [h1] at hk hr
+  refine ⟨h1, ⟨k, hk⟩, ?_⟩
+  rcases hu.flags.ws k hk with h | hgv
+  · exact h
+  -- `main` gave `n`: at `pd` it posts; at `dn` or `joins` no thread is in the condition's code
+  have hcrit : ∀ v, (G v).2.1.crit = true → (G 0).2.2.inSem = true := fun v hv => by
+    have hh := hs.crit v hv
+    have hin : (G v).2.2.inSem = true := by
+      cases e : (G v).2.2.inSem
+      · rcases hu.lph v e with h | h | ⟨h, -⟩ <;> rw [hh] at h <;> cases h
+      · rfl
+    have hv2 : v = 0 ∨ v = 1 := by
+      obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, -, -, hn⟩⟩ := hu.shape
+      · have := hn 1 (Nat.le_refl _); change (G 1).2.2 = _ at this; rw [hk] at this; cases this
+      · rcases Nat.lt_or_ge v 2 with h | h
+        · unfold ThreadId at *; omega
+        · have := hn v h; change (G v).2.2 = _ at this; rw [this] at hin; cases hin
+    rcases hv2 with rfl | rfl
+    · exact hin
+    · rw [hr] at hv; cases hv
+  cases e0 : (G 0).2.2 <;> rw [e0] at hgv <;> simp [Ph.gave] at hgv
+  · rfl
+  all_goals
+    exfalso
+    have hno : ∀ v, (G v).2.1.crit = false := fun v => by
+      cases h : (G v).2.1.crit
+      · rfl
+      · have := hcrit v h; rw [e0] at this; cases this
+    have hP : hasP (fun u => (G u).2.2) = true := by
+      show ((G 1).2.2.isWs && (G 0).2.2.gave) = true; rw [hk, e0]; rfl
+    have hnpz : ¬ Sm.PZ m := fun h => by rw [noP_of_pz hl h] at hP; cases hP
+    have hera := hs.era 1 i jr false e hr
+    have hsz' : (Sm.WE.hist m).size = i + 1 := by
+      rcases hsz with h | ⟨v, hv⟩
+      · exact h
+      · have := hno v; rw [hv] at this; cases this
+    rcases hera.ssz with h | h
+    · rcases hera.pz h with h' | ⟨v, hv⟩
+      · exact hnpz h'
+      · have := hno v; rw [hv] at this; cases this
+    · obtain ⟨v, hv⟩ := hera.pend h hsz'
+      have := hno v; rw [hv] at this; cases this
+
+theorem sem_size : (Enc.encode sem0).size = 24 := by decide +kernel
+theorem sem_s : (Enc.encode sem0).extract 12 16 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_e : (Enc.encode sem0).extract 16 20 = Enc.encode (0 : BitVec 32) := by decide +kernel
+
+/-- `E₀` satisfies `Sem.Spec.start`. -/
+theorem start₀ : ∀ G m, (∀ u, (G u).2.1 = default) →
+    (∀ u, (G u).1.ph = .out ∨ (G u).1.ph = .gone) →
+    (∀ u x, 24 ≤ x → x < 48 → (G u).1.part (0, x) = none) → BlkOk m →
+    curBytes m 0 24 24 = Enc.encode sem0 → m.atomics = #[] → m.waiters = #[] →
+    (∀ e ∈ m.footprint, AllLe m e.clock) → E₀.inv G m := by
+  intro G m hd _ hoff hb hc hat hq hall
+  obtain ⟨blk, hblk, hlv, hsz, ha, hk⟩ := hb
+  have hxs : blk.bytes.extract 24 48 = Enc.encode sem0 := by
+    unfold curBytes at hc; rw [hblk] at hc; simpa using hc
+  have hword : ∀ o, 24 ≤ o → o + 4 ≤ 48 →
+      blk.bytes.extract o (o + 4) = (Enc.encode sem0).extract (o - 24) (o - 20) := by
+    intro o h1 h2; rw [← hxs, Array.extract_extract]; congr 1 <;> omega
+  have hwi : ∀ (W : Word 32 4), W.b = 0 → 36 ≤ W.o → W.o + 4 ≤ 44 → W.o % 4 = 0 →
+      (Enc.encode sem0).extract (W.o - 24) (W.o - 20) = Enc.encode (0 : BitVec 32) →
+      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := fun W hW h1 h2 h4 he =>
+    Sync.Sem.word_init hW hblk hlv (by omega) (by omega) hk hat
+      (by rw [hword W.o (by omega) (by omega), he]; exact intOfBytes_rmw 0)
+      (fun e he' _ => hall e he')
+  obtain ⟨hwsOk, hwsz, hwsv⟩ := hwi Sm.WS rfl (by decide) (by decide) (by decide) sem_s
+  obtain ⟨hweOk, hwez, -⟩ := hwi Sm.WE rfl (by decide) (by decide) (by decide) sem_e
+  have hno : ∀ i l, ¬ Sm.WE.Loc m i l := fun i l hl => by
+    have := (Word.loc_get hl).1; rw [hat] at this; simp at this
+  have hE0 : (Sm.WE.hist m)[0]!.clock = #[] := by rw [Word.hist_none hno]; rfl
+  refine ⟨Sync.Sem.Inv.start (S := Sm) hwsOk hweOk hwsz hwsv hwez (by rw [hE0]; exact Sync.Sem.allLe_nil m)
+    hd (fun w hw => by rw [hq] at hw; simp at hw) (fun u x h1 h2 => hoff u x (by simp only [Sm] at h1; omega)
+      (by simp only [Sm] at h2; omega)), fun w hw => by rw [hq] at hw; simp at hw,
+    fun u h => by rw [hd u] at h; cases h⟩
+
+/-- The `RwLock`'s semaphore satisfies the spec that the proof needs. -/
+theorem spec₀ : E₀.Spec where
+  wait := wait₀
+  post := post₀
+  live := live₀
+  frame := frame₀
+  start := start₀
+
 end Sync.RwLockRead
