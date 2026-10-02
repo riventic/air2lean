@@ -1115,4 +1115,63 @@ theorem inv_finish {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {old : B
     · rw [hgt] at a; cases a
     · rw [hgt] at b; cases b
 
+/-! ## `U` after a step that changes one ghost value -/
+
+/-- `U` after a step of thread `t` (`t ≠ 0`, a task) that keeps the threads, the blocks' sizes
+and the cell at byte 12, with `t`'s new ghost value `g`. -/
+theorem U_task {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} (ht : t = 1 ∨ t = 2)
+    (hi : proto.inv G m) (hth : m'.threads = m.threads)
+    (hcell : m'.heap (0, 12) = m.heap (0, 12))
+    (htk : (G t).2.ph.isTask) (htk' : g.2.ph.isTask) (hp : g.1.part = Heap.empty)
+    (hq : QOk (upd G t g) m') (hsx1 : g.2.sx → g.2.ph = .wk ∨ g.2.ph = .dn ∨ g.2.ph = .fin)
+    (hwks : g.2.ph = .wk → g.2.sx) (hfzc : g.2.frozen → g.2.sx = false → g.2.fz = g.2.fc)
+    (hlg : g.2.fd → g.1.ph = .gone)
+    (hpre : (G 0).2.ph.rank ≤ 7 → Pre (upd G t g) m')
+    (hdone : 6 ≤ (G 0).2.ph.rank → (upd G t g 1).2.frozen ∧ (upd G t g 2).2.frozen ∧
+      VClock.le (upd G t g 1).2.fz (m'.clocks[0]!) = true ∧
+      VClock.le (upd G t g 2).2.fz (m'.clocks[0]!) = true) :
+    U (upd G t g) m' := by
+  have h0 := task_ne ht
+  have hG0 : upd G t g 0 = G 0 := upd_ne _ _ (Ne.symm h0)
+  have hsh := hi.2.shape
+  rw [← upd_same G t, snd_upd] at hsh
+  have hsh' := shape_task ht hsh htk htk'
+  refine ⟨by rw [snd_upd]; unfold Shape at hsh' ⊢; rw [hth]; exact hsh', fun u hu => ?_,
+    fun x => by rw [hG0]; exact hi.2.part0 x, fun u h3 => ?_, blk_keep hi.2.blk hcell, hq,
+    fun u => ?_, fun u => ?_, fun u => ?_, fun u => ?_, fun hr => ?_, fun hr => ?_⟩
+  · unfold upd; split
+    · exact hp
+    · exact hi.2.parts u hu
+  · have hut : u ≠ t := fun e => by
+      subst e; exact absurd h3 (by rcases ht with rfl | rfl <;> decide)
+    rw [upd_ne _ _ hut]; exact hi.2.out3 u h3
+  · unfold upd; split
+    · exact hsx1
+    · exact hi.2.sx1 u
+  · unfold upd; split
+    · exact hwks
+    · exact hi.2.wks u
+  · unfold upd; split
+    · exact hfzc
+    · exact hi.2.fzc u
+  · unfold upd; split
+    · exact hlg
+    · exact hi.2.lg u
+  · rw [hG0] at hr; exact hpre hr
+  · rw [hG0] at hr; exact hdone hr
+
+/-- A task's step that is not in `U`'s view of the lock: the lock's invariant with `t`'s new
+ghost value `g`, with the same lock part and the same store. -/
+theorem linv_task {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} (hL : L.Inv G m)
+    (h1 : g.1 = (G t).1) (hc : g.2.cnt = (G t).2.cnt) : L.Inv (upd G t g) m :=
+  hL.congr (fun u => by unfold upd; split <;> simp_all [L, Lock.prod])
+    (fun u => by unfold upd; split <;> simp_all [L, Lock.prod])
+    (fun u => by unfold upd; split <;> simp_all [L, Lock.prod]) fun h => by
+      show R (fun u => (upd G t g u).2) h ↔ R (fun u => (G u).2) h
+      refine R_cnt ?_ ?_ h <;>
+      · show (upd G t g _).2.cnt = (G _).2.cnt
+        unfold upd; split
+        · rename_i e; subst e; exact hc
+        · rfl
+
 end Threadsync.WG
