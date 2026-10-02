@@ -227,7 +227,8 @@ theorem held_of_pz {G : ThreadId → Gh} {m : Mem} (hl : S.L.Inv G m) (hpz : S.P
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (g : Gh) (hu : U G m)
     (hs : S.Step t m m') (h2 : g.2.2 = (G t).2.2) (hp : g.1.part = (G t).1.part)
-    (hw : g.2.1.waits = true → (G t).2.1.waits = true ∨ S.wx g.2.2) : U (upd G t g) m' := by
+    (hw : g.2.1.waits = true → (G t).2.1.waits = true ∨ S.wx g.2.2)
+    (_ : (g.1.ph ≠ (G t).1.ph ∨ g.2.1 ≠ (G t).2.1) → S.inS g.2.2) : U (upd G t g) m' := by
   have hX : XG (upd G t g) = XG G := funext fun u => by
     show (upd G t g u).2.2 = _; unfold upd; split
     · rename_i e; subst e; exact h2
@@ -804,7 +805,7 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
     refine WP.bind (wp_io hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (Sem.wait_spec fits t Heap.empty (.work s.local1.toNat false)
       (.work s.local1.toNat true) (fun h => ∃ v : BitVec 32, pts nPtr 4 v h) _
-      (hone_w t _) ⟨_, rfl⟩ (hmv_w t _ ht2) (hU_w t _) G m₁ d hi₁)))
+      (hone_w t _) ⟨_, rfl⟩ trivial trivial (hmv_w t _ ht2) (hU_w t _) G m₁ d hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h₃, -, hi₂⟩
     rw [show cPtr.add 40 = nPtr from rfl]
     -- the load of `n`
@@ -841,7 +842,7 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
       obtain ⟨ht2', h2, -⟩ := shape_work hi₄.2.2.shape hx₄; rw [h2]; exact ht2'
     refine WP.bind (wp_io hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (Sem.post_spec fits t Heap.empty h₅
-      (.work (s.local1.toNat + 1) true) (.work (s.local1.toNat + 1) false) _ (hmv_p t _ h₅ ht2)
+      (.work (s.local1.toNat + 1) true) (.work (s.local1.toNat + 1) false) _ trivial trivial (hmv_p t _ h₅ ht2)
       (hU_p t _ h₅) (fun _ => .inl rfl) G₂ m₅ d₂ (by rw [Heap.empty_union]; exact hi₅))))
     rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
     simp only [StateT.run_pure, pure_bind]
