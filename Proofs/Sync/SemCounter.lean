@@ -862,4 +862,119 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
     simp only [semWork.again4, Bool.false_eq_true, ↓reduceIte]
     exact ⟨rfl, hc, heq ▸ hi⟩
 
+
+theorem work_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G t (gOut 0)) m) (hc : m.current = t) :
+    proto.WP t (semWork cPtr) (fun _ G' m' _ => m'.current = t ∧ proto.inv (upd G' t (gOut 2)) m')
+      G m d := by
+  unfold semWork
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (workInv t) (fun _ => 0) (workPost t) (loop4_body t) _ G m d
+    ⟨hc, by decide, by simpa using hi⟩))
+  rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hc', hi'⟩
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  exact WP.pure' ⟨hc', hi'⟩
+
+/-! ## The ends of the threads -/
+
+/-- A thread at the end of `semWork`: its place in `main` or `semWork` is `p` (`joins` for `main`;
+`fin` and `gone` for the kid). -/
+theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
+    (hi : proto.inv (upd G t (gOut 2)) m) (hg : g.1 = ⟨.out, Heap.empty, Heap.empty⟩ ∨
+      g.1 = ⟨.gone, Heap.empty, Heap.empty⟩) (hg2 : g.2.1 = .none)
+    (hp : (t = 0 ∧ g.2.2 = .joins) ∨ (t = 1 ∧ g.2.2 = .fin)) :
+    proto.inv (upd G t g) m := by
+  obtain ⟨hl, hs, hu⟩ := hi
+  have hx : XG (upd G t (gOut 2)) t = .work 2 false := by
+    show (upd G t (gOut 2) t).2.2 = _; rw [upd_self]; rfl
+  have hX : XG (upd G t g) = upd (XG (upd G t (gOut 2))) t g.2.2 := by rw [XG_upd, XG_upd, upd_upd]
+  have hsum : sum (XG (upd G t g)) = sum (XG (upd G t (gOut 2))) := by
+    rw [hX]; unfold sum
+    rcases hp with ⟨rfl, h2⟩ | ⟨rfl, h2⟩
+    · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), h2, hx]; rfl
+    · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), h2, hx]; rfl
+  have hheld : held (XG (upd G t g)) = held (XG (upd G t (gOut 2))) := by
+    rw [hX]; simp only [held]
+    rcases hp with ⟨rfl, h2⟩ | ⟨rfl, h2⟩
+    · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), h2, hx]; rfl
+    · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), h2, hx]; rfl
+  have hR : ∀ hL, S.L.R (upd G t (gOut 2)) hL → S.L.R (upd (upd G t (gOut 2)) t g) hL := by
+    intro hL h
+    rw [upd_upd]
+    have h' : (pts S.ptr 8 (if held (XG (upd G t (gOut 2))) then (0 : BitVec 64) else 1) ∗
+      (if held (XG (upd G t (gOut 2))) then emp else NP (XG (upd G t (gOut 2))))) hL := h
+    change (pts S.ptr 8 (if held (XG (upd G t g)) then (0 : BitVec 64) else 1) ∗
+      (if held (XG (upd G t g)) then emp else NP (XG (upd G t g)))) hL
+    rw [hheld]; unfold NP; rw [hsum]; exact h'
+  have hl' := hl.ghost (t := t) (g := g) (by rw [upd_self]; rfl)
+    (by rcases hg with h | h <;> simp [Lock.prod, h])
+    (by rw [upd_self]; rcases hg with h | h <;> simp [Lock.prod, h, gOut])
+    (by rcases hg with h | h <;> simp [Lock.prod, h])
+    (fun _ => hl.live t (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))) hR
+  rw [upd_upd] at hl'
+  have hs' : S.Inv (upd G t g) m := by
+    have := hs.congrG (G' := upd G t g) (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, upd_self, hg2]; rfl
+      · rw [upd_ne _ _ e, upd_ne _ _ e]) (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, upd_self]; rcases hg with h | h <;> simp [h, gOut]
+      · rw [upd_ne _ _ e, upd_ne _ _ e]) (fun u x h1 h2 => by
+      by_cases e : u = t
+      · subst e; rw [upd_self]; rcases hg with h | h <;> rw [h] <;> rfl
+      · rw [upd_ne _ _ e]; have := hs.off u x h1 h2; rwa [upd_ne _ _ e] at this)
+    exact this
+  refine ⟨hl', hs', U_retag hu ?_ ?_ hsum ?_ (fun h => by rw [hg2] at h; cases h)⟩
+  · rw [hX]; exact shape_set hu.shape hx _ (by
+      rcases hp with ⟨rfl, h2⟩ | ⟨rfl, h2⟩
+      · exact .inr (.inl ⟨rfl, h2⟩)
+      · exact .inr (.inr ⟨rfl, h2⟩))
+  · have hh : g.2.2.holds = false := by rcases hp with ⟨-, h2⟩ | ⟨-, h2⟩ <;> rw [h2] <;> rfl
+    rw [hh]; rcases hg with h | h <;> rw [h] <;> simp
+  · left; rcases hp with ⟨-, h2⟩ | ⟨-, h2⟩ <;> rw [h2] <;> rfl
+
+/-- The kid spawned no thread. -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : proto.inv G m)
+    (hu : 0 < u) : joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, h⟩ := hi.2.2.shape
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have h0' : ∀ h : 0 < m.threads.size, (m.threads[0]'h).spawner = 0 := by
+    intro h; rw [Array.getElem?_eq_getElem h] at h0; rw [Option.some.inj h0]
+  rcases h with ⟨h1, -, -⟩ | ⟨h2, h1, -⟩
+  · have : i = 0 := by omega
+    subst this
+    rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+  · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+    · rw [Array.getElem?_eq_getElem hi'] at h1
+      rw [Option.some.inj h1] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+/-- The kid: `semWork` on the `SemCounter`, then its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | semWork p =>
+    obtain ⟨rfl, rfl⟩ := hg
+    show proto.WP u ((fun _ => ()) <$> semWork cPtr) _ G _ d
+    refine WP.map (WP.mono ?_ (work_spec u G _ d
+      (by rw [show gOut 0 = G u from hgu.symm, upd_same]
+          exact fits.cur u u m.woken hi) rfl))
+    rintro _ G' m' _ ⟨-, hi'⟩
+    have hx : XG (upd G' u (gOut 2)) u = .work 2 false := by
+      show (upd G' u (gOut 2) u).2.2 = _; rw [upd_self]; rfl
+    obtain ⟨hu2, -, -⟩ := shape_work hi'.2.2.shape hx
+    have hu1 : u = 1 := by unfold ThreadId at *; omega
+    subst hu1
+    exact ⟨_, inv_end (g := (⟨.gone, Heap.empty, Heap.empty⟩, .none, .fin)) hi' (.inr rfl) rfl
+      (.inr ⟨rfl, rfl⟩), ⟨rfl, rfl⟩, fun _ => joinedAll_kid hi' hu⟩
+  | producer p => cases hg
+  | work p => cases hg
+  | writer p => cases hg
+
 end Sync.SemCounter
