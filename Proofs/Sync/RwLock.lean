@@ -2270,4 +2270,51 @@ theorem lws_lose {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {x y : Ph} 
   exact linv_lose hl (by rw [Lock.joinedB_congr hop.threads]; exact hjt) (by rw [hg]; rfl)
     (by rw [hg]; rfl) (R_nohas h1 h2)
 
+/-! ## The `RwLock`'s ops -/
+
+/-- The old value of an RMW of the state word: the state of the places. -/
+theorem sold {G : ThreadId → Gh S} {m : Mem} (hu : U G m) {old : BitVec 64}
+    (hv : (last (WS.hist m)).Val old) : old = sv3 (G 1).2.2.wb (G 1).2.2.ib (G 0).2.2.rb :=
+  val_eq hv hu.slast
+
+theorem wsptr : (bPtr.add 16).add 0 = WS.ptr := rfl
+theorem wmptr : (bPtr.add 16).add 32 = WM.ptr := rfl
+theorem semptr : (bPtr.add 16).add 8 = semPtr := rfl
+
+/-- `lock` of the `RwLock` by the writer at `wo k`: it owns `n`. -/
+theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {sx : S} {io : Io} {G : ThreadId → Gh S}
+    {m : Mem} {d : Nat} (hi : (proto E).inv (upd G 1 (gA (.wo k) Heap.empty sx)) m) :
+    (proto E).WP 1 (Io_RwLock_lockUncancelable (bPtr.add 16) io) (fun _ G' m' d' => d' < d ∧
+      m'.current = 1 ∧ ∃ h sx', NPts k h ∧ (proto E).inv (upd G' 1 (gA (.wn k) h sx')) m') G m d := by
+  unfold Io_RwLock_lockUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [wsptr, wmptr]
+  refine WP.bind (wp_rmw (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+    fun k₁ hk₁ G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' hop => ?_)
+  have hu₁ := hi₁.2.1
+  have hg1 : (G₁ 1).2.2 = .wo k := by rw [hg₁]; rfl
+  have hold := sold hu₁ hv
+  rw [hg1] at hold; simp only [Ph.wb, Ph.ib] at hold
+  have hr := Ph.rb_le (G₁ 0).2.2
+  -- `state += writer`
+  have hi₂ : (proto E).inv (upd G₁ 1 (gA (.wa k .cas) Heap.empty sx)) m' := by
+    have hnp : (G₁ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := hu₁.flags.po h; rw [hg1] at hk'; cases hk'
+    have hval : RmwOp.add.apply false old (2 : BitVec 64) = sv (G₁ 0).2.2 (.wa k .cas) := by
+      rw [hold, sv3_add2 hr, sv_eq]; rfl
+    refine inv_sstep hE hi₁ hg₁ hop hw' hh (by
+        rw [upd1_0, upd_self]; show Word.Entry.Val _ (sv (G₁ 0).2.2 (.wa k .cas)); rw [← hval]
+        exact rmwEnt_val WS) rfl rfl (fun h => by cases h)
+      (by rfl) (by simp [Ph.isW]; omega) rfl (.inr (by simp [Ph.mp])) ?_ (by rfl) (fun hc => ?_)
+      (lws_keep hi₁ hop hg₁ (by simp only [hasP, upd_self]; rfl) (by simp [hasP, hg1, Ph.isWs]))
+    · rw [upd1_0, upd_self]
+      exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => by cases h.2)⟩
+    · simp only [upd1_0, upd_self] at hc ⊢
+      obtain ⟨hn, hp, hs, hok⟩ := hu₁.car (by rw [hg1]; exact ⟨hc.1, rfl, by simpa [Ph.isWs] using hc.2.2⟩)
+      rw [hg1] at hp
+      exact ⟨hn, hp, car_rmw hp hs hok hu₁.ws hop hh⟩
+  sorry
+
 end Sync.RwLockRead
