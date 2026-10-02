@@ -250,6 +250,7 @@ structure U (G : ThreadId → Gh) (m : Mem) : Prop where
   q : QOk G m
   /-- A task's flags. -/
   sx1 : ∀ u, (G u).2.sx → (G u).2.ph = .wk ∨ (G u).2.ph = .dn ∨ (G u).2.ph = .fin
+  wks : ∀ u, (G u).2.ph = .wk → (G u).2.sx
   /-- A frozen task that did not set: its frozen clock is its finish clock. -/
   fzc : ∀ u, (G u).2.frozen → (G u).2.sx = false → (G u).2.fz = (G u).2.fc
   /-- A task after its finish is `gone` for the lock. -/
@@ -348,7 +349,8 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
   have hsh := hu.shape
   refine ⟨by rw [hX']; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh,
     fun u hu' => by rw [hpart]; exact hu.parts u hu', fun x => by rw [hpart]; exact hu.part0 x,
-    fun u h3 => ?_, ?_, fun w hw => ?_, fun u => by rw [hX]; exact hu.sx1 u, fun u => by rw [hX]; exact hu.fzc u,
+    fun u h3 => ?_, ?_, fun w hw => ?_, fun u => by rw [hX]; exact hu.sx1 u, fun u => by rw [hX]; exact hu.wks u,
+    fun u => by rw [hX]; exact hu.fzc u,
     fun u hf => ?_, fun hr => ?_, fun hr => ?_⟩
   · have ht3 : t < 3 := Nat.lt_of_not_le fun h3 => hg (hu.out3 t h3)
     unfold upd; split
@@ -444,10 +446,10 @@ theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
   simp
 
-/-- The same first cell: the same block 0. -/
-theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
+/-- The same cell at byte 12 (padding): the same block 0. -/
+theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 12) = m.heap (0, 12)) : BlkOk m' := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
-  have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
+  have hc : m.heap (0, 12) = some ⟨blk.bytes[12]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
     simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
@@ -468,7 +470,7 @@ theorem U_mem {G : ThreadId → Gh} {m m' : Mem} (hu : U G m) (hb : m'.blocks = 
   have hsh := hu.shape
   refine ⟨by unfold Shape at hsh ⊢; rw [ht]; exact hsh, hu.parts, hu.part0, hu.out3,
     by obtain ⟨blk, h1, h2, h3, h4, h5⟩ := hu.blk; exact ⟨blk, by rw [hb]; exact h1, h2, h3, h4, h5⟩,
-    hq, hu.sx1, hu.fzc, hu.lg, fun hr => ?_, fun hr => ?_⟩
+    hq, hu.sx1, hu.wks, hu.fzc, hu.lg, fun hr => ?_, fun hr => ?_⟩
   · have hp := hu.pre hr
     have hkG : WG.Keep m m' := Word.keep_of hb ha hf ht hcl
     have hkE : EV.Keep m m' := Word.keep_of hb ha hf ht hcl
@@ -607,7 +609,7 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     (hsh : Shape (upd (fun u => (G u).2) t g.2) m)
     (hpart : t ≠ 0 → g.1.part = Heap.empty) (hpart0 : t = 0 → ∀ x, g.1.part (0, x) = none)
     (hq : QOk (upd G t g) m') (hsx1 : g.2.sx → g.2.ph = .wk ∨ g.2.ph = .dn ∨ g.2.ph = .fin)
-    (hlg : g.2.fd → g.1.ph = .gone)
+    (hwks : g.2.ph = .wk → g.2.sx) (hlg : g.2.fd → g.1.ph = .gone)
     (hdone : 6 ≤ (upd G t g 0).2.ph.rank → (upd G t g 1).2.frozen ∧ (upd G t g 2).2.frozen ∧
       VClock.le (upd G t g 1).2.fz (m'.clocks[0]!) = true ∧
       VClock.le (upd G t g 2).2.fz (m'.clocks[0]!) = true)
@@ -622,7 +624,7 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     · exact XEq.refl _
   refine ⟨by rw [snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh, fun u hu => ?_,
     fun x => ?_, fun u h3 => ?_, blk_keep hi.2.blk ?_, hq, fun u => ?_, fun u => ?_, fun u => ?_,
-    fun hr => ?_, hdone⟩
+    fun u => ?_, fun hr => ?_, hdone⟩
   · unfold upd; split
     · rename_i e; subst e; exact hpart hu
     · exact hi.2.parts u hu
@@ -632,11 +634,14 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
   · unfold upd; split
     · rename_i e; subst e; exact absurd h3 (by unfold ThreadId at *; omega)
     · exact hi.2.out3 u h3
-  · rw [hm', Heap.union_of_right ((hd (0, 0)).resolve_right (by
-      rw [hrest 0 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 0 (by decide)]
+  · rw [hm', Heap.union_of_right ((hd (0, 12)).resolve_right (by
+      rw [hrest 12 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 12 (by decide)]
   · unfold upd; split
     · exact hsx1
     · exact hi.2.sx1 u
+  · unfold upd; split
+    · exact hwks
+    · exact hi.2.wks u
   · unfold upd; split
     · rename_i e; subst e
       intro hf; rw [hfz] at hf; cases hf
@@ -745,6 +750,7 @@ theorem U_hold {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g' : Gh} {hQ :
           · left; rw [hsx] at d; simpa using d
           · exact .inr (.inl d)
           · exact absurd d hwk)
+    (fun h => by rcases hg' with h' | h' <;> rw [h'] at h <;> cases h)
     (fun h => by rcases hg' with h' | h' <;> rw [h'] at h <;> cases h)
     (fun h => by rcases hg' with h' | h' <;> rw [h'] at h <;> cases h)
     (fun hr => by
