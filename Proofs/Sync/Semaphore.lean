@@ -174,7 +174,7 @@ structure Fits {Tgt : Type} (P : Proto Tgt (SGh X)) (U : (ThreadId → SGh X) �
     (g.2.1.waits = true → (G t).2.1.waits = true ∨ S.wx g.2.2) → U (upd G t g) m'
   /-- A step of the holder on its own bytes keeps `U`; its part and the rest of its ghost value
   stay. -/
-  own : ∀ G m m' t g hQ, U G m → StepIn (m.heap.diff (S.L.own G m t)) m m' →
+  own : ∀ G m m' t g hQ, S.L.Inv G m → U G m → StepIn (m.heap.diff (S.L.own G m t)) m m' →
     m'.heap = hQ ∪ m.heap.diff (S.L.own G m t) → Heap.Disjoint hQ (m.heap.diff (S.L.own G m t)) →
     (G t).1.ph = .holds → g.1.ph = .holds → g.2 = (G t).2 → g.1.part = (G t).1.part →
     g.1.part ∪ g.1.held = hQ → U (upd G t g) m'
@@ -1649,7 +1649,7 @@ theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadI
       (by rw [hown]; exact hd) hpzm).congrG (G' := upd G t (⟨.holds, pa', hp' ∪ hr₂⟩, sp, x'))
       (fun u => by unfold upd; split <;> rfl) (fun u => by unfold upd; split <;> exact Iff.rfl)
       (fun u y h1 h2 => ?_)
-    · have hu' := hP.own _ m m' t (⟨.holds, pa, hp' ∪ hr⟩, sp, x) _ hu
+    · have hu' := hP.own _ m m' t (⟨.holds, pa, hp' ∪ hr⟩, sp, x) _ hl hu
         (by rw [hown]; exact hst) (by rw [hown]; exact hm') (by rw [hown]; exact hd)
         (by rw [upd_self]) rfl (by rw [upd_self]) (by rw [upd_self])
         (Heap.union_left_comm (Heap.disjoint_union_right.mp hd').1.symm)
