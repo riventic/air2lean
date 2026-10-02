@@ -2465,6 +2465,26 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
   exact WP.pure' (WP.pure' ⟨by omega, hc₅, hi₅⟩)
 
 
+/-- A word at the start: no atomic location, each access to it happened before every thread, and
+the value 0. -/
+theorem word_init {W : Word 32 4} {m : Mem} {b : BlockId} {blk : Block} (hW : W.b = b)
+    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hfit : W.o + 4 ≤ blk.bytes.size)
+    (hal : (blk.addr + W.o) % 4 = 0) (hk : blk.kind = .stack) (hat : m.atomics = #[])
+    (hv : (intOfBytes 32 (blk.bytes.extract W.o (W.o + 4))).run = some (.ok 0))
+    (hfp : ∀ e ∈ m.footprint, W.Hits e → AllLe m e.clock) :
+    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := by
+  have hno : ∀ i l, ¬ W.Loc m i l := fun i l hl => by
+    have := (Word.loc_get hl).1; rw [hat] at this; simp at this
+  have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
+  refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hfit, hal, by rw [hk]; decide⟩,
+    fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
+    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩⟩, ?_, ?_⟩
+  · rw [Word.hist_none hno]; rfl
+  · rw [Word.hist_none hno]; exact hu
+
+theorem allLe_nil (m : Mem) : AllLe m #[] := fun _ _ => VClock.le_iff.mpr fun i => by
+  simp [VClock.get]
+
 /-- The condition's invariant at the semaphore's start: each word has one write, `0`, and no
 thread is in the condition's code. -/
 theorem Inv.start {G : ThreadId → SGh X} {m : Mem} (hws : S.WS.Ok m) (hwe : S.WE.Ok m)
