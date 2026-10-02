@@ -133,9 +133,22 @@ def EV : Word 32 4 := { b := 0, o := 8 }
 /-- The newest write of a word. -/
 abbrev last (h : Array Word.Entry) : Word.Entry := h[h.size - 1]!
 
+/-- `main` before `startMany`. -/
+def X.isPre (x : X) : Bool := x.ph == .pre
+
+/-- The setter, between its finish and its `xchg(2)`. -/
+def X.st (x : X) : Bool := x.ph == .s0 || x.ph == .s1
+
+/-- `main` in the event's `wait`, before it read `2`. -/
+def X.e01 (x : X) : Bool := x.ph == .ev0 || x.ph == .ev1
+
+def X.isEv1 (x : X) : Bool := x.ph == .ev1
+def X.isEvd (x : X) : Bool := x.ph == .evd
+
 /-- The group's state: `4` after `startMany`, `+ 1` after `main`'s `add`, `- 2` per finish. -/
 def wgv (x0 x1 x2 : X) : Nat :=
-  if x0.ph = .pre then 0 else 4 + (if x0.wa then 1 else 0) - 2 * ((if x1.fd then 1 else 0) + (if x2.fd then 1 else 0))
+  if x0.isPre then 0 else
+    4 + (if x0.wa then 1 else 0) - 2 * ((if x1.fd then 1 else 0) + (if x2.fd then 1 else 0))
 
 /-- The event's writes: `0`, then `1` by `main`, then `2` by the setter. -/
 def evL (x0 x1 x2 : X) : List Nat :=
@@ -170,6 +183,26 @@ def QOk (G : ThreadId → Gh) (m : Mem) : Prop :=
     (w.1 = 0 ∧ w.2 = EV.ptr ∧ (G 0).2.ph = .ev1 ∧
       ((!(G 1).2.sx && !(G 2).2.sx) = true ∨ (G 1).2.ph = .wk ∨ (G 2).2.ph = .wk))
 
+/-- Two ghost values that agree on what `Pre` reads. -/
+structure XEq (x x' : X) : Prop where
+  isPre : x'.isPre = x.isPre
+  wa : x'.wa = x.wa
+  fd : x'.fd = x.fd
+  frozen : x'.frozen = x.frozen
+  sx : x'.sx = x.sx
+  e1 : x'.e1 = x.e1
+  st : x'.st = x.st
+  e01 : x'.e01 = x.e01
+  isEv1 : x'.isEv1 = x.isEv1
+  isEvd : x'.isEvd = x.isEvd
+  fc : x'.fc = x.fc
+  fz : x'.fz = x.fz
+
+theorem XEq.refl (x : X) : XEq x x := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The two tasks. -/
+def Pair (u v : ThreadId) : Prop := u = 1 ∧ v = 2 ∨ u = 2 ∧ v = 1
+
 /-- The facts before `main`'s read of the `Tally` (module doc). -/
 structure Pre (G : ThreadId → Gh) (m : Mem) : Prop where
   wg : WG.Ok m
@@ -182,14 +215,18 @@ structure Pre (G : ThreadId → Gh) (m : Mem) : Prop where
   setc : ((G 1).2.sx || (G 2).2.sx) = true →
     VClock.le (G 1).2.fz (last (EV.hist m)).relClock = true ∧
     VClock.le (G 2).2.fz (last (EV.hist m)).relClock = true
-  /-- The setter read `3`: the other task finished before it, and is frozen. -/
-  sto : ∀ u v, (u = 1 ∧ v = 2 ∨ u = 2 ∧ v = 1) → ((G u).2.ph = .s0 ∨ (G u).2.ph = .s1) →
-    (G v).2.frozen ∧ VClock.le (G v).2.fz (m.clocks[u]!) = true
+  /-- The setter read `3`: the other task finished before it, is frozen and did not set. -/
+  sto : ∀ u v, Pair u v → (G u).2.st → (G v).2.frozen ∧ VClock.le (G v).2.fz (m.clocks[u]!) = true
+  sfd : ∀ u v, Pair u v → ((G u).2.st || (G u).2.sx) →
+    (G v).2.fd ∧ (G v).2.sx = false ∧ (G v).2.st = false
+  /-- A setter read `3`, after `main`'s `add`. -/
+  swa : ∀ u, u = 1 ∨ u = 2 → ((G u).2.st || (G u).2.sx) → (G 0).2.wa
   /-- After `main`'s `add`, the last finish reads `3`. -/
-  last3 : (G 0).2.ph = .ev0 ∨ (G 0).2.ph = .ev1 → (G 1).2.fd → (G 2).2.fd →
-    (G 1).2.ph = .s0 ∨ (G 1).2.ph = .s1 ∨ (G 1).2.sx ∨ (G 2).2.ph = .s0 ∨ (G 2).2.ph = .s1 ∨ (G 2).2.sx
-  /-- `main` waits on the event only after its `add`. -/
-  e1m : (G 0).2.e1 → (G 0).2.ph = .ev1 ∨ (G 0).2.ph = .evd
+  last3 : (G 0).2.e01 → (G 1).2.fd → (G 2).2.fd →
+    ((G 1).2.st || (G 1).2.sx || (G 2).2.st || (G 2).2.sx) = true
+  /-- `main` wrote `1` exactly at `ev1` (and after it, at `evd`). -/
+  e1m : (G 0).2.e1 → ((G 0).2.isEv1 || (G 0).2.isEvd) = true
+  m1e : (G 0).2.isEv1 → (G 0).2.e1
   /-- Each access to the `Tally` is by a thread, and below its clock (or its frozen clock). -/
   attr : ∀ e ∈ m.footprint, e.block = 0 → e.tid < 3 ∧ VClock.le e.clock (ac G m e.tid) = true
 
@@ -243,29 +280,44 @@ theorem ac_mono {G G' : ThreadId → Gh} {m m' : Mem} (hX : ∀ u, (G' u).2 = (G
   · exact VClock.le_refl _
   · exact hcl u
 
-/-- `Pre` with the same ghost values outside the lock, the same writes and clocks that are not
-smaller; the new accesses to the `Tally` are by `t`, which is not frozen. -/
+/-- `Pre` with ghost values that agree on what it reads (`XEq`), the same writes and clocks that
+are not smaller; the new accesses to the `Tally` are by `t`, which is not frozen. -/
 theorem Pre.keep {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hp : Pre G m)
-    (hX : ∀ u, (G' u).2 = (G u).2) (hwg : WG.Ok m') (hev : EV.Ok m')
+    (hX : ∀ u, XEq (G u).2 (G' u).2) (hwg : WG.Ok m') (hev : EV.Ok m')
     (hhg : WG.hist m' = WG.hist m) (hhe : EV.hist m' = EV.hist m)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) (ht : t < 3)
-    (hft : (G t).2.frozen = false)
+    (hft : (G' t).2.frozen = false)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
       (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true)) : Pre G' m' := by
-  have h0 := hX 0; have h1 := hX 1; have h2 := hX 2
-  refine ⟨hwg, hev, by rw [hhg, h0, h1, h2]; exact hp.gv, fun u hu hf => ?_,
-    by unfold EVOk; rw [hhe, h0, h1, h2]; exact hp.evh, fun h => ?_, fun u v huv hu => ?_,
-    by rw [h0, h1, h2]; exact hp.last3, by rw [h0]; exact hp.e1m, fun e he hb => ?_⟩
-  · rw [hX u] at hf ⊢; rw [hhg]; exact hp.gw u hu hf
-  · rw [h1, h2] at h ⊢; rw [hhe]; exact hp.setc h
-  · rw [hX u, hX v] at *
+  have hwgv : wgv (G' 0).2 (G' 1).2 (G' 2).2 = wgv (G 0).2 (G 1).2 (G 2).2 := by
+    unfold wgv; rw [(hX 0).isPre, (hX 0).wa, (hX 1).fd, (hX 2).fd]
+  have hevL : evL (G' 0).2 (G' 1).2 (G' 2).2 = evL (G 0).2 (G 1).2 (G 2).2 := by
+    unfold evL; rw [(hX 0).e1, (hX 1).sx, (hX 2).sx]
+  have hac : ∀ u, VClock.le (ac G m u) (ac G' m' u) = true := fun u => by
+    unfold ac; rw [(hX u).frozen, (hX u).fz]; split
+    · exact VClock.le_refl _
+    · exact hcl u
+  refine ⟨hwg, hev, by rw [hhg, hwgv]; exact hp.gv, fun u hu hf => ?_,
+    by unfold EVOk; rw [hhe, hevL]; exact hp.evh, fun h => ?_, fun u v huv hu => ?_,
+    fun u v huv hu => ?_, fun u hu hs => ?_, fun h0 h1 h2 => ?_, fun h => ?_, fun h => ?_,
+    fun e he hb => ?_⟩
+  · rw [(hX u).fd] at hf; rw [hhg, (hX u).fc]; exact hp.gw u hu hf
+  · rw [(hX 1).sx, (hX 2).sx] at h; rw [hhe, (hX 1).fz, (hX 2).fz]; exact hp.setc h
+  · rw [(hX u).st] at hu; rw [(hX v).frozen, (hX v).fz]
     obtain ⟨a, b⟩ := hp.sto u v huv hu
     exact ⟨a, VClock.le_trans b (hcl u)⟩
+  · rw [(hX u).st, (hX u).sx] at hu; rw [(hX v).fd, (hX v).sx, (hX v).st]
+    exact hp.sfd u v huv hu
+  · rw [(hX u).st, (hX u).sx] at hs; rw [(hX 0).wa]; exact hp.swa u hu hs
+  · rw [(hX 0).e01] at h0; rw [(hX 1).fd] at h1; rw [(hX 2).fd] at h2
+    rw [(hX 1).st, (hX 1).sx, (hX 2).st, (hX 2).sx]; exact hp.last3 h0 h1 h2
+  · rw [(hX 0).e1] at h; rw [(hX 0).isEv1, (hX 0).isEvd]; exact hp.e1m h
+  · rw [(hX 0).isEv1] at h; rw [(hX 0).e1]; exact hp.m1e h
   · rcases hfp e he with h' | ⟨het, hle⟩
     · obtain ⟨a, b⟩ := hp.attr e h' hb
-      exact ⟨a, VClock.le_trans b (ac_mono hX hcl _)⟩
+      exact ⟨a, VClock.le_trans b (hac _)⟩
     · refine ⟨het ▸ ht, ?_⟩
-      unfold ac; rw [hX, het, hft]; exact hle
+      unfold ac; rw [het, hft]; exact hle
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Heap)
     (hg : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m')
@@ -317,8 +369,8 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
     have hkG := Word.keep_lockStep hs apG
     have hkE := Word.keep_lockStep hs apE
     have ht3 : t < 3 := Nat.lt_of_not_le fun h3 => hg (hu.out3 t h3)
-    exact Pre.keep hp hX (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
-      (Word.hist_keep hp.ev hkE) hs.clocks ht3 hfz hs.fpt
+    exact Pre.keep hp (fun u => by rw [hX u]; exact XEq.refl _) (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
+      (Word.hist_keep hp.ev hkE) hs.clocks ht3 (by rw [hX]; exact hfz) hs.fpt
   · rw [hX 0, hX 1, hX 2] at *
     obtain ⟨a, b, c, d⟩ := hu.done hr
     exact ⟨a, b, VClock.le_trans c (hs.clocks 0), VClock.le_trans d (hs.clocks 0)⟩
@@ -415,7 +467,7 @@ theorem U_mem {G : ThreadId → Gh} {m m' : Mem} (hu : U G m) (hb : m'.blocks = 
       fun u h1 h2 => by rw [Word.hist_keep hp.wg hkG]; exact hp.gw u h1 h2,
       by unfold EVOk; rw [Word.hist_keep hp.ev hkE]; exact hp.evh,
       fun h => by rw [Word.hist_keep hp.ev hkE]; exact hp.setc h,
-      fun u v h1 h2 => by rw [hc]; exact hp.sto u v h1 h2, hp.last3, hp.e1m,
+      fun u v h1 h2 => by rw [hc]; exact hp.sto u v h1 h2, hp.sfd, hp.swa, hp.last3, hp.e1m, hp.m1e,
       fun e he hb' => by rw [hf] at he; unfold ac; rw [hc]; exact hp.attr e he hb'⟩
   · rw [hc]; exact hu.done hr
 
