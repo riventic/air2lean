@@ -296,7 +296,7 @@ theorem Pre.keep {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hp : Pre 
     (hX : ∀ u, XEq (G u).2 (G' u).2) (hwg : WG.Ok m') (hev : EV.Ok m')
     (hhg : WG.hist m' = WG.hist m) (hhe : EV.hist m' = EV.hist m)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) (ht : t < 3)
-    (hft : (G' t).2.frozen = false)
+    (hft : (G' t).2.frozen = false ∨ ∀ e ∈ m'.footprint, e ∈ m.footprint)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
       (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true)) : Pre G' m' := by
   have hwgv : wgv (G' 0).2 (G' 1).2 (G' 2).2 = wgv (G 0).2 (G 1).2 (G 2).2 := by
@@ -323,11 +323,14 @@ theorem Pre.keep {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hp : Pre 
     rw [(hX 1).st, (hX 1).sx, (hX 2).st, (hX 2).sx]; exact hp.last3 h0 h1 h2
   · rw [(hX 0).e1] at h; rw [(hX 0).isEv1, (hX 0).isEvd]; exact hp.e1m h
   · rw [(hX 0).isEv1] at h; rw [(hX 0).e1]; exact hp.m1e h
-  · rcases hfp e he with h' | ⟨het, hle⟩
-    · obtain ⟨a, b⟩ := hp.attr e h' hb
-      exact ⟨a, VClock.le_trans b (hac _)⟩
-    · refine ⟨het ▸ ht, ?_⟩
-      unfold ac; rw [het, hft]; exact hle
+  · have hold : e ∈ m.footprint → e.tid < 3 ∧ VClock.le e.clock (ac G' m' e.tid) = true :=
+      fun h' => by obtain ⟨a, b⟩ := hp.attr e h' hb; exact ⟨a, VClock.le_trans b (hac _)⟩
+    rcases hfp e he with h' | ⟨het, hle⟩
+    · exact hold h'
+    · rcases hft with hft | hft
+      · refine ⟨het ▸ ht, ?_⟩
+        unfold ac; rw [het, hft]; exact hle
+      · exact hold (hft e he)
 
 theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Heap)
     (hg : L.ph (G t) ≠ .gone) (hu : U G m) (hs : L.Step t m m')
@@ -381,7 +384,7 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
     have hkE := Word.keep_lockStep hs apE
     have ht3 : t < 3 := Nat.lt_of_not_le fun h3 => hg (hu.out3 t h3)
     exact Pre.keep hp (fun u => by rw [hX u]; exact XEq.refl _) (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
-      (Word.hist_keep hp.ev hkE) hs.clocks ht3 (by rw [hX]; exact hfz) hs.fpt
+      (Word.hist_keep hp.ev hkE) hs.clocks ht3 (.inl (by rw [hX]; exact hfz)) hs.fpt
   · rw [hX 0, hX 1, hX 2] at *
     obtain ⟨a, b, c, d⟩ := hu.done hr
     exact ⟨a, b, VClock.le_trans c (hs.clocks 0), VClock.le_trans d (hs.clocks 0)⟩
@@ -655,7 +658,7 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     have hkG := Word.keep_stepIn hp.wg (hoff WG rfl (by decide)) hs hm' hd
     have hkE := Word.keep_stepIn hp.ev (hoff EV rfl (by decide)) hs hm' hd
     refine Pre.keep hp hXu (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
-      (Word.hist_keep hp.ev hkE) hcl ht (by rw [upd_self]; exact hfz) fun e he => ?_
+      (Word.hist_keep hp.ev hkE) hcl ht (.inl (by rw [upd_self]; exact hfz)) fun e he => ?_
     rcases hs.fp e he with h' | ⟨het, -, -⟩
     · exact .inl h'
     · rcases hs.fpc e he with h'' | hle
@@ -1238,7 +1241,7 @@ theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {a b : VC
       · rw [hg] at d; rw [upd_self, upd_ne _ _ (by decide)]; simpa [gS] using d
   · have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
     refine Pre.keep hp (fun u => ?_) (hp.wg.keep hkG) hw' (Word.hist_keep hp.wg hkG) hh hop.clocks
-      (task_lt ht) (by rw [upd_self]; rfl) hop.fpt
+      (task_lt ht) (.inl (by rw [upd_self]; rfl)) hop.fpt
     unfold upd; split
     · rename_i e; subst e; exact hX
     · exact XEq.refl _
@@ -1419,5 +1422,46 @@ theorem inv_sxchg {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {a b : VC
     rcases ht with rfl | rfl
     · rw [hg] at a'; cases a'
     · rw [hg] at b'; cases b'
+
+/-- A step of a frozen task that changes only the futex queue (and `current`): its new place is
+`ph'` (`dn` or `fin`), the same for `Pre`. -/
+theorem inv_frozen {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {ph ph' : Ph} {a b : VClock}
+    {sx : Bool} (ht : t = 1 ∨ t = 2) (hi : proto.inv G m) (hg : G t = gS ph a b sx)
+    (hph : ph = .wk ∨ ph = .dn) (hph' : ph' = .dn ∨ ph' = .fin) (hwk : ph = .wk → sx)
+    (hL : L.Inv G m') (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
+    (hf : m'.footprint = m.footprint) (hth : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
+    (hq : QOk (upd G t (gS ph' a b sx)) m') :
+    proto.inv (upd G t (gS ph' a b sx)) m' := by
+  have hX : XEq (G t).2 (gS ph' a b sx).2 := by
+    rw [hg]; rcases hph with rfl | rfl <;> rcases hph' with rfl | rfl <;>
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
+    rw [hc]; exact VClock.le_refl _
+  refine ⟨linv_task hL (by rw [hg]; rfl) (by rw [hg]; rcases hph with rfl | rfl <;>
+    rcases hph' with rfl | rfl <;> rfl), ?_⟩
+  refine U_task ht hi hth (by simp only [Mem.heap, hb]) (by rw [hg]; rcases hph with rfl | rfl <;> rfl)
+    (by rcases hph' with rfl | rfl <;> rfl) rfl hq
+    (fun _ => by rcases hph' with rfl | rfl <;> simp [gS]) (fun h => by
+      rcases hph' with rfl | rfl <;> cases h)
+    (fun _ hs => by
+      have := hi.2.fzc t (by rw [hg]; rcases hph with rfl | rfl <;> rfl) (by rw [hg]; exact hs)
+      rw [hg] at this; exact this)
+    (fun _ => rfl) (fun hr => ?_) (fun hr => ?_)
+  · have hp := hi.2.pre hr
+    have hkG : WG.Keep m m' := Word.keep_of hb ha hf hth hcl
+    have hkE : EV.Keep m m' := Word.keep_of hb ha hf hth hcl
+    refine Pre.keep hp (fun u => ?_) (hp.wg.keep hkG) (hp.ev.keep hkE) (Word.hist_keep hp.wg hkG)
+      (Word.hist_keep hp.ev hkE) hcl (task_lt ht) (.inr fun e he => hf ▸ he)
+      fun e he => .inl (hf ▸ he)
+    · unfold upd; split
+      · rename_i e; subst e; exact hX
+      · exact XEq.refl _
+  · obtain ⟨a', b', c', d'⟩ := hi.2.done hr
+    rw [hc]
+    rcases ht with rfl | rfl
+    · rw [upd_self, upd_ne _ _ (by decide)]; rw [hg] at a' c'
+      exact ⟨by rcases hph' with rfl | rfl <;> rfl, b', c', d'⟩
+    · rw [upd_self, upd_ne _ _ (by decide)]; rw [hg] at b' d'
+      exact ⟨a', by rcases hph' with rfl | rfl <;> rfl, c', d'⟩
 
 end Threadsync.WG
