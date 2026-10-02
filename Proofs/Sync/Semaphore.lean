@@ -2342,7 +2342,7 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
       U (upd G t (⟨.holds, pa, h₁⟩, .none, x)) m → U (upd G t (⟨.holds, pa ∪ h₃, h₂⟩, .none, x')) m)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (⟨.out, pa, Heap.empty⟩, .none, x)) m) :
-    P.WP t (Io_Semaphore_waitUncancelable S.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+    P.WP t (Io_Semaphore_waitUncancelable S.ptr io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G m d := by
   unfold Io_Semaphore_waitUncancelable
   refine WP.bind ?_
@@ -2352,8 +2352,8 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
   refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
     (⟨.out, pa, Heap.empty⟩, .none, x) rfl rfl io G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv5 (P := P) t pa x d) (fun _ => 0)
-    (post5 (S := S) (P := P) t pa x d) (loop5_body t pa x hP io hone hwx d) _ G₁ m₁ d₁
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv5 (P := P) t pa x d₁) (fun _ => 0)
+    (post5 (S := S) (P := P) t pa x d₁) (loop5_body t pa x hP io hone hwx d₁) _ G₁ m₁ d₁
     ⟨by omega, hc₁, hL₁, hi₁⟩))
   rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, rfl, hc₂, hL₂, hi₂, hz₂⟩
   simp only [StateT.run_bind, pure_bind]
@@ -2382,14 +2382,14 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
   subst hpa
   refine WP.bind (wp_cntLoad hP hi₄ hc₄ fun m₅ hL₅ hc₅ hi₅ => ?_)
   simp only [StateT.run_pure, pure_bind]
-  have hfin : ∀ G₆ m₆ d₆ hL₆, d₆ ≤ d → m₆.current = t →
+  have hfin : ∀ G₆ m₆ d₆ hL₆, d₆ ≤ d₁ → m₆.current = t →
       P.inv (upd G₆ t (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x')) m₆ →
       P.WP t ((do
         let _i33 ← callC (Io_Mutex_unlock (S.ptr.add 8) io)
         pure Io_Semaphore_waitUncancelableExit.ret : CM Tgt Io_Semaphore_waitUncancelableLocals _).run
           s') (fun a G' m' d' => P.WP t (match a.1 with
             | .ret => pure ()
-            | _ => throw .panic) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+            | _ => throw .panic) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
               ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G' m' d')
         G₆ m₆ d₆ := by
     intro G₆ m₆ d₆ hL₆ hd₆ _ hi₆

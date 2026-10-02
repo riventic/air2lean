@@ -25,6 +25,8 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
 
 namespace Sync.SemCounter
 
+attribute [local irreducible] Proto.WP
+
 /-- Where a thread is, outside the semaphore's code. -/
 inductive Ph where
   | none
@@ -739,5 +741,125 @@ theorem hU_p : ∀ G m h₁ h₂, U (upd G t (⟨.holds, Heap.empty ∪ h₃, h�
     (.inl rfl) (fun h => by cases h)
 
 end Specs
+
+
+/-! ## `semWork` -/
+
+/-- A thread in `semWork` without the permit, after `k` increments. -/
+def gOut (k : Nat) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .none, .work k false)
+
+theorem sum_le {X : ThreadId → Ph} {m : Mem} {t k : Nat} {b : Bool} (h : Shape X m)
+    (hx : X t = .work k b) : sum X ≤ k + 2 := by
+  obtain ⟨htl, hs2, -⟩ := shape_work h hx
+  obtain ⟨-, ⟨hs1, -, -⟩ | ⟨-, -, h0, h1, -⟩⟩ := h
+  · omega
+  have c0 : (X 0).count ≤ 2 := by
+    rcases h0 with h0 | ⟨k', hk, b', h0⟩ <;> rw [h0]
+    · decide
+    · exact hk
+  have c1 : (X 1).count ≤ 2 := by
+    rcases h1 with h1 | ⟨k', hk, b', h1⟩ <;> rw [h1]
+    · decide
+    · exact hk
+  unfold sum
+  rcases (by omega : t = 0 ∨ t = 1) with rfl | rfl
+  · rw [hx]; show k + _ ≤ _; omega
+  · rw [hx]; show _ + k ≤ _; omega
+
+theorem sum_succ {X : ThreadId → Ph} {t k : Nat} {b : Bool} (ht : t < 2) (hx : X t = .work k b) :
+    sum (upd X t (.work (k + 1) b)) = sum X + 1 := by
+  unfold sum
+  rcases (by omega : t = 0 ∨ t = 1) with rfl | rfl
+  · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), hx]; simp only [Ph.count]; omega
+  · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), hx]; simp only [Ph.count]; omega
+
+/-- `semWork`'s loop invariant: thread `t` did `local1` increments, without the permit. -/
+def workInv (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = t ∧ s.local1.toNat ≤ 2 ∧ proto.inv (upd G t (gOut s.local1.toNat)) m
+
+/-- `semWork`'s loop ends after 2 increments. -/
+def workPost (t : ThreadId) (r : semWorkExit × semWorkLocals) (G : ThreadId → Gh) (m : Mem)
+    (_ : Nat) : Prop :=
+  r.1 = .br3 ∧ m.current = t ∧ proto.inv (upd G t (gOut 2)) m
+
+theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (h : workInv t s G m d) :
+    proto.WP t ((semWork.loop4 cPtr).run s) (fun r G' m' d' =>
+      if semWork.again4 r.1 then workInv t r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : semWorkLocals) => 0) s)
+      else workPost t r G' m' d') G m d := by
+  obtain ⟨hc, hle, hi⟩ := h
+  unfold semWork.loop4
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  have hx : XG (upd G t (gOut s.local1.toNat)) t = .work s.local1.toNat false := by
+    show (upd G t (gOut _) t).2.2 = _; rw [upd_self]; rfl
+  obtain ⟨ht2, hs2, -⟩ := shape_work hi.2.2.shape hx
+  have htl : t < m.threads.size := by rw [hs2]; exact ht2
+  split
+  · rename_i hlt
+    have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
+    simp only [StateT.run_bind, bind_assoc]
+    rw [show cPtr.add 0 = cPtr from rfl, show cPtr.add 16 = S.ptr from rfl]
+    -- the read of `io`, then `wait`
+    refine WP.bind (wp_io hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
+    refine WP.bind (WP.callC (WP.mono ?_ (Sem.wait_spec fits t Heap.empty (.work s.local1.toNat false)
+      (.work s.local1.toNat true) (fun h => ∃ v : BitVec 32, pts nPtr 4 v h) _
+      (hone_w t _) ⟨_, rfl⟩ (hmv_w t _ ht2) (hU_w t _) G m₁ d hi₁)))
+    rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h₃, -, hi₂⟩
+    rw [show cPtr.add 40 = nPtr from rfl]
+    -- the load of `n`
+    refine WP.bind (wp_n hi₂ hc₂ (TTriple.load (by decide)) rfl (by omega)
+      fun m₃ h₄ hc₃ ht₃ hi₃ => ?_)
+    have hx₂ : XG (upd G₂ t (⟨.out, Heap.empty ∪ h₃, Heap.empty⟩, .none, .work s.local1.toNat true)) t =
+        .work s.local1.toNat true := by show (upd G₂ t _ t).2.2 = _; rw [upd_self]
+    have hsum := sum_le hi₂.2.2.shape hx₂
+    generalize hS : sum (XG (upd G₂ t (⟨.out, Heap.empty ∪ h₃, Heap.empty⟩, .none,
+      .work s.local1.toNat true))) = S at hsum ⊢
+    have hS3 : S + 1 < 2 ^ 32 := Nat.lt_of_le_of_lt (by omega : S + 1 ≤ 4) (by decide)
+    have hS32 : (BitVec.ofNat 32 S).toNat = S := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+    -- the add
+    refine WP.bind (WP.callRC (fun e he => (add_one_noErr (by rw [hS32]; exact hS3) e he).elim)
+      fun v₃ hadd => ?_)
+    have hv₃ := add_one_ok hadd (by rw [hS32]; exact hS3)
+    rw [hS32] at hv₃
+    -- the store
+    have hsucc : sum (XG (upd G₂ t (⟨.out, h₄, Heap.empty⟩, .none, .work (s.local1.toNat + 1) true))) =
+        S + 1 := by
+      rw [← hS, XG_upd, XG_upd]
+      have := sum_succ (X := upd (XG G₂) t (.work s.local1.toNat true)) ht2 (upd_self _ _ _)
+      rw [upd_upd] at this; exact this
+    refine WP.bind (wp_n (r₀ := ()) hi₃ hc₃ (TTriple.conseq (TTriple.store (by decide) v₃) (fun _ h => h)
+      fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩) (by
+        apply BitVec.eq_of_toNat_eq
+        rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]) (by omega)
+      fun m₄ h₅ hc₄ ht₄ hi₄ => ?_)
+    -- the read of `io`, then `post`
+    have htl₄ : t < m₄.threads.size := by
+      have hx₄ : XG (upd G₂ t (⟨.out, h₅, Heap.empty⟩, .none, .work (s.local1.toNat + 1) true)) t =
+          .work (s.local1.toNat + 1) true := by show (upd G₂ t _ t).2.2 = _; rw [upd_self]
+      obtain ⟨ht2', h2, -⟩ := shape_work hi₄.2.2.shape hx₄; rw [h2]; exact ht2'
+    refine WP.bind (wp_io hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
+    refine WP.bind (WP.callC (WP.mono ?_ (Sem.post_spec fits t Heap.empty h₅
+      (.work (s.local1.toNat + 1) true) (.work (s.local1.toNat + 1) false) _ (hmv_p t _ h₅ ht2)
+      (hU_p t _ h₅) (fun _ => .inl rfl) G₂ m₅ d₂ (by rw [Heap.empty_union]; exact hi₅))))
+    rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
+    simp only [StateT.run_pure, pure_bind]
+    -- the next repeat
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.callRC (fun e he =>
+      (add_one_noErr (a := s.local1) (by have := s.local1.isLt; omega) e he).elim) fun i24 hadd' => ?_)
+    have h24 := add_one_ok (a := s.local1) hadd' (by have := s.local1.isLt; omega)
+    simp only [StateT.run_modify, StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [semWork.again4, ↓reduceIte]
+    refine ⟨⟨hc₆, by simp only; omega, by simp only; rw [h24]; exact hi₆⟩, .inl (by omega)⟩
+  · rename_i hge
+    have hge' : ¬ s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hge
+    have heq : s.local1.toNat = 2 := by omega
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [semWork.again4, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨rfl, hc, heq ▸ hi⟩
 
 end Sync.SemCounter
