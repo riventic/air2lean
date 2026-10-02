@@ -662,7 +662,8 @@ structure Sem.Spec : Prop where
   frame : ∀ G G' m m', E.inv G m → Frame m m' →
     (∀ u, (G' u).2.1 = (G u).2.1 ∧ (G' u).1.held = (G u).1.held ∧
       (∀ x, 24 ≤ x → x < 48 → (G' u).1.part (0, x) = none) ∧
-      ((G' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G' u).1.ph ≠ .holds))) →
+      ((G' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G' u).1.ph ≠ .holds)) ∧
+      ((G u).2.2.isWs → (G' u).2.2 = (G u).2.2)) →
     E.inv G' m'
   /-- The start, after the spawn: the semaphore's bytes hold `sem0`, no atomic op was done, no
   thread waits, and each access happened before every thread. -/
@@ -1098,24 +1099,30 @@ theorem U_mx {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {y : Ph} {g' : 
 
 /-! ## Steps that keep the protocol -/
 
+theorem isWs_of_inSem {x : Ph} (h : x.inSem = false) : x.isWs = false := by
+  cases x <;> simp_all [Ph.inSem, Ph.isWs]
+
 /-- The ghost values of the semaphore's part stay (`Sem.Spec.frame`). -/
 theorem econd {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {g' : Gh S} (hu : U G m)
     (hs : g'.2.1 = (G t).2.1) (hh : g'.1.held = (G t).1.held)
     (hpt : ∀ x, 24 ≤ x → x < 48 → g'.1.part (0, x) = none)
-    (hp : g'.1.ph = (G t).1.ph ∨ ((G t).1.ph ≠ .holds ∧ g'.1.ph ≠ .holds)) :
+    (hp : g'.1.ph = (G t).1.ph ∨ ((G t).1.ph ≠ .holds ∧ g'.1.ph ≠ .holds))
+    (hws : (G t).2.2.isWs = false) :
     ∀ u, (upd G t g' u).2.1 = (G u).2.1 ∧ (upd G t g' u).1.held = (G u).1.held ∧
       (∀ x, 24 ≤ x → x < 48 → (upd G t g' u).1.part (0, x) = none) ∧
-      ((upd G t g' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (upd G t g' u).1.ph ≠ .holds)) :=
+      ((upd G t g' u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (upd G t g' u).1.ph ≠ .holds)) ∧
+      ((G u).2.2.isWs → (upd G t g' u).2.2 = (G u).2.2) :=
     fun u => by
   unfold upd; split
-  · rename_i e; subst e; exact ⟨hs, hh, hpt, hp⟩
-  · exact ⟨rfl, rfl, fun x _ h2 => part_none hu u (by omega), .inl rfl⟩
+  · rename_i e; subst e; exact ⟨hs, hh, hpt, hp, fun h => by rw [hws] at h; cases h⟩
+  · exact ⟨rfl, rfl, fun x _ h2 => part_none hu u (by omega), .inl rfl, fun _ => rfl⟩
 
 theorem econd0 {G : ThreadId → Gh S} {m : Mem} (hu : U G m) :
     ∀ u, (G u).2.1 = (G u).2.1 ∧ (G u).1.held = (G u).1.held ∧
       (∀ x, 24 ≤ x → x < 48 → (G u).1.part (0, x) = none) ∧
-      ((G u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G u).1.ph ≠ .holds)) :=
-  fun u => ⟨rfl, rfl, fun x _ h2 => part_none hu u (by omega), .inl rfl⟩
+      ((G u).1.ph = (G u).1.ph ∨ ((G u).1.ph ≠ .holds ∧ (G u).1.ph ≠ .holds)) ∧
+      ((G u).2.2.isWs → (G u).2.2 = (G u).2.2) :=
+  fun u => ⟨rfl, rfl, fun x _ h2 => part_none hu u (by omega), .inl rfl, fun _ => rfl⟩
 
 /-- A part that stays has no byte of the semaphore. -/
 theorem pnone {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {g' : Gh S} (hu : U G m)
@@ -1172,7 +1179,8 @@ theorem inv_mop (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId
       hfp (Nat.le_of_eq hop.bsize.symm) (fun x h1 _ => hop.cells _ (by simp [WM]; omega))
       hop.clocks hw' hmh hml hmq hfl,
     hE.frame G _ m m' hi.2.2 (frame_op hop (.inr (.inr (by decide))))
-      (econd hu hg.2.2.2.2.2.1 hg.2.2.2.2.2.2.2 (pnone hu hg.2.2.2.2.2.2.1) (.inl hg1))⟩
+      (econd hu hg.2.2.2.2.2.1 hg.2.2.2.2.2.2.2 (pnone hu hg.2.2.2.2.2.2.1) (.inl hg1)
+        (isWs_of_inSem hg.2.1))⟩
 
 theorem Frame.refl (m : Mem) : Frame m m :=
   ⟨fun _ _ _ _ => Word.keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _, rfl, fun _ _ => Iff.rfl,
@@ -1376,7 +1384,7 @@ theorem inv_away (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} 
       (g' := (⟨.away, Heap.empty, Heap.empty⟩, (sx, x))) hi.2.1 (by rw [upd_self]; rfl)
       (by rw [upd_self]; rfl) (fun _ _ _ => rfl)
       (.inr ⟨by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.holds),
-        (by decide : LPh.away ≠ LPh.holds)⟩)
+        (by decide : LPh.away ≠ LPh.holds)⟩) (by rw [upd_self]; exact isWs_of_inSem hx)
     rw [upd_upd] at hc
     exact hE.frame _ _ m m hi.2.2 (Frame.refl m) hc
 
@@ -1450,7 +1458,8 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
         fun w _ => by rw [hq], fun u => by rw [hcl]; exact VClock.le_refl _⟩
         (econd hu₁ (by rw [hg₁]; rfl) (by rw [hg₁]; rfl) (fun _ _ _ => rfl)
           (.inr ⟨by rw [hg₁]; exact (by decide : LPh.away ≠ LPh.holds),
-            (by decide : LPh.out ≠ LPh.holds)⟩))
+            (by decide : LPh.out ≠ LPh.holds)⟩)
+          (by rw [hg₁]; revert hx; cases x <;> simp [Ph.isMx, Ph.isWs, Ph.setM]))
   rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     exact h k hk G₁ _ rfl (hgo _ rfl rfl rfl rfl rfl rfl rfl hl.2)
@@ -1810,7 +1819,8 @@ theorem inv_mghost (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {t : ThreadId
       rfl hu.io hu.blk (fun e he => .inl he) (Nat.le_refl _) (fun _ _ _ => rfl)
       (fun _ => VClock.le_refl _) hu.wm hu.mhist hml hmq hfl,
     hE.frame G _ m m hi.2.2 (Frame.refl m)
-      (econd hu hg.2.2.2.2.2.1 hg.2.2.2.2.2.2.2 (pnone hu hg.2.2.2.2.2.2.1) (.inl hg1))⟩
+      (econd hu hg.2.2.2.2.2.1 hg.2.2.2.2.2.2.2 (pnone hu hg.2.2.2.2.2.2.1) (.inl hg1)
+        (isWs_of_inSem hg.2.1))⟩
   all_goals unfold upd; split
   all_goals first | rfl | (rename_i e; subst e)
   · exact hg1
@@ -2203,7 +2213,8 @@ theorem inv_sstep (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : Thread
       rw [ph_upd]; exact shape_upd hu.shape hY (by rw [hgt]; simp [gA, hM]) (by rw [hgt]; simp [gA, hW]))
     hfl (fun u => ?_) hcar,
     hE.frame G _ m m' hi.2.2 (frame_op hop (.inr (.inl (by decide))))
-      (econd hu (by rw [hg]; rfl) (by rw [hg]; rfl) hpt (.inl (by rw [hg]; rfl)))⟩
+      (econd hu (by rw [hg]; rfl) (by rw [hg]; rfl) hpt (.inl (by rw [hg]; rfl))
+        (by rw [hg]; exact isWs_of_inSem hns))⟩
   have h1 : (upd G t (gA y hy sx) 1).2.2.cnt = (G 1).2.2.cnt := by
     unfold upd; split
     · rename_i e1; subst e1; rw [hgt]; exact hcnt
@@ -2718,7 +2729,8 @@ theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} 
       (econd hu (by show _ = (upd G t (gA x h sx) t).2.1; rw [upd_self]; rfl)
         (by show _ = (upd G t (gA x h sx) t).1.held; rw [upd_self]; rfl)
         (fun x _ h2 => npts_none hpQ (by simp only; omega))
-        (.inl (by show _ = (upd G t (gA x h sx) t).1.ph; rw [upd_self]; rfl)))
+        (.inl (by show _ = (upd G t (gA x h sx) t).1.ph; rw [upd_self]; rfl))
+        (by show (upd G t (gA x h sx) t).2.2.isWs = false; rw [upd_self]; exact (mustN_noP hxm).1))
   rw [upd_upd] at hl'
   exact hq m' hQ (hst.current.trans hc) hst.threads ⟨hl', hU, hE'⟩
 
@@ -2870,7 +2882,8 @@ theorem inv_wend (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem}
     exact this
   have he' := hE.frame _ _ m m he (Frame.refl m) (econd hu (g' := g) (t := 1) (by rw [upd_self]; rfl)
     (by rw [upd_self]; rfl) (fun _ _ _ => rfl)
-    (.inr ⟨by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.holds), (by decide : LPh.gone ≠ LPh.holds)⟩))
+    (.inr ⟨by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.holds), (by decide : LPh.gone ≠ LPh.holds)⟩)
+    (by rw [upd_self]; rfl))
   rw [upd_upd] at he'
   exact ⟨hl', hU, he'⟩
 
@@ -3196,7 +3209,8 @@ theorem inv_g0 (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h : H
   have he' := hE.frame _ _ m m he (Frame.refl m) (econd hu (t := 0) (g' := gA y h default)
     (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
     (fun x _ h2 => by have := part_none hu 0 (x := x) (by omega); rw [upd_self] at this; exact this)
-    (.inl (by rw [upd_self]; rfl)))
+    (.inl (by rw [upd_self]; rfl))
+    (by rw [upd_self]; revert hxM; cases x <;> simp [gA, Ph.isMain, Ph.isWs]))
   rw [hG] at hl' hU he'
   exact ⟨hl', hU, he'⟩
 
