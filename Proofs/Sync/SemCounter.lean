@@ -1192,6 +1192,113 @@ theorem main_spec (io : Io) (d : Nat) :
     rw [writeBytes_all (by rw [hsI, enc_io]), writeBytes_all (by rw [hsS, sem_size]),
       writeBytes_all (by rw [hsN, enc_u32])] at F₄
     exact F₄
+  -- the spawn
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, inv_pre ho₄ hPa hA8 hth₄ hat₄ hq₄, fun G₁ m₅ hg₁ hi₅ =>
+    ⟨gOut 0, ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
+  -- after the stop: `main` alone, at `gPre`
+  obtain ⟨hl₅, hs₅, hu₅⟩ := hi₅
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hu₅.shape
+  rotate_left
+  · exfalso; rcases h0 with h0 | ⟨k', -, b', h0⟩ <;> change (G₁ 0).2.2 = _ at h0 <;> rw [hg₁] at h0 <;>
+      cases h0
+  have hcs₅ : m₅.clocks.size = 1 := by rw [hl₅.own.csize, hs1]
+  have hk : ∀ W : Word 32 4, W.Keep m₅ m₆ := fun _ =>
+    Word.keep_fork (t := 0) (by rw [hs1]; decide) (by rw [hcs₅, hs1]) hf
+  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  rw [hs1] at hch
+  subst hch hm₆
+  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs₅]; decide)
+  have hg1 : (G₁ 1).1.ph = .gone := by
+    by_cases e : (G₁ 1).1.ph = .gone
+    · exact e
+    · exact absurd (hl₅.live 1 e).1 (by rw [hs1]; decide)
+  have h1n : (G₁ 1).2.1 = .none := by
+    have hX1 : (G₁ 1).2.2 = .none := hnone 1 (Nat.le_refl _)
+    cases e : (G₁ 1).2.1 with
+    | none => rfl
+    | reg i jr sn e' =>
+      obtain ⟨k', hk'⟩ := hu₅.wx 1 (by rw [e]; rfl); rw [hX1] at hk'; cases hk'
+    | _ => have := hs₅.crit 1 (by rw [e]; rfl); rw [hg1] at this; cases this
+  have hsum₀ : ∀ X : ThreadId → Ph, (X 0 = .pre ∨ X 0 = .work 0 false) →
+      (X 1 = .none ∨ X 1 = .work 0 false) → held X = false ∧ sum X = 0 := by
+    intro X h0 h1
+    rcases h0 with h0 | h0 <;> rcases h1 with h1 | h1 <;> simp [held, sum, h0, h1, Ph.holds, Ph.count]
+  have hX₁ := hsum₀ (XG G₁) (.inl (by show (G₁ 0).2.2 = _; rw [hg₁]; rfl)) (.inl (hnone 1 (Nat.le_refl _)))
+  have hX₆ := hsum₀ (XG (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0)))
+    (.inr (by show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 0).2.2 = _; rw [upd_self]; rfl))
+    (.inr (by show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 1).2.2 = _
+              rw [upd_ne _ _ (by decide), upd_self]; rfl))
+  have hGo : ∀ u, 2 ≤ u → upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) u = G₁ u := fun u hu => by
+    rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+  have hi₆ : proto.inv (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0))
+      { m₅ with
+        current := 0
+        clocks := (m₅.clocks.set! 0 (VClock.bump (m₅.clocks[0]!) 0)).push
+          (VClock.bump (m₅.clocks[0]!) 0)
+        threads := m₅.threads.push { spawner := 0, joined := false } } := by
+    refine ⟨hl₅.fork (t := 0) (by rw [hg₁]; rfl) hf (by rw [hg₁]; rfl) (fun _ => .inl rfl) rfl rfl
+        rfl rfl fun hL hR => ?_, ?_, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, .inr ⟨0, by decide, false, ?_⟩,
+      .inr ⟨0, by decide, false, ?_⟩, fun u hu => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_,
+      hu₅.blk, hu₅.q, .inl (by rw [upd_self]; rfl), fun u hu => ?_⟩⟩
+    · have h' : (pts S.ptr 8 (if held (XG G₁) then (0 : BitVec 64) else 1) ∗
+        (if held (XG G₁) then emp else NP (XG G₁))) hL := hR
+      change (pts S.ptr 8 (if held (XG (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0))) then (0 : BitVec 64)
+        else 1) ∗ (if held (XG (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0))) then emp
+        else NP (XG (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0))))) hL
+      rw [hX₆.1]; rw [hX₁.1] at h'; unfold NP at h' ⊢; rw [hX₆.2]; rw [hX₁.2] at h'; exact h'
+    · refine (hs₅.mono (hs₅.ws.keep (hk _)) (hs₅.we.keep (hk _)) (Word.hist_keep hs₅.ws (hk _))
+        (Word.hist_keep hs₅.we (hk _)) (fun u => ?_) (fun c ⟨i, l, h1, h2⟩ => ⟨i, l, h1, h2⟩)
+        (fun h => .inl h) (fun w hw _ => .inl hw) (fun c h u hu => ?_)).congrG (fun u => ?_)
+        (fun u => ?_) (fun u x h1 h2 => ?_)
+      · by_cases hu : u < m₅.clocks.size
+        · exact hcl u hu
+        · rw [getElem!_neg m₅.clocks u hu]; exact VClock.le_iff.mpr fun i => by show (#[] : Array Nat).getD i 0 ≤ _; simp
+      · simp only [Array.size_push, hs1] at hu
+        rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+        · exact VClock.le_trans (h 0 (by rw [hs1]; decide)) (hcl 0 (by rw [hcs₅]; decide))
+        · rw [← hcs₅]; exact VClock.le_trans (h 0 (by rw [hs1]; decide)) hcn
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self, hg₁]; rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self, h1n]; rfl
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self, hg₁]; exact Iff.rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self, hg1]
+            simp [gOut]
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self]; rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self]; rfl
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]; exact hs₅.off u x h1 h2
+    · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+    · simp only [Array.getElem?_push, hs1, ↓reduceIte]
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 0).2.2 = _; rw [upd_self]; rfl
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) 1).2.2 = _; rw [upd_ne _ _ (by decide), upd_self]; rfl
+    · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) u).2.2 = _
+      rw [hGo u hu]; exact hnone u (by unfold ThreadId at *; omega)
+    · rcases hu₅.io e he hb ho16 with h | h
+      · exact .inl h
+      · refine .inr fun u hu => ?_
+        simp only [Array.size_push, hs1] at hu
+        rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+        · exact VClock.le_trans (h 0 (by rw [hs1]; decide)) (hcl 0 (by rw [hcs₅]; decide))
+        · rw [← hcs₅]; exact VClock.le_trans (h 0 (by rw [hs1]; decide)) hcn
+    · by_cases e0 : u = 0
+      · subst e0; rw [upd_self]; rfl
+      · by_cases e1 : u = 1
+        · subst e1; rw [upd_ne _ _ (by decide), upd_self]; rfl
+        · rw [hGo u (by unfold ThreadId at *; omega)]
+          have hn : (G₁ u).2.2 = .none := hnone u (by unfold ThreadId at *; omega)
+          have := hu₅.parts u; rw [hn] at this ⊢; simpa [Ph.holds] using this
+    · by_cases e0 : u = 0
+      · subst e0; rw [upd_self] at hu; cases hu
+      · by_cases e1 : u = 1
+        · subst e1; rw [upd_ne _ _ (by decide), upd_self] at hu; cases hu
+        · rw [hGo u (by unfold ThreadId at *; omega)] at hu ⊢; exact hu₅.wx u hu
   sorry
 
 end Sync.SemCounter
