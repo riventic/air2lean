@@ -61,7 +61,7 @@ def sum (X : ThreadId → Ph) : Nat := (X 0).count + (X 1).count
 def R (X : ThreadId → Ph) : Assn := pts (cPtr.add 4) 4 (BitVec.ofNat 32 (sum X))
 
 /-- The `Thread.Mutex`: bytes 0..4 of the `Counter`, contended value `3`. It owns the counter. -/
-abbrev L : Lock Gh := Lock.prod 0 0 R 3 (.inr rfl)
+abbrev L : Lock Gh := Lock.prod 0 0 R mutexC (by decide)
 
 /-- The threads: `main` alone before its spawn; then `main` and the kid, which `main` spawned
 and did not join yet. -/
@@ -505,7 +505,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-- The initial `Counter`. -/
 def counter0 : Counter :=
-  { m := { impl := { state := { raw := 0 } } }, n := 0 }
+  { m := mutexOf 0, n := 0 }
 
 theorem enc_counter : (Enc.encode counter0).extract 0 4 = Enc.encode (0 : BitVec 32) ∧
     (Enc.encode counter0).extract 4 8 = Enc.encode (0 : BitVec 32) ∧
@@ -640,7 +640,7 @@ theorem cnt_decode {bs : Array Byte} {w : BitVec 32} (hs : bs.size = 8)
     (hw : (intOfBytes 32 (bs.extract 0 4)).run = some (.ok w))
     (hn' : (intOfBytes 32 (bs.extract 4 8)).run = some (.ok (BitVec.ofNat 32 4))) :
     Enc.decode (α := Counter) (bs.extract 0 (0 + Enc.size Counter)) =
-      pure { m := { impl := { state := { raw := w } } }, n := BitVec.ofNat 32 4 } := by
+      pure { m := mutexOf w, n := BitVec.ofNat 32 4 } := by
   have hw2 : intOfBytes 32 (bs.extract 0 4) = pure w := ExceptT.ext (by rw [hw]; rfl)
   have hn2 : intOfBytes 32 (bs.extract 4 8) = pure (BitVec.ofNat 32 4) :=
     ExceptT.ext (by rw [hn']; rfl)
@@ -815,7 +815,7 @@ theorem main_spec (d : Nat) :
   have heq : own₉ 0 ∪ (hL ∪ L.wordH m₉) = (hL ∪ L.wordH m₉) ∪ own₉ 0 := Heap.union_comm hd
   refine WP.bind (WP.liftM_owned (TTriple.loadAt (T := Counter) (p := cPtr) (q := cPtr)
     (A := blk₀.addr) (S := 8) (K := blk₀.kind) (bs := blk₀.bytes) (k := 0) (a := 4)
-    (v := { m := { impl := { state := { raw := BitVec.ofNat 32 w₉ } } }, n := BitVec.ofNat 32 4 })
+    (v := { m := mutexOf (BitVec.ofNat 32 w₉), n := BitVec.ofNat 32 4 })
     rfl (by decide) (by rw [hs₀]; decide) (by simp [cPtr]; omega) (cnt_decode hs₀ hw₉ hn4)).frame
     ho hc₉ (by rw [hs₉]; decide) (by rw [upd_self, heq]; exact ⟨_, _, hd.symm, rfl, hbytes, rfl⟩)
     fun a m₁₀ hQ hr ho' hq hs₁₀ _ _ => ?_)

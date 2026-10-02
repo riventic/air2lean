@@ -168,6 +168,16 @@ jobs:
         if: matrix.full
         run: scripts/no-sorry.sh
 
+      # 0.15.2 on macOS: `Thread.Mutex` is `os_unfair_lock` (tests/golden/0.15.2/threadsync/
+      # Gen-darwin.lean). The `threadsync` proofs hold for that translation too.
+      - name: Build threadsync proofs (macOS translation)
+        if: ${{ !matrix.mutate && matrix.zig == '0.15.2' }}
+        run: |
+          cp Proofs/Threadsync/Gen.lean "$RUNNER_TEMP/Gen-linux.lean"
+          cp tests/golden/0.15.2/threadsync/Gen-darwin.lean Proofs/Threadsync/Gen.lean
+          lake build Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
+          cp "$RUNNER_TEMP/Gen-linux.lean" Proofs/Threadsync/Gen.lean
+
       - name: Mutation check
         if: matrix.mutate
         env:

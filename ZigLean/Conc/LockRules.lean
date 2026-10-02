@@ -849,18 +849,18 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
 
 /-- The holder `t` writes `0` (`unlock`, a release RMW) where the word was `w`: no thread holds the
 lock, and the lock owns the resource again. `t` goes to `out` (`w = 1`) or to the futex wake
-(`w = 2`). -/
+(`w = 2`). `w = 1` with `p = .out` needs `L.c ≠ 1`. -/
 theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {w : Nat}
     {p : LPh} (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
     (hph : L.ph (G t) = .holds) (hw : L.U32 m₁ (BitVec.ofNat 32 w))
-    (hp : (w = 1 ∧ p = .out) ∨ (w = L.c ∧ p = .wake))
+    (hp : (w = 1 ∧ p = .out ∧ L.c ≠ 1) ∨ (w = L.c ∧ p = .wake))
     (hM : M = rmwM m₁ li (l.msgs.size - 1) .release (l.msgs[l.msgs.size - 1]!)
       (BitVec.ofNat 32 0)) :
     L.Step t m₁ M ∧ M.current = t ∧ L.Before M (m₁.clocks[t]!) ∧
       L.Inv (upd G t (L.set (G t) p Heap.empty)) M := by
   obtain ⟨ht, hjt⟩ := hi.live t (by rw [hph]; decide)
-  have hpg : p ≠ .gone := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
-  have hph' : p ≠ .holds := by rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> decide
+  have hpg : p ≠ .gone := by rcases hp with ⟨-, rfl, -⟩ | ⟨-, rfl⟩ <;> decide
+  have hph' : p ≠ .holds := by rcases hp with ⟨-, rfl, -⟩ | ⟨-, rfl⟩ <;> decide
   have honly : ∀ u, L.ph (G u) = .holds → u = t := fun u hu => hi.one u t hu hph
   obtain ⟨blk, m₂, hb, hm₂, hst, hcM, hwM, hclM, hbM, haM⟩ := hi.rmwStep hl hc ht hM
   have hacq : AtomicOrder.release.isAcq = false := rfl
@@ -937,13 +937,13 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
         · rcases hst.fp e he with h | ⟨heb, -⟩
           · exact absurd h hm
           · rw [heb, hst.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
-  · rcases hp with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  · rcases hp with ⟨rfl, rfl, hc1⟩ | ⟨rfl, rfl⟩
     · -- `w = 1`: the old witness is not `t`
       obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ hp')
       have hvt : v ≠ t := fun e => by
         subst e
         have := ofNat_inj (by decide) L.c_lt (u32_eq hw (h2 hph))
-        exact L.c_ne1 this.symm
+        exact hc1 this.symm
       refine ⟨v, by rw [hst.threads]; exact hv, hwM ▸ hq, by rw [hGu v hvt]; exact h1,
         fun hh => absurd hh (hnh v)⟩
     · -- `w = 2`: `t` is at the wake
@@ -1487,9 +1487,11 @@ theorem Inv.xchgUnlock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type
   obtain ⟨v', hv', hcase⟩ := S.dec hS hw
   have := decode_eq hd hv'
   subst this
+  have hc1 : L.c ≠ 1 := fun h =>
+    S.ne12 (decode_eq S.dec1 (by have := S.dec2; rwa [hS, h] at this))
   rcases hcase with ⟨h, -⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
   · exact absurd h hw0
-  · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .out) hl' hcu₁ hph hU (.inl ⟨rfl, rfl⟩) hm'
+  · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .out) hl' hcu₁ hph hU (.inl ⟨rfl, rfl, hc1⟩) hm'
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inl ⟨rfl, hi'⟩⟩
   · obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨rfl, rfl⟩) hm'
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), .inr ⟨rfl, hi'⟩⟩
@@ -1699,6 +1701,104 @@ theorem Inv.wait_ok {G : ThreadId → γ} {m : Mem} {t : ThreadId} {e : BitVec 3
     obtain ⟨w, -, hu, -⟩ := hi.word
     rw [u32_bytes hb] at hu
     exact ⟨_, _, futexWait_run_go (by simpa using hw) ha hu⟩
+
+/-! ### `Thread.Mutex` (0.15.2, macOS): `os_unfair_lock`, with the word `0` or `1` (`L.c = 1`)
+
+The model (`Zig.osUnfairLockC`, `Zig.osUnfairUnlockC`, `ZigLean/Conc/Call.lean`): the lock is a loop
+of an acquire `cmpxchg` `0 → 1` that, on a failure, waits at the futex while the word is `1`; the
+unlock is a release `xchg` of `0` and a wake. The contended value is `1`: a thread that finds the
+word `1` goes to `wait`, and the holder goes to `wake` at its unlock. -/
+
+/-- `os_unfair_lock_lock`'s `cmpxchg` `0 → 1` with an acquire, by thread `t` at `out` (the first
+try) or `spin` (after a futex wait): on success `t` holds the lock; else it read `1` and goes to
+`wait`. -/
+theorem Inv.casD {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {r : Option (BitVec 32)}
+    (hc1 : L.c = 1) (hi : L.Inv G m) (hph : L.ph (G t) = .out ∨ L.ph (G t) = .spin)
+    (hc : m.current = t)
+    (h : ((cmpxchgAt c .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1).run m).run =
+      some (.ok (r, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧
+      ((r = none ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
+       (r = some (BitVec.ofNat 32 L.c) ∧
+        L.Inv (upd G t (L.set (G t) .wait Heap.empty)) m')) := by
+  have hng : L.ph (G t) ≠ .gone := by rcases hph with h | h <;> rw [h] <;> decide
+  have hnh : L.ph (G t) ≠ .holds := by rcases hph with h | h <;> rw [h] <;> decide
+  have hnw : L.ph (G t) ≠ .wait := by rcases hph with h | h <;> rw [h] <;> decide
+  have hna : L.ph (G t) ≠ .away := by rcases hph with h | h <;> rw [h] <;> decide
+  obtain ⟨ht, -⟩ := hi.live t hng
+  obtain ⟨b, blk, off, li, m₁, pos, old, hacc, -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok h
+  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
+  obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
+  rw [hl0] at hold
+  rcases hcase with ⟨rfl, rfl, hm'⟩ | ⟨hne, rfl, hm'⟩
+  · -- success: the newest message holds `0`
+    have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos
+      (by rw [hl0]; exact hold)
+    rw [hl0] at hpl hm'
+    rw [hpl] at hold hm'
+    obtain ⟨w, -, -, hU⟩ := hi₁.msgVal hl' (by omega) hold
+    have hU0 : L.U32 m₁ (BitVec.ofNat 32 0) := hU rfl
+    have hF : L.Free G := (hi₁.free_iff L.val0 hU0).mp rfl
+    obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₁.acquire (w' := 1) hl' hcu₁
+      (hph.elim (fun h => .inl ⟨h, rfl⟩) fun h => .inr ⟨h, hc1.symm⟩) hF hm'
+    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hL, hR, hi'⟩⟩
+  · -- failure: a relaxed read of `1`
+    obtain ⟨hlt, -⟩ := casOpts_pos hpos
+    rw [hl0] at hlt
+    obtain ⟨w, hw, rfl, -⟩ := hi₁.msgVal hl' hlt hold
+    have hw0 : w ≠ 0 := fun e => hne (by rw [e]; rfl)
+    have hwc : w = L.c := by rcases hw with h | h | h <;> omega
+    have hmM : m' = observeM m₁ li ((m₁.atomics[li]!).msgs[pos]!).id := by
+      rw [hm']; unfold loadM; rfl
+    have hi' : L.Inv G m' := by
+      rw [hmM]
+      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) fun e he => .inl he
+    have hq := hi'.queue (c := m'.current) (ws := m'.waiters) (wk := m'.woken) (p := .wait) hnh hng
+      (by decide) (by decide) (fq_keep hi' hnw hna) (wit_keep hi' hnh (by decide) fun _ => rfl)
+    cases m'
+    exact ⟨hst₁.trans (by rw [hmM]; exact Step.same rfl rfl rfl rfl rfl rfl fun _ _ => Iff.rfl)
+      (.inl hb₁), by rw [hmM, ← hcu₁]; rfl, .inr ⟨by rw [hwc], hq⟩⟩
+
+/-- `os_unfair_lock_lock`'s `cmpxchg` does not throw. -/
+theorem Inv.casD_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} (hi : L.Inv G m)
+    (ht : m.current < m.threads.size) (hg : L.ph (G m.current) ≠ .gone)
+    (hcr : c < casCount 32 .acquire 4 L.ptr (0 : BitVec 32) m ∨
+      casCount 32 .acquire 4 L.ptr (0 : BitVec 32) m = 0 ∧ c = 0) (e : Error) :
+    ((cmpxchgAt c .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1).run m).run ≠
+      some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prep_ok ht hg
+  have hprep : ∀ e, ((casPrep 32 4 L.ptr (0 : BitVec 32)).run m).run ≠ some (.error e) :=
+    casPrep_noErr hacc hnr hloc
+  refine cmpxchgAt_noErr hprep ?_ e
+  intro li opts m₁ hp
+  obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
+  obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht ha hl
+  obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
+  have hne := casOpts_ne (e := (0 : BitVec 32)) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
+  have hcnt : casCount 32 .acquire 4 L.ptr (0 : BitVec 32) m =
+      (casOpts m₁ li (0 : BitVec 32)).size := by
+    unfold casCount; rw [optCount_eq hp]
+  have hc : c < (casOpts m₁ li (0 : BitVec 32)).size := by rw [hcnt] at hcr; omega
+  refine ⟨_, Array.getElem?_eq_getElem hc, ?_⟩
+  have hpl := (casOpts_pos (Array.getElem?_eq_getElem hc)).1
+  rw [hl0] at hpl
+  obtain ⟨w, -, hw⟩ := hval _ hpl
+  exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
+
+/-- `os_unfair_lock_unlock`'s `xchg` of `0` with a release, by the holder `t`: `t` goes to the
+futex wake. -/
+theorem Inv.xchgRel {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 32}
+    (hc1 : L.c = 1) (hi : L.Inv G m) (hph : L.ph (G t) = .holds) (hc : m.current = t)
+    (h : ((atomicRmwAt c .xchg false .release 4 L.ptr (0 : BitVec 32)).run m).run =
+      some (.ok (b, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧ L.Before m' (m.clocks[t]!) ∧
+      L.Inv (upd G t (L.set (G t) .wake Heap.empty)) m' := by
+  obtain ⟨ht, -⟩ := hi.live t (by rw [hph]; decide)
+  obtain ⟨m₁, li, l, w, hl', hi₁, hst₁, hcu₁, hb₁, hw, rfl, hU, hm'⟩ := hi.xchgAt hc ht h
+  have hw0 : w ≠ 0 := fun e => (hi₁.free_iff hw hU).mp e t hph
+  have hwc : w = L.c := by rcases hw with h | h | h <;> omega
+  obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨hwc, rfl⟩) hm'
+  exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), hi'⟩
 
 /-! ## A protocol with the lock -/
 
@@ -2045,6 +2145,87 @@ theorem wp_loadLock (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → 
   refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
   rw [← hg₁, upd_same]
   exact hP.stay hiP hgone hst hl
+
+/-- `os_unfair_lock_lock`'s `cmpxchg` `0 → 1`, by thread `t` at `out` or `spin` (`g`). -/
+theorem wp_casD (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out ∨ L.ph g = .spin)
+    (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
+      ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
+       (r = some (BitVec.ofNat 32 L.c) ∧ P.inv (upd G₁ t (L.set g .wait Heap.empty)) m')) →
+      Q (r, s) G₁ m' k) :
+    P.WP t ((cmpxchgC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 : CM Tgt σ _).run s)
+      Q G m n := by
+  have hnh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
+  unfold cmpxchgC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hgone : L.ph (G₁ t) ≠ .gone := by rw [hg₁]; rcases hg with h | h <;> rw [h] <;> decide
+  have hiP := hP.cur t hi₁ hgone
+  have hiL := hP.lock hiP
+  have ht := hP.alive hiP hg₁ (by rcases hg with h | h <;> rw [h] <;> decide)
+  refine WP.callMC (fun e he => (hiL.casD_noErr ht hgone hcr e he).elim) fun r m' hr => ?_
+  obtain ⟨hst, hcu, hcase⟩ := hiL.casD hc1 (by rw [hg₁]; exact hg) rfl hr
+  refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
+  rw [hg₁] at hcase
+  rcases hcase with ⟨rfl, hL, -, hl⟩ | ⟨rfl, hl⟩
+  · refine .inl ⟨rfl, hL, ?_⟩
+    have := hP.step (p := .holds) (h := hL) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁]; exact hnh)) (by rw [hg₁]; exact hl)
+    rwa [hg₁] at this
+  · refine .inr ⟨rfl, ?_⟩
+    have := hP.step (p := .wait) (h := Heap.empty) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁]; exact hnh)) (by rw [hg₁]; exact hl)
+    rwa [hg₁] at this
+
+/-- `os_unfair_lock_lock`'s futex wait for `1`, by thread `t` at `wait` (`g`): it goes on at
+`spin`. -/
+theorem wp_waitD (hP : L.Fits P U) {s : σ} {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait)
+    (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
+      P.inv (upd G₁ t (L.set g .spin Heap.empty)) m' → Q ((), s) G₁ m' k) :
+    P.WP t ((threadFutexWaitC L.ptr (BitVec.ofNat 32 L.c) : CM Tgt σ Unit).run s) Q G m n := by
+  rw [threadFutexWaitC_eq]
+  refine WP.futexWaitC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
+  have he : (Packed.toBits (BitVec.ofNat 32 L.c)).setWidth 32 = BitVec.ofNat 32 L.c :=
+    BitVec.setWidth_eq _
+  simp only [he]
+  have hiL := hP.lock hi₁
+  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hiL.wait_ok, fun b m' hw => ?_⟩⟩
+  obtain ⟨hst, hb⟩ := hiL.wait (by rw [hg₁]; exact hg) hq hw
+  cases b
+  · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
+    obtain ⟨hcu, hl⟩ := hb
+    refine h k hk G₁ m' hcu ?_
+    have := hP.step (p := .spin) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) hl
+    rwa [hg₁] at this
+  · simp only [↓reduceIte] at hb ⊢
+    exact hP.stay hi₁ (by rw [hg₁, hg]; decide) hst hb
+
+/-- `os_unfair_lock_unlock`'s `xchg` of `0` with a release, by the holder `t` (`g`). -/
+theorem wp_xchgRel (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
+      P.inv (upd G₁ t (L.set g .wake Heap.empty)) m' → Q (r, s) G₁ m' k) :
+    P.WP t ((atomicRmwC .xchg false .release 4 L.ptr (0 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
+      Q G m n := by
+  unfold atomicRmwC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hgone : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
+  have hiP := hP.cur t hi₁ hgone
+  have hiL := hP.lock hiP
+  have ht := hP.alive hiP hg₁ (by rw [hg]; decide)
+  refine WP.callMC (fun e he => (hiL.rmw_noErr ht hgone hcr e he).elim) fun r m' hr => ?_
+  obtain ⟨hst, hcu, hbf, hl⟩ := hiL.xchgRel hc1 (by rw [hg₁]; exact hg) rfl hr
+  refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
+  rw [hg₁] at hl
+  have := hP.step (p := .wake) (h := Heap.empty) hiP hgone hst (fun _ _ => hbf)
+    (by rw [hg₁]; exact hl)
+  rwa [hg₁] at this
 
 end Lock
 
