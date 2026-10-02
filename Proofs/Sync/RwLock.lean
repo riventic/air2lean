@@ -4321,6 +4321,102 @@ theorem inv_spawn {G₁ : ThreadId → Gh SPh} {m₅ m₆ : Mem} {c : ThreadId}
       · subst e1; rw [hG'1] at h; cases h
       · rw [hGo u (by unfold ThreadId at *; omega)] at h ⊢; exact hq.wx u h
 
+/-- After the join: `main` at `ls true`, the writer has ended. -/
+theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E₀).inv G₃ m₈)
+    (hg₃ : G₃ 0 = gA .joins Heap.empty default) (hfin : (proto E₀).fin (G₃ 1))
+    (hj : ((Thread.join 1).run { m₈ with current := 0 }).run = some (.ok ((), m₉))) :
+    (proto E₀).inv (upd G₃ 0 (gA (.ls true) Heap.empty default)) m₉ := by
+  obtain ⟨hl, hu, he⟩ := hi
+  have hg1 : (G₃ 1).2.2 = .wf := hfin.2
+  have hk : ∀ {n nb : Nat} (W : Word n nb), W.Keep m₈ m₉ := fun _ => Word.keep_join (t := 0) (u := 1) hj
+  obtain ⟨rec, hrec, hrj, hm₉⟩ := Proto.join_eq hj
+  have hth : m₉.threads = m₈.threads.set! 1 { rec with joined := true } := by rw [hm₉]
+  have hcl : ∀ u : Nat, VClock.le (m₈.clocks[u]!) (m₉.clocks[u]!) = true := fun u => by
+    rw [hm₉]; simp only
+    rw [Proto.getElem!_set!_ite]
+    split
+    · rename_i h; rw [h.1]
+      exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+    · exact VClock.le_refl _
+  have hsz : m₉.threads.size = m₈.threads.size := by rw [hth]; simp
+  have hown1 : (L SPh).own G₃ m₈ 1 = Heap.empty := by
+    unfold Lock.own; split
+    · rfl
+    · show (G₃ 1).1.part ∪ (G₃ 1).1.held = _
+      have hp := hu.parts 1; rw [hg1] at hp; simp only [Ph.mustN, Bool.false_eq_true, ↓reduceIte] at hp
+      rw [hp, show (G₃ 1).1.held = (L SPh).held (G₃ 1) from rfl,
+        hl.idle 1 (by show (G₃ 1).1.ph ≠ _; rw [hfin.1]; decide)]; rfl
+  have hL := hl.join (t := 0) (u := 1) (g := gA (.ls true) Heap.empty default) (by decide) (by decide)
+    (by show (G₃ 0).1.ph = _; rw [hg₃]; rfl) hfin.1 hj
+    (by show Heap.empty = (G₃ 0).1.part ∪ _; rw [hown1, hg₃]; rfl) rfl rfl
+    (fun hL hR => (R_nohas (by simp [hasP, upd_self, upd0_1, hg1, Ph.isWs])
+      (by show ((G₃ 1).2.2.isWs && (G₃ 0).2.2.gave) = false; rw [hg1]; rfl) hL).mpr hR)
+  have hGu : ∀ u, u ≠ 0 → upd G₃ 0 (gA (.ls true) Heap.empty default) u = G₃ u :=
+    fun u h => upd_ne _ _ h
+  have hmp : ∀ u, (upd G₃ 0 (gA (.ls true) Heap.empty default) u).2.2.mp = (G₃ u).2.2.mp := fun u => by
+    by_cases e : u = 0
+    · subst e; rw [upd_self, hg₃]; rfl
+    · rw [hGu u e]
+  have hkS := hk WS
+  have hkM := hk WM
+  have hhS := Word.hist_keep hu.ws hkS
+  have hhM := Word.hist_keep hu.wm hkM
+  obtain ⟨h00, ⟨-, hp0, -⟩ | ⟨hs2, h1j, -, -, hn2⟩⟩ := hu.shape
+  · change (G₃ 0).2.2 = _ at hp0; rw [hg₃] at hp0; cases hp0
+  have hrec' : rec = { spawner := 0, joined := false } := by
+    rcases h1j with h | ⟨h, -⟩ <;> rw [hrec] at h <;> cases h
+    · rfl
+    · cases hrj
+  subst hrec'
+  have hU : U (upd G₃ 0 (gA (.ls true) Heap.empty default)) m₉ := by
+    refine ⟨⟨?_, .inr ⟨by rw [hsz, hs2], .inr ⟨?_, by
+          show (upd G₃ 0 _ 1).2.2 = _; rw [hGu 1 (by decide)]; exact hg1⟩,
+        by show (upd G₃ 0 _ 0).2.2.isMain = true; rw [upd_self]; rfl,
+        by show (upd G₃ 0 _ 1).2.2.isW = true; rw [hGu 1 (by decide), hg1]; rfl,
+        fun u hu' => by show (upd G₃ 0 _ u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]
+                        exact hn2 u hu'⟩⟩, ?_, fun e he' hb ho => ?_, ?_, hu.ws.keep hkS,
+      hu.wm.keep hkM, by rw [hhS]; exact hu.shist, ?_, by rw [hhM]; exact hu.mhist, ?_,
+      fun w hw hp => ?_, fun u hu' => ?_, fun u => ?_, fun hc => ?_⟩
+    · simp [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, h00]
+    · simp [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, hs2]
+    · rw [upd_self, hGu 1 (by decide), hg1]
+      exact ⟨(fun _ h => by cases h), (fun h => by cases h), (fun h => by cases h.2),
+        (fun _ _ h => by cases h), fun _ => rfl⟩
+    · have : m₉.footprint = m₈.footprint := by rw [hm₉]
+      rw [this] at he'
+      exact (hu.io e he' hb ho).imp id fun h => hkS.all _ h
+    · unfold BlkOk; rw [show m₉.blocks = m₈.blocks by rw [hm₉]]; exact hu.blk
+    · have := hu.slast; rw [hg₃, hg1] at this
+      rw [hhS, upd_self, hGu 1 (by decide), hg1]; exact this
+    · obtain ⟨v, hv, hl', hz⟩ := hu.mlast
+      exact ⟨v, hv, by rw [hhM]; exact hl', hz.trans (forall_congr' fun u => by rw [hmp])⟩
+    · have hw' : w ∈ m₈.waiters := by rw [hm₉] at hw; exact hw
+      have := mq_wait hu hw' hp
+      rcases mp_lt hu (u := w.1) (by rw [this]; simp) with e | e <;> rw [e] at this
+      · rw [hg₃] at this; cases this
+      · rw [hg1] at this; cases this
+    · by_cases e : u = 0
+      · subst e; rw [upd_self]; exact .inl rfl
+      · rw [hGu u e] at hu' ⊢; exact hu.lph u hu'
+    · rw [hGu 1 (by decide)]
+      by_cases e : u = 0
+      · subst e; rw [upd_self]; rfl
+      · rw [hGu u e]; exact hu.parts u
+    · rw [upd_self, hGu 1 (by decide)] at hc
+      obtain ⟨hn, hp, hsb, hok⟩ := hu.car (by rw [hg₃]; exact ⟨rfl, hc.2.1, by rw [hg1]; rfl⟩)
+      have hfp : m₉.footprint = m₈.footprint := by rw [hm₉]
+      have hheap : m₉.heap = m₈.heap := by rw [hm₉]; rfl
+      refine ⟨hn, by rw [hGu 1 (by decide)]; exact hp, by rw [hheap]; exact hsb, fun e he' ht => ?_⟩
+      rw [hfp] at he'
+      rcases hok e he' (by rw [show m₉.blocks = m₈.blocks by rw [hm₉]] at ht; exact ht) with h | h
+      · exact .inl (by rw [hhS]; exact h)
+      · exact .inr (hkS.all _ h)
+  have hF : Frame m₈ m₉ := ⟨fun W _ _ _ => hk W, hsz, fun w _ => by rw [hm₉], hcl⟩
+  have he' := frame₀ _ _ m₈ m₉ he hF (econd hu (t := 0) (g' := gA (.ls true) Heap.empty default)
+    (by rw [hg₃]; rfl) (by rw [hg₃]; rfl) (fun _ _ _ => rfl) (.inl (by rw [hg₃]; rfl))
+    (by rw [hg₃]; rfl))
+  exact ⟨hL, hU, he'⟩
+
 theorem main_spec (io : Io) (d : Nat) :
     (proto E₀).WP 0 (rwLockRead io) QM G0 { mem0 with current := 0 } d := by
   unfold rwLockRead
