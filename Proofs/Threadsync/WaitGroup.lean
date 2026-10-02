@@ -1752,4 +1752,175 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
   | producer p => cases hg
   | work p => cases hg
 
+/-! ## The start -/
+
+/-- The `Tally` that `main` stores. -/
+def tally0 : Tally :=
+  { wg := { state := { raw := 0 }, event := { impl := { state := { raw := 0 } } } },
+    m := { impl := { state := { raw := 0 } } }, n := 0 }
+
+theorem enc_tally : (Enc.encode tally0).size = 24 ∧
+    (Enc.encode tally0).extract 0 8 = Enc.encode (0 : BitVec 64) ∧
+    (Enc.encode tally0).extract 8 12 = Enc.encode (0 : BitVec 32) ∧
+    (Enc.encode tally0).extract 16 20 = Enc.encode (0 : BitVec 32) ∧
+    (Enc.encode tally0).extract 20 24 = Enc.encode (0 : BitVec 32) := by decide +kernel
+
+/-- No thread at the start. -/
+def G0 : ThreadId → Gh := fun _ => (⟨.gone, Heap.empty, Heap.empty⟩, {})
+
+/-- `main` before `startMany`. -/
+def gM (h : Heap) (x : X) : Gh := (⟨.out, h, Heap.empty⟩, x)
+
+/-- A shared word at the start: no atomic location, each access happened before every thread,
+and the value 0. -/
+theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {blk : Block} (hW : W.b = 0)
+    (hal : (blk.addr + W.o) % nb = 0) (hhi : W.o + nb ≤ 24) (hb : m.blocks[0]? = some blk)
+    (hl : blk.live = true) (hs : blk.bytes.size = 24) (hk : blk.kind = .stack)
+    (hat : m.atomics = #[])
+    (hv : (intOfBytes n (blk.bytes.extract W.o (W.o + nb))).run = some (.ok 0))
+    (hfp : ∀ e ∈ m.footprint, W.Hits e → AllLe m e.clock) :
+    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec n) := by
+  have hno : ∀ i l, ¬ W.Loc m i l := fun i l hl => by
+    have := (Word.loc_get hl).1; rw [hat] at this; simp at this
+  have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
+  refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, by omega, hal, by rw [hk]; decide⟩,
+    fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
+    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩⟩, ?_, ?_⟩
+  · rw [Word.hist_none hno]; rfl
+  · rw [Word.hist_none hno]; exact hu
+
+theorem allLe_one {m : Mem} {c : VClock} (h1 : m.threads.size = 1)
+    (h : VClock.le c (m.clocks[0]!) = true) : AllLe m c := fun u hu => by
+  rw [h1] at hu
+  have : u = 0 := by omega
+  subst this; exact h
+
+/-- Before `startMany`: `main` alone owns the `Tally`, with its bytes. The mutex starts: it owns the
+counter; the two words belong to no thread. -/
+theorem inv_start {m : Mem} {A : Nat} {h : Heap}
+    (ho : Owned (upd (fun _ => Heap.empty) 0 h) m)
+    (hb : bytesAt bPtr A 24 .stack (Enc.encode tally0) h) (hA : A % 8 = 0)
+    (hth : m.threads = #[{ spawner := 0, joined := true }]) (hat : m.atomics = #[])
+    (hq : m.waiters = #[])
+    (hfp0 : ∀ e ∈ m.footprint, e.tid = 0 ∧ VClock.le e.clock (m.clocks[0]!) = true) :
+    proto.inv (upd G0 0 (gM Heap.empty { ph := .pre })) m := by
+  obtain ⟨hsz, he0, he8, he16, he20⟩ := enc_tally
+  obtain ⟨hP, hWR, dP, rfl, hbP, hbWR⟩ := bytesAt_split hb (k := 16) (by rw [hsz]; decide)
+  obtain ⟨hW, hR, dWR, rfl, hbW, hbR⟩ := bytesAt_split hbWR (k := 4) (by simp [hsz])
+  have hsub := ho.sub 0; rw [upd_self] at hsub
+  have sW : hW.Sub m.heap :=
+    (Heap.sub_union_left.trans (Heap.sub_union_right dP)).trans hsub
+  have sR : hR.Sub m.heap :=
+    (Heap.sub_union_right dWR |>.trans (Heap.sub_union_right dP)).trans hsub
+  have sH : (hP ∪ (hW ∪ hR)).Sub m.heap := hsub
+  have h1 : m.threads.size = 1 := by rw [hth]; rfl
+  obtain ⟨blk, hblk, hl, hA', hS', hK', hx⟩ := bytesAt_blk (m := m) hb sH rfl (by rw [hsz]; decide)
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hext : ∀ a b, b ≤ 24 → blk.bytes.extract a b = (Enc.encode tally0).extract a b := by
+    intro a b hb'
+    rw [← hx]; simp only [Array.extract_extract, bPtr]
+    simp [hsz]; congr 1 <;> omega
+  have hall : ∀ e ∈ m.footprint, AllLe m e.clock := fun e he =>
+    allLe_one h1 (by obtain ⟨-, hle⟩ := hfp0 e he; exact hle)
+  obtain ⟨hwgOk, hwgz, hwgv⟩ := word_init (W := WG) rfl (by simp [WG]; rw [hA']; omega)
+    (by decide) hblk hl hS' hK' hat (by
+      rw [show WG.o = 0 from rfl, hext 0 8 (by decide), he0]
+      exact LawfulEnc.decode_encode (α := BitVec 64) 0) (fun e he _ => hall e he)
+  obtain ⟨hevOk, hevz, hevv⟩ := word_init (W := EV) rfl (by simp [EV]; rw [hA']; omega)
+    (by decide) hblk hl hS' hK' hat (by
+      rw [show EV.o = 8 from rfl, hext 8 12 (by decide), he8]
+      exact LawfulEnc.decode_encode (α := BitVec 32) 0) (fun e he _ => hall e he)
+  have h0 : L.U32 m 0 := by
+    show (intOfBytes 32 (curBytes m 0 16 4)).run = _
+    unfold curBytes; rw [hblk]
+    simp only [Option.map_some, Option.getD_some]
+    rw [hext 16 20 (by decide), he16]
+    exact intOfBytes_rmw 0
+  -- the resource: the counter is `0`
+  have hR' : L.R (upd G0 0 (gM Heap.empty { ph := .pre })) hR := by
+    show R (fun u => (upd G0 0 (gM Heap.empty { ph := .pre }) u).2) hR
+    unfold R
+    rw [show ((fun u => (upd G0 0 (gM Heap.empty { ph := .pre }) u).2) 1).cnt +
+      ((fun u => (upd G0 0 (gM Heap.empty { ph := .pre }) u).2) 2).cnt = 0 from rfl]
+    have hbR' : bytesAt (bPtr.add 20) A 24 .stack (Enc.encode (0 : BitVec 32)) hR := by
+      have e : ((((Enc.encode tally0).extract 16 (Enc.encode tally0).size)).extract 4
+          ((Enc.encode tally0).extract 16 (Enc.encode tally0).size).size) =
+          Enc.encode (0 : BitVec 32) := by
+        rw [hsz]; simp only [Array.extract_extract]; rw [← he20]; simp [hsz]
+      rw [← e]
+      exact hbR
+    exact ⟨A, 24, .stack, _, by simp [bPtr, Ptr.add]; omega, LawfulEnc.size_encode _,
+      LawfulEnc.decode_encode _, hbR', by decide⟩
+  -- `main` keeps nothing; the lock gets the mutex and the counter
+  have dRW : Heap.Disjoint hR hW := dWR.symm
+  have ho' := ho.shrink (t := 0) (h := Heap.empty ∪ (hR ∪ hW)) (by
+    rw [upd_self, Heap.empty_union, Heap.union_comm dRW]; exact Heap.sub_union_right dP)
+  rw [upd_upd] at ho'
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 (gM Heap.empty { ph := .pre }) u = G0 u := fun u h => upd_ne _ _ h
+  have hcellW : ∀ x, 16 ≤ x → x < 16 + 4 → hW (0, x) ≠ none := fun x a b =>
+    bytesAt_in hbW rfl (by simp [bPtr, Ptr.add]; omega) (by simp [bPtr, Ptr.add, hsz]; omega)
+  have hL := Inv.make (L := L) (G := upd G0 0 (gM Heap.empty { ph := .pre })) (t := 0) (hL := hR)
+    (hW := hW) ho' rfl
+    (fun u hu => by rw [upd_ne _ _ hu]; unfold Lock.own; rw [hGu u hu]; split <;> rfl)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; exact fun _ => .inl rfl) dRW
+    (fun u => by
+      by_cases hu : u = 0
+      · subst hu; rw [upd_self]; exact .inl ⟨rfl, by rw [h1]; decide, rfl⟩
+      · rw [hGu u hu]; exact .inr rfl)
+    (fun u => by
+      by_cases hu : u = 0
+      · subst hu; rw [upd_self]; rfl
+      · rw [hGu u hu]; rfl)
+    hR' hcellW ⟨blk, hblk, hl, by rw [hS']; decide, by show (blk.addr + 16) % 4 = 0; rw [hA']; omega,
+      by rw [hK']; decide⟩ h0 (by rw [hat]; simp) hq (allLe_one h1 (VClock.le_refl _)) (by rw [h1]; decide)
+  have hX0 : (upd G0 0 (gM Heap.empty { ph := .pre }) 0).2 = { ph := .pre } := by rw [upd_self]; rfl
+  have hXu : ∀ u, u ≠ 0 → (upd G0 0 (gM Heap.empty { ph := .pre }) u).2 = {} := fun u hu => by
+    rw [hGu u hu]; rfl
+  have h3ne : ∀ u : ThreadId, 3 ≤ u → u ≠ 0 := fun u hu => Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu)
+  refine ⟨hL, ⟨⟨by rw [hth]; rfl, by show (upd G0 0 (gM Heap.empty { ph := .pre }) 0).2.ph.isMain = true; rw [hX0]; rfl,
+    fun u hu => hXu u (h3ne u hu),
+    .inl ⟨h1, by show (upd G0 0 (gM Heap.empty { ph := .pre }) 0).2.ph.rank ≤ 1; rw [hX0]; decide, hXu 1 (by decide),
+      hXu 2 (by decide)⟩⟩,
+    fun u hu => by rw [hGu u hu]; rfl, fun x => by rw [upd_self]; rfl,
+    fun u hu => by rw [hGu u (h3ne u hu)]; rfl, hbk, fun w hw => by rw [hq] at hw; simp at hw,
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, fun _ => ?_, fun h => ?_⟩⟩
+  · by_cases hu : u = 0
+    · subst hu; rw [hX0] at h; cases h
+    · rw [hXu u hu] at h; cases h
+  · by_cases hu : u = 0
+    · subst hu; rw [hX0] at h; cases h
+    · rw [hXu u hu] at h; cases h
+  · by_cases hu : u = 0
+    · subst hu; rw [hX0] at h; cases h
+    · rw [hXu u hu] at h; cases h
+  · by_cases hu : u = 0
+    · subst hu; rw [hX0] at h; cases h
+    · rw [hXu u hu] at h; cases h
+  · have hX1 := hXu 1 (by decide); have hX2 := hXu 2 (by decide)
+    refine ⟨hwgOk, hevOk, ?_, fun u hu hf => ?_, ?_, fun h => ?_, fun u v huv hu => ?_,
+      fun u v huv hu => ?_, fun u hu hs => ?_, fun h => ?_, fun h => ?_, fun h => ?_,
+      fun e he hb' => ?_⟩
+    · rw [hX0, hX1, hX2]; unfold last; rw [hwgz]; exact hwgv
+    · rcases hu with rfl | rfl
+      · rw [hX1] at hf; cases hf
+      · rw [hX2] at hf; cases hf
+    · rw [hX0, hX1, hX2]; exact ⟨hevz, fun j hj => by simp [evL] at hj; subst hj; exact hevv⟩
+    · rw [hX1, hX2] at h; cases h
+    · rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩
+      · rw [hX1] at hu; cases hu
+      · rw [hX2] at hu; cases hu
+    · rcases huv with ⟨rfl, -⟩ | ⟨rfl, -⟩
+      · rw [hX1] at hu; cases hu
+      · rw [hX2] at hu; cases hu
+    · rcases hu with rfl | rfl
+      · rw [hX1] at hs; cases hs
+      · rw [hX2] at hs; cases hs
+    · rw [hX0] at h; cases h
+    · rw [hX0] at h; cases h
+    · rw [hX0] at h; cases h
+    · obtain ⟨ht0, hle⟩ := hfp0 e he
+      refine ⟨by rw [ht0]; decide, ?_⟩
+      unfold ac; rw [ht0, hX0]; exact hle
+  · rw [hX0] at *; exact absurd h (by decide)
+
 end Threadsync.WG
