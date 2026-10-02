@@ -3146,4 +3146,156 @@ theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m
     refine WP.pure' ?_
     exact WP.pure' ⟨by omega, hc₆, hn, hi₈⟩
 
+/-! ## `unlockShared` -/
+
+/-- `main` changes its place from `x` to `y`, with the same memory, part and fields. -/
+theorem inv_g0 (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {x y : Ph} {h : Heap}
+    (hi : (proto E).inv (upd G 0 (gA x h default)) m) (hxM : x.isMain) (hyM : y.isMain)
+    (hwb : y.wb = x.wb) (hib : y.ib = x.ib) (hrb : y.rb = x.rb) (hmp : y.mp = x.mp)
+    (hgv : y.gave = x.gave) (hiw : y.isWs = x.isWs) (hmu : y.mustN = x.mustN) (hcn : y.cnt = x.cnt)
+    (hns : y.inSem = false) (hfl : Flags y (G 1).2.2) :
+    (proto E).inv (upd G 0 (gA y h default)) m := by
+  obtain ⟨hl, hu, he⟩ := hi
+  have hG : upd (upd G 0 (gA x h default)) 0 (gA y h default) = upd G 0 (gA y h default) :=
+    upd_upd _ _ _ _
+  have hf : ∀ {β : Type} (f : Ph → β), f y = f x →
+      ∀ u, f (upd (upd G 0 (gA x h default)) 0 (gA y h default) u).2.2 =
+        f (upd G 0 (gA x h default) u).2.2 := fun f hfx u => by
+    by_cases e : u = 0
+    · subst e; rw [upd_self, upd_self]; exact hfx
+    · rw [upd_ne _ _ e, upd_ne _ _ e]
+  have h1 : ∀ u, (upd (upd G 0 (gA x h default)) 0 (gA y h default) u).1 =
+      (upd G 0 (gA x h default) u).1 := fun u => by
+    by_cases e : u = 0
+    · subst e; rw [upd_self, upd_self]; rfl
+    · rw [upd_ne _ _ e]
+  have hl' := hl.congr (G' := upd (upd G 0 (gA x h default)) 0 (gA y h default))
+    (fun u => congrArg LG.ph (h1 u)) (fun u => congrArg LG.part (h1 u))
+    (fun u => congrArg LG.held (h1 u))
+    (R_upd (by rw [upd_self]; exact hiw) (by rw [upd_self]; exact hgv) (by rw [upd_self]; exact hcn))
+  have hx0 : (upd G 0 (gA x h default) 0).2.2 = x := by rw [upd_self]; rfl
+  have hU := U_ghost (G' := upd (upd G 0 (gA x h default)) 0 (gA y h default)) hu
+    (by
+      rw [ph_upd]
+      exact shape_upd hu.shape (.inl (by rw [hx0]; exact hxM)) (fun _ => by rw [show (gA y h default).2.2 = y from rfl]; exact hyM)
+        (fun hw => by rw [hx0] at hw; revert hxM hw; cases x <;> simp [Ph.isMain, Ph.isW]))
+    (by rw [upd_self, upd0_1]; rw [upd0_1]; exact hfl)
+    (by rw [sv_eq, sv_eq, hf Ph.wb hwb, hf Ph.ib hib, hf Ph.rb hrb])
+    (fun u => hf Ph.mp hmp u)
+    (fun u hu' => by
+      by_cases e : u = 0
+      · subst e; rw [upd_self]; exact .inl rfl
+      · rw [upd_ne _ _ e] at hu' ⊢; exact hu.lph u hu')
+    (fun u => by
+      have := hu.parts u
+      rw [upd0_1] at this; rw [upd0_1, upd0_1]
+      by_cases e : u = 0
+      · subst e; rw [upd_self] at this ⊢; simp only [gA, hmu] at this ⊢; exact this
+      · rw [upd_ne _ _ e]; exact this)
+    (fun hc => by
+      obtain ⟨hn, hp, hs, hok⟩ := hu.car (by
+        unfold Car at hc ⊢
+        rwa [hf Ph.mustN hmu 0, hf Ph.mustN hmu 1, hf Ph.isWs hiw 1, hf Ph.gave hgv 0] at hc)
+      exact ⟨hn, by rw [upd0_1] at hp; rw [upd0_1, upd0_1]; exact hp, hs, hok⟩)
+  have he' := hE.frame _ _ m m he (Frame.refl m) (econd hu (t := 0) (g' := gA y h default)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+    (fun x _ h2 => by have := part_none hu 0 (x := x) (by omega); rw [upd_self] at this; exact this)
+    (.inl (by rw [upd_self]; rfl)))
+  rw [hG] at hl' hU he'
+  exact ⟨hl', hU, he'⟩
+
+/-- `unlockShared` by `main` at `sh j`, which owns `n` (`h`): it gives `n` back to the state word,
+or to the semaphore while the writer waits. -/
+theorem unlockS_spec (hE : E.Spec) {j : Bool} {h : Heap} {io : Io} {G : ThreadId → Gh S} {m : Mem}
+    {d : Nat} (hi : (proto E).inv (upd G 0 (gA (.sh j) h default)) m) :
+    (proto E).WP 0 (Io_RwLock_unlockShared (bPtr.add 16) io) (fun _ G' m' d' => d' ≤ d ∧
+      m'.current = 0 ∧ (proto E).inv (upd G' 0 (gA (.dn j) Heap.empty default)) m') G m d := by
+  unfold Io_RwLock_unlockShared
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [wsptr]
+  refine WP.bind (wp_rmw (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+    fun k₁ hk₁ G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' hop => ?_)
+  have hu := hi₁.2.1
+  have hg0 : (G₁ 0).2.2 = .sh j := by rw [hg₁]; rfl
+  have hold := sold hu hv
+  rw [hg0] at hold; simp only [Ph.rb] at hold
+  have hwi := Ph.wb_ib (G₁ 1).2.2
+  obtain ⟨hsub, htest1, htest2⟩ := sv3_sub hwi
+  have hp : NPts (G₁ 1).2.2.cnt h := by
+    have := hu.parts 0; rw [hg₁] at this; simpa [gA, Ph.mustN] using this
+  have hf := hu.flags
+  rw [hg0] at hf
+  have hW1 := w_isW hu (by rw [hg0]; simp)
+  rcases (by omega : (G₁ 1).2.2.ib = 0 ∨ (G₁ 1).2.2.ib = 1) with hi0 | hi1
+  · -- no writer waits: `n` goes back to the state word
+    obtain ⟨hm1, hws1⟩ := w_free hW1 (.inl hi0)
+    have htl : 0 < m₁.threads.size :=
+      (hi₁.1.live 0 (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))).1
+    have hj0 : joinedB m₁ 0 = false :=
+      (hi₁.1.live 0 (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))).2
+    have hown := hi₁.1.own.owns 0 htl
+    have hsb := hi₁.1.own.sub 0
+    rw [Lock.own_live hj0, hg₁] at hown hsb
+    have hcl := car_lose hu.ws hown.left (fun l c h' => hsb l c (Heap.sub_union_left l c h')) hp hop hh
+    have hi₂ : (proto E).inv (upd G₁ 0 (gA (.dn j) Heap.empty default)) m' :=
+      inv_sstep hE hi₁ hg₁ hop hw' hh (by
+          rw [upd_self, upd0_1, sv_eq]
+          show Word.Entry.Val _ (sv3 _ _ 0)
+          rw [← hsub, ← hold]; exact rmwEnt_val WS)
+        rfl rfl (by simp) rfl rfl rfl (.inl rfl)
+        (by
+          rw [upd_self, upd0_1]
+          exact ⟨(fun k hk => by rw [hk] at hi0; cases hi0), (fun h => by cases h),
+            (fun h => by cases h.1), (fun _ _ h => by cases h), hf.jd⟩)
+        rfl (fun _ => ⟨h, by rw [upd0_1]; exact hp, hcl⟩)
+        (lws_lose hi₁ hop hg₁ (by simp [hasP, upd0_1, hws1]) (by simp [hasP, hws1]))
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [hold, htest1]
+    simp only [↓reduceIte, StateT.run_pure, pure_bind]
+    rw [htest2]
+    simp only [hi0, show ((0 : Nat) = 1) = False from by decide, decide_false, Bool.false_eq_true,
+      ↓reduceIte, StateT.run_pure]
+    exact WP.pure' (WP.pure' ⟨by omega, hop.current, hi₂⟩)
+  · -- the writer waits at the semaphore: `main` posts `n`
+    obtain ⟨k, hk⟩ : ∃ k, (G₁ 1).2.2 = .ws k := by
+      cases e : (G₁ 1).2.2 <;> rw [e] at hi1 <;> simp [Ph.ib] at hi1
+      · exact ⟨_, rfl⟩
+      · exact absurd (by rw [e]; rfl) (fun h => not_both hi₁ (by rw [hg0]; rfl) h)
+    have hjf : j = false := by
+      cases j
+      · rfl
+      · have := hf.jd rfl; rw [hk] at this; cases this
+    subst hjf
+    have hi₂ : (proto E).inv (upd G₁ 0 (gA .po h default)) m' :=
+      inv_sstep hE hi₁ hg₁ hop hw' hh (by
+          rw [upd_self, upd0_1, sv_eq]
+          show Word.Entry.Val _ (sv3 _ _ 0)
+          rw [← hsub, ← hold]; exact rmwEnt_val WS)
+        rfl rfl (by simp) rfl rfl rfl (.inl rfl)
+        (by
+          rw [upd_self, upd0_1]
+          exact ⟨fun _ _ => .inl rfl, fun _ => ⟨k, hk⟩, (fun h => by cases h.1), (fun _ _ h => by cases h),
+            (fun h => by cases h)⟩)
+        (by rw [upd0_1]; exact hp)
+        (fun hc' => absurd hc'.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
+        (lws_keep hi₁ hop hg₁ (by simp [hasP, upd_self, gA, Ph.gave]) (by simp [hasP, hg0, Ph.gave]))
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [hold, htest1]
+    simp only [↓reduceIte, StateT.run_pure, pure_bind]
+    rw [htest2]
+    simp only [hi1, decide_true, ↓reduceIte, StateT.run_bind]
+    rw [semptr]
+    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (hE.post h G₁ m' k₁ io hi₂ hop.current))))
+    rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
+    have hf₃ := hi₃.2.1.flags
+    rw [upd_self, upd0_1] at hf₃
+    have hi₄ := inv_g0 hE (y := .dn false) hi₃ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+      ⟨fun _ _ => .inr rfl, (fun h => by cases h), (fun h => by cases h.1), (fun _ _ h => by cases h),
+        (fun h => by cases h)⟩
+    simp only [StateT.run_pure, pure_bind]
+    exact WP.pure' (WP.pure' (WP.pure' ⟨by omega, hc₂, hi₄⟩))
+
 end Sync.RwLockRead
