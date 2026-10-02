@@ -4,7 +4,7 @@
 
 Translate a subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 185 functions in 19 examples translate and match the compiled Zig on 87,121 differential tests (x86_64-linux), including the panic kind and the memory after each call. Every example has machine-checked proofs (`Proofs/`; `floatops`, a float test bench, only for the parts that do not depend on the Zig version). See [PLAN.md](PLAN.md).
+**Status:** works for Zig 0.16.0, 0.15.2 and 0.14.1. 185 functions in 19 examples translate and match the compiled Zig on 87,121 differential tests (x86_64-linux), including the panic kind and the memory after each call. Every example has machine-checked proofs (`Proofs/`; `floatops`' `op128` without its `f128` division and `@sqrt`, which differ by Zig version). See [PLAN.md](PLAN.md).
 
 | Examples | What they cover |
 |---|---|

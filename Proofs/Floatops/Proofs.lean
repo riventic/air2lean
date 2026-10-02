@@ -9,8 +9,11 @@ Zig version: the division selectors (3, 5, 6) call a different model function pe
 (`docs/floats.md` §Per-version differences), and CI builds these proofs against each version's
 translation.
 
-- `opN_basic`: `sel` 0, 1, 2, 14, 15 are `+`, `-`, `*`, `@abs`, negation.
-- `opN_other`: a `sel` of 26 or more returns `a` unchanged.
+- `opN_spec`: every `sel` picks its op (`opSpec`). `/`, `@divTrunc` and `@divFloor` are
+  `Float.div` on every version for `f16`..`f80`; `op128_spec` leaves out `sel` 3, 5, 6, 9
+  (`f128` division and `@sqrt` differ by version). `opN_other`: a `sel` of 26 or more returns
+  `a` unchanged.
+- `divExact64_spec`: the truncated quotient, or a panic when it is not a whole number.
 - `cmp64_spec`: the bitmask is the 6 comparisons; `cmp64_nan`: with a NaN operand only `!=` is
   true (IEEE 754: NaN is unordered), so the mask is `8`.
 -/
@@ -66,12 +69,6 @@ theorem sel_ne {sel : BitVec 8} (h : 26 ≤ sel.toNat) (k : BitVec 8) (hk : k.to
     (sel == k) = false := by
   simp only [beq_eq_false_iff_ne, ne_eq]; intro he; subst he; omega
 
-theorem op16_basic (a b c : Zig.Float .f16) :
-    op16 0 a b c = pure (Zig.Float.add a b) ∧ op16 1 a b c = pure (Zig.Float.sub a b) ∧
-      op16 2 a b c = pure (Zig.Float.mul a b) ∧ op16 14 a b c = pure (Zig.Float.abs a) ∧
-      op16 15 a b c = pure (Zig.Float.neg a) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
-
 theorem op16_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .f16) :
     op16 sel a b c = pure a := by
   unfold op16
@@ -85,12 +82,6 @@ theorem op16_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .f
     sel_ne h 21 (by decide), sel_ne h 22 (by decide), sel_ne h 23 (by decide),
     sel_ne h 24 (by decide), sel_ne h 25 (by decide)]
   rfl
-
-theorem op32_basic (a b c : Zig.F32) :
-    op32 0 a b c = pure (Zig.Float.add a b) ∧ op32 1 a b c = pure (Zig.Float.sub a b) ∧
-      op32 2 a b c = pure (Zig.Float.mul a b) ∧ op32 14 a b c = pure (Zig.Float.abs a) ∧
-      op32 15 a b c = pure (Zig.Float.neg a) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 theorem op32_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.F32) :
     op32 sel a b c = pure a := by
@@ -106,12 +97,6 @@ theorem op32_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.F32) :
     sel_ne h 24 (by decide), sel_ne h 25 (by decide)]
   rfl
 
-theorem op64_basic (a b c : Zig.F64) :
-    op64 0 a b c = pure (Zig.Float.add a b) ∧ op64 1 a b c = pure (Zig.Float.sub a b) ∧
-      op64 2 a b c = pure (Zig.Float.mul a b) ∧ op64 14 a b c = pure (Zig.Float.abs a) ∧
-      op64 15 a b c = pure (Zig.Float.neg a) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
-
 theorem op64_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.F64) :
     op64 sel a b c = pure a := by
   unfold op64
@@ -125,12 +110,6 @@ theorem op64_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.F64) :
     sel_ne h 21 (by decide), sel_ne h 22 (by decide), sel_ne h 23 (by decide),
     sel_ne h 24 (by decide), sel_ne h 25 (by decide)]
   rfl
-
-theorem op80_basic (a b c : Zig.Float .f80) :
-    op80 0 a b c = pure (Zig.Float.add a b) ∧ op80 1 a b c = pure (Zig.Float.sub a b) ∧
-      op80 2 a b c = pure (Zig.Float.mul a b) ∧ op80 14 a b c = pure (Zig.Float.abs a) ∧
-      op80 15 a b c = pure (Zig.Float.neg a) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 theorem op80_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .f80) :
     op80 sel a b c = pure a := by
@@ -146,12 +125,6 @@ theorem op80_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .f
     sel_ne h 24 (by decide), sel_ne h 25 (by decide)]
   rfl
 
-theorem op128_basic (a b c : Zig.Float .f128) :
-    op128 0 a b c = pure (Zig.Float.add a b) ∧ op128 1 a b c = pure (Zig.Float.sub a b) ∧
-      op128 2 a b c = pure (Zig.Float.mul a b) ∧ op128 14 a b c = pure (Zig.Float.abs a) ∧
-      op128 15 a b c = pure (Zig.Float.neg a) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
-
 theorem op128_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .f128) :
     op128 sel a b c = pure a := by
   unfold op128
@@ -165,3 +138,247 @@ theorem op128_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .
     sel_ne h 21 (by decide), sel_ne h 22 (by decide), sel_ne h 23 (by decide),
     sel_ne h 24 (by decide), sel_ne h 25 (by decide)]
   rfl
+
+/-! ### Every selector -/
+
+/-- The op that `sel` picks, in the model (`docs/floats.md` §Semantics). `/`, `@divTrunc` and
+`@divFloor` are `Float.div` then `trunc`/`floor`: on a format other than `f128` that is the
+model of every Zig version. -/
+def opSpec {fmt : Zig.FloatFmt} (sel : BitVec 8) (a b c : Zig.Float fmt) : Zig.Result (Zig.Float fmt) :=
+  match sel.toNat with
+  | 0 => pure (Zig.Float.add a b)
+  | 1 => pure (Zig.Float.sub a b)
+  | 2 => pure (Zig.Float.mul a b)
+  | 3 => pure (Zig.Float.div a b)
+  | 4 => Zig.Float.fmaRtChk a b c
+  | 5 => pure (Zig.Float.trunc (Zig.Float.div a b))
+  | 6 => pure (Zig.Float.floor (Zig.Float.div a b))
+  | 7 => Zig.Float.remChk a b
+  | 8 => Zig.Float.modChk a b
+  | 9 => pure (Zig.Float.sqrt a)
+  | 10 => Zig.Float.floorChk a
+  | 11 => Zig.Float.ceilChk a
+  | 12 => Zig.Float.truncChk a
+  | 13 => Zig.Float.roundChk a
+  | 14 => pure (Zig.Float.abs a)
+  | 15 => pure (Zig.Float.neg a)
+  | 16 => Zig.Float.minChk a b
+  | 17 => Zig.Float.maxChk a b
+  | 18 => pure (Zig.Float.libm .sin a)
+  | 19 => pure (Zig.Float.libm .cos a)
+  | 20 => pure (Zig.Float.libm .tan a)
+  | 21 => pure (Zig.Float.libm .exp a)
+  | 22 => pure (Zig.Float.libm .exp2 a)
+  | 23 => pure (Zig.Float.libm .log a)
+  | 24 => pure (Zig.Float.libm .log2 a)
+  | 25 => pure (Zig.Float.libm .log10 a)
+  | _ => pure a
+
+theorem opSpec_other {fmt : Zig.FloatFmt} {sel : BitVec 8} (h : 26 ≤ sel.toNat)
+    (a b c : Zig.Float fmt) : opSpec sel a b c = pure a := by
+  unfold opSpec
+  split <;> first | omega | rfl
+
+/-- A `sel` below 26 is `BitVec.ofNat 8 n` for an `n` below 26. -/
+theorem sel_lt {sel : BitVec 8} (h : ¬26 ≤ sel.toNat) :
+    ∃ n, n < 26 ∧ sel = BitVec.ofNat 8 n :=
+  ⟨sel.toNat, by omega, by simp⟩
+
+theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) : op16 sel a b c = opSpec sel a b c := by
+  by_cases h : 26 ≤ sel.toNat
+  · rw [op16_other sel h, opSpec_other h]
+  · obtain ⟨n, hn, rfl⟩ := sel_lt h
+    match n, hn with
+    | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
+    | 4, _ =>
+      show _ = Zig.Float.fmaRtChk a b c
+      unfold op16; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
+    | 7, _ =>
+      show _ = Zig.Float.remChk a b
+      unfold op16; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 8, _ =>
+      show _ = Zig.Float.modChk a b
+      unfold op16; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 10, _ =>
+      show _ = Zig.Float.floorChk a
+      unfold op16; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 11, _ =>
+      show _ = Zig.Float.ceilChk a
+      unfold op16; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 12, _ =>
+      show _ = Zig.Float.truncChk a
+      unfold op16; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 13, _ =>
+      show _ = Zig.Float.roundChk a
+      unfold op16; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 16, _ =>
+      show _ = Zig.Float.minChk a b
+      unfold op16; generalize Zig.Float.minChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 17, _ =>
+      show _ = Zig.Float.maxChk a b
+      unfold op16; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | n + 26, h => omega
+
+theorem op32_spec (sel : BitVec 8) (a b c : Zig.Float .f32) : op32 sel a b c = opSpec sel a b c := by
+  by_cases h : 26 ≤ sel.toNat
+  · rw [op32_other sel h, opSpec_other h]
+  · obtain ⟨n, hn, rfl⟩ := sel_lt h
+    match n, hn with
+    | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
+    | 4, _ =>
+      show _ = Zig.Float.fmaRtChk a b c
+      unfold op32; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
+    | 7, _ =>
+      show _ = Zig.Float.remChk a b
+      unfold op32; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 8, _ =>
+      show _ = Zig.Float.modChk a b
+      unfold op32; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 10, _ =>
+      show _ = Zig.Float.floorChk a
+      unfold op32; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 11, _ =>
+      show _ = Zig.Float.ceilChk a
+      unfold op32; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 12, _ =>
+      show _ = Zig.Float.truncChk a
+      unfold op32; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 13, _ =>
+      show _ = Zig.Float.roundChk a
+      unfold op32; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 16, _ =>
+      show _ = Zig.Float.minChk a b
+      unfold op32; generalize Zig.Float.minChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 17, _ =>
+      show _ = Zig.Float.maxChk a b
+      unfold op32; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | n + 26, h => omega
+
+theorem op64_spec (sel : BitVec 8) (a b c : Zig.Float .f64) : op64 sel a b c = opSpec sel a b c := by
+  by_cases h : 26 ≤ sel.toNat
+  · rw [op64_other sel h, opSpec_other h]
+  · obtain ⟨n, hn, rfl⟩ := sel_lt h
+    match n, hn with
+    | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
+    | 4, _ =>
+      show _ = Zig.Float.fmaRtChk a b c
+      unfold op64; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
+    | 7, _ =>
+      show _ = Zig.Float.remChk a b
+      unfold op64; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 8, _ =>
+      show _ = Zig.Float.modChk a b
+      unfold op64; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 10, _ =>
+      show _ = Zig.Float.floorChk a
+      unfold op64; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 11, _ =>
+      show _ = Zig.Float.ceilChk a
+      unfold op64; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 12, _ =>
+      show _ = Zig.Float.truncChk a
+      unfold op64; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 13, _ =>
+      show _ = Zig.Float.roundChk a
+      unfold op64; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 16, _ =>
+      show _ = Zig.Float.minChk a b
+      unfold op64; generalize Zig.Float.minChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 17, _ =>
+      show _ = Zig.Float.maxChk a b
+      unfold op64; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | n + 26, h => omega
+
+theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80) : op80 sel a b c = opSpec sel a b c := by
+  by_cases h : 26 ≤ sel.toNat
+  · rw [op80_other sel h, opSpec_other h]
+  · obtain ⟨n, hn, rfl⟩ := sel_lt h
+    match n, hn with
+    | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
+    | 4, _ =>
+      show _ = Zig.Float.fmaRtChk a b c
+      unfold op80; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
+    | 7, _ =>
+      show _ = Zig.Float.remChk a b
+      unfold op80; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 8, _ =>
+      show _ = Zig.Float.modChk a b
+      unfold op80; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 10, _ =>
+      show _ = Zig.Float.floorChk a
+      unfold op80; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 11, _ =>
+      show _ = Zig.Float.ceilChk a
+      unfold op80; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 12, _ =>
+      show _ = Zig.Float.truncChk a
+      unfold op80; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 13, _ =>
+      show _ = Zig.Float.roundChk a
+      unfold op80; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 16, _ =>
+      show _ = Zig.Float.minChk a b
+      unfold op80; generalize Zig.Float.minChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 17, _ =>
+      show _ = Zig.Float.maxChk a b
+      unfold op80; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | n + 26, h => omega
+
+/-- `f128`: `/`, `@divTrunc`, `@divFloor` and `@sqrt` (`sel` 3, 5, 6, 9) call another model
+function per Zig version (`docs/floats.md` §Per-version differences); every other `sel` is
+`opSpec`. -/
+theorem op128_spec (sel : BitVec 8) (hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9)
+    (a b c : Zig.Float .f128) : op128 sel a b c = opSpec sel a b c := by
+  by_cases h : 26 ≤ sel.toNat
+  · rw [op128_other sel h, opSpec_other h]
+  · obtain ⟨n, hn, rfl⟩ := sel_lt h
+    match n, hn with
+    | 3, _ => exact absurd rfl hs.1
+    | 5, _ => exact absurd rfl hs.2.1
+    | 6, _ => exact absurd rfl hs.2.2.1
+    | 9, _ => exact absurd rfl hs.2.2.2
+    | 0, _ | 1, _ | 2, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
+    | 4, _ =>
+      show _ = Zig.Float.fmaRtChk a b c
+      unfold op128; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
+    | 7, _ =>
+      show _ = Zig.Float.remChk a b
+      unfold op128; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 8, _ =>
+      show _ = Zig.Float.modChk a b
+      unfold op128; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 10, _ =>
+      show _ = Zig.Float.floorChk a
+      unfold op128; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 11, _ =>
+      show _ = Zig.Float.ceilChk a
+      unfold op128; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 12, _ =>
+      show _ = Zig.Float.truncChk a
+      unfold op128; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 13, _ =>
+      show _ = Zig.Float.roundChk a
+      unfold op128; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl
+    | 16, _ =>
+      show _ = Zig.Float.minChk a b
+      unfold op128; generalize Zig.Float.minChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | 17, _ =>
+      show _ = Zig.Float.maxChk a b
+      unfold op128; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
+    | n + 26, h => omega
+
+/-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics); the
+safety check panics if it is not a whole number, so a NaN quotient panics too. -/
+theorem divExact64_spec (a b : Zig.F64) :
+    divExact64 a b =
+      let q := Zig.Float.trunc (Zig.Float.div a b)
+      if Zig.Float.eq q (Zig.Float.floor q) then pure q else throw .panic := by
+  have hd : Zig.Float.divTruncRt016 a b = Zig.Float.trunc (Zig.Float.div a b) ∧
+      Zig.Float.divTruncRt a b = Zig.Float.trunc (Zig.Float.div a b) := ⟨rfl, rfl⟩
+  unfold divExact64
+  simp only [hd.1, hd.2]
+  generalize Zig.Float.trunc (Zig.Float.div a b) = q
+  show _ = if Zig.Float.eq q (Zig.Float.floor q) then pure q else throw Zig.Error.panic
+  generalize hb : Zig.Float.eq q (Zig.Float.floor q) = t
+  cases t <;> simp only [Zig.Float.floorChk, Zig.Float.isInvalidF80, Bool.false_eq_true,
+    ↓reduceIte, zig_unfold, hb] <;> rfl
