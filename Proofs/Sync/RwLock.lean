@@ -2415,4 +2415,77 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
     simp only [StateT.run_pure, pure_bind]
     exact WP.pure' (WP.pure' (WP.pure' ⟨by omega, hc₅, h, hnk, hi₆⟩))
 
+/-- Only one thread owns `n`. -/
+theorem not_both {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m)
+    (h0 : (G 0).2.2.mustN) (h1 : (G 1).2.2.mustN) : False := by
+  have hu := hi.2.1
+  have hj : ∀ u, (G u).2.2.mustN → (G u).2.2.inSem = false → joinedB m u = false := fun u hm hns => by
+    have hlv : (G u).2.2.live := by cases e : (G u).2.2 <;> simp_all [Ph.mustN, Ph.live]
+    refine (hi.1.live u ?_).2
+    rcases hu.lph u hns with h | h | ⟨-, h⟩
+    · show (G u).1.ph ≠ _; rw [h]; decide
+    · show (G u).1.ph ≠ _; rw [h]; decide
+    · rw [hlv] at h; cases h
+  have hW : (G 1).2.2.isW := by
+    obtain ⟨-, ⟨-, -, hn⟩ | ⟨-, -, -, hW, -⟩⟩ := hu.shape
+    · have := hn 1 (Nat.le_refl _); change (G 1).2.2 = _ at this; rw [this] at h1; cases h1
+    · exact hW
+  have hn0 : (G 0).2.2.inSem = false := by
+    cases e : (G 0).2.2 <;> simp_all [Ph.mustN, Ph.inSem]
+    obtain ⟨k, hk⟩ := hu.flags.po e; rw [hk] at h1; cases h1
+  have hn1 : (G 1).2.2.inSem = false := by cases e : (G 1).2.2 <;> simp_all [Ph.mustN, Ph.inSem, Ph.isW]
+  have a := hu.parts 0; simp only [h0, ↓reduceIte] at a
+  have b := hu.parts 1; simp only [h1, ↓reduceIte] at b
+  have hd := hi.1.own.disj 0 1 (by decide)
+  rw [Lock.own_live (hj 0 h0 hn0), Lock.own_live (hj 1 h1 hn1)] at hd
+  exact npts_meet a b (Heap.disjoint_union_right.mp (Heap.disjoint_union_left.mp hd).1).1
+
+/-- `unlock` of the `RwLock` by the writer at `wn k`, which owns `n` (`hn`): it gives `n` to the
+state word. -/
+theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : Io}
+    {G : ThreadId → Gh S} {m : Mem} {d : Nat} (hi : (proto E).inv (upd G 1 (gA (.wn k) hn default)) m) :
+    (proto E).WP 1 (Io_RwLock_unlock (bPtr.add 16) io) (fun _ G' m' d' => d' < d ∧
+      m'.current = 1 ∧ (proto E).inv (upd G' 1 (gA (.wo k) Heap.empty default)) m') G m d := by
+  unfold Io_RwLock_unlock
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [wsptr, wmptr]
+  refine WP.bind (wp_rmw (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+    fun k₁ hk₁ G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' hop => ?_)
+  have hu₁ := hi₁.2.1
+  have hg1 : (G₁ 1).2.2 = .wn k := by rw [hg₁]; rfl
+  have hold := sold hu₁ hv
+  rw [hg1] at hold; simp only [Ph.wb, Ph.ib] at hold
+  have hr := Ph.rb_le (G₁ 0).2.2
+  have hm0 : (G₁ 0).2.2.mustN = false :=
+    Bool.eq_false_iff.mpr fun h => not_both hi₁ h (by rw [hg1]; rfl)
+  obtain ⟨-, f2, f3, f4⟩ := hu₁.flags
+  rw [hg1] at f3 f2
+  have hnp : (G₁ 0).2.2 ≠ .po := fun h => by obtain ⟨k', hk'⟩ := f2 h; cases hk'
+  -- `n` from the writer's part
+  have htl : 1 < m₁.threads.size := (hi₁.1.live 1 (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))).1
+  have hj1 : joinedB m₁ 1 = false := (hi₁.1.live 1 (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))).2
+  have hown := hi₁.1.own.owns 1 htl
+  have hsub := hi₁.1.own.sub 1
+  rw [Lock.own_live hj1, hg₁] at hown hsub
+  have hcl := car_lose hu₁.ws hown.left (fun l c h => hsub l c (Heap.sub_union_left l c h)) hp hop hh
+  have hi₂ : (proto E).inv (upd G₁ 1 (gA (.wr k .holds) Heap.empty default)) m' :=
+    inv_sstep hE hi₁ hg₁ hop hw' hh (by
+        rw [upd1_0, upd_self]
+        show Word.Entry.Val _ (sv (G₁ 0).2.2 (.wr k .holds))
+        rw [sv_eq]; show Word.Entry.Val _ (sv3 0 0 _); rw [← sv3_and hr, ← hold]; exact rmwEnt_val WS)
+      rfl rfl (fun h => by cases h) rfl rfl rfl (.inl rfl)
+      (by
+        rw [upd1_0, upd_self]
+        exact ⟨(fun _ h => by cases h), (fun h => absurd h hnp), (fun h => f3 ⟨h.1, rfl⟩), f4⟩)
+      (by rfl) (fun _ => ⟨hn, by rw [upd_self]; exact hp, hcl⟩)
+      (lws_lose hi₁ hop hg₁ (by simp [hasP, upd_self, gA, Ph.isWs]) (by simp [hasP, hg1, Ph.isWs]))
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 1) (x := .wr k .holds)
+    (.inr ⟨rfl, k, .holds, by rw [upd_self]; rfl⟩) rfl hi₂)))
+  rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
+  exact WP.pure' (WP.pure' ⟨by omega, hc₂, hi₃⟩)
+
 end Sync.RwLockRead
