@@ -2392,5 +2392,52 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
     simp only [Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
     exact hfin G₂ m₅ d₂ hL₅ hd₂ hc₅ hi₅
 
+
+/-- `post` by `t` at `x`, with the resource `h₃` of a permit in its part: it gives the permit and
+`h₃` back (`hmv`); its part is `pa`, its ghost value `x'`. -/
+theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (io : Io)
+    (hmv : ∀ Y : ThreadId → X, Y t = x → S.pv (upd Y t x') = S.pv Y + 1 ∧
+      (S.pv Y).toNat + 1 < 2 ^ 64 ∧
+      ∀ hr, S.Res Y hr → Heap.Disjoint h₃ hr → S.Res (upd Y t x') (h₃ ∪ hr))
+    (hU : ∀ G m h₁ h₂, U (upd G t (⟨.holds, pa ∪ h₃, h₁⟩, .pst, x)) m →
+      U (upd G t (⟨.holds, pa, h₂⟩, .pst, x')) m)
+    (hdj : Heap.Disjoint pa h₃) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x)) m) :
+    P.WP t (Io_Semaphore_post S.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      P.inv (upd G' t (⟨.out, pa, Heap.empty⟩, .none, x')) m') G m d := by
+  unfold Io_Semaphore_post
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
+    (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x) rfl rfl io G m d hi)))
+  rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
+  have hp₁ := hP.toPst hi₁ rfl
+  rw [ptr0 (S := S)]
+  refine WP.bind (wp_cntLoad hP hp₁ hc₁ fun m₂ hL₂ hc₂ hi₂ => ?_)
+  have hY := xs_self G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)
+  obtain ⟨hpv, hlt, hres⟩ := hmv _ hY
+  refine WP.bind (WP.callRC_ok (add1_run hlt) ?_)
+  have hxs := xs_eq G₁ t ⟨.holds, pa ∪ h₃, hL₂⟩ ⟨.holds, pa ∪ h₃, hL₁⟩ .pst .pst x
+  refine WP.bind (wp_cnt hP (Mv := (· = pa)) (x' := x') (r₀ := ()) hi₂ hc₂
+    (TTriple.conseq (TTriple.store (by decide) _) (fun _ h => h) fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩)
+    (by rw [hxs]) (fun hr hrr hdr => ?_) (.inr (.inr rfl))
+    (fun m' h₁ h₂ pa' hpa hu => by subst hpa; exact hU _ _ _ _ hu)
+    fun m₃ pa' hL₃ hpa hc₃ _ hi₃ => ?_)
+  · rw [hxs] at hrr
+    obtain ⟨hd3, hdr'⟩ := Heap.disjoint_union_left.mp hdr
+    refine ⟨pa, h₃ ∪ hr, (Heap.union_assoc _ _ _).symm, Heap.disjoint_union_right.mpr ⟨hdj, hd3⟩,
+      ?_, ?_, rfl⟩
+    · rw [xs_upd G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)]; exact hres hr hrr hdr'
+    · rw [xs_upd G₁ t (⟨.holds, pa ∪ h₃, hL₁⟩, .pst, x)]; exact hpv
+  subst hpa
+  refine WP.bind (WP.callC (WP.mono ?_ (signal_spec hP t ⟨.holds, pa', hL₃⟩ x' rfl io G₁ m₃ d₁ hi₃)))
+  rintro _ G₄ m₄ d₄ ⟨hd₄, hc₄, hi₄⟩
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf ptr_mutex rfl t
+    (⟨.holds, pa', hL₃⟩, .none, x') rfl rfl io G₄ m₄ d₄ hi₄)))
+  rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
+  exact WP.pure' (WP.pure' ⟨by omega, hc₅, hi₅⟩)
+
 end Sem
 end Sync
