@@ -4,7 +4,26 @@ import ZigLean.Conc.Word
 /-!
 # `rwLockRead` over all schedules
 
-WIP.
+`rwLockRead` spawns a writer, which adds 1 two times to a counter `n` under the exclusive lock of
+an `Io.RwLock` (translated from Zig 0.16.0's std code; the futex under it is the model). `main`
+reads `n` under the shared lock, joins the writer, and reads `n` again. The result is
+`10 * first + second`: 2, 12 or 22 under every schedule (`rwLockRead_spec`), and no schedule gives
+an error (`rwLockRead_safe`): no data race on `n`, and no deadlock.
+
+- **Places** (`Ph`): where `main` and the writer are in their code. `main`'s places carry `jd`:
+  `main` joined the writer. The writer's places carry its number of increments (`cnt`).
+- **The state word** (`WS`): the `RwLock`'s `state`; its newest write is `sv` of the two places
+  (`writer`, `is_writing`, `reader`). Each RMW of it is a step of the places (`inv_sstep`).
+- **`n`**: a thread at a place with `mustN` owns it in its part; else the semaphore's free permit
+  has it (`Res`, while the writer waits and `main` gave it), or no thread has it (`Car`): each
+  access to it happened before the release clock of the state's newest write (`CarOk`).
+- **The `RwLock`'s mutex** (`WM`): a word with the values `0`, `1`, `2`; at most one place holds
+  it (`Flags.one`); a thread asleep at it waits for the holder or for its wake (`MQ`).
+- **The semaphore**: the proof uses only `Sem.Spec` (`wait`, `post`, `live`, `frame`) of an
+  abstract part `E` of the invariant. `spec₀` gives it for `E₀`, from the semaphore's kit
+  (`Proofs/Sync/Semaphore.lean`, `Sm`).
+- **The threads** (`Shape`): `main` alone before its spawn; then two threads. The writer is
+  joined exactly when `main` is at a place with `jd`, so `main`'s second read sees 2.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
