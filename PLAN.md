@@ -88,7 +88,7 @@ Mutation check (`scripts/mutate.sh`, 5 CI jobs, one per line of `scripts/mutatio
 | # | Milestone |
 |---|---|
 | T6 | Docs for the T series (the status table, README, `docs/`); a release tag after approval. |
-| T7 | Close the proof gaps: `vectors.checkedAdd` (`checkedAdd_ok`, `checkedAdd_overflow`); every `floatops` selector (`opN_spec`; `op128` without the `f128` division and `@sqrt`, which differ by version) and `divExact64`; `Triple`'s memory invariant `Mem.Seq` (one thread, every block below `Mem.nextAddr`) and `lists.append` (`append_run`); `sync.semaphoreCounter`, `sync.rwLockRead` over all schedules; 0.15.2 `Thread.Mutex` on macOS (done: `Proofs/Threadsync/Lock.lean` proves `lock_spec`/`unlock_spec` for the macOS translation; CI builds the `threadsync` proofs against `Gen-darwin.lean`). |
+| T7 | Close the proof gaps: `vectors.checkedAdd` (`checkedAdd_ok`, `checkedAdd_overflow`); every `floatops` selector (`opN_spec`; `op128` without the `f128` division and `@sqrt`, which differ by version) and `divExact64`; `Triple`'s memory invariant `Mem.Seq` (one thread, every block below `Mem.nextAddr`) and `lists.append` (`append_run`); `sync.semaphoreCounter` over all schedules (done: `Proofs/Sync/Semaphore.lean` proves `wait` and `post` for every protocol, `Proofs/Sync/SemCounter.lean` the example); `sync.rwLockRead` over all schedules; 0.15.2 `Thread.Mutex` on macOS (done: `Proofs/Threadsync/Lock.lean` proves `lock_spec`/`unlock_spec` for the macOS translation; CI builds the `threadsync` proofs against `Gen-darwin.lean`). |
 
 ## Decisions
 
