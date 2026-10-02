@@ -1521,4 +1521,65 @@ theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (h
     simp only [Bool.not_eq_eq_eq_not, Bool.not_true] at hnot
     rw [Array.contains_iff_mem.mpr hin] at hnot; cases hnot
 
+/-! ## `set` -/
+
+/- The rules need `WP` only as a name: unfolding it runs the program. -/
+attribute [local irreducible] Proto.WP
+
+theorem evptr : (((((bPtr.add 0).add 8).add 0).add 0).add 0) = EV.ptr := rfl
+theorem evptr4 : ((((bPtr.add 0).add 8).add 0).add 0) = EV.ptr := rfl
+
+theorem set_eq (p : Ptr) : Thread_ResetEvent_set p =
+    (Thread_ResetEvent_FutexImpl_set (p.add 0) >>= fun _ => pure ()) := by
+  unfold Thread_ResetEvent_set
+  simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
+    bind_assoc, map_bind, map_pure]
+
+/-- `ResetEvent.set` by the setter `t` (at `s0`): it ends at `dn`, having set the event. -/
+theorem set_spec {t : ThreadId} (ht : t = 1 ∨ t = 2) (a b : VClock) (G : ThreadId → Gh) (m : Mem)
+    (d : Nat) (hi : proto.inv (upd G t (gS .s0 a b false)) m) :
+    proto.WP t (Thread_ResetEvent_set ((bPtr.add 0).add 8))
+      (fun _ G' m' _ => ∃ c, proto.inv (upd G' t (gS .dn a c true)) m') G m d := by
+  rw [set_eq]
+  refine WP.bind ?_
+  unfold Thread_ResetEvent_FutexImpl_set
+  refine WP.bind ?_
+  rw [StateT.run'_eq, map_eq_pure_bind]
+  refine WP.bind ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [evptr]
+  have hts : ∀ (g : Gh), g.2.ph.isTask → g.2.frozen = false → ∀ G₁ m₁, G₁ t = g →
+      proto.inv G₁ m₁ → t < m₁.threads.size ∧ (G₁ 0).2.ph.rank ≤ 7 := fun g h1 h2 G₁ m₁ hg hi₁ =>
+    ⟨task_size hi₁ ht (by rw [hg]; exact h1), task_rank hi₁ ht (by rw [hg]; exact h2)⟩
+  refine WP.bind (wp_load shE hi (hts _ rfl rfl)
+    fun k hk G₁ m₁ m' v j hg₁ hi₁ hr hj hv _ _ hh hw' hop hL => ?_)
+  obtain ⟨hv01, hi'⟩ := inv_sload ht hi₁ hg₁ hr hj hv hh hw' hop hL
+  have hv2 : (v == (2 : BitVec 32)) = false := by rcases hv01 with rfl | rfl <;> rfl
+  simp only [StateT.run_pure, pure_bind, hv2, Bool.false_eq_true, ↓reduceIte]
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  refine WP.bind (wp_rmw shE hi' (hts _ rfl rfl)
+    fun k₂ hk₂ G₂ m₂ m'' old hg₂ hi₂ hr₂ hv' _ hh' _ hw'' hop' hL' => ?_)
+  obtain ⟨h01, hi''⟩ := inv_sxchg ht hi₂ hg₂ hr₂ hv' hh' hw'' hop' hL'
+  simp only [StateT.run_pure, pure_bind]
+  by_cases h1 : old = 1
+  · subst h1
+    simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind, bind_assoc,
+      pure_bind]
+    rw [evptr4, threadFutexWakeC_eq]
+    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi'', fun G₃ m₃ hg₃ hi₃ m₄ hw => ?_⟩)
+    simp only [if_pos rfl] at hg₃
+    have hl := hi₃.1.wakeOff (by decide) hw
+    obtain ⟨hq, hb, ha, hf, hth, hc⟩ := wake_q (G' := upd G₃ t (gS .dn a (m''.clocks[t]!) true))
+      (by decide) hi₃.2.q hw
+    have := inv_frozen (ph := .wk) (ph' := .dn) ht hi₃ hg₃ (.inl rfl) (.inl rfl) (fun _ => rfl) hl hb
+      ha hf hth hc hq
+    simp only [StateT.run_pure, pure_bind]
+    exact WP.pure' (WP.pure' (WP.pure' (WP.pure' ⟨_, this⟩)))
+  · have h0 : old = 0 := h01.resolve_right h1
+    subst h0
+    simp only [show ((0 : BitVec 32) == 1) = false from rfl, Bool.false_eq_true, ↓reduceIte,
+      StateT.run_pure, pure_bind] at hi'' ⊢
+    simp only [show ((0 : BitVec 32) = 1) ↔ False by decide, ↓reduceIte] at hi''
+    exact WP.pure' (WP.pure' (WP.pure' (WP.pure' ⟨_, hi''⟩)))
+
 end Threadsync.WG
