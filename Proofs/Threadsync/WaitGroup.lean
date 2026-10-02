@@ -3223,4 +3223,220 @@ theorem wgwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind])
     done
 
+/-! ## `main`'s read of the `Tally`, and its joins -/
+
+/-- The `Tally`'s decode, from the values of its four words. -/
+theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
+    (ha : (intOfBytes 64 (bs.extract 0 8)).run = some (.ok a))
+    (hb : (intOfBytes 32 (bs.extract 8 12)).run = some (.ok b))
+    (hc : (intOfBytes 32 (bs.extract 16 20)).run = some (.ok c))
+    (hd : (intOfBytes 32 (bs.extract 20 24)).run = some (.ok d)) :
+    (Enc.decode bs : Result Tally).run = some (.ok
+      { wg := { state := { raw := a }, event := { impl := { state := { raw := b } } } },
+        m := { impl := { state := { raw := c } } }, n := d }) := by
+  have ha' : intOfBytes 64 (bs.extract 0 8) = pure a := ha
+  have hb' : intOfBytes 32 (bs.extract 8 12) = pure b := hb
+  have hc' : intOfBytes 32 (bs.extract 16 20) = pure c := hc
+  have hd' : intOfBytes 32 (bs.extract 20 24) = pure d := hd
+  simp only [Enc.decode, Enc.decodeAt, Enc.size, Array.extract_extract, intSize,
+    show alignUp ((64 + 7) / 8) (intAlign 64) = 8 from rfl,
+    show alignUp ((32 + 7) / 8) (intAlign 32) = 4 from rfl]
+  rw [show Min.min 8 (Min.min 8 16) = 8 from rfl,
+    show Min.min (8 + 4) (Min.min (8 + 4) (Min.min (8 + 4) (Min.min (8 + 4) 16))) = 12 from rfl,
+    show Min.min (16 + 4) (Min.min (16 + 4) (Min.min (16 + 4) (16 + 4))) = 20 from rfl,
+    show (20 + 4 : Nat) = 24 from rfl, ha', hb', hc', hd']
+  rfl
+
+/-- `main` at `rd`: both tasks are frozen, so no thread holds the mutex. -/
+theorem free_rd {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) : L.Free G := by
+  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
+  intro u
+  by_cases h0 : u = 0
+  · subst h0; rw [hg]; show LPh.out ≠ LPh.holds; decide
+  have hgone : L.ph (G u) = .gone := by
+    by_cases h12 : u = 1 ∨ u = 2
+    · have hfr : (G u).2.frozen := by rcases h12 with rfl | rfl; exact hd.1; exact hd.2.1
+      apply hi.2.lg u
+      unfold X.frozen at hfr; unfold X.fd
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
+      exact ⟨hfr.1, by omega⟩
+    · exact hi.2.out3 u (by unfold ThreadId at *; omega)
+  rw [hgone]; decide
+
+/-- A frozen task did its store of the counter. -/
+theorem cnt_frozen {x : X} (h : x.frozen) : x.cnt = 1 := by
+  unfold X.frozen at h; unfold X.cnt
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  rw [if_pos ⟨h.1, by omega⟩]
+
+/-- `main` at `rd`: the `Tally` holds the four words, and the counter `2`. -/
+theorem tally_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) :
+    ∃ (blk : Block) (v : Tally), m.blocks[0]? = some blk ∧ m.access bPtr (Enc.size Tally) 8 = pure (0, blk, 0) ∧
+      Enc.decode (blk.bytes.extract 0 (0 + Enc.size Tally)) = pure v ∧ v.n = 2 := by
+  obtain ⟨blk, h1, hlive, hsz, haddr, -⟩ := hi.2.blk
+  have hacc : m.access bPtr (Enc.size Tally) 8 = pure (0, blk, 0) :=
+    access_of rfl h1 hlive (by decide) (by simp [bPtr, hsz]; exact Int.le_refl 24) (by simp [bPtr, haddr])
+  have hp := hi.2.pre (by rw [hg]; show Ph.rd.rank ≤ 7; decide)
+  obtain ⟨a, ha⟩ := hp.wg.val
+  rw [Word.u32_bytes (W := WG) h1] at ha
+  obtain ⟨b, hb⟩ := hp.ev.val
+  rw [Word.u32_bytes (W := EV) h1] at hb
+  obtain ⟨w, -, hU, -⟩ := hi.1.word
+  unfold Lock.U32 curBytes at hU
+  rw [show L.b = 0 from rfl, show L.o = 16 from rfl, h1] at hU
+  simp only [Option.map_some, Option.getD_some] at hU
+  -- the counter: the lock's free resource
+  obtain ⟨hL, hR, hsub, -, -, -⟩ := hi.1.free (free_rd hi hg)
+  change R (fun u => (G u).2) hL at hR
+  obtain ⟨A, S, K, bs, -, hs, hv, hbA, -⟩ := hR
+  obtain ⟨hm, -⟩ := Heap.diff_split hsub
+  obtain ⟨b', blk', hacc', -, -, -, hx⟩ := bytesAt_access hbA hm (q := (bPtr.add 20).add 0) (k := 0)
+    (n := 4) (a := 1) rfl (by decide) (by rw [hs]; exact Nat.le_refl _) (Nat.mod_one _)
+  obtain ⟨hqb, hblk', -⟩ := access_eq hacc'
+  cases hqb
+  rw [h1] at hblk'; cases hblk'
+  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
+  have hc2 : (G 1).2.cnt + (G 2).2.cnt = 2 := by rw [cnt_frozen hd.1, cnt_frozen hd.2.1]
+  rw [hc2] at hv
+  have hs4 : bs.size = 4 := hs
+  have hbs : bs.extract 0 (0 + 4) = bs := by rw [Array.extract_eq_self_iff]; omega
+  rw [hbs] at hx
+  have hd' : (intOfBytes 32 (blk.bytes.extract 20 24)).run = some (.ok (BitVec.ofNat 32 2)) := by
+    have : blk.bytes.extract 20 24 = bs := hx
+    rw [this]; exact hv
+  have e : ∀ i j, (blk.bytes.extract 0 (0 + Enc.size Tally)).extract i j =
+      blk.bytes.extract i (min j 24) := fun i j => by
+    rw [Array.extract_extract]; simp [Enc.size]
+  refine ⟨blk, _, h1, hacc, tally_decode (a := a) (b := b) (c := BitVec.ofNat 32 w)
+    (by rw [e]; exact ha) (by rw [e]; exact hb) (by rw [e]; exact hU) (by rw [e]; exact hd'), rfl⟩
+
+/-- `main` at `rd`: every other thread is `gone` for the lock. -/
+theorem gone_rd {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) (u : ThreadId) (h0 : u ≠ 0) :
+    L.ph (G u) = .gone := by
+  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
+  by_cases h12 : u = 1 ∨ u = 2
+  · have hfr : (G u).2.frozen := by rcases h12 with rfl | rfl; exact hd.1; exact hd.2.1
+    apply hi.2.lg u
+    unfold X.frozen at hfr; unfold X.fd
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
+    exact ⟨hfr.1, by omega⟩
+  · exact hi.2.out3 u (by unfold ThreadId at *; omega)
+
+/-- `main`'s read of the whole `Tally` at `rd`: no race, and `main` goes to `rdd`. -/
+theorem inv_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) (hc : m.current = 0) :
+    NoRace m 0 0 (Enc.size Tally) .read ∧
+      proto.inv (upd G 0 (gM Heap.empty { ph := .rdd })) (m.recordAt 0 0 (Enc.size Tally) .read) := by
+  have hgx : (G 0).2 = { ph := .rd, e1 := e1 } := by rw [hg]; rfl
+  have hp := hi.2.pre (by rw [hgx]; show Ph.rd.rank ≤ 7; decide)
+  have hd := hi.2.done (by rw [hgx]; show 6 ≤ Ph.rd.rank; decide)
+  obtain ⟨blk, h1, -⟩ := hi.2.blk
+  refine ⟨noRace_of fun e he hb _ _ => .inl ?_, ?_, ?_⟩
+  · obtain ⟨ht3, hle⟩ := hp.attr e he hb
+    rw [hc]
+    refine VClock.le_trans hle ?_
+    unfold ac
+    rcases (by unfold ThreadId at *; omega : e.tid = 0 ∨ e.tid = 1 ∨ e.tid = 2) with h | h | h <;> rw [h]
+    · rw [hgx]; exact VClock.le_refl _
+    · rw [if_pos hd.1]; exact hd.2.2.1
+    · rw [if_pos hd.2.1]; exact hd.2.2.2
+  · have hl := hi.1.readAll (b := 0) (o := 0) (n := Enc.size Tally)
+      (Array.getElem?_eq_some_iff.mp h1).1 (by decide) (by rw [hc]; exact main_lt hi)
+      (fun u _ hu => gone_rd hi hg u (by rw [hc] at hu; exact hu))
+      (fun u x _ _ => by
+        unfold Lock.own; split
+        · rfl
+        · show ((G u).1.part ∪ (G u).1.held) (0, x) = none
+          have hh : (G u).1.held = Heap.empty := hi.1.idle u (by
+            by_cases h0 : u = 0
+            · subst h0; rw [hg]; show LPh.out ≠ LPh.holds; decide
+            · rw [gone_rd hi hg u h0]; decide)
+          rw [hh, Heap.union_empty]
+          by_cases h0 : u = 0
+          · subst h0; exact hi.2.part0 x
+          · rw [hi.2.parts u h0]; rfl)
+    exact linv_task hl (by rw [hg]; rfl) (by rw [hg]; rfl)
+  · refine U_main hi (by
+        rw [show (fun u => (upd G 0 (gM Heap.empty { ph := .rdd }) u).2) =
+          upd (fun u => (G u).2) 0 { ph := .rdd } by funext u; unfold upd; split <;> rfl]
+        exact shape_m hi.2.shape rfl (by rw [hgx]; show 3 ≤ Ph.rd.rank; decide)
+          (by rw [hgx]; show Ph.rd ≠ .j1; decide) rfl (by decide)
+          (by decide))
+      (Mem.heap_recordAt _) (fun _ => rfl) (qok_run hi (by rw [hg]; rfl) rfl _)
+      (fun hr => by rw [upd_self] at hr; exact absurd hr (by show ¬ Ph.rdd.rank ≤ 7; decide))
+      (fun _ => ⟨hd.1, hd.2.1, VClock.le_trans hd.2.2.1 (recordAt_le _ _ _ _ _ _),
+        VClock.le_trans hd.2.2.2 (recordAt_le _ _ _ _ _ _)⟩)
+      ⟨rfl, by show Ph.rdd ≠ .wk; decide, rfl, rfl⟩
+
+/-- A thread that is `gone` for the lock owns nothing (its part is empty). -/
+theorem own_gone {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {u : ThreadId} (hu0 : u ≠ 0)
+    (hg : L.ph (G u) = .gone) : L.own G m u = Heap.empty := by
+  unfold Lock.own; split
+  · rfl
+  · show (G u).1.part ∪ (G u).1.held = Heap.empty
+    rw [hi.2.parts u hu0, show (G u).1.held = Heap.empty from hi.1.idle u (by rw [hg]; decide)]; rfl
+
+/-- `main`'s join of task 1 at `rdd`: it goes to `j1`. -/
+theorem inv_j1 {G : ThreadId → Gh} {m m' : Mem} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rdd })
+    (hj : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m'))) :
+    m'.current = 0 ∧ proto.inv (upd G 0 (gM Heap.empty { ph := .j1 })) m' := by
+  have hgx : (G 0).2 = { ph := .rdd } := by rw [hg]; rfl
+  have hd := hi.2.done (by rw [hgx]; show 6 ≤ Ph.rdd.rank; decide)
+  have hg1 : L.ph (G 1) = .gone := by
+    apply hi.2.lg 1
+    have hfr := hd.1
+    unfold X.frozen at hfr; unfold X.fd
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
+    exact ⟨hfr.1, by omega⟩
+  have hown := own_gone hi (by decide) hg1
+  have hl := hi.1.join (t := 0) (u := 1) (g := gM Heap.empty { ph := .j1 }) (by decide) (by decide)
+    (by rw [hg]; rfl) hg1 hj (by rw [hown, hg]; rfl) rfl rfl (fun hL hR => by
+      show R (fun u => (upd G 0 (gM Heap.empty { ph := .j1 }) u).2) hL
+      refine (R_cnt (Y := fun u => (G u).2) ?_ ?_ hL).mpr hR <;>
+      · show (upd G 0 _ _).2.cnt = _; rw [upd_ne _ _ (by decide)])
+  obtain ⟨rec, hrec, hrj, hm'⟩ := join_eq hj
+  have hc' : m'.current = 0 := by rw [hm']
+  refine ⟨hc', hl, ?_⟩
+  obtain ⟨h00, -, h3, d⟩ := hi.2.shape
+  rcases d with ⟨-, d2, -⟩ | ⟨-, d2, -⟩ | ⟨d1, -, d3, d4, d5, d6⟩
+  · change (G 0).2.ph.rank ≤ 1 at d2; rw [hgx] at d2; simp [Ph.rank] at d2
+  · change (G 0).2.ph = .sp1 at d2; rw [hgx] at d2; cases d2
+  have hX : ∀ u, u ≠ 0 → (upd G 0 (gM Heap.empty { ph := .j1 }) u).2 = (G u).2 := fun u h => by
+    rw [upd_ne _ _ h]
+  have hX0 : (upd G 0 (gM Heap.empty { ph := .j1 }) 0).2 = { ph := .j1 } := by rw [upd_self]; rfl
+  simp only at hrec
+  change ({ m with current := 0 } : Mem).threads[1]? = some rec at hrec
+  have hrec' : rec = { spawner := 0, joined := false } := by
+    change m.threads[1]? = _ at hrec
+    have : m.threads[1]? = some { spawner := 0, joined := decide ((G 0).2.ph = .j1) } := d5
+    rw [this, hgx] at hrec; cases hrec; rfl
+  subst hrec'
+  have hth : m'.threads = m.threads.set! 1 { spawner := 0, joined := true } := by rw [hm']
+  have hcl : VClock.le (m.clocks[0]!) (m'.clocks[0]!) = true := by
+    rw [hm']; simp only
+    rw [Proto.getElem!_set!_ite]
+    split
+    · exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+    · exact VClock.le_refl _
+  refine U_main hi ⟨?_, by show (upd G 0 _ 0).2.ph.isMain = true; rw [hX0]; rfl, fun u hu => by
+      show (upd G 0 _ u).2 = _
+      rw [hX u (Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) hu))]; exact h3 u hu,
+      .inr (.inr ⟨by rw [hth, Array.size_set!]; exact d1,
+        by show 3 ≤ (upd G 0 _ 0).2.ph.rank; rw [hX0]; decide,
+        by show (upd G 0 _ 1).2.ph.isTask = true; rw [hX 1 (by decide)]; exact d3,
+        by show (upd G 0 _ 2).2.ph.isTask = true; rw [hX 2 (by decide)]; exact d4, ?_, ?_⟩)⟩
+    (by rw [hm']; rfl) (fun _ => rfl) (qok_run hi (by rw [hg]; rfl) (by rw [hm']) _)
+    (fun hr => by rw [upd_self] at hr; exact absurd hr (by show ¬ Ph.j1.rank ≤ 7; decide))
+    (fun _ => ⟨hd.1, hd.2.1, VClock.le_trans hd.2.2.1 hcl, VClock.le_trans hd.2.2.2 hcl⟩)
+    ⟨rfl, by show Ph.j1 ≠ .wk; decide, rfl, rfl⟩
+  · rw [hth]; simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simpa using h00
+  · rw [hth]; simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+    show _ = some ({ spawner := 0, joined := decide ((upd G 0 (gM Heap.empty { ph := .j1 }) 0).2.ph = .j1) } : ThreadRec)
+    rw [hX0]; simp [d1]
+  · rw [hth]; simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simpa using d6
+
 end Threadsync.WG
