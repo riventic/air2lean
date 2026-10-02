@@ -1061,7 +1061,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     · exact ⟨_, _, futexWait_run_woken hwk⟩
     · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
       obtain ⟨v, hv⟩ := hw.val
-      rw [Word.u32_bytes hb] at hv
+      rw [Word.holds_bytes hb] at hv
       exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
   have hl := hi₁.1.waitOff hph hWL hq0 hr
   rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
@@ -1080,7 +1080,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
     rw [this, ha₀] at ha
     cases ha
     have hU32 : W.Holds m₁ ((Packed.toBits e).setWidth 32) := by
-      rw [Word.u32_bytes hb₀, ← hve]; exact hv
+      rw [Word.holds_bytes hb₀, ← hve]; exact hv
     have hq' := hq G₁ m₁ hg₁ hi₁ hU32
     exact ⟨hl, U_mem hi₁.2 rfl rfl rfl rfl rfl hq'⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
@@ -1465,7 +1465,7 @@ theorem wt_sleep {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
   have hf := hi.2.flags
   rw [hg] at hf
   obtain ⟨hsz, hval⟩ := hi.2.eh
-  have hl := (hi.2.we.u32_last).mp hU
+  have hl := (hi.2.we.holds_last).mp hU
   have h0 : eN (G 1).2 = 0 := by
     have := val_eq hl (by rw [hsz]; exact hval _ (by simp))
     simp only [Nat.add_sub_cancel] at this
@@ -1952,7 +1952,7 @@ theorem loop17_body (c : Bool) (D : Nat) (io : Io) (s : Io_Event_waitUncancelabl
     rcases Array.mem_push.mp hw with hw | rfl
     · exact hi₁.2.q w hw
     refine .inr (.inr ⟨rfl, rfl, by rw [hg₁]; rfl, fun hf => ?_⟩)
-    have hv := (hi₁.2.wv.u32_last).mp hU
+    have hv := (hi₁.2.wv.holds_last).mp hU
     obtain ⟨hsz, hval⟩ := hi₁.2.vh
     rw [hg₁] at hsz hval
     have hfl := hi₁.2.flags

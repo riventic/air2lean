@@ -73,7 +73,7 @@ def SomeLe (m : Mem) (c : VClock) : Prop :=
   ∃ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
 
 /-- The atomic locations at other addresses than `(b, o)` stay (the same index, the same
-location), and a new location is at `(b, o)`, with 4 bytes. -/
+location), and a new location is at `(b, o)`, with `k` bytes. -/
 structure LocsKeep (b o k : Nat) (m m' : Mem) : Prop where
   new : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ (l.block = b ∧ l.off = o ∧ l.len = k)
   same : ∀ b' o', (b' ≠ b ∨ o' ≠ o) → ∀ i l,
@@ -304,7 +304,8 @@ def LiveLe (G : ThreadId → γ) (m : Mem) (c : VClock) : Prop :=
   ∀ u < m.threads.size, L.ph (G u) ≠ .gone → VClock.le c (m.clocks[u]!) = true
 
 /-- The free lock owns `h`: each access to it (or to a block that does not exist yet) happened
-before every thread, or before the release clock of the newest message of the word. -/
+before every thread that has not ended, or before the release clock of the newest message of the
+word. -/
 def Owns (G : ThreadId → γ) (m : Mem) (h : Heap) : Prop :=
   ∀ e ∈ m.footprint, (e.Touches h ∨ m.blocks.size ≤ e.block) →
     L.LiveLe G m e.clock ∨ ∃ i l, L.Loc m i l ∧ VClock.le e.clock (l.msgs.back!).relClock = true
@@ -340,7 +341,7 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   one : ∀ u v, L.ph (G u) = .holds → L.ph (G v) = .holds → u = v
   loc : L.LocOk m
   off : ∀ u, L.Off (L.own G m u)
-  /-- An access to the word is atomic, or happened before every thread. -/
+  /-- An access to the word is atomic, or happened before every thread that has not ended. -/
   wfp : ∀ e ∈ m.footprint, L.Hits e →
     (e.kind.isAtomic = true ∧ SomeLe m e.clock) ∨ L.LiveLe G m e.clock
   /-- The release clock of the newest message happened before a thread, and before the holder. -/
@@ -406,9 +407,6 @@ theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : AllLe m c) : AllLe m' c := fun u hu =>
   VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
-
-theorem LiveLe.of_all {G : ThreadId → γ} {m : Mem} {c : VClock} (h : AllLe m c) :
-    L.LiveLe G m c := fun u hu _ => h u hu
 
 theorem LiveLe.mono {G : ThreadId → γ} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)

@@ -48,8 +48,6 @@ inductive Ph where
   | ev0
   /-- `main` wrote `1` to the event (it waits at the futex). -/
   | ev1
-  /-- `main` read `2` from the event. -/
-  | evd
   /-- `main` stopped waiting, before its read of the `Tally`. -/
   | rd
   /-- `main` read the `Tally` (at its first join). -/
@@ -78,13 +76,13 @@ inductive Ph where
 
 def Ph.rank : Ph → Nat
   | .none => 0
-  | .pre => 0 | .sm => 1 | .sp1 => 2 | .run => 3 | .ev0 => 4 | .ev1 => 5 | .evd => 6
+  | .pre => 0 | .sm => 1 | .sp1 => 2 | .run => 3 | .ev0 => 4 | .ev1 => 5
   | .rd => 7 | .rdd => 8 | .j1 => 9
   | .lk => 0 | .hl => 1 | .inc => 2 | .un => 3 | .s0 => 4 | .s1 => 5 | .wk => 6 | .dn => 7
   | .fin => 8
 
 def Ph.isMain : Ph → Bool
-  | .pre | .sm | .sp1 | .run | .ev0 | .ev1 | .evd | .rd | .rdd | .j1 => true
+  | .pre | .sm | .sp1 | .run | .ev0 | .ev1 | .rd | .rdd | .j1 => true
   | _ => false
 
 def Ph.isTask : Ph → Bool
@@ -143,7 +141,6 @@ def X.st (x : X) : Bool := x.ph == .s0 || x.ph == .s1
 def X.e01 (x : X) : Bool := x.ph == .ev0 || x.ph == .ev1
 
 def X.isEv1 (x : X) : Bool := x.ph == .ev1
-def X.isEvd (x : X) : Bool := x.ph == .evd
 
 /-- The group's state: `4` after `startMany`, `+ 1` after `main`'s `add`, `- 2` per finish. -/
 def wgv (x0 x1 x2 : X) : Nat :=
@@ -194,20 +191,19 @@ structure XEq (x x' : X) : Prop where
   st : x'.st = x.st
   e01 : x'.e01 = x.e01
   isEv1 : x'.isEv1 = x.isEv1
-  isEvd : x'.isEvd = x.isEvd
   fc : x'.fc = x.fc
   fz : x'.fz = x.fz
 
-theorem XEq.refl (x : X) : XEq x x := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+theorem XEq.refl (x : X) : XEq x x := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem XEq.symm {x y : X} (h : XEq x y) : XEq y x :=
   ⟨h.isPre.symm, h.wa.symm, h.fd.symm, h.frozen.symm, h.sx.symm, h.e1.symm, h.st.symm,
-    h.e01.symm, h.isEv1.symm, h.isEvd.symm, h.fc.symm, h.fz.symm⟩
+    h.e01.symm, h.isEv1.symm, h.fc.symm, h.fz.symm⟩
 
 theorem XEq.trans {x y z : X} (h : XEq x y) (h' : XEq y z) : XEq x z :=
   ⟨h'.isPre.trans h.isPre, h'.wa.trans h.wa, h'.fd.trans h.fd, h'.frozen.trans h.frozen,
     h'.sx.trans h.sx, h'.e1.trans h.e1, h'.st.trans h.st, h'.e01.trans h.e01,
-    h'.isEv1.trans h.isEv1, h'.isEvd.trans h.isEvd, h'.fc.trans h.fc, h'.fz.trans h.fz⟩
+    h'.isEv1.trans h.isEv1, h'.fc.trans h.fc, h'.fz.trans h.fz⟩
 
 /-- The two tasks. -/
 def Pair (u v : ThreadId) : Prop := u = 1 ∧ v = 2 ∨ u = 2 ∧ v = 1
@@ -233,6 +229,7 @@ structure Pre (G : ThreadId → Gh) (m : Mem) : Prop where
   /-- After `main`'s `add`, the last finish reads `3`. -/
   last3 : (G 0).2.e01 → (G 1).2.fd → (G 2).2.fd →
     ((G 1).2.st || (G 1).2.sx || (G 2).2.st || (G 2).2.sx) = true
+  /-- At `ev1`, `main` wrote `1`. -/
   m1e : (G 0).2.isEv1 → (G 0).2.e1
   /-- `main`'s write of `1` happened before it. -/
   e1c : (G 0).2.e1 → VClock.le (EV.hist m)[1]!.clock (m.clocks[0]!) = true
@@ -278,17 +275,6 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 
 theorem apG : Word.Apart L WG := .inr (.inr (by decide))
 theorem apE : Word.Apart L EV := .inr (.inr (by decide))
-
-theorem shape_size {X : ThreadId → X} {m : Mem} (h : Shape X m) : m.threads.size ≤ 3 := by
-  obtain ⟨-, -, -, ⟨h1, -⟩ | ⟨h2, -⟩ | ⟨h3, -⟩⟩ := h <;> omega
-
-/-- `ac` with the same ghost values and clocks that are not smaller. -/
-theorem ac_mono {G G' : ThreadId → Gh} {m m' : Mem} (hX : ∀ u, (G' u).2 = (G u).2)
-    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) (u : ThreadId) :
-    VClock.le (ac G m u) (ac G' m' u) = true := by
-  unfold ac; rw [hX u]; split
-  · exact VClock.le_refl _
-  · exact hcl u
 
 /-- `Pre` with ghost values that agree on what it reads (`XEq`), the same writes and clocks that
 are not smaller; the new accesses to the `Tally` are by `t`, which is not frozen. -/
@@ -420,19 +406,6 @@ theorem own_none {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (u : Threa
     by_cases hh : L.ph (G u) = .holds
     · exact R_none (X := fun u => (G u).2) (hi.1.res u hh) hx
     · rw [show (G u).1.held = L.held (G u) from rfl, hi.1.idle u hh]; rfl
-
-/-- If no thread holds the mutex, no thread owns a byte of the `Tally`. -/
-theorem own_free {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (hF : L.Free G) (u : ThreadId)
-    (x : Nat) : L.own G m u (0, x) = none := by
-  unfold Lock.own; split
-  · rfl
-  · show ((G u).1.part ∪ (G u).1.held) (0, x) = none
-    have hp : (G u).1.part (0, x) = none := by
-      by_cases hu : u = 0
-      · subst hu; exact hi.2.part0 x
-      · rw [hi.2.parts u hu]; rfl
-    rw [Heap.union_apply, hp, Option.none_or,
-      show (G u).1.held = L.held (G u) from rfl, hi.1.idle u (hF u)]; rfl
 
 theorem off_own {n nb : Nat} {W : Word n nb} {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
     (hb : W.b = 0) (ho : W.o + nb ≤ 16) (u : ThreadId) : W.Off (L.own G m u) := fun x _ h2 => by
@@ -722,7 +695,7 @@ theorem U_hold {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g' : Gh} {hQ :
   have hrk : ∀ x : X, x = { ph := .lk } ∨ x = { ph := .inc } → XEq x { ph := .lk } := by
     rintro x (rfl | rfl)
     · exact XEq.refl _
-    · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   have hT : ∀ x : X, x = { ph := .lk } ∨ x = { ph := .inc } → x.ph.isTask := by
     rintro x (rfl | rfl) <;> rfl
   have hG : upd G t (G t) = G := upd_same G t
@@ -1187,18 +1160,6 @@ theorem ev_val {m : Mem} {vs : List Nat} (h : EVOk m vs) {j : Nat} {v : BitVec 3
   have hj' : j < vs.length := h.1 ▸ hj
   exact ⟨hj', val_eq hv (h.2 j hj')⟩
 
-theorem ev_last {m : Mem} {vs : List Nat} (h : EVOk m vs) (hne : vs ≠ []) :
-    (last (EV.hist m)).Val (BitVec.ofNat 32 (vs.getLast hne)) := by
-  have hl : vs.length - 1 < vs.length := by
-    cases vs with
-    | nil => exact absurd rfl hne
-    | cons _ _ => simp
-  have := h.2 _ hl
-  unfold last; rw [h.1]
-  rwa [List.getLast_eq_getElem]
-
-theorem evL_ne (x0 x1 x2 : X) : evL x0 x1 x2 ≠ [] := by simp [evL]
-
 /-- A task after its finish, `gone` for the lock. -/
 def gS (ph : Ph) (a b : VClock) (sx : Bool) : Gh :=
   (⟨.gone, Heap.empty, Heap.empty⟩, { ph := ph, fc := a, fz := b, sx := sx })
@@ -1229,7 +1190,7 @@ theorem inv_sload {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId} {a b : VC
     rcases hx with rfl | rfl <;> simp
   refine ⟨hv01, linv_task hL (by rw [hg]; rfl) (by rw [hg]; rfl), ?_⟩
   have hX : XEq (G t).2 (gS .s1 a b false).2 := by
-    rw [hg]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    rw [hg]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   refine U_task ht hi hop.threads (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega))
     (by rw [hg]; rfl) rfl rfl (fun w hw => ?_) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (fun _ => rfl) (fun _ => ?_) (fun hr' => ?_)
@@ -1438,7 +1399,7 @@ theorem inv_frozen {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {ph ph' : P
     proto.inv (upd G t (gS ph' a b sx)) m' := by
   have hX : XEq (G t).2 (gS ph' a b sx).2 := by
     rw [hg]; rcases hph with rfl | rfl <;> rcases hph' with rfl | rfl <;>
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
     rw [hc]; exact VClock.le_refl _
   refine ⟨linv_task hL (by rw [hg]; rfl) (by rw [hg]; rcases hph with rfl | rfl <;>
@@ -2091,9 +2052,9 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {k : Nat} {p
     by_cases h0 : u = 0
     · subst h0; rw [hX0, hG0]
       rcases hk with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩ <;>
-        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     · by_cases hc : u = c
-      · subst hc; rw [hXc, hGk]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · subst hc; rw [hXc, hGk]; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · rw [hth u h0 hc]; exact XEq.refl _
   refine ⟨rfl, hL, ?_⟩
   obtain ⟨h00, -, h3, d⟩ := hu.shape
@@ -2677,24 +2638,6 @@ theorem inv_mown {G : ThreadId → Gh} {m m' : Mem} {x0 : X} {h hQ : Heap}
     (fun hr => by rw [upd_self] at hr; rw [upd_self]; exact hr)
   rwa [upd_upd] at hU
 
-/-- A step of `main` on its own part `h` (`TTriple Pa x Qa`), in `ConcM`. -/
-theorem wp_mown {α : Type} {x : MemM α} {G : ThreadId → Gh} {m : Mem} {d : Nat} {x0 : X}
-    {h : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
-    (hi : proto.inv (upd G 0 (gM h x0)) m) (hc : m.current = 0) (hp : Pa h)
-    (hb0 : ∀ a hQ, Qa a hQ → ∀ y, hQ (0, y) = none)
-    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hQ : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → m'.current = 0 →
-      m'.threads = m.threads → Qa a hQ → proto.inv (upd G 0 (gM hQ x0)) m' → Q a G m' d) :
-    proto.WP 0 (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
-  have hph : L.ph (upd G 0 (gM h x0) 0) = .out := by rw [upd_self]; rfl
-  obtain ⟨ht0, hjt⟩ := hi.1.live 0 (by rw [hph]; decide)
-  have hown : L.own (upd G 0 (gM h x0)) m 0 = h := by
-    rw [L.own_live hjt, upd_self]; exact Heap.union_empty h
-  refine WP.liftMem_owned ht hi.1.own hc ht0 (by rw [hown]; exact hp)
-    fun a m' hQ' hr ho' hq hs hm' hd => ?_
-  exact hQ a m' hQ' hr (hs.current.trans hc) hs.threads hq
-    (inv_mown hi hc ho' hs hm' hd (hb0 a hQ' hq))
-
 /-- A step of `main` on its own part `h` (`TTriple Pa x Qa`), in `CM`. -/
 theorem wp_mownM {α σ : Type} {x : MemM α} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     {x0 : X} {h : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
@@ -2829,7 +2772,7 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     · exact ⟨_, _, futexWait_run_woken hwk⟩
     · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
       obtain ⟨v, hv⟩ := hw.val
-      rw [Word.u32_bytes hb] at hv
+      rw [Word.holds_bytes hb] at hv
       exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
   have hl := hi₁.1.waitOff hph (by decide) hq0 hr
   rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
@@ -2843,8 +2786,8 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     rw [this, ha₀] at ha
     cases ha
     have hve' : v = 1 := by rw [hve]; rfl
-    have hH : EV.Holds m₁ 1 := by rw [Word.u32_bytes hb₀, ← hve']; exact hv
-    have hlast := hw.u32_last.mp hH
+    have hH : EV.Holds m₁ 1 := by rw [Word.holds_bytes hb₀, ← hve']; exact hv
+    have hlast := hw.holds_last.mp hH
     have hns : (!(G₁ 1).2.sx && !(G₁ 2).2.sx) = true := by
       cases e : ((G₁ 1).2.sx || (G₁ 2).2.sx)
       · simp only [Bool.or_eq_false_iff] at e; simp [e]
@@ -3008,7 +2951,8 @@ theorem loop37_body (p0 q : Ptr) (hp1 : p0.add 0 = EV.ptr)
       | simp only [StateT.run_pure, Thread_ResetEvent_FutexImpl_waitUntilSet.again37, ↓reduceIte])
     done
 
-/-- `wp_mown`, where the post's facts may use the run. -/
+/-- A step of `main` on its own part `h` (`TTriple Pa x Qa`), in `ConcM`; the post's facts may
+use the run. -/
 theorem wp_mownR {α : Type} {x : MemM α} {G : ThreadId → Gh} {m : Mem} {d : Nat} {x0 : X}
     {h : Heap} {Pa : Assn} {Qa : α → Assn} (ht : TTriple Pa x Qa)
     (hi : proto.inv (upd G 0 (gM h x0)) m) (hc : m.current = 0) (hp : Pa h)
@@ -3247,22 +3191,26 @@ theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
     show (20 + 4 : Nat) = 24 from rfl, ha', hb', hc', hd']
   rfl
 
+/-- `main` at `rd`: every other thread is `gone` for the lock. -/
+theorem gone_rd {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
+    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) (u : ThreadId) (h0 : u ≠ 0) :
+    L.ph (G u) = .gone := by
+  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
+  by_cases h12 : u = 1 ∨ u = 2
+  · have hfr : (G u).2.frozen := by rcases h12 with rfl | rfl; exact hd.1; exact hd.2.1
+    apply hi.2.lg u
+    unfold X.frozen at hfr; unfold X.fd
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
+    exact ⟨hfr.1, by omega⟩
+  · exact hi.2.out3 u (by unfold ThreadId at *; omega)
+
 /-- `main` at `rd`: both tasks are frozen, so no thread holds the mutex. -/
 theorem free_rd {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
     (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) : L.Free G := by
-  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
   intro u
   by_cases h0 : u = 0
   · subst h0; rw [hg]; show LPh.out ≠ LPh.holds; decide
-  have hgone : L.ph (G u) = .gone := by
-    by_cases h12 : u = 1 ∨ u = 2
-    · have hfr : (G u).2.frozen := by rcases h12 with rfl | rfl; exact hd.1; exact hd.2.1
-      apply hi.2.lg u
-      unfold X.frozen at hfr; unfold X.fd
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
-      exact ⟨hfr.1, by omega⟩
-    · exact hi.2.out3 u (by unfold ThreadId at *; omega)
-  rw [hgone]; decide
+  · rw [gone_rd hi hg u h0]; decide
 
 /-- A frozen task did its store of the counter. -/
 theorem cnt_frozen {x : X} (h : x.frozen) : x.cnt = 1 := by
@@ -3280,9 +3228,9 @@ theorem tally_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G
     access_of rfl h1 hlive (by decide) (by simp [bPtr, hsz]; exact Int.le_refl 24) (by simp [bPtr, haddr])
   have hp := hi.2.pre (by rw [hg]; show Ph.rd.rank ≤ 7; decide)
   obtain ⟨a, ha⟩ := hp.wg.val
-  rw [Word.u32_bytes (W := WG) h1] at ha
+  rw [Word.holds_bytes (W := WG) h1] at ha
   obtain ⟨b, hb⟩ := hp.ev.val
-  rw [Word.u32_bytes (W := EV) h1] at hb
+  rw [Word.holds_bytes (W := EV) h1] at hb
   obtain ⟨w, -, hU, -⟩ := hi.1.word
   unfold Lock.U32 curBytes at hU
   rw [show L.b = 0 from rfl, show L.o = 16 from rfl, h1] at hU
@@ -3311,19 +3259,6 @@ theorem tally_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G
     rw [Array.extract_extract]; simp [Enc.size]
   refine ⟨blk, _, h1, hacc, tally_decode (a := a) (b := b) (c := BitVec.ofNat 32 w)
     (by rw [e]; exact ha) (by rw [e]; exact hb) (by rw [e]; exact hU) (by rw [e]; exact hd'), rfl⟩
-
-/-- `main` at `rd`: every other thread is `gone` for the lock. -/
-theorem gone_rd {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)
-    (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) (u : ThreadId) (h0 : u ≠ 0) :
-    L.ph (G u) = .gone := by
-  have hd := hi.2.done (by rw [hg]; show 6 ≤ Ph.rd.rank; decide)
-  by_cases h12 : u = 1 ∨ u = 2
-  · have hfr : (G u).2.frozen := by rcases h12 with rfl | rfl; exact hd.1; exact hd.2.1
-    apply hi.2.lg u
-    unfold X.frozen at hfr; unfold X.fd
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at hfr ⊢
-    exact ⟨hfr.1, by omega⟩
-  · exact hi.2.out3 u (by unfold ThreadId at *; omega)
 
 /-- `main`'s read of the whole `Tally` at `rd`: no race, and `main` goes to `rdd`. -/
 theorem inv_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m)

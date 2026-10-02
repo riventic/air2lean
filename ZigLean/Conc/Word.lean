@@ -230,12 +230,12 @@ theorem Ok.cell {m : Mem} (hw : W.Ok m) {x : Nat} (h1 : W.o ≤ x) (h2 : x < W.o
   simp
 
 /-- The word as the block's bytes. -/
-theorem u32_bytes {m : Mem} {blk : Block} {v : BitVec n} (hb : m.blocks[W.b]? = some blk) :
+theorem holds_bytes {m : Mem} {blk : Block} {v : BitVec n} (hb : m.blocks[W.b]? = some blk) :
     W.Holds m v ↔ (intOfBytes n (blk.bytes.extract W.o (W.o + nb))).run = some (.ok v) := by
   unfold Word.Holds curBytes; rw [hb]; rfl
 
 /-- The word holds the value of its newest write. -/
-theorem Ok.u32_last {m : Mem} (hw : W.Ok m) {v : BitVec n} :
+theorem Ok.holds_last {m : Mem} (hw : W.Ok m) {v : BitVec n} :
     W.Holds m v ↔ (W.hist m)[(W.hist m).size - 1]!.Val v := by
   unfold hist
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
@@ -1023,7 +1023,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
     · omega
     · omega
   obtain ⟨hblk', hcur⟩ := Lock.word_congr (L := L) (fun x h1 h2 => hop.cells _ (hnw x h1 h2)) hi.blk
-  have hHolds : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold Lock.U32; rw [hcur]
+  have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold Lock.U32; rw [hcur]
   have hne : L.b ≠ W.b ∨ L.o ≠ W.o := by
     rcases hap with h | h | h
     · exact .inl h
@@ -1061,7 +1061,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       · exact absurd h' hm
       · rw [hb, hop.bsize]; exact hWb
   · rw [hop.threads, hjb]; exact hi.live u hu
-  · obtain ⟨w, hw', hu, hz⟩ := hi.word; exact ⟨w, hw', (hHolds _).mpr hu, hz⟩
+  · obtain ⟨w, hw', hu, hz⟩ := hi.word; exact ⟨w, hw', (hU32 _).mpr hu, hz⟩
   · rcases hop.locs.new l hl with h | ⟨hb', ho, hlen⟩
     · exact hi.loc.only l h hb h1 h2
     · rw [ho] at h1; rw [ho, hlen] at h2; rw [hb'] at hb
@@ -1096,7 +1096,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
         · exact absurd h' hm
         · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hop.waiters ▸ hp)
-    exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hHolds _).mpr (h2 hh)⟩
+    exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
 end Word
 

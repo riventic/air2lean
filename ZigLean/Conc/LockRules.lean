@@ -273,7 +273,7 @@ theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
       · rcases h2 with h2 | h2 <;> omega
       · rcases h2 with h2 | h2 <;> omega
 
-/-- A plain read by the current thread `t`, the only thread that has not ended, of `n` bytes at
+/-- A plain read by the current thread, the only thread that has not ended, of `n` bytes at
 `o` of block `b` that no part has: it can read the word and the resource. The caller shows that
 the read does not race. -/
 theorem Inv.readAll {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
