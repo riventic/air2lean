@@ -3079,4 +3079,71 @@ theorem ls_body (hE : E.Spec) (j : Bool) (D : Nat) (s : Io_RwLock_lockSharedUnca
     simp only [Io_RwLock_lockSharedUncancelable.again8, Bool.false_eq_true, ↓reduceIte]
     exact ⟨hD, hc, .inr ⟨rfl, hi⟩⟩
 
+/-- `lockShared` by `main` at `ls j`: it holds the shared lock and owns `n`. -/
+theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m : Mem} {d : Nat}
+    (hi : (proto E).inv (upd G 0 (gA (.ls j) Heap.empty default)) m) :
+    (proto E).WP 0 (Io_RwLock_lockSharedUncancelable (bPtr.add 16) io) (fun _ G' m' d' => d' ≤ d ∧
+      m'.current = 0 ∧ ∃ h, (proto E).inv (upd G' 0 (gA (.sh j) h default)) m') G m d := by
+  unfold Io_RwLock_lockSharedUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  rw [wsptr]
+  refine WP.bind (wp_load (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+    fun k₁ hk₁ G₁ m₁ m' v jx hg₁ hi₁ hj hv hfl hacq hh hw' hop => ?_)
+  have hi₂ := inv_sread hE hi₁ hop hw' hh
+  rw [← upd_same G₁ 0, hg₁] at hi₂
+  obtain ⟨v', hv', hvv⟩ := hi₁.2.1.shist jx hj
+  have hov : v = v' := val_eq hv hvv
+  simp only [StateT.run_modify, pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (lsInv E j k₁) (fun _ => 0) (lsPost E j k₁) (ls_body hE j k₁) _
+    G₁ m' k₁ ⟨Nat.le_refl _, hop.current, by rw [hov]; exact hv', hi₂⟩))
+  rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, hc₂, ⟨rfl, h, hi₃⟩ | ⟨rfl, hi₃⟩⟩
+  · simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨by omega, hc₂, h, hi₃⟩
+  · -- the slow path: the mutex, `state += reader`, the unlock
+    have hi₄ := inv_lsl hE hi₃
+    simp only [StateT.run_bind, bind_assoc]
+    rw [wmptr]
+    refine WP.bind (WP.callC (WP.mono ?_ (mlock_spec hE (t := 0) (x := .sl j .cas) rfl rfl hi₄)))
+    rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₅⟩
+    refine WP.bind (wp_rmw (W := WS) hi₅ (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+      fun k₄ hk₄ G₄ m₄ m₅ old hg₄ hi₆ hv hU hh hacq hw' hop => ?_)
+    have hu := hi₆.2.1
+    have hg0 : (G₄ 0).2.2 = .sl j .holds := by rw [hg₄]; rfl
+    have hold := sold hu hv
+    rw [hg0] at hold; simp only [Ph.rb] at hold
+    have hW1 := w_isW hu (by rw [hg0]; simp)
+    have hf := hu.flags
+    rw [hg0] at hf
+    have hone : (G₄ 1).2.2.mp ≠ some .holds := fun h => hf.one ⟨rfl, h⟩
+    obtain ⟨hm1, hws1⟩ := w_free hW1 (.inr hone)
+    have hc : Car (G₄ 0).2.2 (G₄ 1).2.2 := ⟨by rw [hg0]; rfl, hm1, by rw [hws1]; rfl⟩
+    obtain ⟨hn, hpn, hsn, hokn⟩ := hu.car hc
+    have htl : 0 < m₄.threads.size :=
+      (hi₆.1.live 0 (by rw [hg₄]; exact (by decide : LPh.out ≠ LPh.gone))).1
+    have ho := own_rmw hpn hokn hu.ws hop htl (hacq rfl)
+    have hsn' := (car_rmw hpn hsn hokn hu.ws hop hh).1
+    have hi₇ : (proto E).inv (upd G₄ 0 (gA (.sr j .holds) hn default)) m₅ :=
+      inv_sstep hE hi₆ hg₄ hop hw' hh (by
+          rw [upd_self, upd0_1, sv_eq]
+          show Word.Entry.Val _ (sv3 _ _ 1)
+          rw [← sv3_addR (Ph.wb_ib _), ← hold]; exact rmwEnt_val WS)
+        rfl rfl (by simp [Ph.setM]) rfl rfl rfl (.inl rfl)
+        (by
+          rw [upd_self, upd0_1]
+          exact ⟨(fun k hk => by rw [hk] at hone; exact absurd rfl hone), (fun h => by cases h),
+            (fun h => hone h.2), (fun _ _ h => by cases h; exact .inl rfl), hf.jd⟩)
+        (by rw [upd0_1]; exact hpn)
+        (fun hc' => absurd hc'.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
+        (lws_gain hi₆ hop hg₄ hc hpn hsn' ho (by simp [hasP, upd_self, upd0_1, gA, Ph.gave]))
+    refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 0) (x := .sr j .holds)
+      (.inl ⟨rfl, j, .holds, by rw [upd_self]; rfl⟩) rfl hi₇)))
+    rintro _ G₅ m₆ d₅ ⟨hd₅, hc₆, hi₈⟩
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    exact WP.pure' ⟨by omega, hc₆, hn, hi₈⟩
+
 end Sync.RwLockRead
