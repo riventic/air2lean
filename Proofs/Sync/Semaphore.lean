@@ -2306,5 +2306,91 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
 
 end SemWait
 
+
+theorem xs_eq (G : ThreadId → SGh X) (t : ThreadId) (a a' : LG) (sp sp' : SPh) (x : X) :
+    xs (fun u => (upd G t (a, sp, x) u).2) = xs (fun u => (upd G t (a', sp', x) u).2) := by
+  funext u; simp only [xs, upd]; split <;> rfl
+
+/-- `wait` by `t` at `x`, out of the semaphore: it takes a permit, and with it the resource `T`
+(`hmv`); its part grows by `T`, its ghost value is `x'`. -/
+theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : Assn) (io : Io)
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → ∀ u, u ≠ t →
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e)
+    (hmv : ∀ Y : ThreadId → X, Y t = x → S.pv Y ≠ 0 → S.pv (upd Y t x') = S.pv Y - 1 ∧
+      ∀ hr, S.Res Y hr → ∃ h₁ h₂, hr = h₁ ∪ h₂ ∧ Heap.Disjoint h₁ h₂ ∧ S.Res (upd Y t x') h₁ ∧ T h₂)
+    (hU : ∀ G m h₁ h₂ h₃, T h₃ → U (upd G t (⟨.holds, pa, h₁⟩, .none, x)) m →
+      U (upd G t (⟨.holds, pa ∪ h₃, h₂⟩, .none, x')) m)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (⟨.out, pa, Heap.empty⟩, .none, x)) m) :
+    P.WP t (Io_Semaphore_waitUncancelable S.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G m d := by
+  unfold Io_Semaphore_waitUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_specOn hP.lf ptr_mutex rfl t
+    (⟨.out, pa, Heap.empty⟩, .none, x) rfl rfl io G m d hi)))
+  rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, hL₁, hi₁⟩
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv5 (P := P) t pa x d) (fun _ => 0)
+    (post5 (S := S) (P := P) t pa x d) (loop5_body t pa x hP io hone d) _ G₁ m₁ d₁
+    ⟨by omega, hc₁, hL₁, hi₁⟩))
+  rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨hd₂, rfl, hc₂, hL₂, hi₂, hz₂⟩
+  simp only [StateT.run_bind, pure_bind]
+  rw [ptr0 (S := S)]
+  refine WP.bind (wp_cntLoad hP hi₂ hc₂ fun m₃ hL₃ hc₃ hi₃ => ?_)
+  simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (WP.callRC_ok (sub1_run hz₂) ?_)
+  simp only [StateT.run_bind, pure_bind]
+  have hY := xs_self G₂ t (⟨.holds, pa, hL₃⟩, .none, x)
+  have hxs := xs_eq G₂ t ⟨.holds, pa, hL₃⟩ ⟨.holds, pa, hL₂⟩ .none .none x
+  refine WP.bind (wp_cnt hP (Mv := fun pa' => ∃ h₃, T h₃ ∧ pa' = pa ∪ h₃) (x' := x') (r₀ := ()) hi₃ hc₃
+    (TTriple.conseq (TTriple.store (by decide) _) (fun _ h => h) fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩)
+    (by rw [hxs]) (fun hr hrr hdr => ?_) (.inr (.inl hz₂))
+    (fun m' h₁ h₂ pa' ⟨h₃, hT, hpa⟩ hu => by subst hpa; exact hU _ _ _ _ _ hT hu)
+    fun m₄ pa' hL₄ ⟨h₃, hT, hpa⟩ hc₄ _ hi₄ => ?_)
+  · rw [hxs] at hrr hY
+    obtain ⟨hpv, hres⟩ := hmv (xs fun u => (upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x) u).2) hY hz₂
+    obtain ⟨h₁, h₂, rfl, hd12, hr1, hT2⟩ := hres hr hrr
+    obtain ⟨hdp1, hdp2⟩ := Heap.disjoint_union_right.mp hdr
+    refine ⟨pa ∪ h₂, h₁, ?_, Heap.disjoint_union_left.mpr ⟨hdp1, hd12.symm⟩, ?_, ?_, h₂, hT2, rfl⟩
+    · rw [Heap.union_assoc, Heap.union_comm hd12.symm]
+    · rw [xs_upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x)]; exact hr1
+    · rw [xs_upd G₂ t (⟨.holds, pa, hL₂⟩, .none, x)]; exact hpv
+  subst hpa
+  refine WP.bind (wp_cntLoad hP hi₄ hc₄ fun m₅ hL₅ hc₅ hi₅ => ?_)
+  simp only [StateT.run_pure, pure_bind]
+  have hfin : ∀ G₆ m₆ d₆ hL₆, d₆ ≤ d → m₆.current = t →
+      P.inv (upd G₆ t (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x')) m₆ →
+      P.WP t ((do
+        let _i33 ← callC (Io_Mutex_unlock (S.ptr.add 8) io)
+        pure Io_Semaphore_waitUncancelableExit.ret : CM Tgt Io_Semaphore_waitUncancelableLocals _).run
+          s') (fun a G' m' d' => P.WP t (match a.1 with
+            | .ret => pure ()
+            | _ => throw .panic) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+              ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G' m' d')
+        G₆ m₆ d₆ := by
+    intro G₆ m₆ d₆ hL₆ hd₆ _ hi₆
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_specOn hP.lf ptr_mutex rfl t
+      (⟨.holds, pa ∪ h₃, hL₆⟩, .none, x') rfl rfl io G₆ m₆ d₆ hi₆)))
+    rintro _ G₇ m₇ d₇ ⟨hd₇, hc₇, hi₇⟩
+    exact WP.pure' (WP.pure' ⟨by omega, hc₇, h₃, hT, hi₇⟩)
+  by_cases hgt : gt false (S.pv (xs fun u => (upd G₂ t (⟨.holds, pa ∪ h₃, hL₄⟩, .none, x') u).2))
+    (0 : BitVec 64) = true
+  · rw [hgt]
+    simp only [↓reduceIte, StateT.run_bind]
+    have hp₅ := hP.toPst hi₅ rfl
+    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (signal_spec hP t ⟨.holds, pa ∪ h₃, hL₅⟩ x' rfl io G₂ m₅ d₂
+      hp₅))))
+    rintro _ G₆ m₆ d₆ ⟨hd₆, hc₆, hi₆⟩
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    exact hfin G₆ m₆ d₆ hL₅ (by omega) hc₆ hi₆
+  · simp only [Bool.not_eq_true] at hgt
+    rw [hgt]
+    simp only [Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
+    exact hfin G₂ m₅ d₂ hL₅ hd₂ hc₅ hi₅
+
 end Sem
 end Sync
