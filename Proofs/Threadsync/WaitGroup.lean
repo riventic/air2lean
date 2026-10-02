@@ -3439,4 +3439,191 @@ theorem inv_j1 {G : ThreadId → Gh} {m m' : Mem} (hi : proto.inv G m)
     rw [hX0]; simp [d1]
   · rw [hth]; simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simpa using d6
 
+/-! ## `main` -/
+
+/-- `startMany(2)` by `main` at `pre`: it ends at `sm`. -/
+theorem startMany_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .pre })) m) :
+    proto.WP 0 (Thread_WaitGroup_startMany (bPtr.add 0) 2)
+      (fun _ G' m' _ => m'.current = 0 ∧ proto.inv (upd G' 0 (gM Heap.empty { ph := .sm })) m') G m d := by
+  unfold Thread_WaitGroup_startMany
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callRC_ok (v := (4 : BitVec 64)) rfl ?_)
+  simp only [StateT.run_pure, pure_bind]
+  refine WP.bind (WP.bind (wp_rmw shG hi (fun G₁ m₁ hg hi₁ =>
+      ⟨main_lt hi₁, by rw [hg]; show Ph.pre.rank ≤ 7; decide⟩)
+    fun k hk G₁ m₁ m' old hg₁ hi₁ hr hv _ hh _ hw' hop hL => ?_))
+  obtain ⟨rfl, hi'⟩ := inv_sm hi₁ hg₁ hv hh hw' hop hL
+  refine WP.pure' ?_
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  refine WP.bind (WP.callRC_ok (v := (0 : BitVec 64)) rfl ?_)
+  simp only [StateT.run_pure, pure_bind, StateT.run_bind]
+  refine WP.bind (WP.callRC_ok dbg_true ?_)
+  repeat (first
+    | exact ⟨hop.current, hi'⟩
+    | refine WP.pure' ?_
+    | simp only [StateT.run_pure, StateT.run_bind, pure_bind])
+  done
+
+/-- The number of threads at `main`'s spawns. -/
+theorem size_sm {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 0 (gM Heap.empty x)) m) :
+    (x.ph = .sm → m.threads.size = 1) ∧ (x.ph = .sp1 → m.threads.size = 2) := by
+  obtain ⟨-, -, -, d⟩ := hi.2.shape
+  have h0 : (upd G 0 (gM Heap.empty x) 0).2 = x := by rw [upd_self]; rfl
+  refine ⟨fun h => ?_, fun h => ?_⟩ <;>
+    rcases d with ⟨d1, d2, -⟩ | ⟨d1, d2, -⟩ | ⟨d1, d2, -⟩
+  · exact d1
+  · change (upd G 0 _ 0).2.ph = _ at d2; rw [h0, h] at d2; cases d2
+  · change 3 ≤ (upd G 0 _ 0).2.ph.rank at d2; rw [h0, h] at d2; simp [Ph.rank] at d2
+  · change (upd G 0 _ 0).2.ph.rank ≤ 1 at d2; rw [h0, h] at d2; simp [Ph.rank] at d2
+  · exact d1
+  · change 3 ≤ (upd G 0 _ 0).2.ph.rank at d2; rw [h0, h] at d2; simp [Ph.rank] at d2
+
+/-- The threads after both spawns, with `main` at `x` (rank 3 or more). -/
+theorem shape3 {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 0 (gM Heap.empty x)) m)
+    (h3 : 3 ≤ x.ph.rank) :
+    m.threads.size = 3 ∧ m.threads[0]? = some { spawner := 0, joined := true } ∧
+      m.threads[1]? = some { spawner := 0, joined := decide (x.ph = .j1) } ∧
+      m.threads[2]? = some { spawner := 0, joined := false } := by
+  obtain ⟨h00, -, -, d⟩ := hi.2.shape
+  have h0 : (upd G 0 (gM Heap.empty x) 0).2 = x := by rw [upd_self]; rfl
+  rcases d with ⟨-, d2, -⟩ | ⟨-, d2, -⟩ | ⟨d1, -, -, -, d5, d6⟩
+  · change (upd G 0 _ 0).2.ph.rank ≤ 1 at d2; rw [h0] at d2; omega
+  · change (upd G 0 _ 0).2.ph = _ at d2; rw [h0] at d2; rw [d2] at h3; simp [Ph.rank] at h3
+  · refine ⟨d1, h00, ?_, d6⟩
+    change _ = some ({ spawner := 0, joined := decide ((upd G 0 (gM Heap.empty x) 0).2.ph = .j1) } : ThreadRec) at d5
+    rw [h0] at d5; exact d5
+
+theorem main_spec (d : Nat) :
+    proto.WP 0 waitGroup QM G0 { mem0 with current := 0 } d := by
+  unfold waitGroup
+  -- the `Tally`: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 24 8 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 h₁) m₁ := ho₁
+  obtain ⟨hsz, -⟩ := enc_tally
+  refine WP.bind (WP.liftM_owned (TTriple.storeAt' (p := bPtr) (q := bPtr) (A := A) (S := 24)
+    (K := .stack) (bs := Array.replicate 24 .undef) (k := 0) (a := 8) tally0 hsz rfl (by decide)
+    (by simp [Enc.size]) (by simp [bPtr]; omega) (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (by rw [upd_self]; exact hb₁) fun _ m₂ h₂ hr₂ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  rw [writeBytes_all (by rw [hsz]; simp)] at F₂
+  have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
+  have hi₂ := inv_start ho₂ F₂ hA8 (by rw [hs₂.threads, hs₁.threads]; rfl)
+    (by rw [hs₂.atomics, hs₁.atomics]; rfl) (by rw [hs₂.waiters, hs₁.waiters]; rfl)
+    (fun e he => by
+      have h0 : ∀ e ∈ m₁.footprint, e.tid = 0 ∧ VClock.le e.clock (m₁.clocks[0]!) = true := by
+        intro e he
+        rcases hs₁.fp e he with h | ⟨het, -, -⟩
+        · simp [mem0, Mem.ofGlobals] at h
+        · refine ⟨het, ?_⟩
+          rcases hs₁.fpc e he with h | h
+          · simp [mem0, Mem.ofGlobals] at h
+          · exact h
+      rcases hs₂.fp e he with h | ⟨het, -, -⟩
+      · obtain ⟨a, b⟩ := h0 e h
+        exact ⟨a, VClock.le_trans b (by have := hs₂.mine; rw [hc₁] at this; exact this)⟩
+      · refine ⟨by rw [het, hc₁], ?_⟩
+        rcases hs₂.fpc e he with h | h
+        · exact VClock.le_trans (h0 e h).2 (by have := hs₂.mine; rw [hc₁] at this; exact this)
+        · rw [hc₁] at h; exact h)
+  -- `startMany(2)`
+  refine WP.bind (WP.callC (WP.mono ?_ (startMany_spec G0 m₂ d hi₂)))
+  rintro _ G₃ m₃ d₃ ⟨hc₃, hi₃⟩
+  simp only [StateT.run_bind]
+  -- the spawns
+  refine WP.bind (WP.spawnC fun k _ => ⟨_, hi₃, fun G₄ m₄ hg₄ hi₄ => ⟨gT .lk, ⟨rfl, rfl⟩,
+    fun c₁ m₅ hf₁ => ?_⟩⟩)
+  rw [← upd_g hg₄] at hi₄
+  obtain ⟨rfl, hi₅⟩ := inv_spawn (k := 1) hi₄ (by rw [upd_self]) (.inl ⟨rfl, rfl, rfl⟩)
+    ((size_sm hi₄).1 rfl) hf₁
+  rw [upd_g hg₄] at hi₅
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.spawnC fun k _ => ⟨_, hi₅, fun G₆ m₆ hg₆ hi₆ => ⟨gT .lk, ⟨rfl, rfl⟩,
+    fun c₂ m₇ hf₂ => ?_⟩⟩)
+  rw [← upd_g hg₆] at hi₆
+  obtain ⟨rfl, hi₇⟩ := inv_spawn (k := 2) hi₆ (by rw [upd_self]) (.inr ⟨rfl, rfl, rfl⟩)
+    ((size_sm hi₆).2 rfl) hf₂
+  rw [upd_g hg₆] at hi₇
+  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+  have hc₇ : m₇.current = 0 := by rw [(Lock.fork_eq hf₂).2]
+  -- `wait`
+  refine WP.bind (WP.callC (WP.mono ?_ (wgwait_spec _ m₇ k hi₇ hc₇)))
+  rintro _ G₈ m₈ d₈ ⟨hc₈, e1, hi₈⟩
+  -- the read of the `Tally`
+  obtain ⟨blk, v, hblk, hacc, hdec, hn⟩ := tally_read hi₈ (upd_self _ _ _)
+  obtain ⟨hnr, hi₉⟩ := inv_read hi₈ (upd_self _ _ _) hc₈
+  rw [upd_upd] at hi₉
+  have hrun : ((load Tally 8 bPtr).run m₈).run = some (.ok (v, m₈.recordAt 0 0 (Enc.size Tally) .read)) := by
+    rw [load_run hacc hdec hnr]; rfl
+  refine WP.bind (WP.liftM (fun e he => by rw [hrun] at he; cases he) fun a m₉ hr => ?_)
+  rw [hrun] at hr
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+  obtain ⟨rfl, rfl⟩ := hr
+  refine ⟨rfl, ?_⟩
+  -- the join of task 1
+  refine WP.bind (WP.joinC fun k₁ _ => ⟨_, hi₉, fun G₁₀ m₁₀ hg₁₀ hi₁₀ => ?_⟩)
+  rw [← upd_g hg₁₀] at hi₁₀
+  obtain ⟨hs₁₀, -, ht1, -⟩ := shape3 hi₁₀ (by decide)
+  rw [upd_g hg₁₀] at hi₁₀
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₀]; decide, rfl, .inl rfl⟩, fun hfin => ⟨fun _ =>
+    join_run (m := { m₁₀ with current := 0 }) ht1 rfl rfl, fun m₁₁ hj₁ => ?_⟩⟩
+  obtain ⟨hc₁₁, hi₁₁⟩ := inv_j1 hi₁₀ hg₁₀ hj₁
+  -- the join of task 2
+  refine WP.bind (WP.joinC fun k₂ _ => ⟨_, hi₁₁, fun G₁₂ m₁₂ hg₁₂ hi₁₂ => ?_⟩)
+  rw [← upd_g hg₁₂] at hi₁₂
+  obtain ⟨hs₁₂, ht0, ht1', ht2⟩ := shape3 hi₁₂ (by decide)
+  rw [upd_g hg₁₂] at hi₁₂
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₂]; decide, rfl, .inr rfl⟩, fun hfin₂ => ⟨fun _ =>
+    join_run (m := { m₁₂ with current := 0 }) ht2 rfl rfl, fun m₁₃ hj₂ => ?_⟩⟩
+  obtain ⟨rec, hrec, -, hm₁₃⟩ := join_eq hj₂
+  change m₁₂.threads[2]? = some rec at hrec
+  rw [ht2] at hrec; cases hrec
+  refine WP.pure' ?_
+  -- the free of the `Tally`
+  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₂.2.blk
+  have hb₁₃ : m₁₃.blocks[0]? = some blk₀ := by rw [hm₁₃]; exact hblk₀
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ e he).elim) fun _ m₁₄ hfr => ?_)
+  obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨by rw [hn], fun r hr hsp => ?_⟩⟩
+  -- every thread is joined
+  simp only [hm₁₃] at hr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  simp only [Array.size_set!] at hi'
+  simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hi'] at hsp ⊢
+  split
+  · rfl
+  · rename_i hne
+    rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [Array.getElem?_eq_getElem (by omega)] at ht0; rw [Option.some.inj ht0]
+    · rw [Array.getElem?_eq_getElem (by omega)] at ht1'; rw [Option.some.inj ht1']; rfl
+
+/-! ## The results -/
+
+/-- **`threadsync.waitGroup` gives 2 under every schedule** (every oracle `o`, every `fuel`). -/
+theorem waitGroup_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o waitGroup mem0).run = some (.ok (v, m))) :
+    v = .ok 2 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec) h
+  exact hv
+
+/-- **No run of `threadsync.waitGroup` gives an error**: no data race on the `Tally` (its whole
+read included), no deadlock at a futex, no panic, under every schedule. -/
+theorem waitGroup_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o waitGroup mem0).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
 end Threadsync.WG
