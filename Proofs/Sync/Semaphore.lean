@@ -2482,12 +2482,12 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
 
 /-- A word at the start: no atomic location, each access to it happened before every thread, and
 the value 0. -/
-theorem word_init {W : Word 32 4} {m : Mem} {b : BlockId} {blk : Block} (hW : W.b = b)
-    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hfit : W.o + 4 ≤ blk.bytes.size)
-    (hal : (blk.addr + W.o) % 4 = 0) (hk : blk.kind = .stack) (hat : m.atomics = #[])
-    (hv : (intOfBytes 32 (blk.bytes.extract W.o (W.o + 4))).run = some (.ok 0))
+theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {b : BlockId} {blk : Block} (hW : W.b = b)
+    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hfit : W.o + nb ≤ blk.bytes.size)
+    (hal : (blk.addr + W.o) % nb = 0) (hk : blk.kind = .stack) (hat : m.atomics = #[])
+    (hv : (intOfBytes n (blk.bytes.extract W.o (W.o + nb))).run = some (.ok 0))
     (hfp : ∀ e ∈ m.footprint, W.Hits e → AllLe m e.clock) :
-    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) := by
+    W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec n) := by
   have hno : ∀ i l, ¬ W.Loc m i l := fun i l hl => by
     have := (Word.loc_get hl).1; rw [hat] at this; simp at this
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
