@@ -122,7 +122,7 @@ def bPtr : Ptr := ⟨some 0, 0⟩
 def R (X : ThreadId → X) : Assn := pts (bPtr.add 20) 4 (BitVec.ofNat 32 ((X 1).cnt + (X 2).cnt))
 
 /-- The `Thread.Mutex`: bytes 16..20 of the `Tally`, contended value `3`. -/
-abbrev L : Lock Gh := Lock.prod 0 16 R 3 (.inr rfl)
+abbrev L : Lock Gh := Lock.prod 0 16 R mutexC (by decide)
 
 /-- The group's state (bytes 0..8) and the event's state (bytes 8..12). -/
 def WG : Word 64 8 := { b := 0, o := 0 }
@@ -1722,7 +1722,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 /-- The `Tally` that `main` stores. -/
 def tally0 : Tally :=
   { wg := { state := { raw := 0 }, event := { impl := { state := { raw := 0 } } } },
-    m := { impl := { state := { raw := 0 } } }, n := 0 }
+    m := mutexOf 0, n := 0 }
 
 theorem enc_tally : (Enc.encode tally0).size = 24 ∧
     (Enc.encode tally0).extract 0 8 = Enc.encode (0 : BitVec 64) ∧
@@ -3120,7 +3120,7 @@ theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
     (hd : (intOfBytes 32 (bs.extract 20 24)).run = some (.ok d)) :
     (Enc.decode bs : Result Tally).run = some (.ok
       { wg := { state := { raw := a }, event := { impl := { state := { raw := b } } } },
-        m := { impl := { state := { raw := c } } }, n := d }) := by
+        m := mutexOf c, n := d }) := by
   have ha' : intOfBytes 64 (bs.extract 0 8) = pure a := ha
   have hb' : intOfBytes 32 (bs.extract 8 12) = pure b := hb
   have hc' : intOfBytes 32 (bs.extract 16 20) = pure c := hc

@@ -141,7 +141,7 @@ def R (X : ThreadId → X) : Assn :=
   pts (bPtr.add 16) 4 (BitVec.ofNat 32 (vOf (X 1))) ∗ pts (bPtr.add 20) 1 (rdyOf (X 1))
 
 /-- The `Thread.Mutex`: bytes 0..4 of the `Box`, contended value `3`. It owns `v` and `ready`. -/
-abbrev L : Lock Gh := Lock.prod 0 0 R 3 (.inr rfl)
+abbrev L : Lock Gh := Lock.prod 0 0 R mutexC (by decide)
 
 /-- The condition's state (bytes 4..8), its epoch (8..12), and the event (12..16). -/
 def WS : Word 32 4 := { b := 0, o := 4 }
@@ -3160,7 +3160,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-- The `Box` that `main` stores. -/
 def box0 : Box :=
-  { m := { impl := { state := { raw := 0 } } },
+  { m := mutexOf 0,
     c := { impl := { state := { raw := 0 }, epoch := { raw := 0 } } }, ready := false,
     done := { impl := { state := { raw := 0 } } }, v := 0 }
 
