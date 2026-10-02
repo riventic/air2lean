@@ -4448,6 +4448,93 @@ theorem main_spec (io : Io) (d : Nat) :
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  sorry
+  -- the stores: `io`, the `RwLock`, `n`
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 (hI ∪ (hS ∪ (hN ∪ hP)))) m₁ := ho₁
+  have F₁ : (bytesAt bPtr A 64 .stack ((Array.replicate 64 Byte.undef).extract 0 16) ∗
+      (bytesAt (bPtr.add 16) A 64 .stack (((Array.replicate 64 Byte.undef).extract 16).extract 0 40) ∗
+        (bytesAt ((bPtr.add 16).add 40) A 64 .stack
+          ((((Array.replicate 64 Byte.undef).extract 16).extract 40).extract 0 4) ∗
+         bytesAt (((bPtr.add 16).add 40).add 4) A 64 .stack
+          ((((Array.replicate 64 Byte.undef).extract 16).extract 40).extract 4))))
+      (hI ∪ (hS ∪ (hN ∪ hP))) := ⟨hI, _, dI, rfl, hI₁, hS, _, dS, rfl, hS₁, hN, hP, dN, rfl, hN₁, hP₁⟩
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := bPtr) (A := A) (S := 64) (K := .stack) (k := 0)
+    (a := 8) io rfl (by decide) (by rw [hsI]; decide) (by simp [bPtr]; omega) (by decide)).frame)
+    ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
+    fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 16) (A := A) (S := 64) (K := .stack)
+    (k := 0) (a := 8) rw0 (by rw [rw_size]; rfl) rfl (by decide)
+    (by rw [hsS]; decide) (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
+  rw [upd_upd] at ho₃
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (bPtr.add 16).add 40) (A := A) (S := 64)
+    (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
+    (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃
+    (hs₃.current.trans (hs₂.current.trans hc₁))
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
+  rw [upd_upd] at ho₄
+  have hth₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by
+    rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; rfl
+  have hat₄ : m₄.atomics = #[] := by rw [hs₄.atomics, hs₃.atomics, hs₂.atomics, hs₁.atomics]; rfl
+  have hq₄ : m₄.waiters = #[] := by rw [hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
+  have hPa : Parts io A ((((Array.replicate 64 Byte.undef).extract 16).extract 40).extract 4) h₄ := by
+    rw [writeBytes_all (by rw [hsI, enc_io]), writeBytes_all (by rw [hsS, rw_size]),
+      writeBytes_all (by rw [hsN, enc_u32])] at F₄
+    exact F₄
+  -- the spawn
+  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, inv_pre ho₄ hPa hA8 hth₄ hat₄ hq₄, fun G₁ m₅ hg₁ hi₅ =>
+    ⟨gA (.wo 0) Heap.empty default, ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
+  obtain ⟨rfl, hc₆, hi₆⟩ := inv_spawn hi₅ hg₁ hf
+  -- `main`'s first `readShared`
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callC (WP.mono ?_ (readS_spec spec₀ hi₆ hc₆)))
+  rintro v₁ G₂ m₇ d₂ ⟨hc₇, ⟨k₁, hk₁, hv₁, -⟩, hi₇⟩
+  -- the join
+  have hiJ := inv_g0 spec₀.frame (y := .joins) hi₇ rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    ⟨fun _ _ => .inr rfl, (fun h => by cases h), (fun h => by cases h.1), (fun _ _ h => by cases h),
+      (fun h => by cases h)⟩
+  refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gA .joins Heap.empty default, hiJ, fun G₃ m₈ hg₃ hi₈ => ?_⟩)
+  obtain ⟨-, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₈.2.1.shape
+  · exfalso; change (G₃ 0).2.2 = _ at h0; rw [hg₃] at h0; cases h0
+  have hr1' : m₈.threads[1]? = some { spawner := 0, joined := false } := by
+    rcases hr1 with ⟨h, -⟩ | ⟨-, -, hj⟩
+    · exact h
+    · change (G₃ 0).2.2.jd = true at hj; rw [hg₃] at hj; cases hj
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, rfl, rfl⟩, fun hfin => ⟨fun _ =>
+    join_run (m := { m₈ with current := 0 }) hr1' rfl rfl, fun m₉ hj => ?_⟩⟩
+  have hi₉ := inv_join hi₈ hg₃ hfin hj
+  have hc₉ : m₉.current = 0 := by obtain ⟨_, _, _, rfl⟩ := Proto.join_eq hj; rfl
+  -- `10 * first + second`
+  subst hv₁
+  have h3 : k₁ = 0 ∨ k₁ = 1 ∨ k₁ = 2 := by omega
+  refine WP.bind (WP.callRC_ok (v := BitVec.ofNat 32 (10 * k₁))
+    (by rcases h3 with rfl | rfl | rfl <;> rfl) ?_)
+  refine WP.bind (WP.callC (WP.mono ?_ (readS_spec spec₀ hi₉ hc₉)))
+  rintro v₂ G₄ m₁₀ d₄ ⟨hc₁₀, ⟨k₂, -, hv₂, hj2⟩, hi₁₀⟩
+  obtain rfl := hj2 rfl
+  subst hv₂
+  refine WP.bind (WP.callRC_ok (v := BitVec.ofNat 32 (10 * k₁ + 2))
+    (by rcases h3 with rfl | rfl | rfl <;> rfl) ?_)
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  -- the free of the `Shared`
+  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₀.2.1.blk
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ e he).elim) fun _ m₁₁ hfr => ?_)
+  obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨by rcases h3 with rfl | rfl | rfl <;> simp, fun r hr hsp => ?_⟩⟩
+  -- every thread is joined
+  obtain ⟨h0, ⟨-, hp, -⟩ | ⟨hs2', hr', -, -, -⟩⟩ := hi₁₀.2.1.shape
+  · change (upd G₄ 0 _ 0).2.2 = _ at hp; rw [upd_self] at hp; cases hp
+  have hj1 : m₁₀.threads[1]? = some { spawner := 0, joined := true } := by
+    rcases hr' with ⟨-, hd⟩ | ⟨h, -⟩
+    · change (upd G₄ 0 _ 0).2.2.jd = false at hd; rw [upd_self] at hd; cases hd
+    · exact h
+  simp only at hr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+  · rw [Array.getElem?_eq_getElem hi'] at h0; rw [Option.some.inj h0]
+  · rw [Array.getElem?_eq_getElem hi'] at hj1; rw [Option.some.inj hj1]
 
 end Sync.RwLockRead
