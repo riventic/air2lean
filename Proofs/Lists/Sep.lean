@@ -56,35 +56,35 @@ variable {m : Mem} {h hF : Heap} {p : Ptr} {v : BitVec 32} {q : Option Ptr}
 
 /-- The operations on a node that the list functions run: a load of `next` and of `val`, a store
 of `next`, and `destroy`. -/
-theorem node_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.SingleThread) :
+theorem node_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
     ∃ m', (load (Option Ptr) 8 (p.add 0)).run m = pure (q, m') ∧ m'.heap = h ∪ hF ∧
-      m'.SingleThread := by
+      m'.Seq := by
   obtain ⟨h0, A, hA, hb⟩ := hn
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 0) (k := 0) (n := 8) (a := 8)
     hb hm (by simp) (by decide) (by rw [nodeBytes_size]; decide) (by simp [h0]; omega)
   simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
   have hv' : Enc.decode (blk.bytes.extract 0 (0 + Enc.size (Option Ptr))) = pure q := by
     rw [show Enc.size (Option Ptr) = 8 from rfl, hx, nodeBytes_next]; exact LawfulEnc.decode_encode q
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact singleThread_recordAt hst _ _ _ _
+  · exact hst.recordAt _ _ _ _
 
-theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.SingleThread) :
+theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
     ∃ m', (load (BitVec 32) 4 (p.add 8)).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧
-      m'.SingleThread := by
+      m'.Seq := by
   obtain ⟨h0, A, hA, hb⟩ := hn
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 8) (k := 8) (n := 4) (a := 4)
     hb hm (by simp) (by decide) (by rw [nodeBytes_size]; decide) (by simp [h0]; omega)
   simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
   have hv' : Enc.decode (blk.bytes.extract 8 (8 + Enc.size (BitVec 32))) = pure v := by
     rw [show Enc.size (BitVec 32) = 4 from rfl, hx, nodeBytes_val]; exact LawfulEnc.decode_encode v
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst _ _ _ _), ?_, ?_⟩
+  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact singleThread_recordAt hst _ _ _ _
+  · exact hst.recordAt _ _ _ _
 
 theorem node_set_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hst : m.SingleThread) (q' : Option Ptr) :
-    ∃ m', (store 8 (p.add 0) q').run m = pure ((), m') ∧ m'.SingleThread ∧
+    (hst : m.Seq) (q' : Option Ptr) :
+    ∃ m', (store 8 (p.add 0) q').run m = pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ node p v q' h' := by
   obtain ⟨h0, A, hA, hb⟩ := hn
   obtain ⟨m', hr, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
@@ -94,10 +94,10 @@ theorem node_set_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Hea
   exact ⟨m', hr, hst', h', hd', hm', h0, A, hA, hb'⟩
 
 theorem node_free_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hst : m.SingleThread) (a : Allocator) :
-    ∃ m', (a.destroy 16 p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.SingleThread := by
+    (hst : m.Seq) (a : Allocator) :
+    ∃ m', (a.destroy 16 p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq := by
   obtain ⟨h0, A, -, hb⟩ := hn
-  obtain ⟨m', hr, hm', hst'⟩ := rawFree_run hb hm hd (nodeBytes_size v q) h0 (by decide) hst
+  obtain ⟨m', hr, hm', hst', -⟩ := rawFree_run hb hm hd (nodeBytes_size v q) h0 (by decide) hst
   exact ⟨m', by simpa [Allocator.destroy] using hr, hm', hst'⟩
 
 end Node
@@ -125,9 +125,9 @@ def revInv (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) : Assn := fun h
 
 theorem reverse_step (xs : List (BitVec 32)) (hF : Heap) (s : reverseLocals) (n : Nat) (m : Mem)
     (h : Heap) (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hi : revInv xs s n h)
-    (hst : m.SingleThread) :
+    (hst : m.Seq) :
     ∃ e s' m' h', (reverse.loop6.run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
-      m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
+      m'.heap = h' ∪ hF ∧ m'.Seq ∧
       (if reverse.again6 e then ∃ n' < n, revInv xs s' n' h'
        else e = .br5 ∧ list s'.prev xs.reverse h') := by
   obtain ⟨ys, zs, hxs, hn, h₁, h₂, d12, rfl, hl₁, hl₂⟩ := hi
@@ -216,9 +216,9 @@ theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
 def freeInv (s : freeAllLocals) (n : Nat) : Assn := fun h => ∃ zs, zs.length = n ∧ list s.p zs h
 
 theorem freeAll_step (a : Allocator) (hF : Heap) (s : freeAllLocals) (n : Nat) (m : Mem) (h : Heap)
-    (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hi : freeInv s n h) (hst : m.SingleThread) :
+    (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hi : freeInv s n h) (hst : m.Seq) :
     ∃ e s' m' h', ((freeAll.loop5 a).run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
-      m'.heap = h' ∪ hF ∧ m'.SingleThread ∧
+      m'.heap = h' ∪ hF ∧ m'.Seq ∧
       (if freeAll.again5 e then ∃ n' < n, freeInv s' n' h' else e = .br4 ∧ emp h') := by
   obtain ⟨zs, hn, hl⟩ := hi
   cases zs with
