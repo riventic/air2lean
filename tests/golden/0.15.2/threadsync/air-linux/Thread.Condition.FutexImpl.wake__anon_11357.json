@@ -1,7 +1,8 @@
 {
  "schema": 11,
  "zig_version": "0.15.2",
- "name": "Thread.Condition.FutexImpl.wake__anon_11680",
+ "target_endian": "little",
+ "name": "Thread.Condition.FutexImpl.wake__anon_11357",
  "params": [
   0
  ],

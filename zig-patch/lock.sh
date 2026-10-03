@@ -27,15 +27,17 @@ real="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/zig-unlocked"
 case "${1:-}" in
   version | env | targets | help | -h | --help) exec "$real" "$@" ;;
   build-obj | build-exe | build-lib | test)
-    # The last emit flag wins in zig, so refuse every -femit-bin.
+    # Response files can hide emission overrides, and a flag-looking token can be another
+    # option's value. Reject hidden overrides and inject a flag at a guaranteed option position.
     no_bin=0
     for a in "$@"; do
       case "$a" in
         -fno-emit-bin) no_bin=1 ;;
         -femit-bin*) no_bin=0; break ;;
+        @*) no_bin=0; break ;;
       esac
     done
-    if [ "$no_bin" = 1 ]; then exec "$real" "$@"; fi ;;
+    if [ "$no_bin" = 1 ]; then exec "$real" "$1" -fno-emit-bin "${@:2}"; fi ;;
 esac
 echo "error: this patched zig has no LLVM and only writes AIR (build-obj -fno-emit-bin)." >&2
 echo "Build and run programs with a stock zig, or rebuild this one with AIR2LEAN_LLVM=1" >&2

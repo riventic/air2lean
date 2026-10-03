@@ -59,6 +59,15 @@ def rawFree (p : Ptr) (n : Nat) : MemM Unit := do
   let (_, blk, o) ← (← get).access p n 1
   if blk.kind = .heap ∧ o = 0 ∧ blk.bytes.size = n then free p else throw .illegal
 
+/-- The standard library poisons a freed slice before `rawFree`. Validate the whole heap
+block, record that plain write, then free it. The dead bytes need no replacement array. -/
+def poisonFree (p : Ptr) (n : Nat) : MemM Unit := do
+  let (b, blk, o) ← (← get).access p n 1
+  if blk.kind = .heap ∧ o = 0 ∧ blk.bytes.size = n then
+    recordAccess b o n .write
+    rawFree p n
+  else throw .illegal
+
 /-- `create(T)`, for a `T` of `size > 0` bytes and alignment `align`. -/
 def Allocator.create (_ : Allocator) (size align : Nat) : MemM (Except ErrName Ptr) :=
   allocBytes align size
@@ -76,14 +85,14 @@ def Allocator.alloc (_ : Allocator) (size align : Nat) (n : BitVec 64) :
   | .error e => pure (.error e)
 
 /-- `free(s)`, for items of `size` bytes. Zig first sets the bytes to `undefined`; the block is
-dead after the free, and a bad free throws in both steps, so the model only frees. -/
+dead after the free. The poison write participates in the race check. -/
 def Allocator.free (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
-  if size * s.len.toNat = 0 then pure () else rawFree s.ptr (size * s.len.toNat)
+  if size * s.len.toNat = 0 then pure () else poisonFree s.ptr (size * s.len.toNat)
 
 /-- `free(s)` of a slice with a sentinel (`[:s]T`): `len + 1` items, the sentinel too
 (`mem.absorbSentinel`). -/
 def Allocator.freeSentinel (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
-  if size = 0 then pure () else rawFree s.ptr (size * (s.len.toNat + 1))
+  if size = 0 then pure () else poisonFree s.ptr (size * (s.len.toNat + 1))
 
 /-- `dupe(T, m)`: a new block with a copy of the items of `m`. Items of 0 bytes have no bytes to
 copy (and the result has no block). -/

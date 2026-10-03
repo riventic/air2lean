@@ -347,14 +347,14 @@ def storeUndef (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Unit :=
 
 /-! ## Memory ops
 
-`@memset`, `@memcpy` and `@memmove` do nothing for 0 items, also through a pointer that is not
-valid. For more items, the access is checked before the bytes are made. -/
+`@memset`, `@memcpy` and `@memmove` do nothing for 0 bytes (0 items or a zero-sized item), also through a pointer
+that is not valid. For more items, the access is checked before the bytes are made. -/
 
 /-- `@memset`: each of the `n` items at `p` becomes `v`. `v = none`: `undefined`, every byte of
 the items becomes undefined. -/
 def memset {α : Type} [Enc α] (align : Nat) (p : Ptr) (n : BitVec 64) (v : Option α) :
     MemM Unit := do
-  if n.toNat = 0 then return
+  if n.toNat = 0 ∨ Enc.size α = 0 then return
   let _ ← (← get).access p (n.toNat * Enc.size α) align
   let item := match v with
     | some x => Enc.encode x
@@ -365,16 +365,18 @@ def memset {α : Type} [Enc α] (align : Nat) (p : Ptr) (n : BitVec 64) (v : Opt
 read before the first write, so an overlap copies the old bytes (`@memmove`). For `@memcpy`, the
 AIR checks before that the two ranges do not overlap. -/
 def memmove (size dstAlign srcAlign : Nat) (dst src : Ptr) (n : BitVec 64) : MemM Unit := do
-  if n.toNat = 0 then return
+  if n.toNat = 0 ∨ size = 0 then return
   let _ ← (← get).access dst (n.toNat * size) dstAlign
   let bs ← loadBytes src (n.toNat * size) srcAlign
   storeBytes dst dstAlign bs
 
 /-- The items of `s`, for a call to a pure function with a `[]const T` parameter. An undefined
-byte in any item throws `.unspecified`, also in an item that the function does not read. -/
+byte in any item throws `.unspecified`, also in an item that the function does not read.
+Zero-sized items are decoded from empty bytes without accessing the slice pointer. -/
 def readSlice (α : Type) [Enc α] (align : Nat) (s : Slice) : MemM (Array α) := do
   if s.len.toNat = 0 then return #[]
-  let bs ← loadBytes s.ptr (s.len.toNat * Enc.size α) align
+  let bs ← if Enc.size α = 0 then pure #[] else
+    loadBytes s.ptr (s.len.toNat * Enc.size α) align
   (Array.range s.len.toNat).mapM fun i =>
     (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
 
@@ -388,15 +390,15 @@ def ptrAddr (p : Ptr) : MemM Int := do
     | some blk => pure (blk.addr + p.off)
     | none => throw .illegal
 
-/-- The pointer to address `n`: inside the block whose byte range covers `n`, at the matching
+/-- The pointer to address `n`: inside or one past the block whose address range covers `n`, at the matching
 offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still counts (its
 `addr` does not change on `free`), so the pointer this returns can still be a dangling one; the
 existing liveness check in `Mem.access` catches a later access through it. Round-trips with
-`ptrAddr`: `ptrFromAddr (← ptrAddr p) = p` for `p` inside its block's bytes. -/
+`ptrAddr`: `ptrFromAddr (← ptrAddr p) = p` for `p` inside or one past its block's bytes. -/
 def ptrFromAddr (n : Nat) : MemM Ptr := do
   let m ← get
   match m.blocks.zipIdx.findSome? fun (blk, b) =>
-      if blk.addr ≤ n ∧ n < blk.addr + blk.bytes.size then some (b, blk.addr) else none with
+      if blk.addr ≤ n ∧ n ≤ blk.addr + blk.bytes.size then some (b, blk.addr) else none with
   | some (b, addr) => pure ⟨some b, (n : Int) - (addr : Int)⟩
   | none => pure ⟨none, n⟩
 

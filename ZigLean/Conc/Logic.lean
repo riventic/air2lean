@@ -80,7 +80,8 @@ def Live (t : ThreadId) (G : ThreadId → γ) (m : Mem) : Prop :=
 /-- Thread `t` goes on at `op`, with the ghost values `G` and the memory `m` at that time: `K`
 holds of each response and the memory after the scheduler's part of the op
 (`Sched.turn`). A futex wait begins with the thread not in the queue; one that sleeps keeps the
-invariant. -/
+invariant. In strict mode a join handle is valid already while its target runs, because the
+scheduler rejects invalid handles without waiting for `fin`. -/
 def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
     (K : op.Resp → (ThreadId → γ) → Mem → Prop) : Prop :=
   match op, K with
@@ -91,7 +92,8 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
   | .spawn tgt, K => ∃ g, P.init tgt g ∧ ∀ child m',
       (Thread.fork.run { m with current := t }).run = some (.ok (child, m')) →
       K child (upd G child g) m'
-  | .join tid, K => (P.strict = true → t < tid ∧ tid < m.threads.size ∧ P.joins (G t)) ∧
+  | .join tid, K => (P.strict = true → t < tid ∧ tid < m.threads.size ∧ P.joins (G t) ∧
+      Thread.joinValid m t tid = true) ∧
       (P.fin (G tid) →
       (P.strict = true → ∃ m', ((Thread.join tid).run { m with current := t }).run =
         some (.ok ((), m'))) ∧ ∀ m',
@@ -331,6 +333,23 @@ theorem join_ok {m m' : Mem} {tid : ThreadId}
         throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
     rw [← h]; simp
 
+/-- A successful join passed the same handle validation used by scheduler readiness. -/
+theorem join_valid {m m' : Mem} {tid : ThreadId}
+    (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
+    Thread.joinValid m m.current tid = true := by
+  unfold Thread.join at h
+  cases hr : m.threads[tid]? with
+  | none =>
+    simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+      ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
+      throw, throwThe, MonadExceptOf.throw, StateT.lift]
+  | some rec =>
+    by_cases hc : (rec.spawner != m.current || rec.joined) = true <;>
+      simp_all [Thread.joinValid, StateT.run, bind, StateT.bind, get, getThe,
+        MonadStateOf.get, StateT.get, ExceptT.run, ExceptT.bind, ExceptT.mk,
+        ExceptT.bindCont, pure, ExceptT.pure, throw, throwThe, MonadExceptOf.throw,
+        StateT.lift, set, StateT.set]
+
 /-! ## What a step in `MemM` did, from its result -/
 
 namespace MemM
@@ -524,20 +543,20 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
   have hstep := hp G s.mem rfl hinv
   cases op with
   | yield =>
-    simp only [Sched.turn] at h
+    simp only [Sched.turn, Sched.turnTrace] at h
     exact settle_turnPost h hstep hsz rfl rfl rfl
   | choose n =>
-    simp only [Sched.turn, Sched.State.choose] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_turnPost h (hstep _ (choice_lt _ _)) hsz rfl rfl rfl
   | pick count =>
-    simp only [Sched.turn, Sched.State.choose] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_turnPost h (hstep _ (choice_lt _ _)) hsz rfl rfl rfl
   | wake ptr n =>
     obtain ⟨m₁, hw, hth⟩ := futexWake_ok ptr n { s.mem with current := t }
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hw] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_turnPost h (hstep m₁ hw) hsz rfl rfl (congrArg Array.size hth)
   | wait ptr e =>
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
     match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error _) => simp [hw] at h
@@ -558,7 +577,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
         exact settle_turnPost h hK hsz rfl rfl hth
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
     match hf : (Thread.fork.run { s.mem with current := t }).run with
     | none => simp [hf] at h
     | some (.error _) => simp [hf] at h
@@ -580,13 +599,15 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
         exact hdisp tgt g₀ hg₀ child G₁ m₁' _ (by rw [← this]; exact Nat.succ_pos _) hg hi
       · exact hr
   | join tid =>
-    have hf : P.fin (G tid) := hdone tid hgo
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
     match hj : ((Thread.join tid).run { s.mem with current := t }).run with
     | none => simp [hj] at h
     | some (.error _) => simp [hj] at h
     | some (.ok ((), m₁)) =>
       simp only [hj] at h
+      have hv : Thread.joinValid s.mem t tid = true := by
+        simpa [Thread.joinValid] using join_valid hj
+      have hf : P.fin (G tid) := hdone tid (by simpa [Sched.canGo, hv] using hgo)
       exact settle_turnPost h ((hstep.2 hf).2 m₁ hj) hsz rfl rfl (join_ok hj : _)
 
 
@@ -603,24 +624,24 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
   intro h
   cases op with
   | yield =>
-    simp only [Sched.turn] at h
+    simp only [Sched.turn, Sched.turnTrace] at h
     exact settle_safe hstr hstep hQ e h
   | choose n =>
-    simp only [Sched.turn, Sched.State.choose] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ e h
   | pick count =>
-    simp only [Sched.turn, Sched.State.choose] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ e h
   | wake ptr n =>
     obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n { s.mem with current := t }
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hw] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_safe hstr (hstep m₁ hw) hQ e h
   | wait ptr e' =>
     have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
       simpa [Sched.canGo] using hgo
     obtain ⟨b, m₁, hw⟩ := (hstep.2 hq0).1 hstr
     have hK := (hstep.2 hq0).2 b m₁ hw
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hw] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
     cases b with
     | true => simp at h
     | false =>
@@ -628,7 +649,7 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
       exact settle_safe hstr hK hQ e h
   | spawn tgt =>
     obtain ⟨g₀, hg₀, hk⟩ := hstep
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
     match hf : (Thread.fork.run { s.mem with current := t }).run with
     | none =>
       simp [Thread.fork, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
@@ -642,9 +663,10 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
       simp only [hf] at h
       exact settle_safe hstr (hk child m₁ hf) hQ e h
   | join tid =>
-    have hf : P.fin (G tid) := hdone tid hgo
+    have hv := (hstep.1 hstr).2.2.2
+    have hf : P.fin (G tid) := hdone tid (by simpa [Sched.canGo, hv] using hgo)
     obtain ⟨m₁, hj⟩ := (hstep.2 hf).1 hstr
-    simp only [Sched.turn, Sched.State.onMem, bind, Except.bind, hj] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hj] at h
     exact settle_safe hstr ((hstep.2 hf).2 m₁ hj) hQ e h
 
 variable (P) in
@@ -745,7 +767,9 @@ theorem paused_info {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) →
   obtain ⟨d, op, k⟩ := p
   have hs := hp G m hg hi
   cases op with
-  | join tid' => exact ⟨fun tid h => (by cases h; exact hs.1 hstr), fun _ _ h => (by cases h)⟩
+  | join tid' =>
+    exact ⟨fun tid h => (by cases h; exact ⟨(hs.1 hstr).1, (hs.1 hstr).2.1,
+      (hs.1 hstr).2.2.1⟩), fun _ _ h => (by cases h)⟩
   | wait ptr' e' => exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h; exact hs.1 hstr)⟩
   | yield | choose | pick | spawn | wake =>
     exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h)⟩
@@ -779,7 +803,9 @@ theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
   cases op with
   | join tid =>
     obtain ⟨h1, h2, h3⟩ := hj tid rfl
-    exact .inl ⟨tid, h1, h2, h3, by simpa only [Sched.canGo] using hc⟩
+    exact .inl ⟨tid, h1, h2, h3, by
+      simp only [Sched.canGo, Bool.or_eq_false_iff, Bool.not_eq_false'] at hc
+      exact hc.2⟩
   | wait ptr e =>
     simp only [Sched.canGo, Bool.not_eq_false'] at hc
     exact .inr ⟨hc, hw ptr e rfl⟩

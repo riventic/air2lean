@@ -17,11 +17,13 @@ supported version, so one translation (and the proofs over it) serves all versio
    (`struct_field_ptr_index_N`, `ptr_slice_len_ptr`, `slice_elem_ptr`, then `load`), where 0.15.2
    reads the value (`struct_field_val`, `slice_len`, `slice_elem_val`). Nothing writes the copy,
    so a read through it equals the read of the value. The pass changes each such pointer
-   projection to the value read, and drops the copy, the `bitcast`s and the `load`s.
+   projection to the value read, and drops the copy, the `bitcast`s and the `load`s. A slice's
+   elements remain memory: only an adjacent, single projection/load chain can read them early.
 2. `itemReads`. A read of one item through a pointer is `ptr_elem_val` in 0.15.2, and
    `ptr_elem_ptr` then `load` in 0.16.0. A read of one item of a local array is a `load` of the
    whole array then `array_elem_val` in 0.15.2, and the same `ptr_elem_ptr` and `load` in 0.16.0.
    The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use.
+   A `slice_elem_ptr`/`load` pair similarly becomes `slice_elem_val` at the load's position.
    For the second pair, the `array_elem_val` must come directly after the `load` in its body, so
    no write comes between them.
 3. `dropTrueChecks`. For `s[a..b]`, 0.15.2 checks `a <= b` a second time, after the check
@@ -32,8 +34,8 @@ supported version, so one translation (and the proofs over it) serves all versio
    checks `a <= a + n`.
 4. `argRanks`. An `arg`'s `param` is the source index of the parameter, and it counts the
    `comptime` parameters of a generic instance (`dupeSentinel(allocator, comptime T, m)` reads
-   `m` as `param 2`). The pass gives each `arg` the rank of its index among the `arg`s, so
-   `param` is the index of the runtime parameter (`p0, p1, …`).
+   `m` as `param 2`). The pass ranks these indices against runtime parameter slots that have
+   AIR args, preserving slots for one-possible-value parameters (such as `void` and `u0`).
 5. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
@@ -72,9 +74,75 @@ def RawInst.uses (i : RawInst) : Array InstId :=
     i.cases.flatMap (fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b) ++
     (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o => (o.ref.map ids).getD #[]).getD #[]
 
+/-- Reject invalid references before renumbering can turn an absent old ID into a fresh ID.
+Branch targets must be enclosing blocks; repeats must name an enclosing loop. -/
+partial def validateRefs (f : RawFunc) : Except String Unit := do
+  let all := flatten f.body
+  let mut ids : Std.HashSet InstId := {}
+  for i in all do
+    if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
+    ids := ids.insert i.id
+  let rec valRefs (v : Val) : Array InstId :=
+    match v with
+    | .inst id => #[id]
+    | .agg _ vs => vs.flatMap valRefs
+    | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => valRefs v
+    | .sliceConst _ p n => valRefs p ++ valRefs n
+    | _ => #[]
+  for i in all do
+    let values := i.args ++ i.callee.toArray ++
+      i.cases.flatMap (fun c => c.items ++ c.ranges.flatMap fun (a, b) => #[a, b]) ++
+      (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o =>
+        o.ref.toArray).getD #[]
+    for v in values do
+      let refs := valRefs v
+      -- Exported constants contain constants, never SSA references. Renumbering and use
+      -- analysis operate on instruction operands; reject a hidden dynamic operand before
+      -- those passes can lose its use or leave its original ID embedded in a constant.
+      match v with
+      | .inst _ => pure ()
+      | _ => do
+        if let some r := refs[0]? then
+          throw s!"{f.name}: inst {i.id}: nested instruction ref {r} inside a constant is outside the subset"
+      for r in refs do
+        unless ids.contains r do throw s!"{f.name}: inst {i.id}: unknown instruction ref {r}"
+    -- Shuffle masks are comptime values; an SSA lane would need use tracking and ID
+    -- rewriting, and cannot occur in an ordinary compiler export.
+    for lane in i.mask do
+      if let .value v := lane then
+        if let some r := (valRefs v)[0]? then
+          throw s!"{f.name}: inst {i.id}: instruction ref {r} inside a shuffle mask is outside the subset"
+  for g in f.globals do
+    if let some v := g.init then
+      if let some r := (valRefs v)[0]? then
+        throw s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"
+  let rec targets (body : Array RawInst) (blocks loops : Array InstId) : Except String Unit := do
+    for i in body do
+      if i.tag == "br" || i.tag == "repeat" then
+        let some t := i.target | throw s!"{f.name}: inst {i.id}: missing target"
+        unless (if i.tag == "repeat" then loops else blocks).contains t do
+          throw s!"{f.name}: inst {i.id}: target {t} is not an enclosing {if i.tag == "repeat" then "loop" else "block"}"
+      let nestedBlocks := if i.tag == "block" || i.tag == "dbg_inline_block" || i.tag == "loop"
+        then blocks.push i.id else blocks
+      let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
+      for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
+        targets b nestedBlocks nestedLoops
+  targets f.body #[] #[]
+
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||
     tag == "dbg_arg_inline"
+
+/-- Each body's next non-debug instruction, including every nested body. -/
+def nextNonDebug (body : Array RawInst) : Std.HashMap InstId InstId := Id.run do
+  let all := flatten body
+  let bodies := #[body] ++ all.flatMap fun i =>
+    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
+  let mut next : Std.HashMap InstId InstId := {}
+  for b in bodies do
+    let ids := (b.filter (!isDbgTag ·.tag)).map (·.id)
+    for (a, c) in ids.zip (ids.extract 1 ids.size) do next := next.insert a c
+  return next
 
 /-- For a pointer projection: the value read that a `load` through it equals, and the field
 index for a struct field. `slice_elem_ptr` takes the slice value itself, not a pointer. -/
@@ -122,6 +190,20 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
   let isConstPtr (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with | some (.ptr _ c _) => c | _ => false
   let pos := positions f.body
+  -- Adjacent projection/load chains have no intervening write or call. This retains the
+  -- value form for pure slice reads, while delayed or repeated reads stay at each load.
+  let next := nextNonDebug f.body
+  let rec adjacentRead (p : InstId) (fuel : Nat) : Bool :=
+    match fuel with
+    | 0 => false
+    | fuel + 1 =>
+    match (users.getD p #[]).filter (!isDbgTag ·.tag) with
+    | #[u] =>
+      next[p]? == some u.id && u.args[0]? == some (.inst p) &&
+        !((u.ty.bind (f.layouts[·]?)).map (·.isVolatile)).getD false &&
+        (u.tag == "load" || (u.tag != "slice_elem_ptr" && (projection? u).isSome &&
+          adjacentRead u.id fuel))
+    | _ => false
   -- Copies: an `alloc` whose uses are one `store` of a value into it, and `bitcast`s to a const
   -- pointer after that store in the store's own body (`runsAfter`). So the store runs before
   -- every read on every path, and the stored value (an SSA value) never changes.
@@ -136,15 +218,22 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     if let #[s] := stores then
       if let some v := s.args[1]? then
         if (match v with | .undef _ => false | _ => true) &&
-            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty && runsAfter pos s.id u.id) then
+            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty &&
+              (a.ty.bind fun sourceTy => u.ty.map (samePointee f.types sourceTy)).getD false &&
+              runsAfter pos s.id u.id) then
           copyVal := copyVal.insert a.id v
-  -- Read-only pointers: a `bitcast` of a copy, or a projection of one (or of a slice value).
+  -- Read-only pointers into the copy itself. Slice elements live in separate, mutable memory;
+  -- their loads must stay at the load's position even if the slice value is immutable.
   let mut ptrs : Std.HashSet InstId := {}
   for i in all do
     match i.tag, (i.args[0]? : Option Val) with
     | "bitcast", some (.inst a) => if copyVal.contains a then ptrs := ptrs.insert i.id
-    | "slice_elem_ptr", _ => ptrs := ptrs.insert i.id
-    | _, some (.inst p) => if (projection? i).isSome && ptrs.contains p then ptrs := ptrs.insert i.id
+    | "slice_elem_ptr", _ =>
+      if !((i.ty.bind (f.layouts[·]?)).map (·.isVolatile)).getD false && adjacentRead i.id all.size then
+        ptrs := ptrs.insert i.id
+    | _, some (.inst p) =>
+      if i.tag != "slice_elem_ptr" && (projection? i).isSome && ptrs.contains p then
+        ptrs := ptrs.insert i.id
     | _, _ => pure ()
   -- Keep only pointers read by `load`, by a kept projection, or by a debug instruction, and
   -- projections of a kept pointer.
@@ -198,13 +287,16 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
   return { f with body }
 
 /-- A safety check: `block { cond_br c then { br } else { … unreach } }`, whose `then` body only
-leaves the block. After it, `c` is true. The condition `c`, if the block is one. -/
+leaves the block and whose `else` body cannot branch out. After it, `c` is true. The condition
+`c`, if the block is one. -/
 def checkCond? (b : RawInst) : Option InstId :=
   match b.tag, b.body with
   | "block", #[cb] =>
     match cb.tag, (cb.args[0]? : Option Val), cb.thenBody, cb.elseBody.back? with
     | "cond_br", some (.inst c), #[br], some last =>
-      if br.tag == "br" && br.target == some b.id && (last.tag == "unreach" || last.tag == "trap")
+      if br.tag == "br" && br.target == some b.id && br.args == #[.void] &&
+          (last.tag == "unreach" || last.tag == "trap") &&
+          !(flatten cb.elseBody).any (·.tag == "br")
       then some c else none
     | _, _, _, _ => none
   | _, _ => none
@@ -226,6 +318,7 @@ partial def dropTrueChecks (f : RawFunc) : RawFunc := Id.run do
     let mut known : Array (String × Array Val) := #[]
     for i in b do
       let some c := checkCond? i | continue
+      unless (i.ty.bind (f.types[·]?)) == some .void && (users.getD i.id #[]).isEmpty do continue
       let some k := key c | continue
       let unsigned (t : Option TyId) : Bool :=
         match t.bind (f.types[·]?) with | some (.int false _) => true | _ => false
@@ -257,30 +350,27 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
     | #[u] => some u
     | _ => none
   -- The non-debug instruction after each one in the same body.
-  let mut next : Std.HashMap InstId InstId := {}
-  let bodies := #[f.body] ++ all.flatMap fun i =>
-    #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body)
-  for b in bodies do
-    let ids := (b.filter (!isDbgTag ·.tag)).map (·.id)
-    for (a, c) in ids.zip (ids.extract 1 ids.size) do
-      next := next.insert a c
+  let next := nextNonDebug f.body
   -- The item read that replaces each instruction, and the instructions that go.
-  let mut repl : Std.HashMap InstId (Val × Val) := {}
+  let mut repl : Std.HashMap InstId (String × Val × Val) := {}
   let mut gone : Std.HashSet InstId := {}
   for x in all do
     match x.tag, x.args[0]?, x.args[1]?, only x.id with
+    | "slice_elem_ptr", some s, some idx, some u =>
+      if u.tag == "load" && u.args[0]? == some (.inst x.id) then
+        repl := repl.insert u.id ("slice_elem_val", s, idx); gone := gone.insert x.id
     | "ptr_elem_ptr", some p, some i, some u =>
       if u.tag == "load" && u.args[0]? == some (.inst x.id) then
-        repl := repl.insert u.id (p, i); gone := gone.insert x.id
+        repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | "load", some p, _, some u =>
       if u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
         if let some i := u.args[1]? then
-          repl := repl.insert u.id (p, i); gone := gone.insert x.id
+          repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | _, _, _, _ => pure ()
   let body := rewriteBody (body := f.body) fun i =>
     if gone.contains i.id || (isDbgTag i.tag && i.uses.any gone.contains) then none
     else match repl[i.id]? with
-      | some (p, idx) => some { i with tag := "ptr_elem_val", args := #[p, idx] }
+      | some (tag, p, idx) => some { i with tag, args := #[p, idx] }
       | none => some i
   return { f with body }
 
@@ -296,17 +386,50 @@ def renumber (f : RawFunc) : RawFunc :=
     some { (i.mapVals rv) with id := r i.id, target := i.target.map r }
   { f with body }
 
-/-- `argRanks` (module doc). -/
-def argRanks (f : RawFunc) : RawFunc :=
+/-- Types whose parameter has no AIR `arg`: Zig still keeps their slot in the runtime
+function signature. Comptime parameters, in contrast, have no slot in `params`. -/
+partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
+  if seen.contains id then false else
+  let recur := fun t => onePossibleValue types t (seen.push id)
+  match types[id]? with
+  | some .void | some (.int _ 0) => true
+  | some (.enum _ _ true fields) => fields.size == 1
+  | some (.errorSet (some names)) => names.size == 1
+  | some (.array len c _) | some (.vector len c) => len == 0 || recur c
+  | some (.struct _ _ fields) => fields.all (recur ·.2)
+  | some (.tuple fields) => fields.all recur
+  | some (.union _ _ _ fields) => fields.size == 1 && fields.all (recur ·.2)
+  | some (.optional c) => types[c]? == some .noreturn
+  | some (.errorUnion set payload) =>
+    match types[set]? with
+    | some (.errorSet (some names)) =>
+      (names.isEmpty && recur payload) || (names.size == 1 && types[payload]? == some .noreturn)
+    | _ => false
+  | _ => false
+
+/-- Rank source indexes against non-OPV runtime slots, preserving omitted OPV parameters. -/
+def argRanks (f : RawFunc) : Except String RawFunc := do
   let ps := ((flatten f.body).filterMap fun i => if i.tag == "arg" then i.param else none)
   let ranks := (ps.qsort (· < ·)).toList.eraseDups.toArray
-  let rank (p : Nat) : Nat := (ranks.idxOf? p).getD p
+  let slots := (Array.range f.params.size).filter fun k => !onePossibleValue f.types f.params[k]!
+  unless ranks.size == slots.size do
+    throw s!"{f.name}: AIR args do not match non-OPV runtime parameters ({ranks.size} args, {slots.size} slots)"
+  let rank (p : Nat) : Nat := slots[(ranks.idxOf? p).getD slots.size]!
+  for i in flatten f.body do
+    if i.tag == "arg" then
+      let some p := i.param | throw s!"{f.name}: inst {i.id}: 'arg' needs 'param'"
+      unless i.ty == some f.params[rank p]! do
+        throw s!"{f.name}: inst {i.id}: arg type does not match its runtime parameter"
   let body := rewriteBody (body := f.body) fun i =>
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
-  { f with body }
+  pure { f with body }
 
 /-- The five rewrites (module doc). -/
-def canonicalize (f : RawFunc) : RawFunc :=
-  renumber (dropTrueChecks (itemReads (forwardReadOnlyCopies (argRanks f))))
+def canonicalize (f : RawFunc) : Except String RawFunc := do
+  validateRefs f
+  let f ← argRanks f
+  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies f))
+  validateRefs f
+  pure (renumber f)
 
 end Air2Lean.Raw

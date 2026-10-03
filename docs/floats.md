@@ -26,7 +26,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | `@abs`, `-x` | `abs`, `neg` | clear or flip the sign bit (also of a NaN) |
 | `@min`, `@max` | `min`, `max` | one NaN operand: the other operand. Two NaNs: NaN. +0 and −0: see below |
 | `< <= == != >= >` | `cmp_*` | IEEE: NaN is unordered, `−0 == +0` |
-| `@floatCast` | `fptrunc`, `fpext` | rounded / exact |
+| `@floatCast` | `fptrunc`, `fpext` | rounded / exact; value/class-changing casts: group C; f80→f16 in `compiler-rt` mode: group E |
 | `@floatFromInt` | `float_from_int` | rounded (also `u128`/`i128`) |
 | `@intFromFloat` | `int_from_float_safe` (0.15.2) | truncate. `x <= floor(min − 1)` or `x >= ceil(max + 1)`: panic `integerPartOutOfBounds` (`.overflow`). NaN: `.unspecified` (the check does not catch it) |
 | `@intFromFloat` | `int_from_float` (0.14.1, or no safety) | truncate; out of range or NaN: `.unspecified` |
@@ -35,17 +35,28 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 
 ### `--float-semantics ieee | compiler-rt`
 
-The reference target has no hardware `f128` divide and no FMA instruction, so `/`/`@divExact`/`@divTrunc`/`@divFloor` on `f128` and `@mulAdd` on any format actually run a compiler_rt software routine there, not the IEEE-correct result the rest of this page describes. Two divergences, opt-in together per translated example:
+The reference target has no hardware `f128` divide and no FMA instruction, so `/`/`@divExact`/`@divTrunc`/`@divFloor` on `f128` and `@mulAdd` on any format actually run a compiler_rt software routine there, not the IEEE-correct result the rest of this page describes. Three rounding/value divergences, opt-in together per translated example:
 
 - **Group A — `f128` division** (`__divtf3`; this paragraph: before Zig 0.16.0; 0.16.0: §Per-version differences): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
 - **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some subnormal inputs.
+- **Group E — f80→f16 `@floatCast`**: `__truncxfhf2` clears the explicit integer bit before its subnormal conversion and uses a wrapping-u64 sticky-bit expression. For example, f80 `2^-15` converts to f16 `+0`, while correctly-rounded conversion gives `0x0200`. `Float.convRt` ports that helper; IEEE mode keeps correctly-rounded conversion. The relevant helper algorithm is the same in 0.14.1, 0.15.2 and 0.16.0.
 
-`ieee` (default; what a proof assumes) always returns the model's own result for groups A and B. `compiler-rt` matches them bit-for-bit (`ZigLean/Float/CompilerRt.lean`) — needed only by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof never needs to know the divergence exists unless its example opts in.
+`ieee` (default; what a proof assumes) always returns the model's own result for groups A, B and E. `compiler-rt` matches them bit-for-bit (`ZigLean/Float/CompilerRt.lean`) — needed only by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof never needs to know the divergence exists unless its example opts in.
 
 Two more divergences hold in **both modes, always** — the two sides disagree on *which* value is correct, not just on rounding, so the model throws `.unspecified` instead of picking one:
 
-- **Group C — f80 invalid encodings** (§f80 below): compiler_rt's software `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` read an unnormal/pseudo-infinity/pseudo-NaN operand's raw bits directly and diverge from x87 hardware on them. `@mulAdd` alone has a second f80 sub-case: a pseudo-denormal operand. `fma`'s f128-extension step re-derives the value from the exponent by the ordinary subnormal formula, ignoring the explicit integer bit, and reads it as `0` instead of the modeled value — `Float.isPseudoDenormalF80` (`ZigLean/Float/Ops.lean`), checked only by `fmaChk`/`fmaRtChk`. `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod` read a pseudo-denormal correctly and need no such guard.
+- **Group C — result-class changes and f80 invalid encodings** (§f80 below): compiler_rt's software `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` read an unnormal/pseudo-infinity/pseudo-NaN operand's raw bits directly and diverge from x87 hardware on them. `@mulAdd` also checks a second f80 sub-case: a pseudo-denormal operand. `fma`'s f128-extension step re-derives the value from the exponent by the ordinary subnormal formula, ignoring the explicit integer bit, and reads it as `0` instead of the modeled value — `Float.isPseudoDenormalF80` (`ZigLean/Float/Ops.lean`), checked by `fmaChk`/`fmaRtChk` and the cast wrappers below. `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod` read a pseudo-denormal correctly and need no such guard.
 - **Group D — f32/f64 `@min`/`@max` of `+0` and `−0`** (see the table below): order- and sign-dependent on real SSE hardware.
+
+Group C also covers three direct `@floatCast` cases through `Float.convChk` and
+`Float.convRtChk`, in both modes. f80→f128 rejects invalid encodings and pseudo-denormals:
+`__extendxftf2` can read them as a different value or class (the zero-fraction
+pseudo-denormal becomes zero). f80→f16 rejects invalid encodings: `__truncxfhf2` can
+read an unnormal as a finite value or a pseudo-infinity as infinity. Pseudo-denormals
+underflow to the same signed zero in both f16 conversion modes and need no guard.
+f128→f80 rejects NaNs whose entire payload is in the low
+49 fraction bits: `__trunctfxf2` discards those bits without setting a quiet bit and
+returns infinity. Other NaN conversions retain the usual unspecified sign/payload rule.
 
 ### +0 and −0 in `@min` / `@max`
 
@@ -74,7 +85,8 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 | pseudo-infinity, pseudo-NaN | 0x7fff | 0 | NaN |
 | pseudo-denormal | 0 | 1 | the value `1.f × 2^(1 − 16383)` |
 
-The first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is a correctly-modeled value everywhere except `@mulAdd`, where it is group C too.
+The first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` and direct casts to f16 or f128 (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is group C for `@mulAdd` and for a direct cast to f128;
+the model otherwise decodes its value as shown above.
 
 ## Per-version differences
 

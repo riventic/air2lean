@@ -510,8 +510,8 @@ def applyOp (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM applyOpLocals applyOpExit) with
     | .br3 => (do
-      let _i8 ← Zig.callR (Zig.vindex (#v[(⟨some 0, 0⟩ : Zig.Ptr), (⟨some 1, 0⟩ : Zig.Ptr), (⟨some 2, 0⟩ : Zig.Ptr)] : Vector (Zig.Ptr) 3) p0)
-      let i9 ← (if _i8 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if _i8 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if _i8 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
+      let i8 ← Zig.callR (Zig.vindex (#v[(⟨some 0, 0⟩ : Zig.Ptr), (⟨some 1, 0⟩ : Zig.Ptr), (⟨some 2, 0⟩ : Zig.Ptr)] : Vector (Zig.Ptr) 3) p0)
+      let i9 ← (if i8 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if i8 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if i8 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
       pure (.ret i9))
     | e => pure e) : Zig.MM applyOpLocals applyOpExit).run' (default : applyOpLocals)
   match e with
@@ -1200,7 +1200,6 @@ inductive regSignedExit where
 def regSigned (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
   let e ← ((do
     modify (fun s => { s with local1 := (Reg.modify_raw (fun _ => p0) s.local1) })
-    (panic! "air2lean: set_union_tag with an unknown tag")
     let i6 ← pure ((← get).local1)
     let i7 ← Zig.call (Reg.get_signed i6)
     pure (.ret i7)) : Zig.M regSignedLocals regSignedExit).run' (default : regSignedLocals)
@@ -1369,7 +1368,6 @@ inductive wordOfExit where
 def wordOf (p0 : BitVec 32) : Zig.Result (Word) := do
   let e ← ((do
     modify (fun s => { s with local1 := (Word.modify_int (fun _ => p0) s.local1) })
-    (panic! "air2lean: set_union_tag with an unknown tag")
     pure (.ret (← get).local1)) : Zig.M wordOfLocals wordOfExit).run' (default : wordOfLocals)
   match e with
   | .ret v => pure v

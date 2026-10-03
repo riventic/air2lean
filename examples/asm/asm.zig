@@ -41,7 +41,7 @@ pub fn divmod(a: u32, b: u32) u64 {
     var rem: u32 = undefined;
     const q = asm ("xorl %%edx, %%edx\n\tdivl %[b]"
         : [q] "={eax}" (-> u32),
-          [r] "={edx}" (rem),
+          [r] "=&{edx}" (rem),
         : [a] "{eax}" (a),
           [b] "r" (b),
     );

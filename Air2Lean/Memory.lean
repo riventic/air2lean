@@ -6,11 +6,13 @@ import Air2Lean.Air.Op
 Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
 
 * A **place** is an `alloc` (a `var`, or `ret_ptr`), a field pointer of a place (a struct
-  field, or the length or item pointer of a slice), or a `bitcast` of a place. A place whose `alloc` does not escape stays a `Locals` field.
+  field, or the length or item pointer of a slice), or a pointer `bitcast` with the same
+  child type. A place whose `alloc` does not escape stays a `Locals` field.
 * An `alloc` **escapes** if one of its places is used other than as the pointer operand of
   `load`, `store`, `struct_field_ptr`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr`, `bitcast`,
   `set_union_tag`, `ret_load`, an atomic op, or in `dbg`. An escaping `alloc` is a stack block in
-  memory. A place passed to `Thread.spawn` escapes (it is not in this list), so a variable shared
+  memory. A cast to a different pointee also escapes: its loads and stores reinterpret bytes.
+  A place passed to `Thread.spawn` escapes (it is not in this list), so a variable shared
   with a spawned thread is a memory block subject to the race check (`ZigLean/Mem/Thread.lean`).
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
@@ -105,7 +107,13 @@ def escapingAllocs (f : Func) : Array InstId :=
   let insts := f.allInsts
   let roots := placeRoots insts
   insts.foldl (init := #[]) fun acc i =>
-    (valueOperands i.op).foldl (init := acc) fun acc v =>
+    let operands := valueOperands i.op ++ match i.op with
+      | .bitcast v@(.inst id) =>
+        match insts.find? (·.id == id) with
+        | some source => if samePointee f.types source.ty i.ty then #[] else #[v]
+        | none => #[]
+      | _ => #[]
+    operands.foldl (init := acc) fun acc v =>
       match v with
       | .inst id => match roots.find? (·.1 == id) with
         | some (_, r) => if acc.contains r then acc else acc.push r

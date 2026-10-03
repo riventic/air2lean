@@ -393,16 +393,17 @@ def groupConcurrent.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM 
       match i20 with
       | .error _ => (do
         let i22 ← Zig.callRC (Zig.unwrapErr i20)
-        let i23 ← pure (i22)
-        let i24 ← pure ((.error i23) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i24))
+        let _i23 ← Zig.groupCancelC i8 p0
+        let i24 ← pure (i22)
+        let i25 ← pure ((.error i24) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i25))
       | .ok _v21 => (do
         pure .br15))
     else (do
       pure .br12)) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit) with
   | .br15 => (do
-    let i28 ← Zig.add false i14 (1 : BitVec 64)
-    modify (fun s => { s with local10 := i28 })
+    let i29 ← Zig.add false i14 (1 : BitVec 64)
+    modify (fun s => { s with local10 := i29 })
     pure .rep13)
   | e => pure e
 
@@ -423,11 +424,11 @@ def groupConcurrent (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32
     match ← ((do
       Zig.loop (groupConcurrent.loop13 p0 i1 i8) groupConcurrent.again13) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit) with
     | .br12 => (do
-      let _i31 ← Zig.groupCancelC i8 p0
-      let i32 ← pure (i1.add 20)
-      let i33 ← Zig.load (BitVec 32) 4 i32
-      let i34 ← pure ((.ok i33) : Except Zig.ErrName (BitVec 32))
-      pure (.ret i34))
+      let _i32 ← Zig.groupCancelC i8 p0
+      let i33 ← pure (i1.add 20)
+      let i34 ← Zig.load (BitVec 32) 4 i33
+      let i35 ← pure ((.ok i34) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i35))
     | e => pure e) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit).run' { (default : groupConcurrentLocals) with c := s1, g := s8 }
   Zig.free s1
   Zig.free s8

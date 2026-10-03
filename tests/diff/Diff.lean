@@ -89,11 +89,11 @@ private def airAsm_4040357768_impl (x : BitVec 64) : BitVec 64 :=
   (asmPopcnt64 (.ofBitVec x)).toBitVec
 
 /-- Two outputs: the archive packs them in one `UInt64` (quotient low, remainder high). -/
-private def airAsm_2482283570_impl (a b : BitVec 32) : BitVec 32 × BitVec 32 :=
+private def airAsm_3653072158_impl (a b : BitVec 32) : BitVec 32 × BitVec 32 :=
   let r := (asmDivmod32 (.ofBitVec a) (.ofBitVec b)).toBitVec
   (r.extractLsb' 0 32, r.extractLsb' 32 32)
 
-@[csimp] theorem airAsm_2482283570_eq : @Asm.airAsm_2482283570 = @airAsm_2482283570_impl := sorry
+@[csimp] theorem airAsm_3653072158_eq : @Asm.airAsm_3653072158 = @airAsm_3653072158_impl := sorry
 @[csimp] theorem airAsm_3500345798_eq : @Asm.airAsm_3500345798 = @airAsm_3500345798_impl := sorry
 @[csimp] theorem airAsm_3884223243_eq : @Asm.airAsm_3884223243 = @airAsm_3884223243_impl := sorry
 @[csimp] theorem airAsm_4040357768_eq : @Asm.airAsm_4040357768 = @airAsm_4040357768_impl := sorry
@@ -1112,7 +1112,7 @@ def runDivmod : IO Unit :=
     let items ← getArr j
     let a := bv 32 (← getInt items[0]!)
     let b := bv 32 (← getInt items[1]!)
-    let (q, r) := Asm.airAsm_2482283570 a b
+    let (q, r) := Asm.airAsm_3653072158 a b
     pure (render (pure (r.setWidth 64 <<< 32 ||| q.setWidth 64) : Zig.Result (BitVec 64)) true)
 
 end DiffTest
@@ -1220,4 +1220,3 @@ def main : IO Unit := do
     DiffTest.runDivmod
 
   run "layout" DiffTest.runLayout
-

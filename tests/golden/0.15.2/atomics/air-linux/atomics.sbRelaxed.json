@@ -525,7 +525,7 @@
    "id": 56,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 10
   },
   {
    "id": 58,
@@ -541,7 +541,7 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 10
   },
   {
    "id": 61,
@@ -573,7 +573,7 @@
    ]
   },
   {
-   "id": 67,
+   "id": 71,
    "tag": "try",
    "ty": 16,
    "args": [
@@ -600,6 +600,43 @@
     },
     {
      "id": 64,
+     "tag": "load",
+     "ty": 16,
+     "args": [
+      {
+       "inst": 54
+      }
+     ]
+    },
+    {
+     "id": 65,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 9
+    },
+    {
+     "id": 66,
+     "tag": "call",
+     "ty": 1,
+     "callee": {
+      "ty": 22,
+      "func": "Thread.join",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 64
+      }
+     ]
+    },
+    {
+     "id": 67,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 10
+    },
+    {
+     "id": 68,
      "tag": "bitcast",
      "ty": 18,
      "args": [
@@ -609,102 +646,65 @@
      ]
     },
     {
-     "id": 65,
+     "id": 69,
      "tag": "wrap_errunion_err",
      "ty": 0,
      "args": [
       {
-       "inst": 64
+       "inst": 68
       }
      ]
     },
     {
-     "id": 66,
+     "id": 70,
      "tag": "ret_safe",
      "ty": 19,
      "args": [
       {
-       "inst": 65
+       "inst": 69
       }
      ]
     }
    ]
   },
   {
-   "id": 68,
+   "id": 72,
    "tag": "alloc",
    "ty": 20
   },
   {
-   "id": 69,
+   "id": 73,
    "tag": "store_safe",
    "ty": 1,
    "args": [
     {
-     "inst": 68
+     "inst": 72
     },
     {
-     "inst": 67
-    }
-   ]
-  },
-  {
-   "id": 70,
-   "tag": "bitcast",
-   "ty": 21,
-   "args": [
-    {
-     "inst": 68
-    }
-   ]
-  },
-  {
-   "id": 71,
-   "tag": "dbg_var_val",
-   "ty": 1,
-   "args": [
-    {
-     "inst": 67
-    }
-   ],
-   "name": "h2"
-  },
-  {
-   "id": 72,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 10
-  },
-  {
-   "id": 73,
-   "tag": "load",
-   "ty": 16,
-   "args": [
-    {
-     "inst": 54
+     "inst": 71
     }
    ]
   },
   {
    "id": 74,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 10
+   "tag": "bitcast",
+   "ty": 21,
+   "args": [
+    {
+     "inst": 72
+    }
+   ]
   },
   {
    "id": 75,
-   "tag": "call",
+   "tag": "dbg_var_val",
    "ty": 1,
-   "callee": {
-    "ty": 22,
-    "func": "Thread.join",
-    "noreturn": false
-   },
    "args": [
     {
-     "inst": 73
+     "inst": 71
     }
-   ]
+   ],
+   "name": "h2"
   },
   {
    "id": 76,
@@ -718,7 +718,7 @@
    "ty": 16,
    "args": [
     {
-     "inst": 70
+     "inst": 54
     }
    ]
   },
@@ -752,6 +752,43 @@
   {
    "id": 81,
    "tag": "load",
+   "ty": 16,
+   "args": [
+    {
+     "inst": 74
+    }
+   ]
+  },
+  {
+   "id": 82,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 12
+  },
+  {
+   "id": 83,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 22,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 81
+    }
+   ]
+  },
+  {
+   "id": 84,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 13
+  },
+  {
+   "id": 85,
+   "tag": "load",
    "ty": 5,
    "args": [
     {
@@ -760,7 +797,7 @@
    ]
   },
   {
-   "id": 82,
+   "id": 86,
    "tag": "load",
    "ty": 5,
    "args": [
@@ -770,18 +807,18 @@
    ]
   },
   {
-   "id": 83,
+   "id": 87,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 12
+   "line": 13
   },
   {
-   "id": 84,
+   "id": 88,
    "tag": "shl",
    "ty": 5,
    "args": [
     {
-     "inst": 82
+     "inst": 86
     },
     {
      "ty": 23,
@@ -790,41 +827,41 @@
    ]
   },
   {
-   "id": 85,
+   "id": 89,
    "tag": "bit_or",
    "ty": 5,
    "args": [
     {
-     "inst": 81
+     "inst": 85
     },
     {
-     "inst": 84
+     "inst": 88
     }
    ]
   },
   {
-   "id": 86,
+   "id": 90,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 12
+   "line": 13
   },
   {
-   "id": 87,
+   "id": 91,
    "tag": "wrap_errunion_payload",
    "ty": 0,
    "args": [
     {
-     "inst": 85
+     "inst": 89
     }
    ]
   },
   {
-   "id": 88,
+   "id": 92,
    "tag": "ret_safe",
    "ty": 19,
    "args": [
     {
-     "inst": 87
+     "inst": 91
     }
    ]
   }

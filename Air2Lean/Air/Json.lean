@@ -222,11 +222,15 @@ def parseLayout (j : Json) : Except String Layout := do
       | some o => some <$> o.getNat?
       | none => pure none
     | _ => pure #[]
+  let hostSize := (← nat? "host_size").getD 0
+  let bitOffset ← nat? "bit_offset"
+  if hostSize != 0 && bitOffset.isNone then
+    throw "a bit-pointer needs 'bit_offset' (schema ≥ 11)"
   return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel",
            isVolatile := ← bool "volatile",
-           allowzero := ← bool "allowzero", hostSize := (← nat? "host_size").getD 0,
-           bitOffset := (← nat? "bit_offset").getD 0 }
+           allowzero := ← bool "allowzero", hostSize,
+           bitOffset := bitOffset.getD 0 }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -255,8 +259,14 @@ def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except
   | .int .. => return .int tyId (← parseIntLit fnName s)
   -- A packed struct constant is its backing integer (`Emit.lean` writes `Zig.Packed.ofBits`).
   | .struct _ "packed" _ => return .int tyId (← parseIntLit fnName s)
-  | .bool => return .bool (s == "true")
-  | .void => return .void
+  | .bool =>
+    match s with
+    | "true" => return .bool true
+    | "false" => return .bool false
+    | _ => throw s!"{fnName}: not a boolean literal: {s}"
+  | .void =>
+    if s == "{}" then return .void
+    else throw s!"{fnName}: not a void literal: {s}"
   | other => throw s!"{fnName}: constant of unsupported type {repr other}"
 
 /-- The bit width of a packed struct field of type `id`: an integer, a `bool`, an enum (its tag),
@@ -286,7 +296,7 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
         if lhs != "." ++ name then throw s!"{fnName}: packed constant {s}: field {lhs}, expected .{name}"
         if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0 else parseIntLit fnName rhs
       | _ => throw s!"{fnName}: packed constant {s}: cannot read {part}"
-    acc := acc + (v.toNat % 2 ^ w) * 2 ^ off
+    acc := acc + (v % (2 ^ w : Nat)).toNat * 2 ^ off
     off := off + w
   if parts.length != fields.size then
     throw s!"{fnName}: packed constant {s} has {parts.length} fields, expected {fields.size}"
@@ -518,6 +528,12 @@ def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String 
 
 def parseFunc (j : Json) : Except String RawFunc := do
   let name ← (← j.getObjVal? "name").getStr?
+  -- Legacy exports carry no target metadata and retain the reference little-endian
+  -- assumption. New exports must state a target that the byte encoding model supports.
+  if let .ok endian := j.getObjVal? "target_endian" then
+    let endian ← endian.getStr?
+    unless endian == "little" do
+      throw s!"{name}: target_endian '{endian}' is outside the little-endian memory model"
   let schema ← (← j.getObjVal? "schema").getNat?
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
   let typesJ ← (← j.getObjVal? "types").getArr?

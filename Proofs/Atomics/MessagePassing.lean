@@ -1059,7 +1059,9 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   -- the join
   simp only [StateT.run_bind]
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨.joins, hi₁₂.retag0 (.inl hg₃) (.inr rfl), fun G₄ m₁₃ hg₄ hi₁₃ =>
-    ⟨fun _ => ⟨by decide, by rw [(thr_of hi₁₃.thr (.inr (.inl hg₄))).1]; decide, rfl⟩, fun _ =>
+    ⟨fun _ => ⟨by decide, by rw [(thr_of hi₁₃.thr (.inr (.inl hg₄))).1]; decide, rfl, by
+      obtain ⟨m', hj⟩ := join_ok hi₁₃ hg₄
+      exact Proto.join_valid hj⟩, fun _ =>
       ⟨fun _ => join_ok hi₁₃ hg₄, fun m₁₄ hj => ?_⟩⟩⟩)
   obtain ⟨hja, -, hjb⟩ := join_final hi₁₃ hg₄ hj
   simp only [StateT.run_pure]

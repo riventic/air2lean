@@ -40,12 +40,12 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
     simp [rawAlloc, hc, zig_unfold, set, StateT.set, MonadStateOf.set, m₁] at hr ⊢
     simp [hr, ExceptT.bindCont]
 
-/-- `rawFree` of a whole heap block (from offset 0, all `S > 0` bytes owned) removes it. -/
-theorem rawFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
-    (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
-    ∃ m', (rawFree p S).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
-      m'.blocks.size = m.blocks.size := by
+/-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
+private theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
+    {bs : Array Byte} (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF)
+    (hS : bs.size = S) (hpos : 0 < S) :
+    ∃ b blk, m.access p S 1 = pure (b, blk, p.off.toNat) ∧
+      blk.kind = .heap ∧ blk.bytes.size = S := by
   obtain ⟨b, blk, hacc, hblk, -, hsz, -⟩ := bytesAt_access (q := p) (k := 0) (n := S) (a := 1) hb hm
     (by simp [Ptr.add]) hpos (by omega) (Nat.mod_one _)
   have hK : blk.kind = .heap := by
@@ -57,10 +57,37 @@ theorem rawFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array By
     subst this
     rw [hblk] at hblk'; cases hblk'
     simp only [Cell.mk.injEq] at hc; exact hc.2.2.2.symm
+  exact ⟨b, blk, by simpa using hacc, hK, hsz⟩
+
+/-- `rawFree` of a whole heap block (from offset 0, all `S > 0` bytes owned) removes it. -/
+theorem rawFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
+    (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
+    ∃ m', (rawFree p S).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
+      m'.blocks.size = m.blocks.size := by
+  obtain ⟨b, blk, hacc, hK, hsz⟩ := heapBlock_access hb hm hS hpos
   obtain ⟨m', hr, hm', hst', hsz'⟩ := free_run hb hm hd hS h0 hpos hst
   refine ⟨m', ?_, hm', hst', hsz'⟩
   simp only [StateT.run] at hr
   simp [rawFree, zig_unfold, hacc, hK, h0, hsz, hr]
+
+/-- `poisonFree` of a whole heap block (from offset 0, all `S > 0` bytes owned) removes it. -/
+theorem poisonFree_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {bs : Array Byte}
+    (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
+    ∃ m', (poisonFree p S).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
+      m'.blocks.size = m.blocks.size := by
+  obtain ⟨b, blk, hacc, hK, hsz⟩ := heapBlock_access hb hm hS hpos
+  let mr := m.recordAt b 0 S .write
+  have hmr : mr.heap = h ∪ hF := by
+    funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  obtain ⟨m', hr, hm', hst', hsz'⟩ :=
+    rawFree_run hb hmr hd hS h0 hpos (hst.recordAt _ _ _ _)
+  refine ⟨m', ?_, hm', hst', hsz'⟩
+  have hrac := recordAccess_run (noRace_of_singleThread hst.single b 0 S .write)
+  change (recordAccess b 0 S .write).run m = pure ((), mr) at hrac
+  simp only [StateT.run] at hr hrac
+  simp [poisonFree, zig_unfold, hacc, hK, h0, hsz, hrac, hr, ExceptT.bindCont]
 
 /-- What an allocation of `size` bytes with alignment `align` returns: a new heap block of
 undefined bytes, or `error.OutOfMemory` and no bytes. -/
@@ -110,7 +137,7 @@ theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Arr
       (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb hst => by
     obtain ⟨m', hr, hm', hst', -⟩ :=
-      rawFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
+      poisonFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.freeSentinel, show ¬ size = 0 by omega, hr]
 

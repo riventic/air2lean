@@ -45,24 +45,44 @@ exporter="$script_dir/air-json/json.zig"
 
 mkdir -p "$cache_dir"
 tarball="$cache_dir/zig-${version}.tar.xz"
+download_tmp=
+work_dir=
+cleanup() {
+  [ -z "$download_tmp" ] || rm -f "$download_tmp"
+  [ -z "$work_dir" ] || rm -rf "$work_dir"
+}
+trap cleanup EXIT
+
+verify_tarball() {
+  local actual_sha256
+  if command -v shasum >/dev/null 2>&1; then
+    actual_sha256=$(shasum -a 256 "$1" | awk '{print $1}')
+  else
+    actual_sha256=$(sha256sum "$1" | awk '{print $1}')
+  fi
+  if [ "$actual_sha256" != "$sha256" ]; then
+    echo "error: sha256 mismatch for $1" >&2
+    echo "  expected: $sha256" >&2
+    echo "  actual:   $actual_sha256" >&2
+    return 1
+  fi
+}
 
 if [ ! -f "$tarball" ]; then
   echo "downloading $url" >&2
-  curl -fL --output "$tarball.part" "$url"
-  mv "$tarball.part" "$tarball"
-fi
-
-if command -v shasum >/dev/null 2>&1; then
-  actual_sha256=$(shasum -a 256 "$tarball" | awk '{print $1}')
+  download_tmp=$(mktemp "$cache_dir/zig-${version}.part.XXXXXX")
+  curl -fL --output "$download_tmp" "$url"
+  verify_tarball "$download_tmp"
+  # Each writer publishes complete verified bytes. Concurrent builds can replace the same
+  # cache entry safely, because the pinned digest guarantees identical content.
+  mv -f "$download_tmp" "$tarball"
+  download_tmp=
 else
-  actual_sha256=$(sha256sum "$tarball" | awk '{print $1}')
-fi
-if [ "$actual_sha256" != "$sha256" ]; then
-  echo "error: sha256 mismatch for $tarball" >&2
-  echo "  expected: $sha256" >&2
-  echo "  actual:   $actual_sha256" >&2
-  rm -f "$tarball"
-  exit 1
+  # Do not unlink this shared path: another build may publish a valid replacement meanwhile.
+  verify_tarball "$tarball" || {
+    echo "Remove the invalid cache entry and retry: $tarball" >&2
+    exit 1
+  }
 fi
 
 # Resolve prefix to an absolute path before we cd into the source dir.
@@ -72,7 +92,6 @@ case "$prefix" in
 esac
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-${version}.XXXXXX")
-trap 'rm -rf "$work_dir"' EXIT
 src_dir="$work_dir/zig-${version}"
 mkdir -p "$src_dir"
 tar -xJf "$tarball" -C "$src_dir" --strip-components=1

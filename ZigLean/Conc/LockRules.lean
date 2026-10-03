@@ -250,6 +250,31 @@ theorem Inv.record {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessK
     · dsimp only at h1 h2 h3; exact h3 (hoff x h1 (by omega))
     · simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
 
+/-- Recording an atomic access to the word is a lock step, without changing its messages. -/
+theorem Inv.recordStep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {k : AccessKind}
+    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hk : k.isAtomic = true) : L.Step t m (m.recordAt L.b L.o 4 k) := by
+  have hcs : t < m.clocks.size := by rw [hi.own.csize]; exact ht
+  refine ⟨rfl, fun e he => ?_, rfl, by simp [Mem.recordAt], ?_, ?_, rfl, .inl rfl,
+    fun _ _ => Iff.rfl, fun _ h => h, .of_eq rfl, fun e he => ?_⟩
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ⟨rfl, rfl, rfl, hk, t, ht, ?_⟩
+      simp only [Mem.recordAt, hc]
+      rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
+  · intro u hu
+    simp only [Mem.recordAt, hc]
+    rw [getElem!_set!_ite, if_neg (fun h => hu h.1)]
+  · simp only [Mem.recordAt, hc]
+    rw [getElem!_set!_ite]; simp [hcs, VClock.le_bump]
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ⟨hc, ?_⟩
+      simp only [Mem.recordAt, hc]
+      rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
+
 /-- A plain read by the current thread of `n` bytes at `o` of block `b` that no part, no resource
 and not the word has. -/
 theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
@@ -1312,6 +1337,17 @@ theorem Inv.prepR {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : B
     · refine .inr ⟨hc, ?_⟩
       rw [hc₁, ← hc]; simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
 
+/-- CAS preparation checks a writable pointer but initially records a read. -/
+theorem Inv.prepC {G : ThreadId → γ} {m m₁ : Mem} {t li b o : Nat} {blk : Block}
+    (hi : L.Inv G m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hacc : m.accessW L.ptr (intSize 32) 4 = pure (b, blk, o))
+    (hl : ((Zig.locIdx b o (intSize 32)).run (m.recordAt b o (intSize 32) .atomicRead)).run =
+      some (.ok (li, m₁))) :
+    b = L.b ∧ o = L.o ∧ ∃ l, L.Loc m₁ li l ∧ L.Inv G m₁ ∧ L.Step t m m₁ ∧ m₁.current = t ∧
+      m₁.waiters = m.waiters ∧ m₁.blocks = m.blocks ∧ m₁.atomics[li]! = l := by
+  have ha := (accessW_pure (by rw [hacc]; rfl)).1
+  exact hi.prepR hc ht ha hl
+
 /-- Each message of the word holds `0`, `1` or `2`; the newest one holds the word. -/
 theorem Inv.msgVal {G : ThreadId → γ} {m : Mem} {li j : Nat} {l : ALoc} {v : BitVec 32}
     (hi : L.Inv G m) (hl : L.Loc m li l) (hj : j < l.msgs.size)
@@ -1359,10 +1395,10 @@ theorem Inv.cas {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Pack
        ∃ w, L.Val w ∧ w ≠ 0 ∧ o = some (BitVec.ofNat 32 w) ∧ L.Inv G m') := by
     intro o ho
     obtain ⟨b, blk, off, li, m₁, pos, old, hacc, -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok ho
-    obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
+    obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prepC hc ht hacc hl
     obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
     rw [hl0] at hold
-    rcases hcase with ⟨rfl, rfl, hm'⟩ | ⟨hne, rfl, hm'⟩
+    rcases hcase with ⟨rfl, rfl, -, hm'⟩ | ⟨hne, rfl, hm'⟩
     · -- success: the newest message holds `0`
       have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos
         (by rw [hl0]; exact hold)
@@ -1373,8 +1409,13 @@ theorem Inv.cas {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Pack
         have := hU rfl; rw [S.bits0] at this; exact this
       have hF : L.Free G := (hi₁.free_iff L.val0 hU0).mp rfl
       rw [S.bits1] at hm'
-      obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₁.acquire (w' := 1) hl' hcu₁ (.inl ⟨hph, rfl⟩) hF hm'
-      exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hL, hR, hi'⟩⟩
+      have ht₁ : t < m₁.threads.size := by rw [hst₁.threads]; exact ht
+      have hi₂ := hi₁.record (k := .atomicWrite) rfl (hcu₁ ▸ ht₁)
+      have hstR := hi₁.recordStep hcu₁ ht₁ (k := .atomicWrite) rfl
+      obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₂.acquire (w' := 1) hl' hcu₁
+        (.inl ⟨hph, rfl⟩) hF hm'
+      exact ⟨hst₁.trans (hstR.trans hst₂ (.inl rfl)) (.inl hb₁), hcM,
+        .inl ⟨rfl, hL, hR, hi'⟩⟩
     · -- failure: a relaxed read
       obtain ⟨hlt, -⟩ := casOpts_pos hpos
       rw [hl0] at hlt
@@ -1577,6 +1618,30 @@ theorem Inv.prepR_ok {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
     have := Array.findIdx?_eq_none_iff.mp hn l hl
     simp [hb, ho] at this
 
+/-- CAS's initial read record and writable pointer check do not fail. -/
+theorem Inv.prepC_ok {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
+    (ht : m.current < m.threads.size) (hg : L.ph (G m.current) ≠ .gone) :
+    ∃ blk, m.accessW L.ptr (intSize 32) 4 = pure (L.b, blk, L.o) ∧
+      NoRace m L.b L.o (intSize 32) .atomicRead ∧
+      ∀ e, ((Zig.locIdx L.b L.o (intSize 32)).run
+        (m.recordAt L.b L.o (intSize 32) .atomicRead)).run ≠ some (.error e) := by
+  obtain ⟨blk, -, -, -, -, ha⟩ := hi.access
+  obtain ⟨_, -, hnr, hloc⟩ := hi.prepR_ok ht hg
+  exact ⟨blk, ha, hnr, hloc⟩
+
+/-- A successful CAS may add its write access after preparing the read. -/
+theorem Inv.casWrite_noErr {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} {opts : Array Nat}
+    {expected : BitVec 32} (hi : L.Inv G m) (ht : m.current < m.threads.size)
+    (hg : L.ph (G m.current) ≠ .gone)
+    (hp : ((casPrep 32 4 L.ptr expected).run m).run = some (.ok ((li, opts), m₁))) (e : Error) :
+    ((casMarkWrite 32 4 L.ptr).run m₁).run ≠ some (.error e) := by
+  obtain ⟨b, blk, o, ha, -, hl, -⟩ := casPrep_ok hp
+  obtain ⟨rfl, rfl, _, _, hi₁, hs, hc, -⟩ := hi.prepC rfl ht ha hl
+  obtain ⟨blk₁, ha₁, hnr, -⟩ := hi₁.prep_ok
+    (by rw [hc, hs.threads]; exact ht) (by rw [hc]; exact hg)
+  rw [casMarkWrite_run ha₁ hnr]
+  simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
+
 /-- An atomic read of the word that is not an acquire (`Thread.Mutex`'s relaxed load) does not
 throw: each option is a message, which holds a value. -/
 theorem Inv.load_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} {ord : AtomicOrder} (hi : L.Inv G m)
@@ -1607,13 +1672,14 @@ theorem Inv.cas_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} {α : Type} [Pac
     (hcr : c < casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m ∨
       casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m = 0 ∧ c = 0) (e : Error) :
     ((cmpxchgAs c .acquire .relaxed 4 L.ptr S.unl S.one).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prep_ok ht hg
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prepC_ok ht hg
   have hprep : ∀ e, ((casPrep 32 4 L.ptr (Packed.toBits S.unl)).run m).run ≠ some (.error e) :=
     casPrep_noErr hacc hnr hloc
-  refine cmpxchgAs_noErr (cmpxchgAt_noErr hprep ?_) ?_ e
+  refine cmpxchgAs_noErr (cmpxchgAt_noErr hprep ?_
+    (fun _ _ _ hp => hi.casWrite_noErr ht hg hp)) ?_ e
   · intro li opts m₁ hp
     obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
-    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht ha hl
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prepC rfl ht ha hl
     obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
     have hne := casOpts_ne (e := Packed.toBits S.unl) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
     have hcnt : casCount 32 .acquire 4 L.ptr (Packed.toBits S.unl) m =
@@ -1627,7 +1693,7 @@ theorem Inv.cas_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} {α : Type} [Pac
     exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
   · intro b m' hb
     obtain ⟨b0, blk', o, li, m₁, pos, old, hacc', -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok hb
-    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht hacc' hl
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prepC rfl ht hacc' hl
     rcases hcase with ⟨-, h, -⟩ | ⟨-, h, -⟩
     · cases h
     · cases h
@@ -1727,10 +1793,10 @@ theorem Inv.casD {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {r : Option (Bit
   have hna : L.ph (G t) ≠ .away := by rcases hph with h | h <;> rw [h] <;> decide
   obtain ⟨ht, -⟩ := hi.live t hng
   obtain ⟨b, blk, off, li, m₁, pos, old, hacc, -, hl, hpos, hold, hcase⟩ := cmpxchgAt_ok h
-  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prep hc ht hacc hl
+  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prepC hc ht hacc hl
   obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
   rw [hl0] at hold
-  rcases hcase with ⟨rfl, rfl, hm'⟩ | ⟨hne, rfl, hm'⟩
+  rcases hcase with ⟨rfl, rfl, -, hm'⟩ | ⟨hne, rfl, hm'⟩
   · -- success: the newest message holds `0`
     have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos
       (by rw [hl0]; exact hold)
@@ -1739,9 +1805,13 @@ theorem Inv.casD {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {r : Option (Bit
     obtain ⟨w, -, -, hU⟩ := hi₁.msgVal hl' (by omega) hold
     have hU0 : L.U32 m₁ (BitVec.ofNat 32 0) := hU rfl
     have hF : L.Free G := (hi₁.free_iff L.val0 hU0).mp rfl
-    obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₁.acquire (w' := 1) hl' hcu₁
+    have ht₁ : t < m₁.threads.size := by rw [hst₁.threads]; exact ht
+    have hi₂ := hi₁.record (k := .atomicWrite) rfl (hcu₁ ▸ ht₁)
+    have hstR := hi₁.recordStep hcu₁ ht₁ (k := .atomicWrite) rfl
+    obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₂.acquire (w' := 1) hl' hcu₁
       (hph.elim (fun h => .inl ⟨h, rfl⟩) fun h => .inr ⟨h, hc1.symm⟩) hF hm'
-    exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inl ⟨rfl, hL, hR, hi'⟩⟩
+    exact ⟨hst₁.trans (hstR.trans hst₂ (.inl rfl)) (.inl hb₁), hcM,
+      .inl ⟨rfl, hL, hR, hi'⟩⟩
   · -- failure: a relaxed read of `1`
     obtain ⟨hlt, -⟩ := casOpts_pos hpos
     rw [hl0] at hlt
@@ -1766,13 +1836,13 @@ theorem Inv.casD_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} (hi : L.Inv G m
       casCount 32 .acquire 4 L.ptr (0 : BitVec 32) m = 0 ∧ c = 0) (e : Error) :
     ((cmpxchgAt c .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1).run m).run ≠
       some (.error e) := by
-  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prep_ok ht hg
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prepC_ok ht hg
   have hprep : ∀ e, ((casPrep 32 4 L.ptr (0 : BitVec 32)).run m).run ≠ some (.error e) :=
     casPrep_noErr hacc hnr hloc
-  refine cmpxchgAt_noErr hprep ?_ e
+  refine cmpxchgAt_noErr hprep ?_ (fun _ _ _ hp => hi.casWrite_noErr ht hg hp) e
   intro li opts m₁ hp
   obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
-  obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prep rfl ht ha hl
+  obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prepC rfl ht ha hl
   obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
   have hne := casOpts_ne (e := (0 : BitVec 32)) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
   have hcnt : casCount 32 .acquire 4 L.ptr (0 : BitVec 32) m =
