@@ -315,8 +315,8 @@ def Float.divFloor {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor
 
 /-! ## `.unspecified` guards (`docs/floats.md` §Semantics groups C and D; both modes, always)
 
-The reference target (`x86_64-linux -mcpu=baseline`)'s compiler_rt routines diverge from x87
-hardware on two input shapes the model itself does not distinguish from an ordinary case, so
+The reference target (`x86_64-linux -mcpu=baseline`)'s compiler_rt routines diverge from the
+model on input shapes it does not distinguish from an ordinary case, so
 without a guard the model would silently disagree with actual Zig output on these inputs
 regardless of `--float-semantics`. Each guard wraps the model's own (unmodified) op: the
 `.unspecified` throw is the only change, never a different computed value. -/
@@ -373,6 +373,22 @@ def Float.isPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
     let intBit := (v >>> fmt.fracBits) % 2
     intBit == 1 && exp == 0
   | _ => false
+
+/-- Casts whose reference-target software helper changes the value or the result class,
+rather than only rounding it differently. Shared by the IEEE and compiler-rt wrappers.
+`__extendxftf2` ignores f80's integer bit on noncanonical encodings; `__truncxfhf2` can
+turn an invalid f80 encoding into a finite value or infinity; `__trunctfxf2` can discard
+an f128 NaN's entire payload and return infinity (`docs/floats.md`, group C). -/
+def Float.convNeedsGuard (fmt2 : FloatFmt) {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  match fmt, fmt2 with
+  | .f80, .f128 => x.isInvalidF80 || x.isPseudoDenormalF80
+  | .f80, .f16 => x.isInvalidF80
+  | .f128, .f80 => x.isNaN && (x.bits.toNat % 2 ^ 112) >>> 49 == 0
+  | _, _ => false
+
+/-- `@floatCast` in IEEE mode, guarded against value/class-changing software conversions. -/
+def Float.convChk (fmt2 : FloatFmt) {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt2) :=
+  if x.convNeedsGuard fmt2 then throw .unspecified else pure (Float.conv fmt2 x)
 
 /-- `@floor`, guarded against group C. -/
 def Float.floorChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=

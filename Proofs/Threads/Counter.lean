@@ -1924,11 +1924,10 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       (by rw [hcur, hsz]; decide) hcs
     refine ⟨rfl, ?_⟩
     refine WP.bind (WP.joinC fun k hk => ⟨.main 4 J, ⟨hi₁, he₁⟩,
-      fun G₁ m₂ hg₁ hie₂ => ⟨fun _ => ?_, fun hfin => ⟨fun _ => ?_, fun m' hj => ?_⟩⟩⟩)
-    · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
-      rw [hg₁] at hG₂; cases hG₂
-      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega, trivial⟩
-    · obtain ⟨hi₂, he₂⟩ := hie₂
+      fun G₁ m₂ hg₁ hie₂ => ?_⟩)
+    have hjoin : ∃ m', ((Thread.join (s.local51.toNat + 1)).run
+        { m₂ with current := 0 }).run = some (.ok ((), m')) := by
+      obtain ⟨hi₂, he₂⟩ := hie₂
       obtain ⟨s₂, J₂, hG₂, -, hsz₂, -, -, -, -, -, hjoined, -⟩ := hi₂
       rw [hg₁] at hG₂; cases hG₂
       have hlt₂ : s.local51.toNat + 1 < m₂.threads.size := by rw [hsz₂]; omega
@@ -1940,6 +1939,12 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
           · have := hJle _ h; omega
       exact Proto.join_run (rec := m₂.threads[s.local51.toNat + 1])
         (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)) hjf
+    refine ⟨fun _ => ?_, fun hfin => ⟨fun _ => hjoin, fun m' hj => ?_⟩⟩
+    · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
+      rw [hg₁] at hG₂; cases hG₂
+      obtain ⟨m', hj⟩ := hjoin
+      exact ⟨Nat.succ_pos _, by rw [hsz₂]; unfold ThreadId at *; omega,
+        trivial, Proto.join_valid hj⟩
     obtain ⟨hi₂, he₂⟩ := hie₂
     obtain ⟨p, hp⟩ := hfin
     obtain ⟨htJ, hcur', hi'⟩ := inv_join n hi₂ hg₁ ⟨p, hp⟩ hj

@@ -63,7 +63,7 @@ theorem toByte_ok (x : Zig.F32) {q : Rat} (hx : x.toRat? = some q) (hlo : -1 < q
   simp [zig_unfold, h1, h2, hbv]
 
 /-- `toByte` (`@intFromFloat` to `u8`, safety on) of a finite float throws `.overflow` iff its
-exact value lies outside `[-1, 256]`. -/
+exact value lies outside `(-1, 256)`. -/
 theorem toByte_overflow_of_finite (x : Zig.F32) {q : Rat} (hx : x.toRat? = some q) :
     toByte x = throw .overflow ↔ q ≤ -1 ∨ 256 ≤ q := by
   unfold toByte

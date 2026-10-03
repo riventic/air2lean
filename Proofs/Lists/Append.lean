@@ -163,8 +163,9 @@ theorem memmove_two_run {src dst : Ptr} {A₁ S₁ A₂ S₂ : Nat} {K₁ K₂ :
     (by simp [Ptr.add]) (by simp; omega) (by simp; omega) (by simpa using ha₂) hK₂
   refine ⟨m', ?_, hst', by rw [hsz]; rfl, h', hd', hm', hb'⟩
   have h0 : n.toNat ≠ 0 := by omega
+  have h4 : (4 : Nat) ≠ 0 := by decide
   simp only [StateT.run] at hl hrun
-  simp only [memmove, h0, ↓reduceIte, StateT.run, bind, StateT.bind, get, getThe,
+  simp only [memmove, h0, h4, or_self, ↓reduceIte, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
     ExceptT.mk, ExceptT.bindCont, hacc₂, hl, pure, ExceptT.pure, Option.bind_some]
   exact hrun
@@ -203,12 +204,12 @@ theorem free_slice_run {ptr : Ptr} {A : Nat} {bs : Array Byte} {cap : BitVec 64}
     ∃ m', (a.free 4 s).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size := by
   subst hs
-  obtain ⟨m', hr, hm', hst', hsz'⟩ := rawFree_run hb hm hd hsz h0 (by omega) hst
+  obtain ⟨m', hr, hm', hst', hsz'⟩ := poisonFree_run hb hm hd hsz h0 (by omega) hst
   refine ⟨m', ?_, hm', hst', hsz'⟩
   have hne : ¬ 4 * cap.toNat = 0 := by omega
   simp only [StateT.run] at hr ⊢
   simp only [Allocator.free, hne, ↓reduceIte]
-  have hq : ∀ q : Ptr, q = ptr → rawFree q (4 * cap.toNat) m = pure ((), m') := by
+  have hq : ∀ q : Ptr, q = ptr → poisonFree q (4 * cap.toNat) m = pure ((), m') := by
     rintro q rfl; exact hr
   exact hq _ (by simp [Ptr.elem, Ptr.add])
 
