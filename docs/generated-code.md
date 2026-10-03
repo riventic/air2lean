@@ -26,7 +26,7 @@
 | `void` | `Unit` |
 | `[N]T` | `Vector T' N` |
 | `[N:s]T` | `Vector T' (N+1)`: the sentinel is the last item, as in the AIR (a constant's `elems`, `docs/air-json.md`). A load or store copies all `N+1` items; a slice of it has length `N`. |
-| `@Vector(N, T)` (`T` an integer or a float) | `Zig.Vec T' N` (`ZigLean/Vec.lean`) |
+| `@Vector(N, T)` (`T` an integer, a float or `bool`) | `Zig.Vec T' N` (`ZigLean/Vec.lean`) |
 | `[]const T` in a pure function (§Memory) | `Array T'` |
 | `[]T`, `[:s]T`; `[]const T` in a function that uses memory | `Zig.Slice` (an item pointer and a `BitVec 64` length; §Memory) |
 | `*T`, `*const T`, `[*]T`, `[*:s]T`, `*[N]T` | `Zig.Ptr` (a block and a byte offset; §Memory) |
@@ -89,7 +89,13 @@ Sema writes the safety checks of a vector op (division by zero, overflow) as a `
 a `reduce` of the `bool` vector, before the op.
 
 In memory, a vector of integers or floats is its lanes, as an array, with the size rounded up
-to a power of 2 (`vecLayout`). A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
+to a power of 2 (`vecLayout`). This representation requires a nonzero lane width equal to
+`8 * Enc.size T`: every lane occupies whole bytes with no scalar ABI padding. The checker
+rejects full-vector and vector-lane memory accesses for other widths, including non-byte
+integers such as `u9`, ABI-padded integers such as `u24` and `u40`, and `f80`. Value-only
+vectors of these types still support the lane-wise operations above.
+
+A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
 size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
 are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
 A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of an integer or float vector is
@@ -107,7 +113,7 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 ## Memory
 
-`ZigLean/Mem/` models memory as blocks of bytes (CompCert style). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers. The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects an explicit non-little-endian value or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices. A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
 
 A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
@@ -141,7 +147,9 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 
 `Zig.Enc T` gives the size, alignment and bytes of a value (little-endian, x86_64 ABI). `ZigLean/Mem/Enc.lean` has the instances for integers, `bool`, floats, `Zig.Ptr`, `Zig.Slice`, optionals and arrays (`Vector`); each struct and enum that a pointer can point to gets a generated instance from the exporter's offsets. `Check.lean` compares the model's size and alignment of each type in memory with the exporter's `abi_size`/`abi_align`, and rejects a difference. Padding bytes are `undef`. A `uN` with `N % 8 ≠ 0` has padding bits: its last byte is `part (N % 8) b`, because Zig stores it as its integer type and the bits above are undefined. A load that reads an `undef` byte or bit of the value throws `.unspecified` (a `uM` read of a `part m` byte needs its bits in that byte to be at most `m`). A set bit above a `uN` in its last byte also throws `.unspecified`: LLVM makes a load of `iN` undefined if no `iN` store wrote it (a union tag byte 2 of a 1-bit tag). A `packed` union field read is a bit-cast of the backing integer and truncates; a byte other than 0 or 1 as a `bool`, or a tag value without a name of an exhaustive enum, throws `.illegal`. Packed structs, tagged unions and error unions in memory: §Casts, layout and function pointers.
 
-`@memset`, `@memcpy`, `@memmove` and `Zig.readSlice` do nothing for 0 items, also through a pointer that is not valid. `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
+`@memset`, `@memcpy` and `@memmove` do nothing for 0 bytes, also through a pointer that is not valid; this includes a positive count of zero-size items. `Zig.readSlice` does nothing for 0 items. For a positive count of zero-size items it decodes the empty encoding once and returns that many decoded values, preserving decoder errors without accessing memory. For nonzero-size items, `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
+
+`Zig.ptrFromAddr` recovers a block's provenance for addresses inside it or exactly one byte past its last byte, including dead blocks. The one-past pointer can be moved back into the block; it cannot be dereferenced, and recovering provenance does not revive a freed block. Addresses in allocation gaps retain no block.
 
 Two pointers into different blocks have the order of the model's addresses, which can differ from the compiled code. The `@memcpy` overlap check of `ReleaseSafe` compares pointers: for two blocks, the model and the compiled code both find no overlap.
 
@@ -215,7 +223,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
 ```
 
-Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.detach`, `.yield`, `.spinLoopHint`, `std.Thread.Futex.*`, `std.Thread.Mutex.*`/`Mutex.*`, `std.Thread.Condition.*` are rejected at translation time (`rejectedThreadFn?`), each with its own reason.
+Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint` and `Io.futexWaitTimeout` are rejected at translation time (`rejectedThreadFn?`), each with its own reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
 
 An escaping `alloc` gets a stack block at function entry. Its `Locals` field holds the pointer, and the block is freed when the function returns:
 

@@ -16,7 +16,7 @@ Translate a subset of Zig into Lean 4, then prove properties of the code in Lean
 | `sync`, `iogroup` (0.16.0) | `Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock`, translated from their std code, on a futex model; `Io.Group` (a model: a task is a thread) |
 | `threadsync` (0.15.2) | `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup`, translated from their std code |
 
-Proofs over threads hold under every schedule: each gives the result, and no schedule gives a data race, a deadlock or another error. They use a rely–guarantee logic over the scheduler and a concurrent separation logic: each thread owns a part of the heap, and the parts move at a spawn, a join, a lock and an unlock ([docs/proofs.md](docs/proofs.md)).
+For the threaded functions below, every completed run has the stated result, and no schedule gives a data race, a deadlock or another error. These are partial-correctness and safety proofs: they allow no result, including out-of-fuel runs, and do not prove termination or fairness. They use a rely–guarantee logic over the scheduler and a concurrent separation logic: each thread owns a part of the heap, and the parts move at a spawn, a join, a lock and an unlock ([docs/proofs.md](docs/proofs.md)).
 
 | Function | Result | Std code under it | Proof |
 |---|---|---|---|
@@ -92,9 +92,12 @@ The Zig compiler only analyzes functions that something references. Use `export 
 ```sh
 scripts/check.sh       # goldens, translate, build, differential test
 lake build Proofs      # check the proofs
+scripts/review.sh      # focused parser, runtime, proof, emission/exporter and input regressions
 scripts/no-sorry.sh    # no sorry/admit/native_decide
 scripts/mutate.sh      # a changed function must fail a test
 ```
+
+`scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15` or `AIR2LEAN_REVIEW_ZIG16` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; final integration test results are pending.
 
 The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts the float results that differ by target as `host=N`, not as mismatches: `tests/diff/<ex>/host.txt` lists those functions. CI (x86_64-linux) checks them.
 
@@ -111,17 +114,17 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 | atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model) | `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
-| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a vector in memory of a type other than an integer or float |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual `bool` vector lane; integer or float vectors in memory whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`, for example) |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm, register operands only, as opaque functions (x86_64 only) | |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. A proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs. A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 
-The trusted base is: Zig `Sema`, the AIR export patch, the translator, and the Lean kernel. The proof is about the generated Lean code. The differential tests check the translator against the compiler: `scripts/diff.sh` runs the compiled Zig and the generated Lean on the same inputs, including edge values, and compares results and panics.
+The Lean kernel checks the proof about the generated Lean code. Applying that result to compiled Zig also trusts Zig `Sema`, the AIR export patch, the translator, and the fidelity of the handwritten `ZigLean` semantics to the compiler and target. Memory uses a little-endian, 64-bit pointer ABI ([docs/generated-code.md](docs/generated-code.md#memory)); floats follow the stated reference target ([docs/floats.md](docs/floats.md)); allocator and concurrency results rely on the model assumptions in [docs/std-models.md](docs/std-models.md), including infallible thread creation and no load buffering. The differential tests check this correspondence on sampled inputs: `scripts/diff.sh` runs the compiled Zig and the generated Lean on the same inputs, including edge values, and compares results and panics.
 
 ## Zig versions
 
