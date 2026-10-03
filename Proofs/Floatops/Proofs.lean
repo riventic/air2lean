@@ -312,12 +312,13 @@ theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80)
     | 10, _ =>
       show _ = Zig.Float.floorChk a
       unfold op80
-      simp only [Zig.Float.floorRtLegacyChk_eq a ha]
+      -- Pre-0.16 output uses the legacy wrapper; current output already uses floorChk.
+      try rw [Zig.Float.floorRtLegacyChk_eq a ha]
       generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
     | 11, _ =>
       show _ = Zig.Float.ceilChk a
       unfold op80
-      simp only [Zig.Float.ceilRtLegacyChk_eq a ha]
+      try rw [Zig.Float.ceilRtLegacyChk_eq a ha]
       generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
     | 12, _ =>
       show _ = Zig.Float.truncChk a
