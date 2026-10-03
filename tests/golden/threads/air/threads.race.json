@@ -220,7 +220,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_20533",
+    "func": "Thread.spawn__anon_20543",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -344,7 +344,7 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 7
   },
   {
    "id": 38,
@@ -360,7 +360,7 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 7
   },
   {
    "id": 41,
@@ -368,7 +368,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_20533",
+    "func": "Thread.spawn__anon_20543",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -392,7 +392,7 @@
    ]
   },
   {
-   "id": 47,
+   "id": 51,
    "tag": "try",
    "ty": 12,
    "args": [
@@ -419,6 +419,43 @@
     },
     {
      "id": 44,
+     "tag": "load",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 34
+      }
+     ]
+    },
+    {
+     "id": 45,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 6
+    },
+    {
+     "id": 46,
+     "tag": "call",
+     "ty": 2,
+     "callee": {
+      "ty": 18,
+      "func": "Thread.join",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 44
+      }
+     ]
+    },
+    {
+     "id": 47,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 7
+    },
+    {
+     "id": 48,
      "tag": "bitcast",
      "ty": 14,
      "args": [
@@ -428,102 +465,65 @@
      ]
     },
     {
-     "id": 45,
+     "id": 49,
      "tag": "wrap_errunion_err",
      "ty": 1,
      "args": [
       {
-       "inst": 44
+       "inst": 48
       }
      ]
     },
     {
-     "id": 46,
+     "id": 50,
      "tag": "ret_safe",
      "ty": 15,
      "args": [
       {
-       "inst": 45
+       "inst": 49
       }
      ]
     }
    ]
   },
   {
-   "id": 48,
+   "id": 52,
    "tag": "alloc",
    "ty": 16
   },
   {
-   "id": 49,
+   "id": 53,
    "tag": "store_safe",
    "ty": 2,
    "args": [
     {
-     "inst": 48
+     "inst": 52
     },
     {
-     "inst": 47
-    }
-   ]
-  },
-  {
-   "id": 50,
-   "tag": "bitcast",
-   "ty": 17,
-   "args": [
-    {
-     "inst": 48
-    }
-   ]
-  },
-  {
-   "id": 51,
-   "tag": "dbg_var_val",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 47
-    }
-   ],
-   "name": "h2"
-  },
-  {
-   "id": 52,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 7
-  },
-  {
-   "id": 53,
-   "tag": "load",
-   "ty": 12,
-   "args": [
-    {
-     "inst": 34
+     "inst": 51
     }
    ]
   },
   {
    "id": 54,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 7
+   "tag": "bitcast",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 52
+    }
+   ]
   },
   {
    "id": 55,
-   "tag": "call",
+   "tag": "dbg_var_val",
    "ty": 2,
-   "callee": {
-    "ty": 18,
-    "func": "Thread.join",
-    "noreturn": false
-   },
    "args": [
     {
-     "inst": 53
+     "inst": 51
     }
-   ]
+   ],
+   "name": "h2"
   },
   {
    "id": 56,
@@ -537,7 +537,7 @@
    "ty": 12,
    "args": [
     {
-     "inst": 50
+     "inst": 34
     }
    ]
   },
@@ -571,10 +571,10 @@
   {
    "id": 61,
    "tag": "load",
-   "ty": 0,
+   "ty": 12,
    "args": [
     {
-     "inst": 3
+     "inst": 54
     }
    ]
   },
@@ -586,8 +586,13 @@
   },
   {
    "id": 63,
-   "tag": "wrap_errunion_payload",
-   "ty": 1,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 18,
+    "func": "Thread.join",
+    "noreturn": false
+   },
    "args": [
     {
      "inst": 61
@@ -596,11 +601,43 @@
   },
   {
    "id": 64,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 10
+  },
+  {
+   "id": 65,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 10
+  },
+  {
+   "id": 67,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 65
+    }
+   ]
+  },
+  {
+   "id": 68,
    "tag": "ret_safe",
    "ty": 15,
    "args": [
     {
-     "inst": 63
+     "inst": 67
     }
    ]
   }
@@ -914,7 +951,7 @@
   },
   {
    "k": "other",
-   "name": "c.pthread_t__opaque_345"
+   "name": "c.pthread_t__opaque_356"
   },
   {
    "k": "ptr",

@@ -256,7 +256,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_1814",
+    "func": "Thread.spawn__anon_1588",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -380,7 +380,7 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 8
   },
   {
    "id": 42,
@@ -396,7 +396,7 @@
    "id": 44,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 8
   },
   {
    "id": 45,
@@ -404,7 +404,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "Thread.spawn__anon_1814",
+    "func": "Thread.spawn__anon_1588",
     "noreturn": false,
     "comptime_fn": "threads.writeFlag"
    },
@@ -428,7 +428,7 @@
    ]
   },
   {
-   "id": 51,
+   "id": 55,
    "tag": "try",
    "ty": 12,
    "args": [
@@ -455,6 +455,43 @@
     },
     {
      "id": 48,
+     "tag": "load",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 38
+      }
+     ]
+    },
+    {
+     "id": 49,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 7
+    },
+    {
+     "id": 50,
+     "tag": "call",
+     "ty": 2,
+     "callee": {
+      "ty": 18,
+      "func": "Thread.join",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 48
+      }
+     ]
+    },
+    {
+     "id": 51,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 8
+    },
+    {
+     "id": 52,
      "tag": "bitcast",
      "ty": 14,
      "args": [
@@ -464,102 +501,65 @@
      ]
     },
     {
-     "id": 49,
+     "id": 53,
      "tag": "wrap_errunion_err",
      "ty": 1,
      "args": [
       {
-       "inst": 48
+       "inst": 52
       }
      ]
     },
     {
-     "id": 50,
+     "id": 54,
      "tag": "ret_safe",
      "ty": 15,
      "args": [
       {
-       "inst": 49
+       "inst": 53
       }
      ]
     }
    ]
   },
   {
-   "id": 52,
+   "id": 56,
    "tag": "alloc",
    "ty": 16
   },
   {
-   "id": 53,
+   "id": 57,
    "tag": "store_safe",
    "ty": 2,
    "args": [
     {
-     "inst": 52
+     "inst": 56
     },
     {
-     "inst": 51
-    }
-   ]
-  },
-  {
-   "id": 54,
-   "tag": "bitcast",
-   "ty": 17,
-   "args": [
-    {
-     "inst": 52
-    }
-   ]
-  },
-  {
-   "id": 55,
-   "tag": "dbg_var_val",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 51
-    }
-   ],
-   "name": "h2"
-  },
-  {
-   "id": 56,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 8
-  },
-  {
-   "id": 57,
-   "tag": "load",
-   "ty": 12,
-   "args": [
-    {
-     "inst": 38
+     "inst": 55
     }
    ]
   },
   {
    "id": 58,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 8
+   "tag": "bitcast",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 56
+    }
+   ]
   },
   {
    "id": 59,
-   "tag": "call",
+   "tag": "dbg_var_val",
    "ty": 2,
-   "callee": {
-    "ty": 18,
-    "func": "Thread.join",
-    "noreturn": false
-   },
    "args": [
     {
-     "inst": 57
+     "inst": 55
     }
-   ]
+   ],
+   "name": "h2"
   },
   {
    "id": 60,
@@ -573,7 +573,7 @@
    "ty": 12,
    "args": [
     {
-     "inst": 54
+     "inst": 38
     }
    ]
   },
@@ -607,6 +607,43 @@
   {
    "id": 65,
    "tag": "load",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 58
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 10
+  },
+  {
+   "id": 67,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 18,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 65
+    }
+   ]
+  },
+  {
+   "id": 68,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 11
+  },
+  {
+   "id": 69,
+   "tag": "load",
    "ty": 0,
    "args": [
     {
@@ -615,7 +652,7 @@
    ]
   },
   {
-   "id": 66,
+   "id": 70,
    "tag": "load",
    "ty": 0,
    "args": [
@@ -625,41 +662,41 @@
    ]
   },
   {
-   "id": 67,
+   "id": 71,
    "tag": "add_wrap",
    "ty": 0,
    "args": [
     {
-     "inst": 65
+     "inst": 69
     },
     {
-     "inst": 66
+     "inst": 70
     }
    ]
   },
   {
-   "id": 68,
+   "id": 72,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 10
+   "line": 11
   },
   {
-   "id": 69,
+   "id": 73,
    "tag": "wrap_errunion_payload",
    "ty": 1,
    "args": [
     {
-     "inst": 67
+     "inst": 71
     }
    ]
   },
   {
-   "id": 70,
+   "id": 74,
    "tag": "ret_safe",
    "ty": 15,
    "args": [
     {
-     "inst": 69
+     "inst": 73
     }
    ]
   }
@@ -1037,7 +1074,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_452)",
+   "name": "atomic.Value(Thread.Completion__enum_455)",
    "layout": "extern",
    "fields": [
     {
@@ -1095,7 +1132,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_452",
+   "name": "Thread.Completion__enum_455",
    "tag": 41,
    "exhaustive": true,
    "fields": [

@@ -24,7 +24,7 @@ inductive f16ToF128Exit where
 
 def f16ToF128 (p0 : Zig.F16) : Zig.Result (Zig.F128) := do
   let e ← ((do
-    let i1 ← pure (Zig.Float.conv .f128 p0)
+    let i1 ← Zig.Float.convChk .f128 p0
     pure (.ret i1)) : Zig.M f16ToF128Locals f16ToF128Exit).run' (default : f16ToF128Locals)
   match e with
   | .ret v => pure v
@@ -37,7 +37,7 @@ inductive f64ToF16Exit where
 
 def f64ToF16 (p0 : Zig.F64) : Zig.Result (Zig.F16) := do
   let e ← ((do
-    let i1 ← pure (Zig.Float.conv .f16 p0)
+    let i1 ← Zig.Float.convChk .f16 p0
     pure (.ret i1)) : Zig.M f64ToF16Locals f64ToF16Exit).run' (default : f64ToF16Locals)
   match e with
   | .ret v => pure v
@@ -50,7 +50,7 @@ inductive f80ToF64Exit where
 
 def f80ToF64 (p0 : Zig.F80) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i1 ← pure (Zig.Float.conv .f64 p0)
+    let i1 ← Zig.Float.convChk .f64 p0
     pure (.ret i1)) : Zig.M f80ToF64Locals f80ToF64Exit).run' (default : f80ToF64Locals)
   match e with
   | .ret v => pure v

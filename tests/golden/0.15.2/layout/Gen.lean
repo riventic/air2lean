@@ -468,8 +468,8 @@ def applyOp (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM applyOpLocals applyOpExit) with
     | .br3 => (do
-      let _i8 ← Zig.callR (Zig.vindex (#v[(⟨some 0, 0⟩ : Zig.Ptr), (⟨some 1, 0⟩ : Zig.Ptr), (⟨some 2, 0⟩ : Zig.Ptr)] : Vector (Zig.Ptr) 3) p0)
-      let i9 ← (if _i8 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if _i8 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if _i8 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
+      let i8 ← Zig.callR (Zig.vindex (#v[(⟨some 0, 0⟩ : Zig.Ptr), (⟨some 1, 0⟩ : Zig.Ptr), (⟨some 2, 0⟩ : Zig.Ptr)] : Vector (Zig.Ptr) 3) p0)
+      let i9 ← (if i8 == (⟨some 0, 0⟩ : Zig.Ptr) then Zig.callR (double p1) else if i8 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callR (square p1) else if i8 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callR (succ p1) else throw .illegal)
       pure (.ret i9))
     | e => pure e) : Zig.MM applyOpLocals applyOpExit).run' (default : applyOpLocals)
   match e with

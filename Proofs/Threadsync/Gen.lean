@@ -1506,18 +1506,19 @@ def waitGroup  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       match i12 with
       | .error _ => (do
         let i14 ← Zig.callRC (Zig.unwrapErr i12)
-        let i15 ← pure (i14)
-        let i16 ← pure ((.error i15) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i16))
+        let _i15 ← Zig.joinC v6
+        let i16 ← pure (i14)
+        let i17 ← pure ((.error i16) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i17))
       | .ok v13 => (do
-        let i18 ← pure (i0.add 0)
-        let _i19 ← Zig.callC (Thread_WaitGroup_wait i18)
-        let i20 ← Zig.load (Tally) 8 i0
-        let i21 ← pure ((i20).n)
-        let _i22 ← Zig.joinC v6
-        let _i23 ← Zig.joinC v13
-        let i24 ← pure ((.ok i21) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i24)))) : Zig.CM Tgt waitGroupLocals waitGroupExit).run' { (default : waitGroupLocals) with s := s0 }
+        let i19 ← pure (i0.add 0)
+        let _i20 ← Zig.callC (Thread_WaitGroup_wait i19)
+        let i21 ← Zig.load (Tally) 8 i0
+        let i22 ← pure ((i21).n)
+        let _i23 ← Zig.joinC v6
+        let _i24 ← Zig.joinC v13
+        let i25 ← pure ((.ok i22) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i25)))) : Zig.CM Tgt waitGroupLocals waitGroupExit).run' { (default : waitGroupLocals) with s := s0 }
   Zig.free s0
   match e with
   | .ret v => pure v
