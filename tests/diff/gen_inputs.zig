@@ -140,6 +140,8 @@ pub fn main() !void {
     try genClaim();
     try genAtomics();
     try genSync();
+    try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "waitGroup" });
+    try genNoArgs("tests/diff/iogroup/inputs", .{ "groupCounter", "groupConcurrent" });
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -618,12 +620,26 @@ fn fromBits(comptime T: type, b: floatBits(T)) T {
 
 /// One ulp below `x` (toward zero, for the positive magnitudes edgesF uses this on).
 fn ulpDown(comptime T: type, x: T) T {
-    return fromBits(T, toBits(T, x) - 1);
+    const bits = toBits(T, x);
+    if (T == f80 and @as(u64, @truncate(bits)) == 0x8000_0000_0000_0000) {
+        // x87 stores the integer bit explicitly: crossing an exponent boundary must restore
+        // it for the previous normal, or clear it at the normal/subnormal boundary.
+        const exponent = bits >> 64;
+        return fromBits(T, bits - (if (exponent == 1) @as(u80, 1) << 64 else @as(u80, 1) << 63) - 1);
+    }
+    return fromBits(T, bits - 1);
 }
 
 /// One ulp above `x` (away from zero, for the positive magnitudes edgesF uses this on).
 fn ulpUp(comptime T: type, x: T) T {
-    return fromBits(T, toBits(T, x) + 1);
+    const bits = toBits(T, x);
+    if (T == f80 and bits == 0x7fff_ffff_ffff_ffff) {
+        return fromBits(T, bits + (@as(u80, 1) << 64) + 1);
+    }
+    if (T == f80 and @as(u64, @truncate(bits)) == std.math.maxInt(u64)) {
+        return fromBits(T, bits + (@as(u80, 1) << 63) + 1);
+    }
+    return fromBits(T, bits + 1);
 }
 
 // f80's non-IEEE encodings (docs/floats.md): exponent/integer-bit/fraction combinations IEEE
@@ -653,7 +669,7 @@ fn edgesFLen(comptime T: type) usize {
 /// 2^64; f16 cannot hold them (max 65504), so it takes 2^11 (its precision limit), 2^11-1, 2^12,
 /// 2^14, 2^15. f80 adds its 4 invalid encodings above.
 fn edgesF(comptime T: type) [edgesFLen(T)]T {
-    const max_sub = fromBits(T, toBits(T, std.math.floatMin(T)) - 1);
+    const max_sub = ulpDown(T, std.math.floatMin(T));
     const small = T == f16;
     const b31: T = if (small) 2048.0 else 2147483648.0;
     const b31m1: T = if (small) 2047.0 else 2147483647.0;
@@ -754,32 +770,45 @@ fn writeFloatOpLine(writer: anytype, comptime T: type, sel: u8, a: T, b: T, c: T
     try writer.writeAll("]\n");
 }
 
+/// Deterministic float edge pairs: every edge appears on the left against 1, every edge
+/// appears on the right against 1, then diagonal pairs and signed-zero/infinity corners.
+/// The 150-row budget holds all three passes and corners for every format (at most 47 edges).
+fn floatEdgePair(comptime T: type, n: usize) struct { a: T, b: T, c: T } {
+    const edges = edgesF(T);
+    const one = 10; // edgesF's exact 1.0, an ordinary operand for every format.
+    const corners = [_][2]usize{
+        .{ 0, 1 }, .{ 1, 0 }, // opposite signed zeros
+        .{ 20, 21 }, .{ 21, 20 }, // opposite infinities
+        .{ 20, 0 }, .{ 0, 20 }, .{ 21, 1 }, .{ 1, 21 }, // infinity/zero
+        .{ 22, 23 }, // quiet/signaling NaNs
+    };
+    const diagonal = n >= 2 * edges.len and n < 3 * edges.len;
+    const corner = corners[(n -| 3 * edges.len) % corners.len];
+    const ai = if (n < edges.len) n else if (n < 2 * edges.len) one else if (diagonal) n - 2 * edges.len else corner[0];
+    const bi = if (n < edges.len) one else if (n < 2 * edges.len) n - edges.len else if (diagonal) ai else corner[1];
+    return .{ .a = edges[ai], .b = edges[bi], .c = edges[(ai + bi) % edges.len] };
+}
+
 /// op16/op32/op64/op80/op128(sel, a, b, c): 300 lines per sel (0..25), 7,800 lines total. Per
-/// sel: 150 lines are the first 150 of (edgesF(T) x edgesF(T)) in row-major order; the
-/// remaining 150 split into 75 fully-random bit patterns and 75 values with a controlled
-/// exponent — for sel in {5,6,7,8} (divTrunc/divFloor/rem/mod), the controlled-exponent half
-/// cycles through all 4 sign combinations of (a, b), since those ops are sign-sensitive.
-/// `c` (sel 4's mulAdd addend) draws from the edge/random pools alongside `a`/`b`; every other
-/// sel ignores it.
+/// sel: 150 deterministic edge pairs with complete lhs/rhs coverage; the remaining 150 split
+/// into 75 fully-random bit patterns and 75 controlled-exponent values. For sel in {5,6,7,8}
+/// (divTrunc/divFloor/rem/mod), the controlled half cycles all 4 sign combinations.
+/// `c` (sel 4's mulAdd addend) draws from the edge/random pools; other selectors ignore it.
 fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !void {
     var file = try openOutIn("tests/diff/floatops/inputs", name);
     defer file.close();
     const writer = file.writer();
 
-    const edges = edgesF(T);
     var sel: u16 = 0;
     while (sel <= 25) : (sel += 1) {
         const s: u8 = @intCast(sel);
         const sign_sensitive = s == 5 or s == 6 or s == 7 or s == 8;
         var n: usize = 0;
 
-        edge_loop: for (edges, 0..) |a, ei| {
-            for (edges, 0..) |b, ej| {
-                if (n >= 150) break :edge_loop;
-                const c = if (s == 4) edges[(ei + ej) % edges.len] else @as(T, 0);
-                try writeFloatOpLine(writer, T, s, a, b, c);
-                n += 1;
-            }
+        while (n < 150) : (n += 1) {
+            const pair = floatEdgePair(T, n);
+            const c = if (s == 4) pair.c else @as(T, 0);
+            try writeFloatOpLine(writer, T, s, pair.a, pair.b, c);
         }
 
         while (n < N) : (n += 1) {
@@ -802,7 +831,7 @@ fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !voi
     }
 }
 
-/// cmp64(a, b) -> u8 bitmask. 150 edge pairs (first 150 of edgesF(f64) x edgesF(f64)), then 150
+/// cmp64(a, b) -> u8 bitmask. 150 edge pairs with full lhs/rhs coverage, then 150
 /// random fill split the same random-bits/controlled-exponent way as genFloatOp, cycling all 4
 /// sign combinations (comparisons are sign-sensitive by nature).
 fn genCmp64(rng: std.Random) !void {
@@ -810,14 +839,10 @@ fn genCmp64(rng: std.Random) !void {
     defer file.close();
     const writer = file.writer();
 
-    const edges = edgesF(f64);
     var n: usize = 0;
-    edge_loop: for (edges) |a| {
-        for (edges) |b| {
-            if (n >= 150) break :edge_loop;
-            try writeFloatPairLine(writer, f64, a, b);
-            n += 1;
-        }
+    while (n < 150) : (n += 1) {
+        const pair = floatEdgePair(f64, n);
+        try writeFloatPairLine(writer, f64, pair.a, pair.b);
     }
     while (n < N) : (n += 1) {
         var a: f64 = undefined;
@@ -835,7 +860,7 @@ fn genCmp64(rng: std.Random) !void {
 }
 
 /// divExact64(a, b) -> f64 (`@divExact`; ReleaseSafe panics `exactDivisionRemainder` unless
-/// `a / b` is exact). Edges: 150 pairs from edgesF(f64). Random fill: half exact by
+/// `a / b` is exact). Edges: 150 pairs with full lhs/rhs coverage. Random fill: half exact by
 /// construction (`b` random, `a = b * k` for a small integer k, so the safety check passes),
 /// half fully random (almost always inexact, so the panic path gets heavy coverage too).
 fn genDivExact64(rng: std.Random) !void {
@@ -843,14 +868,10 @@ fn genDivExact64(rng: std.Random) !void {
     defer file.close();
     const writer = file.writer();
 
-    const edges = edgesF(f64);
     var n: usize = 0;
-    edge_loop: for (edges) |a| {
-        for (edges) |b| {
-            if (n >= 150) break :edge_loop;
-            try writeFloatPairLine(writer, f64, a, b);
-            n += 1;
-        }
+    while (n < 150) : (n += 1) {
+        const pair = floatEdgePair(f64, n);
+        try writeFloatPairLine(writer, f64, pair.a, pair.b);
     }
     while (n < N) : (n += 1) {
         var a: f64 = undefined;
@@ -994,7 +1015,7 @@ fn genIsNan(rng: std.Random) !void {
     }
 }
 
-/// hypot2(a, b: f64) -> f64. 150 edge pairs (first 150 of edgesF(f64) x edgesF(f64)), then
+/// hypot2(a, b: f64) -> f64. 150 edge pairs with full lhs/rhs coverage, then
 /// random fill (`@sqrt` of a sum of squares: worth stressing both very large and very small
 /// magnitudes, which the random-bits half already reaches).
 fn genHypot2(rng: std.Random) !void {
@@ -1002,14 +1023,10 @@ fn genHypot2(rng: std.Random) !void {
     defer file.close();
     const writer = file.writer();
 
-    const edges = edgesF(f64);
     var n: usize = 0;
-    edge_loop: for (edges) |a| {
-        for (edges) |b| {
-            if (n >= 150) break :edge_loop;
-            try writeFloatPairLine(writer, f64, a, b);
-            n += 1;
-        }
+    while (n < 150) : (n += 1) {
+        const pair = floatEdgePair(f64, n);
+        try writeFloatPairLine(writer, f64, pair.a, pair.b);
     }
     while (n < N) : (n += 1) {
         const a = if (n % 2 == 0) randFiniteBits(rng, f64) else randExpValue(rng, f64, rng.boolean());
@@ -2052,22 +2069,34 @@ fn genThreadsCounter(rng: std.Random) !void {
 /// one shared location without an ordering between them (a plain write, an atomic swap). The
 /// model gives `.illegal` for race (a data race) and `a` or `b` for xchgRace (by the schedule),
 /// so the values only need to exercise the full u32 range.
-fn genThreadsRace(rng: std.Random, comptime name: []const u8) !void {
+fn genThreadsRace(rng: std.Random, comptime name: []const u8, comptime mirror_name: ?[]const u8) !void {
     var file = try openOutIn("tests/diff/threads/inputs", name);
     defer file.close();
     const writer = file.writer();
+    var mirror: ?compat.OutFile = if (mirror_name) |destination|
+        try openOutIn("tests/diff/threads/inputs", destination)
+    else
+        null;
+    const mirror_writer = if (mirror) |*f| f.writer() else null;
+    defer if (mirror) |*f| f.close();
     for (edgesU(u32)) |a| {
-        for (edgesU(u32)) |b| try writer.print("[{d},{d}]\n", .{ a, b });
+        for (edgesU(u32)) |b| {
+            try writer.print("[{d},{d}]\n", .{ a, b });
+            if (mirror_writer) |w| try w.print("[{d},{d}]\n", .{ a, b });
+        }
     }
     for (0..N - edgesU(u32).len * edgesU(u32).len) |_| {
-        try writer.print("[{d},{d}]\n", .{ rng.int(u32), rng.int(u32) });
+        const a = rng.int(u32);
+        const b = rng.int(u32);
+        try writer.print("[{d},{d}]\n", .{ a, b });
+        if (mirror_writer) |w| try w.print("[{d},{d}]\n", .{ a, b });
     }
 }
 
 fn genThreads(rng: std.Random) !void {
     try genThreadsCounter(rng);
-    try genThreadsRace(rng, "race");
-    try genThreadsRace(rng, "xchgRace");
+    try genThreadsRace(rng, "race", "disjoint");
+    try genThreadsRace(rng, "xchgRace", null);
 }
 
 // --- examples/vectors: coverage of the other vector ops ------------------------------------
@@ -2525,14 +2554,25 @@ fn genLayout(rng: std.Random) !void {
 
 // --- examples/vectors: the other lane-wise ops ---------------------------------------------
 
-/// Two `@Vector(4, i32)` per line: lines 0..48 pair every `edgesI` lane with every edge, so a
-/// lane of 0 (division by zero) and `minInt` with -1 (overflow) show up in each lane.
-fn writeVecPairI(w: anytype, rng: std.Random, n: usize) !void {
+/// Two `@Vector(4, i32)` per line: the first 8 rows isolate overflow and division by zero
+/// in each lane when `guarded` (division/modulo), with safe divisors in the other lanes.
+/// Later rows mix edge values, then random values, without changing the shared PRNG stream.
+fn writeVecPairI(w: anytype, rng: std.Random, n: usize, comptime guarded: bool) !void {
     const e = edgesI(i32);
     var b = vecI(rng, n + 3);
-    if (n < 49) b = .{ e[n % 7], e[(n / 7) % 7], e[(n + 3) % 7], e[(n / 7 + 2) % 7] };
+    var a = vecI(rng, n);
+    if (guarded and n < 8) {
+        a = .{ 6, 8, 10, 12 };
+        b = .{ 2, 2, 2, 2 };
+        if (n < 4) {
+            a[n] = std.math.minInt(i32);
+            b[n] = -1;
+        } else {
+            b[n - 4] = 0;
+        }
+    } else if (n < 49) b = .{ e[n % 7], e[(n / 7) % 7], e[(n + 3) % 7], e[(n / 7 + 2) % 7] };
     try w.writeAll("[");
-    try writeIntSlice(w, i32, &vecI(rng, n));
+    try writeIntSlice(w, i32, &a);
     try w.writeAll(",");
     try writeIntSlice(w, i32, &b);
     try w.writeAll("]\n");
@@ -2544,7 +2584,7 @@ fn genVectorOps(rng: std.Random) !void {
         var file = try openOutV(name);
         defer file.close();
         const w = file.writer();
-        for (0..N) |n| try writeVecPairI(w, rng, n);
+        for (0..N) |n| try writeVecPairI(w, rng, n, std.mem.eql(u8, name, "vDiv") or std.mem.eql(u8, name, "vMod"));
     }
     inline for (.{ "vBits", "vOverflow" }) |name| {
         var file = try openOutV(name);
@@ -2718,24 +2758,23 @@ fn genClaim() !void {
     for (0..20) |_| try writer.writeAll("[]\n");
 }
 
-/// atomics: no argument; 20 runs of each function.
-fn genAtomics() !void {
-    try compat.makePath("tests/diff/atomics/inputs");
-    inline for (.{ "mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush" }) |name| {
-        var file = try openOutIn("tests/diff/atomics/inputs", name);
+/// No-argument concurrent functions: each line is one run with the OS scheduler.
+fn genNoArgs(comptime dir: []const u8, comptime names: anytype) !void {
+    try compat.makePath(dir);
+    inline for (names) |name| {
+        var file = try openOutIn(dir, name);
         defer file.close();
         const writer = file.writer();
         for (0..20) |_| try writer.writeAll("[]\n");
     }
 }
 
+/// atomics: no argument; 20 runs of each function.
+fn genAtomics() !void {
+    try genNoArgs("tests/diff/atomics/inputs", .{ "mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush" });
+}
+
 /// sync: the `std.Io` argument only; 20 runs of each function.
 fn genSync() !void {
-    try compat.makePath("tests/diff/sync/inputs");
-    inline for (.{ "mutexCounter", "handoff" }) |name| {
-        var file = try openOutIn("tests/diff/sync/inputs", name);
-        defer file.close();
-        const writer = file.writer();
-        for (0..20) |_| try writer.writeAll("[]\n");
-    }
+    try genNoArgs("tests/diff/sync/inputs", .{ "mutexCounter", "handoff", "semaphoreCounter", "rwLockRead" });
 }
