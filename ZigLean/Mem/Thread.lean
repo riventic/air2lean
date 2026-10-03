@@ -30,7 +30,7 @@ instance : Enc ThreadId where
 /-! ## Atomics (RC11)
 
 The memory model approximates RC11's operational form without promises. Its missing SC order,
-same-value plain writes and read-view transfer can admit extra outcomes
+same-value plain writes and read-view transfer can permit extra outcomes
 (`docs/std-models.md` §Thread model). An atomic location (`ALoc`) keeps its writes (`Msg`) in
 modification order; the block's
 bytes are those of the last one. At each atomic op the oracle picks (`SyncOp.pick`, the options
