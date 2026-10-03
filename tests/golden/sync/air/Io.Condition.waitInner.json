@@ -1,6 +1,7 @@
 {
  "schema": 11,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "name": "Io.Condition.waitInner",
  "params": [
   0,
@@ -379,7 +380,7 @@
        "args": [
         {
          "ty": 22,
-         "val": ".{ .waiters = 1, .signals = 0 }"
+         "val": "1"
         }
        ],
        "name": "operand"
@@ -460,7 +461,7 @@
         },
         {
          "ty": 22,
-         "val": ".{ .waiters = 1, .signals = 0 }"
+         "val": "1"
         }
        ],
        "op": "Add",
@@ -1995,7 +1996,7 @@
              "args": [
               {
                "ty": 22,
-               "val": ".{ .waiters = 1, .signals = 0 }"
+               "val": "1"
               }
              ],
              "name": "operand"
@@ -2076,7 +2077,7 @@
               },
               {
                "ty": 22,
-               "val": ".{ .waiters = 1, .signals = 0 }"
+               "val": "1"
               }
              ],
              "op": "Sub",
