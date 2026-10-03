@@ -40,6 +40,8 @@ if [[ -f "$override" ]]; then
     {
       k = $1 " " $2
       if (!(k in line)) { print "override key not in expected.txt: " k > "/dev/stderr"; bad = 1 }
+      if (k in overrideSeen) { print "duplicate override key in " FILENAME ": " k > "/dev/stderr"; bad = 1 }
+      overrideSeen[k] = 1
       line[k] = $0
     }
     END { if (bad) exit 1; for (i = 1; i <= n; i++) print line[order[i]] }
