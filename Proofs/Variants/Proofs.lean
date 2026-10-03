@@ -8,7 +8,7 @@ an enum: an unnamed value panics for the exhaustive `Light`, and is kept for the
 `Code`. `area`/`scale`/`radius` work on the tagged union `Shape`.
 -/
 
-open Variants
+namespace Variants
 
 /-- The traffic-light cycle as a plain function. -/
 def nextSpec : Light → Light
@@ -282,3 +282,5 @@ theorem totalArea_spec (xs : Array Shape) (hs : xs.size < 2 ^ 64)
     rw [hrun]
     simp [zig_unfold]
   · rw [hpost, areaSum, List.take_of_length_le (by simp)]
+
+end Variants
