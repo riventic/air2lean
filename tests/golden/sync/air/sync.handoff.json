@@ -1,6 +1,7 @@
 {
  "schema": 11,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "name": "sync.handoff",
  "params": [
   0
@@ -107,7 +108,7 @@
        "elems": [
         {
          "ty": 12,
-         "val": ".{ .waiters = 0, .signals = 0 }"
+         "val": "0"
         }
        ]
       },
