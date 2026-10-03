@@ -230,6 +230,18 @@ theorem bind_assoc {γ : Type} {n : Nat} (x : CoN Tgt α n) (f : α → (k : Nat
   | leaf r => rcases r with _ | _ | a <;> rfl
   | sync op m₀ k ih => simp only [bind]; congr; funext r m; exact ih r m
 
+/-- Handle an error at any remaining depth. Within a segment the handler starts from the
+segment's entry memory, as for `StateT`; after a sync it starts from the resumed shared memory,
+so handling an error never rolls back another thread's intervening changes. This handles
+errors in the thread's tree. Errors while the scheduler executes a sync op (for example an
+invalid join or futex pointer) terminate the run before its continuation and are not caught. -/
+def tryCatch {n : Nat} (x : CoN Tgt α n) (m : Mem)
+    (h : Error → (k : Nat) → Mem → CoN Tgt α k) : CoN Tgt α n :=
+  match x with
+  | .leaf (some (.error e)) => h e n m
+  | .leaf r => .leaf r
+  | .sync op m₀ k => .sync op m₀ fun r m => (k r m).tryCatch m h
+
 end CoN
 
 /-- The monad of a concurrent function: a run for each depth `n`, from the memory at the start. -/
@@ -245,9 +257,7 @@ instance : Monad (ConcM Tgt) where
 
 instance : MonadExceptOf Error (ConcM Tgt) where
   throw e := fun _ _ => .leaf (some (.error e))
-  tryCatch x h := fun n m => match x n m with
-    | .leaf (some (.error e)) => h e n m
-    | r => r
+  tryCatch x h := fun n m => (x n m).tryCatch m h
 
 /-- A function that uses memory, run with no stop (`MemM`: no sync op). -/
 def liftMem (x : MemM α) : ConcM Tgt α := fun _ m => .leaf (x.run m)

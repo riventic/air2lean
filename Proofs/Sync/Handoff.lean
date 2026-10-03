@@ -3428,7 +3428,7 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨_, hiJ, fun G₆ m₁₅ hg₆ hi₁₅ => ?_⟩)
   obtain ⟨h00, ⟨-, h0, -⟩ | ⟨hs2, hr1, -⟩⟩ := hi₁₅.2.shape
   · exfalso; change (G₆ 0).2 = _ at h0; rw [hg₆] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, rfl, rfl⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₁₅ with current := 0 }) hr1 rfl rfl, fun m₁₆ hj => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₆⟩ := join_eq hj
   simp only [StateT.run_pure]

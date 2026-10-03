@@ -536,7 +536,10 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₅.main
   rw [hg₃] at h0; cases h0
   obtain ⟨hsz₁₅, r1₁₅, r2₁₅, k1₁₅, k2₁₅, hn₁₅⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₅]; decide, _, B, .inl rfl⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
+    have hr := r1₁₅
+    unfold KidRec at hr
+    simp [Thread.joinValid, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₅ rfl rfl, fun m₁₆ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', x', ax', v', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₅
@@ -587,7 +590,10 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   obtain ⟨ph, hm, B', h0, -, hma₁₇, hsh⟩ := hi₁₇.main
   rw [hg₄] at h0; cases h0
   obtain ⟨hsz₁₇, r1₁₇, r2₁₇, k1₁₇, k2₁₇, hn₁₇⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₇]; decide, _, B, .inr rfl⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
+    have hr := r2₁₇
+    unfold KidRec at hr
+    simp [Thread.joinValid, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₇ rfl rfl, fun m₁₈ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', x'', ax'', v'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₇

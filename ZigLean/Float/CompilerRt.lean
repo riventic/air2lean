@@ -4,18 +4,60 @@ import ZigLean.Float.Ops
 # `compiler-rt` semantics (opt-in)
 
 `f128` has no hardware divide, and x86-64 baseline has no FMA instruction, so on that target
-`@divExact`/`/` on `f128` and `@mulAdd` on any format lower to compiler_rt calls whose result
-differs from the model's own (IEEE-correct) `Float.div`/`Float.fma` (`docs/floats.md`
-§Semantics, groups A/B). This file ports those compiler_rt functions bit-exactly. Reachable
+`@divExact`/`/` on `f128`, `@mulAdd` on any format and f80→f16 conversion lower to compiler_rt
+calls whose result differs from the model's own IEEE-correct operations (`docs/floats.md`
+§Semantics, groups A/B/E). This file ports those compiler_rt functions bit-exactly. Reachable
 only through `--float-semantics compiler-rt` (`Air2Lean/Main.lean`); the default (`ieee`) mode
 never calls into it.
 
-Every helper below is `private`: nothing outside this file names them, only the four
-`Float.divRt`/`Float.divTruncRt`/`Float.divFloorRt`/`Float.fmaRt` entry points (and the Zig 0.16.0
-`Float.divRt016` family) do.
+Every helper below is `private`: only the public `Float.convRt`/`Float.divRt`/
+`Float.divTruncRt`/`Float.divFloorRt`/`Float.fmaRt` entry points and their guarded/versioned
+variants call them.
 -/
 
 namespace Zig
+
+/-! ## f80 to f16 conversion (`__truncxfhf2`, `truncf.zig`)
+
+The reference target calls the same helper in Zig 0.14.1, 0.15.2 and 0.16.0. It clears
+f80's explicit integer bit before denormalization, so ordinary finite inputs can differ
+from correctly-rounded conversion. The wrapping-u64 sticky-bit expression below is also
+the source expression, not the IEEE discarded-bit test. -/
+
+private def truncF80ToF16 (x : Float .f80) : Float .f16 :=
+  match x.classify with
+  | .nan => Float.nan
+  | .inf s => Float.inf s
+  | .finite s _ _ =>
+    let exp := (x.bits.toNat >>> 64) % 2 ^ 15
+    let frac := x.bits.toNat % 2 ^ 63
+    -- Bias difference 16383 - 15 = 16368; the normal exponent range is [1, 30].
+    -- Its contribution is a multiple of 2^10, so roundQuot's parity is the source's.
+    let absResult :=
+      if 16369 ≤ exp && exp < 16399 then
+        ((exp - 16368) <<< 10) + (roundQuot frac (2 ^ 53)).toNat
+      else if 16399 ≤ exp then 0x7c00
+      else
+        let shift := 16368 - exp
+        if 63 < shift then 0
+        else
+          let sticky := if (frac <<< shift) % 2 ^ 64 != 0 then 1 else 0
+          let denormalized := (frac >>> shift) ||| sticky
+          (roundQuot denormalized (2 ^ 53)).toNat
+    Float.ofBits (.ofNat 16 (absResult ||| ((if s then 1 else 0) <<< 15)))
+
+/-- `@floatCast` in compiler-rt mode: f80→f16 uses the target's software conversion;
+every other valid conversion keeps the mathematical model. The caller applies the
+shared value/class guard through `convRtChk`. -/
+def Float.convRt (fmt2 : FloatFmt) {fmt : FloatFmt} (x : Float fmt) : Float fmt2 :=
+  if h : fmt = .f80 then
+    if h2 : fmt2 = .f16 then h2 ▸ truncF80ToF16 (h ▸ x)
+    else Float.conv fmt2 x
+  else Float.conv fmt2 x
+
+/-- `@floatCast` in compiler-rt mode, with the same guards as `Float.convChk`. -/
+def Float.convRtChk (fmt2 : FloatFmt) {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt2) :=
+  if x.convNeedsGuard fmt2 then throw .unspecified else pure (Float.convRt fmt2 x)
 
 /-! ## `std.math` infrastructure `fma`/`fmaq` need (`frexp.zig`, `ldexp.zig`/`scalbn.zig`,
 `ilogb.zig`). Ported via `classify` and exact `Rat`/`Int` arithmetic, not the source's bit

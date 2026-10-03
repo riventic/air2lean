@@ -508,13 +508,11 @@ theorem Ok.access {m : Mem} (hw : W.Ok m) :
   unfold Mem.accessW; rw [hacc]
   simp [hk, pure, bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont]
 
-/-- The record of an atomic access to the word, and the word's location (`locIdx`): the
-location exists after it, with the same writes. -/
-theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.current = t)
-    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true)
-    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
-    ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.Op t m m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
-      m₁.seen = m.seen := by
+/-- Recording an atomic access preserves the shared word and its history. -/
+theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.current = t)
+    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true) :
+    W.Ok (m.recordAt W.b W.o nb k) ∧ W.Op t m (m.recordAt W.b W.o nb k) ∧
+      W.hist (m.recordAt W.b W.o nb k) = W.hist m := by
   subst hc
   have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
   -- the record
@@ -554,6 +552,19 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
       · refine .inr ⟨rfl, ?_⟩
         show VClock.le _ (mr.clocks[m.current]!) = true
         rw [hrt]; exact VClock.le_refl _
+  exact ⟨hwr, hopr, hist_congr rfl rfl⟩
+
+/-- The record of an atomic access to the word, and the word's location (`locIdx`): the
+location exists after it, with the same writes. -/
+theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.current = t)
+    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
+    ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.Op t m m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
+      m₁.seen = m.seen := by
+  subst hc
+  let mr := m.recordAt W.b W.o nb k
+  have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
+  obtain ⟨hwr, hopr, -⟩ := hw.record rfl ht hcs hk
   -- the location
   cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i =>
@@ -906,13 +917,20 @@ theorem Ok.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : Bit
   have hl0 := (loc_get hl').2.2
   have hct : t < m₁.clocks.size := by rw [hop₁.csize, hcs]; exact ht
   have hsz := hist_size hl'
-  rcases hcase with ⟨rfl, rfl, hm'⟩ | ⟨hne, rfl, hm'⟩
+  rcases hcase with ⟨rfl, rfl, -, hm'⟩ | ⟨hne, rfl, hm'⟩
   · have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos hold
     rw [hl0] at hpl hold hm'
     rw [hpl] at hold hm'
-    obtain ⟨hw', hop₂, hU, hh, hacq⟩ := hw₁.rmwAt hl' hop₁.current
-      (by rw [hop₁.threads]; exact ht) (by rw [hop₁.csize, hop₁.threads]; exact hcs) hm'
-    refine ⟨hw', hop₁.trans hop₂, .inl ⟨rfl, ?_, hU, by rw [hh, hh₁], by rw [← hh₁]; exact hacq⟩⟩
+    rw [W.sz_eq] at hm'
+    obtain ⟨hw₂, hop₂, hh₂⟩ := hw₁.record hop₁.current
+      (by rw [hop₁.threads]; exact ht) (by rw [hop₁.csize, hop₁.threads]; exact hcs)
+      (k := .atomicWrite) rfl
+    have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl'
+    obtain ⟨hw', hop₃, hU, hh, hacq⟩ := hw₂.rmwAt (M := m') (ord := succ) (new := new) hl₂ hop₂.current
+      (by rw [hop₂.threads, hop₁.threads]; exact ht)
+      (by rw [hop₂.csize, hop₂.threads, hop₁.csize, hop₁.threads]; exact hcs) hm'
+    refine ⟨hw', hop₁.trans (hop₂.trans hop₃), .inl ⟨rfl, ?_, hU,
+      by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
     rw [← hh₁, hsz]; exact val_of hl' (by omega) hold
   · have hlt := (casOpts_pos hpos).1
     have hfl := casOpts_floor hpos
@@ -1001,18 +1019,28 @@ theorem Ok.cas_noErr {m : Mem} {c : Nat} {succ fail : AtomicOrder} {exp new : Bi
     (hw : W.Ok m) (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < casCount n succ nb W.ptr exp m ∨ casCount n succ nb W.ptr exp m = 0 ∧ c = 0)
     (e : Error) : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, -, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicWrite) rfl
+  obtain ⟨blk, -, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
   have hprep : ∀ e, ((casPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
     casPrep_noErr haw hnr hloc
-  refine cmpxchgAt_noErr hprep (fun li opts m₁ hp => ?_) e
-  obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
-  rw [haw] at ha; cases ha
-  obtain ⟨h0, -, hval⟩ := hw.opts ht hcs rfl hl
-  have hne := casOpts_ne (e := exp) (m := m₁) (li := li) h0
-  have hcnt : casCount n succ nb W.ptr exp m = (casOpts m₁ li exp).size := by
-    unfold casCount; rw [optCount_eq hp]
-  have hc : c < (casOpts m₁ li exp).size := by rw [hcnt] at hcr; omega
-  exact ⟨_, Array.getElem?_eq_getElem hc, hval _ (casOpts_pos (Array.getElem?_eq_getElem hc)).1⟩
+  refine cmpxchgAt_noErr hprep (fun li opts m₁ hp => ?_)
+    (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := casPrep_ok hp
+    rw [haw] at ha; cases ha
+    obtain ⟨h0, -, hval⟩ := hw.opts ht hcs rfl hl
+    have hne := casOpts_ne (e := exp) (m := m₁) (li := li) h0
+    have hcnt : casCount n succ nb W.ptr exp m = (casOpts m₁ li exp).size := by
+      unfold casCount; rw [optCount_eq hp]
+    have hc : c < (casOpts m₁ li exp).size := by rw [hcnt] at hcr; omega
+    exact ⟨_, Array.getElem?_eq_getElem hc, hval _ (casOpts_pos (Array.getElem?_eq_getElem hc)).1⟩
+
+  · obtain ⟨b, blk', o, ha, -, hl, -⟩ := casPrep_ok hp
+    rw [haw] at ha; cases ha
+    rw [W.sz_eq] at hl
+    obtain ⟨l, hl', hw₁, hop₁, -⟩ := hw.prep rfl ht hcs rfl hl
+    obtain ⟨blk₁, -, ha₁, hnr₁, -⟩ := hw₁.prep_ok (by rw [hop₁.current, hop₁.threads]; exact ht)
+      (k := .atomicWrite) rfl
+    rw [casMarkWrite_run ha₁ hnr₁] at he
+    cases he
 
 /-! ## An op at the word keeps a lock's invariant -/
 
