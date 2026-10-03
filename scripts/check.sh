@@ -96,8 +96,9 @@ for ex in $examples; do
   # a `__struct_N`) depends on how much std code the
   # compiler analyses, which differs by run and host OS in 0.16.0; the translator gives the first
   # a stable number (`Air2Lean/Air/Anon.lean`) and does not emit the others (`usedTys`; a
-  # `Thread` handle is `Ty.thread`), so the comparison ignores them, also in the file names (a
-  # golden file is `<name>__anon_N.json`).
+  # `Thread` handle is `Ty.thread`). Normalize only compiler identities, preserving observable
+  # field/error names and string/asm data. Normalize function file names too (a golden file
+  # is `<name>__anon_N.json`).
   #
   # Two instances of one generic function (`math.sub` for `u64` and for `i64`) have the same
   # normalized name: each gets its content hash in the name (`math.sub__anon_N.<hash>.json`), so
@@ -106,8 +107,7 @@ for ex in $examples; do
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
   norm_body() {
-    grep -v '"zig_version"' "$1" |
-      sed -E '/^[[:space:]]*"target_endian"[[:space:]]*:[[:space:]]*"little"[[:space:]]*,?[[:space:]]*$/d; s/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g'
+    python3 scripts/normalize-air.py "$1"
   }
   # add_dir <src-dir> <cmp-dir>: the normalized files of <src-dir> into <cmp-dir>.
   add_dir() {

@@ -86,16 +86,54 @@ expect_failure "duplicate float override" "duplicate override key" env AIR2LEAN_
 check="$test_dir/check"
 mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air" \
   "$check/Proofs/Basic" "$check/bin"
-cp "$repo_root/scripts/check.sh" "$check/scripts/"
-printf '{\n  "instructions": []\n}\n' >"$check/tests/golden/basic/air/basic.foo.json"
+cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py" "$check/scripts/"
+cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
+{
+  "zig_version": "legacy",
+  "name": "basic.foo__anon_1",
+  "types": [{"name": "basic.Choice__enum_1", "fields": [{"name": "visible__anon_1"}]}],
+  "body": [{
+    "callee": {"func": "basic.helper__anon_1"},
+    "callback": {"comptime_fn": "basic.task__anon_1"},
+    "string": "literal__anon_1",
+    "error": {"name": "error__anon_1"},
+    "asm": "asm__anon_1",
+    "zig_version": "nested__anon_1",
+    "target_endian": "nested__anon_1",
+    "__anon_1": "key__anon_1"
+  }]
+}
+EOF
 touch "$check/examples/basic/basic.zig"
 cat >"$check/bin/zig" <<'EOF'
 #!/usr/bin/env bash
-awk 'NR == 1 {
-  print
-  if (ENVIRON["EXPORTED_ENDIAN"] != "") print "  \"target_endian\": \"" ENVIRON["EXPORTED_ENDIAN"] "\","
-  next
-} { print }' tests/golden/basic/air/basic.foo.json >"$ZIG_AIR_JSON_DIR/basic.foo.json"
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+data = json.loads(Path("tests/golden/basic/air/basic.foo.json").read_text())
+data["zig_version"] = "current"
+endian = os.environ.get("EXPORTED_ENDIAN", "")
+if endian:
+    data["target_endian"] = endian
+case = os.environ.get("EXPORTED_CASE", "")
+body = data["body"][0]
+if case == "identities":
+    data["name"] = "basic.foo__anon_987"
+    data["types"][0]["name"] = "basic.Choice__enum_654"
+    body["callee"]["func"] = "basic.helper__anon_321"
+    body["callback"]["comptime_fn"] = "basic.task__anon_456"
+elif case == "enum-field":
+    data["types"][0]["fields"][0]["name"] = "visible__anon_2"
+elif case == "error-name":
+    body["error"]["name"] = "error__anon_2"
+elif case == "key":
+    body["__anon_2"] = body.pop("__anon_1")
+elif case:
+    body[case] = body[case].replace("__anon_1", "__anon_2")
+Path(os.environ["ZIG_AIR_JSON_DIR"], "basic.foo.json").write_text(json.dumps(data))
+PY
 EOF
 cat >"$check/bin/lake" <<'EOF'
 #!/usr/bin/env bash
@@ -124,6 +162,16 @@ expect_pass "little-endian metadata compatible with legacy goldens" env PATH="$c
 expect_failure "big-endian metadata remains visible" "does not match its golden files" env PATH="$check/bin:$PATH" \
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 \
   AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN=big GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
+run_identity_check() {
+  env PATH="$check/bin:$PATH" AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic \
+    AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN= EXPORTED_CASE="$1" \
+    GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
+}
+expect_pass "compiler identity renumbering remains compatible" run_identity_check identities
+for change in string enum-field error-name asm zig_version target_endian key; do
+  expect_failure "observable $change spelling remains visible" "does not match its golden files" \
+    run_identity_check "$change"
+done
 
 # Execute mutation w on copies of every source the script backs up. No live source is touched.
 mutate="$test_dir/mutate"
