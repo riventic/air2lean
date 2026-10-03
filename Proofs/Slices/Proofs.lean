@@ -42,9 +42,9 @@ theorem failName_other (n : BitVec 8) (h : n ≠ 0) (m : Mem) :
   simp [failName, zig_unfold, errorNameOf, h']
 
 /-- `(p + 1)[0]` reads the `u32` 4 bytes after `p`. -/
-theorem second_spec (p : Ptr) (m : Mem) (x : BitVec 32)
-    (hx : (load (BitVec 32) 4 (p.add 4)).run m = pure (x, m)) :
-    (second p).run m = pure (x, m) := by
+theorem second_spec {m₁ : Mem} (p : Ptr) (m : Mem) (x : BitVec 32)
+    (hx : (load (BitVec 32) 4 (p.add 4)).run m = pure (x, m₁)) :
+    (second p).run m = pure (x, m₁) := by
   have hp : (p.elem 4 1#64).elem 4 0#64 = p.add 4 := by simp [Ptr.elem, Ptr.add]
   simp only [StateT.run] at hx
   simp [second, zig_unfold, hp, hx]
@@ -80,3 +80,18 @@ theorem tag_bytes (a : BitVec 8) :
       #[.int a, .int 2, .int 3, .int 0, .int 7] := by
   simp [Enc.encode, Enc.fields, intBytes, padTo, intSize, intAlign, alignUp, writeBytes]
   apply BitVec.eq_of_toNat_eq; simp; omega
+
+-- The second item is read successfully and its access appears in the returned memory.
+example :
+    let m := Mem.ofGlobals [(Enc.encode (1 : BitVec 32) ++ Enc.encode (2 : BitVec 32), 4, .global)]
+    (second ⟨some 0, 0⟩).run m = pure (2, m.recordAt 0 4 4 .read) := by
+  dsimp only
+  have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
+    rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
+    exact Array.extract_size
+  apply second_spec _ _ 2
+  have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
+  simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
+    Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
+    Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set,
+    StateT.set, zig_unfold]

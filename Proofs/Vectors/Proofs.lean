@@ -129,7 +129,7 @@ theorem addWrap_min_max {n : Nat} (s : Bool) (x y : BitVec n) :
 
 end Zig
 
-open Vectors
+namespace Vectors
 
 /-- `uDotWrap`'s scalar spec: the wrapping dot product of two 4-lane `u32` vectors is the
 explicit 4-term wrapping sum of pairwise wrapping products, lane 0 first. Both `mulWrap` and
@@ -295,3 +295,5 @@ theorem checkedAdd_overflow (a b : Zig.Vec (BitVec 32) 4)
     by_cases h2 : 2 ^ 32 ≤ a.lanes[2].toNat + b.lanes[2].toNat
     · simp only [h0, h1, h2, ite_true, ite_false, pure_bind]; rfl
     · simp only [h0, h1, h2, hov, ite_true, ite_false, pure_bind]; rfl
+
+end Vectors
