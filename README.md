@@ -97,7 +97,7 @@ scripts/no-sorry.sh    # no sorry/admit/native_decide
 scripts/mutate.sh      # a changed function must fail a test
 ```
 
-`scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15` or `AIR2LEAN_REVIEW_ZIG16` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; final integration test results are pending.
+`scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15` or `AIR2LEAN_REVIEW_ZIG16` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; local integration checks passed and Linux CI reruns are pending.
 
 The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts the float results that differ by target as `host=N`, not as mismatches: `tests/diff/<ex>/host.txt` lists those functions. CI (x86_64-linux) checks them.
 

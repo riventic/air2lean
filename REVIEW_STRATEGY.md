@@ -51,17 +51,13 @@ integration scopes, with one owner per file (the CI review step belongs to integ
 | Test inputs | differential corpus generation, edge cases and input consistency regression |
 | Integration and documentation | this strategy, baseline coverage, package version 1.0.0, public documentation, final regression driver and its CI step |
 
-Owners leave their scoped edits available to the coordinator for review and integration. The
-coordinator creates the authorized draft PRs after checks. The main dependency stack is
-runtime → translation → test inputs. Proof hygiene and validation scripts are independent
-scopes whose checked commits are cherry-picked or merged into the integration scope at the
-end. The final integration PR depends on the runtime, translation, validation, proof and
-input changes; its regression driver intentionally fails if any required suite file is absent.
-The input PR uses `codex/review-test-inputs-scoped`, in the existing test-input worktree.
-That branch was created non-destructively at the original input branch's pre-merge parent
-to keep its PR diff scoped. The original input branch retains the validation-only scripts
-merge; the integration scope incorporates the validation PR separately.
-Do not treat an isolated documentation branch as a complete release candidate.
+Draft PRs 47 (proof hygiene), 48 (validation scripts) and 49 (runtime) are independent and
+merge first. PR 50 (translation) depends on 48 and 49 through
+`codex/review-translation-base`; PR 51 (test inputs) depends on 50. PR 52 (integration/docs)
+uses `codex/review-integration-base`, the union of 47–51. Its driver requires the complete
+suite and fails if a dependency file is missing. The input PR uses
+`codex/review-test-inputs-scoped`, created non-destructively before the original input
+branch's verification-only scripts merge to keep its diff scoped.
 
 During this resumed session, only the coordinator runs Zig, Lake or Lean, including scripts
 that launch them. All such commands share one serial queue across worktrees. The local
@@ -97,10 +93,23 @@ The coordinator reported these completed checks from the serial guarded queue:
 | Inline assembly regression | Passed with stock Zig 0.15.2 |
 | Focused shell harness regressions | All 32 passed; `normalize-air.py` is part of the validation-scripts PR |
 | Full generated-code regeneration | All 29 generated modules regenerated and checked |
-| Proof checking | All 103 proof modules passed |
+| Proof variants | Zig 0.14.1/0.15.2/0.16.0 translations each passed the full `Proofs` target (103 jobs) and all 40 handwritten imports; 0.15.2 Darwin threadsync passed (44 jobs). Peak 2,188.9 MiB, 57.4 s (`proof-variants.log`) |
+| Parser/emitter semantics | All 21 generated fixture files passed (`emitter-capture.log`) |
+| Baseline coverage audit | 838/838 actual Git objects match ledger hashes; no missing or duplicate paths |
+| Zig 0.15.2 differential rerun | Passed: 85,801 selected cases, zero mismatches; 78,143 `ok`, 4,975 `fail`, 1,077 pinned `unspecified`, 1,606 existing host exceptions |
+| Zig 0.16.0 final differential rerun | Passed on final generated code: 85,861 selected cases, zero mismatches; 79,043 `ok`, 4,975 `fail`, 1,077 pinned `unspecified`, 766 existing host exceptions. Peak 650.5 MiB, 176.1 s (`diff16-pinned-final.log`) |
+| Zig 0.15.2 exception pins | All rows of the four exact pins independently verified (`82dc776`) |
+| Zig 0.15.2 full golden check | Passed with actual compiler dumps |
+| Zig 0.16.0 final full golden check | Actual compiler pipeline passed (44 jobs; `goldens16-final.log`) |
+| Integrated regression suite | `scripts/review.sh` passed: 32 shell checks, full `Proofs`, 40 joint imports, runtime execution, 21 emitted fixtures, inputs and actual exporters 0.15.2/0.16.0. Peak 2,177.3 MiB, 41.9 s (`integration-review.log`) |
 
-Emitter fixture repairs and the full Zig 0.15.2 differential run remain pending. These
-individual passes are not a claim that the final integration regression suite has passed.
+All final local checks passed. The golden checks also verified the genuine 0.16.0
+`floatops.divExact64` override and seven corrected sync packed-constant fixtures (four
+shared, three Linux); their bit encoding received independent verification.
+
+The 8 GiB guard stopped a ReleaseFast compiler bootstrap at 8,233 MiB. Stripped Debug
+builds with `-j1` completed: Zig 0.15.2 peaked at 3,419 MiB and Zig 0.16.0 at 4,526 MiB.
+The memory cap was not raised.
 
 Native Zig 0.14.1 bootstrap was blocked on this macOS host before exporter validation:
 its host build runner could not resolve libc symbols against the installed SDK. Only full
@@ -109,6 +118,25 @@ while Zig 0.14.1 matches `arm64`. No compatible older full SDK or simple support
 workaround was established. Linux CI retains the 0.14.1 matrix job; its final run result
 must be reported separately. The local guard's 8 GiB cap remains in force.
 
-The coordinator will record the remaining completed checks and any further resource,
-toolchain or platform restrictions before delivery. No final test pass is inferred from the
-original review or from static checks in the resumed session.
+Linux CI reruns remain pending. An earlier PR 50 run lacked PR 48's `target_endian`
+normalization dependency; its base and head ancestry now include that dependency. Local
+passes do not imply a completed Linux CI run.
+
+## Supplemental coverage for added files
+
+The baseline ledger remains 838 files. The baseline-to-integration `HEAD` added-file
+inventory (`git diff --diff-filter=A --name-only BASELINE HEAD`) contains these 27 files.
+Every added path has an owner and final-review assignment; none is uncovered. Assignments
+record review scope separately from the completed local checks and pending Linux CI.
+
+| Final reviewer | Owner | Added files |
+|---|---|---|
+| final_proof_scripts | Proof hygiene (`AllProofs`); validation scripts (`scripts/`) | `tests/review/AllProofs.lean`, `scripts/normalize-air.py`, `scripts/review-checks.sh` |
+| final_runtime_concurrency | Runtime semantics | `tests/review/Concurrency.lean` |
+| final_runtime_memory_floats | Runtime semantics | `tests/review/Memory.lean`, `tests/review/Floats.lean` |
+| final_translation_parser | Translation and examples | `tests/review/Parser.lean` |
+| final_translation_emitter; coordinator actual pipeline | Translation and examples | `tests/review/Emitter.lean`, `tests/review/emitter.sh`, `tests/review/regenerate.sh`, `tests/golden/0.16.0/floatops/air/floatops.divExact64.json` |
+| final_exporter_examples | Translation and examples | `tests/review/exporter-checks.sh`, `tests/review/exporter.zig`, `tests/spawn_cleanup.py`, `tests/asm_early_clobber.py`, `examples/asm/zig-versions`, `examples/atomics/zig-versions`, `examples/floatconv/zig-versions`, `examples/lists/zig-versions`, `examples/slices/zig-versions`, `examples/threads/zig-versions`, `examples/vectors/zig-versions` |
+| final_translation_parser + final_runtime_concurrency; coordinator actual dump | Translation and examples | `tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.signal.json` |
+| resume_inputs | Test inputs | `tests/review/inputs.py` |
+| resume_docs + coordinator | Integration and documentation | `REVIEW_STRATEGY.md`, `REVIEW_COVERAGE.tsv`, `scripts/review.sh` |
