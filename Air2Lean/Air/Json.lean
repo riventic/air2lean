@@ -148,7 +148,7 @@ canonicalizer's contextual diagnostic. Bool, void, and function refs have no sto
 def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : Val) :
     Except String Unit := do
   let some t := types[expected]? | throw s!"{fnName}: unknown type id {expected}"
-  let compatible := match v with
+  let compatible : Bool := match v with
     | .inst _ => true
     | .bool _ => t == .bool
     | .void => t == .void
