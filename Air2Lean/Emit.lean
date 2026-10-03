@@ -31,7 +31,7 @@ def isTerminating (op : Op) : Bool :=
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
-/-- Alphabetic reserved tokens from the pinned Lean parser and core notation modules.
+/-- Identifier-shaped reserved tokens from the pinned Lean parser and core notation modules.
 Contextual `nonReservedSymbol` words and the non-reserved leading words of tactic/attribute syntax are excluded. -/
 def leanKeywords : List String :=
   ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match", "matches",
@@ -44,6 +44,7 @@ def leanKeywords : List String :=
    "export", "prelude", "initialize", "infix", "infixl", "infixr", "prefix", "postfix",
    "scoped", "local", "termination_by", "decreasing_by", "throw",
    "break", "continue", "unless", "mut", "repeat", "while", "until",
+   "panic!", "unreachable!", "assert!", "debug_assert!", "termination_by?",
    "public", "meta", "nonrec", "example", "coinductive", "with_weak_namespace",
    "assert_not_exists", "assert_not_imported", "deprecated_syntax", "init_quot", "docs_to_verso",
    "deprecated_module", "unlock_limits", "builtin_initialize", "add_decl_doc", "register_tactic_tag",

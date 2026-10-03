@@ -327,10 +327,11 @@ def main (args : List String) : IO Unit := do
     "example : successful ((Review.instructionBinderType 13).map fun x => x.value.toNat) = some 13 := by native_decide\nexample : successful ((Review.unusedBinderType 14).map fun x => x.value.toNat) = some 14 := by native_decide\nexample : successful ((Review.blockBinderType 15).map fun x => x.value.toNat) = some 15 := by native_decide"
   writeCase directory "generatedBinderFunctionNames" #[identityFile "p0", functionBinderCall]
     "example : successful ((Review.functionBinderCall 16).map BitVec.toNat) = some 16 := by native_decide\nexample : successful ((Review.p0_air2lean1 17).map BitVec.toNat) = some 17 := by native_decide"
-  let keywords := #["matches", "continue", "break", "unless"]
+  let keywords := #["matches", "continue", "break", "unless", "panic!", "unreachable!",
+    "assert!", "debug_assert!", "termination_by?"]
   writeCase directory "reservedKeywordNames"
     (keywords.flatMap fun keyword => #[identityFile keyword, keywordField keyword])
     (String.intercalate "\n" (keywords.toList.flatMap fun keyword =>
-      [s!"example : successful ((Review.«{keyword}» 18).map BitVec.toNat) = some 18 := by native_decide",
-       s!"example : successful ((Review.keywordField_{keyword} ⟨19⟩).map BitVec.toNat) = some 19 := by native_decide"]))
+      [s!"example : successful ((Review.{mangleName "" keyword} 18).map BitVec.toNat) = some 18 := by native_decide",
+       s!"example : successful ((Review.{mangleName "" s!"keywordField_{keyword}"} ⟨19⟩).map BitVec.toNat) = some 19 := by native_decide"]))
   IO.println "emitter regression sources written"
