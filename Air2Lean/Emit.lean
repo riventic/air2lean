@@ -2465,12 +2465,17 @@ unqualified, so their declarations must avoid these names even when the binder b
 different declaration's body. Source field binders already avoid the allocated type names through
 `memberNames` and `collectAllocs`. The indexed names follow this program's parameters and AIR
 instruction IDs, including the unused-result spellings and extracted loop captures. -/
-def generatedBinderNames (funcs : Array Func) : Array String :=
-  #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] ++
-    funcs.flatMap fun f =>
-      (Array.range f.params.size).map (fun k => s!"p{k}") ++
-        f.allInsts.flatMap fun i =>
-          #[s!"i{i.id}", s!"_i{i.id}", s!"v{i.id}", s!"_v{i.id}", s!"a{i.id}", s!"s{i.id}"]
+def generatedBinderNames (funcs : Array Func) : Std.HashSet String := Id.run do
+  let mut names : Std.HashSet String := {}
+  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
+    names := names.insert name
+  for f in funcs do
+    for k in [:f.params.size] do
+      names := names.insert s!"p{k}"
+    for i in f.allInsts do
+      for name in #[s!"i{i.id}", s!"_i{i.id}", s!"v{i.id}", s!"_v{i.id}", s!"a{i.id}", s!"s{i.id}"] do
+        names := names.insert name
+  return names
 
 /-- Allocate source declarations together with their generated names. The unambiguous
 historical spelling stays unchanged; a collision gets a stable suffix. -/
