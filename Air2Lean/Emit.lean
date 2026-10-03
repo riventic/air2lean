@@ -30,6 +30,8 @@ def isTerminating (op : Op) : Bool :=
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
+/-- Alphabetic reserved tokens from the pinned Lean parser and core notation modules.
+Contextual `nonReservedSymbol` words and the non-reserved leading words of tactic/attribute syntax are excluded. -/
 def leanKeywords : List String :=
   ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match", "matches",
    "with", "do", "let", "fun", "if", "then", "else", "end", "mutual", "partial", "where",
@@ -39,7 +41,19 @@ def leanKeywords : List String :=
    "forall", "exists", "Type", "Prop", "Sort", "opaque", "attribute", "set_option", "universe",
    "extends", "renaming", "hiding", "at", "private", "protected", "include", "omit",
    "export", "prelude", "initialize", "infix", "infixl", "infixr", "prefix", "postfix",
-   "scoped", "local", "termination_by", "decreasing_by", "throw"]
+   "scoped", "local", "termination_by", "decreasing_by", "throw",
+   "break", "continue", "unless", "mut", "repeat", "while", "until",
+   "public", "meta", "nonrec", "example", "coinductive", "with_weak_namespace",
+   "assert_not_exists", "assert_not_imported", "deprecated_syntax", "init_quot", "docs_to_verso",
+   "deprecated_module", "unlock_limits", "builtin_initialize", "add_decl_doc", "register_tactic_tag",
+   "tactic_extension", "recommended_spelling", "register_error_explanation", "notation", "macro_rules",
+   "declare_syntax_cat", "elab_rules", "binder_predicate", "nomatch", "nofun", "leading_parser",
+   "trailing_parser", "let_fun", "let_delayed", "let_tmp", "haveI", "letI", "partial_fixpoint",
+   "coinductive_fixpoint", "inductive_fixpoint", "no_index", "inferInstanceAs", "dbg_trace", "idbg",
+   "StateRefT", "show_term_elab", "match_expr", "let_expr", "throwNamedError", "throwNamedErrorAt",
+   "logNamedError", "logNamedErrorAt", "logNamedWarning", "logNamedWarningAt", "register_parser_alias",
+   "tactic_alt", "tactic_tag", "tactic_name", "nat_lit", "without_expected_type", "by_elab", "mod_cast",
+   "include_str", "run_cmd", "run_elab", "run_meta", "seal", "unseal", "unif_hint"]
 
 /-- Quote identifiers that Zig permits but Lean does not accept bare. -/
 def mangleField (raw : String) : String :=

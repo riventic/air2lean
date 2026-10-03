@@ -270,13 +270,13 @@ private def functionBinderCall : Json :=
 
 /-- A Zig identifier that is a Lean parser keyword needs quoting in both declaration
 and projection positions. The function call also uses the allocated quoted spelling. -/
-private def keywordField : Json :=
-  file "keywordField" #[intTy 8,
-    obj [("k", .str "struct"), ("name", .str "KeywordField"), ("layout", .str "auto"),
-      ("fields", .arr #[field "matches" 0])], nrTy] #[1] 0
+private def keywordField (keyword : String) : Json :=
+  file s!"keywordField_{keyword}" #[intTy 8,
+    obj [("k", .str "struct"), ("name", .str s!"KeywordField_{keyword}"), ("layout", .str "auto"),
+      ("fields", .arr #[field keyword 0])], nrTy] #[1] 0
     #[inst 0 "arg" 1 #[] [("param", num 0)],
       inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)],
-      inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str "matches")])], inst 3 "ret" 2 #[ref 2]]
+      inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str keyword)])], inst 3 "ret" 2 #[ref 2]]
 
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Emitter.lean OUTPUT_DIR")
@@ -327,6 +327,10 @@ def main (args : List String) : IO Unit := do
     "example : successful ((Review.instructionBinderType 13).map fun x => x.value.toNat) = some 13 := by native_decide\nexample : successful ((Review.unusedBinderType 14).map fun x => x.value.toNat) = some 14 := by native_decide\nexample : successful ((Review.blockBinderType 15).map fun x => x.value.toNat) = some 15 := by native_decide"
   writeCase directory "generatedBinderFunctionNames" #[identityFile "p0", functionBinderCall]
     "example : successful ((Review.functionBinderCall 16).map BitVec.toNat) = some 16 := by native_decide\nexample : successful ((Review.p0_air2lean1 17).map BitVec.toNat) = some 17 := by native_decide"
-  writeCase directory "reservedKeywordNames" #[identityFile "matches", keywordField]
-    "example : successful ((Review.«matches» 18).map BitVec.toNat) = some 18 := by native_decide\nexample : successful ((Review.keywordField { «matches» := 19 }).map BitVec.toNat) = some 19 := by native_decide"
+  let keywords := #["matches", "continue", "break", "unless"]
+  writeCase directory "reservedKeywordNames"
+    (keywords.flatMap fun keyword => #[identityFile keyword, keywordField keyword])
+    (String.intercalate "\n" (keywords.toList.flatMap fun keyword =>
+      [s!"example : successful ((Review.«{keyword}» 18).map BitVec.toNat) = some 18 := by native_decide",
+       s!"example : successful ((Review.keywordField_{keyword} ⟨19⟩).map BitVec.toNat) = some 19 := by native_decide"]))
   IO.println "emitter regression sources written"
