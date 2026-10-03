@@ -7,7 +7,7 @@
 #   prefix    Install location. Default: ./zig-air-<version>
 #
 # Env:
-#   AIR2LEAN_OPTIMIZE     Build optimize mode. Default: ReleaseFast.
+#   AIR2LEAN_OPTIMIZE     Build optimize mode. Default: Debug (lower bootstrap memory).
 #   AIR2LEAN_CACHE        Download cache dir (tarballs only). Default: $HOME/.cache/air2lean
 #   AIR2LEAN_LLVM         1: build with LLVM (the compiler can then also build programs). Needs
 #                         LLVM, Clang and LLD of this Zig's LLVM version (versions.toml `llvm`)
@@ -20,7 +20,7 @@ set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 version=${1:?"usage: build.sh <version> [prefix]"}
 prefix=${2:-"./zig-air-${version}"}
-optimize=${AIR2LEAN_OPTIMIZE:-ReleaseFast}
+optimize=${AIR2LEAN_OPTIMIZE:-Debug}
 cache_dir=${AIR2LEAN_CACHE:-"$HOME/.cache/air2lean"}
 
 # Building this version's compiler needs a same-version host zig to bootstrap.
@@ -47,11 +47,30 @@ mkdir -p "$cache_dir"
 tarball="$cache_dir/zig-${version}.tar.xz"
 download_tmp=
 work_dir=
+stage_prefix=
+backup_prefix=
+writer_lock=
 cleanup() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  # Publication may fail after moving the previous prefix. Restore it before releasing
+  # the writer lock. Never remove an old installation or a caller-owned prefix.
+  if [ -n "$backup_prefix" ] && [ -e "$backup_prefix" ] && [ ! -e "$abs_prefix" ]; then
+    mv -- "$backup_prefix" "$abs_prefix" || {
+      echo "error: restore the previous installation from $backup_prefix" >&2
+      status=1
+    }
+  fi
   [ -z "$download_tmp" ] || rm -f "$download_tmp"
+  [ -z "$stage_prefix" ] || rm -rf "$stage_prefix"
   [ -z "$work_dir" ] || rm -rf "$work_dir"
+  [ -z "$writer_lock" ] || rmdir "$writer_lock"
+  exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 verify_tarball() {
   local actual_sha256
@@ -90,6 +109,27 @@ case "$prefix" in
   /*) abs_prefix="$prefix" ;;
   *) abs_prefix="$PWD/$prefix" ;;
 esac
+
+# Resolve the parent physically so aliases of the same prefix share the writer lock.
+parent=$(dirname -- "$abs_prefix")
+name=$(basename -- "$abs_prefix")
+[ "$name" != . ] && [ "$name" != .. ] && [ "$name" != / ] || {
+  echo "error: prefix must name an installation directory" >&2; exit 1;
+}
+mkdir -p "$parent"
+parent=$(cd -- "$parent" && pwd -P)
+abs_prefix="$parent/$name"
+[ ! -L "$abs_prefix" ] && { [ ! -e "$abs_prefix" ] || [ -d "$abs_prefix" ]; } || {
+  echo "error: prefix must be a directory, not a symlink or file: $abs_prefix" >&2; exit 1;
+}
+lock_path="$parent/.$name.air2lean-build.lock"
+if ! mkdir "$lock_path" 2>/dev/null; then
+  echo "error: another build owns $lock_path; retry after it finishes" >&2
+  echo "If that build was killed, remove the empty lock only after checking it has stopped." >&2
+  exit 1
+fi
+writer_lock="$lock_path"
+stage_prefix=$(mktemp -d "$parent/.$name.air2lean-stage.XXXXXX")
 
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-build-${version}.XXXXXX")
 src_dir="$work_dir/zig-${version}"
@@ -134,17 +174,28 @@ fi
 echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
 (cd "$src_dir" && zig build \
   -Doptimize="$optimize" \
+  -Dstrip=true \
+  -j1 \
   -Dcpu=baseline \
   -Ddebug-extensions=true \
   "${llvm_flags[@]}" \
-  --prefix "$abs_prefix")
+  --prefix "$stage_prefix")
 
-# Without LLVM, the compiler only writes AIR (lock.sh has the reason). With LLVM, remove the
-# compiler of an earlier build without LLVM that lock.sh left in the prefix.
-if [ "$llvm" = 1 ]; then
-  rm -f "$abs_prefix/bin/zig-unlocked"
-else
-  "$script_dir/lock.sh" "$abs_prefix"
+# Lock the staged compiler before it can become the advertised executable. A failed build
+# leaves the previous prefix untouched; LLVM builds start clean, without a stale wrapper.
+if [ "$llvm" = 0 ]; then
+  "$script_dir/lock.sh" "$stage_prefix"
+fi
+[ -x "$stage_prefix/bin/zig" ] || { echo "error: build did not install a compiler" >&2; exit 1; }
+if [ -e "$abs_prefix" ]; then
+  backup_prefix=$(mktemp -d "$parent/.$name.air2lean-previous.XXXXXX")
+  rmdir "$backup_prefix"
+  mv -- "$abs_prefix" "$backup_prefix"
+fi
+mv -- "$stage_prefix" "$abs_prefix"
+stage_prefix=
+if [ -n "$backup_prefix" ]; then
+  echo "previous installation retained: $backup_prefix" >&2
 fi
 
 echo "done: $abs_prefix/bin/zig" >&2

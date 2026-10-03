@@ -46,6 +46,17 @@ An invalid existing cache entry is reported with its path; remove it before retr
 
 `AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.
 
+The bootstrap defaults to stripped `Debug` and one build job (`-j1`) to reduce peak memory.
+Set `AIR2LEAN_OPTIMIZE=ReleaseFast` for a faster compiler when bootstrap memory allows it.
+The exporter flags and LLVM selection stay the same in either mode.
+
+Builds install into an adjacent temporary directory and apply the AIR-only lock before
+publishing the prefix. A failed build leaves the previous compiler available. Writers to the
+same prefix fail promptly while another build owns its lock; different prefixes share the
+verified download cache. On successful replacement, the script reports and retains the old
+installation as `.PREFIX.air2lean-previous.*`, so any extra files remain recoverable.
+An interrupted publication restores the previous prefix if the replacement was not installed.
+
 Why the lock: without LLVM, the compiler makes native code with Zig's own backends. On aarch64-macos that backend crashes at once (SIGBUS), also for a hello world, and each crash made macOS's crash reporter use tens of GB of memory. Build and run programs (for example `tests/diff/gen_inputs.zig`) with a stock `zig`.
 
 The lock rejects response-file arguments (`@file`) and every explicit `-femit-bin` override.
