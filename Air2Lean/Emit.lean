@@ -2460,12 +2460,25 @@ def emitTgt (_structNames : Array (String × String))
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   ([tgt], [dispatch])
 
+/-- Binders introduced by generated helpers and function bodies. Types and calls are rendered
+unqualified, so their declarations must avoid these names even when the binder belongs to a
+different declaration's body. Source field binders already avoid the allocated type names through
+`memberNames` and `collectAllocs`. The indexed names follow this program's parameters and AIR
+instruction IDs, including the unused-result spellings and extracted loop captures. -/
+def generatedBinderNames (funcs : Array Func) : Array String :=
+  #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] ++
+    funcs.flatMap fun f =>
+      (Array.range f.params.size).map (fun k => s!"p{k}") ++
+        f.allInsts.flatMap fun i =>
+          #[s!"i{i.id}", s!"_i{i.id}", s!"v{i.id}", s!"_v{i.id}", s!"a{i.id}", s!"s{i.id}"]
+
 /-- Allocate source declarations together with their generated names. The unambiguous
 historical spelling stays unchanged; a collision gets a stable suffix. -/
 def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ : String)
     (fixed : Array String) : Array NamedType × Array (String × String) := Id.run do
   let preferred := structs.map (·.leanName) ++ funcs.map (mangleName prefix_ ·.name)
   let mut used := fixed
+  let binders := generatedBinderNames funcs
   let mut named := #[]
   for s in structs do
     let base := plainName s.leanName
@@ -2475,7 +2488,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
         (fun cls => mangleField s!"inst{cls}{(plainName name).capitalize}")
     let mut k := 0
     let mut name := mangleField base
-    while (occupied name).any used.contains ||
+    while binders.contains name || (occupied name).any used.contains ||
         (k != 0 && (occupied name).any preferred.contains) do
       k := k + 1
       name := mangleField s!"{base}_air2lean{k}"
@@ -2491,7 +2504,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
         mangleField s!"instInhabited{locals.capitalize}"]
     let mut k := 0
     let mut name := mangleField base
-    while (occupied name).any used.contains ||
+    while binders.contains name || (occupied name).any used.contains ||
         (targets.contains f.name && typeCoreNames.contains name) ||
         (k != 0 && (occupied name).any preferred.contains) do
       k := k + 1
