@@ -153,6 +153,15 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 }
 
 examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+example_count=0
+for ex in $examples; do
+  case "$ex" in *[!a-zA-Z0-9_-]* | "")
+    echo "error: invalid example name: $ex" >&2; exit 1 ;;
+  esac
+  [ -f "examples/$ex/$ex.zig" ] || { echo "error: unknown example: $ex" >&2; exit 1; }
+  example_count=$((example_count + 1))
+done
+[ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 has_example() {
   local needle=$1 e
   for e in $examples; do
@@ -185,6 +194,34 @@ want_mutation() {
   for l in $selected; do [ "$l" = "$1" ] && return 0; done
   return 1
 }
+
+# A mutant proof failure is evidence only after the same unmutated target builds.
+# Check the toolchain before editing any source, and build just this selection's proofs.
+command -v lake >/dev/null 2>&1 || { echo "error: lake not found" >&2; exit 1; }
+lake env lean --version >/dev/null
+proof_baselines=()
+baseline_for() {
+  local ex=$1 mod=$2 label
+  shift 2
+  if has_example "$ex"; then
+    for label in "$@"; do
+      if want_mutation "$label"; then
+        proof_baselines+=("$mod")
+        break
+      fi
+    done
+  fi
+}
+baseline_for atomics Proofs.Atomics.Proofs w x
+baseline_for sync Proofs.Sync.Proofs y z
+baseline_for threads Proofs.Threads.Counter aa ab
+baseline_for sync Proofs.Sync.Mutex ac
+baseline_for atomics Proofs.Atomics.Stack ad
+baseline_for threads Proofs.Threads.Disjoint af
+if [ "${#proof_baselines[@]}" -gt 0 ]; then
+  echo "== building unmutated proof baseline ==" >&2
+  lake build "${proof_baselines[@]}"
+fi
 
 gen_file="Proofs/Basic/Gen.lean"
 options_gen="Proofs/Options/Gen.lean"
@@ -260,6 +297,11 @@ cleanup() {
   exit "$ec"
 }
 trap cleanup EXIT
+# Default signal termination does not run the EXIT trap. Exit explicitly so an
+# interrupted mutation restores sources just like a failed build does.
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'echo "error: mutation interrupted by TERM" >&2; exit 143' TERM
 
 # translate_mutated <ex> <sed-expr> <grep-pattern>: apply <sed-expr> to a temp copy of
 # examples/<ex>/<ex>.zig, check with <grep-pattern> that it changed, and translate the copy to
@@ -291,17 +333,29 @@ translate_mutated() {
 # proof_report <label> <module>: `lake build <module>` fails with the mutation (a detection).
 proof_report() {
   local label=$1 mod=$2
-  if lake build "$mod" >/dev/null 2>&1; then
+  mutations_run=$((mutations_run + 1))
+  local out status=0
+  out=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-proof.XXXXXX")
+  lake build "$mod" >"$out" 2>&1 || status=$?
+  if [ "$status" -eq 0 ]; then
     echo "$label: NOT detected (lake build $mod succeeded)"
     detected=0
-  else
+  elif [ "$status" -eq 1 ] && grep -Eq '(^error: .*\.lean:[0-9]+:[0-9]+:|\.lean:[0-9]+:[0-9]+: error:)' "$out"; then
+    cat "$out" >&2
     echo "$label: detected (lake build $mod failed)"
     detected=1
+  else
+    echo "error: $label: proof build setup failed (exit=$status)" >&2
+    cat "$out" >&2
+    rm -f "$out"
+    exit 1
   fi
+  rm -f "$out"
 }
 
 run_and_report() {
   local label=$1 ex=$2
+  mutations_run=$((mutations_run + 1))
   local out
   out=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-diff.XXXXXX")
   local status=0
@@ -330,6 +384,7 @@ run_and_report() {
 }
 
 all_detected=1
+mutations_run=0
 
 echo "== mutation (a): scale a*b -> a*%b (Zig source) ==" >&2
 if ! want_mutation a; then
@@ -911,4 +966,5 @@ else
   cp "$thread_backup" "$thread_lean"
 fi
 
+[ "$mutations_run" -gt 0 ] || { echo "error: selection ran no mutations" >&2; exit 1; }
 [ "$all_detected" -eq 1 ]
