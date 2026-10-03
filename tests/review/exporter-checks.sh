@@ -73,6 +73,11 @@ CURL
 cat > "$work/mocks/zig" <<'ZIG'
 #!/usr/bin/env bash
 if [ "${1:-}" = version ]; then echo 0.15.2; exit 0; fi
+for expected in -Doptimize=Debug -Dstrip=true -j1; do
+  found=0
+  for arg in "$@"; do [ "$arg" != "$expected" ] || found=1; done
+  [ "$found" = 1 ] || { echo "missing bootstrap option: $expected" >&2; exit 1; }
+done
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --prefix ]; then shift; prefix=$1; fi
   shift
@@ -80,12 +85,16 @@ done
 mkdir -p "$prefix/bin"
 printf '#!/usr/bin/env bash\necho 0.15.2\n' > "$prefix/bin/zig"
 chmod +x "$prefix/bin/zig"
+if [ "${REVIEW_BUILD_MODE:-}" = installed-failure ]; then
+  echo 'mock builder failed after installing raw compiler' >&2
+  exit 1
+fi
 ZIG
 chmod +x "$work/mocks/"*
 export PATH="$work/mocks:$PATH" REVIEW_SOURCE_TARBALL="$work/source.tar.xz" REVIEW_DOWNLOAD_LOG="$work/downloads"
 export REVIEW_DOWNLOAD_BARRIER="$work/download-barrier"
 mkdir -p "$REVIEW_DOWNLOAD_BARRIER"
-export AIR2LEAN_CACHE="$work/cache" AIR2LEAN_LLVM=0
+export AIR2LEAN_CACHE="$work/cache" AIR2LEAN_LLVM=0 AIR2LEAN_OPTIMIZE=Debug REVIEW_BUILD_MODE= REVIEW_BAD_DOWNLOAD=0
 "$work/build/build.sh" 0.15.2 "$work/one" > "$work/one.log" 2>&1 &
 a=$!
 "$work/build/build.sh" 0.15.2 "$work/two" > "$work/two.log" 2>&1 &
@@ -100,17 +109,76 @@ export AIR2LEAN_CACHE="$work/bad-cache" REVIEW_BAD_DOWNLOAD=1
 if "$work/build/build.sh" 0.15.2 "$work/bad" > "$work/bad.log" 2>&1; then fail 'invalid download passed digest'; fi
 [ "$(find "$AIR2LEAN_CACHE" -type f | wc -l | tr -d ' ')" = 0 ] || fail 'invalid download published or leaked'
 
+# A failed install never exposes the raw staged compiler or changes a previous prefix.
+export AIR2LEAN_CACHE="$work/cache" REVIEW_BAD_DOWNLOAD=0 REVIEW_BUILD_MODE=installed-failure
+cp "$work/one/bin/zig" "$work/previous-wrapper"
+printf 'caller-owned file\n' > "$work/one/keep.txt"
+for prefix in "$work/one" "$work/never-published"; do
+  if "$work/build/build.sh" 0.15.2 "$prefix" > "$work/failed-install.log" 2>&1; then
+    fail 'failed builder published an installation'
+  fi
+  grep -q 'failed after installing raw compiler' "$work/failed-install.log" || fail 'builder failure not exercised'
+done
+cmp "$work/previous-wrapper" "$work/one/bin/zig" || fail 'failed build changed previous compiler'
+[ -f "$work/one/keep.txt" ] || fail 'failed build removed caller file'
+[ ! -e "$work/never-published" ] || fail 'failed build exposed a compiler'
+if "$work/one/bin/zig" build-exe source.zig 2>/dev/null; then fail 'previous compiler lost AIR-only lock'; fi
+if find "$work" -maxdepth 1 -name '*.air2lean-stage.*' -o -name '*.air2lean-build.lock' | grep -q .; then
+  fail 'failed install leaked staging directory or writer lock'
+fi
+export REVIEW_BUILD_MODE=
+# Fail or interrupt the final rename after the previous installation has been moved.
+# The EXIT/signal cleanup must restore it before releasing the writer lock.
+real_mv=$(command -v mv)
+export REVIEW_REAL_MV="$real_mv"
+cat > "$work/mocks/mv" <<'MV'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  case "$arg" in *.air2lean-stage.*)
+    [ -d "$arg" ] || continue
+    case "${REVIEW_PUBLICATION_MODE:-}" in
+      fail) echo 'mock publication failed' >&2; exit 1 ;;
+      signal) echo 'mock publication interrupted' >&2; kill -TERM "$PPID"; exit 143 ;;
+    esac ;;
+  esac
+done
+exec "$REVIEW_REAL_MV" "$@"
+MV
+chmod +x "$work/mocks/mv"
+for mode in fail signal; do
+  if REVIEW_PUBLICATION_MODE="$mode" "$work/build/build.sh" 0.15.2 "$work/one" > "$work/publication-$mode.log" 2>&1; then
+    fail "publication $mode unexpectedly passed"
+  fi
+  grep -q 'mock publication' "$work/publication-$mode.log" || fail "publication $mode not exercised"
+  cmp "$work/previous-wrapper" "$work/one/bin/zig" || fail "publication $mode did not restore compiler"
+  [ -f "$work/one/keep.txt" ] || fail "publication $mode discarded caller-owned file"
+  [ ! -e "$work/.one.air2lean-build.lock" ] || fail "publication $mode leaked writer lock"
+done
+# An occupied writer lock prevents a same-prefix build from reaching installation.
+mkdir "$work/.one.air2lean-build.lock"
+if "$work/build/build.sh" 0.15.2 "$work/one" > "$work/locked-install.log" 2>&1; then
+  fail 'same-prefix writer bypassed lock'
+fi
+grep -q 'another build owns' "$work/locked-install.log" || fail 'writer conflict not diagnosed'
+[ -d "$work/.one.air2lean-build.lock" ] || fail 'losing writer removed another writer lock'
+rmdir "$work/.one.air2lean-build.lock"
+"$work/build/build.sh" 0.15.2 "$work/one" > "$work/replacement.log" 2>&1
+previous=$(sed -n 's/^previous installation retained: //p' "$work/replacement.log")
+[ -n "$previous" ] && [ -f "$previous/keep.txt" ] || fail 'replacement discarded caller-owned previous files'
+cmp "$work/previous-wrapper" "$previous/bin/zig" || fail 'previous compiler backup changed'
+if "$work/one/bin/zig" build-exe source.zig 2>/dev/null; then fail 'published compiler was not locked'; fi
+
 # Opt-in actual compiler tests. Each compiler must be patched and locked; library paths can
 # be supplied for builds using -Dno-lib. AIR2LEAN_REVIEW_TRANSLATOR enables round-trip parsing.
 for version in 14 15 16; do
   eval "compiler=\${AIR2LEAN_REVIEW_ZIG${version}:-}"
   eval "lib=\${AIR2LEAN_REVIEW_LIB${version}:-}"
   [ -n "$compiler" ] || continue
-  lib_args=()
-  [ -z "$lib" ] || lib_args=(--zig-lib-dir "$lib")
+  lib_args=(-OReleaseSafe -fno-error-tracing)
+  [ -z "$lib" ] || lib_args+=(--zig-lib-dir "$lib")
   out="$work/air$version"
   ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER=exporter. "$compiler" build-obj -fno-emit-bin \
-    -OReleaseSafe -fno-error-tracing "${lib_args[@]}" "$repo_root/tests/review/exporter.zig" \
+    "${lib_args[@]}" "$repo_root/tests/review/exporter.zig" \
     --cache-dir "$work/zig-cache$version" --global-cache-dir "$work/zig-global$version"
   python3 - "$out" "$version" <<'PY'
 import glob, json, os, sys

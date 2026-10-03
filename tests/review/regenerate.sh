@@ -54,16 +54,17 @@ with (work / 'manifest.tsv').open('w') as manifest:
         manifest.write(f'{air}\t{target}\t{namespace}\t{example}\n')
 PY
 while IFS=$'\t' read -r air target namespace example; do
-  args=()
+  args=(--namespace "$namespace" --prefix "$example.")
   if [ -f "examples/$example/translate.args" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       # translate.args is intentionally a whitespace-separated argv file, not shell code.
+      [ -n "${line//[[:space:]]/}" ] || continue
       read -r -a words <<< "$line"
       args+=("${words[@]}")
     done < "examples/$example/translate.args"
   fi
   echo "regenerate: ${target#$repo_root/}" >&2
-  "$translator" "$air" -o "$air/Gen.lean" --namespace "$namespace" --prefix "$example." "${args[@]}"
+  "$translator" "$air" -o "$air/Gen.lean" "${args[@]}"
   cp "$air/Gen.lean" "$target"
 done < "$work/manifest.tsv"
 echo 'checked AIR translations regenerated'
