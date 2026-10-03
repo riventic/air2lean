@@ -28,12 +28,19 @@ private def wideMultiply128 (a b : Nat) : Nat × Nat :=
   let word (x i : Nat) := (x >>> (32 * i)) &&& mask32
   let sum (k : Nat) := (List.range 4).foldl (fun s i =>
     if i ≤ k && k - i < 4 then s + word a i * word b (k - i) else s) 0
-  let r0 := (sum 0 &&& mask64) + ((sum 1 &&& mask32) <<< 32)
-  let r1 := (sum 0 >>> 64) + ((sum 1 >>> 32) &&& mask64) +
-    (sum 2 &&& mask64) + ((sum 3 <<< 32) &&& maskHi)
+  let s0 := sum 0
+  let s1 := sum 1
+  let s2 := sum 2
+  let s3 := sum 3
+  let s4 := sum 4
+  let s5 := sum 5
+  let s6 := sum 6
+  let r0 := (s0 &&& mask64) + ((s1 &&& mask32) <<< 32)
+  let r1 := (s0 >>> 64) + ((s1 >>> 32) &&& mask64) +
+    (s2 &&& mask64) + ((s3 <<< 32) &&& maskHi)
   let lo := (r0 + (r1 <<< 64)) % 2 ^ 128
-  let hi := ((r1 >>> 64) + (sum 1 >>> 96) + (sum 2 >>> 64) +
-    (sum 3 >>> 32) + sum 4 + (sum 5 <<< 32) + (sum 6 <<< 64)) % 2 ^ 128
+  let hi := ((r1 >>> 64) + (s1 >>> 96) + (s2 >>> 64) +
+    (s3 >>> 32) + s4 + (s5 <<< 32) + (s6 <<< 64)) % 2 ^ 128
   (hi, lo)
 
 private def mulF128 (a b : Float .f128) : Float .f128 :=
