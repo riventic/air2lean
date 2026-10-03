@@ -31,7 +31,7 @@ def isTerminating (op : Op) : Bool :=
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
 def leanKeywords : List String :=
-  ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match",
+  ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match", "matches",
    "with", "do", "let", "fun", "if", "then", "else", "end", "mutual", "partial", "where",
    "deriving", "class", "instance", "abbrev", "variable", "variables", "section", "by", "sorry",
    "have", "show", "from", "this", "suffices", "calc", "for", "in", "return", "try", "catch",
