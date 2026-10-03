@@ -2,3 +2,5 @@ fMax 5
 fMin 4
 sMod 1
 sRem 1
+# One isolated minInt/-1 modulo case per lane; signed remainder overflow is illegal.
+vMod 4
