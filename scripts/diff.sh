@@ -52,6 +52,12 @@ examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
   if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
   printf '%s ' "${d%/}"
 done)}
+example_count=0
+for ex in $examples; do
+  [ -f "tests/diff/$ex/harness.zig" ] || { echo "error: unknown example: $ex" >&2; exit 1; }
+  example_count=$((example_count + 1))
+done
+[ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 
 # The names of an example's functions are the names of its input files (layout convention).
 functions_of() {
@@ -309,6 +315,10 @@ for ex in $examples; do
       grep -qx "$fn" "tests/diff/$ex/host.txt"; then
       host_dependent=1
     fi
+    # A process substitution hides the producer's exit status from set -e/pipefail.
+    # Materialize the joined rows first so a failed or truncated paste cannot pass.
+    joined_file="$build_dir/compare.tsv"
+    paste "$in_file" "$zig_file" "$lean_file" >"$joined_file"
     i=0
     while IFS=$'\t' read -r in_line zig_line lean_line; do
       i=$((i + 1))
@@ -343,7 +353,11 @@ for ex in $examples; do
         echo "  zig:  $zig_line" >&2
         echo "  lean: $lean_line" >&2
       fi
-    done < <(paste "$in_file" "$zig_file" "$lean_file")
+    done <"$joined_file"
+    [ "$i" -eq "$n" ] || {
+      echo "error: compared $i rows of $in_file, expected $n" >&2
+      exit 1
+    }
 
     if ! pin_ok "$fn" "tests/diff/$ex/unspecified.txt" "$fn_unspecified"; then
       mismatch_found=1
