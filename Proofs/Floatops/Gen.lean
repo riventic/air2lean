@@ -100,7 +100,7 @@ inductive divExact64Exit where
 
 def divExact64 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   let e ← ((do
-    let i2 ← pure (Zig.Float.divTruncRt016 p0 p1)
+    let i2 ← pure (Zig.Float.divTruncRt p0 p1)
     let i3 ← Zig.Float.floorChk i2
     let i4 ← pure (Zig.Float.eq i2 i3)
     match ← ((do

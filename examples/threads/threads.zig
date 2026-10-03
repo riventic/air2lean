@@ -25,7 +25,12 @@ pub fn parallelCounter(itersPerThread: u32) !u32 {
     var ctxs: [4]CounterCtx = undefined;
     for (&ctxs) |*c| c.* = .{ .counter = &counter, .n = itersPerThread };
     var handles: [4]Thread = undefined;
-    for (&handles, &ctxs) |*h, *c| h.* = try Thread.spawn(.{}, bump, .{c});
+    var started: usize = 0;
+    errdefer for (handles[0..started]) |h| h.join();
+    for (&handles, &ctxs) |*h, *c| {
+        h.* = try Thread.spawn(.{}, bump, .{c});
+        started += 1;
+    }
     for (&handles) |*h| h.join();
     return counter.load(.seq_cst);
 }
@@ -48,6 +53,7 @@ pub fn race(a: u32, b: u32) !u32 {
     var c1: RaceCtx = .{ .flag = &flag, .val = a };
     var c2: RaceCtx = .{ .flag = &flag, .val = b };
     const h1 = try Thread.spawn(.{}, writeFlag, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, writeFlag, .{&c2});
     h1.join();
     h2.join();
@@ -62,6 +68,7 @@ pub fn disjoint(a: u32, b: u32) !u32 {
     var c1: RaceCtx = .{ .flag = &x, .val = a };
     var c2: RaceCtx = .{ .flag = &y, .val = b };
     const h1 = try Thread.spawn(.{}, writeFlag, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, writeFlag, .{&c2});
     h1.join();
     h2.join();
@@ -87,6 +94,7 @@ pub fn xchgRace(a: u32, b: u32) !u32 {
     var c1: SwapCtx = .{ .flag = &flag, .val = a };
     var c2: SwapCtx = .{ .flag = &flag, .val = b };
     const h1 = try Thread.spawn(.{}, swapFlag, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, swapFlag, .{&c2});
     h1.join();
     h2.join();
@@ -114,6 +122,7 @@ pub fn claimOnce() !u32 {
     var wins = std.atomic.Value(u32).init(0);
     var ctx: ClaimCtx = .{ .phase = &phase, .wins = &wins };
     const h1 = try Thread.spawn(.{}, claim, .{&ctx});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, claim, .{&ctx});
     h1.join();
     h2.join();

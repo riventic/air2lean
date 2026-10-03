@@ -55,6 +55,13 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
+/-- A pointer cast preserves a value/place only when its child type is unchanged. Changing
+the pointee reinterprets bytes, even when the cast is only read through. -/
+def samePointee (types : Array Ty) (a b : TyId) : Bool :=
+  match types[a]?, types[b]? with
+  | some (.ptr _ _ ca), some (.ptr _ _ cb) => ca == cb
+  | _, _ => false
+
 /-- The memory facts of one type (`docs/air-json.md` schema 6), in a table parallel to the
 types. `none` where the exporter did not know the layout. -/
 structure Layout where
@@ -133,6 +140,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 `expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
+  if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"

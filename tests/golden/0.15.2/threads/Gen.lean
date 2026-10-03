@@ -241,8 +241,8 @@ structure claimOnceLocals where
 
 inductive claimOnceExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
-  | br28 (v : BitVec 32)
-  | br33 (v : Phase)
+  | br29 (v : BitVec 32)
+  | br34 (v : Phase)
 
 def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 4 4
@@ -274,28 +274,29 @@ def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       match i19 with
       | .error _ => (do
         let i21 ← Zig.callRC (Zig.unwrapErr i19)
-        let i22 ← pure (i21)
-        let i23 ← pure ((.error i22) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i23))
+        let _i22 ← Zig.joinC v13
+        let i23 ← pure (i21)
+        let i24 ← pure ((.error i23) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i24))
       | .ok v20 => (do
-        let _i25 ← Zig.joinC v13
-        let _i26 ← Zig.joinC v20
-        let i27 ← pure (i3)
+        let _i26 ← Zig.joinC v13
+        let _i27 ← Zig.joinC v20
+        let i28 ← pure (i3)
         match ← ((do
-          let i29 ← pure (i27.add 0)
-          let i30 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i29
-          pure (.br28 i30)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
-        | .br28 v28 => (do
-          let i32 ← pure (i0)
+          let i30 ← pure (i28.add 0)
+          let i31 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i30
+          pure (.br29 i31)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
+        | .br29 v29 => (do
+          let i33 ← pure (i0)
           match ← ((do
-            let i34 ← pure (i32.add 0)
-            let i35 ← Zig.atomicLoadAsC (Phase) Zig.AtomicOrder.seqCst 4 i34
-            pure (.br33 i35)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
-          | .br33 v33 => (do
-            let i37 ← pure (Phase.toBits v33)
-            let i38 ← Zig.add false v28 i37
-            let i39 ← pure ((.ok i38) : Except Zig.ErrName (BitVec 32))
-            pure (.ret i39))
+            let i35 ← pure (i33.add 0)
+            let i36 ← Zig.atomicLoadAsC (Phase) Zig.AtomicOrder.seqCst 4 i35
+            pure (.br34 i36)) : Zig.CM Tgt claimOnceLocals claimOnceExit) with
+          | .br34 v34 => (do
+            let i38 ← pure (Phase.toBits v34)
+            let i39 ← Zig.add false v29 i38
+            let i40 ← pure ((.ok i39) : Except Zig.ErrName (BitVec 32))
+            pure (.ret i40))
           | e => pure e)
         | e => pure e))) : Zig.CM Tgt claimOnceLocals claimOnceExit).run' { (default : claimOnceLocals) with phase := s0, wins := s3, ctx := s6 }
   Zig.free s0
@@ -366,17 +367,18 @@ def disjoint (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
       match i24 with
       | .error _ => (do
         let i26 ← Zig.callRC (Zig.unwrapErr i24)
-        let i27 ← pure (i26)
-        let i28 ← pure ((.error i27) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i28))
+        let _i27 ← Zig.joinC v18
+        let i28 ← pure (i26)
+        let i29 ← pure ((.error i28) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i29))
       | .ok v25 => (do
-        let _i30 ← Zig.joinC v18
-        let _i31 ← Zig.joinC v25
-        let i32 ← Zig.load (BitVec 32) 4 i2
-        let i33 ← Zig.load (BitVec 32) 4 i4
-        let i34 ← pure (Zig.addWrap i32 i33)
-        let i35 ← pure ((.ok i34) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i35)))) : Zig.CM Tgt disjointLocals disjointExit).run' { (default : disjointLocals) with x := s2, y := s4, c1 := s6, c2 := s11 }
+        let _i31 ← Zig.joinC v18
+        let _i32 ← Zig.joinC v25
+        let i33 ← Zig.load (BitVec 32) 4 i2
+        let i34 ← Zig.load (BitVec 32) 4 i4
+        let i35 ← pure (Zig.addWrap i33 i34)
+        let i36 ← pure ((.ok i35) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i36)))) : Zig.CM Tgt disjointLocals disjointExit).run' { (default : disjointLocals) with x := s2, y := s4, c1 := s6, c2 := s11 }
   Zig.free s2
   Zig.free s4
   Zig.free s6
@@ -389,77 +391,127 @@ structure parallelCounterLocals where
   ctxs : Zig.Ptr
   local6 : BitVec 64
   handles : Zig.Ptr
-  local27 : BitVec 64
-  local51 : BitVec 64
+  started : BitVec 64
+  local29 : BitVec 64
+  local44 : BitVec 64
+  local85 : BitVec 64
   deriving Inhabited
 
 inductive parallelCounterExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
   | br11
   | br8
-  | br32
-  | br29
-  | br56
-  | br53
-  | br68 (v : BitVec 32)
+  | br51
+  | br61
+  | br58
+  | br34
+  | br31
+  | br90
+  | br87
+  | br102 (v : BitVec 32)
   | rep9
-  | rep30
-  | rep54
+  | rep59
+  | rep32
+  | rep88
 
-def parallelCounter.again54 : parallelCounterExit → Bool
-  | .rep54 => true
+def parallelCounter.again88 : parallelCounterExit → Bool
+  | .rep88 => true
   | _ => false
 
-def parallelCounter.again30 : parallelCounterExit → Bool
-  | .rep30 => true
+def parallelCounter.again59 : parallelCounterExit → Bool
+  | .rep59 => true
+  | _ => false
+
+def parallelCounter.again32 : parallelCounterExit → Bool
+  | .rep32 => true
   | _ => false
 
 def parallelCounter.again9 : parallelCounterExit → Bool
   | .rep9 => true
   | _ => false
 
-def parallelCounter.loop54 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
-  let i55 ← pure ((← get).local51)
+def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  let i89 ← pure ((← get).local85)
   match ← ((do
-    let i57 ← pure (i55)
-    let i58 ← pure (Zig.lt false i57 (4 : BitVec 64))
-    if i58 then (do
-      let i60 ← Zig.callMC (Zig.load (Zig.ThreadId) 8 (i25.elem 8 i55))
-      let _i61 ← Zig.joinC i60
-      pure .br56)
+    let i91 ← pure (i89)
+    let i92 ← pure (Zig.lt false i91 (4 : BitVec 64))
+    if i92 then (do
+      let i94 ← Zig.callMC (Zig.load (Zig.ThreadId) 8 (i25.elem 8 i89))
+      let _i95 ← Zig.joinC i94
+      pure .br90)
     else (do
-      pure .br53)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-  | .br56 => (do
-    let i64 ← Zig.add false i55 (1 : BitVec 64)
-    modify (fun s => { s with local51 := i64 })
-    pure .rep54)
+      pure .br87)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+  | .br90 => (do
+    let i98 ← Zig.add false i89 (1 : BitVec 64)
+    modify (fun s => { s with local85 := i98 })
+    pure .rep88)
   | e => pure e
 
-def parallelCounter.loop30 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
-  let i31 ← pure ((← get).local27)
+def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  let i60 ← pure ((← get).local44)
   match ← ((do
-    let i33 ← pure (i31)
-    let i34 ← pure (Zig.lt false i33 (4 : BitVec 64))
-    if i34 then (do
-      let i36 ← pure (i25.elem 8 i31)
-      let i37 ← pure (i4.elem 16 i31)
-      let i38 ← pure (i37)
-      let i39 ← Zig.spawnC (Tgt.bump i38)
-      match i39 with
-      | .error _ => (do
-        let i41 ← Zig.callRC (Zig.unwrapErr i39)
-        let i42 ← pure (i41)
-        let i43 ← pure ((.error i42) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i43))
-      | .ok v40 => (do
-        Zig.store (α := Zig.ThreadId) 8 i36 v40
-        pure .br32))
+    let i62 ← pure (i60)
+    let i63 ← pure (i57)
+    let i64 ← pure (Zig.lt false i62 i63)
+    if i64 then (do
+      let i66 ← Zig.callMC (Zig.load (Zig.ThreadId) 8 (i56.ptr.elem 8 i60))
+      let _i67 ← Zig.joinC i66
+      pure .br61)
     else (do
-      pure .br29)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-  | .br32 => (do
-    let i48 ← Zig.add false i31 (1 : BitVec 64)
-    modify (fun s => { s with local27 := i48 })
-    pure .rep30)
+      pure .br58)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+  | .br61 => (do
+    let i70 ← Zig.add false i60 (1 : BitVec 64)
+    modify (fun s => { s with local44 := i70 })
+    pure .rep59)
+  | e => pure e
+
+def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  let i33 ← pure ((← get).local29)
+  match ← ((do
+    let i35 ← pure (i33)
+    let i36 ← pure (Zig.lt false i35 (4 : BitVec 64))
+    if i36 then (do
+      let i38 ← pure (i25.elem 8 i33)
+      let i39 ← pure (i4.elem 16 i33)
+      let i40 ← pure (i39)
+      let i41 ← Zig.spawnC (Tgt.bump i40)
+      match i41 with
+      | .error _ => (do
+        let i43 ← Zig.callRC (Zig.unwrapErr i41)
+        modify (fun s => { s with local44 := (0 : BitVec 64) })
+        let i46 ← pure ((← get).started)
+        let i47 ← pure (i25)
+        let i48 ← pure (i47.elem 8 (0 : BitVec 64))
+        let i49 ← Zig.sub false i46 (0 : BitVec 64)
+        let i50 ← pure (Zig.le false i46 (4 : BitVec 64))
+        match ← ((do
+          if i50 then (do
+            pure .br51)
+          else (do
+            throw .outOfBounds)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+        | .br51 => (do
+          let i56 ← pure (⟨i48, i49⟩ : Zig.Slice)
+          let i57 ← pure i56.len
+          match ← ((do
+            Zig.loop (parallelCounter.loop59 i56 i57) parallelCounter.again59) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+          | .br58 => (do
+            let i73 ← pure (i43)
+            let i74 ← pure ((.error i73) : Except Zig.ErrName (BitVec 32))
+            pure (.ret i74))
+          | e => pure e)
+        | e => pure e)
+      | .ok v42 => (do
+        Zig.store (α := Zig.ThreadId) 8 i38 v42
+        let i77 ← pure ((← get).started)
+        let i78 ← Zig.add false i77 (1 : BitVec 64)
+        modify (fun s => { s with started := i78 })
+        pure .br34))
+    else (do
+      pure .br31)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+  | .br34 => (do
+    let i82 ← Zig.add false i33 (1 : BitVec 64)
+    modify (fun s => { s with local29 := i82 })
+    pure .rep32)
   | e => pure e
 
 def parallelCounter.loop9 (p0 : BitVec 32) (i1 : Zig.Ptr) (i4 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
@@ -498,22 +550,23 @@ def parallelCounter (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
     | .br8 => (do
       let i25 ← pure (← get).handles
       Zig.storeUndef (Vector (Zig.ThreadId) 4) 8 i25
-      modify (fun s => { s with local27 := (0 : BitVec 64) })
+      modify (fun s => { s with started := (0 : BitVec 64) })
+      modify (fun s => { s with local29 := (0 : BitVec 64) })
       match ← ((do
-        Zig.loop (parallelCounter.loop30 i4 i25) parallelCounter.again30) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-      | .br29 => (do
-        modify (fun s => { s with local51 := (0 : BitVec 64) })
+        Zig.loop (parallelCounter.loop32 i4 i25) parallelCounter.again32) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+      | .br31 => (do
+        modify (fun s => { s with local85 := (0 : BitVec 64) })
         match ← ((do
-          Zig.loop (parallelCounter.loop54 i25) parallelCounter.again54) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-        | .br53 => (do
-          let i67 ← pure (i1)
+          Zig.loop (parallelCounter.loop88 i25) parallelCounter.again88) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+        | .br87 => (do
+          let i101 ← pure (i1)
           match ← ((do
-            let i69 ← pure (i67.add 0)
-            let i70 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i69
-            pure (.br68 i70)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
-          | .br68 v68 => (do
-            let i72 ← pure ((.ok v68) : Except Zig.ErrName (BitVec 32))
-            pure (.ret i72))
+            let i103 ← pure (i101.add 0)
+            let i104 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i103
+            pure (.br102 i104)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
+          | .br102 v102 => (do
+            let i106 ← pure ((.ok v102) : Except Zig.ErrName (BitVec 32))
+            pure (.ret i106))
           | e => pure e)
         | e => pure e)
       | e => pure e)
@@ -565,15 +618,16 @@ def race (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (
       match i22 with
       | .error _ => (do
         let i24 ← Zig.callRC (Zig.unwrapErr i22)
-        let i25 ← pure (i24)
-        let i26 ← pure ((.error i25) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i26))
+        let _i25 ← Zig.joinC v16
+        let i26 ← pure (i24)
+        let i27 ← pure ((.error i26) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i27))
       | .ok v23 => (do
-        let _i28 ← Zig.joinC v16
-        let _i29 ← Zig.joinC v23
-        let i30 ← Zig.load (BitVec 32) 4 i2
-        let i31 ← pure ((.ok i30) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i31)))) : Zig.CM Tgt raceLocals raceExit).run' { (default : raceLocals) with flag := s2, c1 := s4, c2 := s9 }
+        let _i29 ← Zig.joinC v16
+        let _i30 ← Zig.joinC v23
+        let i31 ← Zig.load (BitVec 32) 4 i2
+        let i32 ← pure ((.ok i31) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i32)))) : Zig.CM Tgt raceLocals raceExit).run' { (default : raceLocals) with flag := s2, c1 := s4, c2 := s9 }
   Zig.free s2
   Zig.free s4
   Zig.free s9
@@ -612,7 +666,7 @@ structure xchgRaceLocals where
 
 inductive xchgRaceExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
-  | br32 (v : BitVec 32)
+  | br33 (v : BitVec 32)
 
 def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 4 4
@@ -646,20 +700,21 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
       match i23 with
       | .error _ => (do
         let i25 ← Zig.callRC (Zig.unwrapErr i23)
-        let i26 ← pure (i25)
-        let i27 ← pure ((.error i26) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i27))
+        let _i26 ← Zig.joinC v17
+        let i27 ← pure (i25)
+        let i28 ← pure ((.error i27) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i28))
       | .ok v24 => (do
-        let _i29 ← Zig.joinC v17
-        let _i30 ← Zig.joinC v24
-        let i31 ← pure (i2)
+        let _i30 ← Zig.joinC v17
+        let _i31 ← Zig.joinC v24
+        let i32 ← pure (i2)
         match ← ((do
-          let i33 ← pure (i31.add 0)
-          let i34 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i33
-          pure (.br32 i34)) : Zig.CM Tgt xchgRaceLocals xchgRaceExit) with
-        | .br32 v32 => (do
-          let i36 ← pure ((.ok v32) : Except Zig.ErrName (BitVec 32))
-          pure (.ret i36))
+          let i34 ← pure (i32.add 0)
+          let i35 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i34
+          pure (.br33 i35)) : Zig.CM Tgt xchgRaceLocals xchgRaceExit) with
+        | .br33 v33 => (do
+          let i37 ← pure ((.ok v33) : Except Zig.ErrName (BitVec 32))
+          pure (.ret i37))
         | e => pure e))) : Zig.CM Tgt xchgRaceLocals xchgRaceExit).run' { (default : xchgRaceLocals) with flag := s2, c1 := s5, c2 := s10 }
   Zig.free s2
   Zig.free s5

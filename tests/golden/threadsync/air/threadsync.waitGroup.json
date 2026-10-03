@@ -167,7 +167,7 @@
    "ty": 17,
    "callee": {
     "ty": 18,
-    "func": "Thread.spawn__anon_916",
+    "func": "Thread.spawn__anon_919",
     "noreturn": false,
     "comptime_fn": "threadsync.task"
    },
@@ -291,7 +291,7 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 6
   },
   {
    "id": 26,
@@ -307,7 +307,7 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 6
   },
   {
    "id": 29,
@@ -315,7 +315,7 @@
    "ty": 17,
    "callee": {
     "ty": 18,
-    "func": "Thread.spawn__anon_916",
+    "func": "Thread.spawn__anon_919",
     "noreturn": false,
     "comptime_fn": "threadsync.task"
    },
@@ -339,7 +339,7 @@
    ]
   },
   {
-   "id": 35,
+   "id": 39,
    "tag": "try",
    "ty": 21,
    "args": [
@@ -366,6 +366,43 @@
     },
     {
      "id": 32,
+     "tag": "load",
+     "ty": 21,
+     "args": [
+      {
+       "inst": 22
+      }
+     ]
+    },
+    {
+     "id": 33,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 5
+    },
+    {
+     "id": 34,
+     "tag": "call",
+     "ty": 1,
+     "callee": {
+      "ty": 27,
+      "func": "Thread.join",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 32
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 6
+    },
+    {
+     "id": 36,
      "tag": "bitcast",
      "ty": 23,
      "args": [
@@ -375,102 +412,65 @@
      ]
     },
     {
-     "id": 33,
+     "id": 37,
      "tag": "wrap_errunion_err",
      "ty": 0,
      "args": [
       {
-       "inst": 32
+       "inst": 36
       }
      ]
     },
     {
-     "id": 34,
+     "id": 38,
      "tag": "ret_safe",
      "ty": 24,
      "args": [
       {
-       "inst": 33
+       "inst": 37
       }
      ]
     }
    ]
   },
   {
-   "id": 36,
+   "id": 40,
    "tag": "alloc",
    "ty": 25
   },
   {
-   "id": 37,
+   "id": 41,
    "tag": "store_safe",
    "ty": 1,
    "args": [
     {
-     "inst": 36
+     "inst": 40
     },
     {
-     "inst": 35
-    }
-   ]
-  },
-  {
-   "id": 38,
-   "tag": "bitcast",
-   "ty": 26,
-   "args": [
-    {
-     "inst": 36
-    }
-   ]
-  },
-  {
-   "id": 39,
-   "tag": "dbg_var_val",
-   "ty": 1,
-   "args": [
-    {
-     "inst": 35
-    }
-   ],
-   "name": "t2"
-  },
-  {
-   "id": 40,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 6
-  },
-  {
-   "id": 41,
-   "tag": "struct_field_ptr_index_0",
-   "ty": 14,
-   "args": [
-    {
-     "inst": 1
+     "inst": 39
     }
    ]
   },
   {
    "id": 42,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 6
+   "tag": "bitcast",
+   "ty": 26,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
   },
   {
    "id": 43,
-   "tag": "call",
+   "tag": "dbg_var_val",
    "ty": 1,
-   "callee": {
-    "ty": 27,
-    "func": "Thread.WaitGroup.wait",
-    "noreturn": false
-   },
    "args": [
     {
-     "inst": 41
+     "inst": 39
     }
-   ]
+   ],
+   "name": "t2"
   },
   {
    "id": 44,
@@ -480,8 +480,8 @@
   },
   {
    "id": 45,
-   "tag": "load",
-   "ty": 3,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 14,
    "args": [
     {
      "inst": 1
@@ -496,62 +496,62 @@
   },
   {
    "id": 47,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 28,
+    "func": "Thread.WaitGroup.wait",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 45
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8
+  },
+  {
+   "id": 49,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 50,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8
+  },
+  {
+   "id": 51,
    "tag": "struct_field_val",
    "ty": 10,
    "args": [
     {
-     "inst": 45
+     "inst": 49
     }
    ],
    "index": 2
   },
   {
-   "id": 48,
+   "id": 52,
    "tag": "dbg_var_val",
    "ty": 1,
    "args": [
     {
-     "inst": 47
+     "inst": 51
     }
    ],
    "name": "n"
-  },
-  {
-   "id": 49,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 8
-  },
-  {
-   "id": 50,
-   "tag": "load",
-   "ty": 21,
-   "args": [
-    {
-     "inst": 22
-    }
-   ]
-  },
-  {
-   "id": 51,
-   "tag": "dbg_stmt",
-   "ty": 1,
-   "line": 8
-  },
-  {
-   "id": 52,
-   "tag": "call",
-   "ty": 1,
-   "callee": {
-    "ty": 28,
-    "func": "Thread.join",
-    "noreturn": false
-   },
-   "args": [
-    {
-     "inst": 50
-    }
-   ]
   },
   {
    "id": 53,
@@ -565,7 +565,7 @@
    "ty": 21,
    "args": [
     {
-     "inst": 38
+     "inst": 22
     }
    ]
   },
@@ -580,7 +580,7 @@
    "tag": "call",
    "ty": 1,
    "callee": {
-    "ty": 28,
+    "ty": 27,
     "func": "Thread.join",
     "noreturn": false
    },
@@ -598,21 +598,58 @@
   },
   {
    "id": 58,
-   "tag": "wrap_errunion_payload",
-   "ty": 0,
+   "tag": "load",
+   "ty": 21,
    "args": [
     {
-     "inst": 47
+     "inst": 42
     }
    ]
   },
   {
    "id": 59,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10
+  },
+  {
+   "id": 60,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 27,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 58
+    }
+   ]
+  },
+  {
+   "id": 61,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 11
+  },
+  {
+   "id": 62,
+   "tag": "wrap_errunion_payload",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 51
+    }
+   ]
+  },
+  {
+   "id": 63,
    "tag": "ret_safe",
    "ty": 24,
    "args": [
     {
-     "inst": 58
+     "inst": 62
     }
    ]
   }
@@ -931,11 +968,11 @@
   },
   {
    "k": "other",
-   "name": "fn (*Thread.WaitGroup) void"
+   "name": "fn (Thread) void"
   },
   {
    "k": "other",
-   "name": "fn (Thread) void"
+   "name": "fn (*Thread.WaitGroup) void"
   },
   {
    "k": "struct",
@@ -1036,7 +1073,7 @@
   },
   {
    "k": "other",
-   "name": "c.pthread_t__opaque_728"
+   "name": "c.pthread_t__opaque_731"
   },
   {
    "k": "ptr",
