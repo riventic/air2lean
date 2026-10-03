@@ -130,7 +130,7 @@ head ancestry now include that dependency. Local passes do not imply a completed
 The baseline ledger remains 838 files. The baseline-to-integration `HEAD` added-file
 inventory (`git diff --diff-filter=A --name-only BASELINE HEAD`) contains these 27 files.
 Every added path has an owner and final-review assignment; none is uncovered. Assignments
-record review scope separately from the completed local checks and pending Linux CI.
+record review scope separately from the completed local checks and Linux CI results.
 
 | Final reviewer | Owner | Added files |
 |---|---|---|
@@ -182,7 +182,9 @@ supported.
 PR 53 contains names, PR 54 float/model repairs, PR 55 tooling and PR 56 AIR/CLI. PR 56 is
 based on 53; the other three are based on the complete first-wave PR 52. The second integration
 base is `codex/review-more-base`, the union of these fixes. Its small integration PR pins all
-19 emitter cases and records this review. Every PR is a draft; none is merged.
+19 emitter cases and records this review. Every PR is a draft; none is merged. After a
+dependency reaches `main`, retarget its child PR to `main` before merging it. Union branches
+serve as validation bases, without adding another code-fix PR.
 
 Completed local checks include all 46 shell regressions under current Bash and macOS Bash
 3.2; a real staged/locked Zig 0.16 bootstrap (4,315.7 MiB peak, 195.2 s); exact native source
@@ -197,5 +199,8 @@ golden and native differential results and complete-stack Linux CI status are re
 | Actual 0.16 golden pipeline | Passed AIR comparisons, translation and generated proof builds; peak 679.6 MiB, 51.3 s (`goldens16.log`). |
 | Actual 0.15 golden pipeline | Passed after f80-only legacy dispatch; peak 800.5 MiB, 44.1 s (`goldens15.log`). |
 | Final fixture policy | All 46 shell checks passed under both Bash versions with 19 required emitter outputs plus six caller parser outputs (`final-shell-policy.log`). |
-| Final integrated regressions | Full proof/runtime/parser/input suite, all 25 emitted semantic fixtures and actual 0.15/0.16 exporter round trips passed (`integration-final.log`); no-sorry passed separately (`no-sorry.log`). |
-| Complete-stack Linux CI | Pending; local Mac host exception lists remain unchanged and do not establish x86_64 native agreement. |
+| Final integrated regressions | After the final reserved-token merge, the full proof/runtime/parser/input suite, all 25 emitted semantic fixtures, actual 0.15/0.16 exporter round trips, no-sorry, CLI namespace/IO smoke checks and byte-identical checked-AIR regeneration passed. Peak 728.6 MiB, 27.7 s (`integration-final-tokens.log`). |
+| Matching-version native 0.15 differential | Passed 85,801 selected cases: 78,304 `ok`, 4,975 matching failures, 1,077 pinned unspecified, zero capped/mismatch, 1,445 host differences. Peak 778.8 MiB, 191.9 s (`diff15.log`). |
+| Matching-version native 0.16 differential | Passed 85,861 selected cases: 79,049 `ok`, 4,975 matching failures, 1,077 pinned unspecified, zero capped/mismatch, 760 host differences. Peak 756.1 MiB, 190.8 s (`diff16.log`). |
+| Real allocator mutations | Clean lists baseline passed all 1,500 cases. Mutation h produced 414 mismatches; repaired sentinel mutation s changed a pinned count and was detected. Source restoration checked; peak 765.7 MiB, 65.8 s (`mutations-lists.log`). |
+| Complete-stack Linux CI | All eight jobs passed at `c19a260`: full 0.15.2/0.16.0 native differential jobs, the 0.14.1 exporter/translation/proof job and all five mutation shards ([run 37159767654](https://github.com/riventic/air2lean/actions/runs/37159767654)). The final reserved-token follow-up is locally checked above; its CI run is tracked on PR 57. Mac host exception lists remain unchanged. |
