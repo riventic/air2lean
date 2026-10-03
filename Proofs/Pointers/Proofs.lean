@@ -154,12 +154,12 @@ theorem maxPtr_none_left (b : Option Ptr) (m : Mem) : (maxPtr none b).run m = pu
 theorem maxPtr_none_right (p : Ptr) (m : Mem) : (maxPtr (some p) none).run m = pure (some p, m) := by
   simp [maxPtr, zig_unfold, Zig.optPayload]
 
-/-- Two pointers: the one to the larger value; `p` if the values are equal. Threaded through
-`m₁`: the second load records its own footprint entry, so it runs on the memory the first left. -/
-theorem maxPtr_spec {m₁ : Mem} (p q : Ptr) (m : Mem) (x y : BitVec 32)
+/-- Two pointers: the one to the larger value; `p` if the values are equal. The second load
+runs on `m₁`, the memory the first left, and records its own footprint entry in `m₂`. -/
+theorem maxPtr_spec {m₁ m₂ : Mem} (p q : Ptr) (m : Mem) (x y : BitVec 32)
     (hx : (load (BitVec 32) 4 p).run m = pure (x, m₁))
-    (hy : (load (BitVec 32) 4 q).run m₁ = pure (y, m₁)) :
-    (maxPtr (some p) (some q)).run m = pure (some (if y.toNat ≤ x.toNat then p else q), m₁) := by
+    (hy : (load (BitVec 32) 4 q).run m₁ = pure (y, m₂)) :
+    (maxPtr (some p) (some q)).run m = pure (some (if y.toNat ≤ x.toNat then p else q), m₂) := by
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx hy
   by_cases h : y.toNat ≤ x.toNat <;>
     simp [maxPtr, zig_unfold, Zig.optPayload, hx, hy, h, Zig.ge, Zig.le, BitVec.ule]
@@ -189,8 +189,39 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
   · omega
 
 /-- A sum that does not fit in `u32` is the safety panic `integerOverflow`. -/
-theorem delay_overflow (j : Ptr) (m : Mem) (x d : BitVec 32)
-    (hx : (load (BitVec 32) 4 (j.add 0)).run m = pure (x, m)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
+theorem delay_overflow {m₁ : Mem} (j : Ptr) (m : Mem) (x d : BitVec 32)
+    (hx : (load (BitVec 32) 4 (j.add 0)).run m = pure (x, m₁)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
     (delay j d).run m = throw .overflow := by
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx
   simp [delay, zig_unfold, hx, Zig.add, BitVec.uaddOverflow, h]
+
+-- Concrete instantiations keep the load premises satisfiable as memory bookkeeping evolves.
+example :
+    let m := Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+      (Enc.encode (2 : BitVec 32), 4, .global)]
+    (maxPtr (some ⟨some 0, 0⟩) (some ⟨some 1, 0⟩)).run m =
+      pure (some ⟨some 1, 0⟩, (m.recordAt 0 0 4 .read).recordAt 1 0 4 .read) := by
+  dsimp only
+  have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
+    rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
+    exact Array.extract_size
+  apply maxPtr_spec (m₁ := (Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+    (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
+  all_goals simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
+    Mem.recordAt, alignUp, Enc.size, intSize, intAlign, LawfulEnc.size_encode,
+    hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+
+example :
+    let m := Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
+    (delay ⟨some 0, 0⟩ 1).run m = throw .overflow := by
+  dsimp only
+  have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
+    rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
+    exact Array.extract_size
+  apply delay_overflow
+    (m₁ := (Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
+    _ _ 4294967295 1
+  · simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
+      Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
+      hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+  · decide
