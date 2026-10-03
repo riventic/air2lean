@@ -328,7 +328,8 @@ def main (args : List String) : IO Unit := do
   writeCase directory "generatedBinderFunctionNames" #[identityFile "p0", functionBinderCall]
     "example : successful ((Review.functionBinderCall 16).map BitVec.toNat) = some 16 := by native_decide\nexample : successful ((Review.p0_air2lean1 17).map BitVec.toNat) = some 17 := by native_decide"
   let keywords := #["matches", "continue", "break", "unless", "panic!", "unreachable!",
-    "assert!", "debug_assert!", "termination_by?"]
+    "assert!", "debug_assert!", "termination_by?", "max_prec", "eval_prec", "eval_prio",
+    "s!", "f!", "println!", "show_term", "by?"]
   writeCase directory "reservedKeywordNames"
     (keywords.flatMap fun keyword => #[identityFile keyword, keywordField keyword])
     (String.intercalate "\n" (keywords.toList.flatMap fun keyword =>

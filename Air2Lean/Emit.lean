@@ -55,7 +55,15 @@ def leanKeywords : List String :=
    "StateRefT", "show_term_elab", "match_expr", "let_expr", "throwNamedError", "throwNamedErrorAt",
    "logNamedError", "logNamedErrorAt", "logNamedWarning", "logNamedWarningAt", "register_parser_alias",
    "tactic_alt", "tactic_tag", "tactic_name", "nat_lit", "without_expected_type", "by_elab", "mod_cast",
-   "include_str", "run_cmd", "run_elab", "run_meta", "seal", "unseal", "unif_hint"]
+   "include_str", "run_cmd", "run_elab", "run_meta", "seal", "unseal", "unif_hint",
+   "max_prec", "eval_prec", "eval_prio", "s!", "f!", "println!", "show_term", "by?",
+   "set_library_suggestions", "simproc", "dsimproc", "simproc_decl", "dsimproc_decl",
+   "builtin_simproc", "builtin_dsimproc", "builtin_simproc_decl", "builtin_dsimproc_decl",
+   "cbv_simproc", "cbv_simproc_decl", "builtin_cbv_simproc", "builtin_cbv_simproc_decl", "cbv_eval",
+   "norm_cast_add_elim", "declare_simp_like_tactic", "register_try?_tactic", "grind_annotated",
+   "grind_propagator", "builtin_grind_propagator", "declare_bitwise_uint_theorems",
+   "declare_uint_theorems", "declare_bitwise_int_theorems", "declare_int_theorems",
+   "register_sym_simp", "register_sym_dsimp"]
 
 /-- Quote identifiers that Zig permits but Lean does not accept bare. -/
 def mangleField (raw : String) : String :=
