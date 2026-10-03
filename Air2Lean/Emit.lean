@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Air2Lean.Check
 
 /-!
