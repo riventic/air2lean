@@ -1606,7 +1606,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
-    let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt
+    -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.
+    let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt &&
+      fc.tyOfId inst.ty == .float 80
     let f := match op with
       | .floor => if legacyRt then "Zig.Float.floorRtLegacyChk" else "Zig.Float.floorChk"
       | .ceil => if legacyRt then "Zig.Float.ceilRtLegacyChk" else "Zig.Float.ceilChk"
