@@ -73,8 +73,8 @@ serialization rule does not require disabling that matrix.
 translator and proofs, elaborates the aggregate proof and float regressions, executes the
 concurrency, memory and parser test `main` functions, then runs input, emission and exporter
 checks. Parser and emitter test generators write semantic fixtures into a temporary directory;
-the emission driver preserves the six parser fixtures, adds 15 emitter fixtures, and
-elaborates all 21 generated files serially without nested compiler launches. CI invokes it
+the emission driver preserves the six parser fixtures, adds 19 emitter fixtures, and
+elaborates all 25 generated files serially without nested compiler launches. CI invokes it
 after the selected version's translation and proofs have been checked,
 for every non-mutation matrix job, including 0.14.1. Its synthetic parser cases are independent
 of the selected Zig version; aggregate imports use the generated modules already selected by
@@ -118,9 +118,12 @@ while Zig 0.14.1 matches `arm64`. No compatible older full SDK or simple support
 workaround was established. Linux CI retains the 0.14.1 matrix job; its final run result
 must be reported separately. The local guard's 8 GiB cap remains in force.
 
-Linux CI reruns remain pending. An earlier PR 50 run lacked PR 48's `target_endian`
-normalization dependency; its base and head ancestry now include that dependency. Local
-passes do not imply a completed Linux CI run.
+The first complete Linux CI run passed the 0.14.1 exporter/translation/proof job and four
+mutation shards. The 0.15.2 and 0.16.0 full jobs exposed f128 multiplication and f80 edge
+differences hidden by this Mac's existing host exceptions. Mutation shard 5 also found a
+stale sentinel-free mutation. These failures motivated the second review wave below.
+An earlier PR 50 run lacked PR 48's `target_endian` normalization dependency; its base and
+head ancestry now include that dependency. Local passes do not imply a completed Linux run.
 
 ## Supplemental coverage for added files
 
@@ -140,3 +143,59 @@ record review scope separately from the completed local checks and pending Linux
 | final_translation_parser + final_runtime_concurrency; coordinator actual dump | Translation and examples | `tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.signal.json` |
 | resume_inputs | Test inputs | `tests/review/inputs.py` |
 | resume_docs + coordinator | Integration and documentation | `REVIEW_STRATEGY.md`, `REVIEW_COVERAGE.tsv`, `scripts/review.sh` |
+
+## Second review wave
+
+The user requested further improvements. Independent GPT-6.1 Sol agents reviewed AIR/CLI,
+translation, runtime/concurrency and tooling; separate adversarial agents checked each fix
+scope. Four additional agents applied `/simple`'s reuse, simplification, efficiency and
+altitude angles. Reviewers remained static-only; the coordinator kept the single global
+compiler queue and unchanged 8 GiB memory cap. This wave changes 26 already-covered files
+and adds no tracked files: all 865 tracked paths retain primary coverage.
+
+| Scope | Independently checked files |
+|---|---|
+| AIR/CLI | `Air2Lean/Air/{Op,Json,Canon}.lean`, `Air2Lean/{Check,Main}.lean`, shared `Emit.childTys` removal, `tests/review/Parser.lean`, `docs/{air-json,generated-code}.md` |
+| Names | `Air2Lean/Emit.lean`, `tests/review/Emitter.lean`, `docs/generated-code.md` |
+| Float and model claims | `ZigLean/Float/{Ops,CompilerRt}.lean`, float emission, `Proofs/Floatops/{Gen,Proofs}.lean`, `tests/golden/0.15.2/floatops/Gen.lean`, `tests/review/Floats.lean`, `docs/floats.md`, `ZigLean/Mem/Thread.lean`, `docs/std-models.md` |
+| Tooling | `scripts/{mutate,review-checks}.sh`, `tests/review/{emitter,exporter-checks,regenerate}.sh`, `zig-patch/{build.sh,README.md}` |
+
+The fixes reject cyclic value types, unavailable instruction references, malformed constants,
+markers and flags, unsupported vector reinterpretations/pointer vectors, and omitted spawn
+workers. Generated type/function names avoid body binders and the pinned Lean parser's
+reserved words. Type validation and binder lookup use indexed membership; repeated float
+limb calculations are cached. CLI help, namespace validation and IO errors have smoke checks.
+
+The target float model now includes the genuine compiler-rt f128 lost-carry behavior, f80
+remainder representation preservation and pre-0.16 f80 floor/ceil conversion. IEEE operations
+remain distinct. The public f80 operation theorem explicitly excludes a pseudo-denormal input;
+all selectors remain covered. The concurrency documentation records the existing read-view
+transfer overapproximation instead of claiming exact RC11 behavior.
+
+The compiler builds into an adjacent staging directory, locks the binary before publication,
+excludes same-prefix writers and retains/restores previous installations on publication
+failure. Its default is stripped Debug with one build job. Emission checks generate fresh
+fixtures and validate producer completeness; mutation detection requires a clean unmutated
+differential baseline and targets the current sentinel-free implementation. Bash 3.2 remains
+supported.
+
+PR 53 contains names, PR 54 float/model repairs, PR 55 tooling and PR 56 AIR/CLI. PR 56 is
+based on 53; the other three are based on the complete first-wave PR 52. The second integration
+base is `codex/review-more-base`, the union of these fixes. Its small integration PR pins all
+19 emitter cases and records this review. Every PR is a draft; none is merged.
+
+Completed local checks include all 46 shell regressions under current Bash and macOS Bash
+3.2; a real staged/locked Zig 0.16 bootstrap (4,315.7 MiB peak, 195.2 s); exact native source
+`wideMultiply` checks for Zig 0.15.2 and 0.16.0; full proof/runtime regression checks;
+all 25 generated parser/emitter semantic files; input coverage; actual exporter checks;
+and CLI help, valid/rejected namespaces and IO error paths. The second-wave cross-version,
+golden and native differential results and complete-stack Linux CI status are recorded below.
+
+| Second-wave integration check | Result |
+|---|---|
+| All version proof variants | 0.14.1, 0.15.2, 0.16.0 full `Proofs` and all 40 handwritten imports passed; Darwin Threadsync passed. Peak 2,188.7 MiB, 66.8 s (`floats-all-versions.log`). |
+| Actual 0.16 golden pipeline | Passed AIR comparisons, translation and generated proof builds; peak 679.6 MiB, 51.3 s (`goldens16.log`). |
+| Actual 0.15 golden pipeline | Passed after f80-only legacy dispatch; peak 800.5 MiB, 44.1 s (`goldens15.log`). |
+| Final fixture policy | All 46 shell checks passed under both Bash versions with 19 required emitter outputs plus six caller parser outputs (`final-shell-policy.log`). |
+| Final integrated regressions | Full proof/runtime/parser/input suite, all 25 emitted semantic fixtures and actual 0.15/0.16 exporter round trips passed (`integration-final.log`); no-sorry passed separately (`no-sorry.log`). |
+| Complete-stack Linux CI | Pending; local Mac host exception lists remain unchanged and do not establish x86_64 native agreement. |
