@@ -55,6 +55,41 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
+/-- The types that `ty` names directly. -/
+def childTys (ty : Ty) : Array TyId :=
+  match ty with
+  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
+  | .errorUnion s p => #[s, p]
+  | .struct _ _ fs => fs.map (·.2)
+  | .enum _ t _ _ => #[t]
+  | .union _ _ t fs => t.toArray ++ fs.map (·.2)
+  | .tuple fs => fs
+  | _ => #[]
+
+private inductive TypeVisit where
+  | unseen | active | done
+  deriving Inhabited
+
+/-- Reject cycles through values before width/layout traversal. Pointer edges break a
+value cycle, so ordinary linked structures remain valid. All child IDs are range checked. -/
+partial def validateTypeGraph (fnName : String) (types : Array Ty) : Except String Unit := do
+  for t in types do
+    for c in childTys t do
+      unless c < types.size do throw s!"{fnName}: unknown type id {c}"
+  let rec visit (id : TyId) (states : Array TypeVisit) : Except String (Array TypeVisit) := do
+    match states[id]? with
+    | some .done => return states
+    | some .active => throw s!"{fnName}: cyclic value type at type {id}"
+    | none => throw s!"{fnName}: unknown type id {id}"
+    | some .unseen =>
+      let some t := types[id]? | throw s!"{fnName}: unknown type id {id}"
+      let mut states := states.set! id .active
+      unless (match t with | .ptr .. => true | _ => false) do
+        for c in childTys t do states ← visit c states
+      pure (states.set! id .done)
+  let mut states : Array TypeVisit := Array.replicate types.size .unseen
+  for id in Array.range types.size do states ← visit id states
+
 /-- A pointer cast preserves a value/place only when its child type is unchanged. Changing
 the pointee reinterprets bytes, even when the cast is only read through. -/
 def samePointee (types : Array Ty) (a b : TyId) : Bool :=

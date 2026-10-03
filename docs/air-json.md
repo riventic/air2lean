@@ -27,6 +27,13 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 | `globals` | the globals that pointer constants point into (§Global). A global ID is an index into this array. Missing if the function has no pointer constant (schema 6). |
 | `types` | type table. A type ID is an index into this array. Each type is listed once. |
 
+The reader rejects cyclic value types (pointer recursion is allowed), out-of-range type IDs,
+SSA uses before their definition or outside their lexical body, and malformed constant
+shapes. Aggregate constants must have the exact number and types of their items; optional,
+error-union and union payloads must match their child type. Presence markers such as `undef`,
+`null` and shuffle `u` must be literal `true`. Supplied flags such as `noreturn`, `volatile`
+and `unsupported` must be booleans. A reference or shuffle lane has exactly one value form.
+
 ## Type
 
 Every type is an object with `"k"`. Child types are type IDs (integers), never nested objects.
@@ -38,7 +45,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `bool`, `void`, `noreturn` | — |
 | `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
-| `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9) |
+| `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9). The checked subset permits integer, float and bool lanes. Pointer vectors and nonidentity vector bitcasts are rejected. |
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |

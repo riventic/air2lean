@@ -105,6 +105,38 @@ def optField (j : Json) (k : String) : Option Json :=
   let v := j.getObjValD k
   if v.isNull then none else some v
 
+/-- Optional flags default only when absent; malformed supplied flags are errors. -/
+def boolField (j : Json) (k : String) : Except String Bool :=
+  match j.getObjVal? k with
+  | .ok v => v.getBool?
+  | .error _ => pure false
+
+/-- Presence markers must be the literal `true`. -/
+def trueMarker (j : Json) (k : String) : Except String Bool := do
+  match j.getObjVal? k with
+  | .ok v =>
+    unless (← v.getBool?) do throw s!"'{k}' must be true when supplied"
+    pure true
+  | .error _ => pure false
+
+/-- Nested constants must match their fields. SSA refs are rejected later with the
+canonicalizer's contextual diagnostic. Bool, void, and function refs have no stored type ID. -/
+def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : Val) :
+    Except String Unit := do
+  let some t := types[expected]? | throw s!"{fnName}: unknown type id {expected}"
+  let compatible : Bool := match v with
+    | .inst _ => true
+    | .bool _ => t == .bool
+    | .void => t == .void
+    | .func .. => match t with
+      | .other n => n.startsWith "fn ("
+      | .ptr "one" _ c => match types[c]? with
+        | some (.other n) => n.startsWith "fn ("
+        | _ => false
+      | _ => false
+    | _ => (v.constTy?.bind (types[·]?)) == some t
+  unless compatible do throw s!"{fnName}: constant does not match type {expected}"
+
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
 def parseIntLit (fnName : String) (s : String) : Except String Int :=
   if s.startsWith "-" then
@@ -137,7 +169,7 @@ def parseTy (j : Json) : Except String Ty := do
   | "array" =>
     let len ← (← j.getObjVal? "len").getNat?
     let child ← (← j.getObjVal? "child").getNat?
-    return .array len child ((j.getObjValAs? Bool "sentinel").toOption.getD false)
+    return .array len child (← boolField j "sentinel")
   | "vector" =>
     let len ← (← j.getObjVal? "len").getNat?
     let child ← (← j.getObjVal? "child").getNat?
@@ -151,7 +183,7 @@ def parseTy (j : Json) : Except String Ty := do
     if name == "Thread" then return .thread
     if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
-    if (optField j "no_fields").isSome then return .other name
+    if (← trueMarker j "no_fields") then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
     let fieldsJ ← (← j.getObjVal? "fields").getArr?
     let fields ← fieldsJ.mapM fun fj => do
@@ -177,7 +209,7 @@ def parseTy (j : Json) : Except String Ty := do
     return .enum name tag exhaustive fields
   | "union" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if (optField j "no_fields").isSome then return .other name
+    if (← trueMarker j "no_fields") then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
     -- A bare union's hidden tag (`safety_tag`) is a tag like the one of a `union(enum)`: the
     -- layout, the ops and the safety checks are the same.
@@ -199,7 +231,9 @@ def parseTy (j : Json) : Except String Ty := do
     return .errorUnion set payload
   | "error_set" =>
     -- `inferred`: an inferred set not yet resolved; like `anyerror`, its names are unknown.
-    if (optField j "any").isSome || (optField j "inferred").isSome then return .errorSet none
+    let any ← trueMarker j "any"
+    let inferred ← trueMarker j "inferred"
+    if any || inferred then return .errorSet none
     else
       let errsJ ← (← j.getObjVal? "errors").getArr?
       let errs ← errsJ.mapM Json.getStr?
@@ -213,10 +247,7 @@ def parseLayout (j : Json) : Except String Layout := do
     match optField j k with
     | some v => some <$> v.getNat?
     | none => pure none
-  let bool (k : String) : Except String Bool :=
-    match optField j k with
-    | some v => v.getBool?
-    | none => pure false
+  let bool := boolField j
   let offsets ← match optField j "fields" with
     | some (.arr fs) => fs.filterMapM fun fj => match optField fj "offset" with
       | some o => some <$> o.getNat?
@@ -284,6 +315,8 @@ constants): its backing integer, field 0 in the lowest bits. A field value is an
 `true`/`false`. -/
 def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String × TyId)) (s : String) :
     Except String Int := do
+  unless s.startsWith ".{" && s.endsWith "}" do
+    throw s!"{fnName}: malformed packed constant: {s}"
   let body := ((s.drop 2).dropEnd 1).toString
   let parts := (body.splitOn ",").map (·.trimAscii.toString) |>.filter (· != "")
   let mut acc : Nat := 0
@@ -309,13 +342,15 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
 optional constant holding a payload; nested `Ref`, recursively) / `{"ty", "null": true}` (an
 optional constant, `null`) (`docs/air-json.md`). -/
 partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
+  let forms := ["inst", "func", "undef", "err", "payload", "some", "null", "enum",
+    "uval", "elems", "ptr", "slice_ptr", "fbits", "val"]
+  unless (forms.filter fun k => (j.getObjVal? k).toOption.isSome).length == 1 do
+    throw s!"{fnName}: a reference must have exactly one value form"
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
   else if let some funcJ := optField j "func" then
     let name ← funcJ.getStr?
-    let noreturn := match optField j "noreturn" with
-      | some b => b.getBool?.toOption.getD false
-      | none => false
+    let noreturn ← boolField j "noreturn"
     let spawnFn ← match optField j "comptime_fn" with
       | some sj => some <$> sj.getStr?
       | none => pure none
@@ -324,7 +359,7 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     let tyId ← (← j.getObjVal? "ty").getNat?
     let some ty := types[tyId]?
       | throw s!"{fnName}: unknown type id {tyId} in constant ref"
-    if optField j "undef" |>.isSome then
+    if (← trueMarker j "undef") then
       return .undef tyId
     else if let some errJ := optField j "err" then
       let name ← errJ.getStr?
@@ -334,13 +369,19 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       | other => throw s!"{fnName}: 'err' constant of unexpected type {repr other}"
     else if let some payloadJ := optField j "payload" then
       match ty with
-      | .errorUnion .. => return .errUnionOk tyId (← parseVal fnName types payloadJ)
+      | .errorUnion _ p =>
+        let v ← parseVal fnName types payloadJ
+        checkConstType fnName types p v
+        return .errUnionOk tyId v
       | other => throw s!"{fnName}: 'payload' constant of unexpected type {repr other}"
     else if let some someJ := optField j "some" then
       match ty with
-      | .optional .. => return .optSome tyId (← parseVal fnName types someJ)
+      | .optional p =>
+        let v ← parseVal fnName types someJ
+        checkConstType fnName types p v
+        return .optSome tyId v
       | other => throw s!"{fnName}: 'some' constant of unexpected type {repr other}"
-    else if (optField j "null").isSome then
+    else if (← trueMarker j "null") then
       match ty with
       | .optional .. => return .optNull tyId
       | other => throw s!"{fnName}: 'null' constant of unexpected type {repr other}"
@@ -365,17 +406,45 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
           | throw s!"{fnName}: union constant: no tag field with value {v}"
         let some idx := fields.findIdx? (·.1 == fname)
           | throw s!"{fnName}: union constant: no field {fname}"
-        return .unionVal tyId idx (← parseVal fnName types uvalJ)
+        if let .union _ _ (some tag) _ := ty then
+          checkConstType fnName types tag (.enumTag tagTy v)
+        let payload ← parseVal fnName types uvalJ
+        checkConstType fnName types fields[idx]!.2 payload
+        return .unionVal tyId idx payload
       | other => throw s!"{fnName}: 'uval' constant of unexpected type {repr other}"
     else if let some elemsJ := optField j "elems" then
-      return .agg tyId (← (← elemsJ.getArr?).mapM (parseVal fnName types))
+      let elemsJ ← elemsJ.getArr?
+      let (count, fields) ← match ty with
+        | .array n _ sentinel => pure (n + (if sentinel then 1 else 0), #[])
+        | .vector n _ => pure (n, #[])
+        | .struct _ _ fs => pure (fs.size, fs.map (·.2))
+        | .tuple fs => pure (fs.size, fs)
+        | _ => throw s!"{fnName}: 'elems' constant of unexpected type {repr ty}"
+      unless elemsJ.size == count do
+        throw s!"{fnName}: aggregate has {elemsJ.size} elements, expected {count}"
+      let elems ← elemsJ.mapM (parseVal fnName types)
+      for (v, k) in elems.zipIdx do
+        let t := match ty with | .array _ c _ | .vector _ c => c | _ => fields[k]!
+        checkConstType fnName types t v
+      return .agg tyId elems
     else if let some ptrJ := optField j "ptr" then
+      unless (match ty with | .ptr "one" .. | .ptr "many" .. | .ptr "c" .. => true | _ => false) do
+        throw s!"{fnName}: 'ptr' constant of unexpected type {repr ty}"
       if let some k := optField ptrJ "unsupported" then
         return .ptrOther tyId (← k.getStr?)
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
     else if let some pJ := optField j "slice_ptr" then
-      return .sliceConst tyId (← parseVal fnName types pJ)
-        (← parseVal fnName types (← j.getObjVal? "slice_len"))
+      let .ptr "slice" _ child := ty
+        | throw s!"{fnName}: 'slice_ptr' constant of unexpected type {repr ty}"
+      let p ← parseVal fnName types pJ
+      let n ← parseVal fnName types (← j.getObjVal? "slice_len")
+      unless (match p.constTy?.bind (types[·]?) with
+        | some (.ptr "many" _ c) => types[c]? == types[child]?
+        | _ => false) do throw s!"{fnName}: slice constant has an incompatible pointer"
+      unless (match n.constTy?.bind (types[·]?) with
+        | some (.int false 64) => true | _ => false) do
+        throw s!"{fnName}: slice constant length is not a 64-bit unsigned integer"
+      return .sliceConst tyId p n
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?
       match ty with
@@ -392,9 +461,11 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
 /-- One lane of a shuffle mask: `{"a": i}`, `{"b": i}`, `{"u": true}`, or `{"v": Ref}`
 (`docs/air-json.md`). -/
 def parseMaskLane (fnName : String) (types : Array Ty) (j : Json) : Except String ShuffleLane := do
+  unless (["a", "b", "u", "v"].filter fun k => (j.getObjVal? k).toOption.isSome).length == 1 do
+    throw s!"{fnName}: a shuffle lane must have exactly one value form"
   if let some aJ := optField j "a" then return .a (← aJ.getNat?)
   else if let some bJ := optField j "b" then return .b (← bJ.getNat?)
-  else if (optField j "u").isSome then return .undef
+  else if (← trueMarker j "u") then return .undef
   else if let some vJ := optField j "v" then return .value (← parseVal fnName types vJ)
   else throw s!"{fnName}: bad shuffle mask lane"
 
@@ -411,9 +482,7 @@ def parseAsmOperand (fnName : String) (types : Array Ty) (j : Json) : Except Str
 (`docs/air-json.md`). -/
 def parseAsm (fnName : String) (types : Array Ty) (j : Json) : Except String RawAsm := do
   let source ← (← j.getObjVal? "source").getStr?
-  let isVolatile := match optField j "volatile" with
-    | some (.bool b) => b
-    | _ => false
+  let isVolatile ← boolField j "volatile"
   let clobbersJ ← (← j.getObjVal? "clobbers").getArr?
   let clobbers ← clobbersJ.mapM Json.getStr?
   let outputsJ ← (← j.getObjVal? "outputs").getArr?
@@ -490,9 +559,7 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let asm ← match optField j "source" with
     | some _ => some <$> parseAsm fnName types j
     | none => pure none
-  let unsupported := match optField j "unsupported" with
-    | some (.bool b) => b
-    | _ => false
+  let unsupported ← boolField j "unsupported"
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
            line, order, rmwOp, successOrder, failureOrder, op, mask, asm, unsupported }
 
@@ -502,8 +569,7 @@ partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except S
   let rangesJ ← (← j.getObjVal? "ranges").getArr?
   let ranges ← rangesJ.mapM fun rj => do
     let pair ← rj.getArr?
-    let some a := pair[0]? | throw s!"{fnName}: switch range needs 2 elements"
-    let some b := pair[1]? | throw s!"{fnName}: switch range needs 2 elements"
+    let #[a, b] := pair | throw s!"{fnName}: switch range needs 2 elements"
     return (← parseVal fnName types a, ← parseVal fnName types b)
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst fnName types)
@@ -513,17 +579,18 @@ end
 
 /-- One entry of the `globals` table (`docs/air-json.md`). -/
 def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String Global := do
-  let bool (k : String) : Except String Bool :=
-    match optField j k with
-    | some v => v.getBool?
-    | none => pure false
+  let bool := boolField j
   let name ← match optField j "name" with
     | some n => some <$> n.getStr?
     | none => pure none
+  let ty ← (← j.getObjVal? "ty").getNat?
   let init ← match optField j "init" with
-    | some v => some <$> parseVal fnName types v
+    | some v =>
+      let v ← parseVal fnName types v
+      checkConstType fnName types ty v
+      pure (some v)
     | none => pure none
-  return { name, ty := ← (← j.getObjVal? "ty").getNat?, isConst := ← bool "const",
+  return { name, ty, isConst := ← bool "const",
            threadlocal := ← bool "threadlocal", isExtern := ← bool "extern", init }
 
 def parseFunc (j : Json) : Except String RawFunc := do
@@ -538,6 +605,7 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
+  validateTypeGraph name types
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
   let params ← paramsJ.mapM Json.getNat?

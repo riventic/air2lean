@@ -54,8 +54,11 @@ private partial def parseArgsGo (args : List String)
     if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
-def parseArgs (args : List String) : Except String Args :=
-  parseArgsGo args none none none none none
+def parseArgs (args : List String) : Except String Args := do
+  let a ← parseArgsGo args none none none none none
+  unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
+    throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
+  pure a
 
 /-- Parse, normalize, and check one AIR JSON file's contents into a `Func`. -/
 def processOne (contents : String) : Except String Func := do
@@ -68,18 +71,21 @@ def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
   pure 1
 
-def main (args : List String) : IO UInt32 := do
+private def run (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error e => die e
   | .ok a =>
-    let entries ← a.airDir.readDir
+    let entries ← try a.airDir.readDir catch e =>
+      throw (IO.userError s!"reading AIR directory {a.airDir}: {e}")
     let jsonPaths :=
       ((entries.filter fun e => e.fileName.endsWith ".json").qsort
         (fun a b => decide (a.fileName < b.fileName))).map (·.path)
     if jsonPaths.isEmpty then
       die s!"no *.json files found in {a.airDir}"
     else
-      let texts ← jsonPaths.mapM IO.FS.readFile
+      let texts ← jsonPaths.mapM fun path => do
+        try IO.FS.readFile path catch e =>
+          throw (IO.userError s!"reading AIR file {path}: {e}")
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
@@ -87,12 +93,20 @@ def main (args : List String) : IO UInt32 := do
           match processOne contents with
           | .error e => err := some s!"{path}: {e}"
           | .ok f => funcs := funcs.push f
-      match err.map Except.error |>.getD (checkProgram funcs) with
+      match (match err with | some e => Except.error e | none => checkProgram funcs) with
       | .error e => die e
       | .ok () =>
         let src := emit funcs a.ns a.prefix_ a.floatSemantics
-        IO.FS.writeFile a.outPath src
+        try IO.FS.writeFile a.outPath src catch e =>
+          throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
         pure 0
+
+def main (args : List String) : IO UInt32 := do
+  if args == ["--help"] || args == ["-h"] then
+    IO.println usage
+    pure 0
+  else
+    try run args catch e => die e.toString
 
 end Air2Lean
 

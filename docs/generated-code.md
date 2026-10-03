@@ -2,6 +2,11 @@
 
 `lake exe air2lean <air-dir> -o <File.lean> --namespace <Ns> [--prefix <p>] [--float-semantics ieee|compiler-rt]` writes one Lean file for all JSON files in `<air-dir>`.
 
+`--help` or `-h` prints usage and exits successfully. `--namespace` accepts dot-separated
+Lean identifiers (for example `My.Program`); empty components, keywords, and names requiring
+quoting are rejected before writing output. Filesystem errors identify the input directory,
+input file, or output path. A spawned worker needs its own AIR file, just like a direct callee.
+
 `--float-semantics` (default `ieee`) picks the model behind `@divExact`/`/`/`@divTrunc`/`@divFloor`/`@mulAdd` on a float operand: `ieee` (what a proof assumes) or `compiler-rt` (bit-exact port of the compiler_rt routines the reference target, `x86_64-linux -mcpu=baseline`, actually calls; `docs/floats.md` §Semantics). `scripts/check.sh` reads one example's opt-in from `examples/<ex>/translate.args` (one line of extra CLI args) if present, so most examples stay on the default with no translator invocation to update.
 
 ## Names
@@ -68,6 +73,10 @@ A `switch` on an exhaustive enum that names every value becomes a `match` with o
 A bare union has a hidden tag in `ReleaseSafe` (the exporter's `safety_tag`): it is a tagged union, and a read of a field that is not active panics (`inactiveUnionField`). An `extern` or `packed` union is its bytes (§Casts, layout and function pointers).
 
 ### Vectors
+
+The checked vector subset has integer, float, or bool lanes. Vectors of pointers and bitcasts
+to, from, or between different vector types are rejected: no corresponding packing or
+pointer-aware lane semantics is claimed. Identity casts keep the same vector value.
 
 `Zig.Vec T' N` (`ZigLean/Vec.lean`) wraps a `Vector T' N`; `.lanes` is the only field. Lane 0 is
 first. AIR op → generated code:

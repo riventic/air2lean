@@ -78,7 +78,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     | "many" | "slice" => recur child
     | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
   | .array _ child _ => recur child
-  | .vector _ child => recur child
+  | .vector _ child =>
+    unless (match types[child]? with
+      | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
+      throw s!"{fnName}: near line {line}: a vector with lanes other than integers, floats or bool is outside the subset"
+    recur child
   | .optional child => recur child
   | .errorUnion set payload => do
     recur set
@@ -316,7 +320,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
-  | .bitcast (.inst a) =>
+  | .bitcast a =>
+    let sourceTy := cx.valTy? a
+    let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
+      | some (.vector ..) => true | _ => false
+    if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
+      cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
@@ -327,8 +336,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
-    match cx.instTys.find? (·.1 == a) with
-    | some (_, aty) =>
+    match sourceTy with
+    | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
       if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
@@ -511,6 +520,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
+  validateTypeGraph f.name f.types
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
   checkTy f.name f.types f.layouts 0 f.ret
@@ -593,7 +603,12 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
   let names := funcs.map (·.name)
   for f in funcs do
     for i in f.allInsts do
-      if let .call (.func callee false ..) args := i.op then
+      if let .call (.func callee false spawnFn) args := i.op then
+        if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
+          let some worker := spawnFn
+            | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
+          unless names.contains worker do
+            throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
         unless names.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
