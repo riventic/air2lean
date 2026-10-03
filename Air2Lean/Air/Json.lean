@@ -148,7 +148,7 @@ canonicalizer's contextual diagnostic. Bool, void, and function refs have no sto
 def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : Val) :
     Except String Unit := do
   let some t := types[expected]? | throw s!"{fnName}: unknown type id {expected}"
-  let matches := match v with
+  let compatible := match v with
     | .inst _ => true
     | .bool _ => t == .bool
     | .void => t == .void
@@ -159,7 +159,7 @@ def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : V
         | _ => false
       | _ => false
     | _ => (v.constTy?.bind (types[·]?)) == some t
-  unless matches do throw s!"{fnName}: constant does not match type {expected}"
+  unless compatible do throw s!"{fnName}: constant does not match type {expected}"
 
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
 def parseIntLit (fnName : String) (s : String) : Except String Int :=
