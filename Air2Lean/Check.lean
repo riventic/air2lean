@@ -1,5 +1,4 @@
 import Air2Lean.Memory
-import Air2Lean.Air.Json
 import ZigLean.Mem.Enc
 import ZigLean.Vec
 
@@ -521,7 +520,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
-  Raw.validateTypeGraph f.name f.types
+  validateTypeGraph f.name f.types
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
   checkTy f.name f.types f.layouts 0 f.ret

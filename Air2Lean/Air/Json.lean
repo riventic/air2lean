@@ -119,30 +119,6 @@ def trueMarker (j : Json) (k : String) : Except String Bool := do
     pure true
   | .error _ => pure false
 
-/-- Reject cycles through values before width/layout traversal. Pointer edges break a
-value cycle, so ordinary linked structures remain valid. All child IDs are range checked. -/
-partial def validateTypeGraph (fnName : String) (types : Array Ty) : Except String Unit := do
-  let children (t : Ty) : Array TyId := match t with
-    | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c | .enum _ c _ _ => #[c]
-    | .errorUnion e p => #[e, p]
-    | .struct _ _ fs => fs.map (·.2)
-    | .union _ _ tag fs => tag.toArray ++ fs.map (·.2)
-    | .tuple fs => fs
-    | _ => #[]
-  for t in types do
-    for c in children t do
-      unless c < types.size do throw s!"{fnName}: unknown type id {c}"
-  let rec visit (id : TyId) (path done : Array TyId) : Except String (Array TyId) := do
-    if done.contains id then return done
-    if path.contains id then throw s!"{fnName}: cyclic value type at type {id}"
-    let some t := types[id]? | throw s!"{fnName}: unknown type id {id}"
-    let mut done := done
-    unless (match t with | .ptr .. => true | _ => false) do
-      for c in children t do done ← visit c (path.push id) done
-    pure (done.push id)
-  let mut done := #[]
-  for id in Array.range types.size do done ← visit id #[] done
-
 /-- Nested constants must match their fields. SSA refs are rejected later with the
 canonicalizer's contextual diagnostic. Bool, void, and function refs have no stored type ID. -/
 def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : Val) :
@@ -593,9 +569,7 @@ partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except S
   let rangesJ ← (← j.getObjVal? "ranges").getArr?
   let ranges ← rangesJ.mapM fun rj => do
     let pair ← rj.getArr?
-    unless pair.size == 2 do throw s!"{fnName}: switch range needs 2 elements"
-    let some a := pair[0]? | throw s!"{fnName}: switch range needs 2 elements"
-    let some b := pair[1]? | throw s!"{fnName}: switch range needs 2 elements"
+    let #[a, b] := pair | throw s!"{fnName}: switch range needs 2 elements"
     return (← parseVal fnName types a, ← parseVal fnName types b)
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst fnName types)

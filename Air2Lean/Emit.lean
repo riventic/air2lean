@@ -212,17 +212,6 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .tuple fs => fs.flatMap go
   | _ => #[]
 
-/-- The types that `ty` names directly. -/
-def childTys (ty : Ty) : Array TyId :=
-  match ty with
-  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
-  | .errorUnion s p => #[s, p]
-  | .struct _ _ fs => fs.map (·.2)
-  | .enum _ t _ _ => #[t]
-  | .union _ _ t fs => t.toArray ++ fs.map (·.2)
-  | .tuple fs => fs
-  | _ => #[]
-
 /-- The types of `f` that its translation uses: those of the parameters, the result, each
 instruction, each constant operand and each global, and every type that these name. A type that
 is only in the file's type table is not used: `std.Thread`'s fields (its implementation, which

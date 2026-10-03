@@ -116,7 +116,8 @@ partial def validateRefs (f : RawFunc) : Except String Unit := do
     if let some v := g.init then
       if let some r := (valRefs v)[0]? then
         throw s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"
-  let rec targets (body : Array RawInst) (blocks loops available : Array InstId) : Except String Unit := do
+  let rec targets (body : Array RawInst) (blocks loops : Array InstId)
+      (available : Std.HashSet InstId) : Except String Unit := do
     let mut available := available
     for i in body do
       for r in i.uses do
@@ -131,8 +132,8 @@ partial def validateRefs (f : RawFunc) : Except String Unit := do
       let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
       for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
         targets b nestedBlocks nestedLoops available
-      available := available.push i.id
-  targets f.body #[] #[] #[]
+      available := available.insert i.id
+  targets f.body #[] #[] {}
 
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||
