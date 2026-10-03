@@ -111,10 +111,12 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
 
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
-strict mode, `tid` is a later thread and the join does not throw. -/
+strict mode, `tid` is a later thread with a valid handle even before it ends, and the join
+does not throw. -/
 theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      (P.strict = true → t < tid ∧ tid < m₁.threads.size ∧ P.joins g) ∧ (P.fin (G₁ tid) →
+      (P.strict = true → t < tid ∧ tid < m₁.threads.size ∧ P.joins g ∧
+        Thread.joinValid m₁ t tid = true) ∧ (P.fin (G₁ tid) →
         (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
           some (.ok ((), m'))) ∧ ∀ m',
         ((Thread.join tid).run { m₁ with current := t }).run = some (.ok ((), m')) →
@@ -736,8 +738,8 @@ theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} 
     {opts : Array Nat}
     (h : ((casPrep n align p expected).run m).run = some (.ok ((li, opts), m'))) :
     ∃ b blk o, m.accessW p (intSize n) align = pure (b, blk, o) ∧
-      NoRace m b o (intSize n) .atomicWrite ∧
-      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run =
+      NoRace m b o (intSize n) .atomicRead ∧
+      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run =
         some (.ok (li, m')) ∧
       opts = casOpts m' li expected := by
   unfold casPrep at h
@@ -756,18 +758,64 @@ theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} 
   obtain ⟨rfl, rfl⟩ := he
   exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
 
+theorem locIdx_updates {m m' : Mem} {b o len li : Nat}
+    (h : ((locIdx b o len).run m).run = some (.ok (li, m'))) :
+    ∃ a next, m' = { m with atomics := a, nextMsg := next } := by
+  unfold locIdx at h
+  obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  split at h1
+  · dsimp only at h1
+    split at h1
+    · exact (MemM.throw_ok h1).elim
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact ⟨_, _, rfl⟩
+  · dsimp only at h1
+    split at h1
+    · exact (MemM.throw_ok h1).elim
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact ⟨_, _, rfl⟩
+
+theorem casMarkWrite_ok {n align : Nat} {p : Ptr} {m m₁ m₂ : Mem} {b o li : Nat} {blk : Block}
+    (ha : m.accessW p (intSize n) align = pure (b, blk, o))
+    (hl : ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run =
+      some (.ok (li, m₁)))
+    (h : ((casMarkWrite n align p).run m₁).run = some (.ok ((), m₂))) :
+    NoRace m₁ b o (intSize n) .atomicWrite ∧ m₂ = m₁.recordAt b o (intSize n) .atomicWrite := by
+  obtain ⟨a, next, hmem⟩ := locIdx_updates hl
+  have ha₁ : m₁.accessW p (intSize n) align = pure (b, blk, o) := by
+    rw [hmem]; exact ha
+  unfold casMarkWrite at h
+  obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨r, _, hac, h2⟩ := MemM.bind_ok h1
+  obtain ⟨hac, rfl⟩ := MemM.lift_ok hac
+  rw [ha₁] at hac
+  change some (Except.ok (ε := Error) (b, blk, o)) = some (Except.ok r) at hac
+  cases Option.some.inj hac
+
+  exact recordAccess_ok h2
+
 /-- A `cmpxchg` that read message `pos` (with the value `old`) of location `li`: on success
 (`old = expected`) an RMW, else a read with the failure order. -/
 theorem cmpxchgAt_ok {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p : Ptr}
     {expected new : BitVec n} {r : Option (BitVec n)} {m m' : Mem}
     (h : ((cmpxchgAt c succ fail align p expected new).run m).run = some (.ok (r, m'))) :
     ∃ b blk o li m₁ pos old, m.accessW p (intSize n) align = pure (b, blk, o) ∧
-      NoRace m b o (intSize n) .atomicWrite ∧
-      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run =
+      NoRace m b o (intSize n) .atomicRead ∧
+      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run =
         some (.ok (li, m₁)) ∧
       (casOpts m₁ li expected)[c]? = some pos ∧
       (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok old) ∧
-      ((old = expected ∧ r = none ∧ m' = rmwM m₁ li pos succ ((m₁.atomics[li]!).msgs[pos]!) new) ∨
+      ((old = expected ∧ r = none ∧ NoRace m₁ b o (intSize n) .atomicWrite ∧
+          m' = rmwM (m₁.recordAt b o (intSize n) .atomicWrite) li pos succ
+            ((m₁.atomics[li]!).msgs[pos]!) new) ∨
        (old ≠ expected ∧ r = some old ∧ m' = loadM m₁ li fail ((m₁.atomics[li]!).msgs[pos]!))) := by
   unfold cmpxchgAt at h
   obtain ⟨⟨li, opts⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
@@ -783,9 +831,11 @@ theorem cmpxchgAt_ok {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p : Pt
     refine ⟨pos, old, ha, hnr, hl, hpos, hd, ?_⟩
     split at h₃
     · rename_i he
-      obtain ⟨_, m₄, hw, h₄⟩ := MemM.bind_ok h₃
-      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₄
-      exact .inl ⟨he, rfl, rmwWrite_ok hw⟩
+      obtain ⟨_, m₄, hm, h₄⟩ := MemM.bind_ok h₃
+      obtain ⟨hnw, rfl⟩ := casMarkWrite_ok ha hl hm
+      obtain ⟨_, m₅, hw, h₅⟩ := MemM.bind_ok h₄
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₅
+      exact .inl ⟨he, rfl, hnw, rmwWrite_ok hw⟩
     · rename_i he
       obtain ⟨_, m₄, ho, h₄⟩ := MemM.bind_ok h₃
       have := modify_ok ho
@@ -1304,8 +1354,8 @@ theorem optCount_eq {x : MemM (Nat × Array Nat)} {m m₁ : Mem} {li : Nat} {opt
 
 theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} {b o : Nat}
     {blk : Block} (hacc : m.accessW p (intSize n) align = pure (b, blk, o))
-    (hnr : NoRace m b o (intSize n) .atomicWrite)
-    (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run ≠
+    (hnr : NoRace m b o (intSize n) .atomicRead)
+    (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run ≠
       some (.error e)) (e : Error) :
     ((casPrep n align p expected).run m).run ≠ some (.error e) := by
   intro h
@@ -1327,6 +1377,13 @@ theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} 
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   exact MemM.pure_err h5
 
+theorem casMarkWrite_run {n align : Nat} {p : Ptr} {m : Mem} {b o : Nat} {blk : Block}
+    (ha : m.accessW p (intSize n) align = pure (b, blk, o))
+    (hnr : NoRace m b o (intSize n) .atomicWrite) :
+    (casMarkWrite n align p).run m = pure ((), m.recordAt b o (intSize n) .atomicWrite) := by
+  simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont, Option.bind_some]
+  exact recordAccess_run hnr
+
 theorem cmpxchgAt_noErr {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p : Ptr}
     {expected new : BitVec n} {m : Mem}
     (hprep : ∀ e, ((casPrep n align p expected).run m).run ≠ some (.error e))
@@ -1334,6 +1391,9 @@ theorem cmpxchgAt_noErr {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p :
         some (.ok ((li, opts), m₁)) →
       ∃ pos, opts[c]? = some pos ∧
         ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w))
+    (hwrite : ∀ li opts m₁, ((casPrep n align p expected).run m).run =
+        some (.ok ((li, opts), m₁)) →
+      ∀ e, ((casMarkWrite n align p).run m₁).run ≠ some (.error e))
     (e : Error) : ((cmpxchgAt c succ fail align p expected new).run m).run ≠ some (.error e) := by
   intro h
   unfold cmpxchgAt at h
@@ -1350,9 +1410,11 @@ theorem cmpxchgAt_noErr {n c : Nat} {succ fail : AtomicOrder} {align : Nat} {p :
     rw [hw] at this; cases this
   obtain ⟨-, rfl⟩ := MemM.lift_ok hd
   split at h3
-  · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, hr, h4⟩
-    · exact rmwWrite_noErr e he4
-    · exact MemM.pure_err h4
+  · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, hm, h4⟩
+    · exact hwrite li opts _ hp e he4
+    · rcases MemM.bind_err h4 with he5 | ⟨_, m₅, hr, h5⟩
+      · exact rmwWrite_noErr e he5
+      · exact MemM.pure_err h5
   · rcases MemM.bind_err h3 with he4 | ⟨_, m₄, ho, h4⟩
     · exact MemM.modify_err he4
     cases hq : fail.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h4

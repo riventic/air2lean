@@ -189,7 +189,7 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 5
   },
   {
    "id": 17,
@@ -241,7 +241,7 @@
          ]
         },
         {
-         "id": 40,
+         "id": 42,
          "tag": "cond_br",
          "ty": 17,
          "args": [
@@ -254,7 +254,7 @@
            "id": 23,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 5
           },
           {
            "id": 26,
@@ -270,7 +270,7 @@
            "id": 28,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 5
           },
           {
            "id": 29,
@@ -295,7 +295,7 @@
            ]
           },
           {
-           "id": 35,
+           "id": 37,
            "tag": "try",
            "ty": 2,
            "args": [
@@ -322,8 +322,32 @@
             },
             {
              "id": 32,
+             "tag": "call",
+             "ty": 2,
+             "callee": {
+              "ty": 24,
+              "func": "Io.Group.cancel",
+              "noreturn": false
+             },
+             "args": [
+              {
+               "inst": 11
+              },
+              {
+               "inst": 0
+              }
+             ]
+            },
+            {
+             "id": 33,
+             "tag": "dbg_stmt",
+             "ty": 2,
+             "line": 5
+            },
+            {
+             "id": 34,
              "tag": "bitcast",
-             "ty": 24,
+             "ty": 25,
              "args": [
               {
                "inst": 30
@@ -331,40 +355,40 @@
              ]
             },
             {
-             "id": 33,
+             "id": 35,
              "tag": "wrap_errunion_err",
              "ty": 1,
              "args": [
               {
-               "inst": 32
+               "inst": 34
               }
              ]
             },
             {
-             "id": 34,
+             "id": 36,
              "tag": "ret_safe",
              "ty": 17,
              "args": [
               {
-               "inst": 33
+               "inst": 35
               }
              ]
             }
            ]
           },
           {
-           "id": 36,
+           "id": 38,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 5
           },
           {
-           "id": 37,
+           "id": 39,
            "tag": "dbg_empty_stmt",
            "ty": 2
           },
           {
-           "id": 38,
+           "id": 40,
            "tag": "br",
            "ty": 17,
            "target": 20,
@@ -378,7 +402,7 @@
          ],
          "else": [
           {
-           "id": 39,
+           "id": 41,
            "tag": "br",
            "ty": 17,
            "target": 17,
@@ -394,7 +418,7 @@
        ]
       },
       {
-       "id": 41,
+       "id": 43,
        "tag": "add",
        "ty": 15,
        "args": [
@@ -408,7 +432,7 @@
        ]
       },
       {
-       "id": 42,
+       "id": 44,
        "tag": "store_safe",
        "ty": 2,
        "args": [
@@ -416,12 +440,12 @@
          "inst": 14
         },
         {
-         "inst": 41
+         "inst": 43
         }
        ]
       },
       {
-       "id": 43,
+       "id": 45,
        "tag": "repeat",
        "ty": 17,
        "target": 18
@@ -431,17 +455,17 @@
    ]
   },
   {
-   "id": 44,
+   "id": 46,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 6
   },
   {
-   "id": 45,
+   "id": 47,
    "tag": "call",
    "ty": 2,
    "callee": {
-    "ty": 25,
+    "ty": 24,
     "func": "Io.Group.cancel",
     "noreturn": false
    },
@@ -455,13 +479,13 @@
    ]
   },
   {
-   "id": 46,
+   "id": 48,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 7
   },
   {
-   "id": 47,
+   "id": 49,
    "tag": "struct_field_ptr_index_2",
    "ty": 9,
    "args": [
@@ -471,38 +495,38 @@
    ]
   },
   {
-   "id": 48,
+   "id": 50,
    "tag": "load",
    "ty": 10,
    "args": [
     {
-     "inst": 47
-    }
-   ]
-  },
-  {
-   "id": 49,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 6
-  },
-  {
-   "id": 50,
-   "tag": "wrap_errunion_payload",
-   "ty": 1,
-   "args": [
-    {
-     "inst": 48
+     "inst": 49
     }
    ]
   },
   {
    "id": 51,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 7
+  },
+  {
+   "id": 52,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 50
+    }
+   ]
+  },
+  {
+   "id": 53,
    "tag": "ret_safe",
    "ty": 17,
    "args": [
     {
-     "inst": 50
+     "inst": 52
     }
    ]
   }
@@ -529,7 +553,7 @@
   },
   {
    "k": "error_union",
-   "error": 24,
+   "error": 25,
    "payload": 10,
    "abi_size": 8,
    "abi_align": 4
@@ -766,16 +790,16 @@
    "abi_align": 2
   },
   {
+   "k": "other",
+   "name": "fn (*Io.Group, Io) void"
+  },
+  {
    "k": "error_set",
    "errors": [
     "ConcurrencyUnavailable"
    ],
    "abi_size": 2,
    "abi_align": 2
-  },
-  {
-   "k": "other",
-   "name": "fn (*Io.Group, Io) void"
   },
   {
    "k": "ptr",

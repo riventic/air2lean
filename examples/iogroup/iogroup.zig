@@ -31,6 +31,7 @@ pub fn groupCounter(io: Io) !u32 {
 pub fn groupConcurrent(io: Io) !u32 {
     var c: Counter = .{ .io = io };
     var g: Io.Group = .init;
+    errdefer g.cancel(io);
     for (0..2) |_| try g.concurrent(io, add, .{&c});
     g.cancel(io);
     return c.n;

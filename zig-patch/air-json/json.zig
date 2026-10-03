@@ -97,13 +97,31 @@ const Compat = struct {
         return if (v14) air.extra else air.extra.items;
     }
 
-    /// The ZIR parameter index of an `arg`. 0.14.1's `arg` has no such field. The subset never
-    /// skips a parameter before an `arg`, so the running count of `arg`s gives the same value.
-    fn argIndex(w: *W, inst: Air.Inst.Index) u32 {
+    /// 0.14.1 has no ZIR parameter index. Recover the runtime parameter position, preserving
+    /// parameters with one possible value, which Sema omits from the AIR `arg` instructions.
+    fn argIndex(w: *W, inst: Air.Inst.Index) Error!u32 {
         if (v14) {
-            defer w.arg_count += 1;
-            return w.arg_count;
+            while (w.arg_count < w.param_types.len) {
+                const index = w.arg_count;
+                w.arg_count += 1;
+                if (try Type.fromInterned(w.param_types[index]).onePossibleValue(w.pt) == null)
+                    return index;
+            }
+            unreachable; // Sema emitted an argument for one of these runtime parameters.
         } else return w.data(inst).arg.zir_param_index;
+    }
+
+    fn writeInt(w: *W, val: Value) Error!void {
+        var space: Value.BigIntSpace = undefined;
+        // Before 0.16, @sizeOf/@alignOf can remain lazy until layout is needed. Resolve them
+        // through the PerThread API rather than printing their diagnostic source expression.
+        const integer = if (v16) val.toBigInt(&space, w.pt.zcu) else try val.toBigIntSema(&space, w.pt);
+        const text = try std.fmt.allocPrint(w.gpa, "{d}", .{integer});
+        try w.j.write(text);
+    }
+
+    fn isBitpack(key: InternPool.Key) bool {
+        return if (v16) key == .bitpack else false;
     }
 
     /// A `ty_op` tag that does not exist in every version (`int_from_float_safe`: 0.15.2+).
@@ -353,7 +371,7 @@ fn readAsmNamePair(words: []const u32) struct { constraint: []const u8, name: []
     return .{ .constraint = constraint, .name = name, .len = asmNamePairLen(words) };
 }
 
-const Error = Compat.WriteError || Allocator.Error;
+const Error = Compat.WriteError || Zcu.SemaError;
 
 pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
@@ -409,6 +427,7 @@ const W = struct {
     gpa: Allocator,
     /// Number of `arg` instructions written so far (`Compat.argIndex`, 0.14.1 only).
     arg_count: u32 = 0,
+    param_types: []const InternPool.Index = &.{},
     /// Maps an interned type to its ID (its index in `queue`, and thus in the emitted
     /// `types` array).
     ids: std.AutoHashMapUnmanaged(InternPool.Index, u32) = .empty,
@@ -432,11 +451,14 @@ const W = struct {
         try w.j.write(11);
         try w.field("zig_version");
         try w.j.write(build_options.version);
+        try w.field("target_endian");
+        try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
         try w.field("name");
         try w.j.write(fqn);
         try w.field("params");
         try w.j.beginArray();
         const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
+        w.param_types = param_types;
         for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
         try w.j.endArray();
         try w.field("ret");
@@ -492,14 +514,55 @@ const W = struct {
             },
         }
         switch (tag) {
-            .add, .add_safe, .add_wrap, .add_sat, .sub, .sub_safe, .sub_wrap, .sub_sat,
-            .mul, .mul_safe, .mul_wrap, .mul_sat, .div_float, .div_trunc, .div_floor, .div_exact,
-            .rem, .mod, .bit_and, .bit_or, .xor, .cmp_lt, .cmp_lte, .cmp_eq, .cmp_gte,
-            .cmp_gt, .cmp_neq, .bool_and, .bool_or, .store, .store_safe, .array_elem_val,
-            .slice_elem_val, .ptr_elem_val, .shl, .shl_exact, .shl_sat, .shr, .shr_exact,
-            .min, .max, .set_union_tag, .memset, .memset_safe, .memcpy,
+            .add,
+            .add_safe,
+            .add_wrap,
+            .add_sat,
+            .sub,
+            .sub_safe,
+            .sub_wrap,
+            .sub_sat,
+            .mul,
+            .mul_safe,
+            .mul_wrap,
+            .mul_sat,
+            .div_float,
+            .div_trunc,
+            .div_floor,
+            .div_exact,
+            .rem,
+            .mod,
+            .bit_and,
+            .bit_or,
+            .xor,
+            .cmp_lt,
+            .cmp_lte,
+            .cmp_eq,
+            .cmp_gte,
+            .cmp_gt,
+            .cmp_neq,
+            .bool_and,
+            .bool_or,
+            .store,
+            .store_safe,
+            .array_elem_val,
+            .slice_elem_val,
+            .ptr_elem_val,
+            .shl,
+            .shl_exact,
+            .shl_sat,
+            .shr,
+            .shr_exact,
+            .min,
+            .max,
+            .set_union_tag,
+            .memset,
+            .memset_safe,
+            .memcpy,
             // Pointer (lhs), element (rhs). The order is the tag name's suffix.
-            .atomic_store_unordered, .atomic_store_monotonic, .atomic_store_release,
+            .atomic_store_unordered,
+            .atomic_store_monotonic,
+            .atomic_store_release,
             .atomic_store_seq_cst,
             => {
                 const b = w.data(inst).bin_op;
@@ -528,23 +591,73 @@ const W = struct {
                 try w.field("failure_order");
                 try w.j.write(@tagName(extra.failureOrder()));
             },
-            .is_null, .is_non_null, .is_err, .is_non_err, .ret, .ret_safe, .ret_load, .neg,
-            .is_named_enum_value, .is_null_ptr, .is_non_null_ptr, .tag_name, .error_name,
-            .is_err_ptr, .is_non_err_ptr,
-            .sqrt, .sin, .cos, .tan, .exp, .exp2, .log, .log2, .log10, .floor, .ceil, .round,
+            .is_null,
+            .is_non_null,
+            .is_err,
+            .is_non_err,
+            .ret,
+            .ret_safe,
+            .ret_load,
+            .neg,
+            .is_named_enum_value,
+            .is_null_ptr,
+            .is_non_null_ptr,
+            .tag_name,
+            .error_name,
+            .is_err_ptr,
+            .is_non_err_ptr,
+            .sqrt,
+            .sin,
+            .cos,
+            .tan,
+            .exp,
+            .exp2,
+            .log,
+            .log2,
+            .log10,
+            .floor,
+            .ceil,
+            .round,
             .trunc_float,
             => {
                 try w.writeArgs(&.{w.data(inst).un_op});
             },
-            .not, .bitcast, .load, .intcast, .intcast_safe, .trunc, .slice_ptr, .slice_len,
-            .array_to_slice, .clz, .ctz, .popcount, .abs, .optional_payload, .wrap_optional,
-            .unwrap_errunion_payload, .unwrap_errunion_err, .wrap_errunion_payload,
+            .not,
+            .bitcast,
+            .load,
+            .intcast,
+            .intcast_safe,
+            .trunc,
+            .slice_ptr,
+            .slice_len,
+            .array_to_slice,
+            .clz,
+            .ctz,
+            .popcount,
+            .abs,
+            .optional_payload,
+            .wrap_optional,
+            .unwrap_errunion_payload,
+            .unwrap_errunion_err,
+            .wrap_errunion_payload,
             .wrap_errunion_err,
-            .struct_field_ptr_index_0, .struct_field_ptr_index_1, .struct_field_ptr_index_2,
-            .struct_field_ptr_index_3, .ptr_slice_len_ptr, .ptr_slice_ptr_ptr,
-            .fptrunc, .fpext, .int_from_float, .float_from_int, .get_union_tag,
-            .optional_payload_ptr, .optional_payload_ptr_set, .splat,
-            .unwrap_errunion_payload_ptr, .unwrap_errunion_err_ptr, .errunion_payload_ptr_set,
+            .struct_field_ptr_index_0,
+            .struct_field_ptr_index_1,
+            .struct_field_ptr_index_2,
+            .struct_field_ptr_index_3,
+            .ptr_slice_len_ptr,
+            .ptr_slice_ptr_ptr,
+            .fptrunc,
+            .fpext,
+            .int_from_float,
+            .float_from_int,
+            .get_union_tag,
+            .optional_payload_ptr,
+            .optional_payload_ptr_set,
+            .splat,
+            .unwrap_errunion_payload_ptr,
+            .unwrap_errunion_err_ptr,
+            .errunion_payload_ptr_set,
             => try w.writeArgs(&.{w.data(inst).ty_op.operand}),
             .reduce, .reduce_optimized => {
                 const r = w.data(inst).reduce;
@@ -576,7 +689,7 @@ const W = struct {
             },
             .arg => {
                 try w.field("param");
-                try w.j.write(Compat.argIndex(w, inst));
+                try w.j.write(try Compat.argIndex(w, inst));
             },
             .block, .loop => {
                 const extra = w.air.extraData(Air.Block, w.data(inst).ty_pl.payload);
@@ -588,8 +701,15 @@ const W = struct {
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
-            .add_with_overflow, .sub_with_overflow, .mul_with_overflow, .shl_with_overflow,
-            .slice_elem_ptr, .ptr_elem_ptr, .ptr_add, .ptr_sub, .slice,
+            .add_with_overflow,
+            .sub_with_overflow,
+            .mul_with_overflow,
+            .shl_with_overflow,
+            .slice_elem_ptr,
+            .ptr_elem_ptr,
+            .ptr_add,
+            .ptr_sub,
+            .slice,
             => {
                 const b = w.air.extraData(Air.Bin, w.data(inst).ty_pl.payload).data;
                 try w.writeArgs(&.{ b.lhs, b.rhs });
@@ -944,9 +1064,13 @@ const W = struct {
                     try w.field("fbits");
                     try w.writeFloatBits(f.storage);
                 },
+                .int => {
+                    try w.field("val");
+                    try Compat.writeInt(w, val);
+                },
                 .enum_tag => |e| {
                     try w.field("enum");
-                    try w.writeFmt(Value.fromInterned(e.int).fmtValue(w.pt));
+                    try Compat.writeInt(w, Value.fromInterned(e.int));
                 },
                 .un => |u| {
                     // `tag` is `.none` for a union without a runtime tag.
@@ -999,7 +1123,12 @@ const W = struct {
                         try w.writeFmt(val.fmtValue(w.pt));
                     }
                 },
-                else => if (val.isUndef(zcu)) {
+                else => if (Compat.isBitpack(ip.indexToKey(ip_index)) and
+                    val.typeOf(zcu).zigTypeTag(zcu) == .@"struct")
+                {
+                    try w.field("val");
+                    try Compat.writeInt(w, val);
+                } else if (val.isUndef(zcu)) {
                     try w.field("undef");
                     try w.j.write(true);
                 } else {
@@ -1293,7 +1422,7 @@ const W = struct {
                     try w.field("name");
                     try w.j.write(ty.enumFieldName(i, zcu).toSlice(ip));
                     try w.field("value");
-                    try w.writeFmt(Value.fromInterned(ip.indexToKey(tag_val.toIntern()).enum_tag.int).fmtValue(w.pt));
+                    try Compat.writeInt(w, Value.fromInterned(ip.indexToKey(tag_val.toIntern()).enum_tag.int));
                     try w.j.endObject();
                 }
                 try w.j.endArray();
@@ -1339,8 +1468,19 @@ const W = struct {
         }
         // The size and alignment in bytes, for the types that can be in memory.
         const in_memory = switch (ty.zigTypeTag(zcu)) {
-            .int, .bool, .void, .float, .pointer, .array, .vector, .optional, .error_union,
-            .error_set, .@"struct", .@"enum", .@"union",
+            .int,
+            .bool,
+            .void,
+            .float,
+            .pointer,
+            .array,
+            .vector,
+            .optional,
+            .error_union,
+            .error_set,
+            .@"struct",
+            .@"enum",
+            .@"union",
             => true,
             else => false,
         };

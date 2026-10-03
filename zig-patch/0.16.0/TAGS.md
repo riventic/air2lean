@@ -20,6 +20,9 @@ branch:
 - Hook: after `analyzeFuncBodyInner(func_index, reason)` (renamed from `analyzeFnBodyInner`) in
   `src/Zcu/PerThread.zig`. Function bodies are still analysed on one thread, so the exporter
   needs no lock.
+- Packed struct constants have an InternPool `bitpack` value. The exporter writes its numeric
+  backing integer, so enum and nested packed fields retain their bits without parsing Zig's
+  diagnostic struct-literal formatting.
 
 ## Observed differences on the examples
 
