@@ -46,7 +46,7 @@ theorem Triple.tryPayloadPtr {α : Type} [Enc α] {p : Ptr} {a : Nat} {e : Optio
   apply Triple.of_run
   intro m h hF hd hm hp hs
   obtain ⟨m', hr, hm', hs'⟩ := errorTag_try_run hp hm hs
-  exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+  exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨by cases e <;> rfl, hp⟩, hs'⟩
 
 /-- The payload pointer keeps allocation provenance. -/
 theorem errPayloadPtr_block (α : Type) [Enc α] (p : Ptr) :

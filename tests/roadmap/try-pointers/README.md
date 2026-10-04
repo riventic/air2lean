@@ -20,6 +20,11 @@ Every reachable error-body path must exit the function and may not branch outsid
 Analysis stops at the first terminator, and a branch to a local block resumes that block's
 continuation; a dead return/trap after that branch cannot certify an exit. Falling-through
 bodies, loops and switches with no explicit else are conservatively rejected.
+Error-flow summaries are computed bottom-up once for a function with unique instruction
+IDs, including unreachable child bodies without treating them as reachable outcomes. Direct
+public checks with duplicate IDs fall back to uncached validation; diagnostics still come
+from the original ordered checker traversal. Existing flattening and target-scope checks
+are retained, so this is not a claim about whole-checker complexity.
 Existing layout/encoding
 checks still apply: the current memory model uses a two-byte error code, a 64-bit
 little-endian pointer ABI, and payload offsets from `errUnionOffsets`. Unmodeled error

@@ -106,9 +106,7 @@ private def discardMatchesRaw (n a : Nat) (p : Ptr) (m : Mem) : Bool :=
   reprStr ((loadDiscardBytes n a p).run m).run ==
     reprStr (((do let _ ← loadBytes p n a; pure ()) : MemM Unit).run m).run
 
-private def discardedEquivalent : MemM Bool := do
-  let p ← alloc .heap 4 4
-  let m ← get
+private def racedReadState (p : Ptr) (m : Mem) : Mem :=
   let prior : FootprintEntry := {
     tid := 0
     clock := #[1, 0]
@@ -116,29 +114,23 @@ private def discardedEquivalent : MemM Bool := do
     off := 0
     len := 4
     kind := .write }
-  let raced : Mem := { m with
+  { m with
     current := 1
     clocks := #[#[1, 0], #[0, 0]]
     threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }]
     footprint := #[prior] }
+
+private def discardedEquivalent : MemM Bool := do
+  let p ← alloc .heap 4 4
+  let m ← get
+  let raced := racedReadState p m
   pure (discardMatchesRaw 4 4 p m && discardMatchesRaw 4 4 p raced &&
     discardMatchesRaw 4 4 (p.add 1) m && discardMatchesRaw 5 4 p m &&
     discardMatchesRaw 4 4 default m && discardMatchesRaw 4 4 (p.add 1) raced)
 
 private def discardedRace : MemM Unit := do
   let p ← alloc .heap 4 4
-  let prior : FootprintEntry := {
-    tid := 0
-    clock := #[1, 0]
-    block := p.block.getD 0
-    off := 0
-    len := 4
-    kind := .write }
-  modify fun m => { m with
-    current := 1
-    clocks := #[#[1, 0], #[0, 0]]
-    threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }]
-    footprint := #[prior] }
+  modify (racedReadState p)
   loadDiscardBytes 4 4 p
 
 def main : IO Unit := do

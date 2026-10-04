@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Std.Data.HashMap
 import Air2Lean.Memory
 import ZigLean.Mem.Enc
 import ZigLean.Vec
@@ -231,6 +232,9 @@ structure CheckCtx where
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
   places : Array InstId
+  /-- Internal summaries populated by `check` only after all nested IDs are unique.
+  Bare/public checker contexts default to the uncached path. -/
+  tryErrorExits : Std.HashMap InstId Bool := {}
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -306,47 +310,64 @@ unsupported loop control; `branches` tracks block exits until an enclosing block
 private structure TryErrorFlow where
   valid : Bool
   branches : Std.HashSet InstId := {}
+  deriving Inhabited
 
 private def TryErrorFlow.merge (a b : TryErrorFlow) : TryErrorFlow :=
   ⟨a.valid && b.valid, a.branches.union b.branches⟩
 
-/-- Follow the first terminator, exactly as `Emit.emitStmts` does. A block consumes
-only its own `br`; that path resumes the enclosing sequence. Other exits propagate.
-Empty/falling-through bodies, loops and switches with no explicit else are conservative failures. -/
-private partial def tryErrorFlow (insts : List Inst) : TryErrorFlow :=
+/-- Compute each child flow once, bottom-up, including unreachable child bodies for
+later checking. Only reachable outcomes contribute to the parent flow: the first
+terminator ends its sequence and a block consumes only its own branch. No diagnostics
+are emitted here. The ID-indexed cache is used only after the caller's uniqueness guard. -/
+private partial def summarizeTryErrors (insts : List Inst) (cache : Std.HashMap InstId Bool) :
+    TryErrorFlow × Std.HashMap InstId Bool :=
   match insts with
-  | [] => ⟨false, {}⟩
+  | [] => (⟨false, {}⟩, cache)
   | inst :: rest =>
+    let (later, cache) := summarizeTryErrors rest cache
     match inst.op with
-    | .ret _ | .retLoad _ | .unreach | .trap => ⟨true, {}⟩
-    | .call (.func _ true ..) _ => ⟨true, {}⟩
-    | .br target _ => ⟨true, ({} : Std.HashSet InstId).insert target⟩
-    | .«repeat» _ | .loop _ => ⟨false, {}⟩
-    | .condBr _ t e => (tryErrorFlow t.toList).merge (tryErrorFlow e.toList)
+    | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
+    | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
+    | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
+    | .«repeat» _ => (⟨false, {}⟩, cache)
+    | .loop body =>
+      let (_, cache) := summarizeTryErrors body.toList cache
+      (⟨false, {}⟩, cache)
+    | .condBr _ t e =>
+      let (thenFlow, cache) := summarizeTryErrors t.toList cache
+      let (elseFlow, cache) := summarizeTryErrors e.toList cache
+      (thenFlow.merge elseFlow, cache)
     | .switchBr _ cases e =>
-      cases.foldl (init := tryErrorFlow e.toList) fun flow c =>
-        flow.merge (tryErrorFlow c.body.toList)
+      let (elseFlow, cache) := summarizeTryErrors e.toList cache
+      cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
+        let (caseFlow, cache) := summarizeTryErrors c.body.toList cache
+        (flow.merge caseFlow, cache)
     | .block body =>
-      let inner := tryErrorFlow body.toList
-      if inner.branches.contains inst.id then
-        (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge (tryErrorFlow rest)
-      else inner
+      let (inner, cache) := summarizeTryErrors body.toList cache
+      let flow := if inner.branches.contains inst.id then
+          (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
+        else inner
+      (flow, cache)
     | .«try» _ errBody | .tryPtr _ errBody =>
-      (tryErrorFlow errBody.toList).merge (tryErrorFlow rest)
-    | _ => tryErrorFlow rest
+      let (errorFlow, cache) := summarizeTryErrors errBody.toList cache
+      let cache := cache.insert inst.id (errorFlow.valid && errorFlow.branches.isEmpty)
+      (errorFlow.merge later, cache)
+    | _ => (later, cache)
 
-/-- Every reachable path must exit the function, with no unconsumed block branch. -/
+/-- Every reachable path must exit the function, with no unconsumed block branch.
+Loops, fallthrough and switches without an explicit else are conservative failures. -/
 def tryErrorBodyExits (body : Array Inst) : Bool :=
-  let flow := tryErrorFlow body.toList
+  let flow := (summarizeTryErrors body.toList {}).1
   flow.valid && flow.branches.isEmpty
 
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
-  checkOp cx line inst.ty inst.op
+  checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
 
-partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except String Nat := do
+partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
+    (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   match op with
   | .arith _ mode _ _ =>
@@ -492,7 +513,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if layout.ptrAlign.isNone then
         cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
     checkMemTy fnName cx.types cx.layouts line unionTy
-    unless tryErrorBodyExits errBody do
+    let exits := match cachedTryExit with
+      | some exits => exits
+      | none => tryErrorBodyExits errBody
+    unless exits do
       cx.fail line "try_ptr error body must exit without fallthrough"
     let nested := errBody.foldl flattenInst #[]
     let emptyTargets : Std.HashSet InstId := {}
@@ -621,8 +645,15 @@ def check (f : Func) : Except String Unit := do
         if pa > ga then
           throw s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
             outside the subset"
+  -- `allInsts` includes every nested instruction, even unreachable child bodies.
+  -- Public `check` accepts unnormalized input: duplicate IDs disable the cache,
+  -- without introducing a prepass diagnostic or changing subsequent check order.
+  let emptyIds : Std.HashSet InstId := {}
+  let ids := insts.foldl (init := emptyIds) fun ids i => ids.insert i.id
+  let tryErrorExits := if ids.size == insts.size then
+    (summarizeTryErrors f.body.toList {}).2 else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-                         instTys := insts.map fun i => (i.id, i.ty), places }
+                         instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits }
   let _ ← checkInsts cx 0 f.body
   pure ()
 

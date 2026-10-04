@@ -31,6 +31,17 @@ private def file (name tag : String) (ts : Array Json := types) (body : Array Js
     ("ret", num 5), ("body", .arr #[node 0 "arg" 3 #[] [("param", num 0)],
       node 1 tag 4 args [("body", .arr body)], node 5 "wrap_errunion_payload" 5 #[ref 1],
       node 6 "ret" 6 #[ref 5]])]
+-- Nested error propagation returns the original error from every reachable leaf.
+private def nestedErrorBody : Nat → Array Json
+  | 0 => #[node 100 "unwrap_errunion_err_ptr" 1 #[ref 0],
+      node 101 "wrap_errunion_err" 5 #[ref 100], node 102 "ret" 6 #[ref 101]]
+  | depth + 1 =>
+    let first := 200 + 3 * depth
+    #[node (10 + depth) "try_ptr" 4 #[ref 0] [("body", .arr (nestedErrorBody depth))],
+      node first "unwrap_errunion_err_ptr" 1 #[ref 0],
+      node (first + 1) "wrap_errunion_err" 5 #[ref first],
+      node (first + 2) "ret" 6 #[ref (first + 1)]]
+
 -- A scalar-only signature whose pointer try is the explicit reason it uses MemM.
 private def scalarTryFile : Json :=
   let usize := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
@@ -130,6 +141,28 @@ def main (args : List String) : IO Unit := do
     (#[node 10 "block" 7 #[] [("body", .arr #[node 20 "block" 7 #[]
       [("body", .arr #[node 21 "br" 6 #[unit] [("target", num 10)], node 22 "trap" 6])],
       node 23 "unreach" 6])]] ++ errBody))
+  let nestedErrors ← accept (file "nestedErrors" "try_ptr" types (nestedErrorBody 3))
+  for depth in [1, 8, 32] do
+    let _ ← accept (file "nestedDepth" "try_ptr" types (nestedErrorBody depth))
+  -- Direct public check accepts unnormalized input. Same-ID nodes with different
+  -- error bodies must not alias summaries, including a duplicate after a return.
+  let repeated := { hot with body := hot.body.flatMap fun i => match i.op with
+    | .tryPtr p _ => #[i, { i with op := .tryPtr p #[] }]
+    | _ => #[i] }
+  let unreachableRepeat := { hot with body := hot.body.map fun i => match i.op with
+    | .tryPtr p e => { i with op := .tryPtr p (e.push { i with op := .tryPtr p #[] }) }
+    | _ => i }
+  for duplicated in [repeated, unreachableRepeat] do
+    match check duplicated with
+    | .ok _ => throw (IO.userError "same-ID error body accepted by aliased summary")
+    | .error e => require ((e.splitOn "must exit").length > 1) s!"duplicate-ID diagnostic order changed: {e}"
+  let bare : CheckCtx := { fnName := hot.name, types := hot.types, layouts := hot.layouts,
+    instTys := hot.allInsts.map (fun i => (i.id, i.ty)), places := #[] }
+  for i in hot.body do
+    if let .tryPtr p _ := i.op then
+      match checkOp bare 0 i.ty (.tryPtr p #[]) with
+      | .ok _ => throw (IO.userError "bare checkOp skipped uncached fallthrough validation")
+      | .error e => require ((e.splitOn "must exit").length > 1) s!"bare checker diagnostic changed: {e}"
   let scalar ← accept scalarTryFile
   require scalar.usesMemoryLocally "pointer try did not classify a scalar-signature function as memory"
   require (!scalar.syncLocally) "pointer try alone must not classify as a synchronization op"
@@ -160,9 +193,9 @@ def main (args : List String) : IO Unit := do
   reject (file "bad" "try_ptr" types #[node 2 "unwrap_errunion_err_ptr" 1 #[ref 1],
     node 3 "wrap_errunion_err" 5 #[ref 2], node 4 "ret" 6 #[ref 3]])
     "payload value captured in error branch" "not available in this scope"
-  let generated := emit #[hot, cold, constPointer, resumes, nestedResumes] "SyntheticTry" "" .ieee
-  require ((generated.splitOn "Zig.tryPayloadPtr").length == 6) "pointer try did not use the tag-only runtime helper"
+  let generated := emit #[hot, cold, constPointer, resumes, nestedResumes, nestedErrors] "SyntheticTry" "" .ieee
+  require ((generated.splitOn "Zig.tryPayloadPtr").length == 10) "pointer try did not use the tag-only runtime helper"
   IO.FS.writeFile output (generated ++ "\n" ++
-"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
+"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes, SyntheticTry.nestedErrors] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
   writeLoadCases output
   IO.println "pointer-try parser/checker/emitter regressions passed"
