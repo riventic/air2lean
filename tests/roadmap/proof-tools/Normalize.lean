@@ -29,6 +29,38 @@ example (P : Assn) (c : MemM Unit) (rule : Triple (P ∗ P) c (fun _ => emp)) : 
     have : Triple P c (fun _ => emp) := by sep_frame rule
   trivial
 
+-- Ordered 32-atom matching consumes a growing prefix without shifting the array.
+example (A B C D E F G H I J K L M N O P R : Assn) (c : MemM Unit)
+    (rule : Triple
+      (A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P ∗
+       A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P)
+      c (fun _ => emp)) :
+    Triple
+      (A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P ∗
+       A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P ∗ R)
+      c (fun _ => R) := by
+  sep_frame rule
+
+-- Reordered matching skips already-consumed atoms while retaining first-match order.
+example (A B C D E F G H I J K L M N O P R S : Assn) (c : MemM Unit)
+    (rule : Triple (A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P)
+      c (fun _ => emp)) :
+    Triple (R ∗ P ∗ O ∗ N ∗ M ∗ L ∗ K ∗ J ∗ I ∗ H ∗ G ∗ F ∗ E ∗ D ∗ C ∗ B ∗ A ∗ S)
+      c (fun _ => S ∗ R) := by
+  sep_frame rule
+
+-- A large precondition cannot reuse its 16 atoms to satisfy 32 required occurrences.
+example (A B C D E F G H I J K L M N O P : Assn) (c : MemM Unit)
+    (rule : Triple
+      (A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P ∗
+       A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P)
+      c (fun _ => emp)) : True := by
+  fail_if_success
+    have : Triple (A ∗ B ∗ C ∗ D ∗ E ∗ F ∗ G ∗ H ∗ I ∗ J ∗ K ∗ L ∗ M ∗ N ∗ O ∗ P)
+        c (fun _ => emp) := by
+      sep_frame rule
+  trivial
+
 -- A frame cannot silently disappear from the postcondition.
 example (P R : Assn) (c : MemM Unit) (rule : Triple P c (fun _ => P)) : True := by
   fail_if_success

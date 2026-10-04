@@ -50,24 +50,40 @@ open Lean Meta Elab Tactic
 
 /-- Only explicit separating conjunctions and units are inspected. -/
 private partial def atoms (e : Expr) : Array Expr :=
-  let e := e.consumeMData
-  if e.isAppOfArity ``Zig.Assn.sep 2 then
-    let args := e.getAppArgs
-    atoms args[0]! ++ atoms args[1]!
-  else if e.isConstOf ``Zig.Assn.emp then #[]
-  else #[e]
+  collect [e] #[]
+where
+  collect (pending : List Expr) (result : Array Expr) : Array Expr :=
+    match pending with
+    | [] => result
+    | head :: tail =>
+      let head := head.consumeMData
+      if head.isAppOfArity ``Zig.Assn.sep 2 then
+        let args := head.getAppArgs
+        collect (args[0]! :: args[1]! :: tail) result
+      else if head.isConstOf ``Zig.Assn.emp then collect tail result
+      else collect tail (result.push head)
 
 private def inferFrame (available needed : Expr) : MetaM Expr := do
-  let mut rest := atoms available
+  let all := atoms available
+  let mut consumed := Array.replicate all.size false
+  let mut cursor := 0
   for atom in atoms needed do
     let mut found := false
-    for i in [:rest.size] do
-      if ← isDefEq atom rest[i]! then
-        rest := rest.eraseIdxIfInBounds i
-        found := true
-        break
+    for i in [cursor:all.size] do
+      unless consumed[i]! do
+        if ← isDefEq atom all[i]! then
+          consumed := consumed.set! i true
+          found := true
+          while cursor < all.size do
+            if consumed[cursor]! then cursor := cursor + 1
+            else break
+          break
     unless found do
       throwError "sep_frame: precondition does not contain required atom {atom}"
+  let mut rest := #[]
+  for i in [cursor:all.size] do
+    unless consumed[i]! do
+      rest := rest.push all[i]!
   return rest.foldr (fun p q => mkApp2 (mkConst ``Zig.Assn.sep) p q)
     (mkConst ``Zig.Assn.emp)
 
