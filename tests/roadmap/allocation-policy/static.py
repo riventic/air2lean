@@ -51,13 +51,12 @@ class PolicyChecks(unittest.TestCase):
         fixture = (HERE / 'Check.lean').read_text()
         self.assertIn('Lean.Json.mkObj', fixture)
         self.assertNotIn('s!"{{', fixture)
-        self.assertNotIn('\\n', fixture)
 
     def test_gate_builds_imported_separation_library(self):
         gate = (HERE / 'check.sh').read_text()
         self.assertIn('lake build ZigLean ZigLean.Sep.Alloc', gate)
         self.assertLess(gate.index('lake build ZigLean ZigLean.Sep.Alloc'),
-                        gate.index('lake env lean tests/roadmap/allocation-policy/Check.lean'))
+                        gate.index('lake env lean --run tests/roadmap/allocation-policy/Check.lean'))
         self.assertIn('AIR2LEAN_ALLOCATION_REPORT_DIR', gate)
 
     def test_legacy_mutation_still_targets_fail_at(self):

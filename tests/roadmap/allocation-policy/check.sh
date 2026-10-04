@@ -7,7 +7,6 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-allocation-policy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 zig_bin=${AIR2LEAN_ZIG:-zig}
 lake build ZigLean ZigLean.Sep.Alloc
-lake env lean tests/roadmap/allocation-policy/Check.lean
 lake env lean --run tests/roadmap/allocation-policy/Check.lean > "$work/lean.jsonl"
 "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/fixture" \
   --dep common -Mroot=tests/roadmap/allocation-policy/fixture.zig -Mcommon=tests/diff/common.zig
