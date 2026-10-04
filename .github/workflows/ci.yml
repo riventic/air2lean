@@ -73,6 +73,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Offline compiler inventory regressions
+        run: python3 tests/roadmap/inventory/test_inventory.py
+
+      # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
+      # Run before check.sh replaces committed generated proof modules.
+      - name: Check compiler-derived coverage inventory
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          source_temp=$(mktemp -d "$RUNNER_TEMP/air-inventory.XXXXXX")
+          trap 'rm -rf "$source_temp"' EXIT
+          url=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' url)
+          sha256=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' sha256)
+          curl -fL --output "$source_temp/source.tar.xz" "$url"
+          echo "$sha256  $source_temp/source.tar.xz" | sha256sum -c -
+          mkdir "$source_temp/source"
+          tar -xJf "$source_temp/source.tar.xz" -C "$source_temp/source" --strip-components=1
+          python3 scripts/coverage.py check --version '${{ matrix.zig }}' \
+            --source "$source_temp/source" --os linux --inventory 'coverage/${{ matrix.zig }}.json'
+
       - name: Shell check regressions
         run: scripts/review-checks.sh
 
@@ -166,6 +186,22 @@ jobs:
       - name: Build proofs
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
+
+      # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
+      # assembly/libm policy is reviewed for this profile and the pinned Lean release.
+      - name: Audit theorem dependencies and assumptions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: |
+          rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
+          scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
+
+      - name: Assurance environment regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: tests/roadmap/assurance/check.sh
 
       - name: Integer bit operations regression and differential gate
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
