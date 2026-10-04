@@ -3,19 +3,127 @@ import ZigLean.Float.Ops
 /-!
 # `compiler-rt` semantics (opt-in)
 
-`f128` has no hardware divide, and x86-64 baseline has no FMA instruction, so on that target
-`@divExact`/`/` on `f128`, `@mulAdd` on any format and f80→f16 conversion lower to compiler_rt
+`f128` has no hardware arithmetic, and x86-64 baseline has no FMA instruction, so on that target
+`*`/`@divExact`/`/` on `f128`, `@mulAdd` on any format and f80→f16 conversion lower to compiler_rt
 calls whose result differs from the model's own IEEE-correct operations (`docs/floats.md`
-§Semantics, groups A/B/E). This file ports those compiler_rt functions bit-exactly. Reachable
+§Semantics, groups A/B/E–H). This file ports those compiler_rt functions. Reachable
 only through `--float-semantics compiler-rt` (`Air2Lean/Main.lean`); the default (`ieee`) mode
 never calls into it.
 
-Every helper below is `private`: only the public `Float.convRt`/`Float.divRt`/
-`Float.divTruncRt`/`Float.divFloorRt`/`Float.fmaRt` entry points and their guarded/versioned
-variants call them.
+The implementation helpers are `private`; the public entry points select a target helper,
+apply its shared guards and expose the version-specific variants.
 -/
 
 namespace Zig
+
+/-! ## f128 multiplication (`mulf3.zig`, `wideMultiply`)
+
+The source's u128 wide multiplication omits a carry from its low half into its high half.
+Keep its limb arithmetic here rather than replacing it with an exact 256-bit product. -/
+
+private def wideMultiply128 (a b : Nat) : Nat × Nat :=
+  let mask32 := 2 ^ 32 - 1
+  let mask64 := 2 ^ 64 - 1
+  let maskHi := mask64 - mask32
+  let word (x i : Nat) := (x >>> (32 * i)) &&& mask32
+  let sum (k : Nat) := (List.range 4).foldl (fun s i =>
+    if i ≤ k && k - i < 4 then s + word a i * word b (k - i) else s) 0
+  let s0 := sum 0
+  let s1 := sum 1
+  let s2 := sum 2
+  let s3 := sum 3
+  let s4 := sum 4
+  let s5 := sum 5
+  let s6 := sum 6
+  let r0 := (s0 &&& mask64) + ((s1 &&& mask32) <<< 32)
+  let r1 := (s0 >>> 64) + ((s1 >>> 32) &&& mask64) +
+    (s2 &&& mask64) + ((s3 <<< 32) &&& maskHi)
+  let lo := (r0 + (r1 <<< 64)) % 2 ^ 128
+  let hi := ((r1 >>> 64) + (s1 >>> 96) + (s2 >>> 64) +
+    (s3 >>> 32) + s4 + (s5 <<< 32) + (s6 <<< 64)) % 2 ^ 128
+  (hi, lo)
+
+private def mulF128 (a b : Float .f128) : Float .f128 :=
+  match a.classify, b.classify with
+  | .finite sa ma _, .finite sb mb _ =>
+    if ma = 0 || mb = 0 then Float.zero (sa != sb) else Id.run do
+      let modulus := 2 ^ 128
+      let implicit := 2 ^ 112
+      let mask := implicit - 1
+      let aExp := (a.bits.toNat >>> 112) % 2 ^ 15
+      let bExp := (b.bits.toNat >>> 112) % 2 ^ 15
+      let normalize (exp sig : Nat) : Nat × Int :=
+        if exp = 0 then
+          let shift := 112 - Nat.log2 sig
+          (sig <<< shift, 1 - (shift : Int))
+        else (sig ||| implicit, 0)
+      let (asig, ascale) := normalize aExp (a.bits.toNat % implicit)
+      let (bsig, bscale) := normalize bExp (b.bits.toNat % implicit)
+      let (hi0, lo0) := wideMultiply128 asig (bsig <<< 15)
+      let mut hi := hi0
+      let mut lo := lo0
+      let mut exp : Int := (aExp : Int) + bExp - 16383 + ascale + bscale
+      if hi &&& implicit != 0 then exp := exp + 1
+      else
+        hi := ((hi <<< 1) ||| (lo >>> 127)) % modulus
+        lo := (lo <<< 1) % modulus
+      if exp ≥ 0x7fff then return Float.inf (sa != sb)
+      let mut result := 0
+      if exp ≤ 0 then
+        let shift := (1 - exp).toNat
+        if shift ≥ 128 then return Float.zero (sa != sb)
+        let sticky := if (lo <<< (128 - shift)) % modulus != 0 then 1 else 0
+        lo := (((hi <<< (128 - shift)) ||| (lo >>> shift)) % modulus) ||| sticky
+        hi := hi >>> shift
+        result := hi
+      else result := (hi &&& mask) ||| (exp.toNat <<< 112)
+      if lo > 2 ^ 127 then result := result + 1
+      else if lo = 2 ^ 127 then result := result + result % 2
+      return Float.ofBits (.ofNat 128 (result ||| ((if sa != sb then 1 else 0) <<< 127)))
+  | _, _ => Float.mul a b
+
+/-- Compiler-rt multiplication: f128 follows `mulf3` and its wide-multiply helper;
+the hardware formats keep correctly-rounded multiplication. -/
+def Float.mulRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  if h : fmt = .f128 then h ▸ mulF128 (h ▸ a) (h ▸ b) else Float.mul a b
+
+/-- `__fmodx` returns the original bits when the signless representations compare smaller.
+For canonical inputs its remaining integer remainder algorithm agrees with `Float.rem`. -/
+def Float.remRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  if fmt = .f80 && a.isFinite && b.isFinite && !Float.eq b (Float.zero false) &&
+      a.abs.bits.toNat < b.abs.bits.toNat then a
+  else Float.rem a b
+
+def Float.modRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  if Float.lt a (Float.zero false) then Float.remRt (Float.add (Float.remRt a b) b) b
+  else Float.remRt a b
+
+def Float.remRtChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 then throw .unspecified else pure (Float.remRt a b)
+
+def Float.modRtChk {fmt : FloatFmt} (a b : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 then throw .unspecified else pure (Float.modRt a b)
+
+/-- Before 0.16.0, f80 floor/ceil extend to f128 first. The extension of a pseudo-denormal
+uses its fraction with exponent zero, discarding the explicit integer bit. -/
+private def legacyRoundInput {fmt : FloatFmt} (x : Float fmt) : Float fmt :=
+  if x.isPseudoDenormalF80 then
+    Float.roundRat fmt x.signBit (finiteToRat false (x.bits.toNat % 2 ^ 63) (-16445))
+  else x
+
+def Float.floorRtLegacyChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.floor (legacyRoundInput x))
+
+def Float.ceilRtLegacyChk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isInvalidF80 then throw .unspecified else pure (Float.ceil (legacyRoundInput x))
+
+theorem Float.floorRtLegacyChk_eq {fmt : FloatFmt} (x : Float fmt)
+    (h : x.isPseudoDenormalF80 = false) : Float.floorRtLegacyChk x = Float.floorChk x := by
+  simp [Float.floorRtLegacyChk, Float.floorChk, legacyRoundInput, h]
+
+theorem Float.ceilRtLegacyChk_eq {fmt : FloatFmt} (x : Float fmt)
+    (h : x.isPseudoDenormalF80 = false) : Float.ceilRtLegacyChk x = Float.ceilChk x := by
+  simp [Float.ceilRtLegacyChk, Float.ceilChk, legacyRoundInput, h]
 
 /-! ## f80 to f16 conversion (`__truncxfhf2`, `truncf.zig`)
 
@@ -127,9 +235,9 @@ private def Float.ilogb {fmt : FloatFmt} (x : Float fmt) : Int :=
 /-! ## Dekker's algorithm (`dd_add`/`dd_mul` in `fma.zig`, `dd_add128`/`dd_mul128` in the same
 file). One generic pair: the `f64` and `f128` source versions are the same algorithm, differing
 only in the doubling split constant, so `ddMul` takes it as a parameter instead of duplicating
-the function. Every step here is `Float.add`/`Float.sub`/`Float.mul` — hardware round-to-nearest
-arithmetic, which is exactly what Dekker's technique needs and exactly what the model already
-computes correctly for every format (`docs/floats.md`). -/
+the function. Addition and subtraction use `Float.add`/`Float.sub`; multiplication uses
+`Float.mulRt`, so f128 intermediates retain the source's wide-multiply carry behavior.
+The f64 operations remain hardware round-to-nearest arithmetic. -/
 
 private structure DD (fmt : FloatFmt) where
   hi : Float fmt
@@ -145,18 +253,19 @@ private def ddAdd {fmt : FloatFmt} (a b : Float fmt) : DD fmt :=
 
 /-- `dd_mul`: exact `a * b`, split the same way. `split` is `2 ^ (prec/2 rounded up) + 1`
 (`0x1.0p27 + 1.0` for `f64`, `0x1.0p57 + 1.0` for `f128`); assumes `a`, `b` normalized (no
-underflow or overflow in the intermediate products). -/
+underflow or overflow in the intermediate products). On f128 the source multiplication
+can itself lose a carry, so the target port does not guarantee the split is exact. -/
 private def ddMul {fmt : FloatFmt} (split a b : Float fmt) : DD fmt :=
-  let p1 := Float.mul a split
+  let p1 := Float.mulRt a split
   let ha := Float.add (Float.sub a p1) p1
   let la := Float.sub a ha
-  let p2 := Float.mul b split
+  let p2 := Float.mulRt b split
   let hb := Float.add (Float.sub b p2) p2
   let lb := Float.sub b hb
-  let p3 := Float.mul ha hb
-  let q := Float.add (Float.mul ha lb) (Float.mul la hb)
+  let p3 := Float.mulRt ha hb
+  let q := Float.add (Float.mulRt ha lb) (Float.mulRt la hb)
   let hi := Float.add p3 q
-  let lo := Float.add (Float.add (Float.sub p3 hi) q) (Float.mul la lb)
+  let lo := Float.add (Float.add (Float.sub p3 hi) q) (Float.mulRt la lb)
   ⟨hi, lo⟩
 
 /-! ## `add_adjusted`/`add_and_denorm` (`fma.zig`; `128` suffix for the `f128` versions). These
@@ -209,13 +318,13 @@ the split constant — called at each concrete format by `Float.fmaRt` below; `f
 this at `f128` and rounds down once more (`__fmax`, same as `Float.fma`'s own `f80` case). -/
 private def fmaCore {fmt : FloatFmt} (split : Float fmt) (x y z : Float fmt) : Float fmt :=
   if !x.isFinite || !y.isFinite then
-    Float.add (Float.mul x y) z
+    Float.add (Float.mulRt x y) z
   else if !z.isFinite then
     z
   else if x.isZero || y.isZero then
-    Float.add (Float.mul x y) z
+    Float.add (Float.mulRt x y) z
   else if z.isZero then
-    Float.mul x y
+    Float.mulRt x y
   else
     let (xs, ex) := Float.frexp x
     let (ys, ey) := Float.frexp y

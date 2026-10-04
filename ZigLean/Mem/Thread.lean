@@ -8,12 +8,12 @@ The `MemM` part of the thread model (`docs/std-models.md` §Thread model): the A
 (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`), and the
 bookkeeping of a spawn and a join (`Thread.fork`, `Thread.join`, `checkJoinedByChild`). The
 scheduler (`ZigLean/Conc/Sched.lean`) calls the bookkeeping at a sync op; a concurrent function
-calls an atomic op after a `yield` (`ZigLean/Conc/Call.lean`).
+calls an atomic op after a `pick` (`ZigLean/Conc/Call.lean`).
 
-Every atomic op is sequentially consistent: the ordering argument decodes
-(`Air2Lean.Air.Normalize.lean`'s `parseOrder`), and every atomic write releases and every atomic
-read acquires. The subset restricts an atomic op's pointee to an integer type
-(`Air2Lean.Check.lean`'s `atomicIntChild`).
+The ordering argument decodes through `parseOrder` (`Air2Lean/Air/Normalize.lean`): relaxed
+operations do not synchronize; release writes publish their clocks and acquire reads adopt
+them. There is no global sequentially consistent order. Integer, enum, bool and packed-struct
+pointees use integer operations on their bits (`Air2Lean/Check.lean`, `Zig.Packed`).
 -/
 
 namespace Zig
@@ -29,8 +29,10 @@ instance : Enc ThreadId where
 
 /-! ## Atomics (RC11)
 
-The memory model of atomics is RC11, in the operational form without promises (the model under
-iRC11). An atomic location (`ALoc`) keeps its writes (`Msg`) in modification order; the block's
+The memory model approximates RC11's operational form without promises. Its missing SC order,
+same-value plain writes and read-view transfer can permit extra outcomes
+(`docs/std-models.md` §Thread model). An atomic location (`ALoc`) keeps its writes (`Msg`) in
+modification order; the block's
 bytes are those of the last one. At each atomic op the oracle picks (`SyncOp.pick`, the options
 from `*Count`):
 

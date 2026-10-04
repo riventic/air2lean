@@ -195,6 +195,41 @@ want_mutation() {
   return 1
 }
 
+# A mismatch is evidence only if the unmutated example passes first. Run each selected
+# differential example once; proof-only labels have their own baseline below.
+diff_baselines=
+diff_baseline_for() {
+  local ex=$1 label
+  shift
+  has_example "$ex" || return 0
+  for label in "$@"; do
+    if want_mutation "$label"; then
+      diff_baselines="$diff_baselines $ex"
+      return 0
+    fi
+  done
+}
+diff_baseline_for basic a b
+diff_baseline_for options c
+diff_baseline_for floatops d
+diff_baseline_for variants e
+diff_baseline_for pointers f
+diff_baseline_for slices g r
+diff_baseline_for lists h s
+diff_baseline_for asm i
+diff_baseline_for vectors j q
+diff_baseline_for threads k l v
+diff_baseline_for layout m n o p t u
+diff_baseline_for iogroup ae
+if [ -n "$diff_baselines" ]; then
+  # Batch the examples so their shared libm/asm archives and Lean executable build once.
+  echo "== unmutated differential baseline:$diff_baselines ==" >&2
+  AIR2LEAN_EXAMPLES="$diff_baselines" bash scripts/diff.sh || {
+    echo "error: unmutated differential baseline failed:$diff_baselines" >&2
+    exit 1
+  }
+fi
+
 # A mutant proof failure is evidence only after the same unmutated target builds.
 # Check the toolchain before editing any source, and build just this selection's proofs.
 command -v lake >/dev/null 2>&1 || { echo "error: lake not found" >&2; exit 1; }
@@ -720,9 +755,10 @@ if ! want_mutation s; then
 elif ! has_example lists; then
   echo "mutation (s): skipped (AIR2LEAN_EXAMPLES excludes lists)"
 else
-  sed -i.bak 's/^  if size = 0 then pure () else rawFree s\.ptr (size \* (s\.len\.toNat + 1))$/  if size = 0 then pure () else rawFree s.ptr (size * s.len.toNat)/' "$alloc_lean"
+  # Target the sentinel definition's semantic span, leaving ordinary slice frees alone.
+  sed -i.bak '/^def Allocator.freeSentinel /,/^$/s/poisonFree s\.ptr (size \* (s\.len\.toNat + 1))/poisonFree s.ptr (size * s.len.toNat)/' "$alloc_lean"
   rm -f "$alloc_lean.bak"
-  grep -q 'rawFree s.ptr (size \* s.len.toNat)$' "$alloc_lean" || {
+  sed -n '/^def Allocator.freeSentinel /,/^$/p' "$alloc_lean" | grep -q 'poisonFree s.ptr (size \* s.len.toNat)$' || {
     echo "error: mutation (s): sed did not change Allocator.freeSentinel" >&2
     exit 1
   }

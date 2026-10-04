@@ -1379,7 +1379,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         -- `Zig.Vec.map2`/`map2M` (`ZigLean/Vec.lean`).
         if fc.isFloatTy child then
           let f := match op with
-            | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+            | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => s!"Zig.Float.mul{fc.rtSuffix}"
           s!"pure (Zig.Vec.map2 {f} {rv a} {rv b})"
         else
           let sgn := if fc.tySigned child then "true" else "false"
@@ -1395,7 +1395,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           | .mul, .sat => s!"pure (Zig.Vec.map2 (Zig.mulSat {sgn}) {rv a} {rv b})"
       | _ =>
         if fc.isFloat a then
-          let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => "Zig.Float.mul"
+          let f := match op with | .add => "Zig.Float.add" | .sub => "Zig.Float.sub" | .mul => s!"Zig.Float.mul{fc.rtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         else
           let sgn := if fc.valSigned a then "true" else "false"
@@ -1423,9 +1423,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .divExact =>
           let f := s!"Zig.Float.div{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
-        -- Group C's guard applies in both modes, so `rem`/`mod` never switch on `floatSemantics`.
-        | .rem => s!"Zig.Float.remChk {rv a} {rv b}"
-        | .mod => s!"Zig.Float.modChk {rv a} {rv b}"
+        | .rem => s!"Zig.Float.rem{fc.rtSuffix}Chk {rv a} {rv b}"
+        | .mod => s!"Zig.Float.mod{fc.rtSuffix}Chk {rv a} {rv b}"
       else
         let sgn := if fc.valSigned a then "true" else "false"
         let f := match op with
@@ -1467,7 +1466,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if fc.isFloatTy child then
         match op with
         | .add => s!"pure (Zig.Vec.reduce Zig.Float.add {rv a})"
-        | .mul => s!"pure (Zig.Vec.reduce Zig.Float.mul {rv a})"
+        | .mul => s!"pure (Zig.Vec.reduce Zig.Float.mul{fc.rtSuffix} {rv a})"
         | .min => s!"Zig.Vec.reduceM Zig.Float.minChk {rv a}"
         | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
         | .and | .or | .xor =>
@@ -1616,9 +1615,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
-    -- Group C's guard applies in both modes, so these never switch on `floatSemantics`.
+    -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.
+    let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt &&
+      fc.tyOfId inst.ty == .float 80
     let f := match op with
-      | .floor => "Zig.Float.floorChk" | .ceil => "Zig.Float.ceilChk"
+      | .floor => if legacyRt then "Zig.Float.floorRtLegacyChk" else "Zig.Float.floorChk"
+      | .ceil => if legacyRt then "Zig.Float.ceilRtLegacyChk" else "Zig.Float.ceilChk"
       | .trunc => "Zig.Float.truncChk" | .round => "Zig.Float.roundChk"
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
   | .sqrt a =>

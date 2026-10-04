@@ -11,7 +11,9 @@ translation.
 
 - `opN_spec`: every `sel` picks its op (`opSpec`). `/`, `@divTrunc` and `@divFloor` are
   `Float.div` on every version for `f16`..`f80`; `op128_spec` leaves out `sel` 3, 5, 6, 9
-  (`f128` division and `@sqrt` differ by version). `opN_other`: a `sel` of 26 or more returns
+  (`f128` division and `@sqrt` differ by version). Multiplication and remainder use the
+  compiler-rt helpers selected by this example. `op80_spec` excludes a pseudo-denormal
+  numerator because f80 floor/ceil changed in 0.16.0. `opN_other`: a `sel` of 26 or more returns
   `a` unchanged.
 - `divExact64_spec`: the truncated quotient, or a panic when it is not a whole number.
 - `cmp64_spec`: the bitmask is the 6 comparisons; `cmp64_nan`: with a NaN operand only `!=` is
@@ -148,13 +150,13 @@ def opSpec {fmt : Zig.FloatFmt} (sel : BitVec 8) (a b c : Zig.Float fmt) : Zig.R
   match sel.toNat with
   | 0 => pure (Zig.Float.add a b)
   | 1 => pure (Zig.Float.sub a b)
-  | 2 => pure (Zig.Float.mul a b)
+  | 2 => pure (Zig.Float.mulRt a b)
   | 3 => pure (Zig.Float.div a b)
   | 4 => Zig.Float.fmaRtChk a b c
   | 5 => pure (Zig.Float.trunc (Zig.Float.div a b))
   | 6 => pure (Zig.Float.floor (Zig.Float.div a b))
-  | 7 => Zig.Float.remChk a b
-  | 8 => Zig.Float.modChk a b
+  | 7 => Zig.Float.remRtChk a b
+  | 8 => Zig.Float.modRtChk a b
   | 9 => pure (Zig.Float.sqrt a)
   | 10 => Zig.Float.floorChk a
   | 11 => Zig.Float.ceilChk a
@@ -194,11 +196,11 @@ theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) : op16 sel a b c = o
       show _ = Zig.Float.fmaRtChk a b c
       unfold op16; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
     | 7, _ =>
-      show _ = Zig.Float.remChk a b
-      unfold op16; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.remRtChk a b
+      unfold op16; generalize Zig.Float.remRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 8, _ =>
-      show _ = Zig.Float.modChk a b
-      unfold op16; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.modRtChk a b
+      unfold op16; generalize Zig.Float.modRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 10, _ =>
       show _ = Zig.Float.floorChk a
       unfold op16; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
@@ -229,11 +231,11 @@ theorem op32_spec (sel : BitVec 8) (a b c : Zig.Float .f32) : op32 sel a b c = o
       show _ = Zig.Float.fmaRtChk a b c
       unfold op32; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
     | 7, _ =>
-      show _ = Zig.Float.remChk a b
-      unfold op32; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.remRtChk a b
+      unfold op32; generalize Zig.Float.remRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 8, _ =>
-      show _ = Zig.Float.modChk a b
-      unfold op32; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.modRtChk a b
+      unfold op32; generalize Zig.Float.modRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 10, _ =>
       show _ = Zig.Float.floorChk a
       unfold op32; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
@@ -264,11 +266,11 @@ theorem op64_spec (sel : BitVec 8) (a b c : Zig.Float .f64) : op64 sel a b c = o
       show _ = Zig.Float.fmaRtChk a b c
       unfold op64; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
     | 7, _ =>
-      show _ = Zig.Float.remChk a b
-      unfold op64; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.remRtChk a b
+      unfold op64; generalize Zig.Float.remRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 8, _ =>
-      show _ = Zig.Float.modChk a b
-      unfold op64; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.modRtChk a b
+      unfold op64; generalize Zig.Float.modRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 10, _ =>
       show _ = Zig.Float.floorChk a
       unfold op64; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
@@ -289,7 +291,10 @@ theorem op64_spec (sel : BitVec 8) (a b c : Zig.Float .f64) : op64 sel a b c = o
       unfold op64; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
     | n + 26, h => omega
 
-theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80) : op80 sel a b c = opSpec sel a b c := by
+/-- Legacy f80 floor/ceil extend to f128, which misreads a pseudo-denormal's value.
+With that noncanonical encoding excluded, every selector has the same spec across versions. -/
+theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80)
+    (ha : a.isPseudoDenormalF80 = false) : op80 sel a b c = opSpec sel a b c := by
   by_cases h : 26 ≤ sel.toNat
   · rw [op80_other sel h, opSpec_other h]
   · obtain ⟨n, hn, rfl⟩ := sel_lt h
@@ -299,17 +304,22 @@ theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80) : op80 sel a b c = o
       show _ = Zig.Float.fmaRtChk a b c
       unfold op80; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
     | 7, _ =>
-      show _ = Zig.Float.remChk a b
-      unfold op80; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.remRtChk a b
+      unfold op80; generalize Zig.Float.remRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 8, _ =>
-      show _ = Zig.Float.modChk a b
-      unfold op80; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.modRtChk a b
+      unfold op80; generalize Zig.Float.modRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 10, _ =>
       show _ = Zig.Float.floorChk a
-      unfold op80; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
+      unfold op80
+      -- Pre-0.16 output uses the legacy wrapper; current output already uses floorChk.
+      try rw [Zig.Float.floorRtLegacyChk_eq a ha]
+      generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
     | 11, _ =>
       show _ = Zig.Float.ceilChk a
-      unfold op80; generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
+      unfold op80
+      try rw [Zig.Float.ceilRtLegacyChk_eq a ha]
+      generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
     | 12, _ =>
       show _ = Zig.Float.truncChk a
       unfold op80; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
@@ -342,11 +352,11 @@ theorem op128_spec (sel : BitVec 8) (hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 
       show _ = Zig.Float.fmaRtChk a b c
       unfold op128; generalize Zig.Float.fmaRtChk a b c = x; rcases x with _ | _ | _ <;> rfl
     | 7, _ =>
-      show _ = Zig.Float.remChk a b
-      unfold op128; generalize Zig.Float.remChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.remRtChk a b
+      unfold op128; generalize Zig.Float.remRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 8, _ =>
-      show _ = Zig.Float.modChk a b
-      unfold op128; generalize Zig.Float.modChk a b = x; rcases x with _ | _ | _ <;> rfl
+      show _ = Zig.Float.modRtChk a b
+      unfold op128; generalize Zig.Float.modRtChk a b = x; rcases x with _ | _ | _ <;> rfl
     | 10, _ =>
       show _ = Zig.Float.floorChk a
       unfold op128; generalize Zig.Float.floorChk a = x; rcases x with _ | _ | _ <;> rfl
