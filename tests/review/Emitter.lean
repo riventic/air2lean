@@ -226,6 +226,58 @@ private def packedInstanceName : Json :=
     ptrTy 1, nrTy] #[2] 1
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "load" 1 #[ref 0], inst 2 "ret" 3 #[ref 1]]
 
+/-- Fixed helper binders (`v`, `g`) and indexed function binders (`p0`) must not
+shadow a source type in another parameter, a result type, or a helper body. -/
+private def enumBinderType : Json :=
+  file "enumBinderType" #[intTy 8, enumTy "v" 0 #["a", "b"], nrTy] #[1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "intcast" 0 #[ref 0], inst 2 "ret" 2 #[ref 1]]
+
+private def parameterBinderType : Json :=
+  file "parameterBinderType" #[intTy 8,
+    obj [("k", .str "struct"), ("name", .str "p0"), ("layout", .str "auto"),
+      ("fields", .arr #[field "value" 0])], nrTy] #[1] 1
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "ret" 2 #[ref 0]]
+
+private def unionBinderType : Json :=
+  file "unionBinderType" #[intTy 8, enumTy "GTag" 0 #["a", "b"],
+    obj [("k", .str "union"), ("name", .str "g"), ("layout", .str "auto"), ("tag", num 1),
+      ("fields", .arr #[field "a" 0, field "b" 0])], nrTy] #[2] 0
+    #[inst 0 "arg" 2 #[] [("param", num 0)],
+      inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)], inst 2 "ret" 3 #[ref 1]]
+
+/-- A named type used after a scalar result or a value-producing block must avoid
+that result's local spelling, including a discarded scalar result. -/
+private def instructionBinderType (name : String) (used : Bool) : Json :=
+  file (if used then "instructionBinderType" else "unusedBinderType") #[intTy 8,
+    obj [("k", .str "struct"), ("name", .str name), ("layout", .str "auto"),
+      ("fields", .arr #[field "value" 0])], nrTy] #[0] 1
+    #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "intcast" 0 #[ref 0],
+      inst 2 "aggregate_init" 1 #[ref (if used then 1 else 0)], inst 3 "ret" 2 #[ref 2]]
+
+private def blockBinderType : Json :=
+  file "blockBinderType" #[intTy 8,
+    obj [("k", .str "struct"), ("name", .str "v1"), ("layout", .str "auto"),
+      ("fields", .arr #[field "value" 0])], nrTy] #[0] 1
+    #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "block" 0 #[]
+      [("body", .arr #[inst 2 "br" 2 #[ref 0] [("target", num 1)]])],
+      inst 3 "aggregate_init" 1 #[ref 1], inst 4 "ret" 2 #[ref 3]]
+
+/-- The callee spelling must stay distinct from the caller's generated `p0` value. -/
+private def functionBinderCall : Json :=
+  file "functionBinderCall" #[intTy 8, nrTy] #[0] 0
+    #[inst 0 "arg" 0 #[] [("param", num 0)],
+      inst 1 "call" 0 #[ref 0] [("callee", obj [("func", .str "p0")])], inst 2 "ret" 1 #[ref 1]]
+
+/-- A Zig identifier that is a Lean parser keyword needs quoting in both declaration
+and projection positions. The function call also uses the allocated quoted spelling. -/
+private def keywordField (keyword : String) : Json :=
+  file s!"keywordField_{keyword}" #[intTy 8,
+    obj [("k", .str "struct"), ("name", .str s!"KeywordField_{keyword}"), ("layout", .str "auto"),
+      ("fields", .arr #[field keyword 0])], nrTy] #[1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)],
+      inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)],
+      inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str keyword)])], inst 3 "ret" 2 #[ref 2]]
+
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Emitter.lean OUTPUT_DIR")
   let directory : System.FilePath := output
@@ -268,4 +320,19 @@ def main (args : List String) : IO Unit := do
     "example : successful ((Review.«_» 7).map BitVec.toNat) = some 7 := by native_decide"
   writeCase directory "ctorIndexNames" #[ctorIndexName]
     "example : successful ((Review.ctorIndexName Review.CtorNames.ctorIdx_air2lean1).map BitVec.toNat) = some 0 := by native_decide"
+  writeCase directory "generatedBinderTypeNames" #[enumBinderType, parameterBinderType, unionBinderType]
+    "example : successful ((Review.enumBinderType Review.v_air2lean1.b).map BitVec.toNat) = some 1 := by native_decide\nexample : successful ((Review.parameterBinderType { value := 12 }).map fun x => x.value.toNat) = some 12 := by native_decide\nexample : successful ((Review.unionBinderType (Review.g_air2lean1.a 9)).map BitVec.toNat) = some 9 := by native_decide\nexample : successful ((Review.g_air2lean1.get_a (Review.g_air2lean1.modify_a (fun x => x + 1) (Review.g_air2lean1.a 9))).map BitVec.toNat) = some 10 := by native_decide"
+  writeCase directory "indexedBinderTypeNames" #[instructionBinderType "i1" true,
+    instructionBinderType "_i1" false, blockBinderType]
+    "example : successful ((Review.instructionBinderType 13).map fun x => x.value.toNat) = some 13 := by native_decide\nexample : successful ((Review.unusedBinderType 14).map fun x => x.value.toNat) = some 14 := by native_decide\nexample : successful ((Review.blockBinderType 15).map fun x => x.value.toNat) = some 15 := by native_decide"
+  writeCase directory "generatedBinderFunctionNames" #[identityFile "p0", functionBinderCall]
+    "example : successful ((Review.functionBinderCall 16).map BitVec.toNat) = some 16 := by native_decide\nexample : successful ((Review.p0_air2lean1 17).map BitVec.toNat) = some 17 := by native_decide"
+  let keywords := #["matches", "continue", "break", "unless", "panic!", "unreachable!",
+    "assert!", "debug_assert!", "termination_by?", "max_prec", "eval_prec", "eval_prio",
+    "s!", "f!", "println!", "show_term", "by?"]
+  writeCase directory "reservedKeywordNames"
+    (keywords.flatMap fun keyword => #[identityFile keyword, keywordField keyword])
+    (String.intercalate "\n" (keywords.toList.flatMap fun keyword =>
+      [s!"example : successful ((Review.{mangleName "" keyword} 18).map BitVec.toNat) = some 18 := by native_decide",
+       s!"example : successful ((Review.{mangleName "" s!"keywordField_{keyword}"} ⟨19⟩).map BitVec.toNat) = some 19 := by native_decide"]))
   IO.println "emitter regression sources written"

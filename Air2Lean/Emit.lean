@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Air2Lean.Check
 
 /-!
@@ -30,8 +31,10 @@ def isTerminating (op : Op) : Bool :=
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
+/-- Identifier-shaped reserved tokens from the pinned Lean parser and core notation modules.
+Contextual `nonReservedSymbol` words and the non-reserved leading words of tactic/attribute syntax are excluded. -/
 def leanKeywords : List String :=
-  ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match",
+  ["def", "theorem", "lemma", "structure", "inductive", "namespace", "import", "open", "match", "matches",
    "with", "do", "let", "fun", "if", "then", "else", "end", "mutual", "partial", "where",
    "deriving", "class", "instance", "abbrev", "variable", "variables", "section", "by", "sorry",
    "have", "show", "from", "this", "suffices", "calc", "for", "in", "return", "try", "catch",
@@ -39,7 +42,28 @@ def leanKeywords : List String :=
    "forall", "exists", "Type", "Prop", "Sort", "opaque", "attribute", "set_option", "universe",
    "extends", "renaming", "hiding", "at", "private", "protected", "include", "omit",
    "export", "prelude", "initialize", "infix", "infixl", "infixr", "prefix", "postfix",
-   "scoped", "local", "termination_by", "decreasing_by", "throw"]
+   "scoped", "local", "termination_by", "decreasing_by", "throw",
+   "break", "continue", "unless", "mut", "repeat", "while", "until",
+   "panic!", "unreachable!", "assert!", "debug_assert!", "termination_by?",
+   "public", "meta", "nonrec", "example", "coinductive", "with_weak_namespace",
+   "assert_not_exists", "assert_not_imported", "deprecated_syntax", "init_quot", "docs_to_verso",
+   "deprecated_module", "unlock_limits", "builtin_initialize", "add_decl_doc", "register_tactic_tag",
+   "tactic_extension", "recommended_spelling", "register_error_explanation", "notation", "macro_rules",
+   "declare_syntax_cat", "elab_rules", "binder_predicate", "nomatch", "nofun", "leading_parser",
+   "trailing_parser", "let_fun", "let_delayed", "let_tmp", "haveI", "letI", "partial_fixpoint",
+   "coinductive_fixpoint", "inductive_fixpoint", "no_index", "inferInstanceAs", "dbg_trace", "idbg",
+   "StateRefT", "show_term_elab", "match_expr", "let_expr", "throwNamedError", "throwNamedErrorAt",
+   "logNamedError", "logNamedErrorAt", "logNamedWarning", "logNamedWarningAt", "register_parser_alias",
+   "tactic_alt", "tactic_tag", "tactic_name", "nat_lit", "without_expected_type", "by_elab", "mod_cast",
+   "include_str", "run_cmd", "run_elab", "run_meta", "seal", "unseal", "unif_hint",
+   "max_prec", "eval_prec", "eval_prio", "s!", "f!", "println!", "show_term", "by?",
+   "set_library_suggestions", "simproc", "dsimproc", "simproc_decl", "dsimproc_decl",
+   "builtin_simproc", "builtin_dsimproc", "builtin_simproc_decl", "builtin_dsimproc_decl",
+   "cbv_simproc", "cbv_simproc_decl", "builtin_cbv_simproc", "builtin_cbv_simproc_decl", "cbv_eval",
+   "norm_cast_add_elim", "declare_simp_like_tactic", "register_try?_tactic", "grind_annotated",
+   "grind_propagator", "builtin_grind_propagator", "declare_bitwise_uint_theorems",
+   "declare_uint_theorems", "declare_bitwise_int_theorems", "declare_int_theorems",
+   "register_sym_simp", "register_sym_dsimp"]
 
 /-- Quote identifiers that Zig permits but Lean does not accept bare. -/
 def mangleField (raw : String) : String :=
@@ -2462,12 +2486,30 @@ def emitTgt (_structNames : Array (String × String))
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   ([tgt], [dispatch])
 
+/-- Binders introduced by generated helpers and function bodies. Types and calls are rendered
+unqualified, so their declarations must avoid these names even when the binder belongs to a
+different declaration's body. Source field binders already avoid the allocated type names through
+`memberNames` and `collectAllocs`. The indexed names follow this program's parameters and AIR
+instruction IDs, including the unused-result spellings and extracted loop captures. -/
+def generatedBinderNames (funcs : Array Func) : Std.HashSet String := Id.run do
+  let mut names : Std.HashSet String := {}
+  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
+    names := names.insert name
+  for f in funcs do
+    for k in [:f.params.size] do
+      names := names.insert s!"p{k}"
+    for i in f.allInsts do
+      for name in #[s!"i{i.id}", s!"_i{i.id}", s!"v{i.id}", s!"_v{i.id}", s!"a{i.id}", s!"s{i.id}"] do
+        names := names.insert name
+  return names
+
 /-- Allocate source declarations together with their generated names. The unambiguous
 historical spelling stays unchanged; a collision gets a stable suffix. -/
 def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ : String)
     (fixed : Array String) : Array NamedType × Array (String × String) := Id.run do
   let preferred := structs.map (·.leanName) ++ funcs.map (mangleName prefix_ ·.name)
   let mut used := fixed
+  let binders := generatedBinderNames funcs
   let mut named := #[]
   for s in structs do
     let base := plainName s.leanName
@@ -2477,7 +2519,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
         (fun cls => mangleField s!"inst{cls}{(plainName name).capitalize}")
     let mut k := 0
     let mut name := mangleField base
-    while (occupied name).any used.contains ||
+    while binders.contains name || (occupied name).any used.contains ||
         (k != 0 && (occupied name).any preferred.contains) do
       k := k + 1
       name := mangleField s!"{base}_air2lean{k}"
@@ -2493,7 +2535,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
         mangleField s!"instInhabited{locals.capitalize}"]
     let mut k := 0
     let mut name := mangleField base
-    while (occupied name).any used.contains ||
+    while binders.contains name || (occupied name).any used.contains ||
         (targets.contains f.name && typeCoreNames.contains name) ||
         (k != 0 && (occupied name).any preferred.contains) do
       k := k + 1

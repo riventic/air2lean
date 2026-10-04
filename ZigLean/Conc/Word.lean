@@ -332,12 +332,12 @@ theorem keep_lockStep {γ : Type} {L : Lock γ} {t : ThreadId} {m m' : Mem} (hs 
       · rcases h2 with h2 | h2 <;> omega
       · rcases h2 with h2 | h2 <;> omega
 
-/-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word. -/
-theorem keep_stepIn {m m' : Mem} {own hQ : Heap} (hw : W.Ok m) (hoff : W.Off own)
+/-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word
+(its cells are in the rest of the heap, `hF`). -/
+theorem keep_stepIn_of {m m' : Mem} {own hQ : Heap}
+    (hF : ∀ x, W.o ≤ x → x < W.o + nb → m.heap.diff own (W.b, x) ≠ none)
     (hs : StepIn (m.heap.diff own) m m') (hm' : m'.heap = hQ ∪ m.heap.diff own)
     (hd : Heap.Disjoint hQ (m.heap.diff own)) : W.Keep m m' := by
-  have hF : ∀ x, W.o ≤ x → x < W.o + nb → m.heap.diff own (W.b, x) ≠ none := fun x h1 h2 => by
-    simp only [Heap.diff, hoff x h1 h2, ↓reduceIte]; exact hw.cell h1 h2
   have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
     by_cases hu : u = m.current
     · subst hu; exact hs.mine
@@ -347,10 +347,18 @@ theorem keep_stepIn {m m' : Mem} {own hQ : Heap} (hw : W.Ok m) (hoff : W.Off own
     fun _ h u hu => VClock.le_trans (h u (hs.threads ▸ hu)) (hcl u),
     fun _ ⟨u, hu, hle⟩ => ⟨u, hs.threads ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
   · rw [hm', Heap.union_of_right ((hd (W.b, x)).resolve_right (hF x h1 h2))]
-    simp [Heap.diff, hoff x h1 h2]
+    have hF' := hF x h1 h2
+    unfold Heap.diff at hF' ⊢; split at hF' <;> simp_all
   · rcases hs.fp e he with h | ⟨-, hnt, -⟩
     · exact .inl h
     · exact .inr fun hh => hnt (touches_of hh hF)
+
+/-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word. -/
+theorem keep_stepIn {m m' : Mem} {own hQ : Heap} (hw : W.Ok m) (hoff : W.Off own)
+    (hs : StepIn (m.heap.diff own) m m') (hm' : m'.heap = hQ ∪ m.heap.diff own)
+    (hd : Heap.Disjoint hQ (m.heap.diff own)) : W.Keep m m' :=
+  keep_stepIn_of (fun x h1 h2 => by
+    simp only [Heap.diff, hoff x h1 h2, ↓reduceIte]; exact hw.cell h1 h2) hs hm' hd
 
 /-- A spawn by `t`. -/
 theorem keep_fork {m m' : Mem} {t c : ThreadId} (ht : t < m.threads.size)
