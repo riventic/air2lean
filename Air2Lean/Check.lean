@@ -659,9 +659,9 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
     throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields, but worker '{worker.name}' has {worker.params.size} runtime parameters"
   let mut completed : SpawnTyCache := {}
   for index in [:fields.size] do
-    let (matches, cache) := (sameSpawnTyCached f worker fields[index]! worker.params[index]! #[] true).run completed
+    let (compatible, cache) := (sameSpawnTyCached f worker fields[index]! worker.params[index]! #[] true).run completed
     completed := cache
-    unless matches do
+    unless compatible do
       throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
   let validRet := match worker.types[worker.ret]? with
     | some .void | some .noreturn => true
