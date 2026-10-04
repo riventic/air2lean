@@ -176,31 +176,32 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
   for u in safe do
     if let some f := u.normalized then
       log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
-  let graph := edges units
-  let mut blockers : Array (Edge × Code × Option String) := #[]
-  for edge in graph do
-    let targets := selected[edge.callee]?.getD #[]
-    let unsupported := if targets.isEmpty then rejectedThreadFn? edge.callee else none
-    let code := if unsupported.isSome then some Code.modelFailure
-      else if targets.isEmpty then some Code.calleeMissing
-      else if targets.size > 1 then some Code.calleeAmbiguous
-      else if !(targets[0]?.map (·.localPassed)).getD false then some Code.calleeBlocked else none
-    if let some code := code then
-      blockers := blockers.push (edge, code, unsupported)
-  if !blockers.isEmpty then
-    let index := adjacency graph
-    for root in units do
-      if log.truncated then break
-      if let some name := root.function then
-        let paths := pathsFrom index name (maxFiles + 1)
-        for (edge, code, unsupported) in blockers do
-          if log.truncated then break
-          if let some chain := paths[edge.caller]? then
-            log := log.add { (boundary edge.file (some edge.caller) code .program
-              (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
-              (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
-              anchor := { idSpace := .canonical, instruction := some edge.instruction }
-              dependencyChain := chain.push edge.callee }
+  if !log.truncated then
+    let graph := edges units
+    let mut blockers : Array (Edge × Code × Option String) := #[]
+    for edge in graph do
+      let targets := selected[edge.callee]?.getD #[]
+      let unsupported := if targets.isEmpty then rejectedThreadFn? edge.callee else none
+      let code := if unsupported.isSome then some Code.modelFailure
+        else if targets.isEmpty then some Code.calleeMissing
+        else if targets.size > 1 then some Code.calleeAmbiguous
+        else if !(targets[0]?.map (·.localPassed)).getD false then some Code.calleeBlocked else none
+      if let some code := code then
+        blockers := blockers.push (edge, code, unsupported)
+    if !blockers.isEmpty then
+      let index := adjacency graph
+      for root in units do
+        if log.truncated then break
+        if let some name := root.function then
+          let paths := pathsFrom index name (maxFiles + 1)
+          for (edge, code, unsupported) in blockers do
+            if log.truncated then break
+            if let some chain := paths[edge.caller]? then
+              log := log.add { (boundary edge.file (some edge.caller) code .program
+                (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
+                (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
+                anchor := { idSpace := .canonical, instruction := some edge.instruction }
+                dependencyChain := chain.push edge.callee }
   -- Retain the authoritative whole-program validator. Its first-error boundary
   -- includes shared definitions and memory effects not independently collected.
   if !funcs.isEmpty then
@@ -272,13 +273,13 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
     let result := inspect file contents log
-    units := units.push result.1
     log := result.2
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
       firstProfile := some baseline
       log := log.record (boundary file result.1.function .profileFailure .profile .validationFailure)
         (BuildProfile.checkProgram #[baseline, profile] a.profile)
+    units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
   return (units, collectProgram units log)
 

@@ -92,6 +92,19 @@ private def collectorChecks : IO Unit := do
   require (sharedFailure.items.any (·.code == .programFailure)) "no dependency blockers must not suppress the authoritative program validator"
   let calls := collectCallChecks "calls.json" call #[call, target] {}
   require ((calls.items.filter (·.code == .signatureFailure)).size == 2) "every independent call signature must be checked"
+  let beforeDependency : Log := {
+    limit := 1
+    items := #[{ code := .inputLimit, phase := .input, category := .resourceLimit, message := "cap" }]
+    observed := 1
+    failed := true
+    complete := false
+    truncated := true }
+  let afterDependency := collectProgram #[
+    { file := "calls.json", function := some call.name, normalized := some call, structureValid := true, localPassed := true },
+    { file := "target.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true }] beforeDependency
+  require (afterDependency.observed == 4 && afterDependency.failed && afterDependency.truncated && !afterDependency.complete)
+    "pre-truncated dependency phase must preserve both call additions and the authoritative program addition"
+  require (afterDependency.items.map (·.code) == #[.inputLimit]) "pre-truncated report cannot add dependency items"
   let malformedType := { (mkFunc "prerequisite") with
     types := (mkFunc "").types.push (.other "unsupported")
     layouts := Array.replicate 5 {}
