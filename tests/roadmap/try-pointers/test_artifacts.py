@@ -81,4 +81,31 @@ class ProvenanceTests(unittest.TestCase):
         self.save()
         with self.assertRaisesRegex(ValueError, 'artifact inventory'): guard.inspect(self.repo, self.case)
 
+    def test_fresh_air_reuses_inventory_profile_and_source_guards(self):
+        fresh = self.repo / 'external-fresh-air'
+        fresh.mkdir()
+        for source in (self.case/'air/0.16.0').glob('*.json'):
+            (fresh/source.name).write_bytes(source.read_bytes())
+        before = (self.case/'provenance.json').read_bytes()
+        self.assertEqual(set(guard.inspect(self.repo, self.case, fresh_air=fresh)),
+                         {'hot.json', 'cold.json'})
+        self.assertEqual((self.case/'provenance.json').read_bytes(), before)
+        hot = fresh/'hot.json'
+        data = json.loads(hot.read_text())
+        data['zig_version'] = '0.15.2'
+        hot.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'profile differs'):
+            guard.inspect(self.repo, self.case, fresh_air=fresh)
+        (self.repo/'source.zig').write_text('modified')
+        with self.assertRaisesRegex(ValueError, 'stale source'):
+            guard.inspect(self.repo, self.case, fresh_air=fresh)
+
+    def test_fresh_air_missing_inventory_or_record_request_fails(self):
+        fresh = self.repo / 'empty-fresh-air'
+        fresh.mkdir()
+        with self.assertRaisesRegex(ValueError, 'function inventory'):
+            guard.inspect(self.repo, self.case, fresh_air=fresh)
+        with self.assertRaisesRegex(ValueError, 'cannot record'):
+            guard.inspect(self.repo, self.case, record=True, fresh_air=fresh)
+
 if __name__ == '__main__': unittest.main()

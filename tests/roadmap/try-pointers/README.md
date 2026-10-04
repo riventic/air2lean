@@ -73,6 +73,17 @@ proof failures fail the gate. Compiler-free tests exercise the mutation and clas
 The finite runtime cases are differential evidence, not a universal compiler-preservation
 proof. Temporary generated files/logs use `RUNNER_TEMP` when set, and are not uploaded.
 
+The non-mutation Zig 0.16.0 CI job runs one sequential gate after the runtime and
+translator build. It builds both ownership modules, runs the offline provenance/mutant
+classifier tests, checks the retained artifacts and kernel/runtime/mutation gates, runs
+the stock host compiler's native fixture, then exports fresh source AIR with the matrix's
+patched compiler. `check-artifacts.py --fresh-air DIR` reuses the source/exporter hash,
+profile, exact inventory and tag checks without recording or replacing checked hashes.
+CI translates that fresh AIR and compares generated Lean byte-for-byte with retained
+`Gen.lean`. Fresh AIR, generated Lean and diagnostics stay under `RUNNER_TEMP`; this gate
+adds no artifact upload. Zig 0.14/0.15 exporter API source inspection and synthetic profile
+checks are the current boundary, pending actual export/native qualification on those versions.
+
 Compiler-free provenance regressions:
 
 ```sh
