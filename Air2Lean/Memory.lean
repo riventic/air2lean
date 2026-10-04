@@ -254,9 +254,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
-      (match f.types[i.ty]? with
-        | some (.ptr size _ _) => size == "c" || (f.layouts[i.ty]?.map (·.allowzero)).getD false
-        | _ => false) ||
+      nullablePtrTy f.types f.layouts i.ty ||
       match i.op with
       | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
       | _ => false

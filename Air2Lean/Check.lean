@@ -36,12 +36,6 @@ def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
   | some k => k < outputs
   | none => false
 
-/-- C and allowzero pointers can carry address zero as a value. -/
-def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
-  match types[id]? with
-  | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
-  | _ => false
-
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)

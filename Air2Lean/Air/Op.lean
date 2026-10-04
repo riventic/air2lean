@@ -117,6 +117,12 @@ structure Layout where
   bitOffset : Nat := 0
   deriving Repr, Inhabited
 
+/-- C and allowzero pointers can carry address zero as a value. -/
+def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
+
 inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type, or a packed struct (its backing integer). -/
