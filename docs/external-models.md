@@ -21,7 +21,8 @@ flags. Local type IDs do not determine identity. The `type` string is the normal
 No accepted implementation or contract is supplied by a template: fill every missing field.
 
 Registry JSON uses the shared strict parser: duplicate decoded keys, oversized numbers or
-exponents, more than 128 nested JSON containers and inputs over 64 MiB are rejected. The CLI
+exponents, more than 528 nested registry JSON containers and inputs over 64 MiB are rejected. AIR retains
+its 128-container default. The CLI
 bounds registry-file reads before constructing a UTF-8 string.
 
 Schema 1 deliberately retains expanded tree-shaped JSON. Completed type memoization avoids
@@ -78,9 +79,9 @@ and environment premises; no shipping-binary theorem follows from registering a 
 
 `trust: "proved"` requires an imported proof identifier and emits a theorem obligation.
 `trust: "assumed"` forbids a proof field and emits a named explicit axiom with the same complete
-typed obligation. The generated `-- air2lean-models:` JSON marker reports these assumptions
+typed obligation. When bindings are present, the generated `-- air2lean-models:` JSON marker reports these assumptions
 separately from selected runtime semantics and preserves semantic dependencies, profile and
-signature. A proved entry is reported as `proved-obligation` until the generated source is
+signature. Without bindings, output has only the existing profile header before the Lean body. A proved entry is reported as `proved-obligation` until the generated source is
 kernel checked. Kernel elaboration checks the obligation's type; imported axioms/dependencies
 must still be audited (for example with `#print axioms`) before claiming implementation
 verification. `dependencies` is the project's explicit semantic dependency inventory, not an

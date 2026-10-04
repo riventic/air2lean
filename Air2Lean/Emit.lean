@@ -2533,11 +2533,42 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
     names := names.push (f.name, name)
   return (named, names)
 
+/-- Emission needs only the first validated call for each registered symbol. Value-type
+indexes are built lazily, at most once for each function with a selected call. The checker
+continues to validate every matching site through its separate exhaustive index. -/
+def firstModelCalls (models : Array ModelBinding) (funcs : Array Func) :
+    Std.HashMap String ModelRegistry.CallSite := Id.run do
+  let mut pending := models.foldl (fun names model => names.insert model.symbol) ({} : Std.HashSet String)
+  let mut sites : Std.HashMap String ModelRegistry.CallSite := {}
+  for (f, functionIndex) in funcs.zipIdx do
+    if pending.isEmpty then break
+    let insts := f.allInsts
+    let mut values : Option ModelRegistry.ValueTypeIndex := none
+    for i in insts do
+      if let .call (.func name noreturn spawnFn) args := i.op then
+        if pending.contains name then
+          let index := match values with
+            | some index => index
+            | none => ModelRegistry.valueTypeIndex f.types insts
+          values := some index
+          let site : ModelRegistry.CallSite := {
+            functionIndex := functionIndex
+            function := f
+            values := index
+            args := args
+            ret := i.ty
+            noreturn := noreturn
+            spawnFn := spawnFn
+          }
+          sites := sites.insert name site
+          pending := pending.erase name
+          if pending.isEmpty then break
+  return sites
+
 /-- Emit a typed implementation adapter plus a complete contract obligation. Imported
 identifiers are rooted so generated names cannot shadow the user's definitions. -/
-def emitModel (models : Array ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
+def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     (structNames : Array (String × String)) : String := Id.run do
-  let m := models[index]!
   let f := site.function
   let ret := site.ret
   -- Checked call sites use the same first-occurrence type resolver as registry validation.
@@ -2573,9 +2604,12 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
+  let modelCalls := firstModelCalls models funcs
+  let maxModelArgs := modelCalls.fold (fun count _ site => max count site.args.size) 0
+  let modelBinders := (Array.range maxModelArgs).map fun i => s!"p{i}"
   let modelNames := (Array.range models.size).flatMap fun i =>
     #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"]
-  let fixed := runtimeNames ++ modelNames ++
+  let fixed := runtimeNames ++ modelNames ++ modelBinders ++
     (if memFuncs.isEmpty then #[] else #["mem0"]) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
@@ -2584,11 +2618,9 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := asmDefs.toList.map emitAsmDef
-  let modelCalls : Std.HashMap String (Array ModelRegistry.CallSite) :=
-    if models.isEmpty then {} else ModelRegistry.callIndex funcs
   let modelStr := (models.mapIdx fun index model =>
-    match (modelCalls.getD model.symbol #[])[0]? with
-    | some site => emitModel models index site structNames
+    match modelCalls[model.symbol]? with
+    | some site => emitModel model index site structNames
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc

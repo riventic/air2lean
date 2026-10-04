@@ -54,6 +54,8 @@ private def keys (j : Json) (allowed : List String) : Except String Unit := do
 def maxShapeNodes : Nat := 65536
 def maxShapeBytes : Nat := 1048576
 def maxShapeDepth : Nat := 256
+/-- Two containers per type node plus room for registry/profile envelopes. -/
+def maxJsonDepth : Nat := 2 * maxShapeDepth + 16
 
 private structure Shape where
   json : Json
@@ -236,7 +238,7 @@ def callIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.r
 /-- Profile uses the same parser and equality policy as AIR. Legacy bindings must explicitly
 select legacy metadata; there is no implicit default or wildcard. -/
 def parse (contents : String) : Except String (Array ModelBinding) := do
-  let j ← StrictJson.parse contents
+  let j ← StrictJson.parse contents maxJsonDepth
   keys j ["schema", "models"]
   unless (← (← field j "schema").getNat?) == 1 do throw "unsupported model registry schema"
   (← (← field j "models").getArr?).mapM fun m => do

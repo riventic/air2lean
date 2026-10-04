@@ -18,8 +18,10 @@ lake env bash -euo pipefail -c '
   test -s "$AIR2LEAN_MODEL_EVIDENCE/registry.json"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/Generated.lean"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean"
+  test -s "$AIR2LEAN_MODEL_EVIDENCE/CollisionGenerated.lean"
   lean "$AIR2LEAN_MODEL_EVIDENCE/Generated.lean"     2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/client.log"
   lean "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/tuple-client.log"
+  lean "$AIR2LEAN_MODEL_EVIDENCE/CollisionGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/collision-client.log"
 '
 python3 tests/roadmap/models/test_cli.py .lake/build/bin/air2lean   2>&1 | tee "$model_evidence/cli.log"
 printf 'External model contract evidence: %s\n' "$model_evidence"

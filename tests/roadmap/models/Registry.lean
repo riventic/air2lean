@@ -46,8 +46,11 @@ def main (args : List String) : IO Unit := do
   require (ModelRegistry.parse "{\"schema\":2,\"models\":[]}").toOption.isNone "future registry schema"
   expectError (ModelRegistry.parse "{\"schema\":1e1000000000,\"models\":[]}") "exponent exceeds"
   expectError (ModelRegistry.parse "{\"schema\":1,\"schema\":1,\"models\":[]}") "duplicate JSON object key"
-  let nested := String.join (List.replicate 129 "[") ++ "0" ++ String.join (List.replicate 129 "]")
-  expectError (ModelRegistry.parse nested) "JSON nesting exceeds"
+  let nested (n : Nat) := String.join (List.replicate n "[") ++ "0" ++ String.join (List.replicate n "]")
+  let _ ← get <| StrictJson.parse (nested 128)
+  expectError (StrictJson.parse (nested 129)) "JSON nesting exceeds"
+  let _ ← get <| StrictJson.parse (nested ModelRegistry.maxJsonDepth) ModelRegistry.maxJsonDepth
+  expectError (ModelRegistry.parse (nested (ModelRegistry.maxJsonDepth + 1))) "JSON nesting exceeds"
   let oversized ← try
     let _ ← StrictJson.readBounded (fun _ => pure (ByteArray.mk #[0, 0, 0])) 2
     pure false
@@ -99,6 +102,61 @@ def main (args : List String) : IO Unit := do
   expectError (ModelRegistry.check models raw.profile #[{f with body := #[
     {id := 0, ty := 0, op := .arg 0},
     {id := 1, ty := 0, op := .call (.func "project.identity" false none) repeated}]}]) "expanded signature budget"
+  let selectionFuncs := #[
+    {f with name := "unrelated", body := #[]},
+    {f with body := #[
+      {id := 0, ty := 0, op := .arg 0},
+      {id := 10, ty := 0, op := .call (.func "project.identity" false none) #[.inst 0]},
+      {id := 11, ty := 0, op := .call (.func "project.identity" false none) #[.int 0 7]},
+      {id := 12, ty := 0, op := .call (.func "project.other" false none) #[.inst 0]}]}, f]
+  let selectionModels := models.push {models[0]! with symbol := "project.other"}
+  let first := firstModelCalls selectionModels selectionFuncs
+  let exhaustive := ModelRegistry.callIndex selectionFuncs
+  for m in selectionModels do
+    let summary (site : ModelRegistry.CallSite) := (site.functionIndex, site.args, site.ret)
+    require ((first[m.symbol]?.map summary) ==
+      (((exhaustive.getD m.symbol #[])[0]?).map summary)) "emitter/checker first-site equivalence"
+  require (first.size == 2 && (first["project.identity"]?.map (·.functionIndex)) == some 1) "registered first sites only"
+  let deepTypes : Array Ty := ((Array.range 65).map fun i =>
+    if i == 0 then Ty.int false 8 else Ty.optional (i - 1)).push .noreturn
+  let deepFunc := {f with params := #[64], ret := 64, types := deepTypes, layouts := #[], body := #[
+    {id := 0, ty := 64, op := .arg 0},
+    {id := 1, ty := 64, op := .call (.func "project.identity" false none) #[.inst 0]},
+    {id := 2, ty := 65, op := .ret (.inst 1)}]}
+  let deepTemplate ← get <| ModelRegistry.template raw.profile #[deepFunc]
+  let deepEntry := ((deepTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
+  let deepEntry := entry.setObjVal! "signature" (deepEntry.getObjValD "signature")
+  let deepEntry := (deepEntry.setObjVal! "implementation" (.str "RegistryExample.polyIdentity"))
+    |>.setObjVal! "contract" (.str "RegistryExample.polyContract")
+    |>.setObjVal! "proof" (.str "RegistryExample.polyEvidence")
+  let deepDocument := document.setObjVal! "models" (.arr #[deepEntry])
+  let deepModels ← get <| ModelRegistry.parse deepDocument.compress
+  let _ ← get <| ModelRegistry.check deepModels raw.profile #[deepFunc]
+  let collisionFunc := {f with name := "collisionClient", params := #[], ret := 2,
+    types := f.types.push (.struct "p0" "auto" #[("value", 0)]),
+    layouts := f.layouts.push {size := some 1, align := some 1, offsets := #[0]}, body := #[
+      {id := 0, ty := 2, op := .call (.func "project.identity" false none) #[.undef 2]},
+      {id := 1, ty := 1, op := .ret (.inst 0)}]}
+  let (collisionParams, collisionReturn) ← get <| ModelRegistry.signature collisionFunc #[.undef 2] 2
+  let collisionModels := #[{models[0]! with params := collisionParams, ret := collisionReturn,
+    implementation := "RegistryExample.polyIdentity", contract := "RegistryExample.polyContract",
+    proof := some "RegistryExample.polyEvidence"}]
+  let _ ← get <| check collisionFunc
+  let _ ← get <| checkProgram #[collisionFunc] collisionModels (some raw.profile)
+  let collisionSource := emit #[collisionFunc] "CollisionClient" "" .ieee collisionModels
+  require (decide ((collisionSource.splitOn "(p0 : p0_air2lean1)").length > 1)) "model binder reserves aggregate name"
+  let ordinaryCollision := emit #[collisionFunc] "CollisionClient" ""
+  require (decide ((ordinaryCollision.splitOn "structure p0 where").length > 1)) "ordinary declaration names unchanged"
+  IO.FS.writeFile (directory / "CollisionGenerated.lean") (collisionSource ++ "\n" ++
+    "namespace CollisionClient\n" ++
+    "theorem client_result {before result after}\n" ++
+    "    (run : collisionClient before = some (.ok (result, after))) : result = (default : p0_air2lean1) := by\n" ++
+    "  have modelRun : RegistryExample.polyIdentity (default : p0_air2lean1) before = some (.ok (result, after)) := by\n" ++
+    "    change (some (Except.ok ((default : p0_air2lean1), before)) = some (Except.ok (result, after))) at run\n" ++
+    "    change (some (Except.ok ((default : p0_air2lean1), before)) = some (Except.ok (result, after)))\n" ++
+    "    exact run\n" ++
+    "  exact (air2lean_model_0_contract.success air2lean_model_0_evidence (by trivial) modelRun).1\n" ++
+    "end CollisionClient\n")
   let tupleRaw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/tuple-client.json")
   let tupleFunc ← get <| normalize tupleRaw
   let _ ← get <| check tupleFunc

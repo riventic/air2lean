@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for contents, diagnostic in [
         ('{"schema":1e1000000000,"models":[]}', "exponent exceeds"),
         ('{"schema":1,"schema":1,"models":[]}', "duplicate JSON object key"),
-        ('[' * 129 + '0' + ']' * 129, "JSON nesting exceeds"),
+        ('[' * 529 + '0' + ']' * 529, "JSON nesting exceeds"),
     ]:
         registry.write_text(contents)
         out.write_text("KEEP")
@@ -98,6 +98,30 @@ with tempfile.TemporaryDirectory() as tmp:
     for option in ["-o", "--prefix", "--model-registry", "--namespace"]:
         result = subprocess.run(base + [option], capture_output=True, text=True)
         assert result.returncode != 0 and "missing value" in result.stderr
+    ordinary = json.loads(fixture.read_text())
+    ordinary["body"] = [ordinary["body"][0], ordinary["body"][2]]
+    ordinary["body"][1]["args"] = [{"inst": 0}]
+    (air / "client.json").write_text(json.dumps(ordinary))
+    invoke()
+    text = out.read_text()
+    assert text.startswith("-- air2lean-profile:") and "-- air2lean-models:" not in text
+    write({"schema": 1, "models": []})
+    invoke(["--model-registry", str(registry)])
+    assert out.read_text() == text
+    deep = json.loads(fixture.read_text())
+    deep["types"] = [deep["types"][0]] + [{"k": "optional", "child": i - 1} for i in range(1, 65)] + [{"k": "noreturn"}]
+    deep["params"], deep["ret"] = [64], 64
+    deep["body"][0]["ty"] = deep["body"][1]["ty"] = 64
+    deep["body"][2]["ty"] = 65
+    (air / "client.json").write_text(json.dumps(deep))
+    invoke(["--model-registry-template"])
+    deep_data = json.loads(out.read_text())
+    deep_data["models"][0].update({"import": "tests.roadmap.models.Model", "implementation": "RegistryExample.polyIdentity",
+              "contract": "RegistryExample.polyContract", "trust": "proved", "proof": "RegistryExample.polyEvidence",
+              "termination": "total", "errors": [], "effects": "preserves", "dependencies": []})
+    write(deep_data)
+    invoke(["--model-registry", str(registry)])
+    assert "-- air2lean-models:" in out.read_text()
     # A tuple argument followed by a scalar must remain grouped as (A × B) × C.
     (air / "client.json").write_text(Path(__file__).with_name("tuple-client.json").read_text())
     invoke(["--model-registry-template"])

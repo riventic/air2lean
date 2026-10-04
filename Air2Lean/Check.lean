@@ -604,6 +604,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   unless models.isEmpty do
     let some profile := profile | throw "external model bindings require a checked program profile"
     ModelRegistry.check models profile funcs
+  let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let mem := memoryFunctions funcs (models.map (·.symbol))
   let names := funcs.map (·.name)
   for f in funcs do
@@ -614,7 +615,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
           unless names.contains worker do
             throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-        unless names.contains callee || models.any (·.symbol == callee) do
+        unless names.contains callee || modelSymbols.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           match allocFn? callee with

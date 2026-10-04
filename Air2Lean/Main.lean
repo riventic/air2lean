@@ -139,7 +139,8 @@ private def run (args : List String) : IO UInt32 := do
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
             let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-              "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n" ++
+              (if models.isEmpty then "" else
+                "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
               emit funcs a.ns a.prefix_ a.floatSemantics models
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
