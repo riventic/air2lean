@@ -1,4 +1,4 @@
-# AIR JSON format (schema 11)
+# AIR JSON format (schema 12)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,9 +6,26 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 11,
+  "schema": 12,
   "zig_version": "0.15.2",
   "target_endian": "little",
+  "profile": {
+    "name": "abi64-le-v1",
+    "target_triple": "x86_64-linux.4.19...6.1-gnu.2.28",
+    "pointer_bits": 64,
+    "endian": "little",
+    "abi": "gnu",
+    "zig_version": "0.15.2",
+    "backend": "stage2_llvm",
+    "cpu": "x86_64",
+    "features": ["sse", "sse2"],
+    "build_mode": "ReleaseSafe",
+    "float_mode": "per-instruction",
+    "error_set_bits": 16,
+    "error_layout": "type-table",
+    "error_tracing": false,
+    "export_stage": "analyzed-air"
+  },
   "name": "basic.scale",
   "params": [0, 1],
   "ret": 3,
@@ -20,7 +37,9 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 | Field | Meaning |
 |---|---|
-| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy files without this field are accepted under the little-endian reference-target assumption; their target has not been verified. |
+| `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
+| `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
+| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |

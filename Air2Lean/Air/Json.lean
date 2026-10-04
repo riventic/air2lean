@@ -1,5 +1,6 @@
 import Lean.Data.Json
 import Air2Lean.Air.Op
+import Air2Lean.Air.Profile
 
 /-!
 # AIR JSON parser
@@ -91,6 +92,7 @@ end
 structure RawFunc where
   schema : Nat
   zigVersion : String
+  profile : BuildProfile
   name : String
   params : Array TyId
   ret : TyId
@@ -602,14 +604,9 @@ def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String 
 
 def parseFunc (j : Json) : Except String RawFunc := do
   let name ← (← j.getObjVal? "name").getStr?
-  -- Legacy exports carry no target metadata and retain the reference little-endian
-  -- assumption. New exports must state a target that the byte encoding model supports.
-  if let .ok endian := j.getObjVal? "target_endian" then
-    let endian ← endian.getStr?
-    unless endian == "little" do
-      throw s!"{name}: target_endian '{endian}' is outside the little-endian memory model"
   let schema ← (← j.getObjVal? "schema").getNat?
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
+  let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
   validateTypeGraph name types
@@ -623,7 +620,18 @@ def parseFunc (j : Json) : Except String RawFunc := do
     | some g => g.getArr?
     | none => pure #[]
   let globals ← globalsJ.mapM (parseGlobal name types)
-  return { schema, zigVersion, name, params, ret, body, types, layouts, globals }
+  return {
+    schema
+    zigVersion
+    profile
+    name
+    params
+    ret
+    body
+    types
+    layouts
+    globals
+  }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do
