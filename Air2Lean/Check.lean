@@ -626,7 +626,7 @@ private def checkCallSignatureWith (f target : Func) (i : Inst) (args : Array Va
   for (arg, k) in args.zipIdx do
     if let .func .. := arg then
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' argument {k}: function values lack a structured signature in this AIR schema"
-    let agrees := match arg with
+    let agrees : Bool := match arg with
       | .bool _ => target.types[target.params[k]!]? == some .bool
       | .void => target.types[target.params[k]!]? == some .void
       | v => ((index.valTy? v).map fun t => sameType t target.params[k]!).getD false
