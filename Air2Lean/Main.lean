@@ -22,6 +22,21 @@ def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt]"
 
+def help : String :=
+  "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
+  "\n\nArguments:\n" ++
+  "  <air-dir>                    Directory of JSON files from the patched Zig compiler.\n" ++
+  "  -o <out.lean>                Lean file to write (required).\n" ++
+  "  --namespace <Ns>             Lean namespace, such as My.Program (required).\n" ++
+  "  --prefix <p>                 Trim this prefix from emitted function names.\n" ++
+  "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
+  "  -h, --help                   Show this help.\n\n" ++
+  "Example:\n" ++
+  "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
+  "To translate a Zig source file, use scripts/translate.sh instead.\n" ++
+  "Check setup with scripts/doctor.sh; start with docs/getting-started.md.\n" ++
+  "Generated definitions describe the program; properties need separate proofs."
+
 structure Args where
   airDir : System.FilePath
   outPath : System.FilePath
@@ -51,7 +66,8 @@ private partial def parseArgsGo (args : List String)
   | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
-    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics
+    if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
+    else if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
@@ -81,7 +97,9 @@ private def run (args : List String) : IO UInt32 := do
       ((entries.filter fun e => e.fileName.endsWith ".json").qsort
         (fun a b => decide (a.fileName < b.fileName))).map (·.path)
     if jsonPaths.isEmpty then
-      die s!"no *.json files found in {a.airDir}"
+      die (s!"no *.json files found in {a.airDir}\n" ++
+        "Export AIR with the patched Zig compiler first, or use scripts/translate.sh.\n" ++
+        "Check the dump filter and make functions reachable with export fn or comptime references.")
     else
       let texts ← jsonPaths.mapM fun path => do
         try IO.FS.readFile path catch e =>
@@ -103,7 +121,7 @@ private def run (args : List String) : IO UInt32 := do
 
 def main (args : List String) : IO UInt32 := do
   if args == ["--help"] || args == ["-h"] then
-    IO.println usage
+    IO.println help
     pure 0
   else
     try run args catch e => die e.toString
