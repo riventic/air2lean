@@ -71,8 +71,10 @@ kernel build, ten exact native comparisons and three detected semantic mutants a
 `853cef53211d08a62e368739160f56dea6a3408e`, using Zig 0.16.0 on aarch64-macos with
 baseline CPU/ReleaseSafe. It lists the actual caps and failure indices, log hashes and
 sampled resource measurements. A subsequent local Zig 0.15.2 run also passed ten exact cases, and the full committed
-proof package passed (104 jobs). Reference Linux CI, the existing lists-client differential
-rerun after a nested allocator-parameter rename, and central review remain pending. M03 is not fully qualified until remaining gates and
+proof package passed (104 jobs). The existing lists-client differential rerun passed 1,503 exact comparisons with zero
+fail matches, unspecified outcomes, caps or mismatches; its libm self-check matched
+320/320 samples. Reference Linux CI, the fixtures/documentation second review, and
+post-cleanup checks for the moved default cap definition remain pending. M03 is not fully qualified until remaining gates and
 the universal acceptance review pass against an exact revision/profile. This fixture
 compares the selected model policy on native reference layouts; it is not general allocator
 or cross-target correspondence.

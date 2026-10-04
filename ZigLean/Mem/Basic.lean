@@ -184,11 +184,14 @@ structure ALoc where
   msgs : Array Msg
   deriving Repr, Inhabited
 
+/-- The legacy default request-size cap, in bytes; configurable through `Mem.allocPolicy`. -/
+def maxAllocBytes : Nat := 1 <<< 20
+
 /-- Selected allocator environment: a per-request cap and permitted failure indices.
 The finite list can describe every finite prefix of an arbitrary failure decision trace.
 It is not a claim about a native allocator's available memory or address policy. -/
 structure AllocPolicy where
-  maxBytes : Nat := 1 <<< 20
+  maxBytes : Nat := maxAllocBytes
   failures : List Nat := []
   deriving DecidableEq, Repr, Inhabited
 

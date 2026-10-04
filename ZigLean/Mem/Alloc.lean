@@ -35,9 +35,6 @@ instance : Enc Allocator where
   encode _ := Array.replicate 16 (.int 0)
   decode _ := pure ⟨⟩
 
-/-- The legacy default request-size cap, in bytes; configurable through `Mem.allocPolicy`. -/
-def maxAllocBytes : Nat := 1 <<< 20
-
 /-- `rawAlloc` of `n > 0` bytes: allocation number `Mem.allocs`. `none`: the allocation fails. -/
 def rawAlloc (n align : Nat) : MemM (Option Ptr) := do
   let m ← get

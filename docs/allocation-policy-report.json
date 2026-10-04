@@ -112,8 +112,7 @@
     {
       "kind": "existing_client_differential",
       "command": "AIR2LEAN_EXAMPLES=lists scripts/diff.sh",
-      "status": "pending_rerun",
-      "reason": "First attempt failed on nested Zig allocator-parameter shadowing before native execution; narrow rename now applied.",
+      "status": "pass",
       "previous_attempt": {
         "status": "fail",
         "revision": "75c473bcaf352778b576b54592df97b2d15a6f81",
@@ -132,6 +131,60 @@
           "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
         },
         "stage": "Native lists harness compilation; no differential result claimed."
+      },
+      "revision": "13d6d58aa1ec2a4bfecd1ed7b7dda6c1bba4916a",
+      "profile": {
+        "zig": "0.16.0",
+        "lean_toolchain": "leanprover/lean4:v4.34.0",
+        "host": "aarch64-macos",
+        "cpu": "baseline",
+        "build_mode": "ReleaseSafe",
+        "scope": "selected native 64-bit allocation-policy TestAllocator fixture; not full ABI/native allocator qualification"
+      },
+      "date": "2026-10-04",
+      "log": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-lists-shadow-fixed.log",
+        "sha256": "2883ffc00359ac64d44cfc196ba03e99bfa564499b487702f3eb4b0a43dee9b4",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "result": {
+        "exact_comparisons": 1503,
+        "fail_matches": 0,
+        "unspecified": 0,
+        "capped_searches": 0,
+        "mismatches": 0,
+        "functions": {
+          "dupe": 300,
+          "dupeZLen": 300,
+          "evens": 300,
+          "listSum": 300,
+          "sumRange": 303
+        },
+        "libm_self_check": {
+          "matches": 320,
+          "mismatches": 0
+        }
+      },
+      "coordinator_reported_metrics": {
+        "elapsed_seconds": 35.1,
+        "sampled_peak_memory_mib": 338
+      },
+      "checked_code_sha256": {
+        "ZigLean/Mem/Basic.lean": "a862ddfbae16ccad700dc3b5c99466f48642e8531874d8dc4f629170faba2ed3",
+        "ZigLean/Mem/Alloc.lean": "8c15f83f28c7cab91f400deebf14e9fef852d3455f6fee9e200a80a9ec8cef18",
+        "ZigLean/Sep/Alloc.lean": "0409ae6dddff630925604c87a684aaa9bccb2d16acf980efe1f41333d966ad70",
+        "tests/diff/common.zig": "9eb8a82722896be6adbfa5e211ebf5841458d79c1d1786ae3c3dd7b5278f1ef6",
+        "tests/diff/Diff.lean": "3903da2bed2f02316c4e801689a7a71e053e6ff815033dd888eebc82c1e7f6be",
+        "tests/diff/lists/harness.zig": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
+        "tests/diff/lists/inputs/sumRange.jsonl": "8f6316ebcf07cb012e3486d5c9ce0d294dd2b73d203f50489768eba0497b51bb",
+        "tests/roadmap/allocation-policy/Check.lean": "7113f34252a4c4c07e8059c65209aca3bd674bb360dfbbbef8903bd2f181fcd9",
+        "tests/roadmap/allocation-policy/fixture.zig": "dacde4e6f873f09f9e82858f50e9ca15b0803e48da59019d110110c6ecff5561",
+        "tests/roadmap/allocation-policy/check.sh": "ac7f235cc4bf9b3429d950f1dad5b41ba2296c45e23fe9fc51f67da7c1d6f5f8",
+        "tests/roadmap/allocation-policy/mutations.py": "80eb157bbb65c8a3dd1d8df8d29216d3fbc760fd8b0533286616c176a7fb7b58",
+        "tests/roadmap/allocation-policy/compare.py": "2c90d74517f1c71f33a49b0642c3f741bea1921cb18513a87c1189fa6ee6b24f",
+        "tests/roadmap/allocation-policy/static.py": "238e00f0b1fdaa9e0268652ce62032e8d9770c48d37c3d121f5fcd215a1a9b9e",
+        "scripts/mutate.sh": "e96c0af7343d52d0fc6d95892a590d72230c56beb7a5ef912cba2e0b0f26e69a",
+        ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
       }
     },
     {
@@ -215,11 +268,18 @@
       "scripts/mutate.sh": "e96c0af7343d52d0fc6d95892a590d72230c56beb7a5ef912cba2e0b0f26e69a",
       ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
     },
-    "pending_code_change": {
-      "path": "tests/diff/lists/harness.zig",
-      "sha256": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
-      "reason": "Nested allocator parameter renamed; existing client differential needs rerun. Previously checked hashes still identify the earlier exact source state."
-    }
+    "pending_code_changes": [
+      {
+        "path": "ZigLean/Mem/Basic.lean",
+        "sha256": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
+        "reason": "Review cleanup moves the unchanged public maxAllocBytes constant into Mem.Basic and references it from AllocPolicy; post-cleanup compiler check remains coordinator-owned."
+      },
+      {
+        "path": "ZigLean/Mem/Alloc.lean",
+        "sha256": "1ab859b56bcd932b4f3e92cab45396e450c1ac1ffd699f12f6477b454d986dad",
+        "reason": "Review cleanup moves the unchanged public maxAllocBytes constant into Mem.Basic and references it from AllocPolicy; post-cleanup compiler check remains coordinator-owned."
+      }
+    ]
   },
   "execution_controls": {
     "coordinator_only_compilers": true,
@@ -393,9 +453,9 @@
     }
   ],
   "pending": [
-    "Eight independent central review angles",
-    "Existing lists-client differential rerun after allocator-parameter rename",
-    "CI qualification on the reference Linux host for Zig 0.16.0/0.15.2",
+    "CI and fixtures/documentation second independent review",
+    "Reference Linux CI for Zig 0.16.0/0.15.2",
+    "Post-cleanup source-state checks for the moved default cap definition",
     "Universal acceptance review"
   ]
 }
