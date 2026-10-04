@@ -265,15 +265,35 @@ def main (args : List String) : IO Unit := do
   reject (castFile 1 4) "integer-to-float vector bitcast"
   let _ ← accept (castFile 1 1)
   let tuple := obj [("k", .str "tuple"), ("fields", .arr #[obj [("ty", num 0)]])]
-  for (callee, args) in #[ ("Thread.spawn", #[lit 1 "{}", ref 0]),
-      ("Io.Group.async", #[lit 1 "{}", lit 1 "{}", ref 0]) ] do
-    let spawn := file "spawnMissing" #[intTy 8, voidTy, tuple, nrTy] #[] 1
-      #[inst 0 "aggregate_init" 2 #[lit 0 "7"], inst 1 "call" 1 args
+  let modelStruct (name : String) := obj [("k", .str "struct"), ("name", .str name),
+    ("layout", .str "auto"), ("fields", .arr #[])]
+  let spawnTypes := #[intTy 8, voidTy, tuple, nrTy, modelStruct "Thread.SpawnConfig",
+    obj [("k", .str "error_set"), ("any", .bool true)], modelStruct "Thread",
+    obj [("k", .str "error_union"), ("error", num 5), ("payload", num 6)],
+    modelStruct "Io.Group", ptrTy "one" 8, modelStruct "Io"]
+  for (callee, args) in #[ ("Thread.spawn", #[undef 4, ref 0]),
+      ("Io.Group.async", #[undef 9, undef 10, ref 0]) ] do
+    let result := if callee == "Thread.spawn" then 7 else 1
+    let spawn := file "spawnMissing" spawnTypes #[] 1
+      #[inst 0 "aggregate_init" 2 #[lit 0 "7"], inst 1 "call" result args
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "missingWorker")])],
         inst 2 "ret" 3 #[lit 1 "{}"]]
     let f ← accept spawn
-    require ((checkProgram #[f]).toOption.isNone) s!"accepted missing worker for {callee}"
-    let worker ← accept (file "missingWorker" #[intTy 8, nrTy] #[0] 0
-      #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]])
-    require ((checkProgram #[f, worker]).toOption.isSome) s!"rejected present worker for {callee}"
+    match checkProgram #[f] with
+    | .ok _ => throw (IO.userError s!"accepted missing worker for {callee}")
+    | .error e =>
+      require ((e.splitOn "the spawned callee 'missingWorker' has no AIR file").length > 1)
+        s!"wrong missing-worker diagnostic for {callee}: {e}"
+    let workerFile (bits : Nat) := file "missingWorker" #[intTy bits, nrTy] #[0] 0
+      #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]]
+    let worker ← accept (workerFile 8)
+    match checkProgram #[f, worker] with
+    | .ok _ => pure ()
+    | .error e => throw (IO.userError s!"rejected present worker for {callee}: {e}")
+    let incompatible ← accept (workerFile 16)
+    match checkProgram #[f, incompatible] with
+    | .ok _ => throw (IO.userError s!"accepted incompatible worker for {callee}")
+    | .error e =>
+      require ((e.splitOn "spawned callee 'missingWorker' has an incompatible argument 0 type").length > 1)
+        s!"wrong incompatible-worker diagnostic for {callee}: {e}"
   IO.println "parser regressions passed"
