@@ -1,4 +1,5 @@
 import Air2Lean.Memory
+import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Std.Data.HashMap
 import ZigLean.Mem.Enc
@@ -1096,5 +1097,126 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           | _ => #[]
         for c in items do
           checkMemTy f.name f.types f.layouts 0 c
+
+/-! Collection reuses validators without constructing partial IR. Failed units retain
+their first error, but cannot suppress independent siblings. -/
+
+def diagnosticStructure (f : Func) : Except String Unit :=
+  checkFunctionStructure f f.operandTypes
+
+private def checkDiagnostic (file : String) (f : Func) (code : Diagnostics.Code)
+    (anchor : Diagnostics.Anchor := {}) : Diagnostics.Diagnostic :=
+  { code, phase := .check, category := .validationFailure, message := "",
+    file := some file, function := some f.name, anchor,
+    prerequisites := #["normalized_function_structure"] }
+
+private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
+    (body : Array Inst) (line : Nat) (log : Diagnostics.Log) : Nat × Diagnostics.Log := Id.run do
+  let mut log := log
+  let mut line := line
+  for i in body do
+    let anchor : Diagnostics.Anchor := { idSpace := .canonical,
+      instruction := some i.id, nearestDbgLine := if line == 0 then none else some line }
+    log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty })
+      (checkTy f.name f.types f.layouts line i.ty)
+    match i.op with
+    | .block b | .loop b =>
+      let result := collectInstChecks file f cx b line log
+      line := result.1; log := result.2
+    | .condBr _ t e =>
+      log := (collectInstChecks file f cx t line log).2
+      log := (collectInstChecks file f cx e line log).2
+    | .switchBr _ cases e =>
+      for c in cases do log := (collectInstChecks file f cx c.body line log).2
+      log := (collectInstChecks file f cx e line log).2
+    | .«try» _ b => log := (collectInstChecks file f cx b line log).2
+    | .line n => line := n
+    | _ => log := log.record (checkDiagnostic file f .instructionFailure anchor)
+        (checkOp cx line i.ty i.op)
+  return (line, log)
+
+def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
+  let mut log := initial
+  match diagnosticStructure f with
+  | .error message =>
+    log := log.add { (checkDiagnostic file f .structureFailure) with
+      category := .malformedInput, message, firstErrorInUnit := true }
+    return log.add (Diagnostics.skipped file (some f.name) .check "normalized_function_structure")
+  | .ok _ => pure ()
+  for p in f.params ++ #[f.ret] do
+    log := log.record (checkDiagnostic file f .typeFailure { idSpace := .canonical, typeId := some p })
+      (checkTy f.name f.types f.layouts 0 p)
+  for (t, id) in f.types.zipIdx do
+    if let .union _ _ none _ := t then
+      log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
+        (checkMemTy f.name f.types f.layouts 0 id)
+  let insts := f.allInsts
+  let escaping := escapingAllocs f
+  let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p
+  for i in insts do
+    if let .alloc := i.op then
+      if escaping.contains i.id then
+        if let some c := ptrChild f.types i.ty then
+          log := log.record (checkDiagnostic file f .memoryFailure
+            { idSpace := .canonical, instruction := some i.id, typeId := some c })
+            (checkMemTy f.name f.types f.layouts 0 c)
+  for (g, id) in f.globals.zipIdx do
+    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
+  for i in insts do
+    for v in valueOperands i.op ++ ptrOperands i.op do
+      let result : Except String Unit := do
+        if let some k := v.ptrOther? then throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"
+        if let .ptrConst pty g _ := v then
+          let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
+          let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
+          if pa > ga then throw s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset"
+      log := log.record (checkDiagnostic file f .constantFailure
+        { idSpace := .canonical, instruction := some i.id }) result
+  let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
+    instTys := insts.map fun i => (i.id, i.ty), places }
+  return (collectInstChecks file f cx f.body 0 log).2
+
+private def diagnosticSpawnSignature (f target : Func) (i : Inst) (args : Array Val)
+    (k : Nat) (index : OperandTypes) : Except String Unit := do
+  let some tuple := args[k]?.bind index.valTy? | throw "spawn args have no type"
+  let some (.tuple fields) := f.types[tuple]? | throw "spawn args are not a tuple"
+  unless fields.size == target.params.size do throw "spawned callee has an incompatible argument count"
+  for (ty, n) in fields.zipIdx do
+    unless compatibleType f target ty target.params[n]! do
+      throw s!"spawned callee has an incompatible argument {n} type (inst {i.id})"
+
+/-- Calls are independent units; the original whole-program check additionally covers
+shared definitions, indirect targets and memory propagation. -/
+def collectCallChecks (file : String) (f : Func) (funcs : Array Func)
+    (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
+  let mut log := initial
+  let index := f.operandTypes
+  let references := fnRefs funcs
+  let unique (name : String) : Option Func :=
+    let matches := funcs.filter (·.name == name)
+    if matches.size == 1 then matches[0]? else none
+  for i in index.insts do
+    let diagnostic := { (checkDiagnostic file f .signatureFailure
+      { idSpace := .canonical, instruction := some i.id }) with phase := .program }
+    match i.op with
+    | .call (.func callee false worker) args =>
+      log := log.record { diagnostic with code := .modelFailure }
+        (checkModelSignature f callee args i.ty index)
+      if (allocFn? callee).isNone && (threadFn? callee).isNone then
+        if let some target := unique callee then
+          log := log.record diagnostic (checkCallSignature f target i args index)
+      if let some k := (threadFn? callee).bind (·.spawnArgs?) then
+        if let some target := worker.bind unique then
+          log := log.record diagnostic (diagnosticSpawnSignature f target i args k index)
+    | .call (.inst p) args =>
+      match index.calleeFnTy? f p with
+      | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
+      | some name =>
+        for (typ, callee) in references do
+          if typ == name then
+            if let some target := unique callee then
+              log := log.record diagnostic (checkCallSignature f target i args index)
+    | _ => pure ()
+  return log
 
 end Air2Lean

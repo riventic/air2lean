@@ -2,6 +2,7 @@ import Air2Lean
 import Air2Lean.Check
 import Air2Lean.Emit
 import Air2Lean.Air.Anon
+import Air2Lean.Diagnose
 
 /-!
 # CLI
@@ -20,7 +21,8 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1]"
+    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
 
 structure Args where
   airDir : System.FilePath
@@ -122,7 +124,9 @@ private def run (args : List String) : IO UInt32 := do
           pure 0
 
 def main (args : List String) : IO UInt32 := do
-  if args == ["--help"] || args == ["-h"] then
+  if args.head? == some "--diagnostics-json" then
+    Diagnostics.runCheck args
+  else if args == ["--help"] || args == ["-h"] then
     IO.println usage
     pure 0
   else

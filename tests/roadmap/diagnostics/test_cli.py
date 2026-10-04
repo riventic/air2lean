@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Actual-CLI regressions; --self-test checks bounded harness oracles without tools."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+
+VOID = dict(k="void", abi_size=0, abi_align=1)
+NORETURN = dict(k="noreturn")
+INT = dict(k="int", signed=False, bits=32, abi_size=4, abi_align=4)
+PTR = dict(k="ptr", size="one", const=False, child=0, abi_size=8, abi_align=8, ptr_align=4)
+
+
+def inst(i, tag, ty, args=(), **extra):
+    return dict(id=i, tag=tag, ty=ty, args=list(args), **extra)
+
+
+def function(name, body=None):
+    return dict(schema=11, zig_version="0.16.0", name=name, types=[VOID, NORETURN],
+                params=[], ret=0, body=body if body is not None else [
+                    inst(0, "ret", 1, [dict(ty=0, val="{}")])], globals=[])
+
+
+def calls(name, *targets):
+    return function(name, [inst(i, "call", 0, callee=dict(func=target, noreturn=False))
+                           for i, target in enumerate(targets)] + [
+                               inst(len(targets), "ret", 1, [dict(ty=0, val="{}")])])
+
+
+def decode(result):
+    assert result.stderr == "", result.stderr
+    report = json.loads(result.stdout)
+    assert report["schema"] == 1 and report["kind"] == "air2lean-check-diagnostics"
+    assert report["proof_status"] == "not_run" and report["runtime_outcomes"] == "not_observed"
+    assert report["source_correspondence"] == "not_attested"
+    assert result.returncode == (1 if report["status"] == "rejected" else 0)
+    assert report["status"] in ("checked", "rejected")
+    assert len(report["diagnostics"]) <= report["diagnostic_limit"]
+    assert report["diagnostic_payload_bytes"] <= 1024 * 1024
+    if report["truncated"] or any(d["first_error_in_unit"] for d in report["diagnostics"]):
+        assert report["complete"] is False
+    for d in report["diagnostics"]:
+        assert d["source_span"] is None and d["source_span_status"] == "unavailable_in_AIR"
+        assert d["anchor"]["id_space"] in ("canonical", "exported", "unavailable")
+        assert isinstance(d["prerequisites"], list) and isinstance(d["dependency_chain"], list)
+    return report
+
+
+def invoke(binary, air, *flags):
+    return subprocess.run([str(binary), "--diagnostics-json", str(air), *flags],
+                          capture_output=True, text=True, timeout=15, check=False)
+
+
+def write(air, documents):
+    for old in air.glob("*.json"):
+        old.unlink()
+    for name, document in documents.items():
+        text = document if isinstance(document, str) else json.dumps(document)
+        (air / name).write_text(text)
+
+
+def run(binary, baseline=None):
+    checks = 0
+    with tempfile.TemporaryDirectory(prefix="air2lean-diagnostics-") as directory:
+        directory = Path(directory)
+        air = directory / "air"
+        air.mkdir()
+        output = directory / "Gen.lean"
+        output.write_text("sentinel\n")
+        marked = function("marked", [inst(42, "unknown_a", 0, unsupported=True),
+                                      inst(43, "unknown_b", 0, unsupported=True)])
+        write(air, {"a.json": "{", "b.json": "{", "marked.json": marked, "ok.json": function("ok")})
+        first = invoke(binary, air)
+        report = decode(first)
+        assert [d["file"].split("/")[-1] for d in report["diagnostics"] if d["code"] == "JSON_SYNTAX"] == ["a.json", "b.json"]
+        markers = [d for d in report["diagnostics"] if d["code"] == "EXPORTER_UNSUPPORTED"]
+        assert [d["anchor"]["instruction"] for d in markers] == [42, 43]
+        assert all(d["anchor"]["id_space"] == "exported" for d in markers)
+        assert any(f["function"] == "ok" and f["local_check"] == "passed" for f in report["files"])
+        assert invoke(binary, air).stdout == first.stdout, "deterministic report bytes"
+        assert output.read_text() == "sentinel\n"
+        cap = decode(invoke(binary, air, "--diagnostic-limit", "1"))
+        assert len(cap["diagnostics"]) == 1 and cap["truncated"] and not cap["complete"]
+        checks += 3
+
+        branch = function("branches", [inst(0, "arg", 3, param=0), inst(7, "dbg_stmt", 1, line=42),
+            inst(1, "cond_br", 2, [dict(ty=4, val="true")], **{"then": [
+                inst(10, "atomic_load", 0, [dict(inst=0)], order="unordered")], "else": [
+                inst(20, "assembly", 1, source="", volatile=False, clobbers=["memory"], outputs=[], inputs=[])]}),
+            inst(30, "ret", 2, [dict(ty=1, val="{}")])])
+        branch.update(types=[INT, VOID, NORETURN, PTR, dict(k="bool", abi_size=1, abi_align=1)], params=[3], ret=1)
+        write(air, {"branches.json": branch})
+        report = decode(invoke(binary, air))
+        failures = [d for d in report["diagnostics"] if d["code"] == "INSTRUCTION_FAILURE"]
+        assert len(failures) == 2, report
+        assert all(d["anchor"]["id_space"] == "canonical" and d["anchor"]["nearest_dbg_line"] == 42 for d in failures)
+        assert not report["complete"] and not report["truncated"]
+        default = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Diagnostics"],
+                                 text=True, capture_output=True, timeout=15)
+        assert default.returncode == 1 and output.read_text() == "sentinel\n"
+        checks += 2
+
+        write(air, {"root.json": calls("root", "mid", "missing_a", "missing_b"),
+                    "mid.json": calls("mid", "root", "marked"), "marked.json": marked})
+        report = decode(invoke(binary, air))
+        assert any(d["code"] == "CALLEE_BLOCKED" and d["dependency_chain"] == ["root", "mid", "marked"] for d in report["diagnostics"])
+        assert {d["dependency_chain"][-1] for d in report["diagnostics"] if d["code"] == "CALLEE_MISSING"} == {"missing_a", "missing_b"}
+        assert report["runtime_outcomes"] == "not_observed", "cycles cannot be labeled divergence"
+        checks += 1
+        write(air, {"a.json": function("duplicate"), "b.json": function("duplicate"), "caller.json": calls("caller", "duplicate")})
+        report = decode(invoke(binary, air))
+        assert any(d["code"] == "DUPLICATE_FUNCTION" for d in report["diagnostics"])
+        assert any(d["code"] == "CALLEE_AMBIGUOUS" for d in report["diagnostics"])
+        checks += 1
+        write(air, {"ok.json": function("ok")})
+        report = decode(invoke(binary, air))
+        assert report["status"] == "checked" and report["complete"] and not report["diagnostics"]
+        assert output.read_text() == "sentinel\n"
+        for flags in (("-o", str(output)), ("--namespace", "N"), ("--prefix", "p"),
+                      ("--float-semantics", "ieee"), ("--diagnostic-limit", "0")):
+            rejected = decode(invoke(binary, air, *flags))
+            assert rejected["diagnostics"][0]["code"] == "CLI_ARGUMENTS"
+            assert output.read_text() == "sentinel\n"
+        checks += 6
+        if baseline is not None:
+            reference = directory / "Reference.lean"
+            for executable, destination in ((baseline, reference), (binary, output)):
+                emitted = subprocess.run([str(executable), str(air), "-o", str(destination), "--namespace", "Diagnostics"],
+                                         text=True, capture_output=True, timeout=15)
+                assert emitted.returncode == 0, emitted.stderr
+            assert output.read_bytes() == reference.read_bytes(), "default successful emission changed"
+            checks += 1
+        else:
+            print("baseline emission-byte comparison not run (supply --baseline)")
+    print(f"diagnostic CLI regressions passed: {checks}")
+
+
+class HarnessTests(unittest.TestCase):
+    def valid(self):
+        return dict(schema=1, kind="air2lean-check-diagnostics", proof_status="not_run",
+                    runtime_outcomes="not_observed", source_correspondence="not_attested",
+                    status="checked", diagnostics=[], diagnostic_limit=256,
+                    diagnostic_payload_bytes=0, complete=True, truncated=False)
+
+    def result(self, report, status=0):
+        return subprocess.CompletedProcess([], status, json.dumps(report), "")
+
+    def test_oracle_refuses_inflated_evidence(self):
+        for key, value in (("proof_status", "proved"), ("runtime_outcomes", "no_failures"),
+                           ("source_correspondence", "verified")):
+            report = self.valid()
+            report[key] = value
+            with self.assertRaises(AssertionError):
+                decode(self.result(report))
+
+    def test_oracle_refuses_hidden_truncation_and_failed_verdict(self):
+        report = self.valid()
+        report["truncated"] = True
+        with self.assertRaises(AssertionError):
+            decode(self.result(report))
+        with self.assertRaises(AssertionError):
+            decode(self.result(self.valid(), 1))
+
+    def test_synthetic_dependency_and_branch_inputs(self):
+        document = calls("root", "mid", "missing")
+        self.assertEqual([i["callee"]["func"] for i in document["body"][:-1]], ["mid", "missing"])
+        self.assertEqual(document["body"][-1]["tag"], "ret")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("binary", type=Path, nargs="?")
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        unittest.main(argv=[__file__])
+    elif args.binary:
+        run(args.binary.resolve(strict=True), args.baseline.resolve(strict=True) if args.baseline else None)
+    else:
+        parser.error("provide a root-built translator, or --self-test for offline harness checks")
