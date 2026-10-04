@@ -58,7 +58,7 @@ theorem weakCasPrep_of {n align li : Nat} {p : Ptr} {expected : BitVec n} {m m�
   obtain ⟨he, rfl⟩ := MemM.pure_ok h₂
   simp only [Prod.mk.injEq] at he
   obtain ⟨rfl, rfl⟩ := he
-  change casReadPrep n align p m = some (.ok ((li₁, readOpts m₂ li₁ false), m₂)) at hp
+  change casReadPrep n align p m = some (.ok ((li, readOpts m₁ li false), m₁)) at hp
   simp [weakCasPrep, weakCasOpts, zig_unfold, hp, ExceptT.run]
 
 theorem weakOptCount_eq {n align li : Nat} {p : Ptr} {expected : BitVec n} {succ : AtomicOrder}
