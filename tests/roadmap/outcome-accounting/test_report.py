@@ -123,6 +123,26 @@ class Outcomes(unittest.TestCase):
             path.write_text(text)
             with self.assertRaises(REPORT.Invalid):REPORT.load_panic_policy(path)
 
+    def test_exponent_overflow_rejected_at_shared_json_boundary(self):
+        for token in ('1e999','2e999','-1e999','-2e999'):
+            for raw in (token,'[0,'+token+']','{"nested":{"number":'+token+'}}'):
+                with self.subTest(raw=raw),self.assertRaises(REPORT.Invalid):REPORT.decode(raw)
+            for raw in ('{"ok":'+token+'}','{"ok":{"nested":['+token+']}}'):
+                with self.subTest(wire=raw),self.assertRaises(REPORT.Invalid):REPORT.wire(raw)
+            metadata='{"schema":1,"kind":"value","legacy":{"ok":{"nested":['+token+']}}}'
+            with self.subTest(binding=token),self.assertRaises(REPORT.Invalid):
+                REPORT.observation(metadata,{'ok':{'nested':[1.0]}},'native')
+
+    def test_finite_exponents_keep_type_zero_sign_and_spelling_policy(self):
+        self.assertEqual(REPORT.decode('1e308'),1e308)
+        self.assertEqual(REPORT.decode('-1e308'),-1e308)
+        self.assertTrue(REPORT.json_equal(REPORT.decode('1.0'),REPORT.decode('1e0')))
+        self.assertFalse(REPORT.json_equal(REPORT.decode('1'),REPORT.decode('1e0')))
+        self.assertFalse(REPORT.json_equal(REPORT.decode('0.0'),REPORT.decode('-0e0')))
+        metadata='{"schema":1,"kind":"value","legacy":{"ok":{"x":1e0}}}'
+        kind,_=REPORT.observation(metadata,REPORT.wire('{"ok":{"x":1.0}}'),'native')
+        self.assertEqual(kind,K.VALUE)
+
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})
         code,data=self.compare()

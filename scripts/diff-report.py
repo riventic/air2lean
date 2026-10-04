@@ -77,9 +77,14 @@ def no_duplicates(pairs):
         out[key] = value
     return out
 
+def parse_finite_float(token):
+    value=float(token)
+    if not math.isfinite(value):raise Invalid('non-finite JSON number')
+    return value
+
 def decode(line):
     try:
-        return json.loads(line, object_pairs_hook=no_duplicates, parse_constant=lambda _: (_ for _ in ()).throw(Invalid('non-finite JSON')))
+        return json.loads(line, object_pairs_hook=no_duplicates, parse_float=parse_finite_float, parse_constant=lambda _: (_ for _ in ()).throw(Invalid('non-finite JSON')))
     except (ValueError, RecursionError) as exc:
         raise Invalid('invalid JSON record') from exc
 
