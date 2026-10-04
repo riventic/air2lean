@@ -2253,8 +2253,8 @@ structure FuncParts where
   loops : List String
   defn : String
 
-/-- The static context of `f`. `globalIds`: the block of each global of `f.globals`. -/
-def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
+/-- The static context without block-emission membership, for global encoding. -/
+private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
     (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
     (concFuncs : Array String := #[]) : FCtx :=
   let allInsts := f.allInsts
@@ -2271,18 +2271,28 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds }
   let fc := { fc with places := fc.computePlaces }
-  ({ fc with instUses := fc.computeInstUses } : FCtx).prepareBranchTargets
+  { fc with instUses := fc.computeInstUses }
+
+/-- The static context of `f`, prepared for block emission. `globalIds`: the block of
+ each global of `f.globals`. Bare contexts are also prepared by `emitStmts`. -/
+def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
+    (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
+    (concFuncs : Array String := #[]) : FCtx :=
+  (mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs).prepareBranchTargets
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) : FuncParts :=
-  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
+  let fc := { mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
   let blTys := fc.blockTys
   let brT := brTargets allInsts
+  -- Reuse the ordered constructor inventory for block-emission membership.
+  let empty : Std.HashSet InstId := {}
+  let fc := { fc with branchTargetSet := some (brT.foldl (fun targets id => targets.insert id) empty) }
   let repT := repTargets allInsts
   let localsName := fc.localsName
   let exitName := fc.exitName
@@ -2598,7 +2608,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := asmDefs.toList.map emitAsmDef
-  let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
+  let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
