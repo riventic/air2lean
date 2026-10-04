@@ -22,11 +22,14 @@ def readBounded (read : USize → IO ByteArray) (limit : Nat := maxBytes) : IO B
       throw (IO.userError s!"AIR JSON exceeds {limit} UTF-8 bytes")
   return bytes
 
-/-- The per-file CLI reader. Metadata rejects oversized regular files cheaply; the bounded
-read still checks growth and non-regular inputs rather than trusting that initial size. -/
+/-- The per-file CLI reader accepts regular files, including symlinks to regular files.
+Metadata rejects other kinds before open and oversized files cheaply; bounded reads also
+check growth rather than trusting the initial size. -/
 def readFile (path : System.FilePath) : IO String := do
   let metadata ← path.metadata
-  if metadata.type == .file && metadata.byteSize.toNat > maxBytes then
+  unless metadata.type == .file do
+    throw (IO.userError s!"AIR input {path} must be a regular file")
+  if metadata.byteSize.toNat > maxBytes then
     throw (IO.userError s!"AIR JSON exceeds {maxBytes} UTF-8 bytes")
   IO.FS.withFile path .read fun handle => do
     let bytes ← readBounded handle.read

@@ -2,6 +2,7 @@
 """Run with the built translator; creates exact binding templates then mutates them."""
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -55,6 +56,16 @@ def main(executable):
         report = json.loads(marker.split(": ", 1)[1])
         assert report["assumptions"] == []
         assert "theorem air2lean_model_0_evidence" in text and "def client (p0 : BitVec 8) : Zig.MemM" in text
+        registry_symlink = tmp / "registry-link.json"
+        registry_symlink.symlink_to(registry)
+        invoke(["--model-registry", str(registry_symlink)])
+        assert out.read_text() == text, "regular-file registry symlink changed output"
+        # No writer is attached: pre-open rejection must finish within run_cli's timeout.
+        registry_fifo = tmp / "registry.fifo"
+        os.mkfifo(registry_fifo)
+        out.write_text("KEEP")
+        invoke(["--model-registry", str(registry_fifo)], False, "must be a regular file")
+        assert out.read_text() == "KEEP", "FIFO registry rejection overwrote output"
         assumed = copy.deepcopy(data)
         assumed["models"][0]["trust"] = "assumed"
         assumed["models"][0].pop("proof")
