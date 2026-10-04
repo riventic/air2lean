@@ -167,6 +167,10 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
 
+      - name: First-proof tutorial
+        if: ${{ !matrix.mutate }}
+        run: lake env lean tutorials/first-proof/Main.lean
+
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions
