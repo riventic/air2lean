@@ -23,5 +23,8 @@ lake env bash -euo pipefail -c '
   lean "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/tuple-client.log"
   lean "$AIR2LEAN_MODEL_EVIDENCE/CollisionGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/collision-client.log"
 '
-python3 tests/roadmap/models/test_cli.py .lake/build/bin/air2lean   2>&1 | tee "$model_evidence/cli.log"
+(
+  python3 -B tests/roadmap/models/test_cli_helpers.py
+  python3 tests/roadmap/models/test_cli.py .lake/build/bin/air2lean
+) 2>&1 | tee "$model_evidence/cli.log"
 printf 'External model contract evidence: %s\n' "$model_evidence"

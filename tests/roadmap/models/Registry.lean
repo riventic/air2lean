@@ -13,6 +13,15 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
   | .ok _ => throw (IO.userError s!"expected error containing {part}")
   | .error message => require (decide ((message.splitOn part).length > 1)) message
 
+private def provedEntry (entry : Json) (implementation contract proof : String) : Except String Json := do
+  let obj ← entry.getObj?
+  pure <| Json.mkObj <| obj.toArray.toList ++ [
+    ("import", .str "tests.roadmap.models.Model"),
+    ("implementation", .str implementation),
+    ("contract", .str contract), ("trust", .str "proved"),
+    ("proof", .str proof), ("termination", .str "total"),
+    ("errors", .arr #[]), ("effects", .str "preserves"), ("dependencies", .arr #[])]
+
 def main (args : List String) : IO Unit := do
   let directory : System.FilePath ← match args with
     | [] => pure "tests/roadmap/models"
@@ -23,13 +32,8 @@ def main (args : List String) : IO Unit := do
   let f ← get <| normalize raw
   let template ← get <| ModelRegistry.template raw.profile #[f]
   let entry := ((template.getObjValD "models").getArr?.toOption.getD #[])[0]!
-  let obj ← get entry.getObj?
-  let entry := Json.mkObj <| obj.toArray.toList ++ [
-    ("import", .str "tests.roadmap.models.Model"),
-    ("implementation", .str "RegistryExample.identity"),
-    ("contract", .str "RegistryExample.contract"), ("trust", .str "proved"),
-    ("proof", .str "RegistryExample.evidence"), ("termination", .str "total"),
-    ("errors", .arr #[]), ("effects", .str "preserves"), ("dependencies", .arr #[])]
+  let entry ← get <| provedEntry entry "RegistryExample.identity" "RegistryExample.contract" "RegistryExample.evidence"
+  expectError (provedEntry (.str "scalar") "Model.impl" "Model.contract" "Model.proof") "object expected"
   let document := Json.mkObj [("schema", toJson (1 : Nat)), ("models", .arr #[entry])]
   let models ← get <| ModelRegistry.parse document.compress
   let _ ← get <| ModelRegistry.check models raw.profile #[f]
@@ -131,10 +135,7 @@ def main (args : List String) : IO Unit := do
   }
   let deepTemplate ← get <| ModelRegistry.template raw.profile #[deepFunc]
   let deepEntry := ((deepTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
-  let deepEntry := entry.setObjVal! "signature" (deepEntry.getObjValD "signature")
-  let deepEntry := (deepEntry.setObjVal! "implementation" (.str "RegistryExample.polyIdentity"))
-    |>.setObjVal! "contract" (.str "RegistryExample.polyContract")
-    |>.setObjVal! "proof" (.str "RegistryExample.polyEvidence")
+  let deepEntry ← get <| provedEntry deepEntry "RegistryExample.polyIdentity" "RegistryExample.polyContract" "RegistryExample.polyEvidence"
   let deepDocument := document.setObjVal! "models" (.arr #[deepEntry])
   let deepModels ← get <| ModelRegistry.parse deepDocument.compress
   let _ ← get <| ModelRegistry.check deepModels raw.profile #[deepFunc]
@@ -178,13 +179,8 @@ def main (args : List String) : IO Unit := do
   let _ ← get <| check tupleFunc
   let tupleTemplate ← get <| ModelRegistry.template tupleRaw.profile #[tupleFunc]
   let tupleEntry := ((tupleTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
-  let tupleFields ← get tupleEntry.getObj?
-  let tupleEntry := Json.mkObj <| tupleFields.toArray.toList ++ [
-    ("import", .str "tests.roadmap.models.Model"),
-    ("implementation", .str "RegistryExample.tupleSelect"),
-    ("contract", .str "RegistryExample.tupleContract"), ("trust", .str "proved"),
-    ("proof", .str "RegistryExample.tupleEvidence"), ("termination", .str "total"),
-    ("errors", .arr #[]), ("effects", .str "preserves"), ("dependencies", .arr #[])]
+  let tupleEntry ← get <| provedEntry tupleEntry "RegistryExample.tupleSelect" "RegistryExample.tupleContract" "RegistryExample.tupleEvidence"
+  require (!(entry.getObjValD "signature" == tupleEntry.getObjValD "signature")) "scalar/tuple signatures remain distinct"
   let tupleDocument := Json.mkObj [("schema", toJson (1 : Nat)), ("models", .arr #[tupleEntry])]
   let tupleModels ← get <| ModelRegistry.parse tupleDocument.compress
   let _ ← get <| checkProgram #[tupleFunc] tupleModels (some tupleRaw.profile)
