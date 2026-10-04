@@ -110,3 +110,15 @@ The CLI's large-message case uses one 100 KiB type name and two failed instructi
 Without `--baseline`, that byte
 comparison is explicitly reported as not run. `--self-test` runs only offline
 harness-oracle tests; it does not execute or validate the translator.
+
+CI runs the collector evaluation, offline harness checks and actual CLI driver in
+that order, in the full non-mutation Zig 0.16.0 lane after the translator build.
+Evidence remains under `RUNNER_TEMP/diagnostics`; this gate adds no artifact upload.
+CI does not supply a historical V05 binary, so its emission-byte comparison is
+explicitly not run. The baseline comparison remains a separate qualification command
+above. Accepted V05 Parser/Emitter test fixtures are included without production changes.
+
+Recorded validation currently covers a serialized translator core build and three
+offline harness tests. Collector evaluation, actual diagnostics CLI checks, the V05
+baseline comparison, input-validation compatibility and CI replay await qualification;
+the presence of the CI gate does not claim that these checks have passed.
