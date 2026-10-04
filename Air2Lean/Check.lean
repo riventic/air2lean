@@ -804,7 +804,8 @@ private def checkSharedDefinitions (funcs : Array Func) : Except String (Array O
           unless (match g.init with | some (.func nm ..) => nm == n | _ => false) do
             throw s!"{f.name}: global '{n}' collides with a function name"
         if let some (previousIndex, id) := globals[n]? then
-          let previous := funcs[previousIndex]!
+          let some previous := funcs[previousIndex]?
+            | throw s!"{f.name}: shared global '{n}' refers to unknown function table {previousIndex}"
           let key := (fileIndex, previousIndex)
           let completed : Std.HashSet (Nat × Nat) := globalComparisons[key]?.getD {}
           let some completed := compatibleGlobalCached f previous k id completed
