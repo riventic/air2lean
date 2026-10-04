@@ -52,6 +52,11 @@ LEAN_PATH="$mutant:$LEAN_PATH" "${lean_cmd[@]}" -R "$mutant" \
 mutant_status=0
 LEAN_PATH="$mutant:$LEAN_PATH" "${lean_cmd[@]}" -R "$mutant" \
   "$mutant/TryPointers/Proofs.lean" >"$mutant/proof.log" 2>&1 || mutant_status=$?
-python3 tests/roadmap/try-pointers/mutate-offset.py classify \
-  --status "$mutant_status" --proof "$mutant/TryPointers/Proofs.lean" --log "$mutant/proof.log"
+if ! python3 tests/roadmap/try-pointers/mutate-offset.py classify \
+  --status "$mutant_status" --proof "$mutant/TryPointers/Proofs.lean" --log "$mutant/proof.log"; then
+  # The outer validation log retains the exact diagnostics before EXIT cleans the
+  # temporary tree. Classification stays strict; evidence is ordinary runner output.
+  cat "$mutant/proof.log" >&2
+  exit 1
+fi
 echo 'pointer-try artifact, ownership, generated runtime, malformed-AIR and offset-mutant gates passed'
