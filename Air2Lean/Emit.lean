@@ -2634,8 +2634,10 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)
-  let spawnFallbacks := targetDescriptions.map fun (nm, name, args, kind) =>
-    (nm, emitCapturedFallback name args kind)
+  let spawnFallbacks := if spawnSemantics == .fallible then
+    targetDescriptions.map fun (nm, name, args, kind) =>
+      (nm, emitCapturedFallback name args kind)
+    else #[]
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgt structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
