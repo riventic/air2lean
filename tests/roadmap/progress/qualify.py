@@ -165,7 +165,7 @@ def main():
         run("pipeline", ["lake", "env", "lean", "--run", FIXTURES / "Pipeline.lean",
                          artifacts / "ProgressPipeline.lean", artifacts])
         for version in report["scope"]["synthetic_versions"]:
-            run("synthetic-" + version, ["lake", "env", "lean", artifacts / f"ProgressPipeline-{version}.lean"])
+            run("synthetic-" + version, ["lake", "env", "lean", "-R", artifacts, artifacts / f"ProgressPipeline-{version}.lean"])
         run("participation", ["lake", "env", "lean", "--run", FIXTURES / "Participation.lean"])
         original = (FIXTURES / "Participation.lean").read_text()
         marker = "private def hint : ConcM Unit Unit := spinLoopHint"
@@ -173,7 +173,7 @@ def main():
             raise RuntimeError("scheduler participation mutation marker must occur exactly once")
         mutant = artifacts / "ParticipationMutant.lean"
         mutant.write_text(original.replace(marker, "private def hint : ConcM Unit Unit := pure ()"))
-        run("participation-mutant", ["lake", "env", "lean", "--run", mutant],
+        run("participation-mutant", ["lake", "env", "lean", "-R", artifacts, "--run", mutant],
             expected_failure="C03_ASSERTION: spin scheduler participation lost")
         if args.mode == "full":
             patched = compiler("patched-zig", "AIR2LEAN_ZIG_AIR")
@@ -196,7 +196,7 @@ def main():
             generated = artifacts / "ProgressSource.lean"
             run("translate", ["lake", "exe", "air2lean", air, "-o", generated,
                               "--namespace", "ProgressSource", "--prefix", "progress."])
-            run("source-kernel-check", ["lake", "env", "lean", generated])
+            run("source-kernel-check", ["lake", "env", "lean", "-R", artifacts, generated])
             run("native-finite", [stock, "test", "-OReleaseSafe", "-fno-error-tracing", "-target", "native",
                                   "--cache-dir", artifacts / "stock-cache", "--global-cache-dir", artifacts / "stock-global-cache",
                                   f"-femit-bin={artifacts / 'finite-tests'}", FIXTURES / "finite.zig"])
