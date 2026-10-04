@@ -678,7 +678,7 @@ inductive SpawnSemantics where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The fallible boundary accepts only the audited std versions and a constant
-SpawnConfig with a positive stack size and null custom allocator. Runtime configs
+SpawnConfig requesting 1 MiB or the default 16 MiB and a null custom allocator. Other sizes, runtime configs
 and allocator-specific semantics remain outside this model. -/
 def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
   for f in funcs do
@@ -699,8 +699,8 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
                 throw s!"{f.name}: fallible Thread.spawn has an incomplete SpawnConfig"
               let .int _ stack := fields[0]!
                 | throw s!"{f.name}: fallible Thread.spawn requires a constant stack_size"
-              unless stack > 0 do
-                throw s!"{f.name}: fallible Thread.spawn requires a positive stack_size"
+              unless stack == 1048576 || stack == 16777216 do
+                throw s!"{f.name}: fallible Thread.spawn supports only audited 1 MiB or default 16 MiB stack_size requests"
               let .optNull _ := fields[1]!
                 | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
             else
