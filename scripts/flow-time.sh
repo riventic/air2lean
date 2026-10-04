@@ -18,6 +18,7 @@ check_proofs() {
   LEAN_PATH="$proof_work${LEAN_PATH:+:$LEAN_PATH}" lake env lean -R case-studies/flow-time case-studies/flow-time/FlowTime/Proofs.lean
 }
 if [ "${1:-}" = --check-artifacts ] && [ "$#" = 1 ]; then
+  python3 tests/roadmap/flow-time/test_compat.py
   work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-flow-time.XXXXXX")
   trap 'rm -rf "$work"' EXIT
   mkdir -p "$work/FlowTime"
@@ -44,13 +45,19 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-flow-time.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/air" "$work/FlowTime"
 env ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER=flow_time. "$AIR2LEAN_ZIG_AIR" \
-  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline \
+  build-obj -fno-emit-bin -fllvm -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline \
   --dep flow_time_original -Mroot=case-studies/flow-time/flow_time.zig \
   "-Mflow_time_original=$source"
 python3 case-studies/flow-time/check-source.py "$source"
-python3 tests/roadmap/flow-time/compare-air.py case-studies/flow-time/air "$work/air"
-"$translator" "$work/air" -o "$work/FlowTime/Gen.lean" --namespace FlowTime --prefix flow_time.
-cmp case-studies/flow-time/FlowTime/Gen.lean "$work/FlowTime/Gen.lean"
+# Validate the exact fresh profile before translation or compatibility normalization.
+python3 tests/roadmap/flow-time/compare-air.py case-studies/flow-time/air "$work/air" --validate-fresh
+"$translator" "$work/air" -o "$work/FlowTime/Gen.lean" --namespace FlowTime --prefix flow_time. \
+  --profile abi64-le-v1 --float-semantics ieee
+python3 scripts/normalize-generated.py report "$work/FlowTime/Gen.lean" "$work/air" "$work/check-report.json"
+python3 tests/roadmap/flow-time/compare-air.py case-studies/flow-time/air "$work/air" \
+  --generated "$work/FlowTime/Gen.lean" --check-report "$work/check-report.json"
+python3 scripts/normalize-generated.py compare case-studies/flow-time/FlowTime/Gen.lean \
+  "$work/FlowTime/Gen.lean" "$work/check-report.json"
 "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe --dep flow_time_wrapper \
   -Mroot=tests/roadmap/flow-time/boundaries.zig --dep flow_time_original \
   -Mflow_time_wrapper=case-studies/flow-time/flow_time.zig "-Mflow_time_original=$source"

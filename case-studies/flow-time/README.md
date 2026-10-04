@@ -44,19 +44,36 @@ AIR2LEAN_TRANSLATOR=/path/to/air2lean \
 Run this command from the air2lean repository with the pinned Lean toolchain
 available. It checks the production hash, exports AIR with the explicit
 `x86_64-linux` / `baseline` / `ReleaseSafe` profile, compares both complete JSON
-exports and the generated Lean with committed artifacts, tests the wrapper's
+exports and the complete generated Lean body with committed artifacts, tests the wrapper's
 native boundary cases, builds `ZigLean`, and kernel-checks the generated module
 and proofs. The native compiler version is checked before export. Only the stock-compiler
 native test uses the host target; it imports the same wrapper
 and original source. The script creates temporary compiler and Lean outputs and
 removes them on exit. It never updates the checked artifacts silently.
 
+The retained AIR is the historical schema 11 export. Fresh reproduction requires
+schema 12 with the exact Zig 0.16.0 LLVM, Linux x86_64 baseline, ReleaseSafe,
+64-bit little-endian, 16-bit error-set, and disabled error-tracing profile checked
+by `tests/roadmap/flow-time/compare-air.py`. Its resolved target triple and complete
+CPU feature list are explicit in that guard. Both fresh entry points must have
+identical profile facts before translation. Other profiles fail closed.
+
+After translation, the shared `scripts/normalize-generated.py` helper writes a
+receipt binding the raw AIR hashes, profile, full generated hash, and body hash.
+The Flow guard checks its exact two-file inventory and hashes before permitting
+only the top-level schema 12/profile-to-schema 11 protocol transition. Function
+names, version/endian, instructions, types, layouts, parameters, results, globals,
+and nested metadata remain observable. The complete generated body must equal
+the retained module; the **full headered fresh module** is kernel-checked with the
+universal proofs. A receipt is provenance evidence, not a compiler-preservation
+proof. Historical AIR, generated Lean, source hash, and provenance remain intact.
+
 The essential original-source binding is:
 
 ```sh
 mkdir -p out FlowTime
 ZIG_AIR_JSON_DIR="$PWD/out" ZIG_AIR_JSON_FILTER=flow_time. "$AIR2LEAN_ZIG_AIR" \
-  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+  build-obj -fno-emit-bin -fllvm -OReleaseSafe -fno-error-tracing \
   -target x86_64-linux -mcpu=baseline \
   --dep flow_time_original -Mroot=case-studies/flow-time/flow_time.zig \
   -Mflow_time_original="$FLOW_TIME_SOURCE"
@@ -69,6 +86,7 @@ Provenance guards can be checked without invoking any compiler:
 ```sh
 bash scripts/flow-time.sh --check-source
 python3 tests/roadmap/flow-time/test_provenance.py
+python3 tests/roadmap/flow-time/test_compat.py
 ```
 
 The boundary tests cover ordinary addition, the largest allowed result, equality
@@ -92,11 +110,18 @@ external checkout or either Zig compiler:
 bash scripts/flow-time.sh --check-artifacts
 ```
 
-The CI workflow runs this artifact-only command and the five Python provenance guard
-regressions once in the default full job. It deliberately supplies an unavailable
+The CI workflow runs this artifact-only command, including its eight synthetic
+compatibility regressions, and the five Python provenance guard regressions once
+in the default full job. It deliberately supplies an unavailable
 production source path: the artifact gate must succeed without the private checkout.
 CI does not regenerate production AIR or run production native tests, and this gate
 makes no compiler-preservation claim. It uses ordinary CI logs and temporary files.
 
 This checks the committed artifacts only. The full original-source reproduction
 requires the source dependency, reexports and compares AIR, and reruns native tests.
+
+The compatibility guard's synthetic offline regressions reject profile changes,
+semantic-body changes, missing/extra exports, malformed generated headers, and
+receipt tampering. They do not execute a compiler or attest a new original-source
+export. Fresh source/native/kernel qualification of this schema transition is a
+separate required check; artifact-only CI checks the retained proof domain.
