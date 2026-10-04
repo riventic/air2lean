@@ -901,7 +901,7 @@ theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (h
     have hcount := weakOptCount_eq (succ := .release) hp
     have hne : 0 < (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size := by
       have hs := casOpts_ne (e := h) (m := prepared) (li := 0) (by rw [hl0]; exact hfl.pos)
-      simp only [weakCasOpts, Array.size_append, Array.size_map]
+      simp only [weakCasOpts_eq, Array.size_append, Array.size_map]
       omega
     rw [hcount] at hcr
     change c < (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size ∨
