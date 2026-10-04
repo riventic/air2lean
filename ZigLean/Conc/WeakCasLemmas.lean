@@ -10,7 +10,7 @@ theorem weakCasOpts_read {n li c pos : Nat} {m : Mem} {expected : BitVec n}
     (h : (weakCasOpts m li expected (casOpts m li expected))[c]? = some (pos, spurious)) :
     ∃ j : Nat, (readOpts m li false)[j]? = some pos := by
   have hm := Array.mem_of_getElem? h
-  simp only [weakCasOpts, Array.mem_append, Array.mem_map] at hm
+  simp only [weakCasOpts_eq, Array.mem_append, Array.mem_map] at hm
   rcases hm with ⟨p, hp, he⟩ | ⟨p, hp, he⟩
   · simp only [Prod.mk.injEq] at he
     obtain ⟨rfl, rfl⟩ := he
@@ -25,7 +25,7 @@ theorem weakCasOpts_strong {n li c pos : Nat} {m : Mem} {expected : BitVec n}
     (h : (weakCasOpts m li expected (casOpts m li expected))[c]? = some (pos, false)) :
     ∃ j : Nat, (casOpts m li expected)[j]? = some pos := by
   have hm := Array.mem_of_getElem? h
-  simp only [weakCasOpts, Array.mem_append, Array.mem_map] at hm
+  simp only [weakCasOpts_eq, Array.mem_append, Array.mem_map] at hm
   rcases hm with ⟨p, hp, he⟩ | ⟨p, hp, he⟩
   · simp only [Prod.mk.injEq] at he
     obtain ⟨rfl, -⟩ := he
@@ -37,8 +37,11 @@ theorem weakCasPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : M
     ((weakCasPrep n align p expected).run m).run ≠ some (.error e) := by
   intro h
   unfold weakCasPrep at h
-  rcases MemM.bind_err h with he | ⟨⟨li, opts⟩, m₁, hprep, h₁⟩
-  · exact hp e he
+  rcases MemM.bind_err h with he | ⟨⟨li, readable⟩, m₁, hprep, h₁⟩
+  · have he' : casReadPrep n align p m = some (.error e) := he
+    have hc : ((casPrep n align p expected).run m).run = some (.error e) := by
+      simp [casPrep, zig_unfold, he', ExceptT.run]
+    exact hp e hc
   rcases MemM.bind_err h₁ with he | ⟨a, m₂, hg, h₂⟩
   · exact MemM.get_err he
   exact MemM.pure_err h₂
@@ -47,16 +50,23 @@ theorem weakCasPrep_of {n align li : Nat} {p : Ptr} {expected : BitVec n} {m m�
     {opts : Array Nat} (h : ((casPrep n align p expected).run m).run = some (.ok ((li, opts), m₁))) :
     ((weakCasPrep n align p expected).run m).run =
       some (.ok ((li, weakCasOpts m₁ li expected opts), m₁)) := by
-  change casPrep n align p expected m = some (.ok ((li, opts), m₁)) at h
-  simp [weakCasPrep, zig_unfold, h, ExceptT.run]
+  unfold casPrep at h
+  obtain ⟨⟨li₁, readable⟩, m₂, hp, h₁⟩ := MemM.bind_ok h
+  obtain ⟨b, blk, o, ha, hnr, hl, rfl⟩ := casReadPrep_ok hp
+  obtain ⟨a, m₃, hg, h₂⟩ := MemM.bind_ok h₁
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨he, rfl⟩ := MemM.pure_ok h₂
+  simp only [Prod.mk.injEq] at he
+  obtain ⟨rfl, rfl⟩ := he
+  change casReadPrep n align p m = some (.ok ((li₁, readOpts m₂ li₁ false), m₂)) at hp
+  simp [weakCasPrep, weakCasOpts, zig_unfold, hp, ExceptT.run]
 
 theorem weakOptCount_eq {n align li : Nat} {p : Ptr} {expected : BitVec n} {succ : AtomicOrder}
     {m m₁ : Mem} {opts : Array (Nat × Bool)}
     (h : ((weakCasPrep n align p expected).run m).run = some (.ok ((li, opts), m₁))) :
     weakCasCount n succ align p expected m = opts.size := by
-  unfold weakCasCount optCount
-  rw [StateT.run_map, ExceptT.run_map, h]
-  simp [Except.map]
+  unfold weakCasCount
+  exact optCount_eq h
 
 theorem cmpxchgWeakAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : AtomicOrder}
     {align : Nat} {p : Ptr} {expected new : α} {r : Option α} {m m' : Mem}

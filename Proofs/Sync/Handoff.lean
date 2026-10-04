@@ -763,7 +763,7 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : Thread
         W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
         (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
         Q (none, s) G₁ m' k) ∧
-      (∀ j b r, True → (Packed.ofBits? (α := α) b).run = some (.ok r) →
+      (∀ j b r, (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
         W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
@@ -778,7 +778,7 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : Thread
   refine WP.callMC (fun e he => (cmpxchgWeakAs_noErr (hwc.weakCas_noErr (fail := fail)
     (new := Packed.toBits new) htl (hcs_of hic) hcr) (fun b m' hr => ?_) e he).elim)
     fun r m' hr => ?_
-  · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, -, hj, hv, -⟩⟩ := hwc.weakCas rfl htl (hcs_of hic) hr
+  · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, hj, hv, -⟩⟩ := hwc.weakCas rfl htl (hcs_of hic) hr
     · cases he
     · cases he
       rw [hh₁] at hj hv
@@ -789,13 +789,13 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : Thread
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
         (linv_op hW hic hop)).1 hv hU hh hacq⟩
     · cases he
-  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, hacq, hh⟩⟩ :=
+  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hj, hv, hfl, hacq, hh⟩⟩ :=
       hwc.weakCas rfl htl (hcs_of hic) ho
     · cases he
     · cases he
       rw [hh₁] at hj hv hfl hacq hh
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
-        (linv_op hW hic hop)).2 j b v hne hd hj hv hfl hacq hh⟩
+        (linv_op hW hic hop)).2 j b v hd hj hv hfl hacq hh⟩
 
 
 /-! ## `U` after an op at a shared word -/
@@ -1615,7 +1615,7 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
     rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
     refine WP.bind (WP.bind (wp_weakCasAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩))
+        ⟨fun hv hU hh hacq => ?_, fun j b r hd hj hv hfl hacq hh => ?_⟩))
     · -- success: `main` takes the signal
       rw [bits_sv2] at hv
       rw [bits_take] at hh
@@ -2682,7 +2682,7 @@ theorem sig_body (io : Io) (s : Io_Condition_signalLocals) (G : ThreadId → Gh)
     rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
     refine WP.bind (wp_weakCasAs (.inl rfl) (g := gP { ph := .sg1 }) hi (ht1 (by simp [gP]))
       (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩)
+        ⟨fun hv hU hh hacq => ?_, fun j b r hd hj hv hfl hacq hh => ?_⟩)
     · have hi₂ := inv_sgp (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
         (by rw [upd_g hg₁]; exact hL) (by rw [hh, bits11])
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]

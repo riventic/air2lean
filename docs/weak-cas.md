@@ -51,9 +51,11 @@ AIR2LEAN_ZIG=/path/to/stock16/zig scripts/weak-cas.sh full
 Artifact-only mode checks synthetic schema-11 AIR for all supported version labels, including
 preservation of weak/strong tags, integer/Packed dispatch and actual emitted Lean elaboration.
 Runtime tests check matching failures, successes, mismatches, correct failure-order acquire,
-unchanged messages/write footprints, Packed values, and readable RMW predecessors. Kernel
-reduction covers both branches and every success/failure sequence of a bounded three-attempt
-retry client. The generic retry WP rule supports arbitrary repeated failure through an
+unchanged messages/write footprints, Packed values, and readable RMW predecessors. Preparation
+regressions compare the shared preparation against its previous implementation for matching,
+mismatching and consumed-predecessor reads, including exact choice arrays, memory events,
+writable-access errors and generic option-count fallback. Kernel reduction covers both branches
+and every success/failure sequence of a bounded three-attempt retry client. The generic retry WP rule supports arbitrary repeated failure through an
 invariant obligation; the bounded enumeration is not an exhaustive unbounded program proof.
 The mutation gate substitutes a strong operation for the weak matching-failure operation and
 requires the dedicated assertion marker and exit 85. A compiler failure cannot satisfy it.

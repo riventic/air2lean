@@ -623,7 +623,7 @@ theorem wp_weakCas {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m 
         W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) new) →
         (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
         Q (none, s) G₁ m' k) ∧
-      (∀ j b, True → j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
+      (∀ j b, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
         W.hist m' = W.hist m₁ → Q (some b, s) G₁ m' k)) :
@@ -640,9 +640,9 @@ theorem wp_weakCas {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m 
   obtain ⟨hw', hop, hcase⟩ := hwc.weakCas rfl htl (hcs_of hic) hr
   have hH := h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop) (linv_op hW hic hop)
   refine ⟨by rw [hop.threads], ?_⟩
-  rcases hcase with ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hne, hj, hv, hfl, hacq, hh⟩
+  rcases hcase with ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hj, hv, hfl, hacq, hh⟩
   · rw [hh₁] at hv hh hacq; exact hH.1 hv hU hh hacq
-  · rw [hh₁] at hj hv hfl hacq hh; exact hH.2 j old hne hj hv hfl hacq hh
+  · rw [hh₁] at hj hv hfl hacq hh; exact hH.2 j old hj hv hfl hacq hh
 
 
 /-! ## `U` after an op at a shared word -/
@@ -1603,7 +1603,7 @@ theorem loop107_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoc
     rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
     refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gM hD x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b hne hj hv hfl hacq hh => ?_⟩)))
+        ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
     · -- success: `main` takes the signal
       have hi₂ := inv_cons hx hcw hvw (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
         (by rw [upd_g hg₁]; exact hL) hv hh
@@ -2758,7 +2758,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
       show ((bPtr.add 4).add 0).add 4 = WE.ptr from rfl]
     refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gP { ph := .sg1 }) hi
       (ht1 (by simp [gM])) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b hne hj hv hfl hacq hh => ?_⟩)))
+        ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
     · have hi₂ := inv_sgp (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
         (by rw [upd_g hg₁]; exact hL) hh
       refine WP.pure' ?_

@@ -17,7 +17,7 @@ theorem Ok.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new :
       W.hist m' = (W.hist m).push (rmwEnt m' t succ (W.hist m)[(W.hist m).size - 1]! new) ∧
       (succ.isAcq = true →
         VClock.le (W.hist m)[(W.hist m).size - 1]!.relClock (m'.clocks[t]!) = true)) ∨
-     (∃ j old, r = some old ∧ True ∧ j < (W.hist m).size ∧ (W.hist m)[j]!.Val old ∧
+     (∃ j old, r = some old ∧ j < (W.hist m).size ∧ (W.hist m)[j]!.Val old ∧
       Floor (W.hist m) (m.clocks[t]!) j ∧
       (fail.isAcq = true → VClock.le (W.hist m)[j]!.relClock (m'.clocks[t]!) = true) ∧
       W.hist m' = W.hist m)) := by
@@ -53,7 +53,7 @@ theorem Ok.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new :
     rw [hl0] at hlt hold hm'
     rw [hm']
     obtain ⟨hfl', hacq, hh, hw', hop₂⟩ := hw₁.read (ord := fail) hl' hop₁ hct hlt hfl
-    refine ⟨hw', hop₁.trans hop₂, .inr ⟨pos, old, rfl, trivial, by rw [← hh₁, hsz]; exact hlt,
+    refine ⟨hw', hop₁.trans hop₂, .inr ⟨pos, old, rfl, by rw [← hh₁, hsz]; exact hlt,
       by rw [← hh₁]; exact val_of hl' hlt hold, by rw [← hh₁]; exact hfl',
       by rw [← hh₁]; exact hacq, by rw [hh, hh₁]⟩⟩
 
@@ -72,7 +72,7 @@ theorem Ok.weakCas_noErr {m : Mem} {c : Nat} {succ fail : AtomicOrder} {exp new 
     have hne := casOpts_ne (e := exp) (m := m₁) (li := li) h0
     have hcnt := weakOptCount_eq (succ := succ) hp
     have hsz : 0 < (weakCasOpts m₁ li exp (casOpts m₁ li exp)).size := by
-      simp only [weakCasOpts, Array.size_append, Array.size_map]
+      simp only [weakCasOpts_eq, Array.size_append, Array.size_map]
       omega
     have hc : c < (weakCasOpts m₁ li exp (casOpts m₁ li exp)).size := by rw [hcnt] at hcr; omega
     let choice := (weakCasOpts m₁ li exp (casOpts m₁ li exp))[c]

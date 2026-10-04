@@ -161,7 +161,7 @@ def main():
         for path in sorted(paths):
             if path.is_file():
                 report["source_hashes"][str(path.relative_to(ROOT))] = digest(path)
-        for fixture in ["weakcas.zig", "native.zig", "Runtime.lean", "Pipeline.lean", "Mutation.lean", "SourceCheck.lean.in"]:
+        for fixture in ["weakcas.zig", "native.zig", "Runtime.lean", "Preparation.lean", "Pipeline.lean", "Mutation.lean", "SourceCheck.lean.in"]:
             shutil.copy2(FIXTURES / fixture, artifacts / fixture)
         report["model_source_hashes"] = {p: h for p, h in report["source_hashes"].items()
                                           if p.startswith("ZigLean/") or p == "ZigLean.lean"}
@@ -178,6 +178,7 @@ def main():
         translator = ROOT / ".lake/build/bin/air2lean"
         report["translator_binary"] = {"path": str(translator), "sha256": digest(translator)}
         run("runtime", ["lake", "env", "lean", "--run", FIXTURES / "Runtime.lean"])
+        run("preparation-equivalence", ["lake", "env", "lean", "--run", FIXTURES / "Preparation.lean"])
         run("pipeline", ["lake", "env", "lean", "--run", FIXTURES / "Pipeline.lean", artifacts])
         for version in report["scope"]["synthetic_versions"]:
             run("synthetic-" + version, ["lake", "env", "lean", "-R", artifacts, artifacts / f"WeakCasPipeline-{version}.lean"])

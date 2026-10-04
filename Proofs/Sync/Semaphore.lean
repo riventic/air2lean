@@ -672,7 +672,7 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4
         W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
         (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
         Q (none, s) G₁ m' k) ∧
-      (∀ j b r, True → (Packed.ofBits? (α := α) b).run = some (.ok r) →
+      (∀ j b r, (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
@@ -693,14 +693,14 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
         hl' hu').1 hv hU hh hacq⟩
     · cases he
-  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, -, hh⟩⟩ :=
+  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hj, hv, hfl, -, hh⟩⟩ :=
       hwc.weakCas rfl htl (hcs hP hic) ho
     · cases he
     · cases he
       rw [hh₁] at hj hv hfl hh
       obtain ⟨hl', hu'⟩ := hP.op hW hic hop
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
-        hl' hu').2 j b v hne hd hj hv hfl hh⟩
+        hl' hu').2 j b v hd hj hv hfl hh⟩
 
 /-! ## Steps that keep the condition's invariant -/
 
@@ -1496,7 +1496,7 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
     rw [ptr_state]
     refine WP.bind (wp_weakCasAs hP (.inl rfl) (g := (a, .pst, x)) (by rw [ha]; decide) hi
       (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL hU =>
-        ⟨fun hv hU' hh hacq => ?_, fun j b r _ hd hj hv hfl hh => ?_⟩)
+        ⟨fun hv hU' hh hacq => ?_, fun j b r hd hj hv hfl hh => ?_⟩)
     · -- the signal
       rw [bits1] at hv
       have hh' := hh
@@ -2069,7 +2069,7 @@ theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
     rw [ptr_state]
     refine WP.bind (WP.bind (wp_weakCasAs hP (.inl rfl) (g := gw pa x i jr e sn) (fun h => by cases h) hi
       (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL hU =>
-        ⟨fun hv _ hh _ => ?_, fun j b r _ hd hj hv hfl hh => ?_⟩))
+        ⟨fun hv _ hh _ => ?_, fun j b r hd hj hv hfl hh => ?_⟩))
     · -- the waiter takes the signal, then locks the mutex
       rw [bits_take'] at hh
       obtain ⟨-, hs₁, -⟩ := hP.split hi₁

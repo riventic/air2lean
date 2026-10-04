@@ -17,8 +17,8 @@ theorem weakCasPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : M
         some (.ok (li, m')) ∧
       opts = weakCasOpts m' li expected (casOpts m' li expected) := by
   unfold weakCasPrep at h
-  obtain ⟨⟨li₁, strong⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
-  obtain ⟨b, blk, o, ha, hnr, hl, rfl⟩ := casPrep_ok hp
+  obtain ⟨⟨li₁, readable⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
+  obtain ⟨b, blk, o, ha, hnr, hl, rfl⟩ := casReadPrep_ok hp
   obtain ⟨a, m₂, hg, h₂⟩ := MemM.bind_ok h₁
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   obtain ⟨he, rfl⟩ := MemM.pure_ok h₂

@@ -141,7 +141,7 @@ def insertMsg (li p : Nat) (msg : Msg) : MemM Unit := modify fun m =>
   else m
 
 /-- The options of an op at `p` (`MemM` run on a copy): `1` if the op throws first. -/
-def optCount (x : MemM (Array Nat)) (m : Mem) : Nat :=
+def optCount {α : Type} (x : MemM (Array α)) (m : Mem) : Nat :=
   match (x.run m).run with
   | some (.ok (a, _)) => a.size
   | _ => 1
@@ -238,20 +238,29 @@ def atomicRmwAt {n : Nat} (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOr
   rmwWrite li pos ord rd (op.apply signed old v)
   pure old
 
+/-- Shared CAS preparation: writable access, exactly one atomic-read footprint, the location,
+and its complete readable positions. Strong and weak operations filter this same array. -/
+def casReadPrep (n align : Nat) (p : Ptr) : MemM (Nat × Array Nat) := do
+  let (b, _, o) ← (← get).accessW p (intSize n) align
+  recordAccess b o (intSize n) .atomicRead
+  let li ← locIdx b o (intSize n)
+  pure (li, readOpts (← get) li false)
+
+/-- Success-capable strong choices from a prepared readable array. -/
+def casStrongOpts {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n)
+    (readable : Array Nat) : Array Nat :=
+  readable.filter fun pos =>
+    !((m.atomics[li]!).hasRmwAfter pos &&
+      match (intOfBytes n (m.atomics[li]!).msgs[pos]!.bytes).run with
+      | some (.ok v) => v == expected
+      | _ => false)
+
 /-- A strong `cmpxchg` reads a message; one with the value `expected` must be one without an RMW
 after it (the write goes right after it). -/
 def casPrep (n : Nat) (align : Nat) (p : Ptr) (expected : BitVec n) :
     MemM (Nat × Array Nat) := do
-  let (b, _, o) ← (← get).accessW p (intSize n) align
-  recordAccess b o (intSize n) .atomicRead
-  let li ← locIdx b o (intSize n)
-  let m ← get
-  let l := m.atomics[li]!
-  let opts := (readOpts m li false).filter fun pos =>
-    !(l.hasRmwAfter pos && match (intOfBytes n l.msgs[pos]!.bytes).run with
-      | some (.ok v) => v == expected
-      | _ => false)
-  pure (li, opts)
+  let (li, readable) ← casReadPrep n align p
+  pure (li, casStrongOpts (← get) li expected readable)
 
 /-- A successful CAS also writes. The scheduler cannot run another thread between its read
 preparation and this write access; both footprints belong to the same atomic operation. -/
@@ -279,27 +288,42 @@ def cmpxchgAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : P
     if fail.isAcq then acquireClock rd.relClock
     pure (some old)
 
+/-- Internal builder. The operation supplies the array returned by `casReadPrep` on this same
+prepared memory; arbitrary caller-supplied positions are not a model operation. -/
+private def weakCasOptsFromReads {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n)
+    (strong readable : Array Nat) : Array (Nat × Bool) :=
+  strong.map (fun pos => (pos, false)) ++
+    (readable.filter fun pos =>
+      match (intOfBytes n m.atomics[li]!.msgs[pos]!.bytes).run with
+      | some (.ok v) => v == expected
+      | _ => false).map (fun pos => (pos, true))
+
 /-- Weak choices keep the strong choices first, then add a forced failure for every
 readable message equal to `expected`. A failed read may observe a predecessor already consumed
 by an RMW: the restriction on successful RMW insertion does not apply to that read. -/
 def weakCasOpts {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n)
     (strong : Array Nat) : Array (Nat × Bool) :=
-  strong.map (fun pos => (pos, false)) ++
-    ((readOpts m li false).filter fun pos =>
-      match (intOfBytes n m.atomics[li]!.msgs[pos]!.bytes).run with
-      | some (.ok v) => v == expected
-      | _ => false).map (fun pos => (pos, true))
+  weakCasOptsFromReads m li expected strong (readOpts m li false)
 
-/-- Prepare exactly one atomic-read footprint; choices distinguish success-capable reads
-from forced read-only failures. -/
+theorem weakCasOpts_eq {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n)
+    (strong : Array Nat) :
+    weakCasOpts m li expected strong = strong.map (fun pos => (pos, false)) ++
+      ((readOpts m li false).filter fun pos =>
+        match (intOfBytes n m.atomics[li]!.msgs[pos]!.bytes).run with
+        | some (.ok v) => v == expected
+        | _ => false).map (fun pos => (pos, true)) := rfl
+
+/-- Prepare exactly one atomic-read footprint. Reuse every prepared readable position for
+both the ordinary strong choices and the additional forced read-only matching failures. -/
 def weakCasPrep (n align : Nat) (p : Ptr) (expected : BitVec n) :
     MemM (Nat × Array (Nat × Bool)) := do
-  let (li, strong) ← casPrep n align p expected
-  pure (li, weakCasOpts (← get) li expected strong)
+  let (li, readable) ← casReadPrep n align p
+  let m ← get
+  pure (li, weakCasOptsFromReads m li expected (casStrongOpts m li expected readable) readable)
 
 def weakCasCount (n : Nat) (succ : AtomicOrder) (align : Nat) (p : Ptr)
     (expected : BitVec n) : Mem → Nat :=
-  optCount ((fun r => r.2.map Prod.fst) <$> weakCasPrep n align p expected)
+  optCount ((·.2) <$> weakCasPrep n align p expected)
 
 /-- `cmpxchg_weak`: `some expected` is a permitted spurious failure. Failure observes the
 read message using only `fail`, without an atomic-write footprint, new message or RMW edge.
