@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 HELPER = runpy.run_path(str(ROOT / "scripts/normalize-generated.py"))
@@ -120,6 +121,107 @@ class ReceiptTests(unittest.TestCase):
                                  "--check-report", str(self.report), "--actual"], capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("AIR artifact does not match", result.stderr)
+
+    def test_duplicate_receipt_filenames_fail_for_actual_and_golden_batches(self):
+        report = json.loads(self.report.read_text())
+        report["air"].append(dict(report["air"][0]))
+        self.report.write_text(json.dumps(report))
+        for actual in (False, True):
+            with self.assertRaisesRegex(ValueError, "duplicate AIR receipt filename"):
+                NORMALIZER["ValidationContext"](self.report, actual)
+
+    def test_directory_bad_hash_leaves_existing_overlay_untouched(self):
+        second = self.air / "two.json"
+        second.write_text(json.dumps(CURRENT))
+        HELPER["write_report"](self.output, self.air, self.report)
+        second.write_text(json.dumps(dict(CURRENT, name="changedAfterReceipt")))
+        destination = self.directory / "normalized"
+        destination.mkdir()
+        previous = destination / "one.json"
+        previous.write_bytes(b"previous overlay\n")
+        context = NORMALIZER["ValidationContext"](self.report, True)
+        with self.assertRaisesRegex(ValueError, "AIR artifact does not match"):
+            NORMALIZER["add_directory"](self.air, destination, context)
+        self.assertEqual(previous.read_bytes(), b"previous overlay\n")
+        self.assertEqual(sorted(p.name for p in destination.iterdir()), ["one.json"])
+
+    def test_directory_checks_profiles_even_when_raw_hash_matches(self):
+        changed = copy.deepcopy(CURRENT)
+        changed["profile"]["cpu"] = "haswell"
+        self.input.write_text(json.dumps(changed))
+        report = json.loads(self.report.read_text())
+        report["air"][0]["sha256"] = hashlib.sha256(self.input.read_bytes()).hexdigest()
+        self.report.write_text(json.dumps(report))
+        context = NORMALIZER["ValidationContext"](self.report, True)
+        with self.assertRaisesRegex(ValueError, "AIR profile differs"):
+            NORMALIZER["add_directory"](self.air, self.directory / "normalized", context)
+
+    def test_golden_batch_checks_profile_without_matching_actual_receipt_entry(self):
+        source = self.directory / "golden"
+        source.mkdir()
+        path = source / "notInActualReceipt.json"
+        path.write_text(json.dumps(LEGACY))
+        context = NORMALIZER["ValidationContext"](self.report)
+        destination = self.directory / "normalized"
+        NORMALIZER["add_directory"](source, destination, context)
+        self.assertEqual(json.loads((destination / path.name).read_text())["schema"], 11)
+        malformed = copy.deepcopy(LEGACY)
+        malformed["target_endian"] = "big"
+        path.write_text(json.dumps(malformed))
+        with self.assertRaisesRegex(ValueError, "little-endian"):
+            NORMALIZER["add_directory"](source, destination, context)
+
+    def test_directory_helpers_and_receipt_load_once_each_file_normalizes_once(self):
+        second = self.air / "two.json"
+        second.write_text(json.dumps(CURRENT))
+        HELPER["write_report"](self.output, self.air, self.report)
+        NORMALIZER["load_helpers"].cache_clear()
+        with mock.patch.object(runpy, "run_path", wraps=runpy.run_path) as load:
+            helpers = NORMALIZER["load_helpers"]()
+            report_loader = mock.Mock(wraps=helpers["load_report"])
+            profile_checker = mock.Mock(wraps=helpers["profile_for_air"])
+            with mock.patch.dict(helpers, {"load_report": report_loader, "profile_for_air": profile_checker}):
+                context = NORMALIZER["ValidationContext"](self.report, True)
+                NORMALIZER["add_directory"](self.air, self.directory / "normalized", context)
+            self.assertEqual(load.call_count, 1)
+            self.assertEqual(report_loader.call_count, 1)
+            self.assertEqual(profile_checker.call_count, 2)
+
+    def test_collision_hashes_match_single_file_cli_and_overlays_remove_all_variants(self):
+        source = self.directory / "golden"
+        source.mkdir()
+        destination = self.directory / "normalized"
+        expected = {}
+        for i in (1, 23):
+            doc = copy.deepcopy(LEGACY)
+            doc["name"] = f"math.sub__anon_{i}"
+            doc["body"][0]["args"][0]["val"] = str(i)
+            doc["body"][0]["observable"] = "naïve__anon_9"
+            path = source / f"math.sub__anon_{i}.json"
+            path.write_text(json.dumps(doc))
+            result = subprocess.run(["python3", str(ROOT / "scripts/normalize-air.py"), str(path),
+                                     "--check-report", str(self.report)], check=True, capture_output=True)
+            self.assertTrue(result.stdout.endswith(b"\n"))
+            canonical = (json.dumps(json.loads(result.stdout), ensure_ascii=False,
+                                    sort_keys=True, indent=2) + "\n").encode()
+            self.assertEqual(result.stdout, canonical)
+            name = "math.sub__anon_N." + hashlib.sha1(canonical).hexdigest()[:12] + ".json"
+            expected[name] = canonical
+        context = NORMALIZER["ValidationContext"](self.report)
+        NORMALIZER["add_directory"](source, destination, context)
+        self.assertEqual({p.name: p.read_bytes() for p in destination.iterdir()}, expected)
+        (destination / "unrelated.json").write_bytes(b"retain\n")
+        (destination / "math.sub__anon_N.arbitrary.extra.json").write_bytes(b"stale\n")
+        overlay = self.directory / "overlay"
+        overlay.mkdir()
+        (overlay / "math.sub__anon_99.json").write_text(json.dumps(LEGACY))
+        NORMALIZER["add_directory"](overlay, destination, context)
+        self.assertEqual(sorted(p.name for p in destination.iterdir()),
+                         ["math.sub__anon_N.json", "unrelated.json"])
+        NORMALIZER["add_directory"](source, destination, context)
+        self.assertEqual(set(p.name for p in destination.iterdir()), set(expected) | {"unrelated.json"})
+        self.assertEqual((destination / "unrelated.json").read_bytes(), b"retain\n")
+
 
 
 class FakePipelineTests(unittest.TestCase):
