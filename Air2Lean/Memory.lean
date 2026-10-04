@@ -180,6 +180,8 @@ def allocFn? (name : String) : Option AllocFn :=
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
+  | yield | spinLoopHint
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
   /-- `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2). -/
@@ -201,6 +203,8 @@ def threadFn? (name : String) : Option ThreadFn :=
   match (name.splitOn "__anon_").head! with
   | "Thread.spawn" => some .spawn
   | "Thread.join" => some .join
+  | "Thread.yield" => some .yield
+  | "atomic.spinLoopHint" | "Thread.spinLoopHint" => some .spinLoopHint
   | "Io.futexWait" => some .futexWait
   | "Io.futexWaitUncancelable" => some .futexWaitU
   | "Io.futexWake" => some .futexWake
@@ -224,16 +228,20 @@ def rejectedThreadFn? (name : String) : Option String :=
     some "Io.futexWaitTimeout is outside the model: it has no clock"
   else if base == "Thread.detach" then
     some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
-  else if base == "Thread.yield" then
-    some "Thread.yield is outside the model: there is no scheduler to yield to"
-  else if base == "Thread.spinLoopHint" then
-    some "Thread.spinLoopHint is outside the model (a spin-wait on a flag diverges, \
-      `docs/std-models.md` §Thread model)"
   else none
+
+/-- Audited operand-free spin instructions emitted by `std.atomic.spinLoopHint` on
+x86/x86_64 (and RISC-V with Zihintpause) and aarch64. Exact volatile instructions only:
+other assembly keeps its opaque semantics. This is an extra scheduling opportunity, not a
+memory fence or progress premise (`docs/progress-hints.md`). -/
+def Op.isSpinHint : Op → Bool
+  | .asm source true clobbers outputs inputs =>
+    (source == "pause" || source == "isb") && clobbers.isEmpty && outputs.isEmpty && inputs.isEmpty
+  | _ => false
 
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
-  match op with
+  op.isSpinHint || match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
@@ -314,7 +322,7 @@ partial def memoryFunctions (funcs : Array Func) : Array String :=
 
 /-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
 def Func.syncLocally (f : Func) : Bool :=
-  f.allInsts.any fun i => match i.op with
+  f.allInsts.any fun i => i.op.isSpinHint || match i.op with
     | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
     | .call (.func name ..) _ => (threadFn? name).isSome
     | _ => false
