@@ -107,6 +107,14 @@ class Gate:
         previous[signal.SIGCHLD] = signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         proc = None
         cleanup_attempted = False
+        def cleanup():
+            nonlocal cleanup_attempted
+            cleanup_attempted = True
+            try:
+                return stop_group(proc)
+            except BaseException as failure:
+                step["status"] = "cleanup_failed"
+                raise RuntimeError(label + ": process cleanup failed") from failure
         try:
             with logfile.open("wb") as output, selectors.DefaultSelector() as selector:
                 proc = subprocess.Popen(step["argv"], cwd=ROOT, env=env, stdout=subprocess.PIPE,
@@ -115,17 +123,24 @@ class Gate:
                 selector.register(proc.stdout, selectors.EVENT_READ)
                 deadline = time.monotonic() + timeout
                 output_bytes = 0
+                output_open = True
                 def read_output():
-                    nonlocal output_bytes
+                    nonlocal output_bytes, output_open
+                    if not output_open:
+                        return "eof"
                     try:
                         chunk = os.read(proc.stdout.fileno(), 65536)
                     except BlockingIOError:
-                        return False
+                        return "blocked"
+                    if not chunk:
+                        selector.unregister(proc.stdout)
+                        output_open = False
+                        return "eof"
                     output.write(chunk[:max(0, log_limit - output_bytes)])
                     output_bytes += len(chunk)
                     if output_bytes > log_limit:
                         step["status"] = "oversized_log"
-                    return bool(chunk)
+                    return "data"
                 try:
                     while True:
                         if interrupted[0] is not None:
@@ -139,20 +154,15 @@ class Gate:
                         if step["status"] == "oversized_log" or peek_status(proc) is not None:
                             break
                 finally:
-                    cleanup_attempted = True
-                    try:
-                        code = stop_group(proc)
-                    except BaseException as failure:
-                        step["status"] = "cleanup_failed"
-                        raise RuntimeError(label + ": process cleanup failed") from failure
+                    if not cleanup_attempted:
+                        code = cleanup()
                     # Only bounded pipe reads follow reaping; no later group signal.
                     for _ in range(16):
-                        if not read_output():
+                        if read_output() != "data":
                             break
                     else:
-                        if read_output():
+                        if read_output() == "data":
                             step["status"] = "output_incomplete"
-                    proc.stdout.close()
                 if interrupted[0] is not None:
                     step["interrupted_by"] = interrupted[0]
                     if step["status"] == "pending":
@@ -161,12 +171,7 @@ class Gate:
         finally:
             try:
                 if proc is not None and not cleanup_attempted:
-                    cleanup_attempted = True
-                    try:
-                        stop_group(proc)
-                    except BaseException as failure:
-                        step["status"] = "cleanup_failed"
-                        raise RuntimeError(label + ": process cleanup failed") from failure
+                    cleanup()
             finally:
                 if proc is not None:
                     proc.stdout.close()

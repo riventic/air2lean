@@ -97,6 +97,42 @@ class HarnessTests(unittest.TestCase):
             self.process_events("import time; time.sleep(1)", "timeout", timeout=0.03)
         self.assertEqual(self.gate.steps[-1]["status"], "timeout")
 
+    def closed_output(self, label, duration, timeout):
+        scans = []
+        real_peek = qualify.peek_status
+        def peek(proc):
+            scans.append(1)
+            return real_peek(proc)
+        with replaced(qualify, "peek_status", peek):
+            try:
+                self.process_events("import os,time; os.close(1); os.close(2); time.sleep(" +
+                                    str(duration) + ")", label, timeout=timeout)
+            finally:
+                self.assertLessEqual(len(scans), 32)
+                self.assertGreater(len(scans), 0)
+
+    def test_closed_output_live_child_completes_without_spinning(self):
+        self.closed_output("closed-pass", 0.08, 0.7)
+        self.assertEqual(self.gate.steps[-1]["status"], "passed")
+
+    def test_closed_output_live_child_retains_deadline(self):
+        with self.assertRaisesRegex(RuntimeError, "timeout"):
+            self.closed_output("closed-timeout", 0.15, 0.06)
+        self.assertEqual(self.gate.steps[-1]["status"], "timeout")
+
+    def test_cleanup_failure_is_not_retried_after_reap(self):
+        calls = []
+        real_stop = qualify.stop_group
+        def fail_after_cleanup(proc):
+            calls.append(1)
+            real_stop(proc)
+            raise RuntimeError("mock cleanup failure")
+        with replaced(qualify, "stop_group", fail_after_cleanup):
+            with self.assertRaisesRegex(RuntimeError, "process cleanup failed"):
+                self.gate.run("cleanup-failed", self.tiny("PASS"), timeout=1)
+        self.assertEqual(calls, [1])
+        self.assertEqual(self.gate.steps[-1]["status"], "cleanup_failed")
+
     def test_signal_interruption_preserves_anchor(self):
         with self.assertRaisesRegex(RuntimeError, "interrupted"):
             self.process_events("import os,time; os.kill(os.getppid(),signal.SIGTERM); time.sleep(1)",
