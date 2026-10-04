@@ -69,7 +69,10 @@ private def eagerCaller : ConcM Target ThreadId := do
 def main : IO Unit := do
   let mut errors : Array String := #[]
   let mut concurrentFailure := false
-  for seed in List.range 96 do
+  -- This fixture's choice counts are 1, 2, 3 and 6, so the affine oracle
+  -- repeats modulo 6. Revisit this bound if workers add choices or nested spawns.
+  let fixtureChoicePeriod := 6
+  for seed in List.range fixtureChoicePeriod do
     let oracle := fun turn => seed + turn * 11
     match (Sched.run dispatch 80 oracle failedCalls {}).run with
     | some (.ok ((first, second), m)) =>

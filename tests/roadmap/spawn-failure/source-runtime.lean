@@ -10,7 +10,10 @@ def main : IO Unit := do
   let mut failures : Array String := #[]
   let mut secondFailure := false
   let value := (17 : BitVec 32)
-  for seed in List.range 96 do
+  -- This fixture's choice counts are 1, 2, 3 and 6, so the affine oracle
+  -- repeats modulo 6. Revisit this bound if workers add choices or nested spawns.
+  let fixtureChoicePeriod := 6
+  for seed in List.range fixtureChoicePeriod do
     let oracle := fun turn => seed + turn * 11
     match (Zig.Sched.run SpawnFailure.dispatch 160 oracle (SpawnFailure.threadPair value) SpawnFailure.mem0).run with
     | some (.ok (result, m)) =>
