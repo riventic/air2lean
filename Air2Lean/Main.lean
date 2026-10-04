@@ -72,12 +72,15 @@ def parseArgs (args : List String) : Except String Args := do
       throw s!"invalid --profile '{p}'\n{usage}"
   pure a
 
-/-- Parse, normalize, and check one AIR JSON file's contents into a `Func`. -/
-def processOne (contents : String) : Except String Func := do
-  let raw ← Raw.parseFile contents
+/-- Shared checked path for parsed AIR; metadata remains available to the CLI. -/
+def processRaw (raw : Raw.RawFunc) : Except String Func := do
   let f ← normalize raw
   check f
   pure f
+
+/-- Parse, normalize, and check one AIR JSON file's contents into a `Func`. -/
+def processOne (contents : String) : Except String Func := do
+  processRaw (← Raw.parseFile contents)
 
 def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
@@ -117,9 +120,7 @@ private def run (args : List String) : IO UInt32 := do
             match (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              let f ← normalize raw
-              check f
-              pure f : Except String Func) with
+              processRaw raw : Except String Func) with
             | .error e => err := some s!"{path}: {e}"
             | .ok f => funcs := funcs.push f
       match (match err with | some e => Except.error e | none => if a.registryTemplate then pure () else checkProgram funcs models profiles[0]?) with

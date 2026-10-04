@@ -99,3 +99,45 @@ selection, mixed files and preservation of existing output on every rejection.
 The Lean driver checks parser/profile selection directly. Exporter builds and
 live-export fixture checks must also cover each supported Zig version; this file
 does not turn metadata capture into a semantic-preservation theorem.
+
+## Golden comparisons and check receipts
+
+`scripts/check.sh` first translates the actual complete AIR program, so profile,
+layout and program checks run before metadata is ignored for comparison. It binds
+the generated first-line profile record to every actual AIR file's metadata and
+SHA-256 hash. Only that receipt permits the known schema-12/profile to schema-11
+comparison transition; older schemas, malformed metadata and observable nested
+AIR data remain checked.
+
+Generated comparisons omit only a valid first-line JSON profile marker. The real
+header stays in the generated file that the Lean proof gate builds. In CI, the
+script checks committed, staged and working-tree sources before replacement;
+only a header matching the checked profile may differ while the committed body
+stays identical. Untracked and unrelated proof changes fail. Version/OS generated
+goldens still require the exact generated body to match their selected snapshot.
+The proof build and optional differential gate keep their existing behavior.
+
+Each example records its profile, selected float semantics, input hashes, full
+generated-source hash and body hash in
+`.lake/check-reports/<zig-version>/<example>.json`, alongside the actual
+`<example>.Gen.lean`. `AIR2LEAN_CHECK_REPORT_DIR` changes this destination.
+`AIR2LEAN_OUT_DIR` additionally copies these receipts and generated artifacts under
+`check-reports/<zig-version>/`, separately from the reusable AIR directories.
+These are provenance receipts, not semantic-preservation or binary-equivalence
+certificates.
+
+Fake-tool integration regressions run without a Zig or Lean compiler:
+
+```sh
+python3 tests/roadmap/profiles/test_golden_pipeline.py
+bash scripts/review-checks.sh
+```
+
+AIR comparison now processes each directory as one batch. The batch loads helpers
+and the receipt once, rejects duplicate receipt filenames, and indexes input
+hashes by their original filenames. Every actual file still passes its raw-hash
+and profile checks before any overlay is replaced. Later golden directories
+replace all earlier variants of the same normalized basename. Generic-instance
+collisions retain the SHA-1 first-12-digit suffix of the exact pretty JSON plus
+its final newline. The existing single-file `normalize-air.py INPUT.json` command
+is unchanged; `--output-dir DIRECTORY` selects the batch overlay operation.
