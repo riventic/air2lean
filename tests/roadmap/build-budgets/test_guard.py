@@ -41,8 +41,11 @@ class GuardTests(unittest.TestCase):
 fixture_token = {token!r}
 fixture_deadline = time.monotonic() + {lifetime!r}
 def fixture_pause():
-    while time.monotonic() < fixture_deadline:
-        time.sleep(min(0.01, max(0, fixture_deadline - time.monotonic())))
+    while True:
+        remaining = fixture_deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(remaining)
 '''
         # Keep ps's command field on one line, including after fork/setsid.
         return f"exec({(support + source)!r})"
