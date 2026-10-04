@@ -16,6 +16,13 @@
 | tag enum of `union(enum)` `variants.Shape` | `Ns.ShapeTag` |
 | a name that is a Lean keyword | `«name»` |
 
+Declarations that collide with another emitted name receive a stable `_air2leanN` suffix.
+Named types and functions also avoid the emitter's local binders, such as `v`, `g`, `p0` and
+the instruction result names `iN`/`vN`, because type references and calls in generated helpers
+and bodies are unqualified. For example, an enum named `v` becomes `v_air2lean1`, and a
+function named `p0` becomes `p0_air2lean1`. Source fields and local fields likewise avoid allocated
+type names so that one field cannot shadow the type of a later field.
+
 ## Types
 
 | Zig | Lean |

@@ -26,6 +26,7 @@ For the threaded functions below, every completed run has the stated result, and
 | `sync.mutexCounter` | 4 | `Io.Mutex` | `Proofs/Sync/Mutex.lean` |
 | `sync.handoff` | 7 | `Io.Mutex`, `Io.Condition`, `Io.Event` | `Proofs/Sync/Handoff.lean` |
 | `sync.semaphoreCounter` | 4 | `Io.Semaphore` (with its `Io.Mutex`, `Io.Condition`) | `Proofs/Sync/SemCounter.lean` |
+| `sync.rwLockRead` | 2, 12 or 22 | `Io.RwLock` (with its `Io.Mutex`, `Io.Semaphore`) | `Proofs/Sync/RwLock.lean` |
 | `iogroup.groupCounter` | 3 | `Io.Group`, `Io.Mutex` | `Proofs/Iogroup/Counter.lean` |
 | `threadsync.mutexCounter` | 4 | `Thread.Mutex` | `Proofs/Threadsync/Mutex.lean` |
 | `threadsync.waitGroup` | 2 | `Thread.WaitGroup`, `Thread.ResetEvent`, `Thread.Mutex` | `Proofs/Threadsync/WaitGroup.lean` |

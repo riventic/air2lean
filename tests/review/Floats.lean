@@ -74,4 +74,62 @@ example : resultEq (Zig.Float.convRtChk .f80 (f128 true 0 0)) (.ok (Zig.Float.ze
 example : resultEq (Zig.Float.convChk .f16 (f80 false 16368 (2 ^ 63))) (.ok (Zig.Float.ofBits (fmt := .f16) 0x0200#16)) = true := by native_decide
 example : resultEq (Zig.Float.convRtChk .f16 (f80 false 16368 (2 ^ 63))) (.ok (Zig.Float.zero false)) = true := by native_decide
 
+-- __multf3's limb multiply loses a carry for these significands. IEEE multiplication
+-- retains its correctly-rounded result; the target port reproduces the missing carry.
+example : (Zig.Float.mulRt (f128 false 0x401d (2 ^ 112 - 1))
+    (f128 false 0x401d (2 ^ 112 - 1))).bits.toNat =
+    0x403cfffffffffffffffffffffffffffd := by native_decide
+example : (Zig.Float.mul (f128 false 0x401d (2 ^ 112 - 1))
+    (f128 false 0x401d (2 ^ 112 - 1))).bits.toNat =
+    0x403cfffffffffffffffffffffffffffe := by native_decide
+example : (Zig.Float.mulRt (f128 false 0x401e (2 ^ 112 - 1))
+    (f128 false 0x401e (2 ^ 112 - 1))).bits.toNat =
+    0x403efffffffffffffffffffffffffffd := by native_decide
+example : (Zig.Float.mulRt (f128 false 0x403d (2 ^ 112 - 1))
+    (f128 false 0x403d (2 ^ 112 - 1))).bits.toNat =
+    0x407cfffffffffffffffffffffffffffd := by native_decide
+example : (Zig.Float.mulRt (f128 true 0x403e (2 ^ 112 - 1))
+    (f128 false 0x403e (2 ^ 112 - 1))).bits.toNat =
+    0xc07efffffffffffffffffffffffffffd := by native_decide
+example : (Zig.Float.fmaRt (f128 false 0x401d (2 ^ 112 - 1))
+    (f128 false 0x401d (2 ^ 112 - 1)) (Zig.Float.zero false)).bits.toNat =
+    0x403cfffffffffffffffffffffffffffd := by native_decide
+example : Zig.Float.mulRt (f128 false 1 0) (f128 false 0x3ffe 0) =
+    f128 false 0 (2 ^ 111) := by native_decide
+example : Zig.Float.mulRt (f128 false 0 1) (f128 false 0x3fff 0) =
+    f128 false 0 1 := by native_decide
+example : Zig.Float.mulRt (f128 false 0 1) (f128 false 0x3ffe 0) =
+    (Zig.Float.zero false) := by native_decide
+example : Zig.Float.mulRt (f128 true 0x7ffe (2 ^ 112 - 1)) (f128 false 0x4000 0) =
+    (Zig.Float.inf true) := by native_decide
+example : (Zig.Float.mulRt (Zig.Float.zero false) (Zig.Float.inf (fmt := .f128) false)).isNaN = true := by native_decide
+
+-- A remainder equal to its numerator keeps the original representation. __fmodx's
+-- early comparison also uses the raw encoding, which can disagree with numeric order.
+example : Zig.Float.rem (f80 false 0 (2 ^ 63)) (f80 false 0x3fff (2 ^ 63)) =
+    f80 false 0 (2 ^ 63) := by native_decide
+example : resultEq (Zig.Float.remRtChk (f80 false 0 (2 ^ 63)) (f80 false 0x3fff (2 ^ 63)))
+    (.ok (f80 false 0 (2 ^ 63))) = true := by native_decide
+example : resultEq (Zig.Float.modRtChk (f80 false 0 (2 ^ 63)) (f80 false 0x3fff (2 ^ 63)))
+    (.ok (f80 false 0 (2 ^ 63))) = true := by native_decide
+example : Zig.Float.rem (f80 false 0 (2 ^ 63 + 1)) (f80 false 1 (2 ^ 63)) =
+    f80 false 0 1 := by native_decide
+example : Zig.Float.remRt (f80 false 0 (2 ^ 63 + 1)) (f80 false 1 (2 ^ 63)) =
+    f80 false 0 (2 ^ 63 + 1) := by native_decide
+example : Zig.Float.remRt (f80 true 0 (2 ^ 63 + 1)) (f80 false 1 (2 ^ 63)) =
+    f80 true 0 (2 ^ 63 + 1) := by native_decide
+
+-- Legacy f80 floor/ceil go through __extendxftf2. A zero-fraction pseudo-denormal
+-- becomes signed zero there; 0.16.0's direct f80 floor/ceil use its numeric value.
+example : resultEq (Zig.Float.ceilRtLegacyChk (f80 false 0 (2 ^ 63)))
+    (.ok (Zig.Float.zero false)) = true := by native_decide
+example : resultEq (Zig.Float.floorRtLegacyChk (f80 true 0 (2 ^ 63)))
+    (.ok (Zig.Float.zero true)) = true := by native_decide
+example : resultEq (Zig.Float.ceilChk (f80 false 0 (2 ^ 63)))
+    (.ok (f80 false 0x3fff (2 ^ 63))) = true := by native_decide
+example : resultEq (Zig.Float.floorChk (f80 true 0 (2 ^ 63)))
+    (.ok (f80 true 0x3fff (2 ^ 63))) = true := by native_decide
+example : resultEq (Zig.Float.ceilRtLegacyChk (f80 false 0 (2 ^ 63 + 1)))
+    (.ok (f80 false 0x3fff (2 ^ 63))) = true := by native_decide
+
 end FloatReview
