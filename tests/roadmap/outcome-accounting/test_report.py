@@ -58,6 +58,7 @@ class Outcomes(unittest.TestCase):
     def test_observation_constructors_use_named_fields_with_default_search(self):
         outcome=(ROOT/'tests/diff/Outcome.lean').read_text()
         self.assertIn('search : Option Search := none',outcome)
+        self.assertIn('instance : Nonempty Observation := ⟨noResult⟩',outcome)
         for name in ('tests/diff/Outcome.lean','tests/diff/Diff.lean','tests/roadmap/outcome-accounting/Search.lean'):
             source=(ROOT/name).read_text()
             self.assertNotIn('⟨"',source,name)

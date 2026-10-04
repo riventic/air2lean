@@ -10,3 +10,5 @@ example : errorKind .illegal = .illegal := rfl
 example : errorKind .unspecified = .unspecified := rfl
 example : errorKind .deadlock = .deadlock := rfl
 example : noResult.kind = .boundedNoResult := rfl
+
+example : Nonempty Observation := inferInstance

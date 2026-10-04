@@ -84,4 +84,7 @@ def failure (e : Zig.Error) : Observation :=
   {
     line := "{\"fail\":\"" ++ reprStr e ++ "\"}"
     kind := errorKind e }
+/-- Partial schedule search needs a nonempty result type; this witness makes no
+termination claim and uses the existing bounded no-result observation. -/
+instance : Nonempty Observation := ⟨noResult⟩
 end DiffOutcome
