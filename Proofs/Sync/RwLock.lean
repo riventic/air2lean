@@ -4504,7 +4504,8 @@ theorem main_spec (io : Io) (d : Nat) :
     rcases hr1 with ⟨h, -⟩ | ⟨-, -, hj⟩
     · exact h
     · change (G₃ 0).2.2.jd = true at hj; rw [hg₃] at hj; cases hj
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, rfl, rfl⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩,
+    by simp [Thread.joinValid, hr1']⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1' rfl rfl, fun m₉ hj => ?_⟩⟩
   have hi₉ := inv_join hi₈ hg₃ hfin hj
   have hc₉ : m₉.current = 0 := by obtain ⟨_, _, _, rfl⟩ := Proto.join_eq hj; rfl

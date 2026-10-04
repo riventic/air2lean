@@ -241,7 +241,7 @@ set -euo pipefail
 if [ "${3:-}" = --run ]; then
   output=$5
   mkdir -p "$output"
-  for name in pointerCasts tuples names indirectCapture unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames; do
+  for name in pointerCasts tuples names indirectCapture unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames; do
     [ "${EMITTER_MODE:-}" != missing ] || [ "$name" != tuples ] || continue
     : > "$output/$name.lean"
   done
@@ -268,8 +268,8 @@ run_emitter() {
     bash "$emitter/tests/review/emitter.sh" -fixtures
 }
 for name in parser1 parser2 parser3 parser4 parser5 parser6; do : > "$emitter/-fixtures/$name.lean"; done
-expect_pass "emitter checks 21 fixtures in leading-hyphen directory" run_emitter healthy
-expect_pass "all 21 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 21
+expect_pass "emitter checks 25 fixtures in leading-hyphen directory" run_emitter healthy
+expect_pass "all 25 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 25
 expect_failure "failed emitter find" "find failed" run_emitter find-failure
 expect_failure "failed emitter sort" "sort failed" run_emitter sort-failure
 expect_failure "truncated emitter find" "listing incomplete" run_emitter truncated

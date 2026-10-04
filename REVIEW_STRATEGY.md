@@ -73,8 +73,8 @@ serialization rule does not require disabling that matrix.
 translator and proofs, elaborates the aggregate proof and float regressions, executes the
 concurrency, memory and parser test `main` functions, then runs input, emission and exporter
 checks. Parser and emitter test generators write semantic fixtures into a temporary directory;
-the emission driver preserves the six parser fixtures, adds 15 emitter fixtures, and
-elaborates all 21 generated files serially without nested compiler launches. CI invokes it
+the emission driver preserves the six parser fixtures, adds 19 emitter fixtures, and
+elaborates all 25 generated files serially without nested compiler launches. CI invokes it
 after the selected version's translation and proofs have been checked,
 for every non-mutation matrix job, including 0.14.1. Its synthetic parser cases are independent
 of the selected Zig version; aggregate imports use the generated modules already selected by
@@ -118,16 +118,19 @@ while Zig 0.14.1 matches `arm64`. No compatible older full SDK or simple support
 workaround was established. Linux CI retains the 0.14.1 matrix job; its final run result
 must be reported separately. The local guard's 8 GiB cap remains in force.
 
-Linux CI reruns remain pending. An earlier PR 50 run lacked PR 48's `target_endian`
-normalization dependency; its base and head ancestry now include that dependency. Local
-passes do not imply a completed Linux CI run.
+The first complete Linux CI run passed the 0.14.1 exporter/translation/proof job and four
+mutation shards. The 0.15.2 and 0.16.0 full jobs exposed f128 multiplication and f80 edge
+differences hidden by this Mac's existing host exceptions. Mutation shard 5 also found a
+stale sentinel-free mutation. These failures motivated the second review wave below.
+An earlier PR 50 run lacked PR 48's `target_endian` normalization dependency; its base and
+head ancestry now include that dependency. Local passes do not imply a completed Linux run.
 
 ## Supplemental coverage for added files
 
-The baseline ledger remains 838 files. The baseline-to-integration `HEAD` added-file
-inventory (`git diff --diff-filter=A --name-only BASELINE HEAD`) contains these 27 files.
+The baseline ledger remains 838 files. Before the merge reconciliation below, the
+baseline-to-integration added-file inventory contained these 27 files.
 Every added path has an owner and final-review assignment; none is uncovered. Assignments
-record review scope separately from the completed local checks and pending Linux CI.
+record review scope separately from the completed local checks and Linux CI results.
 
 | Final reviewer | Owner | Added files |
 |---|---|---|
@@ -140,3 +143,89 @@ record review scope separately from the completed local checks and pending Linux
 | final_translation_parser + final_runtime_concurrency; coordinator actual dump | Translation and examples | `tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.signal.json` |
 | resume_inputs | Test inputs | `tests/review/inputs.py` |
 | resume_docs + coordinator | Integration and documentation | `REVIEW_STRATEGY.md`, `REVIEW_COVERAGE.tsv`, `scripts/review.sh` |
+
+## Second review wave
+
+The user requested further improvements. Independent GPT-6.1 Sol agents reviewed AIR/CLI,
+translation, runtime/concurrency and tooling; separate adversarial agents checked each fix
+scope. Four additional agents applied `/simple`'s reuse, simplification, efficiency and
+altitude angles. Reviewers remained static-only; the coordinator kept the single global
+compiler queue and unchanged 8 GiB memory cap. This wave changes 26 already-covered files
+and adds no tracked files: all 865 tracked paths at that wave's head retain primary coverage.
+
+| Scope | Independently checked files |
+|---|---|
+| AIR/CLI | `Air2Lean/Air/{Op,Json,Canon}.lean`, `Air2Lean/{Check,Main}.lean`, shared `Emit.childTys` removal, `tests/review/Parser.lean`, `docs/{air-json,generated-code}.md` |
+| Names | `Air2Lean/Emit.lean`, `tests/review/Emitter.lean`, `docs/generated-code.md` |
+| Float and model claims | `ZigLean/Float/{Ops,CompilerRt}.lean`, float emission, `Proofs/Floatops/{Gen,Proofs}.lean`, `tests/golden/0.15.2/floatops/Gen.lean`, `tests/review/Floats.lean`, `docs/floats.md`, `ZigLean/Mem/Thread.lean`, `docs/std-models.md` |
+| Tooling | `scripts/{mutate,review-checks}.sh`, `tests/review/{emitter,exporter-checks,regenerate}.sh`, `zig-patch/{build.sh,README.md}` |
+
+The fixes reject cyclic value types, unavailable instruction references, malformed constants,
+markers and flags, unsupported vector reinterpretations/pointer vectors, and omitted spawn
+workers. Generated type/function names avoid body binders and the pinned Lean parser's
+reserved words. Type validation and binder lookup use indexed membership; repeated float
+limb calculations are cached. CLI help, namespace validation and IO errors have smoke checks.
+
+The target float model now includes the genuine compiler-rt f128 lost-carry behavior, f80
+remainder representation preservation and pre-0.16 f80 floor/ceil conversion. IEEE operations
+remain distinct. The public f80 operation theorem explicitly excludes a pseudo-denormal input;
+all selectors remain covered. The concurrency documentation records the existing read-view
+transfer overapproximation instead of claiming exact RC11 behavior.
+
+The compiler builds into an adjacent staging directory, locks the binary before publication,
+excludes same-prefix writers and retains/restores previous installations on publication
+failure. Its default is stripped Debug with one build job. Emission checks generate fresh
+fixtures and validate producer completeness; mutation detection requires a clean unmutated
+differential baseline and targets the current sentinel-free implementation. Bash 3.2 remains
+supported.
+
+PR 53 contains names, PR 54 float/model repairs, PR 55 tooling and PR 56 AIR/CLI. PR 56 is
+based on 53; the other three are based on the complete first-wave PR 52. The second integration
+base is `codex/review-more-base`, the union of these fixes. Its small integration PR pins all
+19 emitter cases and records this review. Every PR is a draft; none is merged. After a
+dependency reaches `main`, retarget its child PR to `main` before merging it. Union branches
+serve as validation bases, without adding another code-fix PR.
+
+Completed local checks include all 46 shell regressions under current Bash and macOS Bash
+3.2; a real staged/locked Zig 0.16 bootstrap (4,315.7 MiB peak, 195.2 s); exact native source
+`wideMultiply` checks for Zig 0.15.2 and 0.16.0; full proof/runtime regression checks;
+all 25 generated parser/emitter semantic files; input coverage; actual exporter checks;
+and CLI help, valid/rejected namespaces and IO error paths. The second-wave cross-version,
+golden and native differential results and complete-stack Linux CI status are recorded below.
+
+| Second-wave integration check | Result |
+|---|---|
+| All version proof variants | 0.14.1, 0.15.2, 0.16.0 full `Proofs` and all 40 handwritten imports passed; Darwin Threadsync passed. Peak 2,188.7 MiB, 66.8 s (`floats-all-versions.log`). |
+| Actual 0.16 golden pipeline | Passed AIR comparisons, translation and generated proof builds; peak 679.6 MiB, 51.3 s (`goldens16.log`). |
+| Actual 0.15 golden pipeline | Passed after f80-only legacy dispatch; peak 800.5 MiB, 44.1 s (`goldens15.log`). |
+| Final fixture policy | All 46 shell checks passed under both Bash versions with 19 required emitter outputs plus six caller parser outputs (`final-shell-policy.log`). |
+| Final integrated regressions | After the final reserved-token merge, the full proof/runtime/parser/input suite, all 25 emitted semantic fixtures, actual 0.15/0.16 exporter round trips, no-sorry, CLI namespace/IO smoke checks and byte-identical checked-AIR regeneration passed. Peak 728.6 MiB, 27.7 s (`integration-final-tokens.log`). |
+| Matching-version native 0.15 differential | Passed 85,801 selected cases: 78,304 `ok`, 4,975 matching failures, 1,077 pinned unspecified, zero capped/mismatch, 1,445 host differences. Peak 778.8 MiB, 191.9 s (`diff15.log`). |
+| Matching-version native 0.16 differential | Passed 85,861 selected cases: 79,049 `ok`, 4,975 matching failures, 1,077 pinned unspecified, zero capped/mismatch, 760 host differences. Peak 756.1 MiB, 190.8 s (`diff16.log`). |
+| Real allocator mutations | Clean lists baseline passed all 1,500 cases. Mutation h produced 414 mismatches; repaired sentinel mutation s changed a pinned count and was detected. Source restoration checked; peak 765.7 MiB, 65.8 s (`mutations-lists.log`). |
+| Complete-stack Linux CI | All eight jobs passed at `c19a260`: full 0.15.2/0.16.0 native differential jobs, the 0.14.1 exporter/translation/proof job and all five mutation shards ([run 37159767654](https://github.com/riventic/air2lean/actions/runs/37159767654)). The final reserved-token follow-up is locally checked above; its CI run is tracked on PR 57. Mac host exception lists remain unchanged. |
+
+## Merge reconciliation with current main
+
+Before merging the review PRs, current main `2848b84` also contained PR 46's RwLock
+proof and semaphore changes. The complete review stack at `3ffb793` had passed all eight
+Linux jobs ([run 37161282164](https://github.com/riventic/air2lean/actions/runs/37161282164));
+that run preceded this reconciliation.
+
+Independent GPT-6.1 Sol agents `merge_sync_compat` and `merge_policy_compat` checked
+the synchronization API, proof-discovery and documentation interactions. The former
+read the entire newly added `Proofs/Sync/RwLock.lean` (4,559 lines before the fix).
+This adds one supplemental covered file, making 866 tracked files; the original
+838-file ledger remains unchanged.
+
+The RwLock join proof now supplies `Thread.joinValid` from its existing invariant,
+without weakening its theorem or the runtime API. `tests/review/AllProofs.lean` now
+imports RwLock, bringing the aggregate check to 41 handwritten modules. A separate
+static verification confirmed both changes.
+
+Serialized local checks passed all three version-specific full `Proofs` builds
+(104 jobs each), all 41 aggregate imports, Darwin Threadsync, all 46 shell checks,
+runtime/parser/input regressions, all 25 emitted semantic fixtures, actual 0.15/0.16
+exporter round trips and no-sorry. The guarded run peaked at 2,210.7 MiB; generated
+proofs and goldens were restored unchanged. The intentional RwLock source fix was
+the sole remaining proof diff before commit.
