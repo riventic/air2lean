@@ -278,6 +278,14 @@ theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block
     StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some, hnr,
     Mem.recordAt]
 
+/-- A discarded load performs exactly the full raw read and keeps its access record. -/
+theorem loadDiscardBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n .read) :
+    (loadDiscardBytes n a p).run m = pure ((), m.recordAt b o n .read) := by
+  simp only [loadDiscardBytes, StateT.run_bind, loadBytes_run h hnr]
+  simp [StateT.run, pure, StateT.pure, bind, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont]
+
 /-- The memory after writing `bs` at offset `o` of block `b` (`storeBytes`). -/
 def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) : Mem :=
   { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }

@@ -418,6 +418,9 @@ inductive Op where
   /-- `try`/`try_cold`: `v` is an error union; `errBody` runs when it holds an error (it ends in
   an exit, like a `cond_br` branch). Otherwise the `try` instruction's value is the payload. -/
   | «try» (v : Val) (errBody : Array Inst)
+  /-- Pointer-form `try`: test the addressed error tag, run `errBody` on error, otherwise
+  return the payload's address in the same allocation without reading or copying it. -/
+  | tryPtr (p : Val) (errBody : Array Inst)
   | ret (v : Val)
   | unreach
   | trap

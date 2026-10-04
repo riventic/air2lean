@@ -535,6 +535,9 @@ structure FCtx where
   /-- `block`/`loop` inst id → its declared `ty`. -/
   blockTys : Array (InstId × TyId)
   allInsts : Array Inst
+  /-- Actual emitted value uses across the entire function, including nested bodies.
+  Computed once after places are known, so unused-load queries do not rescan all AIR. -/
+  instUses : Std.HashSet InstId := {}
   retTy : TyId
   /-- This function's own generated (mangled) name, for naming its extracted loop-body defs
   (`<fnName>.loop<k>`, see `emitLoopDef`). -/
@@ -1200,7 +1203,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
-  | .«try» v _ => #[v]
+  | .«try» v _ | .tryPtr v _ => #[v]
   | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
   | .unreach => #[]
   | .trap => #[]
@@ -1221,9 +1224,16 @@ def FCtx.freeVarIds (fc : FCtx) (body : Array Inst) : Array InstId :=
     #[])
   used.filter (fun id => !defined.contains id)
 
+/-- Cache direct value uses from every instruction in the flattened function. Constant
+aggregate SSA refs are rejected by Canon; debug-only refs do not read runtime values. -/
+def FCtx.computeInstUses (fc : FCtx) : Std.HashSet InstId :=
+  let empty : Std.HashSet InstId := {}
+  fc.allInsts.foldl (init := empty) fun used i =>
+    (fc.directVals i.op).foldl (init := used) fun used v =>
+      match v with | .inst id => used.insert id | _ => used
+
 /-- Some instruction of the function reads `id`. -/
-def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
-  fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
+def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool := fc.instUses.contains id
 
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
@@ -1750,7 +1760,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
   | .load ptr =>
     if fc.isMemPtr ptr then
-      let (env, l) := bindLet fc env inst.id (fc.loadMem ptr (rv ptr)); (env, some l)
+      if !fc.isReferenced inst.id then
+        -- Keep the full access/read record, but do not decode a value with no runtime use.
+        -- A bit-pointer reads its complete host, rather than only the field's byte width.
+        let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+        let child := ((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0
+        let size := if host != 0 then host else fc.sizeOf child
+        (env, some s!"Zig.loadDiscardBytes {size} {fc.ptrAlign ptr} {rv ptr}")
+      else
+        let (env, l) := bindLet fc env inst.id (fc.loadMem ptr (rv ptr)); (env, some l)
     else
       let (env, l) := bindLet fc env inst.id s!"pure ({fc.loadPlace ptr})"; (env, some l)
   | .store ptr v =>
@@ -2057,6 +2075,16 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         s!"match {fc.resolveVal env v} with\n\
           | .error _ => {doBlock errStr}\n\
           | .ok {vname} => {doBlock restStr}"
+      | .tryPtr p errBody =>
+        let payload := match fc.pointeeOf p with
+          | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+          | _ => "(panic! \"air2lean: try_ptr of a non-error-union pointer\")"
+        let errStr := emitStmts fc env errBody.toList
+        let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
+        let restStr := emitStmts fc (env.push (inst.id, vname)) rest
+        s!"match ← Zig.tryPayloadPtr ({payload}) {fc.ptrAlign p} {fc.resolveVal env p} with\n\
+          | .error _ => {doBlock errStr}\n\
+          | .ok {vname} => {doBlock restStr}"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
@@ -2223,7 +2251,8 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds }
-  { fc with places := fc.computePlaces }
+  let fc := { fc with places := fc.computePlaces }
+  { fc with instUses := fc.computeInstUses }
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)

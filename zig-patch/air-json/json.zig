@@ -777,6 +777,13 @@ const W = struct {
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
+            .try_ptr, .try_ptr_cold => {
+                const ty_pl = w.data(inst).ty_pl;
+                const extra = w.air.extraData(Air.TryPtr, ty_pl.payload);
+                try w.writeArgs(&.{extra.data.ptr});
+                try w.field("body");
+                try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
+            },
             .switch_br, .loop_switch_br => {
                 const sw = w.air.unwrapSwitch(inst);
                 try w.writeArgs(&.{sw.operand});

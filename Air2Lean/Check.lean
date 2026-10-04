@@ -300,6 +300,20 @@ def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String 
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
 
+/-- A conservative visible exit check for a pointer-try error body. Compiler AIR guarantees
+no fallthrough. A loop or exhaustive switch without an explicit else is not inferred here. -/
+partial def tryErrorBodyExits (body : Array Inst) : Bool :=
+  let tail : Option Inst := body.foldl (init := none) fun previous i =>
+    match i.op with | .line _ | .dbg .. => previous | _ => some i
+  let tailOp : Option Op := tail.map fun (i : Inst) => i.op
+  match tailOp with
+  | some (.ret _) | some (.retLoad _) | some .unreach | some .trap => true
+  | some (.call (.func _ true ..) _) => true
+  | some (.condBr _ t e) => tryErrorBodyExits t && tryErrorBodyExits e
+  | some (.switchBr _ cases e) => cases.all (fun c => tryErrorBodyExits c.body) && tryErrorBodyExits e
+  | some (.block body) => tryErrorBodyExits body
+  | _ => false
+
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
@@ -434,6 +448,36 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     for c in cases do
       let _ ← checkInsts cx line c.body
     let _ ← checkInsts cx line elseBody
+    pure line
+  | .tryPtr p errBody => do
+    let pty ← cx.memPtrTy line p
+    let some (.ptr "one" isConst unionTy) := cx.types[pty]?
+      | cx.fail line "try_ptr requires a single pointer to an error union"
+    let some (.errorUnion _ payload) := cx.types[unionTy]?
+      | cx.fail line "try_ptr requires a pointer to an error union"
+    unless cx.types[ty]? == some (.ptr "one" isConst payload) do
+      cx.fail line "try_ptr result must be a pointer to the same payload with matching constness"
+    for ptrTy in #[pty, ty] do
+      let layout := cx.layouts[ptrTy]?.getD {}
+      if layout.isVolatile then
+        cx.fail line "try_ptr through a volatile pointer is outside the subset"
+      if layout.hostSize != 0 then
+        cx.fail line "try_ptr through a bit-pointer is outside the subset"
+      if layout.ptrAlign.isNone then
+        cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
+    checkMemTy fnName cx.types cx.layouts line unionTy
+    unless tryErrorBodyExits errBody do
+      cx.fail line "try_ptr error body must exit without fallthrough"
+    let nested := errBody.foldl flattenInst #[]
+    let localTargets := nested.filterMap fun i =>
+      match i.op with | .block _ | .loop _ => some i.id | _ => none
+    for i in nested do
+      match i.op with
+      | .br target _ | .«repeat» target =>
+        unless localTargets.contains target do
+          cx.fail line "try_ptr error body must exit the function, not branch outside its body"
+      | _ => pure ()
+    let _ ← checkInsts cx line errBody
     pure line
   | .«try» _ errBody => do
     let _ ← checkInsts cx line errBody
