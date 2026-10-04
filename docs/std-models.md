@@ -52,7 +52,9 @@ every policy. `releaseAttempt_run` and `releaseAttempts_run` additionally establ
 actual returned outcome and restore the original heap after every successful allocation
 or permitted failure. Their premises are positive request sizes/alignment and the existing
 sequential memory invariant; they do not assume allocation success or a fixed resource cap.
-The source definitions require a fresh kernel check before qualification.
+The coordinator kernel-checked these definitions at `853cef53211d08a62e368739160f56dea6a3408e`;
+[the policy report](allocation-policy-report.json) records the selected local profile and
+remaining qualification/review gates.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails (legacy null/index), or
 `{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields

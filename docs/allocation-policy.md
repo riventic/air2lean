@@ -26,7 +26,9 @@ that a finite allocate/free client has an actual returned outcome, one outcome p
 and restores its original heap regardless of failure choices and cap. This is stronger
 than a partial triple satisfied by a diverging computation. Premises remain positive size,
 positive alignment and `Mem.Seq`; the theorem does not assume resources or success.
-These are source definitions pending a fresh kernel check in the qualification record.
+These definitions passed the coordinator's kernel build at revision
+`853cef53211d08a62e368739160f56dea6a3408e`; the qualification record identifies the
+selected local profile and remaining review/regression gates.
 
 The native differential `TestAllocator` uses the same explicit policy, over page allocation,
 and still reports actual harness allocation failure separately. Existing lists inputs retain
@@ -64,9 +66,13 @@ Compiler errors, unexpected panics, missing tools and killed processes do not co
 mutation detection. Temporary copies preserve the original source. Existing mutation (h)
 continues to remove only legacy `failAt`, retaining the configured policy.
 
-[The qualification record](allocation-policy-report.json) separates completed static checks
-from unavailable compiler/kernel/differential checks. M03 is not qualified until those checks
-and the universal acceptance review pass against an exact revision/profile. This fixture
+[The qualification record](allocation-policy-report.json) records the coordinator's successful
+kernel build, ten exact native comparisons and three detected semantic mutants at revision
+`853cef53211d08a62e368739160f56dea6a3408e`, using Zig 0.16.0 on aarch64-macos with
+baseline CPU/ReleaseSafe. It lists the actual caps and failure indices, log hashes and
+sampled resource measurements. Zig 0.15.2 CI, the existing lists-client differential gate
+and central review remain pending. M03 is not fully qualified until remaining gates and
+the universal acceptance review pass against an exact revision/profile. This fixture
 compares the selected model policy on native reference layouts; it is not general allocator
 or cross-target correspondence.
 
