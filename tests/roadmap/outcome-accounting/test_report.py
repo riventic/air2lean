@@ -2,6 +2,7 @@
 """Offline typed accounting tests. Every subprocess has a short timeout."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -156,6 +157,61 @@ class Outcomes(unittest.TestCase):
         records('renderer.jsonl',[{'fail':'harnessRenderFailure'}])
         records('renderer.jsonl.outcomes',[{'schema':1,'kind':'native_panic','legacy':{'fail':'harnessRenderFailure'}}])
         with self.assertRaisesRegex(AssertionError,'semantic mismatch'):module.verify(self.root)
+
+    def test_actual_diff_setup_failures_invalidate_old_completed_report(self):
+        cases=('missing_compiler','version_failure','unknown_example','invalid_example',
+               'empty_selection','selection_failure','temporary_directory_failure','native_build_failure')
+        for case in cases:
+            with self.subTest(case=case):
+                root=self.root/case;scripts=root/'scripts';scripts.mkdir(parents=True)
+                for name in ('diff.sh','diff-report.py','panic-policy.tsv','example-selection.sh'):
+                    (scripts/name).write_text((ROOT/'scripts'/name).read_text())
+                (root/'examples/basic').mkdir(parents=True)
+                harness=root/'tests/diff/basic/harness.zig';harness.parent.mkdir(parents=True);harness.touch()
+                stale=root/'tests/diff/out/zig/basic/foo.jsonl.outcomes';stale.parent.mkdir(parents=True)
+                stale.write_text('{"schema":1,"kind":"input_failure"}\n')
+                summary=root/'summary.json';summary.write_text('{"schema":1,"complete":true,"mutation_eligible":999}')
+                Path(str(summary)+'.jsonl').write_text('old evidence\n')
+                compiler=root/'fake-compiler'
+                compiler.write_text('#!/bin/bash\nif [ "$1" = version ]; then '+('exit 17' if case=='version_failure' else 'echo 0.16.0')+'; else exit 23; fi\n')
+                compiler.chmod(0o755)
+                env=dict(os.environ,AIR2LEAN_ZIG=str(compiler),AIR2LEAN_EXAMPLES='basic',AIR2LEAN_DIFF_REPORT=str(summary))
+                if case=='missing_compiler':env['AIR2LEAN_ZIG']=str(root/'missing-compiler')
+                if case=='unknown_example':env['AIR2LEAN_EXAMPLES']='not-known'
+                if case=='invalid_example':env['AIR2LEAN_EXAMPLES']='../bad'
+                if case in ('empty_selection','selection_failure'):
+                    env.pop('AIR2LEAN_EXAMPLES',None)
+                    (scripts/'example-selection.sh').write_text('air2lean_default_examples() { '+('return 19' if case=='selection_failure' else ':')+'; }\n')
+                if case=='temporary_directory_failure':env['TMPDIR']=str(root/'absent-directory')
+                result=subprocess.run(['bash',str(scripts/'diff.sh')],env=env,capture_output=True,text=True,timeout=3)
+                self.assertNotEqual(result.returncode,0,result.stdout)
+                report=REPORT.read_summary(summary)
+                self.assertFalse(report['complete'])
+                self.assertEqual(report['mutation_eligible'],0)
+                self.assertEqual(report['failure'],'setup_failure')
+                self.assertEqual(report['phase'],'build_native' if case in ('temporary_directory_failure','native_build_failure') else 'setup')
+                self.assertFalse(Path(str(summary)+'.jsonl').exists())
+
+    def test_report_initialization_failure_stops_before_mock_compiler(self):
+        scripts=self.root/'scripts';(scripts/'diff.sh').write_text((ROOT/'scripts/diff.sh').read_text())
+        (scripts/'diff-report.py').write_text('import sys\nraise SystemExit(42)\n')
+        compiler=self.root/'fake-compiler';marker=self.root/'compiler-called'
+        compiler.write_text('#!/bin/bash\ntouch "'+str(marker)+'"\nexit 23\n');compiler.chmod(0o755)
+        env=dict(os.environ,AIR2LEAN_ZIG=str(compiler),AIR2LEAN_DIFF_REPORT=str(self.summary))
+        result=subprocess.run(['bash',str(scripts/'diff.sh')],env=env,capture_output=True,text=True,timeout=3)
+        self.assertEqual(result.returncode,42,result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertIn('could not record differential failure evidence',result.stderr)
+
+    def test_actual_review_comparison_fixture_supplies_policy_context(self):
+        source=(ROOT/'scripts/review-checks.sh').read_text()
+        fixture=source[source.index('compare="$test_dir/compare"'):source.index('expect_pass "healthy comparison"')]
+        command='set -euo pipefail\nrepo_root="$1"\ntest_dir="$2"\n'+fixture+'\nbash "$compare/run.sh"\n'
+        env=dict(os.environ,AIR2LEAN_DIFF_REPORT=str(self.root/'inherited-report.json'))
+        result=subprocess.run(['bash','-c',command,'bash',str(ROOT),str(self.root)],env=env,capture_output=True,text=True,timeout=3)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('TOTAL: ok=2 fail_match=0 unspecified=0 capped=0 mismatch=0',result.stdout)
+        self.assertFalse((self.root/'inherited-report.json').exists())
 
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})

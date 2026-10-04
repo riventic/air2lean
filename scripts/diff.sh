@@ -45,6 +45,26 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+# Invalidate old completed evidence before compiler/version/selection setup.
+export AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
+examples=""
+build_dir=""
+diff_phase=setup
+finish_diff() {
+  local status=$? evidence_examples=""
+  if [ "$diff_phase" != setup ]; then evidence_examples=$examples; fi
+  if [ "$status" -ne 0 ]; then
+    if ! python3 scripts/diff-report.py failure --summary "$AIR2LEAN_DIFF_REPORT" \
+      --root "$repo_root" --examples "$evidence_examples" --phase "$diff_phase"; then
+      echo "error: could not record differential failure evidence" >&2
+    fi
+  fi
+  if [ -n "$build_dir" ]; then rm -rf "$build_dir"; fi
+  return "$status"
+}
+trap finish_diff EXIT
+python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root"
+
 zig_bin=${AIR2LEAN_ZIG:-zig}
 zig_version=$("$zig_bin" version)
 if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
@@ -55,13 +75,15 @@ else
 fi
 example_count=0
 for ex in $examples; do
+  case "$ex" in *[!a-zA-Z0-9_-]* | "")
+    echo "error: invalid example: $ex" >&2; exit 1 ;;
+  esac
   [ -f "tests/diff/$ex/harness.zig" ] || { echo "error: unknown example: $ex" >&2; exit 1; }
   example_count=$((example_count + 1))
 done
 [ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 
-# Typed evidence is additional to the stable legacy TOTAL/pin protocol.
-export AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
+# Clear this selection's old sidecars only after setup has validated it.
 python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
 diff_phase=build_native
 
@@ -72,15 +94,6 @@ functions_of() {
 
 echo "== building zig harnesses ==" >&2
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
-finish_diff() {
-  local status=$?
-  if [ "$status" -ne 0 ]; then
-    python3 scripts/diff-report.py failure --summary "$AIR2LEAN_DIFF_REPORT" \
-      --root "$repo_root" --examples "$examples" --phase "$diff_phase" || true
-  fi
-  rm -rf "$build_dir"
-}
-trap finish_diff EXIT
 for ex in $examples; do
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
   "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/$ex" \
