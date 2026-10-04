@@ -13,7 +13,7 @@
     "src/codegen/llvm.zig": "76e87395cb64d105a8f4d9ab0cb38b45c134c851cefc77f55ad18ada443d1025",
     "lib/std/mem/Allocator.zig": "2abc46d48236f1914c5cb9f1a8d526210c1159613bdf19bb57dda054c4f408b5",
     "lib/std/Thread.zig": "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d",
-    "lib/std/Io.zig": "b8db7985bba184238d97a59336389bb51e7f14546746c1a95a9681ee12c3aadc",
+    "lib/std/Io.zig": null,
     "lib/std/time.zig": "3dcf1c3db1d8f99b8b4d0f6da6dbc7ad916ef62765a1fede977517587523d7ed"
   },
   "universe": {
@@ -12351,7 +12351,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "238e886065cc6b6de308b571074d6137b23ca37648b8c9760bfaaa9889189758",
+      "scripts/coverage.py": "fda8199e30e4a4e6d4462b49098ba652bd0adcc933eada72fbe98c952b1c3a02",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {

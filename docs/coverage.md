@@ -37,8 +37,18 @@ compiler fingerprint, universe, disposition, model boundary, golden input or
 project evidence changes. New and renamed tags cannot disappear through a
 normalizer filter. Renaming appears as removal plus addition; the tool does not
 infer equivalence. Exit 2 means invalid/inaccessible input. CI must provision the
-compiler source root and run checks after generating any expected translations.
+compiler source root and check committed evidence before overwriting generated
+proof modules.
 Regeneration records evidence; it does not itself qualify an upgrade.
+
+CI runs the offline regression suite in every matrix job. Each non-mutation job
+then downloads its version's source archive using the existing `versions.toml`
+URL and SHA-256 pins, verifies the archive, extracts a fresh temporary source root
+and checks the committed Linux inventory. It cleans up the source root on exit.
+This gate runs before compiler/proof pipelines overwrite generated proof modules,
+and independently of the patched compiler cache. A new/renamed tag, changed
+compiler fingerprint or stale project evidence fails the job. The source gate
+invokes neither Zig nor Lean; later pipeline steps supply execution/proof evidence.
 
 The initial snapshots use these already available source directories:
 

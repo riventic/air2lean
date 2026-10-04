@@ -66,6 +66,18 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(rows[2]['disposition'], 'exporter-fallback-unsupported-marker-review')
         self.assertTrue(all('review' in row['disposition'] for row in rows))
 
+    def test_optional_compiler_file_requires_exact_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            (parent/'io.zig').write_text('// older Zig namespace')
+            # Simulate macOS's permissive file lookup even on a Linux test host.
+            with patch.object(Path, 'is_file', return_value=True):
+                self.assertFalse(coverage.exact_file(parent/'Io.zig'))
+                self.assertTrue(coverage.exact_file(parent/'io.zig'))
+            (parent/'io.zig').unlink()
+            (parent/'Io.zig').write_text('// newer Zig namespace')
+            self.assertTrue(coverage.exact_file(parent/'Io.zig'))
+
     def test_file_cache_reuses_bytes_and_new_invocation_is_fresh(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'source.zig'

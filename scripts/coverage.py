@@ -266,6 +266,13 @@ def model_inventory(text):
     return entries
 
 
+def exact_file(path):
+    # Case-insensitive host filesystems must not invent version-specific files
+    # such as Io.zig from older releases' lowercase io.zig.
+    return path.parent.is_dir() and any(child.name == path.name and child.is_file()
+                                       for child in path.parent.iterdir())
+
+
 def compiler_inventory(source, cache=None):
     cache = cache if cache is not None else SourceCache()
     specs = [('air_tags', 'src/Air.zig', 'Tag', 'enum'),
@@ -283,7 +290,7 @@ def compiler_inventory(source, cache=None):
                      'src/codegen/llvm.zig', 'lib/std/mem/Allocator.zig',
                      'lib/std/Thread.zig', 'lib/std/Io.zig', 'lib/std/time.zig'):
         p = source / relative
-        hashes[relative] = cache.digest(p) if p.is_file() else None
+        hashes[relative] = cache.digest(p) if exact_file(p) else None
     return out, hashes
 
 
