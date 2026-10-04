@@ -77,7 +77,11 @@ def Observation.metadata (o : Observation) : Json :=
         ("saw_no_result", Lean.toJson s.sawNoResult)])])
 
 /-- Keep legacy wire shapes; `none` is deliberately not classified as proven divergence. -/
-def noResult : Observation := { line := "{\"diverge\":true}", kind := .boundedNoResult }
+def noResult : Observation := {
+  line := "{\"diverge\":true}"
+  kind := .boundedNoResult }
 def failure (e : Zig.Error) : Observation :=
-  { line := "{\"fail\":\"" ++ reprStr e ++ "\"}", kind := errorKind e }
+  {
+    line := "{\"fail\":\"" ++ reprStr e ++ "\"}"
+    kind := errorKind e }
 end DiffOutcome

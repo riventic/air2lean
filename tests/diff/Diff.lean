@@ -159,7 +159,9 @@ def renderOk {α : Type} [ReturnedError α] (r : Zig.Result α) (payload : α �
   match r.run with
   | none => DiffOutcome.noResult
   | some (.error e) => DiffOutcome.failure e
-  | some (.ok v) => { line := "{\"ok\":" ++ payload v ++ "}", kind := DiffOutcome.valueKind v }
+  | some (.ok v) => {
+      line := "{\"ok\":" ++ payload v ++ "}"
+      kind := DiffOutcome.valueKind v }
 
 /-- An integer value; `wide`: quoted (u64 results). -/
 def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
@@ -209,7 +211,9 @@ def processFile (ex name : String) (step : Json → IO Observation) : IO Unit :=
       for line in raw do
         if line.trimAscii.isEmpty then continue
         let recordFailure : IO Unit := metadata.putStrLn
-          (({ line := "{}", kind := .inputFailure } : Observation).metadata.compress)
+          (({
+              line := "{}"
+              kind := .inputFailure } : Observation).metadata.compress)
         let j ← match Json.parse line with
           | .ok j => pure j
           | .error e => do
@@ -755,7 +759,9 @@ def renderMem {α : Type} [ReturnedError α] (g n : Nat) (r : Zig.Result (α × 
       "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
     let live := if heap then s!",\"live\":{(m.blocks.filter fun b => b.kind == .heap && b.live).size}"
       else ""
-    { line := "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}", kind := DiffOutcome.valueKind v }
+    {
+      line := "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}"
+      kind := DiffOutcome.valueKind v }
 
 /-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
 memory, from the memory `m0` of the example. `call` gets the number of globals. `heap`: the
@@ -967,7 +973,9 @@ def renderOut {α : Type} [ReturnedError α] (r : Zig.Sched.Out α) (payload : �
   match r with
   | none => DiffOutcome.noResult
   | some (.error e) => DiffOutcome.failure e
-  | some (.ok (v, _)) => { line := "{\"ok\":" ++ payload v ++ "}", kind := DiffOutcome.valueKind v }
+  | some (.ok (v, _)) => {
+      line := "{\"ok\":" ++ payload v ++ "}"
+      kind := DiffOutcome.valueKind v }
 
 /-- The most runs (schedules) that `searchSchedules` tries for one input. -/
 def scheduleCap : Nat := 2000
@@ -979,11 +987,20 @@ def scheduleFuel : Nat := 100000
 A search cap or any no-result branch is inconclusive, never a termination result. -/
 partial def searchSchedules (run : (Nat → Nat) → Observation × Array Nat) (zig : String) : Observation :=
   let finish (o : Observation) (runs : Nat) (status : DiffOutcome.SearchStatus) (bounded : Bool) :=
-    { o with search := some { (o.search.getD {}) with runs := runs, status := status, sawNoResult := bounded } }
+    { o with
+      search := some { (o.search.getD {}) with
+        runs := runs
+        status := status
+        sawNoResult := bounded } }
   let rec go (pre : Array Nat) (runs : Nat) (first race : Option Observation) (bounded : Bool) : Observation :=
     let (raw, opts) := run fun i => pre.getD i 0
-    let out := { raw with search := some { schedulePrefix := pre, options := opts, runs := runs + 1,
-      fuel := scheduleFuel, cap := scheduleCap } }
+    let out := { raw with
+      search := some {
+        schedulePrefix := pre
+        options := opts
+        runs := runs + 1
+        fuel := scheduleFuel
+        cap := scheduleCap } }
     let bounded := bounded || out.kind == .boundedNoResult
     if out.line == zig then finish out (runs + 1) .witness bounded else
     let first := first.orElse fun _ => some out
@@ -997,7 +1014,9 @@ partial def searchSchedules (run : (Nat → Nat) → Observation × Array Nat) (
     match next opts.size with
     | some p =>
       if runs + 1 ≥ scheduleCap then
-        let capped : Observation := { out with line := "{\"fail\":\"Zig.Error.capped\"}", kind := .searchCap }
+        let capped : Observation := { out with
+          line := "{\"fail\":\"Zig.Error.capped\"}"
+          kind := .searchCap }
         finish (race.getD capped) (runs + 1) .capped bounded
       else go p (runs + 1) first race bounded
     | none => finish (race.getD (first.getD out)) (runs + 1)

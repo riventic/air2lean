@@ -241,26 +241,24 @@ classify_line() {
   esac
 }
 
-# Maps a Zig panic kind (a member name of common.zig's `panic`) to the `Zig.Error` constructor
-# (bare name, no "Zig.Error." prefix) the Lean side is expected to throw for the same check.
-# Echoes nothing for a kind with no expected constructor — including "unknown" — which the
-# caller then treats as a mismatch: v0's scope (README.md) never reaches an unlisted kind, so
-# seeing one at all is itself a bug. bash 3.2 has no associative arrays, hence the `case`.
+# Load the shared native-panic/model-constructor policy once. Bash 3.2 indexed
+# arrays avoid associative-array dependencies; each lookup uses only shell builtins.
+panic_kinds=()
+panic_ctors=()
+while IFS=$'\t' read -r panic_kind panic_ctor; do
+  [ -n "$panic_kind" ] || continue
+  panic_kinds+=("$panic_kind")
+  panic_ctors+=("$panic_ctor")
+done <"$repo_root/scripts/panic-policy.tsv"
 expected_ctor_for_zig_kind() {
-  case "$1" in
-    integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds | integerPartOutOfBounds)
-      echo overflow ;;
-    outOfBounds | startGreaterThanEnd) echo outOfBounds ;;
-    divideByZero) echo divByZero ;;
-    # common.zig's TestAllocator: a free of memory that it did not allocate. The Lean `.illegal`
-    # matches any Zig line (below), so this entry only names the pair.
-    doubleFree) echo illegal ;;
-    reachedUnreachable) echo unreachable ;;
-    exactDivisionRemainder | unwrapNull | unwrapError | forLenMismatch | invalidEnumValue \
-      | inactiveUnionField | corruptSwitch | sentinelMismatch | copyLenMismatch | memcpyAlias \
-      | castToNull | incorrectAlignment | panic) echo panic ;;
-    *) echo "" ;;
-  esac
+  local i
+  expected_ctor=""
+  for ((i=0; i<${#panic_kinds[@]}; i++)); do
+    if [ "${panic_kinds[$i]}" = "$1" ]; then
+      expected_ctor=${panic_ctors[$i]}
+      return 0
+    fi
+  done
 }
 
 # The pin of function `$1` in the pin file `$2`: "<count>" or "<min>-<max>"; not listed: 0.
@@ -348,6 +346,7 @@ for ex in $examples; do
       lval=${val:-}
       lbufs=$bufs
       llive=$live
+      expected_ctor_for_zig_kind "$zval"
 
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
         bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
@@ -357,8 +356,8 @@ for ex in $examples; do
       elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
         fn_capped=$((fn_capped + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
-        [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
-        [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
+        [ -n "$expected_ctor" ] &&
+        [ "$expected_ctor" = "${lval#'Zig.Error.'}" ]; then
         fn_fail_match=$((fn_fail_match + 1))
       elif [ "$host_dependent" -eq 1 ]; then
         fn_host=$((fn_host + 1))

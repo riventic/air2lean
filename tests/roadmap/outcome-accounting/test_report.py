@@ -25,6 +25,8 @@ class Outcomes(unittest.TestCase):
         self.root=Path(self.temp.name)
         (self.root/'examples/basic').mkdir(parents=True)
         self.summary=self.root/'summary.json'
+        (self.root/'scripts').mkdir()
+        (self.root/'scripts/panic-policy.tsv').write_text((ROOT/'scripts/panic-policy.tsv').read_text())
 
     def seed(self, native, model, nk=K.VALUE, mk=K.VALUE, search=None):
         paths={name:self.root/'tests/diff'/name for name in ('basic/inputs','out/zig/basic','out/lean/basic')}
@@ -59,7 +61,66 @@ class Outcomes(unittest.TestCase):
         for name in ('tests/diff/Outcome.lean','tests/diff/Diff.lean','tests/roadmap/outcome-accounting/Search.lean'):
             source=(ROOT/name).read_text()
             self.assertNotIn('⟨"',source,name)
-            self.assertIn('{ line := "',source,name)
+            self.assertIn('line := "',source,name)
+
+    def test_metadata_binding_rejects_nested_boolean_integer_aliases(self):
+        for payload,bound in [(True,1),({'x':[False]}, {'x':[0]}),(1,1.0),(0.0,-0.0)]:
+            native={'ok':payload}
+            metadata=json.dumps({'schema':1,'kind':'value','legacy':{'ok':bound}})
+            with self.assertRaises(REPORT.Invalid):REPORT.observation(metadata,native,'native')
+
+    def test_metadata_binding_ignores_object_order_only(self):
+        self.assertTrue(REPORT.json_equal({'x':[1,False],'y':2},{'y':2,'x':[1,False]}))
+        self.assertFalse(REPORT.json_equal({'x':1},{'x':True}))
+        self.assertTrue(REPORT.json_equal(1.0,1e0))
+
+    def test_arbitrary_glob_masks_and_pointer_fragments_never_match(self):
+        for mask in ('*','[ab]1','a*','pp','???','?'):
+            self.assertFalse(REPORT.same_value({'ok':0,'bufs':['a1']},{'ok':0,'bufs':[mask]}),mask)
+        self.assertFalse(REPORT.buffer_match('A1','?1'))
+        self.assertTrue(REPORT.buffer_match('a1b2','??b?'))
+        self.assertFalse(REPORT.buffer_match('a1b2','?1'))
+        self.assertFalse(REPORT.buffer_match('a','?'))
+
+    def test_pointer_fragment_remains_mismatch_not_setup_failure(self):
+        self.seed({'ok':0,'bufs':['0011']},{'ok':0,'bufs':['pppp']})
+        code,data=self.compare()
+        self.assertEqual(code,1)
+        self.assertEqual(data['counts'],{'mismatch':1})
+        self.assertEqual(data['setup_failures'],0)
+
+    def test_illegal_pin_change_with_raw_incomplete_search_is_not_detection(self):
+        for search in (self.search('capped'),self.search('bounded',True),self.search('exhausted',True)):
+            self.seed({'ok':1},{'fail':'Zig.Error.illegal'},K.VALUE,K.ILLEGAL,search)
+            code,data=self.compare()
+            self.assertEqual(code,1)
+            self.assertEqual(data['counts'],{'illegal_exclusion':1})
+            self.assertEqual(data['mutation_eligible'],0)
+            self.assertEqual(data['legacy_counts'],{'unspecified':1})
+
+    def test_value_comparison_is_computed_once_per_report_case(self):
+        self.seed({'ok':1},{'ok':1})
+        with patch.object(REPORT,'same_value',wraps=REPORT.same_value) as same:
+            self.assertEqual(self.compare()[0],0)
+        self.assertEqual(same.call_count,1)
+
+    def test_shared_panic_policy_matches_shell_consumer_without_subshell_lookup(self):
+        source=(ROOT/'scripts/diff.sh').read_text()
+        start=source.index('panic_kinds=()');end=source.index('# The pin of function',start)
+        body=source[start:end]
+        self.assertNotIn('$(expected_ctor_for_zig_kind',source)
+        cases=list(REPORT.PANICS)+['unknown','noreturnReturned']
+        script='repo_root="$1"\n'+body+'\nshift\nfor kind in "$@"; do expected_ctor_for_zig_kind "$kind"; printf "%s=%s\\n" "$kind" "$expected_ctor"; done\n'
+        result=subprocess.run(['bash','-c',script,'bash',str(ROOT),*cases],capture_output=True,text=True,timeout=3)
+        self.assertEqual(result.returncode,0,result.stderr)
+        mapping=dict(row.split('=',1) for row in result.stdout.splitlines())
+        self.assertEqual(mapping,{kind:REPORT.PANICS.get(kind,'') for kind in cases})
+
+    def test_panic_policy_rejects_duplicate_and_unknown_constructor(self):
+        path=self.root/'policy.tsv'
+        for text in ('panic\tpanic\npanic\tpanic\n','panic\tunmodeled\n'):
+            path.write_text(text)
+            with self.assertRaises(REPORT.Invalid):REPORT.load_panic_policy(path)
 
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})
@@ -280,7 +341,7 @@ class Outcomes(unittest.TestCase):
     def test_actual_comparison_tail_keeps_total_and_reports_native_setup_failure(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
         (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
-        scripts=self.root/'scripts';scripts.mkdir()
+        scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)
         (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
         source=(ROOT/'scripts/diff.sh').read_text()
         functions=source[source.index('functions_of()'):source.index('\n}',source.index('functions_of()'))+2]

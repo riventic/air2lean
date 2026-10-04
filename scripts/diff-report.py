@@ -3,7 +3,7 @@
 import argparse
 from collections import Counter
 from enum import Enum
-import fnmatch
+import math
 import hashlib
 import json
 import os
@@ -48,14 +48,6 @@ class Status(str, Enum):
     NATIVE_HARNESS_FAILURE = 'native_harness_failure'
     SKIPPED = 'skipped'
 
-PANICS = {
-    **dict.fromkeys(('integerOverflow', 'shlOverflow', 'shrOverflow', 'integerOutOfBounds', 'integerPartOutOfBounds'), 'overflow'),
-    **dict.fromkeys(('outOfBounds', 'startGreaterThanEnd'), 'outOfBounds'),
-    'divideByZero': 'divByZero', 'doubleFree': 'illegal', 'reachedUnreachable': 'unreachable',
-    **dict.fromkeys(('exactDivisionRemainder', 'unwrapNull', 'unwrapError', 'forLenMismatch', 'invalidEnumValue',
-                    'inactiveUnionField', 'corruptSwitch', 'sentinelMismatch', 'copyLenMismatch', 'memcpyAlias',
-                    'castToNull', 'incorrectAlignment', 'panic'), 'panic'),
-}
 ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock'}
 IDENT = re.compile(r'[a-zA-Z0-9_-]+\Z')
 
@@ -64,6 +56,18 @@ class Invalid(ValueError):
 
 class Unsupported(Invalid):
     pass
+
+def load_panic_policy(path):
+    result={}
+    for line in path.read_text().splitlines():
+        fields=line.split('\t')
+        if len(fields)!=2 or not IDENT.fullmatch(fields[0]) or fields[0] in result or fields[1] not in ERRORS:
+            raise Invalid('invalid panic policy')
+        result[fields[0]]=fields[1]
+    if not result:raise Invalid('empty panic policy')
+    return result
+
+PANICS=load_panic_policy(Path(__file__).with_name('panic-policy.tsv'))
 
 def no_duplicates(pairs):
     out = {}
@@ -119,6 +123,17 @@ def wire(line):
         raise Invalid('invalid terminal result')
     return value
 
+def json_equal(left, right):
+    """Exact decoded types/values, with object order ignored and float zero sign kept."""
+    if type(left) is not type(right):return False
+    if isinstance(left,dict):
+        return left.keys()==right.keys() and all(json_equal(left[k],right[k]) for k in left)
+    if isinstance(left,list):
+        return len(left)==len(right) and all(json_equal(x,y) for x,y in zip(left,right))
+    if isinstance(left,float) and left==right==0:
+        return math.copysign(1,left)==math.copysign(1,right)
+    return left==right
+
 def observation(line, legacy, side):
     record = decode(line)
     if not isinstance(record, dict) or type(record.get('schema')) is not int:
@@ -133,7 +148,7 @@ def observation(line, legacy, side):
         raise Invalid('unknown observation field')
     if ('legacy' in record) == ('legacy_line' in record):
         raise Invalid('observation needs exactly one legacy binding')
-    if wire(record.get('legacy', record.get('legacy_line'))) != legacy:
+    if not json_equal(wire(record.get('legacy', record.get('legacy_line'))),legacy):
         raise Invalid('stale/misaligned observation')
     allowed = {Kind.VALUE, Kind.ERROR_RETURN, Kind.NATIVE_PANIC, Kind.NATIVE_HARNESS_FAILURE, Kind.INPUT_FAILURE} if side == 'native' else set(Kind) - {Kind.NATIVE_PANIC}
     if kind not in allowed:
@@ -187,25 +202,33 @@ def normalized(value):
         return int(value)
     return value
 
+def buffer_match(native, model):
+    # Pointer fragments ('pp') are unresolved, so they cannot establish byte equality.
+    if len(native)!=len(model) or len(native)%2:return False
+    if not re.fullmatch(r'[0-9a-f]*',native) or not re.fullmatch(r'[0-9a-f?]*',model):return False
+    return all(y=='?' or x==y for x,y in zip(native,model))
+
 def same_value(native, model):
-    if 'ok' not in native or 'ok' not in model or json.dumps(normalized(native['ok']), sort_keys=True) != json.dumps(normalized(model['ok']), sort_keys=True):
+    if 'ok' not in native or 'ok' not in model or not json_equal(normalized(native['ok']),normalized(model['ok'])):
         return False
     if native.get('live') != model.get('live') or ('bufs' in native) != ('bufs' in model):
         return False
     return len(native.get('bufs', [])) == len(model.get('bufs', [])) and all(
-        fnmatch.fnmatchcase(z, l) for z,l in zip(native.get('bufs', []), model.get('bufs', [])))
+        buffer_match(z,l) for z,l in zip(native.get('bufs', []), model.get('bufs', [])))
 
-def legacy_bucket(native, model, host):
-    if same_value(native, model): return 'ok'
+def legacy_bucket(native, model, host, values_match=None):
+    if values_match is None:values_match=same_value(native,model)
+    if values_match: return 'ok'
     if model.get('fail') in {'Zig.Error.illegal','Zig.Error.unspecified'}: return 'unspecified'
     if model.get('fail') == 'Zig.Error.capped': return 'capped'
     if 'fail' in native and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return 'fail_match'
     return 'host' if host else 'mismatch'
 
-def classify(native, model, nkind, mkind, search, host=False):
+def classify(native, model, nkind, mkind, search, host=False, values_match=None):
     if Kind.INPUT_FAILURE in (nkind,mkind): return Status.INPUT_FAILURE
     if Kind.NATIVE_HARNESS_FAILURE in (nkind,mkind): return Status.NATIVE_HARNESS_FAILURE
-    if same_value(native, model):
+    if values_match is None:values_match=same_value(native,model)
+    if values_match:
         if nkind != mkind:return Status.MISMATCH
         return Status.ERROR_RETURN_MATCH if mkind == Kind.ERROR_RETURN else Status.VALUE_MATCH
     if mkind == Kind.ILLEGAL: return Status.ILLEGAL
@@ -261,7 +284,7 @@ def source_hashes(root):
     paths+=sorted((root/'Proofs').rglob('*.lean'))
     paths+=sorted((root/'tests/diff').rglob('*.zig'))
     paths+=sorted((root/'examples').rglob('*.zig'))
-    paths+=[root/name for name in ('scripts/example-selection.sh','scripts/mutate.sh','lakefile.toml','lean-toolchain','tests/diff/lakefile.toml')]
+    paths+=[root/name for name in ('scripts/example-selection.sh','scripts/panic-policy.tsv','scripts/mutate.sh','lakefile.toml','lean-toolchain','tests/diff/lakefile.toml')]
     if len(paths)>4096:raise Invalid('source inventory bound exceeded')
     result={}
     for path in paths:
@@ -304,7 +327,7 @@ def compare(root, examples, version, host, summary):
                 if not IDENT.fullmatch(fn):raise Invalid('invalid function name')
                 zpath=root/'tests/diff/out/zig'/ex/infile.name;lpath=root/'tests/diff/out/lean'/ex/infile.name
                 generators=[iter(lines(path)) for path in (infile,zpath,lpath,Path(str(zpath)+'.outcomes'),Path(str(lpath)+'.outcomes'))]
-                local=Counter();statuses=Counter();count=0
+                local=Counter();statuses=Counter();count=0;incomplete_search=False
                 while True:
                     values=[next(g,None) for g in generators]
                     if all(v is None for v in values):break
@@ -312,8 +335,10 @@ def compare(root, examples, version, host, summary):
                     raw,zline,lline,zmeta,lmeta=values;decode(raw)
                     native=wire(zline);model=wire(lline)
                     nkind,_=observation(zmeta,native,'native');mkind,search=observation(lmeta,model,'model')
-                    status=classify(native,model,nkind,mkind,search,fn in allowed_host)
-                    bucket=legacy_bucket(native,model,fn in allowed_host)
+                    values_match=same_value(native,model)
+                    status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match)
+                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match)
+                    incomplete_search |= bool(search and (search['status'] in {'capped','bounded'} or search['saw_no_result']))
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
@@ -331,7 +356,7 @@ def compare(root, examples, version, host, summary):
                         violation={'example':ex,'function':fn,'counter':bucket,'actual':local[bucket],'min':lo,'max':hi}
                         violations.append(violation)
                         # Search-cap changes are budget evidence, not semantic mutation detections.
-                        if bucket=='unspecified' and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
+                        if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]
     atomic_json(summary,{'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host},
                          'case_count':case_count,'skipped_examples':len(skipped),'counts':dict(totals),'legacy_counts':dict(legacy_totals),
