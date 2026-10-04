@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reproduction guard regressions; these tests never invoke Zig, Lake, or Lean."""
 import hashlib
+import json
 import os
 import pathlib
 import shutil
@@ -21,7 +22,7 @@ class ProvenanceGuards(unittest.TestCase):
             shutil.copyfile(CASE / "check-source.py", checker)
             source = directory / "external.zig"
             source.write_bytes(b"external production source\n")
-            (directory / "source.sha256").write_text(hashlib.sha256(source.read_bytes()).hexdigest())
+            (directory / "provenance.json").write_text(json.dumps({"production_sha256": hashlib.sha256(source.read_bytes()).hexdigest()}))
             good = subprocess.run(["python3", str(checker), str(source)], capture_output=True, text=True)
             self.assertEqual(good.returncode, 0, good.stderr)
             source.write_bytes(b"changed external production source\n")
@@ -32,6 +33,25 @@ class ProvenanceGuards(unittest.TestCase):
             missing = subprocess.run(["python3", str(checker), str(source)], capture_output=True, text=True)
             self.assertNotEqual(missing.returncode, 0)
             self.assertIn("Flow source unavailable", missing.stderr)
+
+    def test_manifest_hash_is_required_and_validated(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = pathlib.Path(name)
+            checker = directory / "check-source.py"
+            shutil.copyfile(CASE / "check-source.py", checker)
+            source = directory / "external.zig"
+            source.write_bytes(b"external production source\n")
+            for manifest in ({}, {"production_sha256": None}, {"production_sha256": 7},
+                             {"production_sha256": "a" * 63}, {"production_sha256": "g" * 64},
+                             {"production_sha256": "A" * 64}):
+                (directory / "provenance.json").write_text(json.dumps(manifest))
+                result = subprocess.run(["python3", str(checker), str(source)], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Flow provenance invalid", result.stderr)
+            (directory / "provenance.json").write_text(json.dumps({"production_sha256": "0" * 64}))
+            stale = subprocess.run(["python3", str(checker), str(source)], capture_output=True, text=True)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("Flow source changed", stale.stderr)
 
     def test_real_pipeline_rejects_changed_source_before_tool_execution(self):
         with tempfile.TemporaryDirectory() as name:
