@@ -49,11 +49,13 @@ examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
   printf '%s ' "${d%/}"
 done)}
 restore_gen=""
+gen_targets=()
 
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
   # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
   Ex="$(printf '%s' "${ex:0:1}" | tr '[:lower:]' '[:upper:]')${ex:1}"
+  gen_targets+=("Proofs.$Ex.Gen")
   # One golden set for every Zig version (tests/golden/<ex>/air/). A file in
   # tests/golden/<version>/<ex>/air/ replaces the shared file of the same name for that version
   # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
@@ -87,14 +89,16 @@ for ex in $examples; do
   fi
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
-  # Each file names the Zig version that wrote it; compare everything else. The number of a
-  # generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
+  # Ignore writer-version metadata and explicit little-endian metadata (legacy dumps
+  # predate that field). Keep unsupported endianness visible to the golden comparison.
+  # The number of a generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
   # (`Thread.Completion__enum_1614`, `c.pthread_t__opaque_339`, `Io.Operation.Result__union_2204`,
   # a `__struct_N`) depends on how much std code the
   # compiler analyses, which differs by run and host OS in 0.16.0; the translator gives the first
   # a stable number (`Air2Lean/Air/Anon.lean`) and does not emit the others (`usedTys`; a
-  # `Thread` handle is `Ty.thread`), so the comparison ignores them, also in the file names (a
-  # golden file is `<name>__anon_N.json`).
+  # `Thread` handle is `Ty.thread`). Normalize only compiler identities, preserving observable
+  # field/error names and string/asm data. Normalize function file names too (a golden file
+  # is `<name>__anon_N.json`).
   #
   # Two instances of one generic function (`math.sub` for `u64` and for `i64`) have the same
   # normalized name: each gets its content hash in the name (`math.sub__anon_N.<hash>.json`), so
@@ -102,7 +106,9 @@ for ex in $examples; do
   # a name in the earlier ones, all instances together.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
   norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
-  norm_body() { grep -v '"zig_version"' "$1" | sed -E 's/__(anon|enum|opaque|union|struct)_[0-9]+/__\1_N/g'; }
+  norm_body() {
+    python3 scripts/normalize-air.py "$1"
+  }
   # add_dir <src-dir> <cmp-dir>: the normalized files of <src-dir> into <cmp-dir>.
   add_dir() {
     local src=$1 dst=$2 f n b names
@@ -173,8 +179,9 @@ if [ -n "$restore_gen" ]; then
   echo "note: these files hold the Zig $zig_version translation:$restore_gen. Restore the committed ones with: git checkout --$restore_gen" >&2
 fi
 
+[ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 echo "== building Lean ==" >&2
-lake build
+lake build "${gen_targets[@]}"
 
 if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
   echo "== differential testing: skipped (AIR2LEAN_DIFF=0) ==" >&2
