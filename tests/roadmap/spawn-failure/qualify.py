@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Sequential raw-artifact qualification for explicit fallible assignment."""
+import ctypes
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
+import selectors
 import signal
 import subprocess
 import sys
@@ -38,45 +41,140 @@ def artifacts(destination):
                 found[str(path.relative_to(destination))] = {"sha256": digest(path), "bytes": path.stat().st_size}
     return dict(sorted(found.items()))
 
+# Python omits waitid on some Darwin builds. Darwin's public siginfo_t prefix
+# contains these six 32-bit fields; a larger zeroed buffer holds the native tail.
+def peek_status(proc):
+    if hasattr(os, "waitid"):
+        info = os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        return None if info is None else info.si_status if info.si_code == os.CLD_EXITED else -info.si_status
+    if sys.platform != "darwin":
+        raise RuntimeError("nonreaping process observation is unavailable")
+    libc = ctypes.CDLL(None, use_errno=True)
+    native_waitid = libc.waitid
+    native_waitid.argtypes = [ctypes.c_int, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+    native_waitid.restype = ctypes.c_int
+    info = ctypes.create_string_buffer(256)
+    if native_waitid(1, proc.pid, info, 0x4 | 0x1 | 0x20) != 0:  # P_PID, WEXITED, WNOHANG, WNOWAIT
+        error = ctypes.get_errno()
+        if error == errno.EINTR:
+            return None
+        raise OSError(error, os.strerror(error))
+    fields = (ctypes.c_int32 * 6).from_buffer(info)
+    return None if fields[3] == 0 else fields[5] if fields[2] == 1 else -fields[5]
+
+
+def stop_group(proc):
+    # No poll/wait/reap before the last group signal: the leader anchors the PGID
+    # even after a successful exit while descendants still hold the output pipe.
+    deadline = time.monotonic() + 2
+    errors = []
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            pass
+        except OSError as error:
+            errors.append(error)
+        if sig == signal.SIGTERM:
+            time.sleep(0.1)
+    try:
+        code = proc.wait(timeout=max(0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired as error:
+        errors.append(error)
+    if errors:
+        raise RuntimeError("group cleanup or bounded reap failed") from errors[0]
+    return code
+
+
 class Gate:
     def __init__(self, destination):
         self.destination = destination
         self.steps = []
 
-    def run(self, label, argv, *, env=None, expected=0, marker=None, timeout=180):
+    def run(self, label, argv, *, env=None, expected=0, marker=None, timeout=180,
+            log_limit=16 * (1 << 20)):
+        if not 0 < log_limit <= 16 * (1 << 20):
+            raise ValueError("log limit must be positive and at most 16 MiB")
         logfile = self.destination / (label + ".log")
         step = {"label": label, "argv": list(map(str, argv)), "expected_exit": expected,
                 "status": "pending", "log": logfile.name}
         self.steps.append(step)
-        with logfile.open("wb") as output:
-            proc = subprocess.Popen(step["argv"], cwd=ROOT, env=env, stdout=output,
-                                    stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                code = proc.wait(timeout=timeout)
-            except BaseException as failure:
-                # Keep the leader unreaped until group cleanup finishes, anchoring its PGID.
-                step["status"] = "timeout" if isinstance(failure, subprocess.TimeoutExpired) else "interrupted"
+        interrupted = [None]
+        def interrupt(signum, _frame):
+            interrupted[0] = signum
+        previous = {sig: signal.signal(sig, interrupt)
+                    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+        previous[signal.SIGCHLD] = signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+        proc = None
+        cleanup_attempted = False
+        try:
+            with logfile.open("wb") as output, selectors.DefaultSelector() as selector:
+                proc = subprocess.Popen(step["argv"], cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, start_new_session=True)
+                os.set_blocking(proc.stdout.fileno(), False)
+                selector.register(proc.stdout, selectors.EVENT_READ)
+                deadline = time.monotonic() + timeout
+                output_bytes = 0
+                def read_output():
+                    nonlocal output_bytes
+                    try:
+                        chunk = os.read(proc.stdout.fileno(), 65536)
+                    except BlockingIOError:
+                        return False
+                    output.write(chunk[:max(0, log_limit - output_bytes)])
+                    output_bytes += len(chunk)
+                    if output_bytes > log_limit:
+                        step["status"] = "oversized_log"
+                    return bool(chunk)
                 try:
-                    try:
-                        os.killpg(proc.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                    time.sleep(0.2)
+                    while True:
+                        if interrupted[0] is not None:
+                            step["status"] = "interrupted"
+                            break
+                        if time.monotonic() >= deadline:
+                            step["status"] = "timeout"
+                            break
+                        if selector.select(min(0.02, max(0, deadline - time.monotonic()))):
+                            read_output()
+                        if step["status"] == "oversized_log" or peek_status(proc) is not None:
+                            break
                 finally:
+                    cleanup_attempted = True
                     try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    try:
-                        proc.wait(timeout=2)
-                    except subprocess.TimeoutExpired as exc:
+                        code = stop_group(proc)
+                    except BaseException as failure:
                         step["status"] = "cleanup_failed"
-                        raise RuntimeError(label + ": process cleanup timed out") from exc
-                raise RuntimeError(label + ": command timed out or was interrupted") from failure
+                        raise RuntimeError(label + ": process cleanup failed") from failure
+                    # Only bounded pipe reads follow reaping; no later group signal.
+                    for _ in range(16):
+                        if not read_output():
+                            break
+                    else:
+                        if read_output():
+                            step["status"] = "output_incomplete"
+                    proc.stdout.close()
+                if interrupted[0] is not None:
+                    step["interrupted_by"] = interrupted[0]
+                    if step["status"] == "pending":
+                        step["status"] = "interrupted"
+                step["output_bytes"] = output_bytes
+        finally:
+            try:
+                if proc is not None and not cleanup_attempted:
+                    cleanup_attempted = True
+                    try:
+                        stop_group(proc)
+                    except BaseException as failure:
+                        step["status"] = "cleanup_failed"
+                        raise RuntimeError(label + ": process cleanup failed") from failure
+            finally:
+                if proc is not None:
+                    proc.stdout.close()
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
         step["exit"] = code
-        if logfile.stat().st_size > 16 * (1 << 20):
-            step["status"] = "oversized_log"
-            raise RuntimeError(label + ": output exceeded 16 MiB")
+        if step["status"] in ("timeout", "interrupted", "oversized_log", "output_incomplete"):
+            raise RuntimeError(label + ": " + step["status"])
         text = logfile.read_text(errors="replace")
         if code != expected or (marker is not None and marker not in text):
             step["status"] = "failed"
