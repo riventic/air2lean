@@ -132,3 +132,12 @@ Fake-tool integration regressions run without a Zig or Lean compiler:
 python3 tests/roadmap/profiles/test_golden_pipeline.py
 bash scripts/review-checks.sh
 ```
+
+AIR comparison now processes each directory as one batch. The batch loads helpers
+and the receipt once, rejects duplicate receipt filenames, and indexes input
+hashes by their original filenames. Every actual file still passes its raw-hash
+and profile checks before any overlay is replaced. Later golden directories
+replace all earlier variants of the same normalized basename. Generic-instance
+collisions retain the SHA-1 first-12-digit suffix of the exact pretty JSON plus
+its final newline. The existing single-file `normalize-air.py INPUT.json` command
+is unchanged; `--output-dir DIRECTORY` selects the batch overlay operation.

@@ -132,30 +132,15 @@ for ex in $examples; do
   # the comparison matches them by content. A later directory (version, OS) replaces every file of
   # a name in the earlier ones, all instances together.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
-  norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
-  norm_body() {
-    if [ "$2" = actual ]; then
-      python3 scripts/normalize-air.py "$1" --check-report "$report" --actual
-    else
-      python3 scripts/normalize-air.py "$1" --check-report "$report"
-    fi
-  }
-  # add_dir <src-dir> <cmp-dir> <actual|golden>: normalize under the checked receipt.
+  # One process per directory loads/indexes the receipt once. Later overlays remove
+  # every earlier normalized basename variant; collision hashes retain the old format.
   add_dir() {
-    local src=$1 dst=$2 mode=$3 f n b names
-    [ -d "$src" ] || return 0
-    names=$(for f in "$src"/*.json; do [ -f "$f" ] && { norm_name "$f"; echo; }; done)
-    for b in $(echo "$names" | sort -u); do
-      rm -f "$dst/$b" "$dst/${b%.json}".*.json
-    done
-    for f in "$src"/*.json; do
-      [ -f "$f" ] || continue
-      n=$(norm_name "$f")
-      if [ "$(echo "$names" | grep -cx "$n")" -gt 1 ]; then
-        n="${n%.json}.$(norm_body "$f" "$mode" | shasum | cut -c1-12).json"
-      fi
-      norm_body "$f" "$mode" >"$dst/$n"
-    done
+    [ -d "$1" ] || return 0
+    if [ "$3" = actual ]; then
+      python3 scripts/normalize-air.py "$1" --output-dir "$2" --check-report "$report" --actual
+    else
+      python3 scripts/normalize-air.py "$1" --output-dir "$2" --check-report "$report"
+    fi
   }
   add_dir "$golden_dir" "$cmp_dir/golden" golden
   add_dir "$version_dir" "$cmp_dir/golden" golden
