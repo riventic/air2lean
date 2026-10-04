@@ -1092,9 +1092,10 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           let key (x y : TyId) := ((fileIndex, targetIndex), (x, y))
           let pairs ← checkSpawnSignatureWith f target args k index
             (fun x y => signatures.contains (key x y) || compatibleType f target x y)
-            { missingTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args have no type",
-              notTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args are not a tuple",
-              count := fun _ => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count",
+            {
+              missingTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args have no type"
+              notTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args are not a tuple"
+              count := fun _ => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count"
               argument := fun n => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type" }
           for (x, y) in pairs do signatures := signatures.insert (key x y)
         unless functionNames.contains callee do
@@ -1134,8 +1135,14 @@ def diagnosticStructure (f : Func) : Except String Unit :=
 
 private def checkDiagnostic (file : String) (f : Func) (code : Diagnostics.Code)
     (anchor : Diagnostics.Anchor := {}) : Diagnostics.Diagnostic :=
-  { code, phase := .check, category := .validationFailure, message := "",
-    file := some file, function := some f.name, anchor,
+  {
+    code
+    phase := .check
+    category := .validationFailure
+    message := ""
+    file := some file
+    function := some f.name
+    anchor
     prerequisites := #["normalized_function_structure"] }
 
 private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
@@ -1143,8 +1150,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
   let mut log := log
   let mut line := line
   for i in body do
-    let anchor : Diagnostics.Anchor := { idSpace := .canonical,
-      instruction := some i.id, nearestDbgLine := if line == 0 then none else some line }
+    let anchor : Diagnostics.Anchor := {
+      idSpace := .canonical
+      instruction := some i.id
+      nearestDbgLine := if line == 0 then none else some line }
     let typeCheck := checkTy f.name f.types f.layouts line i.ty
     log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
     if typeCheck.toOption.isNone then
@@ -1178,8 +1187,12 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   match checkFunctionStructure f index with
   | .error message =>
     log := log.add { (checkDiagnostic file f .structureFailure) with
-      category := .malformedInput, message, firstErrorInUnit := true }
-    return { index, structureValid := false,
+      category := .malformedInput
+      message
+      firstErrorInUnit := true }
+    return {
+      index
+      structureValid := false
       log := log.add (Diagnostics.skipped file (some f.name) .check "normalized_function_structure") }
   | .ok _ => pure ()
   for p in f.params ++ #[f.ret] do
@@ -1208,8 +1221,12 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
         (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
       log := log.record (checkDiagnostic file f .constantFailure
         { idSpace := .canonical, instruction := some i.id }) result
-  let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-    instTys := insts.map fun i => (i.id, i.ty), places }
+  let cx : CheckCtx := {
+    fnName := f.name
+    types := f.types
+    layouts := f.layouts
+    instTys := insts.map fun i => (i.id, i.ty)
+    places }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/
@@ -1219,8 +1236,10 @@ def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log)
 private def diagnosticSpawnSignature (f target : Func) (i : Inst) (args : Array Val)
     (k : Nat) (index : OperandTypes) : Except String Unit := do
   let _ ← checkSpawnSignatureWith f target args k index (compatibleType f target)
-    { missingTuple := fun _ => "spawn args have no type", notTuple := fun _ => "spawn args are not a tuple",
-      count := fun _ => "spawned callee has an incompatible argument count",
+    {
+      missingTuple := fun _ => "spawn args have no type"
+      notTuple := fun _ => "spawn args are not a tuple"
+      count := fun _ => "spawned callee has an incompatible argument count"
       argument := fun n => s!"spawned callee has an incompatible argument {n} type (inst {i.id})" }
   pure ()
 
@@ -1245,7 +1264,8 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
   let mut log := initial
   for i in index.insts do
     let diagnostic := { (checkDiagnostic file f .signatureFailure
-      { idSpace := .canonical, instruction := some i.id }) with phase := .program }
+      { idSpace := .canonical, instruction := some i.id }) with
+      phase := .program }
     match i.op with
     | .call (.func callee false worker) args =>
       log := log.record { diagnostic with code := .modelFailure }

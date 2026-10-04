@@ -147,7 +147,10 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
   -- skipped only when rejection is already established, never when accepting.
   if log.observed == before then
     log := log.record (boundary file name .instructionFailure .check .validationFailure) (check f)
-  return ({ unit with normalized := some f, index := some checked.index, structureValid := checked.structureValid,
+  return ({ unit with
+    normalized := some f
+    index := some checked.index
+    structureValid := checked.structureValid
     localPassed := checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
@@ -191,13 +194,17 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
           log := log.add { (boundary edge.file (some edge.caller) code .program
             (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
             (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
-            anchor := { idSpace := .canonical, instruction := some edge.instruction },
+            anchor := { idSpace := .canonical, instruction := some edge.instruction }
             dependencyChain := prefix.push edge.callee }
   -- Retain the authoritative whole-program validator. Its first-error boundary
   -- includes shared definitions and memory effects not independently collected.
   if !funcs.isEmpty then
-    log := log.record { code := .programFailure, phase := .program, category := .validationFailure,
-      message := "", prerequisites := #["structurally_valid_selected_functions"] } (checkProgram funcs)
+    log := log.record {
+      code := .programFailure
+      phase := .program
+      category := .validationFailure
+      message := ""
+      prerequisites := #["structurally_valid_selected_functions"] } (checkProgram funcs)
   if units.any (!·.localPassed) then
     log := { log with complete := false }
   return log
@@ -232,7 +239,8 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     return (#[], log.add (boundary a.directory.toString none .inputRead .input .ioFailure "no *.json files found"))
   if paths.size > maxFiles then
     log := log.add { (boundary a.directory.toString none .inputLimit .input .resourceLimit
-      s!"selected input exceeds {maxFiles} files; only the first sorted files are inspected") with firstErrorInUnit := true }
+      s!"selected input exceeds {maxFiles} files; only the first sorted files are inspected") with
+      firstErrorInUnit := true }
   let mut total := 0
   let mut files : Array String := #[]
   let mut texts : Array String := #[]
@@ -242,7 +250,8 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
       let metadata ← path.metadata
       if metadata.byteSize.toNat > maxInputBytes - total then
         log := log.add { (boundary path.toString none .inputLimit .input .resourceLimit
-          "AIR input exceeds remaining aggregate 64 MiB budget") with firstErrorInUnit := true }
+          "AIR input exceeds remaining aggregate 64 MiB budget") with
+          firstErrorInUnit := true }
         units := units.push { file := path.toString }
         log := log.add (skipped path.toString none .decode "readable_input_within_aggregate_budget")
         continue
@@ -271,12 +280,19 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with
     | .error message => pure (#[], ({ } : Log).add {
-        code := .cliArguments, phase := .cli, category := .malformedInput, message, firstErrorInUnit := true })
+        code := .cliArguments
+        phase := .cli
+        category := .malformedInput
+        message
+        firstErrorInUnit := true })
     | .ok a =>
       try scan a catch error =>
         pure (#[], ({ limit := a.limit } : Log).add {
-          code := .inputRead, phase := .input, category := .ioFailure,
-          message := error.toString, firstErrorInUnit := true })
+          code := .inputRead
+          phase := .input
+          category := .ioFailure
+          message := error.toString
+          firstErrorInUnit := true })
   IO.println (report result.1 result.2).compress
   return if result.2.failed then 1 else 0
 
