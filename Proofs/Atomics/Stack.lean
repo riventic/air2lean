@@ -1,3 +1,4 @@
+import ZigLean.Conc.WeakCasLemmas
 import Proofs.Atomics.MessagePassing
 
 /-!
@@ -825,10 +826,10 @@ failure nothing that the invariant sees changes. -/
 theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
     {r : Option (BitVec 32)} (hi : Inv G m) (hu : u = 1 ∨ u = 2) (hg : G u = .cas h)
     (hc : m.current = u)
-    (hs : ((cmpxchgAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run = some (.ok (r, m'))) :
+    (hs : ((cmpxchgWeakAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run = some (.ok (r, m'))) :
     m'.current = u ∧ m'.threads = m.threads ∧
       ((r = none ∧ Inv (upd G u .done) m') ∨ (∃ old, r = some old ∧ Inv G m')) := by
-  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, -, hl, hpos, hold, hres⟩ := cmpxchgAt_ok hs
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, -, hl, hpos, hold, hres⟩ := cmpxchgWeakAt_ok hs
   obtain ⟨rfl, rfl, hb0, -⟩ := acc_head (accessW_pure hacc).1
   have hk0 : Kid u (G u) := .inr (.inl ⟨h, hg⟩)
   have hnd : G u ≠ .done := by rw [hg]; intro h; cases h
@@ -844,10 +845,11 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
   have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
   have hiM := hir.setLoc hfl k
   have hact' : Act G mr.current := by rw [hcur]; exact hact
-  rcases hres with ⟨rfl, rfl, -, rfl⟩ | ⟨-, rfl, rfl⟩
+  rcases hres with ⟨rfl, hsp, rfl, -, rfl⟩ | ⟨-, rfl, rfl⟩
   · -- success: the newest message, then the pusher's message
+    obtain ⟨j, hstrong⟩ := weakCasOpts_strong (by simpa [hsp] using hpos)
     have hpos' := cas_chain_pos (m := { mr with atomics := #[l], nextMsg := k })
-      (by rw [hl0]; exact hfl.2.2.2.2.1) hpos hold
+      (by rw [hl0]; exact hfl.2.2.2.2.1) hstrong hold
     rw [hl0] at hpos' hold
     have hbM : ({ mr with atomics := #[l], nextMsg := k } : Mem).blocks[
         (({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]!).block]? = some blk := by
@@ -877,9 +879,9 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
 
 theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (hi : Inv G m)
     (hu : u = 1 ∨ u = 2) (hg : G u = .cas h) (hc : m.current = u)
-    (hcr : c < casCount 32 .release 4 sPtr h m ∨ casCount 32 .release 4 sPtr h m = 0 ∧ c = 0)
+    (hcr : c < weakCasCount 32 .release 4 sPtr h m ∨ weakCasCount 32 .release 4 sPtr h m = 0 ∧ c = 0)
     (e : Error) :
-    ((cmpxchgAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run ≠ some (.error e) := by
+    ((cmpxchgWeakAt c .release .relaxed 4 sPtr h (BitVec.ofNat 32 u)).run m).run ≠ some (.error e) := by
   have hk0 : Kid u (G u) := .inr (.inl ⟨h, hg⟩)
   have hnd : G u ≠ .done := by rw [hg]; intro h; cases h
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
@@ -889,27 +891,33 @@ theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (h
   have hacc : m.accessW sPtr (intSize 32) 4 = pure (0, blk₀, 0) := by simp [Mem.accessW, hacc₀, hk]
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
     (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
-  refine cmpxchgAt_noErr (casPrep_noErr hacc (noRace_head rfl hi ht hact)
-    (head_locIdx_noErr hir.head)) (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
-  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
+  refine cmpxchgWeakAt_noErr (weakCasPrep_noErr (casPrep_noErr hacc (noRace_head rfl hi ht hact)
+    (head_locIdx_noErr hir.head))) (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := weakCasPrep_ok hp
     obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
     obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
     have hl0 : ({ m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
-    have hcount : casCount 32 .release 4 sPtr h m = (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with
-        atomics := #[l], nextMsg := k } 0 h).size := optCount_eq hp
-    have hne : 0 < (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with
-        atomics := #[l], nextMsg := k } 0 h).size := casOpts_ne (by rw [hl0]; exact hfl.pos)
+    let prepared : Mem := { m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k }
+    have hcount := weakOptCount_eq (succ := .release) hp
+    have hne : 0 < (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size := by
+      have hs := casOpts_ne (e := h) (m := prepared) (li := 0) (by rw [hl0]; exact hfl.pos)
+      simp only [weakCasOpts, Array.size_append, Array.size_map]
+      omega
     rw [hcount] at hcr
-    have hc' : c < (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k } 0 h).size := by
-      rcases hcr with h | ⟨h0, -⟩
-      · exact h
-      · exact absurd h0 (Nat.pos_iff_ne_zero.mp hne)
-    refine ⟨_, Array.getElem?_eq_getElem hc', ?_⟩
-    have hlt := (casOpts_pos (Array.getElem?_eq_getElem hc')).1
+    change c < (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size ∨
+      (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size = 0 ∧ c = 0 at hcr
+    have hc' : c < (weakCasOpts prepared 0 h (casOpts prepared 0 h)).size := by omega
+    let choice := (weakCasOpts prepared 0 h (casOpts prepared 0 h))[c]
+    have hchoice : (weakCasOpts prepared 0 h (casOpts prepared 0 h))[c]? = some choice :=
+      Array.getElem?_eq_getElem hc'
+    obtain ⟨j, hread⟩ := weakCasOpts_read hchoice
+    refine ⟨choice.1, choice.2, hchoice, ?_⟩
+    have hlt := readOpts_lt hread
     rw [hl0] at hlt ⊢
     exact hfl.val hlt
 
-  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
+
+  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := weakCasPrep_ok hp
     obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
     obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
     have hiM := hir.setLoc hfl k
@@ -1006,7 +1014,7 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   refine ⟨rfl, ?_⟩
   -- the `cmpxchg` (a stop)
   rw [show (sPtr.add 0).add 0 = sPtr from rfl]
-  simp only [cmpxchgC, StateT.run_bind]
+  simp only [cmpxchgWeakC, StateT.run_bind]
   refine WP.bind (WP.bind (WP.bind (WP.pickC fun k₁ hk₁ => ⟨Gh.cas s.h, hi₅, fun G₁ m₆ hg₁ hi₆ c hcr => ?_⟩)))
   have hi₆' : Inv G₁ { m₆ with current := u } :=
     (hi₆ : Inv G₁ m₆).grow (growsAt_current m₆ u) (.inr ⟨hu, by rw [hg₁]; intro h; cases h⟩)

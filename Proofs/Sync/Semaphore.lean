@@ -1,5 +1,6 @@
 import Proofs.Sync.Lock
 import ZigLean.Conc.Word
+import ZigLean.Conc.WeakWord
 
 /-!
 # `waitUncancelable` and `post` of the translated `Io.Semaphore`
@@ -651,6 +652,49 @@ theorem wp_casAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
     · cases he
   · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, -, hh⟩⟩ :=
       hwc.cas rfl htl (hcs hP hic) ho
+    · cases he
+    · cases he
+      rw [hh₁] at hj hv hfl hh
+      obtain ⟨hl', hu'⟩ := hP.op hW hic hop
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        hl' hu').2 j b v hne hd hj hv hfl hh⟩
+
+/-- A weak `cmpxchg` at the condition state: failure may read the expected value.
+The history and floor guarantees still let either condition loop retry. -/
+theorem wp_weakCasAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
+    (hW : W = S.WS ∨ W = S.WE) {s : σ} {t : ThreadId} {G : ThreadId → SGh X} {m : Mem} {n : Nat}
+    {g : SGh X} {succ fail : AtomicOrder} {exp new : α} (hgone : g.1.ph ≠ .gone)
+    (hi : P.inv (upd G t g) m) (hdec : ∀ b, ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {Q : Option α × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m', G₁ t = g → P.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
+      S.L.Inv G₁ m' → U G₁ m' →
+      ((last (W.hist m₁)).Val (Packed.toBits exp) → W.Holds m' (Packed.toBits new) →
+        W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
+        (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j b r, True → (Packed.ofBits? (α := α) b).run = some (.ok r) →
+        j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
+    P.WP t ((cmpxchgWeakAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
+  unfold cmpxchgWeakAsC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := hP.cur t t m₁.woken hi₁
+  have htl : t < m₁.threads.size := alive hP hi₁ hg₁ hgone
+  have hwc := wd_ok hW (hP.split hic).2.1
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  refine WP.callMC (fun e he => (cmpxchgWeakAs_noErr (hwc.weakCas_noErr (fail := fail)
+    (new := Packed.toBits new) htl (hcs hP hic) hcr) (fun b _ _ => hdec b) e he).elim)
+    fun r m' hr => ?_
+  rcases cmpxchgWeakAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
+  · obtain ⟨hw', hop, ⟨-, hv, hU, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hwc.weakCas rfl htl (hcs hP hic) ho
+    · rw [hh₁] at hv hh hacq
+      obtain ⟨hl', hu'⟩ := hP.op hW hic hop
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        hl' hu').1 hv hU hh hacq⟩
+    · cases he
+  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, -, hh⟩⟩ :=
+      hwc.weakCas rfl htl (hcs hP hic) ho
     · cases he
     · cases he
       rw [hh₁] at hj hv hfl hh
@@ -1450,9 +1494,9 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       rw [add_sig] at hv; cases hv; rfl
     subst hv1
     rw [ptr_state]
-    refine WP.bind (wp_casAs hP (.inl rfl) (g := (a, .pst, x)) (by rw [ha]; decide) hi
+    refine WP.bind (wp_weakCasAs hP (.inl rfl) (g := (a, .pst, x)) (by rw [ha]; decide) hi
       (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL hU =>
-        ⟨fun hv hU' hh hacq => ?_, fun j b r hne hd hj hv hfl hh => ?_⟩)
+        ⟨fun hv hU' hh hacq => ?_, fun j b r _ hd hj hv hfl hh => ?_⟩)
     · -- the signal
       rw [bits1] at hv
       have hh' := hh
@@ -1481,12 +1525,10 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       simp only [Io_Condition_signal.again11, Bool.false_eq_true, ↓reduceIte]
       exact ⟨by omega, .inl rfl, hc₅, hi₆⟩
     · -- no signal: `t` read write `j`
-      rw [bits1] at hne
       obtain ⟨hl₁, hs₁, -⟩ := hP.split hi₁
       have hh₁ : (G₁ t).1.ph = .holds := by rw [hg₁]; exact ha
       have hs₂ := hs₁.opKeep (.inl rfl) hop hw' hh
       have hi₂ : P.inv G₁ m' := hP.pack hL hs₂ hU
-      have hn₂ := read_noR hl₁ hs₁ hh₁ hv hj hfl hne
       have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
       simp only [Option.isSome_some, ↓reduceIte]
       simp only [StateT.run_bind]
@@ -1495,10 +1537,11 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, ↓reduceIte]
-      refine ⟨⟨by omega, hop.current, b, hr, sv_of hs₁ hj hv, by rw [← hg₁, upd_same]; exact hi₂, fun _ => ?_⟩,
+      refine ⟨⟨by omega, hop.current, b, hr, sv_of hs₁ hj hv, by rw [← hg₁, upd_same]; exact hi₂, fun hb => ?_⟩,
         .inl (by omega)⟩
       intro R i jr sn e hR
-      rw [hh]; rw [← hg₁, upd_same] at hR; exact hn₂ R i jr sn e hR
+      rw [hh]; rw [← hg₁, upd_same] at hR
+      exact read_noR hl₁ hs₁ hh₁ hv hj hfl hb R i jr sn e hR
   · -- `(0, 0)` or `(1, 1)`: no signal
     rw [if_neg (fun h => hb ((gt_sv hsv).mp h))]
     simp only [StateT.run_pure, pure_bind]
@@ -2024,9 +2067,9 @@ theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
     subst hc''
     dsimp only
     rw [ptr_state]
-    refine WP.bind (WP.bind (wp_casAs hP (.inl rfl) (g := gw pa x i jr e sn) (fun h => by cases h) hi
+    refine WP.bind (WP.bind (wp_weakCasAs hP (.inl rfl) (g := gw pa x i jr e sn) (fun h => by cases h) hi
       (fun b => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL hU =>
-        ⟨fun hv _ hh _ => ?_, fun j b r hne hd hj hv hfl hh => ?_⟩))
+        ⟨fun hv _ hh _ => ?_, fun j b r _ hd hj hv hfl hh => ?_⟩))
     · -- the waiter takes the signal, then locks the mutex
       rw [bits_take'] at hh
       obtain ⟨-, hs₁, -⟩ := hP.split hi₁
@@ -2043,21 +2086,18 @@ theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
       exact ⟨by omega, hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
-    · -- no signal taken: only if the waiter did not see the signal's epoch
-      rw [bits11] at hne
+    · -- no signal taken: a weak failure can retry even after seeing the epoch
       obtain ⟨-, hs₁, -⟩ := hP.split hi₁
-      have hsnf : sn = false := by
-        cases sn
-        · rfl
-        · exfalso
-          have he := hs₁.era t i jr true e (by rw [hg₁])
-          obtain ⟨hsz, hcl⟩ := he.seen rfl
-          rcases he.esz with h1 | ⟨-, h2, h3⟩
-          · omega
-          · have := hfl (jr + 1) (by omega) (VClock.le_trans h3 hcl)
-            obtain rfl : j = jr + 1 := by omega
-            exact hne (val_eq hv (he.s1 h2))
-      subst hsnf
+      have hsn₂ : sn = true → b = 0x10001 := by
+        intro hsn'
+        subst hsn'
+        have he := hs₁.era t i jr true e (by rw [hg₁])
+        obtain ⟨hsz, hcl⟩ := he.seen rfl
+        rcases he.esz with h1 | ⟨-, h2, h3⟩
+        · omega
+        · have := hfl (jr + 1) (by omega) (VClock.le_trans h3 hcl)
+          obtain rfl : j = jr + 1 := by omega
+          exact val_eq hv (he.s1 h2)
       have hi₂ : P.inv G₁ m' := hP.pack hL (hs₁.opKeep (.inl rfl) hop hw' hh) hU
       have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
       simp only [StateT.run_pure]
@@ -2068,8 +2108,8 @@ theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
       simp only [StateT.run_pure]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, ↓reduceIte]
-      refine ⟨⟨by omega, hop.current, false, b, hr, sv_of hs₁ hj hv, hep,
-        fun h => absurd h (by decide), by rw [← hg₁, upd_same]; exact hi₂⟩, .inl (by omega)⟩
+      refine ⟨⟨by omega, hop.current, sn, b, hr, sv_of hs₁ hj hv, hep,
+        hsn₂, by rw [← hg₁, upd_same]; exact hi₂⟩, .inl (by omega)⟩
   · have hsnf : sn = false := by cases sn; rfl; exact absurd (hsn rfl) hb
     subst hsnf
     rw [if_neg (fun h => hb ((sig_sv hsv).mp h))]

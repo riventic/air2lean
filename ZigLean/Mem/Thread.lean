@@ -262,7 +262,7 @@ def casMarkWrite (n align : Nat) (p : Ptr) : MemM Unit := do
 def casCount (n : Nat) (succ : AtomicOrder) (align : Nat) (p : Ptr) (expected : BitVec n) : Mem → Nat :=
   optCount ((·.2) <$> casPrep n align p expected)
 
-/-- `cmpxchg_weak`/`cmpxchg_strong`: option `c` of `casCount`. The model never fails
+/-- `cmpxchg_strong`: option `c` of `casCount`. It never fails
 spuriously. `none` on success (the store happened), `some` of the value read on failure. -/
 def cmpxchgAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : Ptr)
     (expected new : BitVec n) : MemM (Option (BitVec n)) := do
@@ -271,6 +271,46 @@ def cmpxchgAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : P
   let rd := (← get).atomics[li]!.msgs[pos]!
   let old ← intOfBytes n rd.bytes
   if old = expected then
+    casMarkWrite n align p
+    rmwWrite li pos succ rd new
+    pure none
+  else
+    observe li rd.id
+    if fail.isAcq then acquireClock rd.relClock
+    pure (some old)
+
+/-- Weak choices keep the strong choices first, then add a forced failure for every
+readable message equal to `expected`. A failed read may observe a predecessor already consumed
+by an RMW: the restriction on successful RMW insertion does not apply to that read. -/
+def weakCasOpts {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n)
+    (strong : Array Nat) : Array (Nat × Bool) :=
+  strong.map (fun pos => (pos, false)) ++
+    ((readOpts m li false).filter fun pos =>
+      match (intOfBytes n m.atomics[li]!.msgs[pos]!.bytes).run with
+      | some (.ok v) => v == expected
+      | _ => false).map (fun pos => (pos, true))
+
+/-- Prepare exactly one atomic-read footprint; choices distinguish success-capable reads
+from forced read-only failures. -/
+def weakCasPrep (n align : Nat) (p : Ptr) (expected : BitVec n) :
+    MemM (Nat × Array (Nat × Bool)) := do
+  let (li, strong) ← casPrep n align p expected
+  pure (li, weakCasOpts (← get) li expected strong)
+
+def weakCasCount (n : Nat) (succ : AtomicOrder) (align : Nat) (p : Ptr)
+    (expected : BitVec n) : Mem → Nat :=
+  optCount ((fun r => r.2.map Prod.fst) <$> weakCasPrep n align p expected)
+
+/-- `cmpxchg_weak`: `some expected` is a permitted spurious failure. Failure observes the
+read message using only `fail`, without an atomic-write footprint, new message or RMW edge.
+The oracle may always choose failure: no fairness or eventual-success claim is made. -/
+def cmpxchgWeakAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : Ptr)
+    (expected new : BitVec n) : MemM (Option (BitVec n)) := do
+  let (li, opts) ← weakCasPrep n align p expected
+  let some (pos, spurious) := opts[c]? | throw .illegal
+  let rd := (← get).atomics[li]!.msgs[pos]!
+  let old ← intOfBytes n rd.bytes
+  if old = expected ∧ spurious = false then
     casMarkWrite n align p
     rmwWrite li pos succ rd new
     pure none
@@ -302,6 +342,12 @@ def atomicRmwAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (op : RmwOp) (ord 
 def cmpxchgAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (succ fail : AtomicOrder) (align : Nat)
     (p : Ptr) (expected new : α) : MemM (Option α) := do
   match ← cmpxchgAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with
+  | none => pure none
+  | some b => some <$> StateT.lift (Packed.ofBits? b)
+
+def cmpxchgWeakAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (succ fail : AtomicOrder)
+    (align : Nat) (p : Ptr) (expected new : α) : MemM (Option α) := do
+  match ← cmpxchgWeakAt c succ fail align p (Packed.toBits expected) (Packed.toBits new) with
   | none => pure none
   | some b => some <$> StateT.lift (Packed.ofBits? b)
 

@@ -1,3 +1,4 @@
+import ZigLean.Conc.WeakWord
 import Proofs.Sync.Lock
 import ZigLean.Conc.Word
 
@@ -749,6 +750,54 @@ theorem wp_casAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} 
       exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
         (linv_op hW hic hop)).2 j b v hne hd hj hv hfl hacq hh⟩
 
+theorem wp_weakCasAs {α : Type} [Packed α 32] {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh}
+    {m : Mem} {n : Nat} {g : Gh} {W : Word 32 4} (hW : Wd W) {succ fail : AtomicOrder} {exp new : α}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    (hdec : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → ∀ j < (W.hist m₁).size, ∀ b,
+      (W.hist m₁)[j]!.Val b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {Q : Option α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m', G₁ t = g → proto.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
+      L.Inv G₁ m' →
+      ((last (W.hist m₁)).Val (Packed.toBits exp) → W.Holds m' (Packed.toBits new) →
+        W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) (Packed.toBits new)) →
+        (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j b r, True → (Packed.ofBits? (α := α) b).run = some (.ok r) →
+        j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
+    proto.WP t ((cmpxchgWeakAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
+  unfold cmpxchgWeakAsC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  refine WP.callMC (fun e he => (cmpxchgWeakAs_noErr (hwc.weakCas_noErr (fail := fail)
+    (new := Packed.toBits new) htl (hcs_of hic) hcr) (fun b m' hr => ?_) e he).elim)
+    fun r m' hr => ?_
+  · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, -, hj, hv, -⟩⟩ := hwc.weakCas rfl htl (hcs_of hic) hr
+    · cases he
+    · cases he
+      rw [hh₁] at hj hv
+      exact hdec G₁ m₁ hg₁ hi₁ j hj _ hv
+  rcases cmpxchgWeakAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
+  · obtain ⟨hw', hop, ⟨-, hv, hU, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hwc.weakCas rfl htl (hcs_of hic) ho
+    · rw [hh₁] at hv hh hacq
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        (linv_op hW hic hop)).1 hv hU hh hacq⟩
+    · cases he
+  · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, hacq, hh⟩⟩ :=
+      hwc.weakCas rfl htl (hcs_of hic) ho
+    · cases he
+    · cases he
+      rw [hh₁] at hj hv hfl hacq hh
+      exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop)
+        (linv_op hW hic hop)).2 j b v hne hd hj hv hfl hacq hh⟩
+
+
 /-! ## `U` after an op at a shared word -/
 
 theorem Wd.lo {W : Word 32 4} (hW : Wd W) : 20 ≤ W.o := by
@@ -1172,6 +1221,26 @@ theorem inv_mload {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : M
     (fun w hw => hu.q w (hop.waiters ▸ hw))
     (fun h => by rw [hS]; exact VClock.le_trans (hu.pc h) (hop.clocks 1))⟩
 
+theorem inv_load {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId}
+    (hi : proto.inv G m₁) (hw' : W.Ok m') (hop : W.Op t m₁ m')
+    (hL : L.Inv G m') (hh : W.hist m' = W.hist m₁) : proto.inv G m' := by
+  have hu := hi.2
+  have hk : ∀ W', Wd W' → W'.hist m' = W'.hist m₁ := fun W' hW' => by
+    by_cases e : W' = W
+    · subst e; exact hh
+    · exact hist_op hW hW' e hu hop
+  have hS := hk WS (.inl rfl)
+  have hE := hk WE (.inr (.inl rfl))
+  have hV := hk WV (.inr (.inr rfl))
+  refine ⟨hL, U_op hW hu hop hw' hu.shape hu.parts ((sok_congr hS).mpr hu.sh)
+    ((eok_congr hE).mpr hu.eh) ((vok_congr hV).mpr hu.vh) hu.flags
+    (hu.reg.mono (by rw [hS]) hop.clocks (fun _ h => before_op hop hW.ap h))
+    (fun h => by rw [hS, hE]; exact hu.sig h)
+    (fun h => by rw [hS]; exact VClock.le_trans (hu.seen h) (hop.clocks 0))
+    (fun h => by rw [hV]; exact VClock.le_trans (hu.vclk h) (hop.clocks 0))
+    (fun w hw => hu.q w (hop.waiters ▸ hw))
+    (fun h => by rw [hS]; exact VClock.le_trans (hu.pc h) (hop.clocks 1))⟩
+
 /-- A change of `main`'s place on the same memory. -/
 theorem inv_mx {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X}
     (hi : proto.inv (upd G 0 (a, x)) m) (hx : x.ph ≠ .pre) (hm : x'.ph.isMain) (hpre : x'.ph ≠ .pre)
@@ -1544,7 +1613,7 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
     subst hb'
     dsimp only
     rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
-    refine WP.bind (WP.bind (wp_casAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
+    refine WP.bind (WP.bind (wp_weakCasAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
         ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩))
     · -- success: `main` takes the signal
@@ -1562,26 +1631,11 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, Bool.false_eq_true, ↓reduceIte]
       exact ⟨by omega, hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
-    · -- failure: only at `wt`; `main` read write `j`
-      have hwt : x.ph = .wt := by
-        rcases hx with h | h
-        · exact h
-        · exfalso
-          have hx' : x = { ph := .seen, cw := true } := by
-            cases x; simp only at h hcw hvw; subst h hcw hvw; rfl
-          subst hx'
-          exact seen_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) (by rw [← bits_sv2]; exact hne)
-            hj hv hfl
-      have hx' : x = { ph := .wt, cw := true } := by
-        cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
-      subst hx'
-      have hi₂ := inv_mload (.inl rfl) (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
-        (by rw [upd_g hg₁]; exact hL) hh
-      obtain ⟨hsz, hval⟩ := hi₁.2.sh
-      rw [← upd_g hg₁, upd_self, upd0_1] at hsz hval
-      have hN : sN (gP { ph := .wt, cw := true }).2 (G₁ 1).2 ≤ 3 := by
-        simp only [sN, gP, Ph.post]; cases (G₁ 1).2.cw <;> simp
-      have hbj : b = sv j := val_eq hv (hval j (by omega))
+    · -- failure may keep either the waiting or seen phase.
+      have hip : proto.inv (upd G₁ 0 (gP x)) m₁ := by rw [upd_g hg₁]; exact hi₁
+      have hi₂ := inv_mload (.inl rfl) hip hw' hop (by rw [upd_g hg₁]; exact hL) hh
+      have hp : x.ph.post = false := by rcases hx with h | h <;> rw [h] <;> rfl
+      obtain ⟨hj2, hbj, hseen⟩ := state_read hip hcw hp hj hv
       have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
       simp only [StateT.run_pure]
       refine WP.pure' ?_
@@ -1591,8 +1645,19 @@ theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
       simp only [StateT.run_pure, StateT.run_modify]
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_waitInner.again56, ↓reduceIte]
-      refine ⟨⟨by omega, hop.current, .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩⟩,
-        .inl (by omega)⟩
+      refine ⟨⟨by omega, hop.current, ?_⟩, .inl (by omega)⟩
+      rcases hx with hwt | hs
+      · have hx' : x = { ph := .wt, cw := true } := by
+          cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
+        subst hx'
+        exact .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩
+      · have hx' : x = { ph := .seen, cw := true } := by
+          cases x; simp only at hs hcw hvw; subst hs hcw hvw; rfl
+        subst hx'
+        have hjseen : j = 2 := hseen rfl hfl
+        subst hjseen
+        exact .inr ⟨hxs rfl, hi₂, by rw [hr, hbj]⟩
+
   · rw [if_neg (by rw [hg]; simp)]
     simp only [StateT.run_pure]
     refine WP.pure' ?_
@@ -2615,7 +2680,7 @@ theorem sig_body (io : Io) (s : Io_Condition_signalLocals) (G : ThreadId → Gh)
       rw [add16] at hv; cases hv; rfl
     subst hv1 hs
     rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
-    refine WP.bind (wp_casAs (.inl rfl) (g := gP { ph := .sg1 }) hi (ht1 (by simp [gP]))
+    refine WP.bind (wp_weakCasAs (.inl rfl) (g := gP { ph := .sg1 }) hi (ht1 (by simp [gP]))
       (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
         ⟨fun hv hU hh hacq => ?_, fun j b r hne hd hj hv hfl hacq hh => ?_⟩)
     · have hi₂ := inv_sgp (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
@@ -2633,8 +2698,27 @@ theorem sig_body (io : Io) (s : Io_Condition_signalLocals) (G : ThreadId → Gh)
       refine WP.pure' (WP.pure' (WP.pure' ?_))
       simp only [Io_Condition_signal.again11, Bool.false_eq_true, ↓reduceIte]
       exact ⟨.inl rfl, (wake_w hi₅.2.q (by decide) (Nat.le_refl _) hw).1, true, hi₆⟩
-    · exact (sg1_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) (by rw [← bits10]; exact hne)
-        hj hv hfl).elim
+    · have hb : b = sv 1 := by
+        apply Classical.byContradiction
+        intro hne'
+        exact sg1_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hne' hj hv hfl
+      have hi₂ := inv_load (.inl rfl) (G := G₁) hi₁ hw' hop hL hh
+      rw [← upd_g hg₁] at hi₂
+      have hr : r = cst 1 0 := by
+        rw [hb, ofBits_cst] at hd
+        cases hd
+        rfl
+      subst hr
+      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
+      refine WP.bind (WP.bind (WP.callRC_ok
+        (x := optPayload (some (cst 1 0))) (v := cst 1 0) rfl ?_))
+      repeat (first
+        | exact ⟨⟨hop.current, .inl ⟨rfl, hi₂⟩⟩, .inl (by omega)⟩
+        | refine WP.pure' ?_
+        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
+            Io_Condition_signal.again11, ↓reduceIte])
+      done
+
   · simp only at hs; subst hs
     unfold Io_Condition_signal.loop11
     simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]

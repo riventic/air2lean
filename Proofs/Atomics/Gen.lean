@@ -314,7 +314,7 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
       let i34 ← Zig.load (BitVec 32) 4 i33
       match ← ((do
         let i36 ← pure (i31.add 0)
-        let i37 ← Zig.cmpxchgC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i36 i32 i34
+        let i37 ← Zig.cmpxchgWeakC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i36 i32 i34
         pure (.br35 i37)) : Zig.CM Tgt pushLocals pushExit) with
       | .br35 v35 => (do
         let i39 ← pure ((v35).isSome)
