@@ -12,6 +12,10 @@ name = "Air2Lean"
 name = "Proofs"
 globs = ["Proofs.+"]
 
+[[lean_lib]]
+name = "AssuranceTools"
+roots = ["tools.Assurance"]
+
 [[lean_exe]]
 name = "air2lean"
 root = "Air2Lean.Main"
