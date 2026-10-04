@@ -689,7 +689,7 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
             unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
               throw s!"{f.name}: fallible spawn requires an audited Zig version"
             if kind == .spawn then
-              let some (.agg ty fields) := args[0]?
+              let some (Val.agg ty fields) := (args[0]? : Option Val)
                 | throw s!"{f.name}: fallible Thread.spawn requires a constant SpawnConfig"
               let some (.struct "Thread.SpawnConfig" _ names) := f.types[ty]?
                 | throw s!"{f.name}: fallible Thread.spawn requires Thread.SpawnConfig"

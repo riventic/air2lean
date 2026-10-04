@@ -84,4 +84,16 @@ theorem WP.spawnFailureFrame {target : Tgt} {c : Nat} (hc : c ≠ 0) {s : σ}
   simp only [spawnOutcomeC, if_neg hc]
   exact WP.pure' ⟨rfl, hf⟩
 
+/-- A failed second assignment executes the caller's cleanup continuation. In
+particular, an outstanding first-child join must be proved with WP.joinC; failure
+adds neither a new child obligation nor a substitute join. -/
+theorem WP.failedSpawnCleanup {target : Tgt} {c : Nat} (hc : c ≠ 0) {s : σ}
+    {cleanup : Except ErrName ThreadId → CM Tgt σ α}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : P.WP t ((cleanup (.error (spawnErrorAt (c - 1)))).run s) Q G m n) :
+    P.WP t ((do
+      let result ← spawnOutcomeC c target
+      cleanup result : CM Tgt σ α).run s) Q G m n := by
+  simpa only [spawnOutcomeC, if_neg hc, StateT.run_bind, StateT.run_pure, pure_bind] using h
+
 end Zig.Conc.Proto

@@ -4,7 +4,7 @@ import ZigLean.Conc.Csl
 
 open Zig Zig.Conc
 
-private inductive Target where
+inductive Target where
   | worker
 
 private def dispatch : Target → ConcM Target Unit := fun _ => pure ()
@@ -18,7 +18,7 @@ theorem failedSpawnLeaf (c : Nat) (hc : c ≠ 0) (s : Unit) (m : Mem) (depth : N
   rfl
 
 theorem failedConcurrentLeaf (s : Unit) (m : Mem) (depth : Nat) :
-    (groupConcurrentOutcomeC 1 Ptr.null {} Target.worker : CM Target Unit _).run s depth m =
+    (groupConcurrentOutcomeC 1 (⟨none, 0⟩ : Ptr) {} Target.worker : CM Target Unit _).run s depth m =
       CoN.leaf (some (.ok ((.error "ConcurrencyUnavailable", s), m))) := by rfl
 
 theorem eagerCallerBody (fallback : ConcM Target Unit) (g : Ptr) (s : Unit) :
@@ -40,16 +40,16 @@ private def failedCalls : ConcM Target (Except ErrName ThreadId × Except ErrNam
   match first with
   | .ok child => discard (joinC child : CM Target Unit Unit).run' ()
   | .error _ => pure ()
-  let second ← (groupConcurrentWithPolicyC .fallible Ptr.null {} .worker : CM Target Unit _).run' ()
+  let second ← (groupConcurrentWithPolicyC .fallible (⟨none, 0⟩ : Ptr) {} .worker : CM Target Unit _).run' ()
   match second with
-  | .ok _ => discard (groupAwaitC Ptr.null {} : CM Target Unit _).run' ()
+  | .ok _ => discard (groupAwaitC (⟨none, 0⟩ : Ptr) {} : CM Target Unit _).run' ()
   | .error _ => pure ()
   pure (first, second)
 
 -- The eager task records its actual caller id in memory. A fork would change it.
 private def eagerCaller : ConcM Target ThreadId := do
   let body : ConcM Target Unit := ConcM.liftMem (modify fun m => {m with nextMsg := m.current + 41})
-  discard (groupAsyncWithPolicyC .fallible Ptr.null {} .worker body : CM Target Unit Unit).run' ()
+  discard (groupAsyncWithPolicyC .fallible (⟨none, 0⟩ : Ptr) {} .worker body : CM Target Unit Unit).run' ()
   let m ← ConcM.liftMem get
   pure m.nextMsg
 

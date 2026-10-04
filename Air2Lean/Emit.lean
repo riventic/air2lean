@@ -1044,7 +1044,9 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     let capture := rv (args[2]?.getD .void)
     let op := if fn == .groupAsync then "groupAsyncC" else "groupConcurrentC"
-    let op := if fc.spawnSemantics == .fallible then op.replace "C" "WithPolicyC .fallible" else op
+    let op := if fc.spawnSemantics == .fallible then
+      (if fn == .groupAsync then "groupAsyncWithPolicyC .fallible" else "groupConcurrentWithPolicyC .fallible")
+      else op
     let fallback := if fc.spawnSemantics == .fallible && fn == .groupAsync then
       let body := (fc.spawnFallbacks.find? (·.1 == spawnFn)).map (·.2) |>.getD ""
       s!" (({body}) {capture})"
@@ -2650,7 +2652,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
       String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   String.intercalate "\n\n"
     (["import ZigLean"] ++
-      (if spawnSemantics == .fallible then ["/-- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
+      (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
       [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"])
 

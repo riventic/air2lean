@@ -80,10 +80,12 @@ theorem monotone_groupAsyncWithPolicyC {γ : Type} [PartialOrder γ]
   | fallible =>
     unfold groupAsyncWithPolicyC
     apply monotone_bind _ _ _ (monotone_const _)
+    apply monotone_of_monotone_apply
     intro choice
-    unfold groupAsyncOutcomeC
-    split
-    · exact monotone_const _
-    · exact monotone_callC f hmono
+    by_cases hc : choice = 0
+    · simpa only [groupAsyncOutcomeC, if_pos hc] using
+        (monotone_const (groupAsyncC group io target : CM Tgt σ Unit) :
+          monotone (fun _ : γ => (groupAsyncC group io target : CM Tgt σ Unit)))
+    · simpa only [groupAsyncOutcomeC, if_neg hc] using (monotone_callC f hmono)
 
 end Zig

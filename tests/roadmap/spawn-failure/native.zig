@@ -25,6 +25,11 @@ test "group eager fallback and concurrent assignment have different contracts" {
     if (@hasDecl(std, "Io") and @hasDecl(std.Io, "Group")) {
         var threaded: std.Io.Threaded = .init(std.heap.page_allocator, .{});
         defer threaded.deinit();
+        var eager: std.Io.Threaded = .init(std.heap.page_allocator,
+            .{ .async_limit = .nothing, .concurrent_limit = .nothing });
+        defer eager.deinit();
+        try std.testing.expectEqual(@as(u32, 29), try source.groupAsync(eager.io(), 29));
+        try std.testing.expectError(error.ConcurrencyUnavailable, source.groupConcurrent(eager.io(), 31));
         try std.testing.expectEqual(@as(u32, 19), try source.groupAsync(threaded.io(), 19));
         if (source.groupConcurrent(threaded.io(), 23)) |result| {
             try std.testing.expectEqual(@as(u32, 23), result);
