@@ -162,18 +162,18 @@ def main (args : List String) : IO Unit := do
       node 4 "ret" 1 #[ref 3]]
   let fs := fs.set! 1 (← parse orderWorker)
   let generated := emit fs "TuplePipeline" ""
-  require (generated.splitOn "worker a.1 a.2.1 a.2.2" |>.length == 2) "three-field dispatch lost source order"
+  require ((generated.splitOn "worker a.1 a.2.1 a.2.2").length == 2) "three-field dispatch lost source order"
   let single ← accepted "Thread.spawn" #[0] #[lit 0 "1"] #[0]
   let singleSource := emit single "TupleSingle" ""
-  require (singleSource.splitOn "| worker (a : BitVec 8)" |>.length == 2)
+  require ((singleSource.splitOn "| worker (a : BitVec 8)").length == 2)
     "legacy one-field target lost its scalar constructor"
-  require (singleSource.splitOn "worker a)" |>.length == 2)
+  require ((singleSource.splitOn "worker a)").length == 2)
     "legacy one-field dispatcher changed argument shape"
   let nested ← nestedTuple
   let nestedSource := emit nested "TupleNested" ""
   let slices ← pureSlices
   let sliceSource := emit slices "TupleSlices" ""
-  require (sliceSource.splitOn "Zig.readSlice" |>.length == 3) "dispatcher did not adapt both pure slice arguments"
+  require ((sliceSource.splitOn "Zig.readSlice").length == 3) "dispatcher did not adapt both pure slice arguments"
   let proof := "\nexample (a b c : BitVec 8) : TuplePipeline.dispatch (.worker (a, b, c)) = discard (Zig.ConcM.liftMem (StateT.lift (TuplePipeline.worker a b c))) := by rfl\n" ++
     "example {γ : Type} (P : Zig.Conc.Proto TuplePipeline.Tgt γ) (a b c : BitVec 8) (g : γ) : TuplePipeline.Tgt.spawnInit P (.worker (a, b, c)) g = P.init (.worker (a, b, c)) g := by rfl\n"
   IO.FS.writeFile output (generated ++ proof)
