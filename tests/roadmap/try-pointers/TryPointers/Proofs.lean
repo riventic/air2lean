@@ -46,13 +46,57 @@ def payloadProgram (α : Type) [Enc α] (n a : Nat) (p : Ptr) :
 theorem payload8_program (p : Ptr) :
     TryPointers.payload8 p = payloadProgram (BitVec 8) 4 2 p := by
   funext m
-  simp [TryPointers.payload8, payloadProgram, zig_unfold]
+  -- The generated MM wrapper carries a local-state pair through each effect. Split
+  -- the actual effect outcomes before reducing those pairs and the return wrapper.
+  cases hread : loadDiscardBytes 4 2 p m with
+  | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread]
+  | some read =>
+    cases read with
+    | error failure => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread]
+    | ok read =>
+      rcases read with ⟨u, m₁⟩
+      cases htag : tryPayloadPtr (BitVec 8) 2 p m₁ with
+      | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+      | some tag =>
+        cases tag with
+        | error failure => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+        | ok tag =>
+          rcases tag with ⟨result, m₂⟩
+          cases result with
+          | ok q => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+          | error name =>
+            cases hcode : errCodeAt (BitVec 8) 2 p m₂ with
+            | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag, hcode]
+            | some code =>
+              cases code <;> simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag, hcode]
 -- MUTANT_BRIDGE_END: payload8_program
 
 theorem payload64_program (p : Ptr) :
     TryPointers.payload64 p = payloadProgram (BitVec 64) 16 8 p := by
   funext m
-  simp [TryPointers.payload64, payloadProgram, zig_unfold]
+  -- The generated MM wrapper carries a local-state pair through each effect. Split
+  -- the actual effect outcomes before reducing those pairs and the return wrapper.
+  cases hread : loadDiscardBytes 16 8 p m with
+  | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread]
+  | some read =>
+    cases read with
+    | error failure => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread]
+    | ok read =>
+      rcases read with ⟨u, m₁⟩
+      cases htag : tryPayloadPtr (BitVec 64) 8 p m₁ with
+      | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+      | some tag =>
+        cases tag with
+        | error failure => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+        | ok tag =>
+          rcases tag with ⟨result, m₂⟩
+          cases result with
+          | ok q => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+          | error name =>
+            cases hcode : errCodeAt (BitVec 64) 8 p m₂ with
+            | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag, hcode]
+            | some code =>
+              cases code <;> simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag, hcode]
 
 /-- One assertion owns the entire object. Only its two tag bytes must decode;
 all payload/padding bytes may be undefined. Separate tag ownership is not assumed. -/
@@ -97,17 +141,21 @@ theorem payloadProgram_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
     ∃ m', (payloadProgram α n a p).run m =
       pure ((match e with | none => .ok (errPayloadPtr α p) | some name => .error name), m') ∧
       m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨A, S, K, bs, ha, hn, hpos, -, -, -, hb⟩ := hp
+  have hpWhole := hp
+  obtain ⟨A, S, K, bs, ha, hn, hpos, -, -, -, hb⟩ := hpWhole
   have hw : readableBytes p n a h := ⟨A, S, K, bs, ha, hn, hb⟩
   obtain ⟨m₁, hread, hm₁, hs₁⟩ := readableBytes_discard_run hw hm hpos hs
-  obtain ⟨m₂, htag, hcode, hm₂, hs₂⟩ := readableUnion_tag_run hp hm₁ hs₁
+  obtain ⟨m₂, htag, -, hm₂, hs₂⟩ := readableUnion_tag_run
+    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m₁) (h := h) (hF := hF) hp hm₁ hs₁
   cases e with
   | none =>
     refine ⟨m₂, ?_, hm₂, hs₂⟩
     simp only [StateT.run] at hread htag
     simp [payloadProgram, zig_unfold, hread, htag]
   | some name =>
-    obtain ⟨m₃, -, hcode', hm₃, hs₃⟩ := readableUnion_tag_run hp hm₂ hs₂
+    obtain ⟨m₃, -, hcode', hm₃, hs₃⟩ := readableUnion_tag_run
+      (α := α) (p := p) (n := n) (a := a) (e := some name) (m := m₂)
+      (h := h) (hF := hF) hp hm₂ hs₂
     have herr := hcode' name rfl
     refine ⟨m₃, ?_, hm₃, hs₃⟩
     simp only [StateT.run] at hread htag herr
@@ -121,7 +169,8 @@ theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Opt
   cases e <;> apply Triple.of_run
   all_goals
     intro m h hF hd hm hp hs
-    obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run hp hm hs
+    obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run
+      (α := α) (p := p) (n := n) (a := a) (m := m) (h := h) (hF := hF) hp hm hs
     exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
 
 theorem payload8_owned (p : Ptr) (e : Option ErrName) (R : Assn) :
