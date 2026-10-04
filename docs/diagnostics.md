@@ -118,7 +118,11 @@ CI does not supply a historical V05 binary, so its emission-byte comparison is
 explicitly not run. The baseline comparison remains a separate qualification command
 above. Accepted V05 Parser/Emitter test fixtures are included without production changes.
 
-Recorded validation currently covers a serialized translator core build and three
-offline harness tests. Collector evaluation, actual diagnostics CLI checks, the V05
-baseline comparison, input-validation compatibility and CI replay await qualification;
-the presence of the CI gate does not claim that these checks have passed.
+At revision `1c174ce`, serialized qualification passed the translator build, collector
+evaluation, 15 diagnostics CLI checks including V05 emission-byte comparison, the
+input-validation API checks, all 78 input-validation CLI checks, and the extracted
+CI step replay. The subsequent test-oracle repair independently requires rejected
+status and exit 1 for negative fixtures; checked receipts must be complete, untruncated,
+diagnostic-free and have passed local file checks. Four offline harness tests pass,
+including contradictory checked receipts. Actual CLI and CI replay with this stronger
+oracle still await a targeted rerun; these test changes do not alter the producer.

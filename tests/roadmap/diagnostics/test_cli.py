@@ -30,7 +30,7 @@ def calls(name, *targets):
                                inst(len(targets), "ret", 1, [dict(ty=0, val="{}")])])
 
 
-def decode(result):
+def decode(result, expected_status=None):
     assert result.stderr == "", result.stderr
     report = json.loads(result.stdout)
     assert report["schema"] == 1 and report["kind"] == "air2lean-check-diagnostics"
@@ -38,6 +38,12 @@ def decode(result):
     assert report["source_correspondence"] == "not_attested"
     assert result.returncode == (1 if report["status"] == "rejected" else 0)
     assert report["status"] in ("checked", "rejected")
+    if expected_status is not None:
+        assert report["status"] == expected_status
+    if report["status"] == "checked":
+        assert report["complete"] is True and report["truncated"] is False
+        assert not report["diagnostics"]
+        assert all(f["local_check"] == "passed" for f in report["files"])
     assert len(report["diagnostics"]) <= report["diagnostic_limit"]
     assert report["diagnostic_payload_bytes"] <= 1024 * 1024
     if report["truncated"] or any(d["first_error_in_unit"] for d in report["diagnostics"]):
@@ -74,15 +80,17 @@ def run(binary, baseline=None):
                                       inst(43, "unknown_b", 0, unsupported=True)])
         write(air, {"a.json": "{", "b.json": "{", "marked.json": marked, "ok.json": function("ok")})
         first = invoke(binary, air)
-        report = decode(first)
+        report = decode(first, "rejected")
         assert [d["file"].split("/")[-1] for d in report["diagnostics"] if d["code"] == "JSON_SYNTAX"] == ["a.json", "b.json"]
         markers = [d for d in report["diagnostics"] if d["code"] == "EXPORTER_UNSUPPORTED"]
         assert [d["anchor"]["instruction"] for d in markers] == [42, 43]
         assert all(d["anchor"]["id_space"] == "exported" for d in markers)
         assert any(f["function"] == "ok" and f["local_check"] == "passed" for f in report["files"])
-        assert invoke(binary, air).stdout == first.stdout, "deterministic report bytes"
+        second = invoke(binary, air)
+        decode(second, "rejected")
+        assert second.stdout == first.stdout, "deterministic report bytes"
         assert output.read_text() == "sentinel\n"
-        cap = decode(invoke(binary, air, "--diagnostic-limit", "1"))
+        cap = decode(invoke(binary, air, "--diagnostic-limit", "1"), "rejected")
         assert len(cap["diagnostics"]) == 1 and cap["truncated"] and not cap["complete"]
         checks += 3
 
@@ -93,7 +101,7 @@ def run(binary, baseline=None):
             inst(30, "ret", 2, [dict(ty=1, val="{}")])])
         branch.update(types=[INT, VOID, NORETURN, PTR, dict(k="bool", abi_size=1, abi_align=1)], params=[3], ret=1)
         write(air, {"branches.json": branch})
-        report = decode(invoke(binary, air))
+        report = decode(invoke(binary, air), "rejected")
         failures = [d for d in report["diagnostics"] if d["code"] == "INSTRUCTION_FAILURE"]
         assert len(failures) == 2, report
         assert all(d["anchor"]["id_space"] == "canonical" and d["anchor"]["nearest_dbg_line"] == 42 for d in failures)
@@ -111,7 +119,7 @@ def run(binary, baseline=None):
         prerequisite.update(types=[INT, VOID, NORETURN, PTR, dict(k="other", name="x" * (100 * 1024))],
                             params=[3], ret=1)
         write(air, {"prerequisite.json": prerequisite})
-        report = decode(invoke(binary, air))
+        report = decode(invoke(binary, air), "rejected")
         assert all(len(d["message"]) <= 2048 for d in report["diagnostics"])
         assert len([d for d in report["diagnostics"] if d["message_truncated"]]) >= 2
         assert len([d for d in report["diagnostics"] if d["code"] == "PREREQUISITE_SKIPPED" and
@@ -121,23 +129,23 @@ def run(binary, baseline=None):
 
         write(air, {"root.json": calls("root", "mid", "missing_a", "missing_b"),
                     "mid.json": calls("mid", "root", "marked"), "marked.json": marked})
-        report = decode(invoke(binary, air))
+        report = decode(invoke(binary, air), "rejected")
         assert any(d["code"] == "CALLEE_BLOCKED" and d["dependency_chain"] == ["root", "mid", "marked"] for d in report["diagnostics"])
         assert {d["dependency_chain"][-1] for d in report["diagnostics"] if d["code"] == "CALLEE_MISSING"} == {"missing_a", "missing_b"}
         assert report["runtime_outcomes"] == "not_observed", "cycles cannot be labeled divergence"
         checks += 1
         write(air, {"a.json": function("duplicate"), "b.json": function("duplicate"), "caller.json": calls("caller", "duplicate")})
-        report = decode(invoke(binary, air))
+        report = decode(invoke(binary, air), "rejected")
         assert any(d["code"] == "DUPLICATE_FUNCTION" for d in report["diagnostics"])
         assert any(d["code"] == "CALLEE_AMBIGUOUS" for d in report["diagnostics"])
         checks += 1
         write(air, {"ok.json": function("ok")})
-        report = decode(invoke(binary, air))
+        report = decode(invoke(binary, air), "checked")
         assert report["status"] == "checked" and report["complete"] and not report["diagnostics"]
         assert output.read_text() == "sentinel\n"
         for flags in (("-o", str(output)), ("--namespace", "N"), ("--prefix", "p"),
                       ("--float-semantics", "ieee"), ("--diagnostic-limit", "0")):
-            rejected = decode(invoke(binary, air, *flags))
+            rejected = decode(invoke(binary, air, *flags), "rejected")
             assert rejected["diagnostics"][0]["code"] == "CLI_ARGUMENTS"
             assert output.read_text() == "sentinel\n"
         checks += 6
@@ -158,7 +166,7 @@ class HarnessTests(unittest.TestCase):
     def valid(self):
         return dict(schema=1, kind="air2lean-check-diagnostics", proof_status="not_run",
                     runtime_outcomes="not_observed", source_correspondence="not_attested",
-                    status="checked", diagnostics=[], diagnostic_limit=256,
+                    status="checked", diagnostics=[], diagnostic_limit=256, files=[],
                     diagnostic_payload_bytes=0, complete=True, truncated=False)
 
     def result(self, report, status=0):
@@ -179,6 +187,21 @@ class HarnessTests(unittest.TestCase):
             decode(self.result(report))
         with self.assertRaises(AssertionError):
             decode(self.result(self.valid(), 1))
+
+    def test_oracle_refuses_checked_blockers_and_wrong_expected_status(self):
+        blocker = dict(code="EXPORTER_UNSUPPORTED", first_error_in_unit=False,
+                       source_span=None, source_span_status="unavailable_in_AIR",
+                       anchor=dict(id_space="exported"), prerequisites=[], dependency_chain=[])
+        report = self.valid()
+        report.update(diagnostics=[blocker], complete=False, truncated=True)
+        with self.assertRaises(AssertionError):
+            decode(self.result(report))
+        report = self.valid()
+        report["files"] = [dict(local_check="blocked_or_rejected")]
+        with self.assertRaises(AssertionError):
+            decode(self.result(report))
+        with self.assertRaises(AssertionError):
+            decode(self.result(self.valid()), "rejected")
 
     def test_synthetic_dependency_and_branch_inputs(self):
         document = calls("root", "mid", "missing")
