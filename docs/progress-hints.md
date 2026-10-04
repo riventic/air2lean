@@ -76,11 +76,15 @@ lake build ZigLean Air2Lean air2lean
 lake env lean --run tests/roadmap/progress/Runtime.lean
 lake env lean --run tests/roadmap/progress/Pipeline.lean /tmp/ProgressPipeline.lean
 lake env lean /tmp/ProgressPipeline.lean
-mkdir -p /tmp/progress-air
-ZIG_AIR_JSON_DIR=/tmp/progress-air ZIG_AIR_JSON_FILTER='progress.' "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing tests/roadmap/progress/progress.zig
-lake exe air2lean /tmp/progress-air -o /tmp/ProgressSource.lean --namespace ProgressSource --prefix progress.
+progress_air=$(mktemp -d /tmp/progress-air.XXXXXX)
+ZIG_AIR_JSON_DIR="$progress_air" ZIG_AIR_JSON_FILTER='progress.' "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing tests/roadmap/progress/progress.zig
+lake exe air2lean "$progress_air" -o /tmp/ProgressSource.lean --namespace ProgressSource --prefix progress.
 lake env lean /tmp/ProgressSource.lean
 ```
+
+Keep the fresh AIR directory, generated Lean, command logs and compiler/source
+hashes with the qualification record; do not reuse a directory containing exports
+from a previous version or target.
 
 The source semantics audit is separate from successful execution of these
 commands. Compiler runs, kernel checks and exported fixture evidence must be

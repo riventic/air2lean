@@ -22,7 +22,7 @@ private def accepted (f : Func) : IO Unit := do
 private def rejected (f : Func) (part : String) : IO Unit := do
   match check f >>= fun _ => checkProgram #[f] with
   | .ok () => throw (IO.userError s!"{f.name}: invalid progress signature accepted")
-  | .error e => require (e.splitOn part |>.length > 1) s!"wrong rejection: {e}"
+  | .error e => require ((e.splitOn part).length > 1) s!"wrong rejection: {e}"
 
 def main (args : List String) : IO Unit := do
   let output := args.headD "/tmp/air2lean-progress-pipeline.lean"
