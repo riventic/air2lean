@@ -65,8 +65,14 @@ private def equivalent (consumed : Bool) (expected : BitVec 8) : Bool :=
 
 private def errorEquivalent : Bool :=
   let p : Ptr := { block := some 0, off := 0 }
-  let m : Mem := { blocks := #[{ bytes := #[.int (42#8)], align := 1, kind := .constGlobal,
-    live := true, addr := 4096 }] }
+  let block : Block := {
+    bytes := #[.int (42#8)]
+    align := 1
+    kind := .constGlobal
+    live := true
+    addr := 4096
+  }
+  let m : Mem := { blocks := #[block] }
   samePrep (casPrep 8 1 p (42#8)) (legacyStrongPrep 8 1 p (42#8)) m &&
   samePrep (weakCasPrep 8 1 p (42#8)) (legacyWeakPrep 8 1 p (42#8)) m &&
   casCount 8 .relaxed 1 p (42#8) m == 1 && weakCasCount 8 .relaxed 1 p (42#8) m == 1

@@ -1200,27 +1200,6 @@ theorem before_op {W : Word 32 4} {t : ThreadId} {m m' : Mem} (hop : W.Op t m m'
     · exact .inr (by omega)
   exact ⟨i, l, (hop.locs.same L.b L.o hne i l).mpr hl, hle⟩
 
-/-- A load by `main` at a shared word, with the same ghost values. -/
-theorem inv_mload {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {g : Gh}
-    (hi : proto.inv (upd G 0 g) m₁) (hw' : W.Ok m') (hop : W.Op 0 m₁ m')
-    (hL : L.Inv (upd G 0 g) m') (hh : W.hist m' = W.hist m₁) : proto.inv (upd G 0 g) m' := by
-  have hu := hi.2
-  have hk : ∀ W', Wd W' → W'.hist m' = W'.hist m₁ := fun W' hW' => by
-    by_cases e : W' = W
-    · subst e; exact hh
-    · exact hist_op hW hW' e hu hop
-  have hS := hk WS (.inl rfl)
-  have hE := hk WE (.inr (.inl rfl))
-  have hV := hk WV (.inr (.inr rfl))
-  refine ⟨hL, U_op hW hu hop hw' hu.shape hu.parts ((sok_congr hS).mpr hu.sh)
-    ((eok_congr hE).mpr hu.eh) ((vok_congr hV).mpr hu.vh) hu.flags
-    (hu.reg.mono (by rw [hS]) hop.clocks (fun _ h => before_op hop hW.ap h))
-    (fun h => by rw [hS, hE]; exact hu.sig h)
-    (fun h => by rw [hS]; exact VClock.le_trans (hu.seen h) (hop.clocks 0))
-    (fun h => by rw [hV]; exact VClock.le_trans (hu.vclk h) (hop.clocks 0))
-    (fun w hw => hu.q w (hop.waiters ▸ hw))
-    (fun h => by rw [hS]; exact VClock.le_trans (hu.pc h) (hop.clocks 1))⟩
-
 theorem inv_load {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {t : ThreadId}
     (hi : proto.inv G m₁) (hw' : W.Ok m') (hop : W.Op t m₁ m')
     (hL : L.Inv G m') (hh : W.hist m' = W.hist m₁) : proto.inv G m' := by
@@ -1240,6 +1219,12 @@ theorem inv_load {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Me
     (fun h => by rw [hV]; exact VClock.le_trans (hu.vclk h) (hop.clocks 0))
     (fun w hw => hu.q w (hop.waiters ▸ hw))
     (fun h => by rw [hS]; exact VClock.le_trans (hu.pc h) (hop.clocks 1))⟩
+
+/-- A load by `main` at a shared word, with the same ghost values. -/
+theorem inv_mload {W : Word 32 4} (hW : Wd W) {G : ThreadId → Gh} {m₁ m' : Mem} {g : Gh}
+    (hi : proto.inv (upd G 0 g) m₁) (hw' : W.Ok m') (hop : W.Op 0 m₁ m')
+    (hL : L.Inv (upd G 0 g) m') (hh : W.hist m' = W.hist m₁) : proto.inv (upd G 0 g) m' := by
+  exact inv_load hW hi hw' hop hL hh
 
 /-- A change of `main`'s place on the same memory. -/
 theorem inv_mx {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X}
