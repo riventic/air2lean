@@ -20,8 +20,10 @@ Every reachable error-body path must exit the function and may not branch outsid
 Analysis stops at the first terminator, and a branch to a local block resumes that block's
 continuation; a dead return/trap after that branch cannot certify an exit. Falling-through
 bodies, loops and switches with no explicit else are conservatively rejected.
-Error-flow summaries are computed bottom-up once for a function with unique instruction
-IDs, including unreachable child bodies without treating them as reachable outcomes. Direct
+For a function containing pointer try, error-flow summaries are computed bottom-up once
+when its instruction IDs are unique. Flat siblings use an array reverse fold; recursion
+visits nested bodies, including unreachable child bodies without treating them as reachable
+outcomes. Functions without pointer try skip cache-only ID hashing and summary preparation. Direct
 public checks with duplicate IDs fall back to uncached validation; diagnostics still come
 from the original ordered checker traversal. Existing flattening and target-scope checks
 are retained, so this is not a claim about whole-checker complexity.

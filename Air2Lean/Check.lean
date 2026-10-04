@@ -319,37 +319,36 @@ private def TryErrorFlow.merge (a b : TryErrorFlow) : TryErrorFlow :=
 later checking. Only reachable outcomes contribute to the parent flow: the first
 terminator ends its sequence and a block consumes only its own branch. No diagnostics
 are emitted here. The ID-indexed cache is used only after the caller's uniqueness guard. -/
-private partial def summarizeTryErrors (insts : List Inst) (cache : Std.HashMap InstId Bool) :
+private partial def summarizeTryErrors (insts : Array Inst) (cache : Std.HashMap InstId Bool) :
     TryErrorFlow × Std.HashMap InstId Bool :=
-  match insts with
-  | [] => (⟨false, {}⟩, cache)
-  | inst :: rest =>
-    let (later, cache) := summarizeTryErrors rest cache
+  -- Array.foldr traverses flat siblings right-to-left without recursive pending
+  -- frames for `rest`; this function recurses only into nested instruction arrays.
+  insts.foldr (init := ((⟨false, {}⟩ : TryErrorFlow), cache)) fun inst (later, cache) =>
     match inst.op with
     | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
     | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
     | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
     | .«repeat» _ => (⟨false, {}⟩, cache)
     | .loop body =>
-      let (_, cache) := summarizeTryErrors body.toList cache
+      let (_, cache) := summarizeTryErrors body cache
       (⟨false, {}⟩, cache)
     | .condBr _ t e =>
-      let (thenFlow, cache) := summarizeTryErrors t.toList cache
-      let (elseFlow, cache) := summarizeTryErrors e.toList cache
+      let (thenFlow, cache) := summarizeTryErrors t cache
+      let (elseFlow, cache) := summarizeTryErrors e cache
       (thenFlow.merge elseFlow, cache)
     | .switchBr _ cases e =>
-      let (elseFlow, cache) := summarizeTryErrors e.toList cache
+      let (elseFlow, cache) := summarizeTryErrors e cache
       cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
-        let (caseFlow, cache) := summarizeTryErrors c.body.toList cache
+        let (caseFlow, cache) := summarizeTryErrors c.body cache
         (flow.merge caseFlow, cache)
     | .block body =>
-      let (inner, cache) := summarizeTryErrors body.toList cache
+      let (inner, cache) := summarizeTryErrors body cache
       let flow := if inner.branches.contains inst.id then
           (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
         else inner
       (flow, cache)
     | .«try» _ errBody | .tryPtr _ errBody =>
-      let (errorFlow, cache) := summarizeTryErrors errBody.toList cache
+      let (errorFlow, cache) := summarizeTryErrors errBody cache
       let cache := cache.insert inst.id (errorFlow.valid && errorFlow.branches.isEmpty)
       (errorFlow.merge later, cache)
     | _ => (later, cache)
@@ -357,7 +356,7 @@ private partial def summarizeTryErrors (insts : List Inst) (cache : Std.HashMap 
 /-- Every reachable path must exit the function, with no unconsumed block branch.
 Loops, fallthrough and switches without an explicit else are conservative failures. -/
 def tryErrorBodyExits (body : Array Inst) : Bool :=
-  let flow := (summarizeTryErrors body.toList {}).1
+  let flow := (summarizeTryErrors body {}).1
   flow.valid && flow.branches.isEmpty
 
 mutual
@@ -648,10 +647,12 @@ def check (f : Func) : Except String Unit := do
   -- `allInsts` includes every nested instruction, even unreachable child bodies.
   -- Public `check` accepts unnormalized input: duplicate IDs disable the cache,
   -- without introducing a prepass diagnostic or changing subsequent check order.
-  let emptyIds : Std.HashSet InstId := {}
-  let ids := insts.foldl (init := emptyIds) fun ids i => ids.insert i.id
-  let tryErrorExits := if ids.size == insts.size then
-    (summarizeTryErrors f.body.toList {}).2 else ({} : Std.HashMap InstId Bool)
+  let tryErrorExits := if insts.any (fun i => match i.op with | .tryPtr .. => true | _ => false) then
+      let emptyIds : Std.HashSet InstId := {}
+      let ids := insts.foldl (init := emptyIds) fun ids i => ids.insert i.id
+      if ids.size == insts.size then
+        (summarizeTryErrors f.body {}).2 else ({} : Std.HashMap InstId Bool)
+    else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits }
   let _ ← checkInsts cx 0 f.body

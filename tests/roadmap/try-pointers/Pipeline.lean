@@ -144,6 +144,24 @@ def main (args : List String) : IO Unit := do
   let nestedErrors ← accept (file "nestedErrors" "try_ptr" types (nestedErrorBody 3))
   for depth in [1, 8, 32] do
     let _ ← accept (file "nestedDepth" "try_ptr" types (nestedErrorBody depth))
+  -- A bounded flat sequence exercises the real pointer-try error body rather than
+  -- a summary-helper imitation. No recursion-depth or memory threshold is claimed.
+  let some byteTy := hot.types.findIdx? (fun t => match t with | .int false 8 => true | _ => false)
+    | throw (IO.userError "shallow fixture lost its byte type")
+  let shallowPrefix := (Array.range 2048).map fun n =>
+    ({ id := 1000 + n, ty := byteTy, op := .bitcast (.int byteTy 7) } : Inst)
+  let shallow := { hot with body := hot.body.map fun i => match i.op with
+    | .tryPtr p e => { i with op := .tryPtr p (shallowPrefix ++ e) }
+    | _ => i }
+  match check shallow with
+  | .ok _ => pure ()
+  | .error e => throw (IO.userError s!"bounded shallow pointer-try sequence rejected: {e}")
+  let shallowFallthrough := { hot with body := hot.body.map fun i => match i.op with
+    | .tryPtr p _ => { i with op := .tryPtr p shallowPrefix }
+    | _ => i }
+  match check shallowFallthrough with
+  | .ok _ => throw (IO.userError "bounded shallow error body fell through")
+  | .error e => require ((e.splitOn "must exit").length > 1) s!"shallow diagnostic changed: {e}"
   -- Direct public check accepts unnormalized input. Same-ID nodes with different
   -- error bodies must not alias summaries, including a duplicate after a return.
   let repeated := { hot with body := hot.body.flatMap fun i => match i.op with
