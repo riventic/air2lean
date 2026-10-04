@@ -8,6 +8,11 @@ private def require (condition : Bool) (message : String) : IO Unit :=
 private def get {α : Type} (e : Except String α) : IO α :=
   match e with | .ok a => pure a | .error error => throw (IO.userError error)
 
+private def expectError {α : Type} (result : Except String α) (part : String) : IO Unit :=
+  match result with
+  | .ok _ => throw (IO.userError s!"expected error containing {part}")
+  | .error message => require (decide ((message.splitOn part).length > 1)) message
+
 def main (args : List String) : IO Unit := do
   let directory : System.FilePath ← match args with
     | [] => pure "tests/roadmap/models"
@@ -39,6 +44,15 @@ def main (args : List String) : IO Unit := do
   require (ModelRegistry.check models raw.profile #[{f with layouts := f.layouts.set! 0 {size := some 2, align := some 2}}]).toOption.isNone "layout mismatch"
   require (ModelRegistry.check models raw.profile #[{f with name := "project.identity"}]).toOption.isNone "AIR override"
   require (ModelRegistry.parse "{\"schema\":2,\"models\":[]}").toOption.isNone "future registry schema"
+  expectError (ModelRegistry.parse "{\"schema\":1e1000000000,\"models\":[]}") "exponent exceeds"
+  expectError (ModelRegistry.parse "{\"schema\":1,\"schema\":1,\"models\":[]}") "duplicate JSON object key"
+  let nested := String.join (List.replicate 129 "[") ++ "0" ++ String.join (List.replicate 129 "]")
+  expectError (ModelRegistry.parse nested) "JSON nesting exceeds"
+  let oversized ← try
+    let _ ← StrictJson.readBounded (fun _ => pure (ByteArray.mk #[0, 0, 0])) 2
+    pure false
+  catch _ => pure true
+  require oversized "bounded registry reader rejects growth"
   let source := emit #[f] "ExternalClient" "" .ieee models
   require (decide ((source.splitOn "def client (p0 : BitVec 8) : Zig.MemM").length > 1)) "client uses MemM"
   require (decide ((source.splitOn "theorem air2lean_model_0_evidence").length > 1)) "proved obligation"
@@ -61,10 +75,30 @@ def main (args : List String) : IO Unit := do
   let small := diamond.extract 0 5
   let _ ← get <| ModelRegistry.preflight small #[]
   require (ModelRegistry.preflight #[.ptr "one" false 0] #[]).toOption.isNone "pointer signature cycle"
+  -- A previously memoized subtree must count its full height beneath a later root.
+  let chain : Array Ty := (Array.range 261).map fun i =>
+    if i == 0 then .int false 8 else .optional (i - 1)
+  let _ ← get <| ModelRegistry.typeShapes chain #[] #[255]
+  expectError (ModelRegistry.typeShapes chain #[] #[256]) "signature nesting exceeds"
+  expectError (ModelRegistry.typeShapes chain #[] #[128, 257]) "signature nesting exceeds"
+  expectError (ModelRegistry.typeShapes chain #[] #[257, 128]) "signature nesting exceeds"
+  let tupleChain := chain.push (.tuple #[130, 260])
+  expectError (ModelRegistry.typeShapes tupleChain #[] #[130, 261]) "signature nesting exceeds"
+  expectError (ModelRegistry.typeShapes #[.int false 8] #[] (Array.replicate 6000 0)) "expanded signature budget"
   let duplicateValues := ModelRegistry.valueTypeIndex f.types
     #[{id := 9, ty := 0, op := .arg 0}, {id := 9, ty := 1, op := .arg 0}]
   require ((← get <| ModelRegistry.argumentTypeIds duplicateValues #[.inst 9]) == #[0]) "first argument type occurrence"
-  require (((ModelRegistry.callIndex #[f, f]).getD "project.identity" #[]).size == 2) "all matching calls indexed"
+  let indexed := (ModelRegistry.callIndex #[
+    {f with body := #[{id := 10, ty := 0, op := .call (.func "project.identity" false none) #[.inst 1]},
+      {id := 11, ty := 0, op := .call (.func "project.identity" false none) #[.inst 2]}]}, f]).getD "project.identity" #[]
+  require (indexed.size == 3) "all matching calls indexed"
+  require (indexed.map (·.functionIndex) == #[0, 0, 1]) "function traversal order"
+  require ((indexed.map (·.args))[0]? == some #[.inst 1] &&
+    (indexed.map (·.args))[1]? == some #[.inst 2]) "instruction traversal order"
+  let repeated : Array Val := Array.replicate 6000 (.inst 0)
+  expectError (ModelRegistry.check models raw.profile #[{f with body := #[
+    {id := 0, ty := 0, op := .arg 0},
+    {id := 1, ty := 0, op := .call (.func "project.identity" false none) repeated}]}]) "expanded signature budget"
   let tupleRaw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/tuple-client.json")
   let tupleFunc ← get <| normalize tupleRaw
   let _ ← get <| check tupleFunc

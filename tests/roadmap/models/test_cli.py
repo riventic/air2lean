@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as tmp:
     registry = tmp / "registry.json"
     base = [str(exe), str(air), "-o", str(out), "--namespace", "ExternalClient"]
     def invoke(extra=(), success=True):
-        result = subprocess.run(base + list(extra), capture_output=True, text=True)
+        result = subprocess.run(base + list(extra), capture_output=True, text=True, timeout=10)
         assert (result.returncode == 0) == success, result.stderr
         return result
     invoke(["--model-registry-template"])
@@ -66,6 +66,20 @@ with tempfile.TemporaryDirectory() as tmp:
         bad = copy.deepcopy(data)
         bad["models"][0]["profile"][key] = value
         fail(bad)
+    for contents, diagnostic in [
+        ('{"schema":1e1000000000,"models":[]}', "exponent exceeds"),
+        ('{"schema":1,"schema":1,"models":[]}', "duplicate JSON object key"),
+        ('[' * 129 + '0' + ']' * 129, "JSON nesting exceeds"),
+    ]:
+        registry.write_text(contents)
+        out.write_text("KEEP")
+        result = invoke(["--model-registry", str(registry)], False)
+        assert diagnostic in result.stderr and out.read_text() == "KEEP", result.stderr
+    # A sparse file checks the pre-read metadata guard without constructing 64 MiB text.
+    with registry.open("wb") as oversized:
+        oversized.truncate(64 * 1024 * 1024 + 1)
+    result = invoke(["--model-registry", str(registry)], False)
+    assert "UTF-8 bytes" in result.stderr and out.read_text() == "KEEP", result.stderr
     invoke([], False)
     invoke(["--model-registry-template", "--model-registry", str(registry)], False)
     # Value-taking options consume their next token even when it looks like a flag.

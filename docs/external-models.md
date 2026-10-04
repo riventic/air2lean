@@ -20,9 +20,13 @@ flags. Local type IDs do not determine identity. The `type` string is the normal
 `Ty` representation in registry schema 1; regenerate templates after changing that format.
 No accepted implementation or contract is supplied by a template: fill every missing field.
 
+Registry JSON uses the shared strict parser: duplicate decoded keys, oversized numbers or
+exponents, more than 128 nested JSON containers and inputs over 64 MiB are rejected. The CLI
+bounds registry-file reads before constructing a UTF-8 string.
+
 Schema 1 deliberately retains expanded tree-shaped JSON. Completed type memoization avoids
 revisiting shared children, while expanded-cost accounting rejects more than 65,536 JSON
-nodes or 1,048,576 UTF-8 bytes and nesting beyond 256 type edges. Repeated DAG edges count
+nodes or 1,048,576 UTF-8 bytes and nesting beyond 256 type nodes along any expanded path. Repeated DAG edges count
 again toward serialized cost. Registry/template inputs preflight the entire type table before
 normalization and recursive subset checking; consequently every type in those tables must
 be acyclic and fit these limits, including types outside an external signature. The same

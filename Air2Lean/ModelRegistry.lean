@@ -3,6 +3,7 @@ import Std.Data.HashSet
 import Air2Lean.Memory
 import Air2Lean.Air.Profile
 import Lean.Data.Json
+import Air2Lean.Air.StrictJson
 
 /-! Exact direct-call bindings, separate from the historical built-in recognition tables.
 The registry supplies identifiers, never executable Lean source fragments. A generated typed
@@ -58,11 +59,13 @@ private structure Shape where
   json : Json
   nodes : Nat
   bytes : Nat
+  height : Nat
   deriving Inhabited
 
 private structure ShapeState where
   done : Std.HashMap TyId Shape := {}
   active : Std.HashSet TyId := {}
+  deriving Inhabited
 
 private partial def jsonNodes : Json → Nat
   | .arr values => 1 + values.foldl (fun n value => n + jsonNodes value) 0
@@ -96,14 +99,20 @@ private def shapeJson (t : Ty) (l : Layout) (children : Array Json) : Json :=
 private partial def shapeGo (types : Array Ty) (layouts : Array Layout) (id : TyId) :
     StateT ShapeState (Except String) Shape := do
   let state : ShapeState ← get
-  if let some cached := state.done[id]? then return cached
+  if let some cached := state.done[id]? then
+    if state.active.size + cached.height > maxShapeDepth then
+      throw s!"model registry: signature nesting exceeds {maxShapeDepth} type nodes"
+    return cached
   if state.active.contains id then
     throw "model registry: recursive signature is outside the extension API"
   if state.active.size ≥ maxShapeDepth then
-    throw s!"model registry: signature nesting exceeds {maxShapeDepth} type edges"
+    throw s!"model registry: signature nesting exceeds {maxShapeDepth} type nodes"
   let some t := types[id]? | throw s!"model registry: unknown type {id}"
   modify fun state => {state with active := state.active.insert id}
   let children ← (childTys t).mapM (shapeGo types layouts)
+  let height := 1 + children.foldl (fun h child => max h child.height) 0
+  if height > maxShapeDepth then
+    throw s!"model registry: signature nesting exceeds {maxShapeDepth} type nodes"
   let l := layouts[id]?.getD {}
   let base := shapeJson t l #[]
   let nodes := jsonNodes base + children.foldl (fun n child => n + child.nodes) 0
@@ -113,13 +122,19 @@ private partial def shapeGo (types : Array Ty) (layouts : Array Layout) (id : Ty
   match withinBudget nodes bytes with
   | .error error => throw error
   | .ok () => pure ()
-  let shape : Shape := {json := shapeJson t l (children.map (·.json)), nodes := nodes, bytes := bytes}
+  let shape : Shape := {
+    json := base.setObjVal! "children" (.arr (children.map (·.json)))
+    nodes := nodes
+    bytes := bytes
+    height := height
+  }
   modify fun state => {state with done := state.done.insert id shape, active := state.active.erase id}
   return shape
 
 /-- Completed memoization avoids retraversing shared types. Expanded-node/byte accounting
 also bounds serialization/equality: memoization alone cannot bound expanded schema-1 JSON. -/
-def typeShapes (types : Array Ty) (layouts : Array Layout) (roots : Array TyId) : Except String (Array Json) := do
+private def typeShapesWith (types : Array Ty) (layouts : Array Layout) (roots : Array TyId)
+    (state : ShapeState := {}) : Except String (Array Json × ShapeState) := do
   let action : StateT ShapeState (Except String) (Array Json) := do
     let mut shapes : Array Json := #[]
     let mut nodes := 0
@@ -133,15 +148,21 @@ def typeShapes (types : Array Ty) (layouts : Array Layout) (roots : Array TyId) 
       | .ok () => pure ()
       shapes := shapes.push shape.json
     return shapes
-  pure (← action.run {}).1
+  action.run state
+
+def typeShapes (types : Array Ty) (layouts : Array Layout) (roots : Array TyId) : Except String (Array Json) := do
+  pure (← typeShapesWith types layouts roots).1
 
 def typeShape (types : Array Ty) (layouts : Array Layout) (id : TyId) : Except String Json := do
   pure (← typeShapes types layouts #[id])[0]!
 
 /-- Registry/template inputs are bounded before the existing recursive subset checks.
 This is an explicit extension limit, not a general scalability fix for unregistered AIR. -/
+private def preflightShapes (types : Array Ty) (layouts : Array Layout) : Except String ShapeState := do
+  pure (← typeShapesWith types layouts (Array.range types.size)).2
+
 def preflight (types : Array Ty) (layouts : Array Layout) : Except String Unit := do
-  let _ ← typeShapes types layouts (Array.range types.size)
+  let _ ← preflightShapes types layouts
   pure ()
 
 structure ValueTypeIndex where
@@ -168,16 +189,22 @@ def argumentTypeIds (index : ValueTypeIndex) (args : Array Val) : Except String 
     | .void => require index.voidType "model registry: missing void type"
     | v => require v.constTy? "model registry: untyped/function-valued argument is unsupported"
 
-def signatureWith (f : Func) (index : ValueTypeIndex) (args : Array Val) (ret : TyId) :
+private def signatureWithShapes (f : Func) (index : ValueTypeIndex) (args : Array Val) (ret : TyId)
+    (state : ShapeState := {}) :
     Except String (Array Json × Json) := do
   let ids ← argumentTypeIds index args
-  let shapes ← typeShapes f.types f.layouts (ids.push ret)
+  let (shapes, _) ← typeShapesWith f.types f.layouts (ids.push ret) state
   pure (shapes.extract 0 ids.size, shapes[ids.size]!)
+
+def signatureWith (f : Func) (index : ValueTypeIndex) (args : Array Val) (ret : TyId) :
+    Except String (Array Json × Json) :=
+  signatureWithShapes f index args ret
 
 def signature (f : Func) (args : Array Val) (ret : TyId) : Except String (Array Json × Json) :=
   signatureWith f (valueTypeIndex f.types f.allInsts) args ret
 
 structure CallSite where
+  functionIndex : Nat := 0
   function : Func
   values : ValueTypeIndex
   args : Array Val
@@ -185,15 +212,16 @@ structure CallSite where
   noreturn : Bool
   spawnFn : Option String
 
-/-- Build symbol buckets once; arrays retain function and instruction traversal order. -/
+/-- Prepend into lists, then reverse each bucket once to retain traversal order. -/
 def callIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.run do
-  let mut calls : Std.HashMap String (Array CallSite) := {}
-  for f in funcs do
+  let mut calls : Std.HashMap String (List CallSite) := {}
+  for (f, functionIndex) in funcs.zipIdx do
     let insts := f.allInsts
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name noreturn spawnFn) args := i.op then
         let site : CallSite := {
+          functionIndex := functionIndex
           function := f
           values := values
           args := args
@@ -201,13 +229,14 @@ def callIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.r
           noreturn := noreturn
           spawnFn := spawnFn
         }
-        calls := calls.insert name ((calls.getD name #[]).push site)
-  return calls
+        calls := calls.insert name (site :: calls.getD name [])
+  return calls.fold (fun buckets name sites => buckets.insert name sites.reverse.toArray)
+    ({} : Std.HashMap String (Array CallSite))
 
 /-- Profile uses the same parser and equality policy as AIR. Legacy bindings must explicitly
 select legacy metadata; there is no implicit default or wildcard. -/
 def parse (contents : String) : Except String (Array ModelBinding) := do
-  let j ← Json.parse contents
+  let j ← StrictJson.parse contents
   keys j ["schema", "models"]
   unless (← (← field j "schema").getNat?) == 1 do throw "unsupported model registry schema"
   (← (← field j "models").getArr?).mapM fun m => do
@@ -273,8 +302,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
   if models.isEmpty then return
   unless funcs.all (·.zigVersion == profile.zigVersion) do
     throw "model registry: function Zig version differs from checked profile"
-  unless models.isEmpty do
-    for f in funcs do preflight f.types f.layouts
+  let completedShapes ← funcs.mapM fun f => preflightShapes f.types f.layouts
   let calls := callIndex funcs
   let functionNames := funcs.foldl (fun names f => names.insert f.name) ({} : Std.HashSet String)
   let addressTaken := (fnRefs funcs).foldl (fun names reference => names.insert reference.2) ({} : Std.HashSet String)
@@ -293,10 +321,11 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     for site in sites do
       unless !site.noreturn && site.spawnFn.isNone do
         throw s!"model '{m.symbol}': noreturn/comptime-worker calls are outside the extension API"
-      let (params, ret) ← signatureWith site.function site.values site.args site.ret
+      let (params, ret) ← signatureWithShapes site.function site.values site.args site.ret
+        completedShapes[site.functionIndex]!
       unless params == m.params && ret == m.ret do
         throw s!"{site.function.name}: model '{m.symbol}' has incompatible signature/layout"
-  unless models.isEmpty || (concFunctions funcs).isEmpty do
+  unless (concFunctions funcs).isEmpty do
     throw "external model bindings currently require a sequential program"
 
 /-- Authoring template: missing implementation/contract/policy fields intentionally make

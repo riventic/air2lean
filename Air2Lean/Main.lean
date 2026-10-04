@@ -101,7 +101,7 @@ private def run (args : List String) : IO UInt32 := do
       let models ← match a.modelRegistry with
         | none => pure #[]
         | some path =>
-          let contents ← IO.FS.readFile path
+          let contents ← StrictJson.readFile path
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
