@@ -48,8 +48,41 @@ print("thread tuple fresh AIR inventory passed")
 PYEXPORT
     exit
     ;;
+  --adapter-contract)
+    [ "$#" -eq 2 ] || { echo 'usage: check.sh --adapter-contract OUTPUT_DIR' >&2; exit 2; }
+    : "${AIR2LEAN_ZIG_AIR:?set matching patched 0.16 AIR compiler}"
+    mkdir -p "$2"
+    [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'adapter output must be empty' >&2; exit 1; }
+    adapter_output=$(cd -- "$2" && pwd)
+    cp tests/roadmap/thread-tuples/adapter-contract.zig "$adapter_output/thread_adapter_contract.zig"
+    mkdir "$adapter_output/air"
+    ZIG_AIR_JSON_DIR="$adapter_output/air" \
+    ZIG_AIR_JSON_FILTER='thread_adapter_contract.mutableCapture,thread_adapter_contract.strongCapture,thread_adapter_contract.weakCapture,thread_adapter_contract.sliceWorker' \
+      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+      -target x86_64-linux -mcpu=baseline "$adapter_output/thread_adapter_contract.zig" --cache-dir "$adapter_output/cache"
+    python3 - "$adapter_output/air" <<'PYADAPTER'
+import json,sys
+from pathlib import Path
+files = [json.loads(p.read_text()) for p in Path(sys.argv[1]).glob("*.json")]
+expected = {"thread_adapter_contract." + name for name in ("mutableCapture", "strongCapture", "weakCapture", "sliceWorker")}
+if len(files) != 4 or {f["name"] for f in files} != expected:
+    raise SystemExit("adapter AIR function inventory differs from the four required roots")
+if any(f["zig_version"] != "0.16.0" or f["schema"] != 11 or f.get("target_endian") != "little" for f in files):
+    raise SystemExit("adapter AIR has a wrong version/schema/endianness")
+PYADAPTER
+    translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
+    "$translator" "$adapter_output/air" -o "$adapter_output/Gen.lean" \
+      --namespace ThreadAdapterContract --prefix thread_adapter_contract.
+    if [ -n "${AIR2LEAN_LEAN:-}" ]; then
+      "$AIR2LEAN_LEAN" "$adapter_output/Gen.lean"
+    else
+      lake env lean "$adapter_output/Gen.lean"
+    fi
+    echo 'fresh adapter source export, translation and kernel gate passed'
+    exit
+    ;;
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR|--adapter-contract OUTPUT_DIR]' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/thread-tuples/check-artifacts.py
 status=0
@@ -85,11 +118,8 @@ if source.count(old) != 1:
     raise SystemExit("tuple order mutation did not find exactly one dispatcher")
 Path(sys.argv[2]).write_text(source.replace(old, "worker capture0 capture2 capture1"))
 PYMUTATE
-if "${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1; then
-  echo 'tuple order mutation unexpectedly kernel checked' >&2; exit 1
-fi
-# The baseline has checked; require a failed equality proof rather than an import/tool error.
-if ! rg -q 'rfl|type mismatch' "$work/mutation.log"; then
-  cat "$work/mutation.log" >&2; echo 'mutation failed for an unrelated reason' >&2; exit 1
-fi
+mutation_status=0
+"${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
+# Require normal exit 1 and only the located dispatcher equality's rfl diagnostic.
+python3 tests/roadmap/thread-tuples/classify_mutant.py "$mutation_status" "$work/mutation.log" "$work/Mutated.lean"
 echo 'thread tuple artifact, runtime, signature, slice, and order mutation gates passed'

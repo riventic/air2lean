@@ -35,7 +35,7 @@ At source revision `61c7ced`, the root serialized validation queue passed the fr
 - `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-pipeline-repaired.log`
 - `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-native-first.log`
 
-CI runs the complete scoped gate only in the existing full nonmutation 0.16.0 Linux job. It checks matching patched/stock compiler versions, exports into a fresh `RUNNER_TEMP` directory, compares the fresh translation with the checked generated file, and runs the native and artifact gates sequentially. Fresh temporary evidence is cleaned up; this gate adds no cache or upload. Linux CI and 0.14.1/0.15.2 live export/native qualification remain pending.
+CI runs the complete scoped gate only in the existing full nonmutation 0.16.0 Linux job. It checks matching patched/stock compiler versions, exports into a fresh `RUNNER_TEMP` directory, compares the fresh translation with the checked generated file, and runs the native and artifact gates sequentially. A separate fresh four-root adapter export is translated and kernel checked with the same patched compiler. All scoped shell gates are invoked through `bash`. Fresh temporary evidence is cleaned up; this gate adds no cache or upload. Linux CI and 0.14.1/0.15.2 live export/native qualification remain pending.
 
 This is partial C01 evidence for complete zero/multiple-field captures and explicit ownership obligations at the accepted spawn boundaries. Sixteen schedules are finite samples. The change makes no detached-thread, TLS, foreign-memory or general lifecycle claim.
 
@@ -45,6 +45,7 @@ The scripts call compilers sequentially. During coordinated development, only th
 
 ```bash
 python3 tests/roadmap/thread-tuples/guard-tests.py
+python3 tests/roadmap/thread-tuples/mutation-tests.py
 python3 tests/roadmap/thread-tuples/check-artifacts.py
 bash tests/roadmap/thread-tuples/check.sh --check-artifacts
 
@@ -54,6 +55,8 @@ AIR2LEAN_ZIG_NATIVE=/path/to/stock-host-zig \
 AIR2LEAN_ZIG_AIR=/path/to/qualified-patched-zig \
   bash tests/roadmap/thread-tuples/check.sh --export /absolute/empty/output
 ```
+
+The tuple-order mutant is counted only for normal Lean exit 1 with exactly one located `rfl` non-definitional-equality diagnostic at the dispatcher equality assertion. Import, I/O, syntax, signal exits and mixed/unlocated errors fail the gate. Eleven compiler-free adversarial/CI invocation tests accompany this classifier. The pinned Lean tactic source defines the expected diagnostic; actual root classification must pass before claiming the revised gate result.
 
 The artifact gate regenerates Lean from checked AIR and compares it with checked `Gen.lean`, then checks the generated definitions, proofs, runtime samples, pipeline fixtures, and mutation. It needs no production repository and no Zig compiler. `AIR2LEAN_TRANSLATOR` can select an already-built translator; `AIR2LEAN_LEAN` can select the exact Lean binary, otherwise the gate uses `lake env lean`.
 
