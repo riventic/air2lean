@@ -32,6 +32,20 @@ TARGET = function("target", [VOID, integer(), NORETURN], [1], 1, [
     inst(0, "arg", 1, param=0), inst(1, "ret", 2, [dict(inst=0)])])
 
 
+def invoke(binary, air, output, error=None, timeout=10):
+    output.write_text("sentinel\n")
+    result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
+                            text=True, capture_output=True, check=False, timeout=timeout)
+    if error is not None:
+        assert result.returncode == 1, (error, result.returncode, result.stderr)
+        assert error in result.stderr, (error, result.stderr)
+        assert output.read_text() == "sentinel\n", "rejected input replaced output"
+    else:
+        assert result.returncode == 0, result.stderr
+        assert output.read_text().startswith("-- air2lean-profile: ")
+    return 1
+
+
 def run(binary, documents, error=None):
     with tempfile.TemporaryDirectory(prefix="air2lean-input-validation-") as directory:
         directory = Path(directory)
@@ -40,38 +54,18 @@ def run(binary, documents, error=None):
         for k, document in enumerate(documents):
             text = document if isinstance(document, str) else json.dumps(document, ensure_ascii=False)
             (air / f"{k}.json").write_text(text)
-        output = directory / "Gen.lean"
-        output.write_text("sentinel\n")
-        result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
-                                text=True, capture_output=True, check=False)
-        if error is not None:
-            assert result.returncode == 1, (error, result.returncode, result.stderr)
-            assert error in result.stderr, (error, result.stderr)
-            assert output.read_text() == "sentinel\n", "rejected input replaced output"
-        else:
-            assert result.returncode == 0, result.stderr
-            assert output.read_text().startswith("-- air2lean-profile: ")
-    return 1
+        return invoke(binary, air, directory / "Gen.lean", error)
 
 
-
-def run_sparse(binary):
-    # A terabyte logical file must be rejected from metadata, without reading its zeros.
+def run_sparse(binary, size=1 << 40):
+    # Reject oversized logical files from metadata, without reading their sparse zeros.
     with tempfile.TemporaryDirectory(prefix="air2lean-input-validation-sparse-") as directory:
         directory = Path(directory)
         air = directory / "air"
         air.mkdir()
         with (air / "huge.json").open("wb") as source:
-            source.truncate(1 << 40)
-        output = directory / "Gen.lean"
-        output.write_text("sentinel\n")
-        result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
-                                text=True, capture_output=True, check=False, timeout=10)
-        assert result.returncode == 1, (result.returncode, result.stderr)
-        assert "UTF-8 bytes" in result.stderr, result.stderr
-        assert output.read_text() == "sentinel\n", "sparse rejection replaced output"
-    return 1
-
+            source.truncate(size)
+        return invoke(binary, air, directory / "Gen.lean", "UTF-8 bytes", timeout=10)
 
 
 def run_file_kind(binary, kind):
@@ -88,18 +82,8 @@ def run_file_kind(binary, kind):
             target = directory / "target.json"
             target.write_text(json.dumps(TARGET))
             source.symlink_to(target)
-        output = directory / "Gen.lean"
-        output.write_text("sentinel\n")
-        result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
-                                text=True, capture_output=True, check=False, timeout=3)
-        if kind == "fifo":
-            assert result.returncode == 1, (result.returncode, result.stderr)
-            assert "must be a regular file" in result.stderr, result.stderr
-            assert output.read_text() == "sentinel\n", "FIFO rejection replaced output"
-        else:
-            assert result.returncode == 0, result.stderr
-            assert output.read_text().startswith("-- air2lean-profile: ")
-    return 1
+        error = "must be a regular file" if kind == "fifo" else None
+        return invoke(binary, air, directory / "Gen.lean", error, timeout=3)
 
 
 def global_(name, ty, value, const=False):
@@ -364,7 +348,7 @@ def main():
     chain["ret"] = 0
     chain["body"] = []
     checks += run(binary, [chain], "value type traversal exceeds")
-    checks += run(binary, [raw[:-1] + ',"extra":"' + 'a' * (64 * 1024 * 1024) + '"}'], "UTF-8 bytes")
+    checks += run_sparse(binary, 64 * 1024 * 1024 + 1)
     mutate = copy.deepcopy(TARGET)
     mutate["types"][1] = dict(k="float", bits=1048576)
     mutate["body"] = [inst(0, "arg", 1, param=0), inst(1, "ret", 2,

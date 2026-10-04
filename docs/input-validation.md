@@ -13,8 +13,9 @@ per-file limit plus one byte before UTF-8 decoding, covering short reads and fil
 The 64 MiB policy applies to each file; it does not cap the sum of retained files.
 Each file is limited to 64 MiB of UTF-8, 128 nested JSON containers, 1,024 characters in a
 numeric token and exponent magnitude 4,096. Value-type and checked type traversal is limited
-to 256 levels. Integer widths and packed backing integers cannot exceed Zig’s 65,535-bit
-limit; decimal integer literal strings cannot exceed 32,768 characters. Integer constants and enum tags
+to 256 levels. Integer type widths and the backing widths of packed integer constants cannot
+exceed Zig’s 65,535-bit limit; this does not impose a blanket width cap on aggregate types.
+Decimal integer literal strings cannot exceed 32,768 characters. Integer constants and enum tags
 must fit their declared integer widths. Float bit patterns, enum constants and named errors
 must fit their own types too; duplicate field names/tags and a non-integer enum tag
 or non-error-set error-union set type are rejected. These are supported-input limits, with explicit errors rather than substituted
@@ -70,6 +71,7 @@ file. The regression drivers are `tests/roadmap/input-validation/Validation.lean
 Lean evaluation of direct API/parser checks) and `test_cli.py` (positive/negative mutations
 against a previously built translator). Neither is presented as a kernel proof of parser or
 whole-program validation correctness. The direct API cases include stream-growth limits,
-shared packed-width graphs, and enum integer boundaries; the CLI includes huge sparse-file
-FIFO/symlink controls, and unsupported-float rejection. The root's serialized compiler queue runs them after
-building the modified translator.
+shared packed-width graphs, and enum integer boundaries; the CLI includes sparse oversized-file
+cases, FIFO rejection, regular-file symlink acceptance, and unsupported-float rejection. Each
+CLI invocation has a ten-second timeout; file-kind cases use three seconds. The root's
+serialized compiler queue runs them after building the modified translator.
