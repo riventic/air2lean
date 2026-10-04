@@ -175,6 +175,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 `expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
+  if calleeName == "debug.defaultPanic" then some ".panic" else
   if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
