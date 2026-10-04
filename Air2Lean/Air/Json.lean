@@ -614,16 +614,16 @@ def parseFunc (j : Json) : Except String RawFunc := do
     | none => pure #[]
   let globals ← globalsJ.mapM (parseGlobal name types)
   return {
-    schema := schema
-    zigVersion := zigVersion
-    profile := profile
-    name := name
-    params := params
-    ret := ret
-    body := body
-    types := types
-    layouts := layouts
-    globals := globals
+    schema
+    zigVersion
+    profile
+    name
+    params
+    ret
+    body
+    types
+    layouts
+    globals
   }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
