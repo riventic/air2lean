@@ -58,6 +58,9 @@ ZIG_AIR_JSON_DIR="$WORK/air" ZIG_AIR_JSON_FILTER=export_names. \
   "$PATCHED_ZIG" build-obj tests/roadmap/export-names/export_names.zig \
   -O ReleaseSafe -fno-error-tracing -fno-emit-bin --cache-dir "$WORK/cache-1"
 python3 tests/roadmap/export-names/check_dump.py "$WORK/air"
+lake exe air2lean "$WORK/air" -o "$WORK/Gen.lean" \
+  --namespace ExportNames --prefix export_names. --profile abi64-le-v1
+lake env lean "$WORK/Gen.lean"
 python3 tests/roadmap/export-names/check_dump.py "$WORK/air" --mode seed-reexport
 ZIG_AIR_JSON_DIR="$WORK/air" ZIG_AIR_JSON_FILTER=export_names. \
   "$PATCHED_ZIG" build-obj tests/roadmap/export-names/export_names.zig \
