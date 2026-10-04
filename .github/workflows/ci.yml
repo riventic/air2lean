@@ -76,6 +76,9 @@ jobs:
       - name: Shell check regressions
         run: scripts/review-checks.sh
 
+      - name: First-use workflow regressions
+        run: python3 tests/usability/workflow.py
+
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
       # zig-patch/versions.toml's [ci.host-zig."<version>"] table.
@@ -140,6 +143,9 @@ jobs:
 
       - name: Build runtime library + translator
         run: lake build
+
+      - name: First-use CLI diagnostics
+        run: python3 tests/usability/cli.py
 
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
