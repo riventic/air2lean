@@ -76,8 +76,12 @@ fail matches, unspecified outcomes, caps or mismatches, and its libm self-check 
 320/320 samples. The appended record binds each command, code hash and distinct log path
 to that checked revision, including separate native-version logs even where their contents
 have the same hash. The default-cap cleanup and guard-order optimization have now been
-rechecked. Reference Linux CI, the fixtures/CI/documentation second review and universal
-acceptance review remain pending, so full M03 qualification remains false. These selected
+rechecked. After the fixture-only cleanup, revision `989983de97216a7d09632a3bcc91088f716714c5`
+also passed ten exact native policy comparisons under each version. The coordinator
+completed eight independent review angles and candidate verification per disjoint scope,
+fixed the confirmed cleanups, and found no remaining findings in the final cleanup delta.
+Reference Linux CI and universal acceptance review remain pending, so full M03
+qualification remains false. These selected
 model-policy checks do not establish general allocator or cross-target correspondence.
 
 The gate explicitly builds `ZigLean.Sep.Alloc` before compiling its client fixture;

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "roadmap_id": "M03",
-  "status": "locally_checked_pending_ci_and_final_review",
+  "status": "locally_checked_and_reviewed_pending_linux_ci_and_acceptance",
   "scope": {
     "policy": "per-request cap and finite zero-based failure-index list additive to legacy failAt",
     "default_max_bytes": 1048576,
@@ -268,7 +268,7 @@
       "scripts/mutate.sh": "e96c0af7343d52d0fc6d95892a590d72230c56beb7a5ef912cba2e0b0f26e69a",
       ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
     },
-    "latest_locally_checked_revision": "6cf2011b33ee242be653b9fb2137661328307bd0",
+    "latest_locally_checked_revision": "989983de97216a7d09632a3bcc91088f716714c5",
     "historical_review_changes": [
       {
         "checked_revision": "6cf2011b33ee242be653b9fb2137661328307bd0",
@@ -479,7 +479,6 @@
     }
   ],
   "pending": [
-    "CI and fixtures/documentation second independent review",
     "Reference Linux CI for Zig 0.16.0/0.15.2",
     "Universal acceptance review"
   ],
@@ -677,6 +676,124 @@
           }
         }
       ]
+    },
+    {
+      "revision": "989983de97216a7d09632a3bcc91088f716714c5",
+      "cwd": "/Users/konstantinrr/.codex/worktrees/roadmap-allocation-policy/air2lean",
+      "date": "2026-10-04",
+      "code_sha256": {
+        "ZigLean/Mem/Basic.lean": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
+        "ZigLean/Mem/Alloc.lean": "11fe18625c91709a68984d9e07fa24e6216d2c0bd0080c9d483d9a6bf5bf8631",
+        "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+        "tests/diff/common.zig": "0cff6589b011d1ae24a7db194c0c926c0f1413fcb5d6a320f09b626f4f73c35b",
+        "tests/diff/Diff.lean": "3903da2bed2f02316c4e801689a7a71e053e6ff815033dd888eebc82c1e7f6be",
+        "tests/diff/lists/harness.zig": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
+        "tests/diff/lists/inputs/sumRange.jsonl": "8f6316ebcf07cb012e3486d5c9ce0d294dd2b73d203f50489768eba0497b51bb",
+        "tests/roadmap/allocation-policy/Check.lean": "7113f34252a4c4c07e8059c65209aca3bd674bb360dfbbbef8903bd2f181fcd9",
+        "tests/roadmap/allocation-policy/fixture.zig": "dacde4e6f873f09f9e82858f50e9ca15b0803e48da59019d110110c6ecff5561",
+        "tests/roadmap/allocation-policy/check.sh": "532ef02c056c57b497120d76af942592588fb0334491bba50eb4198a39098bd4",
+        "tests/roadmap/allocation-policy/mutations.py": "80eb157bbb65c8a3dd1d8df8d29216d3fbc760fd8b0533286616c176a7fb7b58",
+        "tests/roadmap/allocation-policy/compare.py": "2c90d74517f1c71f33a49b0642c3f741bea1921cb18513a87c1189fa6ee6b24f",
+        "tests/roadmap/allocation-policy/static.py": "f43a57298a870859282680e29f1207fc83b799f99499d92fba61914e9d820807",
+        "scripts/mutate.sh": "3686066a7e850e98397c341d5de036ad62eb1125ef0881ddb35d3b744d39ec12",
+        ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
+      },
+      "queue_results": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/queue16-results.json",
+        "sha256": "319f2d3631f40fb2e8b3ba3a8132be43a560366e86c0bd29b6fbb089f7173dd6",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "queue_commands": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/queue16.py",
+        "sha256": "e93efb064c0709aa60989ee91719d17f78c9c3bdf4fb7e24e14444fd50989b76",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "execution_controls": {
+        "coordinator_only_compilers": true,
+        "global_compiler_guard": true,
+        "sampled_memory_limit_mib": 8192,
+        "time_limit_seconds": 900,
+        "limits_are_operational_controls_not_product_guarantees": true
+      },
+      "checks": [
+        {
+          "phase": "allocation-policy-harness-native16",
+          "command": [
+            "env",
+            "AIR2LEAN_ZIG=/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig",
+            "bash",
+            "tests/roadmap/allocation-policy/check.sh"
+          ],
+          "status": "pass",
+          "profile": {
+            "zig": "0.16.0",
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-harness-native16.log",
+            "sha256": "b94c01ff2f90d58a616e6f9dff003b6d734904ee8ef0907f81f4ab8afa6017d9",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "kernel_build_jobs": 34,
+            "exact_comparisons": 10,
+            "exclusions": 0,
+            "capped_searches": 0
+          },
+          "coordinator_reported_metrics": {
+            "elapsed_seconds": 9.3,
+            "sampled_peak_memory_mib": 1189
+          }
+        },
+        {
+          "phase": "allocation-policy-harness-native15",
+          "command": [
+            "env",
+            "AIR2LEAN_ZIG=/opt/homebrew/bin/zig",
+            "bash",
+            "tests/roadmap/allocation-policy/check.sh"
+          ],
+          "status": "pass",
+          "profile": {
+            "zig": "0.15.2",
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-harness-native15.log",
+            "sha256": "b94c01ff2f90d58a616e6f9dff003b6d734904ee8ef0907f81f4ab8afa6017d9",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "kernel_build_jobs": 34,
+            "exact_comparisons": 10,
+            "exclusions": 0,
+            "capped_searches": 0
+          },
+          "coordinator_reported_metrics": {
+            "elapsed_seconds": 5.2,
+            "sampled_peak_memory_mib": 255
+          }
+        }
+      ]
     }
-  ]
+  ],
+  "review": {
+    "status": "complete",
+    "source_revision": "989983de97216a7d09632a3bcc91088f716714c5",
+    "method": "Eight independent review angles and candidate verification per disjoint scope; final low-effort cleanup-delta review reported no remaining findings.",
+    "scopes": [
+      "Core allocator semantics and proofs",
+      "Evidence/report records",
+      "Fixtures, CI and documentation"
+    ],
+    "confirmed_cleanup_outcomes": "fixed"
+  }
 }
