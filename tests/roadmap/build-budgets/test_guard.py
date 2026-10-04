@@ -20,6 +20,10 @@ spec = importlib.util.spec_from_file_location("build_guard", GUARD)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
+# Longer than the coordinator's 12-second timeout and bounded PID waits. Tests
+# assert removal before this deadline; expiry only protects a broken harness.
+FIXTURE_LIFETIME = 30
+
 
 class GuardTests(unittest.TestCase):
     def setUp(self):
@@ -27,11 +31,58 @@ class GuardTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
         self.counter = 0
+        self.fixture_counter = 0
+
+    def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
+        self.fixture_counter += 1
+        token = str(self.root / f"owned-fixture-{self.fixture_counter}")
+        self.addCleanup(self.cleanup_fixture, token)
+        support = f'''import time
+fixture_token = {token!r}
+fixture_deadline = time.monotonic() + {lifetime!r}
+def fixture_pause():
+    while time.monotonic() < fixture_deadline:
+        time.sleep(min(0.01, max(0, fixture_deadline - time.monotonic())))
+'''
+        # Keep ps's command field on one line, including after fork/setsid.
+        return f"exec({(support + source)!r})"
+
+    def cleanup_fixture(self, token):
+        # Independent of every guard observer/cleanup function under test. A
+        # fresh, unique command token identifies even reparented/detached forks;
+        # never signal the test runner's own process group.
+        for _ in range(3):
+            rows = subprocess.run(["ps", "-axo", "pid=,pgid=,stat=,command="],
+                                  capture_output=True, text=True, check=True,
+                                  timeout=2, env={**os.environ, "LC_ALL": "C"})
+            groups = set()
+            for line in rows.stdout.splitlines():
+                fields = line.split(None, 3)
+                if len(fields) == 4 and token in fields[3] and not fields[2].startswith("Z"):
+                    group = int(fields[1])
+                    if group > 0 and group != os.getpgrp():
+                        groups.add(group)
+            if not groups:
+                return
+            for group in groups:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            time.sleep(0.01)
+        self.fail("test-owned fixture survived independent cleanup")
+
+    def cleanup_process(self, child):
+        if child.poll() is None:
+            child.kill()
+        child.communicate(timeout=2)
 
     def command(self, source, *options, cwd=None):
         self.counter += 1
         report = self.root / f"report{self.counter}.json"
         log = self.root / f"log{self.counter}"
+        if "fixture_pause()" in source:
+            source = self.fixture_source(source)
         args = [sys.executable, str(GUARD), "--cwd", str(cwd or self.root),
                 "--lock", str(self.root / "shared.lock"), "--report", str(report),
                 "--log", str(log), "--rss-mib", "32", "--timeout", "5",
@@ -86,15 +137,66 @@ import os, signal, time
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 pid = os.fork()
 if pid == 0:
-    while True: time.sleep(1)
+    fixture_pause()
+    os._exit(0)
 open({str(pids)!r}, 'w').write(str(os.getpid()) + ' ' + str(pid))
-while True: time.sleep(1)
+fixture_pause()
 '''
+        started = time.monotonic()
         result, report, _ = self.run_guard(source, "--timeout", "0.3")
         self.assertEqual((result.returncode, report["outcome"]), (124, "timeout"), result.stderr)
         self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
         result, _, _ = self.run_guard("pass")
         self.assertEqual(result.returncode, 0)
+
+    def test_fixture_self_expiry_is_inherited_by_forks(self):
+        pids = self.root / "expiry-pids"
+        source = self.fixture_source(f'''
+import os, signal
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    fixture_pause()
+    os._exit(0)
+open({str(pids)!r}, 'w').write(str(os.getpid()) + ' ' + str(pid))
+fixture_pause()
+''', lifetime=0.15)
+        child = subprocess.Popen([sys.executable, "-c", source], start_new_session=True)
+        self.addCleanup(self.cleanup_process, child)
+        self.wait_file(pids)
+        child.wait(timeout=2)
+        deadline = time.monotonic() + 2
+        while any(self.live(int(pid)) for pid in pids.read_text().split()) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
+
+    def test_independent_fixture_cleanup_survives_coordinator_crash(self):
+        pids = self.root / "crash-pids"
+        args, _, _ = self.command(f'''
+import os, signal
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    fixture_pause()
+    os._exit(0)
+open({str(pids)!r}, 'w').write(str(os.getpid()) + ' ' + str(pid))
+fixture_pause()
+''')
+        token = str(self.root / f"owned-fixture-{self.fixture_counter}")
+        started = time.monotonic()
+        coordinator = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, coordinator)
+        self.wait_file(pids)
+        coordinator.kill()
+        coordinator.communicate(timeout=2)
+        self.assertTrue(all(self.live(int(pid)) for pid in pids.read_text().split()))
+        with mock.patch.object(guard, "stop_tree", side_effect=AssertionError("cleanup under test")), \
+                mock.patch.object(guard, "processes", side_effect=AssertionError("observer under test")):
+            self.cleanup_fixture(token)
+        self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
 
     def test_sampled_memory_limit_without_large_allocations(self):
         result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
@@ -103,10 +205,10 @@ while True: time.sleep(1)
 
     def test_global_lock_across_working_directories_and_cancellation(self):
         ready = self.root / "ready"
-        source = f'import pathlib,time; pathlib.Path({str(ready)!r}).touch(); time.sleep(20)'
+        source = f'import pathlib; pathlib.Path({str(ready)!r}).touch(); fixture_pause()'
         args, report, _ = self.command(source)
         first = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.addCleanup(lambda: first.poll() is None and first.kill())
+        self.addCleanup(self.cleanup_process, first)
         self.wait_file(ready)
         other = self.root / "other-worktree"
         other.mkdir()
@@ -143,7 +245,7 @@ while True: time.sleep(1)
 import os, time
 pid = os.fork()
 if pid == 0:
-    time.sleep(20)
+    fixture_pause()
 else:
     open({str(pidfile)!r}, 'w').write(str(pid))
 '''
@@ -158,19 +260,18 @@ import os, time
 pid = os.fork()
 if pid == 0:
     os.setsid()
-    time.sleep(20)
+    fixture_pause()
 else:
     open({str(pidfile)!r}, 'w').write(str(pid))
-    time.sleep(20)
+    fixture_pause()
 '''
         result, report, _ = self.run_guard(source, "--timeout", "0.4")
         self.assertEqual((result.returncode, report["outcome"]), (124, "timeout"))
         self.assertFalse(self.live(int(pidfile.read_text())))
 
     def test_observer_failure_cleans_group(self):
-        a = guard.parse_args(["--cwd", str(self.root), "--lock", str(self.root / "lock"),
-                              "--report", str(self.root / "report.json"), "--log", str(self.root / "log"),
-                              "--grace", "0.02", "--", sys.executable, "-c", "import time; time.sleep(20)"])
+        args, _, _ = self.command("fixture_pause()", "--grace", "0.02")
+        a = guard.parse_args(args[2:])
         with mock.patch.object(guard, "processes", side_effect=RuntimeError("ps failed")):
             report = guard.run(a)
         self.assertEqual(report["exit_code"], 70)
@@ -301,16 +402,16 @@ import os, signal, time
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 pid = os.fork()
 if pid == 0:
-    while True: time.sleep(1)
+    fixture_pause()
+    os._exit(0)
 open({str(pidfile)!r}, 'w').write(str(pid))
 os._exit(0)
 '''
+        source = self.fixture_source(source)
+        started = time.monotonic()
         child = subprocess.Popen([sys.executable, "-c", source], start_new_session=True)
         tree = guard.Tree(child.pid)
-        def cleanup():
-            guard.stop_tree(child, tree, 0.01)
-            child.wait(timeout=5)
-        self.addCleanup(cleanup)
+        self.addCleanup(self.cleanup_process, child)
         self.wait_file(pidfile)
         deadline = time.monotonic() + 5
         while guard.peek_status(child) is None and time.monotonic() < deadline:
@@ -327,17 +428,18 @@ os._exit(0)
         while self.live(int(pidfile.read_text())) and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertFalse(self.live(int(pidfile.read_text())))
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
 
     def test_final_cleanup_only_skips_a_confirmed_empty_tree(self):
         args, _, _ = self.command("pass")
         with mock.patch.object(guard, "stop_tree", wraps=guard.stop_tree) as stops:
             self.assertEqual(guard.run(guard.parse_args(args[2:]))["exit_code"], 0)
             self.assertEqual(stops.call_count, 0)
-        args, _, _ = self.command("import time; time.sleep(20)", "--timeout", "0.1")
+        args, _, _ = self.command("fixture_pause()", "--timeout", "0.1")
         with mock.patch.object(guard, "stop_tree", wraps=guard.stop_tree) as stops:
             self.assertEqual(guard.run(guard.parse_args(args[2:]))["exit_code"], 124)
             self.assertEqual(stops.call_count, 1)
-        args, _, _ = self.command("import time; time.sleep(20)", "--timeout", "0.1")
+        args, _, _ = self.command("fixture_pause()", "--timeout", "0.1")
         original_stop = guard.stop_tree
         results = []
         def uncertain_once(*args):
@@ -352,7 +454,7 @@ os._exit(0)
 
     def test_truncated_alias_leaves_trigger_workload_termination(self):
         alias = "zig-long-configured-compiler"
-        args, _, _ = self.command("import time; time.sleep(20)", "--zig-name", alias)
+        args, _, _ = self.command("fixture_pause()", "--zig-name", alias)
         original_processes = guard.processes
         def sampled_leaves():
             rows = original_processes()
