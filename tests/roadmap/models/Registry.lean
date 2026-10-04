@@ -49,7 +49,7 @@ def main (args : List String) : IO Unit := do
     "theorem client_result {x before result after}\n" ++
     "    (run : client x before = some (.ok (result, after))) : result = x := by\n" ++
     "  have modelRun : RegistryExample.identity x before = some (.ok (result, after)) := by\n" ++
-    "    simpa [client, air2lean_model_0, Zig.callM, StateT.run', StateT.bind, StateT.pure] using run\n" ++
+    "    simpa [client, air2lean_model_0, RegistryExample.identity, Zig.callM, StateT.run', StateT.bind, StateT.pure, StateT.lift, StateT.map] using run\n" ++
     "  exact (air2lean_model_0_contract.success air2lean_model_0_evidence (by trivial) modelRun).1\n" ++
     "end ExternalClient\n")
   IO.println "model registry tests passed; generated typed client obligation"
