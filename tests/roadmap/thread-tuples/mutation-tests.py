@@ -67,6 +67,14 @@ class CIInvocation(unittest.TestCase):
         self.assertTrue(all(line.startswith("bash tests/roadmap/thread-tuples/check.sh ") for line in invocations))
         self.assertEqual({line.split()[2] for line in invocations},
                          {"--export", "--native", "--check-artifacts", "--adapter-contract"})
+        # The scoped ownership proofs run before the general Proofs build in CI.
+        start = workflow.index("      - name: Thread tuple source and ownership gate\n")
+        end = workflow.index("      - name: Golden AIR, translate, build, differential test\n", start)
+        gate = [line.strip() for line in workflow[start:end].splitlines()]
+        prerequisite = "lake build ZigLean.Conc.Csl ZigLean.Sep"
+        self.assertEqual(gate.count(prerequisite), 1)
+        self.assertLess(gate.index(prerequisite),
+                        gate.index("bash tests/roadmap/thread-tuples/check.sh --check-artifacts"))
 
 class AdapterEnvironment(unittest.TestCase):
     def setUp(self):
