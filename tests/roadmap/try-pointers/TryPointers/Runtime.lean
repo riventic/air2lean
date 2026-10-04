@@ -100,6 +100,31 @@ private def discardedUndefined : MemM (Array Nat) := do
   loadDiscardBytes 4 4 p
   pure ((← get).footprint.map (·.len))
 
+-- Compare the complete observable Result and memory representation, including every
+-- clock and footprint field. The universal loadDiscardBytes_eq lemma covers all states.
+private def discardMatchesRaw (n a : Nat) (p : Ptr) (m : Mem) : Bool :=
+  reprStr ((loadDiscardBytes n a p).run m).run ==
+    reprStr (((do let _ ← loadBytes p n a; pure ()) : MemM Unit).run m).run
+
+private def discardedEquivalent : MemM Bool := do
+  let p ← alloc .heap 4 4
+  let m ← get
+  let prior : FootprintEntry := {
+    tid := 0
+    clock := #[1, 0]
+    block := p.block.getD 0
+    off := 0
+    len := 4
+    kind := .write }
+  let raced : Mem := { m with
+    current := 1
+    clocks := #[#[1, 0], #[0, 0]]
+    threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }]
+    footprint := #[prior] }
+  pure (discardMatchesRaw 4 4 p m && discardMatchesRaw 4 4 p raced &&
+    discardMatchesRaw 4 4 (p.add 1) m && discardMatchesRaw 5 4 p m &&
+    discardMatchesRaw 4 4 default m && discardMatchesRaw 4 4 (p.add 1) raced)
+
 private def discardedRace : MemM Unit := do
   let p ← alloc .heap 4 4
   let prior : FootprintEntry := {
@@ -135,4 +160,6 @@ def main : IO Unit := do
   check "whole read and tag read retain both footprints" (value readFootprints) (some (.ok #[4, 2]))
   check "discarded undefined bytes still record full read" (value discardedUndefined) (some (.ok #[4]))
   check "discarded read still rejects races" (value discardedRace) (some (.error .illegal))
+  check "direct discarded access equals raw read for successes and errors"
+    (value discardedEquivalent) (some (.ok true))
   IO.println "try pointer source-generated runtime regressions passed"

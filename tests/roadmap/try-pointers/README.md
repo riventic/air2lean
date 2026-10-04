@@ -6,14 +6,20 @@ through `Zig.tryPayloadPtr`; on success it returns `Zig.errPayloadPtr` in the sa
 allocation. The pointer-try operation neither decodes the payload nor sets the tag. Compiler AIR
 can include an earlier unused whole-union load: translation retains the full byte read,
 bounds/alignment/race checks and access record through `loadDiscardBytes`, without
-decoding an SSA value that has no runtime uses. Used loads retain their typed decoder.
+decoding an SSA value that has no runtime uses or allocating an extracted byte array.
+The direct access uses the same validation and race-recording operations as `loadBytes`;
+`loadDiscardBytes_eq` proves equality with a raw read whose result is discarded for every
+memory state, including failures and clock/footprint changes. No performance gain is claimed
+without measurement. Used loads retain their typed decoder.
 Error propagation and cleanup
 execute the compiler's original body, including `defer`, `errdefer` and the cold hint.
 
 The accepted operand is a single pointer to a modeled error union. Its result must be a
 single pointer to the same payload with matching constness and explicit pointer alignment.
-The error body must have a visible function exit and may not branch outside itself;
-terminal loops or exhaustive switches with no explicit else are conservatively rejected.
+Every reachable error-body path must exit the function and may not branch outside itself.
+Analysis stops at the first terminator, and a branch to a local block resumes that block's
+continuation; a dead return/trap after that branch cannot certify an exit. Falling-through
+bodies, loops and switches with no explicit else are conservatively rejected.
 Existing layout/encoding
 checks still apply: the current memory model uses a two-byte error code, a 64-bit
 little-endian pointer ABI, and payload offsets from `errUnionOffsets`. Unmodeled error
@@ -55,7 +61,9 @@ hashes alone do not attest that export or proof checking occurred.
 The artifact gate regenerates Lean, checks byte identity, kernel-checks memory rules,
 runs source-generated alias/error/cleanup tests and synthetic parser/checker/emitter
 cases. The undefined-payload case checks that taking its address does not decode it. Extra
-regressions pin the full-object bounds/alignment/race checks and exact read footprints.
+regressions pin the full-object bounds/alignment/race checks and exact read footprints,
+compare direct discarded access with the former raw read on successes and errors, and
+exercise reachable nested block branches and scalar-signature pointer-try memory classification.
 The native fixture checks the same concrete alias, error and cleanup observations.
 `TryPointers/Proofs.lean` connects the actual generated `payload8` and `payload64`
 definitions to a program that retains the whole-object read and the extra tag read on

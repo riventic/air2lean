@@ -40,6 +40,7 @@ cmp "$work/TryPointers/Gen.lean" tests/roadmap/try-pointers/TryPointers/Gen.lean
 "${lean_cmd[@]}" --run tests/roadmap/try-pointers/Pipeline.lean "$work/Synthetic.lean"
 "${lean_cmd[@]}" --run "$work/Synthetic.lean"
 "${lean_cmd[@]}" --run "$work/Synthetic.lean.loads.lean"
+"${lean_cmd[@]}" --run "$work/Synthetic.lean.memory.lean"
 # Compile a well-typed offset mutant first; only the same proof's located equality
 # failure counts. Import, syntax, tool, unrelated proof and signal failures do not.
 mutant="$work/offset-mutant"

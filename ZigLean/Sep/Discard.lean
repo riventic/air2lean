@@ -20,7 +20,8 @@ theorem readableBytes_discard_run {p : Ptr} {n a : Nat} {m : Mem} {h hF : Heap}
     (by simp [Ptr.add]) hn (by omega) (by simpa using ha)
   simp only [Nat.add_zero] at hacc
   refine ⟨m.recordAt block p.off.toNat n .read,
-    loadDiscardBytes_run hacc (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.recordAt _ _ _ _⟩
+    loadDiscardBytes_run (m := m) (p := p) (n := n) (a := a)
+      hacc (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.recordAt _ _ _ _⟩
   funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
 /-- An unused read preserves owned and framed bytes without requiring initialized values. -/

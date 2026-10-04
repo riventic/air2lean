@@ -43,11 +43,10 @@ theorem Triple.tryPayloadPtr {α : Type} [Enc α] {p : Ptr} {a : Nat} {e : Optio
     Triple (errorTag α p a e) (Zig.tryPayloadPtr α a p)
       (fun r => ⌜r = (match e with | none => .ok (errPayloadPtr α p) | some name => .error name)⌝ ∗
         errorTag α p a e) := by
-  cases e <;> apply Triple.of_run
-  all_goals
-    intro m h hF hd hm hp hs
-    obtain ⟨m', hr, hm', hs'⟩ := errorTag_try_run hp hm hs
-    exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+  apply Triple.of_run
+  intro m h hF hd hm hp hs
+  obtain ⟨m', hr, hm', hs'⟩ := errorTag_try_run hp hm hs
+  exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
 
 /-- The payload pointer keeps allocation provenance. -/
 theorem errPayloadPtr_block (α : Type) [Enc α] (p : Ptr) :

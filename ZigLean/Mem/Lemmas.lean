@@ -278,11 +278,18 @@ theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block
     StateT.lift, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some, hnr,
     Mem.recordAt]
 
-/-- A discarded load performs exactly the full raw read and keeps its access record. -/
+/-- Direct discarded access is equivalent for every state to the former full read and
+unused result, including access errors, race errors, clock changes and read footprints. -/
+theorem loadDiscardBytes_eq (n a : Nat) (p : Ptr) :
+    loadDiscardBytes n a p = (do let _ ← loadBytes p n a; pure ()) := by
+  simp only [loadDiscardBytes, loadBytes, bind_assoc, pure_bind]
+
+/-- A discarded load validates and records the full raw read without extracting bytes. -/
 theorem loadDiscardBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n .read) :
     (loadDiscardBytes n a p).run m = pure ((), m.recordAt b o n .read) := by
-  simp only [loadDiscardBytes, StateT.run_bind, loadBytes_run h hnr]
+  rw [loadDiscardBytes_eq]
+  simp only [StateT.run_bind, loadBytes_run h hnr]
   simp [StateT.run, pure, StateT.pure, bind, ExceptT.pure, ExceptT.mk, ExceptT.bind,
     ExceptT.bindCont]
 

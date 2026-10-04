@@ -280,7 +280,8 @@ def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Arr
 /-- A genuinely unused AIR load still reads its entire byte range, checking provenance,
 bounds, alignment and races. Its bytes are not decoded into an unused typed value. -/
 def loadDiscardBytes (n align : Nat) (p : Ptr) : MemM Unit := do
-  let _ ← loadBytes p n align
+  let (b, _, o) ← (← get).access p n align
+  recordAccess b o n .read
   pure ()
 
 def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) : MemM Unit := do

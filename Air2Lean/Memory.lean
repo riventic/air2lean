@@ -236,7 +236,7 @@ def memoryOp (op : Op) : Bool :=
   match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
-  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
+  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
   | .call (.func name ..) _ => (allocFn? name).isSome || (threadFn? name).isSome
   | _ => false
 

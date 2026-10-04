@@ -31,6 +31,18 @@ private def file (name tag : String) (ts : Array Json := types) (body : Array Js
     ("ret", num 5), ("body", .arr #[node 0 "arg" 3 #[] [("param", num 0)],
       node 1 tag 4 args [("body", .arr body)], node 5 "wrap_errunion_payload" 5 #[ref 1],
       node 6 "ret" 6 #[ref 5]])]
+-- A scalar-only signature whose pointer try is the explicit reason it uses MemM.
+private def scalarTryFile : Json :=
+  let usize := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
+    ("abi_size", num 8), ("abi_align", num 8)]
+  let unit := obj [("ty", num 7), ("val", .str "{}")]
+  obj [("schema", num 11), ("zig_version", .str "0.16.0"), ("target_endian", .str "little"),
+    ("name", .str "scalar"), ("types", .arr (types.push usize)),
+    ("params", toJson (#[8] : Array Nat)), ("ret", num 7),
+    ("body", .arr #[node 0 "arg" 8 #[] [("param", num 0)], node 1 "bitcast" 3 #[ref 0],
+      node 2 "try_ptr" 4 #[ref 1] [("body", .arr #[node 3 "trap" 6])],
+      node 4 "ret" 6 #[unit]])]
+
 private def process (j : Json) : Except String Func := do
   let f ← normalize (← Raw.parseFunc j)
   check f
@@ -105,6 +117,28 @@ def main (args : List String) : IO Unit := do
   let hot ← accept (file "hot" "try_ptr")
   let cold ← accept (file "cold" "try_ptr_cold")
   let constPointer ← accept (file "constPointer" "try_ptr" (types true))
+  let unit := obj [("ty", num 7), ("val", .str "{}")]
+  let localExit := node 11 "br" 6 #[unit] [("target", num 10)]
+  -- A local branch resumes the enclosing sequence, so dead inner terminators
+  -- cannot certify that the outer error branch exits the function.
+  for deadBody in #[#[node 12 "unreach" 6], #[node 12 "trap" 6], errBody] do
+    reject (file "bad" "try_ptr" types #[node 10 "block" 7 #[]
+      [("body", .arr (#[localExit] ++ deadBody))]]) "local block branch then dead exit" "must exit"
+  let resumes ← accept (file "resumes" "try_ptr" types
+    (#[node 10 "block" 7 #[] [("body", .arr #[localExit, node 12 "unreach" 6])]] ++ errBody))
+  let nestedResumes ← accept (file "nestedResumes" "try_ptr" types
+    (#[node 10 "block" 7 #[] [("body", .arr #[node 20 "block" 7 #[]
+      [("body", .arr #[node 21 "br" 6 #[unit] [("target", num 10)], node 22 "trap" 6])],
+      node 23 "unreach" 6])]] ++ errBody))
+  let scalar ← accept scalarTryFile
+  require scalar.usesMemoryLocally "pointer try did not classify a scalar-signature function as memory"
+  require (!scalar.syncLocally) "pointer try alone must not classify as a synchronization op"
+  require (memoryOp (.tryPtr (.inst 1) #[])) "pointer try must be an explicit memory op"
+  require (!(memoryOp (.bitcast (.inst 0)))) "unrelated legacy bitcast classification widened"
+  let scalarGen := emit #[scalar] "MemoryTry" "" .ieee
+  require ((scalarGen.splitOn "Zig.MemM (Unit)").length == 2) "scalar pointer try has the wrong monad"
+  IO.FS.writeFile (output ++ ".memory.lean") (scalarGen ++ "\n" ++
+    "open Zig\nderiving instance DecidableEq for Except\ndef main : IO Unit := do\n  unless ((MemoryTry.scalar 0).run {}).run.map (·.map Prod.fst) = some (.error .illegal) do\n    throw (IO.userError \"scalar pointer try lost pointer access validation\")\n  IO.println \"scalar pointer-try memory classification passed\"\n")
   for version in ["0.14.1", "0.15.2", "0.16.0"] do
     let _ ← accept ((file "version" "try_ptr_cold").setObjVal! "zig_version" (.str version))
   reject (file "bad" "try_ptr" ((types false).set! 3 (pointer 0 1))) "nonunion operand" "pointer to an error union"
@@ -126,9 +160,9 @@ def main (args : List String) : IO Unit := do
   reject (file "bad" "try_ptr" types #[node 2 "unwrap_errunion_err_ptr" 1 #[ref 1],
     node 3 "wrap_errunion_err" 5 #[ref 2], node 4 "ret" 6 #[ref 3]])
     "payload value captured in error branch" "not available in this scope"
-  let generated := emit #[hot, cold, constPointer] "SyntheticTry" "" .ieee
-  require ((generated.splitOn "Zig.tryPayloadPtr").length == 4) "pointer try did not use the tag-only runtime helper"
+  let generated := emit #[hot, cold, constPointer, resumes, nestedResumes] "SyntheticTry" "" .ieee
+  require ((generated.splitOn "Zig.tryPayloadPtr").length == 6) "pointer try did not use the tag-only runtime helper"
   IO.FS.writeFile output (generated ++ "\n" ++
-"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
+"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
   writeLoadCases output
   IO.println "pointer-try parser/checker/emitter regressions passed"

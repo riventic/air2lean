@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Air2Lean.Memory
 import ZigLean.Mem.Enc
 import ZigLean.Vec
@@ -300,19 +301,44 @@ def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String 
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
 
-/-- A conservative visible exit check for a pointer-try error body. Compiler AIR guarantees
-no fallthrough. A loop or exhaustive switch without an explicit else is not inferred here. -/
-partial def tryErrorBodyExits (body : Array Inst) : Bool :=
-  let tail : Option Inst := body.foldl (init := none) fun previous i =>
-    match i.op with | .line _ | .dbg .. => previous | _ => some i
-  let tailOp : Option Op := tail.map fun (i : Inst) => i.op
-  match tailOp with
-  | some (.ret _) | some (.retLoad _) | some .unreach | some .trap => true
-  | some (.call (.func _ true ..) _) => true
-  | some (.condBr _ t e) => tryErrorBodyExits t && tryErrorBodyExits e
-  | some (.switchBr _ cases e) => cases.all (fun c => tryErrorBodyExits c.body) && tryErrorBodyExits e
-  | some (.block body) => tryErrorBodyExits body
-  | _ => false
+/-- Reachable error-body outcomes. `valid` excludes falling off a sequence and
+unsupported loop control; `branches` tracks block exits until an enclosing block consumes them. -/
+private structure TryErrorFlow where
+  valid : Bool
+  branches : Std.HashSet InstId := {}
+
+private def TryErrorFlow.merge (a b : TryErrorFlow) : TryErrorFlow :=
+  ⟨a.valid && b.valid, a.branches.union b.branches⟩
+
+/-- Follow the first terminator, exactly as `Emit.emitStmts` does. A block consumes
+only its own `br`; that path resumes the enclosing sequence. Other exits propagate.
+Empty/falling-through bodies, loops and switches with no explicit else are conservative failures. -/
+private partial def tryErrorFlow (insts : List Inst) : TryErrorFlow :=
+  match insts with
+  | [] => ⟨false, {}⟩
+  | inst :: rest =>
+    match inst.op with
+    | .ret _ | .retLoad _ | .unreach | .trap => ⟨true, {}⟩
+    | .call (.func _ true ..) _ => ⟨true, {}⟩
+    | .br target _ => ⟨true, ({} : Std.HashSet InstId).insert target⟩
+    | .«repeat» _ | .loop _ => ⟨false, {}⟩
+    | .condBr _ t e => (tryErrorFlow t.toList).merge (tryErrorFlow e.toList)
+    | .switchBr _ cases e =>
+      cases.foldl (init := tryErrorFlow e.toList) fun flow c =>
+        flow.merge (tryErrorFlow c.body.toList)
+    | .block body =>
+      let inner := tryErrorFlow body.toList
+      if inner.branches.contains inst.id then
+        (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge (tryErrorFlow rest)
+      else inner
+    | .«try» _ errBody | .tryPtr _ errBody =>
+      (tryErrorFlow errBody.toList).merge (tryErrorFlow rest)
+    | _ => tryErrorFlow rest
+
+/-- Every reachable path must exit the function, with no unconsumed block branch. -/
+def tryErrorBodyExits (body : Array Inst) : Bool :=
+  let flow := tryErrorFlow body.toList
+  flow.valid && flow.branches.isEmpty
 
 mutual
 
@@ -469,8 +495,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     unless tryErrorBodyExits errBody do
       cx.fail line "try_ptr error body must exit without fallthrough"
     let nested := errBody.foldl flattenInst #[]
-    let localTargets := nested.filterMap fun i =>
-      match i.op with | .block _ | .loop _ => some i.id | _ => none
+    let emptyTargets : Std.HashSet InstId := {}
+    let localTargets := nested.foldl (init := emptyTargets) fun targets i =>
+      match i.op with | .block _ | .loop _ => targets.insert i.id | _ => targets
     for i in nested do
       match i.op with
       | .br target _ | .«repeat» target =>
