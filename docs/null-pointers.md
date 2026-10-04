@@ -1,0 +1,74 @@
+# C and allowzero pointer fragment (L05)
+
+Nonoptional scalar `[*c]T`, `*allowzero T` and `[*]allowzero T` values use `Zig.Ptr`.
+Address zero is `Zig.Ptr.null = ⟨none, 0⟩`: no block and no allocation. The reference
+scope is the existing 64-bit little-endian, ReleaseSafe AIR model. This fragment
+is deliberately smaller than complete C/allowzero pointer support.
+
+| Operation | Rule |
+| --- | --- |
+| Runtime integer → nullable pointer | `ptrFromAddrNullable 0` returns null without changing memory. Nonzero addresses use existing `ptrFromAddr` block-range resolution. |
+| Pointer → integer | `ptrAddr` observes the address; it does not dereference or revive a dead allocation. |
+| Null/non-null value tests | `ptrIsNull` compares the address with zero. It does not interpret a scalar pointer as `Option Ptr`. |
+| Nullable pointer equality/inequality | `ptrEqAddr` compares addresses, including zero. |
+| Nullable → nonnullable scalar pointer cast; C `p.?` | `ptrRequireNonNull` rejects zero with `.panic` and preserves a nonzero pointer. Being nonnull does not establish provenance, lifetime, bounds or alignment. |
+| Direct load/store through a scalar nullable pointer | The existing `Mem.access`/`accessW` rules apply. Positive-size accesses require a real live block, bounds and alignment; stores also require writable storage. Source AIR safety guards remain part of the translation. |
+| Zero pointer constant | An explicit `ptr: {"null": true, "off": 0}` becomes `Val.ptrNull`; the checker requires a C/allowzero type. Other integer-base constants remain rejected. |
+
+Null tests are address observations. They do not promise a zero-address object or
+MMIO semantics. A raw nonzero integer pointer also fails access until it has valid
+block provenance. The model does not change its allocator or pointer encodings.
+
+The checker still rejects nullable pointer values stored in memory, nullable
+pointers in value aggregates/error-union payloads, `?[*c]T` and `?*allowzero T`,
+nullable slices/bit-pointers/volatile pointers, implicit conversion to an ordinary
+optional pointer, and nullable pointer indexing/arithmetic/projections/slice
+construction. Use a checked nonnullable cast before the existing projection rules.
+These restrictions prevent the ordinary `Enc (Option Ptr)` null representation
+from conflating an outer optional's `none` with a nullable payload's zero value.
+They also avoid claiming that opaque pointer fragments model nullable zero bytes.
+
+Compiler source inspection of 0.14.1, 0.15.2 and 0.16.0 establishes the relevant
+representation boundaries: `InternPool.Key.Ptr.BaseAddr.int` carries no payload;
+the integer address is in `byte_offset`. `Type.optionalReprIsPayload` excludes
+C/allowzero children from ordinary optional-pointer payload representation.
+C null tests lower to `is_null`/`is_non_null`, and the C-pointer payload operation
+retains the scalar C-pointer type (`Sema.zirOptionalPayload`). These source facts
+are not new compiler-execution or preservation evidence.
+
+## Proof and regression evidence
+
+`ZigLean/Mem/Null.lean` contains universal theorem definitions `null_access`,
+`nullable_from_zero`, `null_is_null`, `null_unwrap`, and `raw_address_access`.
+The direct-access validity premises reuse `ZigLean/Mem/Lemmas.lean`'s existing
+`access_of`/`access_eq` rules. A nonnull check cannot discharge those premises.
+Theorems apply to this model, with its existing compiler/export/normalization
+trust boundary; they are not AIR/backend preservation theorems.
+
+The scoped driver is sequential and requires supplied matching toolchains:
+
+```sh
+AIR2LEAN_NULL_ZIG_VERSION=0.16.0 \
+AIR2LEAN_NULL_ZIG_AIR=/path/to/patched-0.16.0/bin/zig \
+AIR2LEAN_NULL_ZIG_NATIVE=/path/to/shipping-0.16.0/zig \
+AIR2LEAN_NULL_TRANSLATOR=/path/to/air2lean \
+  tests/roadmap/null-pointers/check.sh
+```
+
+The patched compiler must include the updated zero-constant exporter. Run the
+same driver for 0.14.1 and 0.15.2; it does not provision or build a Zig compiler.
+The driver builds the runtime/translator, checks imported theorem definitions,
+checks synthetic schema/checker rejections, elaborates nine generated semantic
+cases, kills an inverted-null-predicate mutant, exports fresh compiler-generated
+fixtures, compares eight native/Lean observation lines, and checks two separate
+compiler-generated rejection roots. The six integer inputs include zero, small
+addresses and the maximum 64-bit address. Native dereference is exercised only
+with a live byte; invalid provenance/dead-block access is tested in the model.
+
+`native_decide` occurs only in generated regression fixtures, following the
+existing emitter-test convention. The five shipped universal theorem definitions
+use kernel reductions and do not use `native_decide`, `sorry`, `admit` or axioms.
+The implementation's initial handoff is source-ready: compiler, theorem and
+native gate results must be recorded by the serialized validation queue before
+claiming version/target qualification. Full L05 remains open for the deliberately
+rejected adjacent representations and operations above.

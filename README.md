@@ -117,6 +117,7 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual `bool` vector lane; integer or float vectors in memory whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`, for example) |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
+| scalar nonoptional C/allowzero pointer null tests, casts and direct access ([fragment](docs/null-pointers.md)) | nullable-pointer storage/aggregates/optionals, volatile/null-bit/slice representations and nullable projections |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm, register operands only, as opaque functions (x86_64 only) | |

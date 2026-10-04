@@ -243,7 +243,7 @@ def memoryOp (op : Op) : Bool :=
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
   match v with
-  | .ptrConst .. | .ptrOther .. | .sliceConst .. => true
+  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .sliceConst .. => true
   | .agg _ elems => elems.any Val.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
@@ -252,6 +252,11 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+      -- Nullable pointer temporaries need address observations even with no pointer
+      -- parameters, no dereference and an integer/bool return.
+      (match f.types[i.ty]? with
+        | some (.ptr size _ _) => size == "c" || (f.layouts[i.ty]?.map (·.allowzero)).getD false
+        | _ => false) ||
       match i.op with
       | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
       | _ => false

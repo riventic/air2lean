@@ -430,6 +430,13 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     else if let some ptrJ := optField j "ptr" then
       unless (match ty with | .ptr "one" .. | .ptr "many" .. | .ptr "c" .. => true | _ => false) do
         throw s!"{fnName}: 'ptr' constant of unexpected type {repr ty}"
+      if let some nullJ := optField ptrJ "null" then
+        unless (← nullJ.getBool?) do throw s!"{fnName}: pointer null marker must be true"
+        if (optField ptrJ "global").isSome || (optField ptrJ "unsupported").isSome then
+          throw s!"{fnName}: ambiguous null pointer constant"
+        unless (← (← ptrJ.getObjVal? "off").getNat?) == 0 do
+          throw s!"{fnName}: null pointer constant has a nonzero offset"
+        return .ptrNull tyId
       if let some k := optField ptrJ "unsupported" then
         return .ptrOther tyId (← k.getStr?)
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
