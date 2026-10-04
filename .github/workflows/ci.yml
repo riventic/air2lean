@@ -167,6 +167,32 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
 
+      # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
+      # assembly/libm policy is reviewed for this profile and the pinned Lean release.
+      - name: Audit theorem dependencies and assumptions
+        id: assurance-audit
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: |
+          rm -f .lake/assurance/assumptions.json
+          scripts/assumptions.sh --output .lake/assurance/assumptions.json
+
+      - name: Assurance environment regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: tests/roadmap/assurance/check.sh
+
+      - name: Upload theorem assumption report
+        if: ${{ always() && matrix.full && matrix.zig == '0.16.0' && (steps.assurance-audit.outcome == 'success' || steps.assurance-audit.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: assumptions-${{ matrix.zig }}-${{ strategy.job-index }}
+          path: .lake/assurance/assumptions.json
+          if-no-files-found: warn
+          retention-days: 7
+
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions
