@@ -38,18 +38,18 @@ private def require (ok : Bool) (message : String) : IO Unit :=
 private def failedCalls : ConcM Target (Except ErrName ThreadId × Except ErrName Unit) := do
   let first ← (spawnWithPolicyC .fallible .worker : CM Target Unit _).run' ()
   match first with
-  | .ok child => discard (joinC child : CM Target Unit Unit).run' ()
+  | .ok child => discard ((joinC child : CM Target Unit Unit).run' ())
   | .error _ => pure ()
   let second ← (groupConcurrentWithPolicyC .fallible (⟨none, 0⟩ : Ptr) {} .worker : CM Target Unit _).run' ()
   match second with
-  | .ok _ => discard (groupAwaitC (⟨none, 0⟩ : Ptr) {} : CM Target Unit _).run' ()
+  | .ok _ => discard ((groupAwaitC (⟨none, 0⟩ : Ptr) {} : CM Target Unit _).run' ())
   | .error _ => pure ()
   pure (first, second)
 
 -- The eager task records its actual caller id in memory. A fork would change it.
 private def eagerCaller : ConcM Target ThreadId := do
   let body : ConcM Target Unit := ConcM.liftMem (modify fun m => {m with nextMsg := m.current + 41})
-  discard (groupAsyncWithPolicyC .fallible (⟨none, 0⟩ : Ptr) {} .worker body : CM Target Unit Unit).run' ()
+  discard ((groupAsyncWithPolicyC .fallible (⟨none, 0⟩ : Ptr) {} .worker body : CM Target Unit Unit).run' ())
   let m ← ConcM.liftMem get
   pure m.nextMsg
 
