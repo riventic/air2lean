@@ -194,7 +194,7 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
     "same-ID shortcut skipped nested form validation"
   let allocTypes := #[Ty.allocator, .int false 32, .ptr "one" false 1, .errorUnion 4 2,
     .errorSet (some #["OutOfMemory"]), .void, .int false 64, .ptr "slice" false 1, .errorUnion 4 7]
-  let allocLayouts : Array Layout := (Array.replicate allocTypes.size {}).set! 1
+  let allocLayouts : Array Layout := (Array.replicate allocTypes.size ({} : Layout)).set! 1
     { size := some 4, align := some 4 }
   let allocLayouts := (allocLayouts.set! 2 { ptrAlign := some 4 }).set! 7 { ptrAlign := some 4 }
   let allocator := { (mkFunc "allocator" allocTypes #[] 5) with layouts := allocLayouts }
@@ -221,7 +221,7 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
     | throw (IO.userError "successful recursive global cache comparison failed")
   require (completed.contains (0, 1) && completed.contains (1, 0) && completed.size == 2)
     "successful comparison did not publish every visited global pair"
-  require ((compatibleGlobalCached graphA graphB 1 0 completed).map (·.size) == some 2)
+  require ((compatibleGlobalCached graphA graphB 1 0 completed).map (fun (pairs : Std.HashSet (Nat × Nat)) => pairs.size) == some 2)
     "successful pair cache did not preserve recursive equality"
   let broken := { graphB with
     globals := graphB.globals.set! 0 { graphB.globals[0]! with init := some (.ptrConst 0 0 1) }

@@ -227,7 +227,7 @@ def main():
     chain_c["globals"][2]["init"]["val"] = "8"
     checks += run(binary, [chain_a, chain_b, chain_c], "inconsistent shared global 'shared.head'")
     nested = function("nested", [integer(), VOID, NORETURN,
-        dict(k="tuple", fields=[dict(ty=0, offset=0)], abi_size=4, abi_align=4, offsets=[0])], [], 1,
+        dict(k="array", len=1, child=0, sentinel=False, abi_size=4, abi_align=4)], [], 1,
         [inst(0, "ret", 2, [dict(ty=1, val="{}")])],
         [global_("nested.constant", 3, dict(ty=3, elems=[dict(ty=0, val="7")]), const=True)])
     checks += run(binary, [nested])
