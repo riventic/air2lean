@@ -39,7 +39,7 @@ instance : Enc Allocator where
 def rawAlloc (n align : Nat) : MemM (Option Ptr) := do
   let m ← get
   set { m with allocs := m.allocs + 1 }
-  if m.failAt = some m.allocs ∨ m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none
+  if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none
   some <$> alloc .heap n align
 
 /-- The pointer of an allocation of 0 bytes: no block, and the highest address with the

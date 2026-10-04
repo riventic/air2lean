@@ -106,7 +106,7 @@ pub const TestAllocator = struct {
         const self: *TestAllocator = @ptrCast(@alignCast(ctx));
         const k = self.count;
         self.count += 1;
-        if (self.fail_at == k or std.mem.indexOfScalar(usize, self.failures, k) != null or len > self.request_cap) return null;
+        if (self.fail_at == k or len > self.request_cap or std.mem.indexOfScalar(usize, self.failures, k) != null) return null;
         const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportPanic("harnessOutOfMemory");
         self.live.append(out_gpa, p[0..len]) catch reportPanic("harnessOutOfMemory");
         return p;

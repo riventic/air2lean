@@ -62,8 +62,8 @@ class PolicyChecks(unittest.TestCase):
 
     def test_legacy_mutation_still_targets_fail_at(self):
         source = (ROOT / 'scripts/mutate.sh').read_text()
-        self.assertIn('if m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none', source)
-        self.assertIn('if m.failAt = some m.allocs ∨ m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none', source)
+        self.assertIn('if m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none', source)
+        self.assertIn('if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none', source)
 
 if __name__ == '__main__':
     unittest.main()

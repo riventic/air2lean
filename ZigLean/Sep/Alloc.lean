@@ -30,7 +30,7 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
   let m₁ : Mem := { m with allocs := m.allocs + 1 }
   have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
   have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
-  by_cases hc : m.failAt = some m.allocs ∨ m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n
+  by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
   · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
     simp [rawAlloc, hc, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
   · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=

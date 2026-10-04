@@ -272,12 +272,32 @@
       {
         "path": "ZigLean/Mem/Basic.lean",
         "sha256": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
-        "reason": "Review cleanup moves the unchanged public maxAllocBytes constant into Mem.Basic and references it from AllocPolicy; post-cleanup compiler check remains coordinator-owned."
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
       },
       {
         "path": "ZigLean/Mem/Alloc.lean",
-        "sha256": "1ab859b56bcd932b4f3e92cab45396e450c1ac1ffd699f12f6477b454d986dad",
-        "reason": "Review cleanup moves the unchanged public maxAllocBytes constant into Mem.Basic and references it from AllocPolicy; post-cleanup compiler check remains coordinator-owned."
+        "sha256": "11fe18625c91709a68984d9e07fa24e6216d2c0bd0080c9d483d9a6bf5bf8631",
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+      },
+      {
+        "path": "ZigLean/Sep/Alloc.lean",
+        "sha256": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+      },
+      {
+        "path": "tests/diff/common.zig",
+        "sha256": "0cff6589b011d1ae24a7db194c0c926c0f1413fcb5d6a320f09b626f4f73c35b",
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+      },
+      {
+        "path": "scripts/mutate.sh",
+        "sha256": "3686066a7e850e98397c341d5de036ad62eb1125ef0881ddb35d3b744d39ec12",
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+      },
+      {
+        "path": "tests/roadmap/allocation-policy/static.py",
+        "sha256": "c72d6610d1a24d93e5f1490f6c5dca75e06d4a8c9e32f5cfeca6bc29ae5dae76",
+        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
       }
     ]
   },
