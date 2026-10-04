@@ -147,9 +147,11 @@ private def spawnSlice : Json :=
   (file "spawnSlice" #[intTy 8, ptrTy 0 true "slice", tupleTy #[1], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread")],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1] 3
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    obj [("k", .str "struct"), ("name", .str "Thread.SpawnConfig"),
+      ("layout", .str "auto"), ("fields", .arr #[]), ("abi_size", num 0), ("abi_align", num 1)]] #[1] 3
     #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "aggregate_init" 2 #[ref 0],
-      inst 2 "call" 7 #[lit 3 "{}", ref 1]
+      inst 2 "call" 7 #[obj [("ty", num 8), ("elems", .arr #[])], ref 1]
         [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "sliceWorker")])],
       inst 3 "unwrap_errunion_payload" 5 #[ref 2],
       inst 4 "call" 3 #[ref 3] [("callee", obj [("func", .str "Thread.join")])],
