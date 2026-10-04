@@ -25,7 +25,7 @@ class GuardTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="air2lean-guard-test-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.counter = 0
 
     def command(self, source, *options, cwd=None):
@@ -113,7 +113,10 @@ while True: time.sleep(1)
         blocked, blocked_report, _ = self.command("pass", cwd=other)
         result = subprocess.run(blocked, capture_output=True, timeout=12)
         self.assertEqual(result.returncode, 75)
-        self.assertEqual(json.loads(blocked_report.read_text())["outcome"], "lock_busy")
+        evidence = json.loads(blocked_report.read_text())
+        self.assertEqual(evidence["outcome"], "lock_busy")
+        for key in ("command", "guard", "revision", "inputs", "tools", "pins", "environment_overrides"):
+            self.assertNotIn(key, evidence)
         first.send_signal(signal.SIGTERM)
         first.communicate(timeout=12)
         self.assertEqual(first.returncode, 143)
@@ -185,6 +188,15 @@ else:
         self.assertFalse(guard.parallel_zig(rows, {1, 2}, names))
         rows[3] = {"parent": 1, "name": "zig"}
         self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, names))
+        alias = "zig-very-long-configured-alias"
+        rows[2]["name"] = rows[3]["name"] = alias[:15]
+        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, {alias}))
+        self.assertEqual(guard.sequential_command(["zig", "build", "--prefix", "-j1"], names),
+                         ["zig", "build", "-j1", "--prefix", "-j1"])
+        self.assertEqual(guard.sequential_command(["zig", "build", "run", "--", "-j1", "-j2"], names),
+                         ["zig", "build", "-j1", "run", "--", "-j1", "-j2"])
+        with self.assertRaises(ValueError):
+            guard.sequential_command(["zig", "build", "--prefix", "-j1", "-j2"], names)
 
     def test_observed_pid_reuse_is_not_owned(self):
         tree = guard.Tree(10)
@@ -235,6 +247,136 @@ else:
             with self.assertRaises(SystemExit):
                 guard.parse_args(["--lock", str(fifo), "--log", str(self.root / "log"),
                                   "--report", str(self.root / "report"), "--", "mock"])
+
+    def test_fingerprints_are_collected_after_the_waiting_lock_is_acquired(self):
+        import fcntl
+        fixture = self.root / "input"
+        fixture.write_text("before")
+        args, _, _ = self.command("pass", "--input", "input", "--lock-wait", "2")
+        a = guard.parse_args(args[2:])
+        original_flock = fcntl.flock
+        original_evidence = guard.file_evidence
+        with a.lock.open("a") as owner:
+            original_flock(owner, fcntl.LOCK_EX)
+            acquired = [False]
+            def finish_previous(_duration):
+                fixture.write_text("after")
+                original_flock(owner, fcntl.LOCK_UN)
+                acquired[0] = True
+            def evidence(*args, **kwargs):
+                self.assertTrue(acquired[0])
+                return original_evidence(*args, **kwargs)
+            with mock.patch.object(guard.time, "sleep", side_effect=finish_previous), \
+                    mock.patch.object(guard, "file_evidence", side_effect=evidence), \
+                    mock.patch.object(guard, "revision", side_effect=lambda _: {"head": "after"} if acquired[0] else self.fail("early revision")):
+                report = guard.run(a)
+        self.assertEqual(report["exit_code"], 0)
+        self.assertEqual(report["inputs"][0]["sha256"], guard.digest(fixture))
+        self.assertEqual(report["revision"]["head"], "after")
+
+    def test_fingerprint_cache_keeps_duplicate_entries_and_fresh_outputs(self):
+        fixture = self.root / "input"
+        fixture.write_text("before")
+        alias = self.root / "alias"
+        os.link(fixture, alias)
+        args, _, _ = self.command('open("input", "w").write("after")', "--input", "input",
+                                  "--input", "alias", "--output", "input", "--tool", sys.executable)
+        with mock.patch.object(guard, "digest", wraps=guard.digest) as digests:
+            report = guard.run(guard.parse_args(args[2:]))
+        self.assertEqual(report["exit_code"], 0)
+        fixture_calls = [call for call in digests.call_args_list if Path(call.args[0]).resolve() in (fixture, alias)]
+        python_calls = [call for call in digests.call_args_list if Path(call.args[0]).resolve() == Path(sys.executable).resolve()]
+        self.assertEqual(len(fixture_calls), 2)  # initial inode once, post-execution output once
+        self.assertEqual(len(python_calls), 1)
+        self.assertEqual([item["path"] for item in report["inputs"]], [str(fixture), str(alias)])
+        self.assertEqual(report["inputs"][0]["sha256"], report["inputs"][1]["sha256"])
+        self.assertNotEqual(report["inputs"][0]["sha256"], report["outputs"][0]["sha256"])
+
+    def test_cleanup_fallback_signals_after_leader_exit_without_reaping(self):
+        pidfile = self.root / "survivor"
+        source = f'''
+import os, signal, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    while True: time.sleep(1)
+open({str(pidfile)!r}, 'w').write(str(pid))
+os._exit(0)
+'''
+        child = subprocess.Popen([sys.executable, "-c", source], start_new_session=True)
+        tree = guard.Tree(child.pid)
+        def cleanup():
+            guard.stop_tree(child, tree, 0.01)
+            child.wait(timeout=5)
+        self.addCleanup(cleanup)
+        self.wait_file(pidfile)
+        deadline = time.monotonic() + 5
+        while guard.peek_status(child) is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(guard.peek_status(child), 0)
+        with mock.patch.object(guard, "processes", side_effect=RuntimeError("ps failed")), \
+                mock.patch.object(guard.os, "killpg", wraps=os.killpg) as signals:
+            self.assertFalse(guard.stop_tree(child, tree, 0.03))
+        self.assertEqual([call.args for call in signals.call_args_list],
+                         [(child.pid, signal.SIGTERM), (child.pid, signal.SIGKILL)])
+        self.assertIsNone(child.returncode)  # retain the PID anchor until final cleanup
+        child.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while self.live(int(pidfile.read_text())) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertFalse(self.live(int(pidfile.read_text())))
+
+    def test_final_cleanup_only_skips_a_confirmed_empty_tree(self):
+        args, _, _ = self.command("pass")
+        with mock.patch.object(guard, "stop_tree", wraps=guard.stop_tree) as stops:
+            self.assertEqual(guard.run(guard.parse_args(args[2:]))["exit_code"], 0)
+            self.assertEqual(stops.call_count, 0)
+        args, _, _ = self.command("import time; time.sleep(20)", "--timeout", "0.1")
+        with mock.patch.object(guard, "stop_tree", wraps=guard.stop_tree) as stops:
+            self.assertEqual(guard.run(guard.parse_args(args[2:]))["exit_code"], 124)
+            self.assertEqual(stops.call_count, 1)
+        args, _, _ = self.command("import time; time.sleep(20)", "--timeout", "0.1")
+        original_stop = guard.stop_tree
+        results = []
+        def uncertain_once(*args):
+            result = original_stop(*args)
+            results.append(result)
+            return False if len(results) == 1 else result
+        with mock.patch.object(guard, "stop_tree", side_effect=uncertain_once) as stops:
+            report = guard.run(guard.parse_args(args[2:]))
+            self.assertEqual(report["exit_code"], 124)
+            self.assertEqual(stops.call_count, 2)
+            self.assertEqual(results, [True, True])
+
+    def test_truncated_alias_leaves_trigger_workload_termination(self):
+        alias = "zig-long-configured-compiler"
+        args, _, _ = self.command("import time; time.sleep(20)", "--zig-name", alias)
+        original_processes = guard.processes
+        def sampled_leaves():
+            rows = original_processes()
+            leaders = [pid for pid, row in rows.items()
+                       if row["parent"] == os.getpid() and row["group"] == pid]
+            if leaders:
+                leader = leaders[0]
+                rows[leader]["name"] = "driver"
+                for pid in (-1, -2):
+                    rows[pid] = {"parent": leader, "group": leader, "start": "mock",
+                                 "name": alias[:15], "rss_kib": 0}
+            return rows
+        with mock.patch.object(guard, "processes", side_effect=sampled_leaves):
+            report = guard.run(guard.parse_args(args[2:]))
+        self.assertEqual((report["exit_code"], report["outcome"]), (126, "parallel_zig"))
+        self.assertLess(report["child_status"], 0)
+
+    def test_chunk_limits_cover_zero_exact_and_discarded_output(self):
+        import io
+        for limit in (0, 3, 4):
+            output = io.BytesIO()
+            report = {"output_bytes": 0}
+            guard.write_chunk(output, report, limit, b"abc")
+            guard.write_chunk(output, report, limit, b"d")
+            self.assertEqual(output.getvalue(), b"abcd"[:limit])
+            self.assertEqual(report["output_bytes"], 4)
 
 
 if __name__ == "__main__":

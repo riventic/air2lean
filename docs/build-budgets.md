@@ -23,12 +23,16 @@ also fail or wait: wrap a whole workload once. Advisory locking coordinates
 participating callers; unguarded builds are outside its control. Existing
 `zig-patch/build.sh` already uses `-j1` for its compiler bootstrap.
 
-The guard sets `LEAN_NUM_THREADS=1`. For a direct `zig build` command, it adds
-`-j1` if absent, rejects other job counts and response files that could hide job
-options, and records both requested and executed arguments. It also stops a
+The guard sets `LEAN_NUM_THREADS=1`. For a direct `zig build` command, it inserts
+`-j1` at a guaranteed build-option position, rejects conflicting build job counts
+and response files that could hide job options, and records both requested and
+executed arguments. Known build-option values and arguments forwarded after `--`
+are preserved; a value named `-j1` does not replace the injected build option. It also stops a
 workload when a sample contains multiple leaf Zig processes. A build driver
 supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
-are recognized; use `--zig-name NAME` for a renamed executable. Scripts must
+are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
+truncation is matched conservatively at 15 bytes, so aliases sharing that prefix
+can cause a refusal even when the longer names differ. Scripts must
 choose sequential compiler flags themselves. The guard never automatically
 parallelizes workloads; single-thread Lean settings do not guarantee that an
 arbitrary build system launches only one process.
@@ -39,7 +43,10 @@ by KILL after `--grace` seconds. The original group catches orphaned children;
 observed descendants remain tracked if they change groups or sessions. Cleanup
 checks that observed live processes stop before releasing the lock. A leader
 that exits while children remain is a failed workload, and those children are
-stopped. Zombies are already stopped and excluded. Process-generation checks
+stopped. The leader's exit is observed with POSIX `waitid(WNOWAIT)` and its PID is
+retained until cleanup ends. This prevents original-group ID reuse during a
+TERM/KILL fallback when `ps` fails after the leader exits. Zombies are already
+stopped and excluded. Process-generation checks
 use `ps lstart` (one-second resolution) when following detached descendants.
 
 This is a cooperative build coordinator, not a security sandbox. A descendant
@@ -63,7 +70,11 @@ JSON reports are atomically replaced and limited to 128 KiB. They record exact
 arguments, working directory, tracked Git revision/dirty state when available,
 host, profile, phase, declared cache label, budgets, exit outcome, elapsed and
 workload time, sampled peak RSS, bounded log size/hash, input/output file sizes
-and SHA-256 hashes, and resolved command/Python/ps/additional-tool hashes. Paths
+and SHA-256 hashes, and resolved command/Python/ps/additional-tool hashes. Execution
+fingerprints and revision are collected after acquiring the lock, before launch;
+a lock-busy report contains no execution attestation. Initial fingerprints are
+cached by file identity while preserving ordered duplicate entries. Output
+fingerprints are collected afresh after execution. Paths
 in `--input`, `--output` and relative tools are resolved against `--cwd`.
 `--tool` records a binary without executing it; wrappers and pins are evidence,
 not a claim that every compiler they later resolve was independently hashed.

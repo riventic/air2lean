@@ -27,12 +27,20 @@ def digest(path):
     return h.hexdigest()
 
 
-def file_evidence(path):
+def file_evidence(path, cache=None):
     path = Path(path).resolve()
     try:
-        if not stat.S_ISREG(path.stat().st_mode):
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode):
             return {"path": str(path), "unavailable": "not a regular file"}
-        return {"path": str(path), "sha256": digest(path), "bytes": path.stat().st_size}
+        identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        if cache is None:
+            fingerprint = {"sha256": digest(path), "bytes": info.st_size}
+        else:
+            if identity not in cache:
+                cache[identity] = {"sha256": digest(path), "bytes": info.st_size}
+            fingerprint = cache[identity]
+        return {"path": str(path), **fingerprint}
     except OSError as error:
         return {"path": str(path), "unavailable": str(error)[:256]}
 
@@ -83,11 +91,14 @@ class Tree:
     def __init__(self, root):
         self.root = root
         self.seen = {}
+        self.original_group_gone = False
 
     def owned(self, rows):
         # The initial process group also catches children orphaned before our
         # first sample. Known descendants remain owned after reparenting/setsid.
         owned = {pid for pid, row in rows.items() if row["group"] == self.root}
+        if not owned:
+            self.original_group_gone = True
         owned.update(pid for pid, started in self.seen.items()
                      if pid in rows and rows[pid]["start"] == started)
         pending = list(owned)
@@ -104,7 +115,10 @@ class Tree:
 
 
 def parallel_zig(rows, owned, names):
-    zig = {pid for pid in owned if rows[pid]["name"] in names}
+    # Linux comm truncates to 15 bytes. Prefix collisions are intentionally
+    # conservative: refusing ambiguous parallel work is safer than missing it.
+    observed_names = names | {name.encode()[:15].decode(errors="replace") for name in names}
+    zig = {pid for pid in owned if rows[pid]["name"] in observed_names}
     # A zig build driver supervising one compiler is sequential. Count leaf Zig
     # processes, not their build-driver ancestors.
     ancestors = set()
@@ -118,8 +132,7 @@ def parallel_zig(rows, owned, names):
     return len(zig - ancestors) > 1
 
 
-def signal_tree(rows, owned, sig):
-    groups = {rows[pid]["group"] for pid in owned}
+def signal_groups(groups, sig):
     for group in groups:
         if group <= 0 or group == os.getpgrp():
             raise RuntimeError("child unexpectedly joined coordinator process group")
@@ -129,21 +142,31 @@ def signal_tree(rows, owned, sig):
             pass
 
 
+def signal_workload(child, tree, sig):
+    try:
+        rows = processes()
+        groups = {rows[pid]["group"] for pid in tree.owned(rows)}
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        # The unreaped leader reserves its PID/PGID even after exit. Do not
+        # condition this fallback on poll(): surviving children still need it.
+        groups = set() if tree.original_group_gone else {child.pid}
+    signal_groups(groups, sig)
+
+
+def peek_status(child):
+    # WNOWAIT retains the leader as a PID anchor until all cleanup attempts end.
+    info = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    if info is None:
+        return None
+    return info.si_status if info.si_code == os.CLD_EXITED else -info.si_status
+
+
 def stop_tree(child, tree, grace):
     # Keep the global lock until both the leader and observed descendants stop.
     # If ps fails, the original group can still be stopped without guessing PIDs.
-    try:
-        rows = processes()
-        signal_tree(rows, tree.owned(rows), signal.SIGTERM)
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
-        if child.poll() is None:
-            try:
-                os.killpg(child.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+    signal_workload(child, tree, signal.SIGTERM)
     end = time.monotonic() + grace
     while time.monotonic() < end:
-        child.poll()  # reap the leader; zombies do not keep the lock forever
         try:
             rows = processes()
             owned = tree.owned(rows)
@@ -152,16 +175,7 @@ def stop_tree(child, tree, grace):
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             pass
         time.sleep(min(0.05, max(0, end - time.monotonic())))
-    try:
-        rows = processes()
-        signal_tree(rows, tree.owned(rows), signal.SIGKILL)
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
-        if child.poll() is None:
-            try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-    child.wait(timeout=5)
+    signal_workload(child, tree, signal.SIGKILL)
     end = time.monotonic() + 5
     while time.monotonic() < end:
         try:
@@ -248,16 +262,43 @@ def parse_args(argv):
 def sequential_command(command, zig_names):
     command = list(command)
     if Path(command[0]).name in zig_names and command[1:2] == ["build"]:
-        for i, arg in enumerate(command[2:], 2):
+        # Inject the actual build option at a guaranteed option position. A
+        # value named -j1 or an application argument after -- is not this flag.
+        values = {"-p", "--prefix", "--prefix-lib-dir", "--prefix-exe-dir",
+                  "--prefix-include-dir", "--sysroot", "--search-prefix", "--libc",
+                  "--zig-lib-dir", "--build-file", "--cache-dir", "--global-cache-dir",
+                  "--color", "--summary", "--seed", "--maxrss", "--debug-log"}
+        result = command[:2] + ["-j1"]
+        i = 2
+        while i < len(command):
+            arg = command[i]
+            if arg == "--":
+                result.extend(command[i:])
+                break
+            if arg in values:
+                if i + 1 == len(command):
+                    raise ValueError(f"missing zig build option value: {arg}")
+                result.extend(command[i:i + 2])
+                i += 2
+                continue
             if arg.startswith("@"):
                 raise ValueError("zig build response files can hide parallel job options")
             if arg.startswith("-j"):
                 jobs = command[i + 1] if arg == "-j" and i + 1 < len(command) else arg[2:]
                 if jobs != "1":
                     raise ValueError("zig build must use -j1")
-        if not any(arg.startswith("-j") for arg in command[2:]):
-            command.insert(2, "-j1")
+                i += 2 if arg == "-j" else 1
+                continue
+            result.append(arg)
+            i += 1
+        command = result
     return command
+
+
+def write_chunk(output, report, limit, chunk):
+    remaining = max(0, limit - report["output_bytes"])
+    output.write(chunk[:remaining])
+    report["output_bytes"] += len(chunk)
 
 
 def run(a):
@@ -265,9 +306,11 @@ def run(a):
     def cancel(sig, _frame):
         cancelled[0] = sig
     previous = {sig: signal.signal(sig, cancel) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+    previous[signal.SIGCHLD] = signal.signal(signal.SIGCHLD, signal.SIG_DFL)
     lock = None
     child = None
     tree = None
+    cleanup_confirmed = False
     selector = selectors.DefaultSelector()
     report = {"schema": 1, "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "cwd": str(a.cwd), "requested_command": a.command, "profile": a.profile,
@@ -282,16 +325,6 @@ def run(a):
     try:
         names = {"zig", "zig-air", "zig-unlocked", *a.zig_name}
         command = sequential_command(a.command, names)
-        report["command"] = command
-        report["guard"] = file_evidence(__file__)
-        report["revision"] = revision(a.cwd)
-        report["inputs"] = [file_evidence(a.cwd / path) for path in a.input]
-        tools = [command[0], sys.executable, "ps", *a.tool]
-        report["tools"] = [file_evidence(path) if (path := executable(tool, a.cwd)) else
-                           {"requested": tool, "unavailable": True} for tool in tools]
-        for path in ("lean-toolchain", "zig-patch/versions.toml"):
-            if (a.cwd / path).is_file():
-                report.setdefault("pins", []).append(file_evidence(a.cwd / path))
         a.lock.parent.mkdir(parents=True, exist_ok=True)
         lock = a.lock.open("a")
         lock_start = time.monotonic()
@@ -308,10 +341,27 @@ def run(a):
                     return report
                 time.sleep(min(0.05, a.lock_wait))
         report["lock_wait_seconds"] = round(time.monotonic() - lock_start, 3)
+        # Execution fingerprints belong to the acquired-lock state, not the
+        # state before a different worktree's build finished.
+        report["command"] = command
+        fingerprints = {}
+        report["guard"] = file_evidence(__file__, fingerprints)
+        report["revision"] = revision(a.cwd)
+        report["inputs"] = [file_evidence(a.cwd / path, fingerprints) for path in a.input]
+        tools = [command[0], sys.executable, "ps", *a.tool]
+        report["tools"] = [file_evidence(path, fingerprints) if (path := executable(tool, a.cwd)) else
+                           {"requested": tool, "unavailable": True} for tool in tools]
+        for path in ("lean-toolchain", "zig-patch/versions.toml"):
+            if (a.cwd / path).is_file():
+                report.setdefault("pins", []).append(file_evidence(a.cwd / path, fingerprints))
+        if cancelled[0]:
+            report.update(outcome="cancelled", exit_code=128 + cancelled[0])
+            return report
         a.log.parent.mkdir(parents=True, exist_ok=True)
         with a.log.open("wb") as output:
-            env = os.environ | {"LEAN_NUM_THREADS": "1", "ELAN_NO_OVERRIDE_NOTICE": "1"}
-            report["environment_overrides"] = {"LEAN_NUM_THREADS": "1", "ELAN_NO_OVERRIDE_NOTICE": "1"}
+            overrides = {"LEAN_NUM_THREADS": "1", "ELAN_NO_OVERRIDE_NOTICE": "1"}
+            env = os.environ | overrides
+            report["environment_overrides"] = overrides
             try:
                 child = subprocess.Popen(command, cwd=a.cwd, env=env, stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, start_new_session=True)
@@ -342,16 +392,17 @@ def run(a):
                         reason, code = "rss_limit", 125
                     if not reason and parallel_zig(rows, owned, names):
                         reason, code = "parallel_zig", 126
-                status = child.poll()
+                status = peek_status(child)
                 if reason:
-                    stop_tree(child, tree, a.grace)
+                    cleanup_confirmed = stop_tree(child, tree, a.grace)
                     break
                 if status is not None:
                     rows = processes()
                     if tree.owned(rows):
                         reason, code = "orphaned_children", 71
-                        stop_tree(child, tree, a.grace)
+                        cleanup_confirmed = stop_tree(child, tree, a.grace)
                     else:
+                        cleanup_confirmed = True
                         reason = "success" if status == 0 else "child_failed"
                         code = status if status >= 0 else 128 - status
                     break
@@ -365,9 +416,7 @@ def run(a):
                         if not chunk:
                             selector.unregister(key.fileobj)
                             break
-                        remaining = max(0, a.log_bytes - report["output_bytes"])
-                        output.write(chunk[:remaining])
-                        report["output_bytes"] += len(chunk)
+                        write_chunk(output, report, a.log_bytes, chunk)
             # Drain output already in the pipe after the entire workload stopped.
             while True:
                 try:
@@ -376,10 +425,8 @@ def run(a):
                     break
                 if not chunk:
                     break
-                remaining = max(0, a.log_bytes - report["output_bytes"])
-                output.write(chunk[:remaining])
-                report["output_bytes"] += len(chunk)
-            report.update(outcome=reason, exit_code=code, child_status=child.wait(),
+                write_chunk(output, report, a.log_bytes, chunk)
+            report.update(outcome=reason, exit_code=code, child_status=peek_status(child),
                           workload_seconds=round(time.monotonic() - build_start, 3),
                           log_truncated=report["output_bytes"] > a.log_bytes)
         report["log_sha256"] = digest(a.log)
@@ -390,12 +437,15 @@ def run(a):
     finally:
         if child is not None:
             try:
-                if not stop_tree(child, tree, a.grace):
+                if not cleanup_confirmed and not stop_tree(child, tree, a.grace):
                     report.update(outcome="cleanup_failed", exit_code=70)
             except (OSError, RuntimeError, subprocess.SubprocessError) as error:
                 report.update(outcome="cleanup_failed", exit_code=70, error=str(error)[:256])
             finally:
-                report["child_status"] = child.returncode
+                try:
+                    report["child_status"] = child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    report.update(outcome="cleanup_failed", exit_code=70)
                 child.stdout.close()
         selector.close()
         if lock is not None:
