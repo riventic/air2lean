@@ -33,7 +33,14 @@ mkdir -p "$work/TryPointers"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 "$translator" tests/roadmap/try-pointers/air/0.16.0 -o "$work/TryPointers/Gen.lean" \
   --namespace TryPointers --prefix try_pointers.
-cmp "$work/TryPointers/Gen.lean" tests/roadmap/try-pointers/TryPointers/Gen.lean
+if [ -f tests/roadmap/try-pointers/integration-qualification.json ]; then
+  python3 scripts/normalize-generated.py report "$work/TryPointers/Gen.lean" \
+    tests/roadmap/try-pointers/air/0.16.0 "$work/generated-report.json"
+  python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean \
+    "$work/TryPointers/Gen.lean" "$work/generated-report.json"
+else
+  cmp "$work/TryPointers/Gen.lean" tests/roadmap/try-pointers/TryPointers/Gen.lean
+fi
 "${lean_cmd[@]}" -R "$work" -o "$work/TryPointers/Gen.olean" "$work/TryPointers/Gen.lean"
 "${lean_cmd[@]}" -R tests/roadmap/try-pointers tests/roadmap/try-pointers/TryPointers/Proofs.lean
 "${lean_cmd[@]}" -R tests/roadmap/try-pointers --run tests/roadmap/try-pointers/TryPointers/Runtime.lean

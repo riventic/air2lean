@@ -96,11 +96,22 @@ The non-mutation Zig 0.16.0 CI job runs one sequential gate after the runtime an
 translator build. It builds both ownership modules, runs the offline provenance/mutant
 classifier tests, checks the retained artifacts and kernel/runtime/mutation gates, runs
 the stock host compiler's native fixture, then exports fresh source AIR with the matrix's
-patched compiler. `check-artifacts.py --fresh-air DIR` reuses the source/exporter hash,
-profile, exact inventory and tag checks without recording or replacing checked hashes.
-CI translates that fresh AIR and compares generated Lean byte-for-byte with retained
-`Gen.lean`. Fresh AIR, generated Lean and diagnostics stay under `RUNNER_TEMP`; this gate
-adds no artifact upload. Zig 0.14/0.15 exporter API source inspection and synthetic profile
+patched compiler. `check-artifacts.py --fresh-air DIR` requires explicit schema-12
+Linux/baseline ReleaseSafe profiles, exact inventory and both pointer-try tags. The
+separate `integration-qualification.json` binds the current combined exporter hash to
+the unchanged historical provenance and origin exporter hash. It records inputs only;
+it does not attest compiler or kernel qualification. Without that variant, the original
+exporter hash remains mandatory. Changing the combined exporter requires a separate
+reviewed variant update; this guard never rewrites historical receipts.
+CI translates fresh AIR and binds its full generated hash, input hashes and profile
+through `normalize-generated.py report`, then compares the complete generated body
+with retained `Gen.lean`. In integration mode, the retained artifact gate also binds
+the translator's full output and schema-11 AIR hashes/profile in a receipt before
+comparing the complete body with historical `Gen.lean`; it compiles the full generated
+file with its profile header. Without the integration variant it retains raw Gen
+comparison. Historical provenance and raw retained AIR/Gen hashes remain unchanged.
+Fresh AIR, generated Lean and diagnostics stay under
+`RUNNER_TEMP`; this gate adds no artifact upload. Zig 0.14/0.15 exporter API source inspection and synthetic profile
 checks are the current boundary, pending actual export/native qualification on those versions.
 
 Compiler-free provenance regressions:
