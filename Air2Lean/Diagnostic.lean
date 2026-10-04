@@ -116,11 +116,15 @@ structure Log where
   payloadBytes : Nat := 0
 
 def Log.add (log : Log) (d : Diagnostic) : Log :=
-  let d := { d with message := (d.message.take 2048).toString,
+  let d := { d with
+    message := (d.message.take 2048).toString
     messageTruncated := d.messageTruncated || decide (d.message.length > 2048) }
   if log.items.size ≥ log.limit then
-    { log with observed := log.observed + 1, failed := log.failed || (d.category != .skipped),
-      complete := false, truncated := true }
+    { log with
+      observed := log.observed + 1
+      failed := log.failed || (d.category != .skipped)
+      complete := false
+      truncated := true }
   else
     let bytes := d.toJson.compress.utf8ByteSize
     let fits := log.payloadBytes + bytes ≤ 1024 * 1024
