@@ -141,6 +141,16 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # Registry fixtures are version neutral; check their typed imported evidence and client
+      # once, with generated files/logs isolated from the checkout. No additional upload.
+      - name: External model contracts
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_MODEL_EVIDENCE: ${{ runner.temp }}/model-contracts
+        run: |
+          python3 tests/roadmap/models/test_gate.py
+          scripts/model-contracts.sh
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

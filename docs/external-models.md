@@ -81,13 +81,15 @@ The focused regression example defines a proved identity model and proves a gene
 client's returned value from its declared postcondition. Under the serialized compiler guard:
 
 ```sh
-lake build Air2Lean air2lean
-lake env lean -o tests/roadmap/models/Model.olean tests/roadmap/models/Model.lean
-lake env lean --run tests/roadmap/models/Registry.lean
-lake env lean tests/roadmap/models/Generated.lean
-python3 tests/roadmap/models/test_cli.py .lake/build/bin/air2lean
+AIR2LEAN_MODEL_EVIDENCE="$RUNNER_TEMP/model-contracts" scripts/model-contracts.sh
 ```
 
 The CLI driver exercises exact signature/layout/profile checks, proved versus assumed
 obligations, mandatory fields, missing models and preservation of existing output on errors.
 Template mode produces JSON authoring data and intentionally does not certify program calls.
+
+The gate explicitly builds the `ZigLean` umbrella imported by generated source, compiles the
+fixture model into an isolated module search path, and retains generated source, the binding
+manifest and all compiler/CLI logs in the evidence directory. CI runs it once on its 0.16.0
+non-mutation row. Without `RUNNER_TEMP`, local runs use the temporary directory; override
+`AIR2LEAN_MODEL_EVIDENCE` to retain a separate run. No new CI artifact upload is introduced.

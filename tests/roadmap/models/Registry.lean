@@ -8,7 +8,12 @@ private def require (condition : Bool) (message : String) : IO Unit :=
 private def get {α : Type} (e : Except String α) : IO α :=
   match e with | .ok a => pure a | .error error => throw (IO.userError error)
 
-def main : IO Unit := do
+def main (args : List String) : IO Unit := do
+  let directory : System.FilePath ← match args with
+    | [] => pure "tests/roadmap/models"
+    | [output] => pure (System.FilePath.mk output)
+    | _ => throw (IO.userError "usage: Registry.lean [output-directory]")
+  IO.FS.createDirAll directory
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/client.json")
   let f ← get <| normalize raw
   let template ← get <| ModelRegistry.template raw.profile #[f]
@@ -38,8 +43,8 @@ def main : IO Unit := do
   require (decide ((source.splitOn "def client (p0 : BitVec 8) : Zig.MemM").length > 1)) "client uses MemM"
   require (decide ((source.splitOn "theorem air2lean_model_0_evidence").length > 1)) "proved obligation"
   require ((source.splitOn "axiom air2lean_model_0_evidence").length == 1) "proved binding has no generated assumption"
-  IO.FS.writeFile "tests/roadmap/models/registry.json" (document.pretty ++ "\n")
-  IO.FS.writeFile "tests/roadmap/models/Generated.lean" (source ++ "\n" ++
+  IO.FS.writeFile (directory / "registry.json") (document.pretty ++ "\n")
+  IO.FS.writeFile (directory / "Generated.lean") (source ++ "\n" ++
     "namespace ExternalClient\n" ++
     "theorem client_result {x before result after}\n" ++
     "    (run : client x before = some (.ok (result, after))) : result = x := by\n" ++
