@@ -78,7 +78,8 @@ It builds the runtime/translator, kernel-checks the safety contracts, executes t
 runtime and signature regressions, elaborates fresh synthetic translations for
 all three supported versions, and verifies that an isolated mutant removing the
 spin scheduling operation is rejected by the scheduler-participation assertion.
-The mutation must fail at that assertion; a parse or compile error does not count.
+The mutation must return assertion exit code 85 with its runtime marker; a parse
+or compile error does not count.
 
 Opt into source and native qualification with explicit 0.16.0 compilers:
 

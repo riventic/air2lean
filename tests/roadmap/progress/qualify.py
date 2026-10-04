@@ -82,7 +82,7 @@ def main():
                 raise RuntimeError(f"{name}: timed out; retained {log}")
         step.update(exit_code=code, elapsed_seconds=time.monotonic() - start)
         if expected_failure:
-            valid = code != 0 and expected_failure in log.read_text()
+            valid = code == 85 and expected_failure in log.read_text().splitlines()
             step["status"] = "mutation_rejected_by_assertion" if valid else "failed"
         else:
             valid = code == 0
@@ -174,7 +174,7 @@ def main():
         mutant = artifacts / "ParticipationMutant.lean"
         mutant.write_text(original.replace(marker, "private def hint : ConcM Unit Unit := pure ()"))
         run("participation-mutant", ["lake", "env", "lean", "--run", mutant],
-            expected_failure="spin scheduler participation lost")
+            expected_failure="C03_ASSERTION: spin scheduler participation lost")
         if args.mode == "full":
             patched = compiler("patched-zig", "AIR2LEAN_ZIG_AIR")
             stock = compiler("stock-zig", "AIR2LEAN_ZIG")
