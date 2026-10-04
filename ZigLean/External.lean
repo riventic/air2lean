@@ -6,7 +6,7 @@ cannot assert a final memory state. No binary/environment correspondence is supp
 namespace Zig.External
 
 inductive Termination where
-  | total | partial
+  | total | «partial»
   deriving BEq, Repr
 
 inductive Effects where
@@ -30,7 +30,7 @@ def Contract.Holds {Args Result : Type} (c : Contract Args Result)
     (implementation : Args → MemM Result) : Prop :=
   ∀ args before, c.pre args before →
     match implementation args before with
-    | none => termination = .partial ∧ c.divergence args before
+    | none => termination = .«partial» ∧ c.divergence args before
     | some (.error error) => error ∈ errors ∧ c.failure args before error
     | some (.ok (result, after)) =>
       c.post args before result after ∧ c.frame args before after ∧
@@ -40,7 +40,8 @@ def Contract.Holds {Args Result : Type} (c : Contract Args Result)
 
 /-- The reusable client rule is conditional on the declared precondition and evidence. -/
 theorem Contract.success {Args Result : Type} (c : Contract Args Result)
-    {termination errors effects implementation}
+    {termination : Termination} {errors : List Error} {effects : Effects}
+    {implementation : Args → MemM Result}
     (evidence : c.Holds termination errors effects implementation)
     {args before result after} (pre : c.pre args before)
     (run : implementation args before = some (.ok (result, after))) :
@@ -51,7 +52,8 @@ theorem Contract.success {Args Result : Type} (c : Contract Args Result)
 
 /-- A total contract rules out divergence within its precondition. -/
 theorem Contract.terminates {Args Result : Type} (c : Contract Args Result)
-    {errors effects implementation} (evidence : c.Holds .total errors effects implementation)
+    {errors : List Error} {effects : Effects} {implementation : Args → MemM Result}
+    (evidence : c.Holds .total errors effects implementation)
     {args before} (pre : c.pre args before) : implementation args before ≠ none := by
   intro run
   have h := evidence args before pre

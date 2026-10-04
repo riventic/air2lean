@@ -82,8 +82,7 @@ def signature (f : Func) (args : Array Val) (ret : TyId) :
     Except String (Array Json × Json) := do
   let types ← args.mapM fun arg => do
     let id ← match arg with
-      | .inst id => require ((f.allInsts.find? (·.id == id)).map (·.ty))
-          "model registry: missing argument instruction"
+      | .inst id => require ((f.allInsts.find? (·.id == id)).map (·.ty)) "model registry: missing argument instruction"
       | .bool _ => require (f.types.findIdx? (· == .bool)) "model registry: missing bool type"
       | .void => require (f.types.findIdx? (· == .void)) "model registry: missing void type"
       | v => require v.constTy? "model registry: untyped/function-valued argument is unsupported"
@@ -137,8 +136,10 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
         "illegal", "deadlock"].contains e do throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
-    pure { symbol, profile, params, ret, importModule, implementation, contract, proof,
-      termination, effects, errors, dependencies }
+    pure { symbol := symbol, profile := profile, params := params, ret := ret,
+      importModule := importModule, implementation := implementation, contract := contract,
+      proof := proof, termination := termination, effects := effects, errors := errors,
+      dependencies := dependencies }
 
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/

@@ -2553,7 +2553,8 @@ def emitModel (models : Array ModelBinding) (index : Nat) (f : Func) (args : Arr
     else s!"({", ".intercalate names.toList})"
   let base := s!"air2lean_model_{index}"
   let errors := "[" ++ ", ".intercalate (m.errors.map ("Zig.Error." ++ ·)).toList ++ "]"
-  let obligation := s!"{base}_contract.Holds .{m.termination} {errors} .{m.effects} _root_.{m.implementation}"
+  let termination := if m.termination == "partial" then "«partial»" else "total"
+  let obligation := s!"{base}_contract.Holds .{termination} {errors} .{m.effects} _root_.{m.implementation}"
   let evidence := match m.proof with
     | some proof => s!"theorem {base}_evidence : {obligation} := _root_.{proof}"
     | none => s!"-- Explicit imported-model assumption; reported in air2lean-models.\naxiom {base}_evidence : {obligation}"
