@@ -388,6 +388,35 @@ pub fn forkCallBufs(
     return forkCallBufsWithRenderingAllocator(Args, args, func, quote_wide, bufs, out_gpa);
 }
 
+/// Render only after the tested call returns. Keep the writer alive until its
+/// complete byte sequence has been sent; any rendering error is a harness failure.
+fn renderResult(
+    raw: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+    rendering_allocator: std.mem.Allocator,
+    fd: std.posix.fd_t,
+) !void {
+    var aw: std.Io.Writer.Allocating = .init(rendering_allocator);
+    defer aw.deinit();
+    // One typed byte on the private pipe; it is removed from the legacy JSON payload.
+    try aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V');
+    render_bufs = bufs orelse &.{};
+    try renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw);
+    if (bufs) |bs| {
+        try aw.writer.writeAll(",\"bufs\":[");
+        for (bs, 0..) |b, i| {
+            if (i > 0) try aw.writer.writeAll(",");
+            try aw.writer.writeAll("\"");
+            for (b) |byte| try aw.writer.print("{x:0>2}", .{byte});
+            try aw.writer.writeAll("\"");
+        }
+        try aw.writer.writeAll("]");
+    }
+    if (test_alloc) |ta| try aw.writer.print(",\"live\":{d}", .{ta.live.items.len});
+    writeAll(fd, aw.written());
+}
+
 /// Test-runner injection point for the post-call renderer only. The tested function,
 /// its allocator arguments and the parent's result storage are unchanged.
 pub fn forkCallBufsWithRenderingAllocator(
@@ -410,23 +439,8 @@ pub fn forkCallBufsWithRenderingAllocator(
         compat.silenceStderr();
 
         const raw = @call(.auto, func, args);
-        var aw: std.Io.Writer.Allocating = .init(rendering_allocator);
-        // One typed byte on the private pipe; it is removed from the legacy JSON payload.
-        aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V') catch reportHarnessFailure("harnessRenderFailure");
-        render_bufs = bufs orelse &.{};
-        renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch reportHarnessFailure("harnessRenderFailure");
-        if (bufs) |bs| {
-            aw.writer.writeAll(",\"bufs\":[") catch reportHarnessFailure("harnessRenderFailure");
-            for (bs, 0..) |b, i| {
-                if (i > 0) aw.writer.writeAll(",") catch reportHarnessFailure("harnessRenderFailure");
-                aw.writer.writeAll("\"") catch reportHarnessFailure("harnessRenderFailure");
-                for (b) |byte| aw.writer.print("{x:0>2}", .{byte}) catch reportHarnessFailure("harnessRenderFailure");
-                aw.writer.writeAll("\"") catch reportHarnessFailure("harnessRenderFailure");
-            }
-            aw.writer.writeAll("]") catch reportHarnessFailure("harnessRenderFailure");
-        }
-        if (test_alloc) |ta| aw.writer.print(",\"live\":{d}", .{ta.live.items.len}) catch reportHarnessFailure("harnessRenderFailure");
-        writeAll(fds[1], aw.written());
+        renderResult(raw, quote_wide, bufs, rendering_allocator, fds[1]) catch
+            reportHarnessFailure("harnessRenderFailure");
         compat.exit(0);
     }
 

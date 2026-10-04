@@ -12,7 +12,7 @@ fn sourcePanic() u32 {
 }
 
 fn prefix(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
-    try common.writeResult(writer, try common.forkCall(struct {}, .{}, value, false));
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(value)), .{}, value, false));
 }
 
 fn renderer(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
@@ -21,7 +21,7 @@ fn renderer(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
     var bytes: [0]u8 = .{};
     var fixed = std.heap.FixedBufferAllocator.init(&bytes);
     const outcome = try common.forkCallBufsWithRenderingAllocator(
-        struct {}, .{}, value, false, null, fixed.allocator(),
+        std.meta.ArgsTuple(@TypeOf(value)), .{}, value, false, null, fixed.allocator(),
     );
     switch (outcome) {
         .fail => |failure| if (failure.kind != .native_harness_failure)
@@ -32,7 +32,7 @@ fn renderer(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
 }
 
 fn source(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
-    const outcome = try common.forkCall(struct {}, .{}, sourcePanic, false);
+    const outcome = try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourcePanic)), .{}, sourcePanic, false);
     switch (outcome) {
         .fail => |failure| if (failure.kind != .native_panic)
             return error.SourcePanicMisclassified,
