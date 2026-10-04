@@ -282,7 +282,8 @@ def Float.sqrtF128ViaF64 (x : Float .f128) : Float .f128 :=
 /-- `@rem`: `a - b * trunc(a / b)`, exact — no rounding is needed since the true remainder of
 two same-format floats always fits their shared precision. A zero result takes `a`'s sign,
 per `docs/floats.md` §Semantics (the arithmetic itself loses it, since a `Rat` zero is
-unsigned). -/
+unsigned). A nonzero result equal to `a` retains its bits, including a pseudo-denormal's
+noncanonical encoding. -/
 def Float.rem {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   match a.classify, b.classify with
   | .nan, _ => Float.nan
@@ -295,7 +296,9 @@ def Float.rem {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
       let ra := finiteToRat sa ma ea
       let rb := finiteToRat sb mb eb
       let r := ra - rb * (truncRat (ra / rb) : Rat)
-      if r = 0 then Float.zero sa else Float.roundRat fmt (r < 0) r
+      if r = 0 then Float.zero sa
+      else if r = ra then a
+      else Float.roundRat fmt (r < 0) r
 
 /-- `@mod`: the LLVM lowering, `a < 0 ? rem(rem(a, b) + b, b) : rem(a, b)`
 (`docs/floats.md` §Semantics) — `a < 0` is the ordinary float comparison (`-0` is not `< 0`),
@@ -358,13 +361,14 @@ def Float.isInvalidF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
     intBit == 0 && exp != 0
   | _ => false
 
-/-- Group C, `@mulAdd` only: does `x`'s bit pattern encode an f80 pseudo-denormal — the explicit
+/-- Does `x`'s bit pattern encode an f80 pseudo-denormal — the explicit
 integer bit set while the biased exponent is zero (`docs/floats.md` §f80: modeled as the value
 `1.f × 2^(1 − 16383)`, unlike a true zero/subnormal's clear integer bit). `fma`'s f128-extension
-step on the reference target re-derives the value from the exponent alone by the ordinary
-subnormal formula, ignoring this explicit bit, and reads it as `0`. `@floor`/`@ceil`/`@trunc`/
-`@round`/`@rem`/`@mod` read a pseudo-denormal correctly (0 mismatches there) and need no such
-guard. Always `false` for every other format. -/
+step on the reference target ignores this explicit bit, changing its value (to zero when its
+fraction is zero), so the FMA wrappers guard it. Compiler-rt's legacy f80 floor/ceil use the
+same extension; its remainder compares raw encodings. The target wrappers model these
+differences (`CompilerRt.lean`, groups G/H), while trunc/round still produce the same signed
+zero for these tiny values. Always `false` for every other format. -/
 def Float.isPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
   match fmt with
   | .f80 =>
