@@ -92,5 +92,11 @@ external checkout or either Zig compiler:
 bash scripts/flow-time.sh --check-artifacts
 ```
 
+The CI workflow runs this artifact-only command and the five Python provenance guard
+regressions once in the default full job. It deliberately supplies an unavailable
+production source path: the artifact gate must succeed without the private checkout.
+CI does not regenerate production AIR or run production native tests, and this gate
+makes no compiler-preservation claim. It uses ordinary CI logs and temporary files.
+
 This checks the committed artifacts only. The full original-source reproduction
 requires the source dependency, reexports and compares AIR, and reruns native tests.
