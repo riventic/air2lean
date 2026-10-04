@@ -10,8 +10,9 @@ private def check [DecidableEq α] [Repr α] (name : String) (actual expected : 
 
 private def value (r : Sched.Out α) : Option (Except Error α) := r.map (·.map Prod.fst)
 
-private def spinForever : ConcM Unit Unit :=
-  (Zig.loop (spinLoopHintC : CM Unit Unit Unit) (fun _ => true)).run () |>.map Prod.fst
+private def spinForever : ConcM Unit Unit := do
+  let _ ← (Zig.loop (spinLoopHintC : CM Unit Unit Unit) (fun _ => true)).run ()
+  pure ()
 
 private def observedBeforeJoin : ConcM Unit Nat := do
   let tid ← ConcM.sync (.spawn ())
