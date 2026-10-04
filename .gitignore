@@ -10,3 +10,8 @@ zig-out/
 # air2lean
 tests/diff/out/
 zig-air-*/
+
+# Generated external-contract regression artifacts
+tests/roadmap/models/Generated.lean
+tests/roadmap/models/Model.olean
+tests/roadmap/models/registry.json

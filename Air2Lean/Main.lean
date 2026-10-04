@@ -20,7 +20,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1]"
+    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template]"
 
 structure Args where
   airDir : System.FilePath
@@ -31,33 +31,39 @@ structure Args where
   `FloatSemantics`). -/
   floatSemantics : FloatSemantics
   profile : Option String
+  modelRegistry : Option String
+  registryTemplate : Bool := false
 
 private partial def parseArgsGo (args : List String)
-    (airDir outPath ns prefix_ floatSemantics profile : Option String) : Except String Args :=
+    (airDir outPath ns prefix_ floatSemantics profile modelRegistry : Option String) : Except String Args :=
   match args with
   | [] =>
     match airDir, outPath, ns with
     | some airDir, some outPath, some ns =>
       match floatSemantics with
-      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee, profile }
-      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt, profile }
+      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee, profile, modelRegistry }
+      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt, profile, modelRegistry }
       | some other => .error s!"invalid --float-semantics '{other}' (want 'ieee' or 'compiler-rt')\n{usage}"
     | none, _, _ => .error s!"missing <air-dir>\n{usage}"
     | _, none, _ => .error s!"missing -o <out.lean>\n{usage}"
     | _, _, none => .error s!"missing --namespace <Ns>\n{usage}"
-  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics profile
-  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics profile
-  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics profile
-  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile
-  | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v)
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] =>
+  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics profile modelRegistry
+  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics profile modelRegistry
+  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics profile modelRegistry
+  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile modelRegistry
+  | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v) modelRegistry
+  | "--model-registry" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile (some v)
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
-    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics profile
+    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics profile modelRegistry
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
-  let a ← parseArgsGo args none none none none none none
+  let a ← parseArgsGo (args.filter (· != "--model-registry-template")) none none none none none none none
+  let a := { a with registryTemplate := args.contains "--model-registry-template" }
+  if a.registryTemplate && a.modelRegistry.isSome then
+    throw "--model-registry-template cannot be combined with --model-registry"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -91,6 +97,12 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try IO.FS.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      let modelContents ← match a.modelRegistry with
+        | none => pure "{\"schema\":1,\"models\":[]}"
+        | some path => IO.FS.readFile path
+      let models ← match ModelRegistry.parse modelContents with
+        | .ok models => pure models
+        | .error error => throw (IO.userError error)
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
@@ -106,20 +118,31 @@ private def run (args : List String) : IO UInt32 := do
               pure f : Except String Func) with
             | .error e => err := some s!"{path}: {e}"
             | .ok f => funcs := funcs.push f
-      match (match err with | some e => Except.error e | none => checkProgram funcs) with
+      match (match err with | some e => Except.error e | none => if a.registryTemplate then pure () else checkProgram funcs models profiles[0]?) with
       | .error e => die e
       | .ok () =>
         match BuildProfile.checkProgram profiles a.profile with
         | .error e => die e
         | .ok profile =>
-          let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
-          let metadata := Lean.Json.mkObj [("profile", profile.toJson),
-            ("float_semantics", .str semantics), ("correspondence", .str "model")]
-          let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-            emit funcs a.ns a.prefix_ a.floatSemantics
-          try IO.FS.writeFile a.outPath src catch e =>
-            throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
-          pure 0
+          match ModelRegistry.check models profile funcs with
+          | .error error => die error
+          | .ok () =>
+            if a.registryTemplate then
+              match ModelRegistry.template profile funcs with
+              | .error error => die error
+              | .ok template =>
+                IO.FS.writeFile a.outPath (template.pretty ++ "\n")
+                pure 0
+            else
+              let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
+              let metadata := Lean.Json.mkObj [("profile", profile.toJson),
+                ("float_semantics", .str semantics), ("correspondence", .str "model")]
+              let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+                "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n" ++
+                emit funcs a.ns a.prefix_ a.floatSemantics models
+              try IO.FS.writeFile a.outPath src catch e =>
+                throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+              pure 0
 
 def main (args : List String) : IO UInt32 := do
   if args == ["--help"] || args == ["-h"] then

@@ -2533,23 +2533,63 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
     names := names.push (f.name, name)
   return (named, names)
 
+/-- Emit a typed implementation adapter plus a complete contract obligation. Imported
+identifiers are rooted so generated names cannot shadow the user's definitions. -/
+def emitModel (models : Array ModelBinding) (index : Nat) (f : Func) (args : Array Val)
+    (ret : TyId) (structNames : Array (String × String)) : String := Id.run do
+  let m := models[index]!
+  let insts := f.allInsts
+  let ids := args.map fun arg => match arg with
+    | .inst id => ((insts.find? (·.id == id)).map (·.ty)).getD 0
+    | .bool _ => (f.types.findIdx? (· == .bool)).getD 0
+    | .void => (f.types.findIdx? (· == .void)).getD 0
+    | v => v.constTy?.getD 0
+  let tys := ids.map fun id => emitTy structNames f.types f.types[id]!
+  let result := emitTy structNames f.types f.types[ret]!
+  let argsTy := if tys.isEmpty then "Unit" else " × ".intercalate tys.toList
+  let names := (Array.range tys.size).map fun i => s!"p{i}"
+  let binders := (tys.zip names).map fun (ty, name) => s!"({name} : {ty})"
+  let tuple := if names.isEmpty then "()" else if names.size == 1 then names[0]!
+    else s!"({", ".intercalate names.toList})"
+  let base := s!"air2lean_model_{index}"
+  let errors := "[" ++ ", ".intercalate (m.errors.map ("Zig.Error." ++ ·)).toList ++ "]"
+  let obligation := s!"{base}_contract.Holds .{m.termination} {errors} .{m.effects} _root_.{m.implementation}"
+  let evidence := match m.proof with
+    | some proof => s!"theorem {base}_evidence : {obligation} := _root_.{proof}"
+    | none => s!"-- Explicit imported-model assumption; reported in air2lean-models.\naxiom {base}_evidence : {obligation}"
+  return String.intercalate "\n\n" [
+    s!"def {base}_contract : Zig.External.Contract ({argsTy}) ({result}) := _root_.{m.contract}",
+    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}",
+    evidence]
+
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
 `--float-semantics` (default `ieee`). -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
-    (floatSemantics : FloatSemantics := .ieee) : String :=
-  let memFuncs := memoryFunctions funcs
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[]) : String :=
+  let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
-  let fixed := runtimeNames ++
+  let modelNames := (Array.range models.size).flatMap fun i =>
+    #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"]
+  let fixed := runtimeNames ++ modelNames ++
     (if memFuncs.isEmpty then #[] else #["mem0"]) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
-  let (structs, funcNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+  let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+  let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := asmDefs.toList.map emitAsmDef
+  let modelStr := (models.mapIdx fun index model =>
+    let site := funcs.findSome? fun f => f.allInsts.findSome? fun i => match i.op with
+      | .call (.func name false none) args =>
+        if name == model.symbol then some (f, args, i.ty) else none
+      | _ => none
+    match site with
+    | some (f, args, ret) => emitModel models index f args ret structNames
+    | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
@@ -2592,7 +2632,8 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
         | _ => none
       (leanOf nm, emitTy structNames f.types f.types[a]!, kind, adapter))
   String.intercalate "\n\n"
-    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
+    (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
+      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"])
 
 end Air2Lean

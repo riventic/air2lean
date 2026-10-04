@@ -9,3 +9,4 @@ import ZigLean.Packed
 import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.Vec
+import ZigLean.External
