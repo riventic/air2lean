@@ -38,6 +38,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
 structure FileResult where
   file : String
   function : Option String := none
+  decodedProfile : Option BuildProfile := none
   normalized : Option Func := none
   index : Option OperandTypes := none
   structureValid : Bool := false
@@ -76,8 +77,10 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
   return result
 
 private def adjacency (graph : Array Edge) : Std.HashMap String (Array String) :=
-  graph.foldl (init := {}) fun index edge =>
-    index.insert edge.caller ((index[edge.caller]?.getD #[]).push edge.callee)
+  let reversed := graph.foldl (init := ({} : Std.HashMap String (List String))) fun index edge =>
+    index.insert edge.caller (edge.callee :: index[edge.caller]?.getD [])
+  reversed.fold (init := ({} : Std.HashMap String (Array String))) fun index caller callees =>
+    index.insert caller callees.reverse.toArray
 
 private def pathsFrom (index : Std.HashMap String (Array String)) (start : String)
     (maxNodes : Nat) (goal : Option String := none) : Std.HashMap String (Array String) := Id.run do
@@ -123,6 +126,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
   let .ok raw := decoded
     | log := log.record (boundary file name .airDecode .decode .validationFailure) decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
+  let unit := { unit with function := some raw.name, decodedProfile := some raw.profile }
   let mut marked := false
   for i in Raw.flatten raw.body do
     if i.tag.endsWith "_optimized" || i.unsupported then
@@ -173,7 +177,6 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
     if let some f := u.normalized then
       log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
   let graph := edges units
-  let index := adjacency graph
   let mut blockers : Array (Edge × Code × Option String) := #[]
   for edge in graph do
     let targets := selected[edge.callee]?.getD #[]
@@ -184,18 +187,20 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
       else if !(targets[0]?.map (·.localPassed)).getD false then some Code.calleeBlocked else none
     if let some code := code then
       blockers := blockers.push (edge, code, unsupported)
-  for root in units do
-    if log.truncated then break
-    if let some name := root.function then
-      let paths := pathsFrom index name (maxFiles + 1)
-      for (edge, code, unsupported) in blockers do
-        if log.truncated then break
-        if let some prefix := paths[edge.caller]? then
-          log := log.add { (boundary edge.file (some edge.caller) code .program
-            (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
-            (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
-            anchor := { idSpace := .canonical, instruction := some edge.instruction }
-            dependencyChain := prefix.push edge.callee }
+  if !blockers.isEmpty then
+    let index := adjacency graph
+    for root in units do
+      if log.truncated then break
+      if let some name := root.function then
+        let paths := pathsFrom index name (maxFiles + 1)
+        for (edge, code, unsupported) in blockers do
+          if log.truncated then break
+          if let some prefix := paths[edge.caller]? then
+            log := log.add { (boundary edge.file (some edge.caller) code .program
+              (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
+              (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
+              anchor := { idSpace := .canonical, instruction := some edge.instruction }
+              dependencyChain := prefix.push edge.callee }
   -- Retain the authoritative whole-program validator. Its first-error boundary
   -- includes shared definitions and memory effects not independently collected.
   if !funcs.isEmpty then
@@ -264,16 +269,16 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
       units := units.push { file := path.toString }
       log := log.add (skipped path.toString none .decode "readable_UTF8_input")
   let renamed := Anon.renumberAll texts
-  let mut profiles : Array BuildProfile := #[]
+  let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
     let result := inspect file contents log
     units := units.push result.1
     log := result.2
-    if result.1.function.isSome then
-      if let .ok raw := Raw.parseFile contents then
-        profiles := profiles.push raw.profile
-        log := log.record (boundary file (some raw.name) .profileFailure .profile .validationFailure)
-          (BuildProfile.checkProgram (profiles.extract 0 1 ++ #[raw.profile]) a.profile)
+    if let some profile := result.1.decodedProfile then
+      let baseline := firstProfile.getD profile
+      firstProfile := some baseline
+      log := log.record (boundary file result.1.function .profileFailure .profile .validationFailure)
+        (BuildProfile.checkProgram #[baseline, profile] a.profile)
   units := units.qsort (fun x y => decide (x.file < y.file))
   return (units, collectProgram units log)
 

@@ -41,12 +41,27 @@ private def collectorChecks : IO Unit := do
   let malformed := inspect "bad.json" "{" {}
   require (malformed.2.items[0]?.map (·.code) == some .jsonSyntax) "strict malformed JSON boundary"
   require (malformed.2.items.any (·.code == .prerequisiteSkipped)) "failed parse must report skipped prerequisites"
+  require malformed.1.decodedProfile.isNone "JSON failure cannot fabricate decoded profile eligibility"
+  let undecoded := inspect "undecoded.json" "{\"name\":\"declared\"}" {}
+  require (undecoded.1.function == some "declared" && undecoded.1.decodedProfile.isNone)
+    "declared identity alone cannot make a failed decode eligible for profile comparison"
+  let oversized := inspect "oversized.json" ("{\"name\":\"" ++ String.ofList (List.replicate 1025 'x') ++ "\"}") {}
+  require (oversized.1.function.isNone && oversized.1.decodedProfile.isNone) "oversized identities must remain ineligible"
   let marked := inspect "marked.json"
     "{\"schema\":11,\"zig_version\":\"0.16.0\",\"name\":\"marked\",\"types\":[{\"k\":\"void\"}],\"params\":[],\"ret\":0,\"body\":[{\"id\":42,\"tag\":\"unknown_a\",\"ty\":0,\"unsupported\":true},{\"id\":43,\"tag\":\"unknown_b\",\"ty\":0,\"unsupported\":true}]}" {}
   let markers := marked.2.items.filter (·.code == .exporterUnsupported)
   require (markers.map (·.anchor.instruction) == #[some 42, some 43]) "independent explicit exporter markers"
   require (markers.all (fun d => d.category == .unsupportedSemantics && d.anchor.idSpace == .exported))
     "exported IDs must not be labeled canonical"
+  require (marked.1.decodedProfile.isSome && marked.1.normalized.isNone) "decoded exporter markers retain real profile eligibility"
+  let untranslated := inspect "untranslated.json"
+    "{\"schema\":11,\"zig_version\":\"0.16.0\",\"name\":\"untranslated\",\"types\":[{\"k\":\"void\"}],\"params\":[],\"ret\":0,\"body\":[{\"id\":0,\"tag\":\"unknown_plain\",\"ty\":0}]}" {}
+  require (untranslated.1.decodedProfile.isSome && untranslated.1.normalized.isNone)
+    "normalization failure retains the successfully decoded profile"
+  let uncanonical := inspect "uncanonical.json"
+    "{\"schema\":11,\"zig_version\":\"0.16.0\",\"name\":\"uncanonical\",\"types\":[{\"k\":\"void\"}],\"params\":[],\"ret\":0,\"body\":[{\"id\":0,\"tag\":\"unknown_plain\",\"ty\":0},{\"id\":0,\"tag\":\"unknown_plain\",\"ty\":0}]}" {}
+  require (uncanonical.1.decodedProfile.isSome && uncanonical.2.items.any (·.code == .canonicalFailure))
+    "canonicalization failure retains real decoded profile eligibility"
   let graph : Array Edge := #[
     { caller := "root", callee := "a", instruction := 0, file := "r" },
     { caller := "a", callee := "root", instruction := 0, file := "a" },
@@ -55,12 +70,26 @@ private def collectorChecks : IO Unit := do
   require (shortestChain graph "root" "blocked" == some #["root", "blocked"]) "BFS must choose shortest deterministic path"
   require (shortestChain graph "root" "absent" == none) "cycles must terminate"
   require (shortestChain graph "root" "blocked" 1 == none) "queue bounds must not invent a chain"
+  let ties : Array Edge := #[
+    { caller := "root", callee := "first", instruction := 0, file := "r" },
+    { caller := "root", callee := "second", instruction := 1, file := "r" },
+    { caller := "first", callee := "blocked", instruction := 0, file := "f" },
+    { caller := "second", callee := "blocked", instruction := 0, file := "s" }]
+  require (shortestChain ties "root" "blocked" == some #["root", "first", "blocked"])
+    "reversed adjacency buckets must preserve first-edge BFS ties"
   let call := mkFunc "calls" #[
     { id := 0, ty := 3, op := .arg 0 },
     { id := 1, ty := 1, op := .call (.func "target" false) #[] },
     { id := 2, ty := 1, op := .call (.func "target" false) #[] },
     { id := 3, ty := 2, op := .ret .void }]
   let target := mkFunc "target" #[{ id := 0, ty := 3, op := .arg 0 }, { id := 1, ty := 2, op := .ret .void }]
+  let noBlockers := collectProgram #[
+    { file := "target.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true }] {}
+  require (!noBlockers.failed && noBlockers.complete) "no-blocker program remains accepted without dependency expansion"
+  let sharedFailure := collectProgram #[
+    { file := "a.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true },
+    { file := "b.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true }] {}
+  require (sharedFailure.items.any (·.code == .programFailure)) "no dependency blockers must not suppress the authoritative program validator"
   let calls := collectCallChecks "calls.json" call #[call, target] {}
   require ((calls.items.filter (·.code == .signatureFailure)).size == 2) "every independent call signature must be checked"
   let malformedType := { (mkFunc "prerequisite") with
