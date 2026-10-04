@@ -73,8 +73,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Offline compiler inventory regressions
+        run: python3 tests/roadmap/inventory/test_inventory.py
+
+      # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
+      # Run before check.sh replaces committed generated proof modules.
+      - name: Check compiler-derived coverage inventory
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          source_temp=$(mktemp -d "$RUNNER_TEMP/air-inventory.XXXXXX")
+          trap 'rm -rf "$source_temp"' EXIT
+          url=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' url)
+          sha256=$(zig-patch/toml-get.sh '["${{ matrix.zig }}"]' sha256)
+          curl -fL --output "$source_temp/source.tar.xz" "$url"
+          echo "$sha256  $source_temp/source.tar.xz" | sha256sum -c -
+          mkdir "$source_temp/source"
+          tar -xJf "$source_temp/source.tar.xz" -C "$source_temp/source" --strip-components=1
+          python3 scripts/coverage.py check --version '${{ matrix.zig }}' \
+            --source "$source_temp/source" --os linux --inventory 'coverage/${{ matrix.zig }}.json'
+
       - name: Shell check regressions
         run: scripts/review-checks.sh
+
+      - name: Build guard offline regressions
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
 
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
@@ -141,6 +166,31 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      - name: Build optional separation proof tools
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/proof-tools"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+
+      - name: Separation normalization regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Normalize.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Normalize.log"
+
+      - name: Separation client regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
+
+      - name: Total correctness regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
+
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
       - name: External model contracts
@@ -176,6 +226,22 @@ jobs:
       - name: Build proofs
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
+
+      # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
+      # assembly/libm policy is reviewed for this profile and the pinned Lean release.
+      - name: Audit theorem dependencies and assumptions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: |
+          rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
+          scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
+
+      - name: Assurance environment regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: tests/roadmap/assurance/check.sh
 
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
