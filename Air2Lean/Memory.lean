@@ -286,7 +286,9 @@ def fnRefs (funcs : Array Func) : Array (String × String) :=
 def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
   let i ← f.allInsts.find? (·.id == id)
   let .ptr _ _ c ← f.types[i.ty]? | none
-  let .other tn ← f.types[c]? | none
+  let child ← f.types[c]?
+  unless isFnTy child do none
+  let .other tn := child | none
   pure tn
 
 /-- The functions that an indirect call in `f` can call (`fnRefs`). -/

@@ -590,6 +590,14 @@ def OperandTypes.valTy? (index : OperandTypes) (v : Val) : Option TyId :=
 /-- A normalized operand's type. Bool/void literals carry no file-local ID. -/
 def Func.valTy? (f : Func) (v : Val) : Option TyId := f.operandTypes.valTy? v
 
+private def OperandTypes.calleeFnTy? (index : OperandTypes) (f : Func) (id : InstId) : Option String := do
+  let ty ← index.instructions[id]?
+  let .ptr _ _ child ← f.types[ty]? | none
+  let childTy ← f.types[child]?
+  unless isFnTy childTy do none
+  let .other name := childTy | none
+  pure name
+
 /-- Exact argument type agreement between independent local type tables. -/
 def valueCompatible (f target : Func) (v : Val) (expected : TyId)
     (index : OperandTypes := f.operandTypes) : Bool :=
@@ -609,18 +617,47 @@ private def localValueCompatible (f : Func) (index : OperandTypes) (v : Val) (ex
   | .void => f.types[expected]? == some .void
   | v => ((index.valTy? v).map fun t => localTypeCompatible f t expected).getD false
 
-/-- Validate a direct call (or one possible indirect target) against its exported signature. -/
-def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
-    (index : OperandTypes := f.operandTypes) : Except String Unit := do
+private def checkCallSignatureWith (f target : Func) (i : Inst) (args : Array Val)
+    (index : OperandTypes) (sameType : TyId → TyId → Bool) : Except String Unit := do
   unless args.size == target.params.size do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has {args.size} arguments, expected {target.params.size}"
-  unless compatibleType f target i.ty target.ret do
+  unless sameType i.ty target.ret do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible result type ({i.ty} versus {target.ret})"
   for (arg, k) in args.zipIdx do
     if let .func .. := arg then
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' argument {k}: function values lack a structured signature in this AIR schema"
-    unless valueCompatible f target arg target.params[k]! index do
+    let agrees := match arg with
+      | .bool _ => target.types[target.params[k]!]? == some .bool
+      | .void => target.types[target.params[k]!]? == some .void
+      | v => ((index.valTy? v).map fun t => sameType t target.params[k]!).getD false
+    unless agrees do
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible argument {k} type (expected local type {target.params[k]!})"
+
+/-- Validate a direct call (or one possible indirect target) against its exported signature. -/
+def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
+    (index : OperandTypes := f.operandTypes) : Except String Unit :=
+  checkCallSignatureWith f target i args index (compatibleType f target)
+
+private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
+
+/-- Cache structural equality only for an exact ordered function-table/type-ID pair.
+Every call still checks its arity, operand types/forms and diagnostic context; only an
+entirely successful signature check publishes new pairs. Untyped bool/void literals do
+not establish a local type/layout pair and therefore never add one. -/
+private def checkCallSignatureCached (f target : Func) (sourceIndex targetIndex : Nat)
+    (i : Inst) (args : Array Val) (index : OperandTypes) (completed : SignaturePairs) :
+    Except String SignaturePairs := do
+  let key (x y : TyId) := ((sourceIndex, targetIndex), (x, y))
+  let sameType (x y : TyId) := completed.contains (key x y) || compatibleType f target x y
+  checkCallSignatureWith f target i args index sameType
+  let mut completed := completed.insert (key i.ty target.ret)
+  for (arg, k) in args.zipIdx do
+    match arg with
+    | .bool _ | .void => pure ()
+    | _ =>
+      if let some ty := index.valTy? arg then
+        completed := completed.insert (key ty target.params[k]!)
+  return completed
 
 /-- Constant forms and nested payloads remain typed for direct normalized API clients too. -/
 private partial def checkConstant (f : Func) (index : OperandTypes) (expected : TyId) (v : Val)
@@ -754,34 +791,44 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
 
 /-- The type graph reachable from emitted signatures, instructions, constants and globals.
 Recognized model types have no implementation children in the normalized IR. -/
-private def programUsedTypes (f : Func) (index : OperandTypes) : Std.HashSet TyId := Id.run do
-  let mut seen : Std.HashSet TyId := {}
-  let mut values : List Val := []
-  let mut todo := (f.params ++ #[f.ret]).toList
-  for i in index.insts do
-    todo := i.ty :: todo
-    values := (valueOperands i.op ++ ptrOperands i.op).toList ++ values
-  for g in f.globals do
-    todo := g.ty :: todo
-    values := g.init.toList ++ values
-  while !values.isEmpty do
-    let v := values.head!
-    values := values.tail!
-    if let some t := v.constTy? then
-      unless seen.contains t do
-        seen := seen.insert t
-        todo := ((f.types[t]?.map childTys).getD #[]).toList ++ todo
-    match v with
-    | .agg _ vs => values := vs.toList ++ values
-    | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => values := v :: values
-    | .sliceConst _ p n => values := p :: n :: values
-    | _ => pure ()
+private def typeClosure (types : Array Ty) (roots : List TyId) (seen : Std.HashSet TyId) :
+    Std.HashSet TyId := Id.run do
+  let mut seen := seen
+  let mut todo := roots
   while !todo.isEmpty do
     let id := todo.head!
     todo := todo.tail!
     if seen.contains id then continue
     seen := seen.insert id
-    todo := ((f.types[id]?.map childTys).getD #[]).toList ++ todo
+    todo := ((types[id]?.map childTys).getD #[]).toList ++ todo
+  return seen
+
+/-- Collect reachable IDs without validating them; unknown IDs remain in the result. Roots
+stream through one shared closure algorithm. SSA references add no roots because every
+instruction type is already covered. This pure collector is exposed for equivalence tests. -/
+def programUsedTypes (f : Func) (index : OperandTypes := f.operandTypes) : Std.HashSet TyId := Id.run do
+  let mut seen := typeClosure f.types (f.params ++ #[f.ret]).toList {}
+  let scan (root : Val) (seen : Std.HashSet TyId) : Std.HashSet TyId := Id.run do
+    let mut seen := seen
+    let mut values : List Val := [root]
+    while !values.isEmpty do
+      let v := values.head!
+      values := values.tail!
+      if let some ty := v.constTy? then seen := typeClosure f.types [ty] seen
+      match v with
+      | .agg _ vs => values := vs.toList ++ values
+      | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => values := v :: values
+      | .sliceConst _ p n => values := p :: n :: values
+      | _ => pure ()
+    return seen
+  for i in index.insts do
+    seen := typeClosure f.types [i.ty] seen
+    for v in valueOperands i.op ++ ptrOperands i.op do
+      if let .inst _ := v then continue
+      seen := scan v seen
+  for g in f.globals do
+    seen := typeClosure f.types [g.ty] seen
+    if let some v := g.init then seen := scan v seen
   return seen
 
 /-- Definitions which emission shares by name must agree across every file. -/
@@ -982,37 +1029,46 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
   let indexes ← checkSharedDefinitions funcs
   let refs := fnRefs funcs
   let mem := memoryFunctions funcs
-  let names := funcs.map (·.name)
-  for (f, index) in funcs.zip indexes do
+  let mut functionNames : Std.HashMap String Nat := {}
+  for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
+  let mut signatures : SignaturePairs := {}
+  for ((f, index), fileIndex) in (funcs.zip indexes).zipIdx do
     for i in index.insts do
       if let .call (.inst p) args := i.op then
-        let some tn := (index.instructions[p]?.bind (f.types[·]?)).bind (fun t => match t with
-          | .ptr _ _ c => (f.types[c]?).bind fun t => match t with | .other name => some name | _ => none
-          | _ => none)
+        let some tn := index.calleeFnTy? f p
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
         for (typ, callee) in refs do
           if typ == tn then
-            let some target := funcs.find? (·.name == callee)
+            let some targetIndex := functionNames[callee]?
               | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
-            checkCallSignature f target i args index
+            let some target := funcs[targetIndex]?
+              | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
+            signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
       if let .call (.func callee false spawnFn) args := i.op then
         checkModelSignature f callee args i.ty index
         if (allocFn? callee).isNone && (threadFn? callee).isNone then
-          if let some target := funcs.find? (·.name == callee) then
-            checkCallSignature f target i args index
+          if let some targetIndex := functionNames[callee]? then
+            if let some target := funcs[targetIndex]? then
+              signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
         if let some k := (threadFn? callee).bind (·.spawnArgs?) then
           let some worker := spawnFn
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-          let some target := funcs.find? (·.name == worker)
+          let some targetIndex := functionNames[worker]?
+            | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
+          let some target := funcs[targetIndex]?
             | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
           let some tuple := args[k]?.bind index.valTy? | throw s!"{f.name}: inst {i.id}: spawn args have no type"
           let some (.tuple fields) := f.types[tuple]? | throw s!"{f.name}: inst {i.id}: spawn args are not a tuple"
           unless fields.size == target.params.size do
             throw s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count"
+          let mut completed := signatures
           for (ty, n) in fields.zipIdx do
-            unless compatibleType f target ty target.params[n]! do
+            let key := ((fileIndex, targetIndex), (ty, target.params[n]!))
+            unless completed.contains key || compatibleType f target ty target.params[n]! do
               throw s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type"
-        unless names.contains callee do
+            completed := completed.insert key
+          signatures := completed
+        unless functionNames.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless (allocFn? callee).isSome || (threadFn? callee).isSome do

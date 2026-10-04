@@ -24,6 +24,29 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
   layouts := Array.replicate types.size {}
 }
 
+/-- Snapshot of the previous collector, used only on bounded fixtures to check that the
+streamed closure keeps the same roots (including invalid IDs without diagnosing them). -/
+private def previousUsedTypes (f : Func) : Std.HashSet TyId := Id.run do
+  let rec constantTypes (v : Val) : Array TyId :=
+    v.constTy?.toArray ++ match v with
+      | .agg _ vs => vs.flatMap constantTypes
+      | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => constantTypes v
+      | .sliceConst _ p n => constantTypes p ++ constantTypes n
+      | _ => #[]
+  let insts := f.allInsts
+  let values := insts.flatMap fun i => valueOperands i.op ++ ptrOperands i.op
+  let roots := f.params ++ #[f.ret] ++ insts.map (·.ty) ++ values.flatMap constantTypes ++
+    f.globals.map (·.ty) ++ f.globals.flatMap (fun g => g.init.toArray.flatMap constantTypes)
+  let mut todo := roots.toList
+  let mut seen : Std.HashSet TyId := {}
+  while !todo.isEmpty do
+    let id := todo.head!
+    todo := todo.tail!
+    if seen.contains id then continue
+    seen := seen.insert id
+    todo := ((f.types[id]?.map childTys).getD #[]).toList ++ todo
+  return seen
+
 #eval do
   let source := mkFunc "caller" #[.int false 32, .void] #[0] 0 #[
     { id := 0, ty := 0, op := .arg 0 },
@@ -238,4 +261,52 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
   require (accepted (checkProgram #[spawn, target])) "indexed spawn arguments rejected"
   require (rejected (checkProgram #[spawn, { target with params := #[], body := #[] }])
     "spawned callee 'target' has an incompatible argument count") "spawn argument index changed"
+  let opaque := mkFunc "opaque" #[.other "anyopaque", .ptr "one" true 0, .void] #[1] 2 #[
+    { id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 2, op := .call (.inst 0) #[] },
+    { id := 2, ty := 2, op := .ret .void }]
+  require ((opaque.calleeFnTy? 0).isNone) "opaque pointer was classified as a function pointer"
+  require (rejected (checkProgram #[opaque]) "inst 1: indirect callee is not a function pointer")
+    "opaque indirect call accepted without targets"
+  require (indirect.calleeFnTy? 0 == some fnTy) "known function pointer classification changed"
+  let twice := { source with body := #[
+    { id := 0, ty := 0, op := .arg 0 },
+    { id := 1, ty := 0, op := .call (.func "target" false) #[.inst 0] },
+    { id := 2, ty := 0, op := .call (.func "target" false) #[.inst 0] },
+    { id := 3, ty := 1, op := .ret (.inst 2) }] }
+  require (accepted (checkProgram #[twice, target])) "cached repeated signature rejected"
+  let secondCall (args : Array Val) := { twice with
+    body := twice.body.set! 2 { id := 2, ty := 0, op := .call (.func "target" false) args }
+  }
+  require (rejected (checkProgram #[secondCall #[], target]) "inst 2: callee 'target' has 0 arguments, expected 1")
+    "cached signature concealed per-call arity"
+  require (rejected (checkProgram #[secondCall #[.bool true], target]) "inst 2: callee 'target' has an incompatible argument 0")
+    "cached signature concealed operand types"
+  require (rejected (checkProgram #[secondCall #[.func "target" false], target]) "inst 2: callee 'target' argument 0: function values lack")
+    "cached signature concealed unsupported function operands"
+  let secondSource := { source with name := "secondSource", types := #[.int false 64, .void] }
+  require (rejected (checkProgram #[source, secondSource, target]) "secondSource: inst 1: callee 'target' has an incompatible result")
+    "signature cache leaked between source function tables"
+  let boolTarget := mkFunc "boolTarget" #[.bool, .void] #[0] 1 #[
+    { id := 0, ty := 0, op := .arg 0 }, { id := 1, ty := 1, op := .ret .void }]
+  let boolSource := { (mkFunc "boolSource" #[.bool, .void] #[0] 1 #[
+    { id := 0, ty := 0, op := .arg 0 },
+    { id := 1, ty := 1, op := .call (.func "boolTarget" false) #[.bool true] },
+    { id := 2, ty := 1, op := .call (.func "boolTarget" false) #[.inst 0] },
+    { id := 3, ty := 1, op := .ret .void }]) with
+      layouts := #[{ align := some 2 }, {}]
+  }
+  require (rejected (checkProgram #[boolSource, boolTarget]) "inst 2: callee 'boolTarget' has an incompatible argument 0")
+    "untyped bool literal published a type/layout comparison"
+  let nestedRoots := { constantFn with
+    ret := 99
+    body := #[{ id := 1, ty := 77, op := .ret (.undef 88) }]
+    globals := #[{ tupleGlobal with init := some (.optSome 2 (.errUnionOk 2
+      (.sliceConst 2 (.undef 55) (.agg 2 #[.undef 66])))) }]
+  }
+  for f in #[source, target, indirect, spawn, constantFn, graphA, graphB, nestedRoots] do
+    let old := previousUsedTypes f
+    let new := programUsedTypes f
+    require (old.size == new.size && old.toArray.all new.contains) "streamed type closure changed reachable IDs"
+  let roots := programUsedTypes nestedRoots
+  require (#[99, 77, 88, 55, 66].all roots.contains) "streamed collector discarded unknown or nested type IDs"
   IO.println "whole-program direct API and strict JSON checks passed"

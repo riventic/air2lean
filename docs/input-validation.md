@@ -35,7 +35,10 @@ Ordinary calls require exact argument count and compatible argument/result types
 caller's and callee's **local** type tables. Structural equality includes integer widths and
 signedness, aggregate identity/field order, pointer qualifiers, all modeled layout facts and
 recursive children. Type IDs can differ. Equality never supplies an implicit cast. Indirect
-calls check every address-taken exported target of the function-pointer type. Spawn calls
+calls require a pointer to a recognized function type and check every address-taken exported
+target of that type; an `anyopaque` pointee is not callable. Successful signature comparisons
+are cached by ordered function-table and type-ID pairs, while every call retains its arity,
+operand/form checks and diagnostics. Spawn calls
 compare their captured tuple's fields with the worker's parameters; the worker result remains
 discarded by the established thread model.
 

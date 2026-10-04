@@ -245,6 +245,45 @@ def main():
     mutate = copy.deepcopy(timer)
     mutate["types"][0]["const"] = True
     checks += run(binary, [mutate], "Timer pointer/u64")
+    opaque = function("opaque", [dict(k="other", name="anyopaque"),
+        dict(pointer, const=True, child=0, ptr_align=1), VOID, NORETURN], [1], 2, [
+            inst(0, "arg", 1, param=0), inst(1, "call", 2, [], callee=dict(inst=0)),
+            inst(2, "ret", 3, [dict(ty=2, val="{}")])])
+    checks += run(binary, [opaque], "inst 1: indirect callee is not a function pointer")
+    twice = copy.deepcopy(CALLER)
+    twice["body"] = [inst(0, "arg", 0, param=0),
+        inst(1, "call", 0, [dict(inst=0)], callee=dict(func="target", noreturn=False)),
+        inst(2, "call", 0, [dict(inst=0)], callee=dict(func="target", noreturn=False)),
+        inst(3, "ret", 2, [dict(inst=2)])]
+    checks += run(binary, [twice, TARGET])
+    for args, error in [([], "inst 2: callee 'target' has 0 arguments, expected 1"),
+                        ([dict(ty=3, val="true")], "inst 2: callee 'target' has an incompatible argument 0"),
+                        ([dict(func="target", noreturn=False)], "inst 2: callee 'target' argument 0: function values lack")]:
+        mutate = copy.deepcopy(twice)
+        mutate["body"][2]["args"] = args
+        if any(arg.get("ty") == 3 for arg in args):
+            mutate["types"].append(dict(k="bool", abi_size=1, abi_align=1))
+        checks += run(binary, [mutate, TARGET], error)
+    other_source = copy.deepcopy(CALLER)
+    other_source["name"] = "otherSource"
+    other_source["types"][0] = integer(64)
+    checks += run(binary, [CALLER, other_source, TARGET],
+                  "otherSource: inst 1: callee 'target' has an incompatible result")
+    missing = copy.deepcopy(twice)
+    missing["body"][2]["callee"]["func"] = "missing"
+    checks += run(binary, [missing, TARGET], "callee 'missing' has no AIR file and no model")
+    bool_type = dict(k="bool", abi_size=1, abi_align=1)
+    bool_target = function("boolTarget", [bool_type, VOID, NORETURN], [0], 1,
+        [inst(0, "arg", 0, param=0), inst(1, "ret", 2, [dict(ty=1, val="{}")])])
+    bool_source = function("boolSource", [dict(bool_type, abi_align=2), VOID, NORETURN], [0], 1, [
+        inst(0, "arg", 0, param=0),
+        inst(1, "call", 1, [dict(ty=0, val="true")], callee=dict(func="boolTarget", noreturn=False)),
+        inst(2, "ret", 2, [dict(ty=1, val="{}")])])
+    checks += run(binary, [bool_source, bool_target])
+    bool_source["body"][2:] = [
+        inst(2, "call", 1, [dict(inst=0)], callee=dict(func="boolTarget", noreturn=False)),
+        inst(3, "ret", 2, [dict(ty=1, val="{}")])]
+    checks += run(binary, [bool_source, bool_target], "inst 2: callee 'boolTarget' has an incompatible argument 0")
     raw = json.dumps(TARGET)
     checks += run(binary, [raw[:-1] + ',"sch\\u0065ma":11}'], "duplicate JSON object key")
     for keys in ['"x":0,"\\u0078":1', '"😀":0,"\\ud83d\\ude00":1',
