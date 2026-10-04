@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "roadmap_id": "M03",
+  "status": "implemented_pending_checks",
+  "scope": {
+    "policy": "per-request cap and finite zero-based failure-index list additive to legacy failAt",
+    "default_max_bytes": 1048576,
+    "default_failures": [],
+    "semantic_domain": "Nat; finite trace prefixes with default success after listed failures",
+    "differential_domain": "native 64-bit signed-64 JSON policy integers; selected TestAllocator policy",
+    "theorems": [
+      "Zig.releaseAttempt_run",
+      "Zig.releaseAttempts_run"
+    ],
+    "exclusions": [
+      "native allocator resource/identity/address adequacy",
+      "successful resize/remap",
+      "arbitrary infinite failure traces",
+      "cross-target qualification"
+    ]
+  },
+  "checks": [
+    {
+      "kind": "static",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/allocation-policy/static.py",
+      "status": "pass",
+      "detail": "Five offline mutation-anchor/comparison-accounting regressions; no compiler invoked."
+    },
+    {
+      "kind": "static",
+      "command": "bash -n tests/roadmap/allocation-policy/check.sh; bash -n scripts/mutate.sh",
+      "status": "pass"
+    },
+    {
+      "kind": "kernel_and_differential",
+      "command": "bash tests/roadmap/allocation-policy/check.sh",
+      "status": "not_run",
+      "reason": "Coordinator exclusively owns compiler execution."
+    },
+    {
+      "kind": "semantic_mutations",
+      "command": "python3 tests/roadmap/allocation-policy/mutations.py",
+      "status": "not_run",
+      "reason": "Coordinator exclusively owns compiler execution."
+    },
+    {
+      "kind": "existing_client_differential",
+      "command": "AIR2LEAN_EXAMPLES=lists scripts/diff.sh",
+      "status": "not_run",
+      "reason": "Coordinator exclusively owns compiler execution."
+    }
+  ],
+  "qualified": false
+}

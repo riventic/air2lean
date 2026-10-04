@@ -557,9 +557,9 @@ if ! want_mutation h; then
 elif ! has_example lists; then
   echo "mutation (h): skipped (AIR2LEAN_EXAMPLES excludes lists)"
 else
-  sed -i.bak 's/  if m.failAt = some m.allocs ∨ maxAllocBytes < n then return none/  if maxAllocBytes < n then return none/' "$alloc_lean"
+  sed -i.bak 's/  if m.failAt = some m.allocs ∨ m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none/  if m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none/' "$alloc_lean"
   rm -f "$alloc_lean.bak"
-  grep -q '  if maxAllocBytes < n then return none' "$alloc_lean" || {
+  grep -q '  if m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none' "$alloc_lean" || {
     echo "error: mutation (h): sed did not change Zig.rawAlloc" >&2
     exit 1
   }

@@ -21,7 +21,7 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 | Rule | |
 |---|---|
 | Blocks | Each allocation is a new block of kind `.heap`, with undefined bytes. |
-| Failure | Allocation number `Mem.failAt` (from 0, counted in `Mem.allocs`) fails, and so does an allocation of more than `Zig.maxAllocBytes` (1 MiB). The function returns `error.OutOfMemory`. An allocation of 0 bytes is no allocation: its pointer has no block (`Zig.zeroAllocPtr`). |
+| Failure | Allocation number `Mem.failAt` (from 0, counted in `Mem.allocs`), indices in `Mem.allocPolicy.failures`, and requests above `Mem.allocPolicy.maxBytes` fail. The default is the legacy 1 MiB cap (`Zig.maxAllocBytes`) with no additional failure indices. The function returns `error.OutOfMemory`. An allocation of 0 bytes is no allocation: its pointer has no block (`Zig.zeroAllocPtr`). |
 | `resize`, `remap` | Growth of nonzero-size items fails, so a growing `ArrayListUnmanaged` allocates, copies and frees in the model. `remap` to length 0 frees the slice and succeeds; a nonempty slice of zero-size items can change length without allocating. |
 | Free | For a nonzero byte count, the pointer must be the start of a live `.heap` block and the length must cover the entire block. Anything else (a double free, a free of a global or of a stack block) throws `.illegal`. `free` records the std slice poison write before freeing, including sentinel bytes, so it races with an unjoined concurrent read. `destroy` uses raw free without that poison write. Zero-byte frees do nothing. |
 
@@ -38,7 +38,27 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 
 The name of a generic instance has a number that differs between compiles (`mem.Allocator.dupeZ__anon_16959`). The translator gives each instance a stable number by first use (`Air2Lean/Air/Anon.lean`), so the Lean name is `mem_Allocator_dupeZ__anon_1` in every version and on every host. A golden file of an instance is named `<name>__anon_N.json`.
 
-The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
+`Mem.allocPolicy` is an explicit environment parameter: `maxBytes` bounds each request,
+not total live bytes, and `failures` lists zero-based attempted nonzero allocations that
+fail. An attempt advances `allocs` even when its size exceeds the cap. Duplicate failure
+indices have no extra effect; indices beyond a finite run are unused. Every finite prefix
+of an arbitrary failure trace can be selected, including several or all attempts failing.
+Zero-byte allocation does not consume a decision. The model's fresh-address policy,
+allocator identity, and unsuccessful resize/remap behavior are unchanged. Raising this cap
+does not establish that native malloc has resources or the same address behavior.
+
+`rawAlloc_run`, `create_run` and separation triples quantify over arbitrary `Mem`, including
+every policy. `releaseAttempt_run` and `releaseAttempts_run` additionally establish an
+actual returned outcome and restore the original heap after every successful allocation
+or permitted failure. Their premises are positive request sizes/alignment and the existing
+sequential memory invariant; they do not assume allocation success or a fixed resource cap.
+The source definitions require a fresh kernel check before qualification.
+
+The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails (legacy null/index), or
+`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
+use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
+JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
+part of the differential evidence; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
 
 ## Thread model
 
