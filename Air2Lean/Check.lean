@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Air2Lean.Memory
 import ZigLean.Mem.Enc
 import ZigLean.Vec
@@ -579,37 +580,66 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
 /-- Compare argument types across per-function type tables. Pointer values keep their
 identity; the source alignment must satisfy the target and mutable pointers may become
 const. Other implicit `@call` coercions require an explicit source cast before capture. -/
+private abbrev SpawnTyCache := Std.HashMap (TyId × TyId × Bool) Bool
+
+/-- Completed pairs are shared across sibling fields. Cycle assumptions remain
+local to the current recursion path and are never inserted as completed checks. -/
+private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
+    (seen : Array (TyId × TyId × Bool)) (allowPtrCoercion : Bool) :
+    StateM SpawnTyCache Bool := do
+  let key := (a, b, allowPtrCoercion)
+  if seen.contains key then return true
+  if let some result := (← get)[key]? then return result
+  let recur := fun x y => sameSpawnTyCached source target x y (seen.push key) false
+  let fields := fun (xs ys : Array (String × TyId)) => do
+    if xs.size != ys.size then return false
+    for (x, y) in xs.zip ys do
+      if x.1 != y.1 then return false
+      unless ← recur x.2 y.2 do return false
+    return true
+  let result ← match source.types[a]?, target.types[b]? with
+    | some (.ptr sz c x), some (.ptr tz d y) => do
+      let sl := source.layouts[a]?.getD {}
+      let tl := target.layouts[b]?.getD {}
+      if !(sz == tz && (if allowPtrCoercion then !c || d else c == d) &&
+          (if allowPtrCoercion then decide (sl.ptrAlign.getD 1 ≥ tl.ptrAlign.getD 1)
+           else sl.ptrAlign == tl.ptrAlign) &&
+          sl.sentinel == tl.sentinel && sl.isVolatile == tl.isVolatile &&
+          sl.hostSize == tl.hostSize && sl.bitOffset == tl.bitOffset) then return false
+      recur x y
+    | some (.array n x s), some (.array m y t) =>
+      if n == m && s == t then recur x y else pure false
+    | some (.vector n x), some (.vector m y) => if n == m then recur x y else pure false
+    | some (.optional x), some (.optional y) => recur x y
+    | some (.errorUnion sx x), some (.errorUnion sy y) => do
+      unless ← recur sx sy do return false
+      recur x y
+    | some (.struct n l xs), some (.struct m k ys) =>
+      if n == m && l == k then fields xs ys else pure false
+    | some (.enum n x e fs), some (.enum m y d gs) => do
+      if !(n == m && e == d) then return false
+      unless ← recur x y do return false
+      pure (fs == gs)
+    | some (.union n l tx xs), some (.union m k ty ys) => do
+      if !(n == m && l == k) then return false
+      unless ← fields xs ys do return false
+      match tx, ty with
+      | none, none => pure true
+      | some x, some y => recur x y
+      | _, _ => pure false
+    | some (.tuple xs), some (.tuple ys) => do
+      if xs.size != ys.size then return false
+      for (x, y) in xs.zip ys do
+        unless ← recur x y do return false
+      return true
+    | some x, some y => pure (x == y)
+    | _, _ => pure false
+  modify (·.insert key result)
+  return result
+
 partial def sameSpawnTy (source target : Func) (a b : TyId)
     (seen : Array (TyId × TyId × Bool) := #[]) (allowPtrCoercion : Bool := true) : Bool :=
-  if seen.contains (a, b, allowPtrCoercion) then true else
-  let recur := fun x y => sameSpawnTy source target x y
-    (seen.push (a, b, allowPtrCoercion)) false
-  let fields := fun (xs ys : Array (String × TyId)) =>
-    xs.size == ys.size && (xs.zip ys).all (fun (x, y) => x.1 == y.1 && recur x.2 y.2)
-  match source.types[a]?, target.types[b]? with
-  | some (.ptr sz c x), some (.ptr tz d y) =>
-    let sl := source.layouts[a]?.getD {}
-    let tl := target.layouts[b]?.getD {}
-    sz == tz && (if allowPtrCoercion then !c || d else c == d) &&
-      (if allowPtrCoercion then decide (sl.ptrAlign.getD 1 ≥ tl.ptrAlign.getD 1)
-       else sl.ptrAlign == tl.ptrAlign) &&
-      sl.sentinel == tl.sentinel && sl.isVolatile == tl.isVolatile &&
-      sl.hostSize == tl.hostSize && sl.bitOffset == tl.bitOffset && recur x y
-  | some (.array n x s), some (.array m y t) => n == m && s == t && recur x y
-  | some (.vector n x), some (.vector m y) => n == m && recur x y
-  | some (.optional x), some (.optional y) => recur x y
-  | some (.errorUnion sx x), some (.errorUnion sy y) => recur sx sy && recur x y
-  | some (.struct n l xs), some (.struct m k ys) => n == m && l == k && fields xs ys
-  | some (.enum n x e fs), some (.enum m y d gs) => n == m && e == d && fs == gs && recur x y
-  | some (.union n l tx xs), some (.union m k ty ys) =>
-    n == m && l == k && fields xs ys && match tx, ty with
-      | none, none => true
-      | some x, some y => recur x y
-      | _, _ => false
-  | some (.tuple xs), some (.tuple ys) =>
-    xs.size == ys.size && (xs.zip ys).all (fun (x, y) => recur x y)
-  | some x, some y => x == y
-  | _, _ => false
+  (sameSpawnTyCached source target a b seen allowPtrCoercion).run' {}
 
 /-- Capture exactly the worker's runtime parameters. Zero fields are valid; every field
 is copied as a value, including pointer identity. Ownership remains an explicit proof
@@ -627,8 +657,11 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
     | throw s!"{f.name}: {callee}'s args argument is not a tuple"
   unless fields.size == worker.params.size do
     throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields, but worker '{worker.name}' has {worker.params.size} runtime parameters"
+  let mut completed : SpawnTyCache := {}
   for index in [:fields.size] do
-    unless sameSpawnTy f worker fields[index]! worker.params[index]! do
+    let (matches, cache) := (sameSpawnTyCached f worker fields[index]! worker.params[index]! #[] true).run completed
+    completed := cache
+    unless matches do
       throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
   let validRet := match worker.types[worker.ret]? with
     | some .void | some .noreturn => true
@@ -647,14 +680,14 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
   for f in funcs do
     for i in f.allInsts do
       if let .call (.func callee false spawnFn) args := i.op then
-        if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
-          let some worker := spawnFn
-            | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-          let some target := funcs.find? (·.name == worker)
-            | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-          let kind := (threadFn? callee).getD .spawn
-          checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
-            (kind.spawnArgs?.get!) args
+        if let some kind := threadFn? callee then
+          if let some index := kind.spawnArgs? then
+            let some worker := spawnFn
+              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
+            let some target := funcs.find? (·.name == worker)
+              | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
+            checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
+              index args
         unless names.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"

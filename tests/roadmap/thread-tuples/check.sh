@@ -74,14 +74,16 @@ export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.slices.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.single.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.nested.lean"
+"${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.mutable-slices.lean"
+"${lean_cmd[@]}" -R "$work" --run "$work/TuplePipeline.lean.aligned-slices.lean"
 python3 - "$work/TuplePipeline.lean" "$work/Mutated.lean" <<'PYMUTATE'
 from pathlib import Path
 import sys
 source = Path(sys.argv[1]).read_text()
-old = "worker a.1 a.2.1 a.2.2"
+old = "worker capture0 capture1 capture2"
 if source.count(old) != 1:
     raise SystemExit("tuple order mutation did not find exactly one dispatcher")
-Path(sys.argv[2]).write_text(source.replace(old, "worker a.1 a.2.2 a.2.1"))
+Path(sys.argv[2]).write_text(source.replace(old, "worker capture0 capture2 capture1"))
 PYMUTATE
 if "${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1; then
   echo 'tuple order mutation unexpectedly kernel checked' >&2; exit 1

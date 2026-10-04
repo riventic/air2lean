@@ -2453,10 +2453,9 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in
 source order, adapting every slice argument for a pure worker in the child thread. -/
-def emitTgt (_structNames : Array (String × String))
+def emitTgt (_structNames : Array (String × String)) (extendedCapture : Bool)
     (targets : Array (String × Array (String × Option (String × Nat)) × Nat)) :
     List String × List String :=
-  let extendedCapture := targets.any fun (_, args, _) => args.size != 1
   let ctors := targets.toList.map fun (n, args, _) =>
     let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
       String.intercalate " × " (args.toList.map fun (ty, _) => s!"({ty})")
@@ -2469,7 +2468,7 @@ def emitTgt (_structNames : Array (String × String))
   let obligation := "/-- The child protocol obligation for the complete captured tuple. Pointer\nidentities are copied; a proof must explicitly justify ownership transfer or sharing. -/\n" ++
     "abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (ghost : γ) : Prop :=\n  P.init target ghost"
   let arms := targets.toList.map fun (n, args, k) =>
-    let arg (i : Nat) := "a" ++ tupleProjection args.size i
+    let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
     let itemName (i : Nat) := if args.size == 1 then "items" else s!"items{i}"
     let values := args.mapIdx fun i (_, adapter) =>
       match adapter with | none => arg i | some _ => itemName i
@@ -2481,7 +2480,9 @@ def emitTgt (_structNames : Array (String × String))
       | 1 => s!"Zig.ConcM.liftMem ({term})"
       | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
           "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
-    s!"  | .{n} a => discard ({call})"
+    if args.size ≤ 1 then s!"  | .{n} a => discard ({call})" else
+      let binders := (List.range args.size).map arg
+      s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    discard ({call})"
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
@@ -2492,11 +2493,15 @@ unqualified, so their declarations must avoid these names even when the binder b
 different declaration's body. Source field binders already avoid the allocated type names through
 `memberNames` and `collectAllocs`. The indexed names follow this program's parameters and AIR
 instruction IDs, including the unused-result spellings and extracted loop captures. -/
-def generatedBinderNames (funcs : Array Func) : Std.HashSet String := Id.run do
-  let extendedCapture := (spawnTargets funcs).any fun (_, _, fields) => fields.size != 1
+def generatedBinderNames (funcs : Array Func)
+    (targets : Array (String × Func × Array TyId)) (extendedCapture : Bool) :
+    Std.HashSet String := Id.run do
   let mut names : Std.HashSet String := {}
   for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
     names := names.insert name
+  for (_, _, fields) in targets do
+    if fields.size > 1 then
+      for k in [:fields.size] do names := names.insert s!"capture{k}"
   for f in funcs do
     for k in [:f.params.size] do
       names := names.insert s!"p{k}"
@@ -2509,10 +2514,11 @@ def generatedBinderNames (funcs : Array Func) : Std.HashSet String := Id.run do
 /-- Allocate source declarations together with their generated names. The unambiguous
 historical spelling stays unchanged; a collision gets a stable suffix. -/
 def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ : String)
-    (fixed : Array String) : Array NamedType × Array (String × String) := Id.run do
+    (fixed : Array String) (targets : Array (String × Func × Array TyId))
+    (extendedCapture : Bool) : Array NamedType × Array (String × String) := Id.run do
   let preferred := structs.map (·.leanName) ++ funcs.map (mangleName prefix_ ·.name)
   let mut used := fixed
-  let binders := generatedBinderNames funcs
+  let binders := generatedBinderNames funcs targets extendedCapture
   let mut named := #[]
   for s in structs do
     let base := plainName s.leanName
@@ -2528,7 +2534,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
       name := mangleField s!"{base}_air2lean{k}"
     used := used ++ occupied name
     named := named.push { s with leanName := name }
-  let targets := (spawnTargets funcs).map (·.1)
+  let targetNames := targets.map (·.1)
   let mut names := #[]
   for f in funcs do
     let base := plainName (mangleName prefix_ f.name)
@@ -2539,7 +2545,7 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
     let mut k := 0
     let mut name := mangleField base
     while binders.contains name || (occupied name).any used.contains ||
-        (targets.contains f.name && typeCoreNames.contains name) ||
+        (targetNames.contains f.name && typeCoreNames.contains name) ||
         (k != 0 && (occupied name).any preferred.contains) do
       k := k + 1
       name := mangleField s!"{base}_air2lean{k}"
@@ -2556,12 +2562,14 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
+  let targets := spawnTargets funcs
+  let extendedCapture := targets.any fun (_, _, fields) => fields.size != 1
   let fixed := runtimeNames ++
     (if memFuncs.isEmpty then #[] else #["mem0"]) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
-    (if (spawnTargets funcs).any (fun (_, _, fields) => fields.size != 1) then #["spawnInit"] else #[]) ++
+    (if extendedCapture then #["spawnInit"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
-  let (structs, funcNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+  let (structs, funcNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := asmDefs.toList.map emitAsmDef
@@ -2595,16 +2603,19 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     else
       String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-  let targets := spawnTargets funcs
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
-    emitTgt structNames (targets.map fun (nm, f, fields) =>
+    emitTgt structNames extendedCapture (targets.map fun (nm, f, fields) =>
       let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
-      let args := fields.map fun a =>
-        let adapter := if kind != 0 then none else match f.types[a]! with
+      -- The physical capture comes from the first call; conversion requirements
+      -- belong to the worker contract and must also accept later weaker captures.
+      let worker := (funcs.find? (·.name == nm)).getD f
+      let args := fields.mapIdx fun index a =>
+        let parameter := worker.params[index]!
+        let adapter := if kind != 0 then none else match worker.types[parameter]! with
           | .ptr "slice" true child =>
-            some (emitTy structNames f.types f.types[child]!,
-              Nat.min ((f.layouts[a]?.bind (·.ptrAlign)).getD 1)
-                ((f.layouts[child]?.bind (·.align)).getD 1))
+            some (emitTy structNames worker.types worker.types[child]!,
+              Nat.min ((worker.layouts[parameter]?.bind (·.ptrAlign)).getD 1)
+                ((worker.layouts[child]?.bind (·.align)).getD 1))
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (leanOf nm, args, kind))

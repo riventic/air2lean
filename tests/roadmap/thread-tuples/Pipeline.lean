@@ -58,10 +58,11 @@ private def rejected (name callee : String) (fields : Array Nat) (values : Array
   let fs ← #[spawner callee fields values, worker params retVoid].mapM parse
   require ((checkProgram fs).toOption.isNone) s!"accepted malformed spawn signature: {name}"
 
-private def pureSlices : IO (Array Func) := do
+private def pureSlices (sourceConst : Bool := true) : IO (Array Func) := do
   let slice := obj [("k", .str "ptr"), ("size", .str "slice"), ("const", .bool true),
     ("child", num 0), ("ptr_align", num 1), ("abi_size", num 16), ("abi_align", num 8)]
-  let source := file "slices" #[u8, slice, tuple #[0, 1, 1], voidTy, nrTy,
+  let captureSlice := slice.setObjVal! "const" (.bool sourceConst)
+  let source := file "slices" #[u8, captureSlice, tuple #[0, 1, 1], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
     obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1, 1] 3
@@ -74,6 +75,27 @@ private def pureSlices : IO (Array Func) := do
     #[node 0 "arg" 0 #[] [("param", num 0)], node 1 "arg" 1 #[] [("param", num 1)],
       node 2 "arg" 1 #[] [("param", num 2)], node 3 "ret" 2 #[ref 0]]
   let fs ← #[source, target].mapM parse
+  match checkProgram fs with
+  | .error e => throw (IO.userError e)
+  | .ok _ => pure fs
+
+private def alignedSlices : IO (Array Func) := do
+  let u64 := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
+    ("abi_size", num 8), ("abi_align", num 8)]
+  let slice := fun align => obj [("k", .str "ptr"), ("size", .str "slice"),
+    ("const", .bool true), ("child", num 0), ("ptr_align", num align),
+    ("abi_size", num 16), ("abi_align", num 8)]
+  let source := fun name align => file name #[u64, slice align, tuple #[1], voidTy, nrTy,
+    obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
+    obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1] 3
+    #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "aggregate_init" 2 #[ref 0],
+      node 2 "call" 7 #[lit 3 "{}", ref 1]
+        [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "alignedWorker")])],
+      node 3 "ret" 4 #[lit 3 "{}"]]
+  let target := file "alignedWorker" #[u64, slice 1, voidTy, nrTy] #[1] 2
+    #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "ret" 3 #[lit 2 "{}"]]
+  let fs ← #[source "strongCapture" 8, source "weakCapture" 1, target].mapM parse
   match checkProgram fs with
   | .error e => throw (IO.userError e)
   | .ok _ => pure fs
@@ -161,8 +183,13 @@ def main (args : List String) : IO Unit := do
       node 2 "arg" 0 #[] [("param", num 2)], node 3 "sub_safe" 0 #[ref 1, ref 2],
       node 4 "ret" 1 #[ref 3]]
   let fs := fs.set! 1 (← parse orderWorker)
+  -- A declaration matching a dispatcher local must be renamed by the shared
+  -- allocator, or the local would shadow an unqualified generated call.
+  let fs := fs.push { fs[1]! with name := "capture0" }
   let generated := emit fs "TuplePipeline" ""
-  require ((generated.splitOn "worker a.1 a.2.1 a.2.2").length == 2) "three-field dispatch lost source order"
+  require ((generated.splitOn "def capture0_air2lean1").length == 2)
+    "dispatcher capture local was not reserved by the declaration allocator"
+  require ((generated.splitOn "worker capture0 capture1 capture2").length == 2) "three-field dispatch lost source order"
   let single ← accepted "Thread.spawn" #[0] #[lit 0 "1"] #[0]
   let singleSource := emit single "TupleSingle" ""
   require ((singleSource.splitOn "| worker (a : BitVec 8)").length == 2)
@@ -174,6 +201,14 @@ def main (args : List String) : IO Unit := do
   let slices ← pureSlices
   let sliceSource := emit slices "TupleSlices" ""
   require ((sliceSource.splitOn "Zig.readSlice").length == 3) "dispatcher did not adapt both pure slice arguments"
+  let mutableSlices ← pureSlices false
+  let mutableSliceSource := emit mutableSlices "TupleMutableSlices" ""
+  require ((mutableSliceSource.splitOn "Zig.readSlice").length == 3)
+    "mutable captures were not converted for the const pure worker contract"
+  let aligned ← alignedSlices
+  let alignedSource := emit aligned "TupleAlignedSlices" ""
+  require ((alignedSource.splitOn "Zig.readSlice (BitVec 64) 1 a").length == 2)
+    "dispatcher used first capture alignment instead of worker alignment"
   let proof := "\nexample (a b c : BitVec 8) : TuplePipeline.dispatch (.worker (a, b, c)) = discard (Zig.ConcM.liftMem (StateT.lift (TuplePipeline.worker a b c))) := by rfl\n" ++
     "example {γ : Type} (P : Zig.Conc.Proto TuplePipeline.Tgt γ) (a b c : BitVec 8) (g : γ) : TuplePipeline.Tgt.spawnInit P (.worker (a, b, c)) g = P.init (.worker (a, b, c)) g := by rfl\n"
   IO.FS.writeFile output (generated ++ proof)
@@ -182,4 +217,8 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeFile (output ++ ".slices.lean") sliceSource
   IO.FS.writeFile (output ++ ".single.lean") (singleSource ++
     "\nexample (a : BitVec 8) : TupleSingle.dispatch (.worker a) = discard (Zig.ConcM.liftMem (StateT.lift (TupleSingle.worker a))) := by rfl\n")
+  IO.FS.writeFile (output ++ ".mutable-slices.lean") mutableSliceSource
+  IO.FS.writeFile (output ++ ".aligned-slices.lean") (alignedSource ++
+    "\nexample (a : Zig.Slice) : TupleAlignedSlices.dispatch (.alignedWorker a) = discard (Zig.ConcM.liftMem (do let items ← Zig.readSlice (BitVec 64) 1 a; StateT.lift (TupleAlignedSlices.alignedWorker items))) := by rfl\n" ++
+    "private def weakRead : Zig.ConcM TupleAlignedSlices.Tgt Unit := do\n  let p ← Zig.ConcM.liftMem (Zig.alloc .heap 9 1)\n  let q := p.add 1\n  Zig.ConcM.liftMem (Zig.store 1 q (42#64))\n  let child ← Zig.ConcM.sync (.spawn (.alignedWorker { ptr := q, len := 1 }))\n  let _ ← Zig.ConcM.sync (.join child)\n  pure ()\ndef main : IO Unit := do\n  unless ((Zig.Sched.run TupleAlignedSlices.dispatch 100 (fun _ => 0) weakRead {}).run matches some (.ok ((), _))) do\n    throw (IO.userError \"valid unaligned slice rejected by stronger first capture\")\n")
   IO.println "thread tuple parser/checker/emitter regressions passed"
