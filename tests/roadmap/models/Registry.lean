@@ -54,4 +54,43 @@ def main (args : List String) : IO Unit := do
     "    exact run\n" ++
     "  exact (air2lean_model_0_contract.success air2lean_model_0_evidence (by trivial) modelRun).1\n" ++
     "end ExternalClient\n")
+  let diamond : Array Ty := (Array.range 21).map fun i =>
+    if i == 0 then .int false 8 else .tuple #[i - 1, i - 1]
+  let budgetError := (ModelRegistry.preflight diamond #[]).toOption.isNone
+  require budgetError "shared DAG rejected before exponential expansion"
+  let small := diamond.extract 0 5
+  let _ ← get <| ModelRegistry.preflight small #[]
+  require (ModelRegistry.preflight #[.ptr "one" false 0] #[]).toOption.isNone "pointer signature cycle"
+  let duplicateValues := ModelRegistry.valueTypeIndex f.types
+    #[{id := 9, ty := 0, op := .arg 0}, {id := 9, ty := 1, op := .arg 0}]
+  require ((← get <| ModelRegistry.argumentTypeIds duplicateValues #[.inst 9]) == #[0]) "first argument type occurrence"
+  require (((ModelRegistry.callIndex #[f, f]).getD "project.identity" #[]).size == 2) "all matching calls indexed"
+  let tupleRaw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/tuple-client.json")
+  let tupleFunc ← get <| normalize tupleRaw
+  let _ ← get <| check tupleFunc
+  let tupleTemplate ← get <| ModelRegistry.template tupleRaw.profile #[tupleFunc]
+  let tupleEntry := ((tupleTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
+  let tupleFields ← get tupleEntry.getObj?
+  let tupleEntry := Json.mkObj <| tupleFields.toArray.toList ++ [
+    ("import", .str "tests.roadmap.models.Model"),
+    ("implementation", .str "RegistryExample.tupleSelect"),
+    ("contract", .str "RegistryExample.tupleContract"), ("trust", .str "proved"),
+    ("proof", .str "RegistryExample.tupleEvidence"), ("termination", .str "total"),
+    ("errors", .arr #[]), ("effects", .str "preserves"), ("dependencies", .arr #[])]
+  let tupleDocument := Json.mkObj [("schema", toJson (1 : Nat)), ("models", .arr #[tupleEntry])]
+  let tupleModels ← get <| ModelRegistry.parse tupleDocument.compress
+  let _ ← get <| checkProgram #[tupleFunc] tupleModels (some tupleRaw.profile)
+  let tupleSource := emit #[tupleFunc] "TupleClient" "" .ieee tupleModels
+  require (decide ((tupleSource.splitOn "Contract ((BitVec 8 × BitVec 8) × (BitVec 8))").length > 1)) "tuple argument grouping"
+  IO.FS.writeFile (directory / "tuple-registry.json") (tupleDocument.pretty ++ "\n")
+  IO.FS.writeFile (directory / "TupleGenerated.lean") (tupleSource ++ "\n" ++
+    "namespace TupleClient\n" ++
+    "theorem client_result {x y before result after}\n" ++
+    "    (run : tupleClient x y before = some (.ok (result, after))) : result = x.1 := by\n" ++
+    "  have modelRun : RegistryExample.tupleSelect (x, y) before = some (.ok (result, after)) := by\n" ++
+    "    change (some (Except.ok (x.1, before)) = some (Except.ok (result, after))) at run\n" ++
+    "    change (some (Except.ok (x.1, before)) = some (Except.ok (result, after)))\n" ++
+    "    exact run\n" ++
+    "  exact (air2lean_model_0_contract.success air2lean_model_0_evidence (by trivial) modelRun).1\n" ++
+    "end TupleClient\n")
   IO.println "model registry tests passed; generated typed client obligation"

@@ -15,3 +15,5 @@ zig-air-*/
 tests/roadmap/models/Generated.lean
 tests/roadmap/models/Model.olean
 tests/roadmap/models/registry.json
+tests/roadmap/models/TupleGenerated.lean
+tests/roadmap/models/tuple-registry.json

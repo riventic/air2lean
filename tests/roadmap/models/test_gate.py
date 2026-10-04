@@ -39,6 +39,7 @@ elif [ "$1" = --run ]; then
   evidence=${@: -1}
   printf registry > "$evidence/registry.json"
   printf generated > "$evidence/Generated.lean"
+  printf generated > "$evidence/TupleGenerated.lean"
 else
   echo "mock client"
   [ "${MOCK_FAILURE:-}" != client ] || exit 10
@@ -67,7 +68,7 @@ printf 'mock cli\n'
             assert f"mock {stage}" in (evidence / f"{stage}.log").read_text()
         else:
             for artifact in ["tests/roadmap/models/Model.olean", "registry.json", "Generated.lean",
-                             "model.log", "registry.log", "client.log", "cli.log"]:
+                             "model.log", "registry.log", "client.log", "tuple-client.log", "cli.log"]:
                 assert (evidence / artifact).is_file(), artifact
             assert "ZigLean ZigLean.External Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
         assert not (repo / "tests").exists(), "gate wrote generated evidence into checkout"

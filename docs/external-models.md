@@ -20,6 +20,16 @@ flags. Local type IDs do not determine identity. The `type` string is the normal
 `Ty` representation in registry schema 1; regenerate templates after changing that format.
 No accepted implementation or contract is supplied by a template: fill every missing field.
 
+Schema 1 deliberately retains expanded tree-shaped JSON. Completed type memoization avoids
+revisiting shared children, while expanded-cost accounting rejects more than 65,536 JSON
+nodes or 1,048,576 UTF-8 bytes and nesting beyond 256 type edges. Repeated DAG edges count
+again toward serialized cost. Registry/template inputs preflight the entire type table before
+normalization and recursive subset checking; consequently every type in those tables must
+be acyclic and fit these limits, including types outside an external signature. The same
+limits apply to all argument/return roots of each binding. Failure reports a budget/cycle
+diagnostic before output. This is a bounded extension interface, not a general V05 fix for
+unregistered inputs or all translator traversals.
+
 Each entry must add these fields:
 
 ```json
@@ -78,7 +88,8 @@ usable proof evidence. Clients use `Contract.success` under the declared precond
 and checking again. Contracts do not automatically prove a client's preconditions or loops.
 
 The focused regression example defines a proved identity model and proves a generated
-client's returned value from its declared postcondition. Under the serialized compiler guard:
+client's returned value from its declared postcondition, plus a tuple-and-scalar client that
+checks argument grouping. Under the serialized compiler guard:
 
 ```sh
 AIR2LEAN_MODEL_EVIDENCE="$RUNNER_TEMP/model-contracts" scripts/model-contracts.sh

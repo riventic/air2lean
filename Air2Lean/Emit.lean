@@ -2535,18 +2535,19 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
 
 /-- Emit a typed implementation adapter plus a complete contract obligation. Imported
 identifiers are rooted so generated names cannot shadow the user's definitions. -/
-def emitModel (models : Array ModelBinding) (index : Nat) (f : Func) (args : Array Val)
-    (ret : TyId) (structNames : Array (String × String)) : String := Id.run do
+def emitModel (models : Array ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
+    (structNames : Array (String × String)) : String := Id.run do
   let m := models[index]!
-  let insts : Array Inst := f.allInsts
-  let ids : Array TyId := args.map fun (arg : Val) => match arg with
-    | .inst id => ((insts.find? fun (i : Inst) => i.id == id).map Inst.ty).getD 0
-    | .bool _ => (f.types.findIdx? fun (t : Ty) => t == Ty.bool).getD 0
-    | .void => (f.types.findIdx? fun (t : Ty) => t == Ty.void).getD 0
-    | v => v.constTy?.getD 0
+  let f := site.function
+  let ret := site.ret
+  -- Checked call sites use the same first-occurrence type resolver as registry validation.
+  let ids : Array TyId := match ModelRegistry.argumentTypeIds site.values site.args with
+    | .ok ids => ids
+    | .error error => panic! s!"air2lean: unchecked model arguments: {error}"
   let tys : Array String := ids.map fun (id : TyId) => emitTy structNames f.types f.types[id]!
   let result := emitTy structNames f.types f.types[ret]!
-  let argsTy := if tys.isEmpty then "Unit" else " × ".intercalate tys.toList
+  let argsTy := if tys.isEmpty then "Unit" else
+    " × ".intercalate (tys.map fun ty => s!"({ty})").toList
   let names := (Array.range tys.size).map fun i => s!"p{i}"
   let binders := (tys.zip names).map fun (ty, name) => s!"({name} : {ty})"
   let tuple := if names.isEmpty then "()" else if names.size == 1 then names[0]!
@@ -2583,13 +2584,11 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
   let asmStr := asmDefs.toList.map emitAsmDef
+  let modelCalls : Std.HashMap String (Array ModelRegistry.CallSite) :=
+    if models.isEmpty then {} else ModelRegistry.callIndex funcs
   let modelStr := (models.mapIdx fun index model =>
-    let site := funcs.findSome? fun f => f.allInsts.findSome? fun i => match i.op with
-      | .call (.func name false none) args =>
-        if name == model.symbol then some (f, args, i.ty) else none
-      | _ => none
-    match site with
-    | some (f, args, ret) => emitModel models index f args ret structNames
+    match (modelCalls.getD model.symbol #[])[0]? with
+    | some site => emitModel models index site structNames
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc

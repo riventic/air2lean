@@ -1,3 +1,5 @@
+import Std.Data.HashMap
+import Std.Data.HashSet
 import Air2Lean.Memory
 import Air2Lean.Air.Profile
 import Lean.Data.Json
@@ -47,47 +49,160 @@ private def keys (j : Json) (allowed : List String) : Except String Unit := do
   for (k, _) in (← j.getObj?).toArray do
     unless allowed.contains k do throw s!"model registry: unsupported field '{k}'"
 
-/-- Signature shapes include all layout flags and recursive child types, independent of IDs.
-Recursive signatures are deliberately outside this first extension API. -/
-def typeShape (types : Array Ty) (layouts : Array Layout) (id : TyId) : Except String Json :=
-  let rec go (fuel : Nat) (id : TyId) : Except String Json := do
-    match fuel with
-    | 0 => throw "model registry: recursive signature is outside the extension API"
-    | fuel + 1 =>
-      let some t := types[id]? | throw s!"model registry: unknown type {id}"
-      let l := layouts[id]?.getD {}
-      let children ← (childTys t).mapM (go fuel)
-      -- Replace child IDs with a fixed ID in the head: the child shapes carry their identity.
-      let head : Ty := match t with
-        | .ptr s c _ => .ptr s c 0
-        | .array n _ s => .array n 0 s
-        | .vector n _ => .vector n 0
-        | .optional _ => .optional 0
-        | .errorUnion _ _ => .errorUnion 0 0
-        | .struct n s fs => .struct n s (fs.map fun (n, _) => (n, 0))
-        | .enum n _ e fs => .enum n 0 e fs
-        | .union n s tag fs => .union n s (tag.map fun _ => 0) (fs.map fun (n, _) => (n, 0))
-        | .tuple fs => .tuple (fs.map fun _ => 0)
-        | t => t
-      pure <| Json.mkObj [("type", .str (reprStr head)), ("children", .arr children),
-        ("layout", Json.mkObj [("size", Lean.toJson l.size), ("align", Lean.toJson l.align),
-          ("offsets", Lean.toJson l.offsets), ("pointer_align", Lean.toJson l.ptrAlign),
-          ("sentinel", .bool l.sentinel), ("volatile", .bool l.isVolatile),
-          ("allowzero", .bool l.allowzero), ("host_size", Lean.toJson l.hostSize),
-          ("bit_offset", Lean.toJson l.bitOffset)])]
-  go (types.size + 1) id
+/-- Bounds apply to expanded schema-1 JSON, including repeated DAG edges. -/
+def maxShapeNodes : Nat := 65536
+def maxShapeBytes : Nat := 1048576
+def maxShapeDepth : Nat := 256
 
-/-- Emit these shapes from a checked call site when authoring a manifest binding. -/
-def signature (f : Func) (args : Array Val) (ret : TyId) :
+private structure Shape where
+  json : Json
+  nodes : Nat
+  bytes : Nat
+  deriving Inhabited
+
+private structure ShapeState where
+  done : Std.HashMap TyId Shape := {}
+  active : Std.HashSet TyId := {}
+
+private partial def jsonNodes : Json → Nat
+  | .arr values => 1 + values.foldl (fun n value => n + jsonNodes value) 0
+  | .obj fields => 1 + fields.toArray.foldl (fun n (_, value) => n + jsonNodes value) 0
+  | _ => 1
+
+private def withinBudget (nodes bytes : Nat) : Except String Unit := do
+  unless nodes ≤ maxShapeNodes && bytes ≤ maxShapeBytes do
+    throw s!"model registry: expanded signature budget exceeded (limit {maxShapeNodes} JSON nodes, {maxShapeBytes} UTF-8 bytes)"
+
+private def shapeHead (t : Ty) : Ty := match t with
+  | .ptr s c _ => .ptr s c 0
+  | .array n _ s => .array n 0 s
+  | .vector n _ => .vector n 0
+  | .optional _ => .optional 0
+  | .errorUnion _ _ => .errorUnion 0 0
+  | .struct n s fs => .struct n s (fs.map fun (n, _) => (n, 0))
+  | .enum n _ e fs => .enum n 0 e fs
+  | .union n s tag fs => .union n s (tag.map fun _ => 0) (fs.map fun (n, _) => (n, 0))
+  | .tuple fs => .tuple (fs.map fun _ => 0)
+  | t => t
+
+private def shapeJson (t : Ty) (l : Layout) (children : Array Json) : Json :=
+  Json.mkObj [("type", .str (reprStr (shapeHead t))), ("children", .arr children),
+    ("layout", Json.mkObj [("size", Lean.toJson l.size), ("align", Lean.toJson l.align),
+      ("offsets", Lean.toJson l.offsets), ("pointer_align", Lean.toJson l.ptrAlign),
+      ("sentinel", .bool l.sentinel), ("volatile", .bool l.isVolatile),
+      ("allowzero", .bool l.allowzero), ("host_size", Lean.toJson l.hostSize),
+      ("bit_offset", Lean.toJson l.bitOffset)])]
+
+private partial def shapeGo (types : Array Ty) (layouts : Array Layout) (id : TyId) :
+    StateT ShapeState (Except String) Shape := do
+  let state : ShapeState ← get
+  if let some cached := state.done[id]? then return cached
+  if state.active.contains id then
+    throw "model registry: recursive signature is outside the extension API"
+  if state.active.size ≥ maxShapeDepth then
+    throw s!"model registry: signature nesting exceeds {maxShapeDepth} type edges"
+  let some t := types[id]? | throw s!"model registry: unknown type {id}"
+  modify fun state => {state with active := state.active.insert id}
+  let children ← (childTys t).mapM (shapeGo types layouts)
+  let l := layouts[id]?.getD {}
+  let base := shapeJson t l #[]
+  let nodes := jsonNodes base + children.foldl (fun n child => n + child.nodes) 0
+  let bytes := base.compress.utf8ByteSize +
+    children.foldl (fun n child => n + child.bytes) 0 + (children.size - 1)
+  -- Check costs before attaching repeated child JSON; never serialize an oversized DAG.
+  match withinBudget nodes bytes with
+  | .error error => throw error
+  | .ok () => pure ()
+  let shape : Shape := {json := shapeJson t l (children.map (·.json)), nodes := nodes, bytes := bytes}
+  modify fun state => {state with done := state.done.insert id shape, active := state.active.erase id}
+  return shape
+
+/-- Completed memoization avoids retraversing shared types. Expanded-node/byte accounting
+also bounds serialization/equality: memoization alone cannot bound expanded schema-1 JSON. -/
+def typeShapes (types : Array Ty) (layouts : Array Layout) (roots : Array TyId) : Except String (Array Json) := do
+  let action : StateT ShapeState (Except String) (Array Json) := do
+    let mut shapes : Array Json := #[]
+    let mut nodes := 0
+    let mut bytes := 0
+    for root in roots do
+      let shape ← shapeGo types layouts root
+      nodes := nodes + shape.nodes
+      bytes := bytes + shape.bytes
+      match withinBudget nodes bytes with
+      | .error error => throw error
+      | .ok () => pure ()
+      shapes := shapes.push shape.json
+    return shapes
+  pure (← action.run {}).1
+
+def typeShape (types : Array Ty) (layouts : Array Layout) (id : TyId) : Except String Json := do
+  pure (← typeShapes types layouts #[id])[0]!
+
+/-- Registry/template inputs are bounded before the existing recursive subset checks.
+This is an explicit extension limit, not a general scalability fix for unregistered AIR. -/
+def preflight (types : Array Ty) (layouts : Array Layout) : Except String Unit := do
+  let _ ← typeShapes types layouts (Array.range types.size)
+  pure ()
+
+structure ValueTypeIndex where
+  instructions : Std.HashMap InstId TyId := {}
+  boolType : Option TyId := none
+  voidType : Option TyId := none
+
+def valueTypeIndex (types : Array Ty) (insts : Array Inst) : ValueTypeIndex := Id.run do
+  let mut instructions : Std.HashMap InstId TyId := {}
+  for i in insts do
+    unless instructions.contains i.id do instructions := instructions.insert i.id i.ty
+  return {
+    instructions := instructions
+    boolType := types.findIdx? (· == Ty.bool)
+    voidType := types.findIdx? (· == Ty.void)
+  }
+
+/-- Shared by the checker and emitter. First instruction occurrence retains the old lookup
+semantics; diagnostics remain the same for missing or untyped arguments. -/
+def argumentTypeIds (index : ValueTypeIndex) (args : Array Val) : Except String (Array TyId) :=
+  args.mapM fun arg => match arg with
+    | .inst id => require index.instructions[id]? "model registry: missing argument instruction"
+    | .bool _ => require index.boolType "model registry: missing bool type"
+    | .void => require index.voidType "model registry: missing void type"
+    | v => require v.constTy? "model registry: untyped/function-valued argument is unsupported"
+
+def signatureWith (f : Func) (index : ValueTypeIndex) (args : Array Val) (ret : TyId) :
     Except String (Array Json × Json) := do
-  let types ← args.mapM fun arg => do
-    let id ← match arg with
-      | .inst id => require ((f.allInsts.find? (·.id == id)).map (·.ty)) "model registry: missing argument instruction"
-      | .bool _ => require (f.types.findIdx? (· == .bool)) "model registry: missing bool type"
-      | .void => require (f.types.findIdx? (· == .void)) "model registry: missing void type"
-      | v => require v.constTy? "model registry: untyped/function-valued argument is unsupported"
-    typeShape f.types f.layouts id
-  pure (types, ← typeShape f.types f.layouts ret)
+  let ids ← argumentTypeIds index args
+  let shapes ← typeShapes f.types f.layouts (ids.push ret)
+  pure (shapes.extract 0 ids.size, shapes[ids.size]!)
+
+def signature (f : Func) (args : Array Val) (ret : TyId) : Except String (Array Json × Json) :=
+  signatureWith f (valueTypeIndex f.types f.allInsts) args ret
+
+structure CallSite where
+  function : Func
+  values : ValueTypeIndex
+  args : Array Val
+  ret : TyId
+  noreturn : Bool
+  spawnFn : Option String
+
+/-- Build symbol buckets once; arrays retain function and instruction traversal order. -/
+def callIndex (funcs : Array Func) : Std.HashMap String (Array CallSite) := Id.run do
+  let mut calls : Std.HashMap String (Array CallSite) := {}
+  for f in funcs do
+    let insts := f.allInsts
+    let values := valueTypeIndex f.types insts
+    for i in insts do
+      if let .call (.func name noreturn spawnFn) args := i.op then
+        let site : CallSite := {
+          function := f
+          values := values
+          args := args
+          ret := i.ty
+          noreturn := noreturn
+          spawnFn := spawnFn
+        }
+        calls := calls.insert name ((calls.getD name #[]).push site)
+  return calls
 
 /-- Profile uses the same parser and equality policy as AIR. Legacy bindings must explicitly
 select legacy metadata; there is no implicit default or wildcard. -/
@@ -155,30 +270,32 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
     Except String Unit := do
-  unless models.isEmpty || funcs.all (·.zigVersion == profile.zigVersion) do
+  if models.isEmpty then return
+  unless funcs.all (·.zigVersion == profile.zigVersion) do
     throw "model registry: function Zig version differs from checked profile"
-  let mut seen : Array String := #[]
+  unless models.isEmpty do
+    for f in funcs do preflight f.types f.layouts
+  let calls := callIndex funcs
+  let functionNames := funcs.foldl (fun names f => names.insert f.name) ({} : Std.HashSet String)
+  let addressTaken := (fnRefs funcs).foldl (fun names reference => names.insert reference.2) ({} : Std.HashSet String)
+  let mut seen : Std.HashSet String := {}
   for m in models do
     if seen.contains m.symbol then throw s!"duplicate model symbol '{m.symbol}'"
-    seen := seen.push m.symbol
+    seen := seen.insert m.symbol
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
-    if funcs.any (·.name == m.symbol) || (allocFn? m.symbol).isSome ||
+    if functionNames.contains m.symbol || (allocFn? m.symbol).isSome ||
         (threadFn? m.symbol).isSome || (rejectedThreadFn? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
-    if (fnRefs funcs).any (·.2 == m.symbol) then
+    if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
-    let mut used := false
-    for f in funcs do
-      for i in f.allInsts do
-        if let .call (.func name noreturn spawnFn) args := i.op then
-          if name == m.symbol then
-            unless !noreturn && spawnFn.isNone do
-              throw s!"model '{name}': noreturn/comptime-worker calls are outside the extension API"
-            used := true
-            let (params, ret) ← signature f args i.ty
-            unless params == m.params && ret == m.ret do
-              throw s!"{f.name}: model '{name}' has incompatible signature/layout"
-    unless used do throw s!"model '{m.symbol}' has no supported direct call"
+    let sites := calls.getD m.symbol #[]
+    if sites.isEmpty then throw s!"model '{m.symbol}' has no supported direct call"
+    for site in sites do
+      unless !site.noreturn && site.spawnFn.isNone do
+        throw s!"model '{m.symbol}': noreturn/comptime-worker calls are outside the extension API"
+      let (params, ret) ← signatureWith site.function site.values site.args site.ret
+      unless params == m.params && ret == m.ret do
+        throw s!"{site.function.name}: model '{m.symbol}' has incompatible signature/layout"
   unless models.isEmpty || (concFunctions funcs).isEmpty do
     throw "external model bindings currently require a sequential program"
 
@@ -188,12 +305,14 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
   let mut names : Array String := #[]
   let mut entries : Array Json := #[]
   for f in funcs do
-    for i in f.allInsts do
+    let insts := f.allInsts
+    let values := valueTypeIndex f.types insts
+    for i in insts do
       if let .call (.func name false none) args := i.op then
         unless names.contains name || funcs.any (·.name == name) || (allocFn? name).isSome ||
             (threadFn? name).isSome || (rejectedThreadFn? name).isSome do
           names := names.push name
-          let (params, ret) ← signature f args i.ty
+          let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),
             ("profile", profile.toJson),
             ("signature", Json.mkObj [("params", .arr params), ("return", ret)])]
