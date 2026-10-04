@@ -200,7 +200,7 @@ theorem arr_memset_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {n : BitV
   refine ⟨m', ?_, hst', h', hd', hm', A, S, K, bs', hA, by simp [hs'], ?_, hb', hK⟩
   · have e : n.toNat * Enc.size T = bs'.size := by rw [hs', hn', Nat.mul_comm]
     simp only [StateT.run] at hrun
-    simp only [memset, h0, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
+    simp only [memset, h0, Nat.ne_of_gt hn, or_self, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
     exact hrun
   · intro j hj
     simp only [List.length_replicate] at hj
@@ -258,7 +258,7 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
       (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat) AccessKind.read)
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun
-    simp only [memmove, h0, ↓reduceIte, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    simp only [memmove, h0, Nat.ne_of_gt hn, or_self, ↓reduceIte, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind, ExceptT.mk,
       ExceptT.bindCont, Nat.mul_comm n.toNat (Enc.size T), hacc, hl, pure, ExceptT.pure,
       Option.bind_some]

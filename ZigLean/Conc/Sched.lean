@@ -12,7 +12,8 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
 - **Oracle.** The `i`-th choice of a run is `o i` modulo the number of options, so every `o` is
   a valid schedule. A spec over all schedules is a statement for every `o` (and every `fuel`).
 - **Threads.** Thread 0 is `main`. `spawn t` adds a thread that starts with `dispatch t` at its
-  first turn; `join tid` can go on only when thread `tid` has ended. The clock and join rules are
+  first turn; a valid `join tid` waits until thread `tid` has ended, while an invalid handle
+  goes on immediately to report `.illegal`. The clock and join rules are
   those of `ZigLean/Mem/Thread.lean` (`Thread.fork`, `Thread.join`, `checkJoinedByChild`).
 - **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
   waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
@@ -21,6 +22,10 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
   joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then. If no
   thread can go on and one has not ended, the run is `.deadlock`.
+- **Catch scope.** `ConcM.tryCatch` handles errors produced by the thread before or after a
+  sync op. Errors raised by the scheduler's execution of spawn/join/wait/wake or its end check
+  terminate the entire run; sync responses carry only successful results, so such errors do
+  not enter the thread's catch handler.
 - **Fuel.** `fuel` bounds the number of turns and the depth of each thread's run. Out of fuel is
   `none`, as a loop that does not end.
 
@@ -61,9 +66,10 @@ def State.isDone (s : State Tgt α) (t : ThreadId) : Bool :=
     | some .done => true
     | _ => false
 
-/-- Thread `t`, which waits at the op, can go on now. -/
+/-- Thread `t`, which waits at the op, can go on now. Invalid join handles run their error
+check immediately; only a valid handle can wait for its target. -/
 def canGo (s : State Tgt α) (t : ThreadId) : SyncOp Tgt → Bool
-  | .join tid => s.isDone tid
+  | .join tid => !Thread.joinValid s.mem t tid || s.isDone tid
   | .wait .. => !(s.mem.waiters.any (·.1 == t))
   | _ => true
 
@@ -111,33 +117,44 @@ def settle {β : Type} (t : ThreadId) (s : State Tgt α) {n : Nat} (tree : CoN T
     | none => .error none
   | .sync op m k => .ok (.paused ⟨_, op, k⟩, none, { s with mem := m })
 
-/-- Thread `t` does its op `p.op` and runs to its next stop. -/
-def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
+/-- Thread `t` does its op and runs to its next stop, retaining choices even when it fails or
+has no result. -/
+def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
     (s : State Tgt α) (p : Paused Tgt β) :
-    Except (Option Error) (TS Tgt β × Option β × State Tgt α) := do
+    Except (Option Error) (TS Tgt β × Option β × State Tgt α) × Array Nat :=
   let s := { s with mem := { s.mem with current := t } }
   match p with
-  | ⟨_, .yield, k⟩ => settle t s (k () s.mem)
+  | ⟨_, .yield, k⟩ => (settle t s (k () s.mem), s.trace)
   | ⟨_, .choose n, k⟩ =>
     let (c, s) := s.choose o n
-    settle t s (k c s.mem)
+    (settle t s (k c s.mem), s.trace)
   | ⟨_, .pick count, k⟩ =>
     let (c, s) := s.choose o (count s.mem)
-    settle t s (k c s.mem)
+    (settle t s (k c s.mem), s.trace)
   | ⟨_, .spawn tgt, k⟩ =>
-    let (child, s) ← s.onMem Thread.fork
-    -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.
-    let s := { s with kids := s.kids.push (.paused ⟨fuel, .yield, fun _ m => dispatch tgt fuel m⟩) }
-    settle t s (k child s.mem)
+    (do
+      let (child, s) ← s.onMem Thread.fork
+      -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.
+      let s := { s with kids := s.kids.push (.paused ⟨fuel, .yield, fun _ m => dispatch tgt fuel m⟩) }
+      settle t s (k child s.mem), s.trace)
   | ⟨_, .join tid, k⟩ =>
-    let ((), s) ← s.onMem (Thread.join tid)
-    settle t s (k () s.mem)
+    (do
+      let ((), s) ← s.onMem (Thread.join tid)
+      settle t s (k () s.mem), s.trace)
   | ⟨d, .wait ptr e, k⟩ =>
-    let (sleep, s) ← s.onMem (Thread.futexWait ptr e)
-    if sleep then .ok (.paused ⟨d, .wait ptr e, k⟩, none, s) else settle t s (k () s.mem)
+    (do
+      let (sleep, s) ← s.onMem (Thread.futexWait ptr e)
+      if sleep then .ok (.paused ⟨d, .wait ptr e, k⟩, none, s) else settle t s (k () s.mem), s.trace)
   | ⟨_, .wake ptr n, k⟩ =>
-    let ((), s) ← s.onMem (Thread.futexWake ptr n)
-    settle t s (k () s.mem)
+    (do
+      let ((), s) ← s.onMem (Thread.futexWake ptr n)
+      settle t s (k () s.mem), s.trace)
+
+/-- The semantic result of one turn; `turnTrace` also retains its oracle choices. -/
+def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
+    (s : State Tgt α) (p : Paused Tgt β) :
+    Except (Option Error) (TS Tgt β × Option β × State Tgt α) :=
+  (turnTrace dispatch fuel o t s p).1
 
 /-- Up to `fuel` turns. -/
 def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt α → Out α × Array Nat
@@ -153,15 +170,17 @@ def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt
       match s.main with
       | .done => (none, s.trace)
       | .paused p =>
-        match turn dispatch fuel o 0 s p with
-        | .error e => (outOf e, s.trace)
+        let result := turnTrace dispatch fuel o 0 s p
+        match result.1 with
+        | .error e => (outOf e, result.2)
         | .ok (_, some v, s) => (some (.ok (v, s.mem)), s.trace)
         | .ok (ts, none, s) => go dispatch o fuel { s with main := ts }
     else
       match s.kids[t - 1]? with
       | some (.paused p) =>
-        match turn dispatch fuel o t s p with
-        | .error e => (outOf e, s.trace)
+        let result := turnTrace dispatch fuel o t s p
+        match result.1 with
+        | .error e => (outOf e, result.2)
         | .ok (ts, _, s) => go dispatch o fuel { s with kids := s.kids.set! (t - 1) ts }
       | _ => (none, s.trace)
 

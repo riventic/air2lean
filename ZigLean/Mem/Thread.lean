@@ -241,7 +241,7 @@ after it (the write goes right after it). -/
 def casPrep (n : Nat) (align : Nat) (p : Ptr) (expected : BitVec n) :
     MemM (Nat × Array Nat) := do
   let (b, _, o) ← (← get).accessW p (intSize n) align
-  recordAccess b o (intSize n) .atomicWrite
+  recordAccess b o (intSize n) .atomicRead
   let li ← locIdx b o (intSize n)
   let m ← get
   let l := m.atomics[li]!
@@ -250,6 +250,12 @@ def casPrep (n : Nat) (align : Nat) (p : Ptr) (expected : BitVec n) :
       | some (.ok v) => v == expected
       | _ => false)
   pure (li, opts)
+
+/-- A successful CAS also writes. The scheduler cannot run another thread between its read
+preparation and this write access; both footprints belong to the same atomic operation. -/
+def casMarkWrite (n align : Nat) (p : Ptr) : MemM Unit := do
+  let (b, _, o) ← (← get).accessW p (intSize n) align
+  recordAccess b o (intSize n) .atomicWrite
 
 def casCount (n : Nat) (succ : AtomicOrder) (align : Nat) (p : Ptr) (expected : BitVec n) : Mem → Nat :=
   optCount ((·.2) <$> casPrep n align p expected)
@@ -263,6 +269,7 @@ def cmpxchgAt {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat) (p : P
   let rd := (← get).atomics[li]!.msgs[pos]!
   let old ← intOfBytes n rd.bytes
   if old = expected then
+    casMarkWrite n align p
     rmwWrite li pos succ rd new
     pure none
   else
@@ -320,6 +327,13 @@ def fork : MemM ThreadId := do
     clocks := (m.clocks.set! parent parentClock).push parentClock
     threads := m.threads.push { spawner := parent, joined := false } }
   pure child
+
+/-- A join handle exists, was spawned by the caller and has not already been joined.
+The scheduler uses the same validation to reject invalid handles before waiting. -/
+def joinValid (m : Mem) (caller tid : ThreadId) : Bool :=
+  match m.threads[tid]? with
+  | some rec => rec.spawner == caller && !rec.joined
+  | none => false
 
 /-- `std.Thread.join`: `tid` must have been spawned by the thread running this join, and not
 already joined — a handle joined by anyone else, or joined twice, throws `.illegal`. Merges the

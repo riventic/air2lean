@@ -834,17 +834,17 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
   have hnd : G u ≠ .done := by rw [hg]; intro h; cases h
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act G m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
-  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicWrite) ht hact
+  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
     (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
-  have hcur : (m.recordAt 0 0 (intSize 32) .atomicWrite).current = m.current := rfl
-  have hthr : (m.recordAt 0 0 (intSize 32) .atomicWrite).threads = m.threads := rfl
-  have hbr : (m.recordAt 0 0 (intSize 32) .atomicWrite).blocks[0]? = some blk := hb0
-  generalize m.recordAt 0 0 (intSize 32) .atomicWrite = mr at hir hl hcur hthr hbr
+  have hcur : (m.recordAt 0 0 (intSize 32) .atomicRead).current = m.current := rfl
+  have hthr : (m.recordAt 0 0 (intSize 32) .atomicRead).threads = m.threads := rfl
+  have hbr : (m.recordAt 0 0 (intSize 32) .atomicRead).blocks[0]? = some blk := hb0
+  generalize m.recordAt 0 0 (intSize 32) .atomicRead = mr at hir hl hcur hthr hbr
   obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
   have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
   have hiM := hir.setLoc hfl k
   have hact' : Act G mr.current := by rw [hcur]; exact hact
-  rcases hres with ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
+  rcases hres with ⟨rfl, rfl, -, rfl⟩ | ⟨-, rfl, rfl⟩
   · -- success: the newest message, then the pusher's message
     have hpos' := cas_chain_pos (m := { mr with atomics := #[l], nextMsg := k })
       (by rw [hl0]; exact hfl.2.2.2.2.1) hpos hold
@@ -852,19 +852,23 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
     have hbM : ({ mr with atomics := #[l], nextMsg := k } : Mem).blocks[
         (({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]!).block]? = some blk := by
       rw [hl0, hfl.1]; exact hbr
+    let mw := ({ mr with atomics := #[l], nextMsg := k } : Mem).recordAt 0 0 (intSize 32) .atomicWrite
+    have hiW : Inv G mw := hiM.record (by change mr.current < mr.threads.size; rw [hcur, hthr]; exact ht) hact'
+      (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    have hlw : mw.atomics[0]! = l := rfl
     unfold rmwM
     simp only [AtomicOrder.isAcq, Bool.false_eq_true, ↓reduceIte]
-    have hins := insertM_last (msg := rmwMsg { mr with atomics := #[l], nextMsg := k } .release
+    have hins := insertM_last (m := mw) (msg := rmwMsg mw .release
       (l.msgs[l.msgs.size - 1]!) (BitVec.ofNat 32 u)) hbM
-    rw [hl0] at hins
+    rw [hlw] at hins
     rw [hpos', Nat.sub_add_cancel hfl.pos, show (#[l] : Array ALoc)[0]! = l from rfl, hins]
-    have hiN := hiM.pushHead hu hg rfl (by rw [← hpos']; exact hold) hbr
-      (msg := rmwMsg { mr with atomics := #[l], nextMsg := k } .release (l.msgs[l.msgs.size - 1]!)
+    have hiN := hiW.pushHead hu hg rfl (by rw [← hpos']; exact hold) hbr
+      (msg := rmwMsg mw .release (l.msgs[l.msgs.size - 1]!)
         (BitVec.ofNat 32 u))
       (LawfulEnc.size_encode (α := BitVec 32) _) (intOfBytes_rmw _) rfl
-      (by show VClock.le (mr.clocks[mr.current]!) _ = true; rw [hcur, hc]; exact VClock.le_refl _)
+      (by show VClock.le (mw.clocks[mw.current]!) (mw.clocks[u]!) = true; rw [show mw.current = u from hcur.trans hc]; exact VClock.le_refl _)
     refine ⟨hcur.trans hc, hthr, .inl ⟨trivial, hiN.congr rfl rfl ?_ ?_ rfl⟩⟩
-    · show mr.blocks.set! _ _ = mr.blocks.set! _ _
+    · show mw.blocks.set! _ _ = mw.blocks.set! _ _
       rw [hfl.1, hfl.2.1]
     · rfl
   · -- failure: a read of a message, no acquire
@@ -883,27 +887,39 @@ theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (h
   obtain ⟨blk₀, -, hk, -, hacc₀⟩ := access_blk (p := sPtr) (a := 4) (len := intSize 32) (o := 0)
     hi.b0 (by decide) (fun A hA => by omega) rfl
   have hacc : m.accessW sPtr (intSize 32) 4 = pure (0, blk₀, 0) := by simp [Mem.accessW, hacc₀, hk]
-  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicWrite) ht hact
+  have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
     (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   refine cmpxchgAt_noErr (casPrep_noErr hacc (noRace_head rfl hi ht hact)
-    (head_locIdx_noErr hir.head)) (fun li opts m₁ hp => ?_) e
-  obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
-  obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
-  have hl0 : ({ m.recordAt 0 0 (intSize 32) .atomicWrite with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
-  have hcount : casCount 32 .release 4 sPtr h m = (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with
-      atomics := #[l], nextMsg := k } 0 h).size := optCount_eq hp
-  have hne : 0 < (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with
-      atomics := #[l], nextMsg := k } 0 h).size := casOpts_ne (by rw [hl0]; exact hfl.pos)
-  rw [hcount] at hcr
-  have hc' : c < (casOpts { m.recordAt 0 0 (intSize 32) .atomicWrite with atomics := #[l], nextMsg := k } 0 h).size := by
-    rcases hcr with h | ⟨h0, -⟩
-    · exact h
-    · exact absurd h0 (Nat.pos_iff_ne_zero.mp hne)
-  refine ⟨_, Array.getElem?_eq_getElem hc', ?_⟩
-  have hlt := (casOpts_pos (Array.getElem?_eq_getElem hc')).1
-  rw [hl0] at hlt ⊢
-  exact hfl.val hlt
+    (head_locIdx_noErr hir.head)) (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
+    obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
+    obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
+    have hl0 : ({ m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
+    have hcount : casCount 32 .release 4 sPtr h m = (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with
+        atomics := #[l], nextMsg := k } 0 h).size := optCount_eq hp
+    have hne : 0 < (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with
+        atomics := #[l], nextMsg := k } 0 h).size := casOpts_ne (by rw [hl0]; exact hfl.pos)
+    rw [hcount] at hcr
+    have hc' : c < (casOpts { m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k } 0 h).size := by
+      rcases hcr with h | ⟨h0, -⟩
+      · exact h
+      · exact absurd h0 (Nat.pos_iff_ne_zero.mp hne)
+    refine ⟨_, Array.getElem?_eq_getElem hc', ?_⟩
+    have hlt := (casOpts_pos (Array.getElem?_eq_getElem hc')).1
+    rw [hl0] at hlt ⊢
+    exact hfl.val hlt
+
+  · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := casPrep_ok hp
+    obtain ⟨rfl, rfl, -, -⟩ := acc_head (accessW_pure hacc').1
+    obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
+    have hiM := hir.setLoc hfl k
+    have htM : ({ m.recordAt 0 0 (intSize 32) .atomicRead with
+        atomics := #[l], nextMsg := k } : Mem).current < m.threads.size := ht
+    let M : Mem := { m.recordAt 0 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k }
+    have haM : M.accessW sPtr (intSize 32) 4 = pure (0, blk, 0) := hacc'
+    exact MemM.noErr_of_run (casMarkWrite_run haM
+      (noRace_head rfl hiM htM hact)) e he
+
 
 /-! ## A pusher's loop -/
 
@@ -1815,11 +1831,15 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   simp only [StateT.run_bind]
   -- the joins
   refine WP.bind (WP.joinC fun k₃ hk₃ => ⟨Gh.j1, hi₁₅, fun G₃ m₁₆ hg₃ hi₁₆ =>
-    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₆ : Inv G₃ m₁₆).thr (.inl hg₃)]; decide, .inl rfl⟩, fun hfin =>
+    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₆ : Inv G₃ m₁₆).thr (.inl hg₃)]; decide, .inl rfl, by
+      obtain ⟨m', hj⟩ := join_ok hi₁₆ (.inl ⟨hg₃, rfl⟩)
+      exact Proto.join_valid hj⟩, fun hfin =>
       ⟨fun _ => join_ok hi₁₆ (.inl ⟨hg₃, rfl⟩), fun m₁₇ hj => ?_⟩⟩⟩)
   obtain ⟨hc₁₇, hs₁₇, hi₁₇⟩ := inv_join hi₁₆ (.inl ⟨hg₃, rfl, rfl⟩) hfin hj
   refine WP.bind (WP.joinC fun k₄ hk₄ => ⟨Gh.j2, hi₁₇, fun G₄ m₁₈ hg₄ hi₁₈ =>
-    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₈ : Inv G₄ m₁₈).thr (.inr (.inl hg₄))]; decide, .inr rfl⟩, fun hfin =>
+    ⟨fun _ => ⟨by decide, by rw [size3 (hi₁₈ : Inv G₄ m₁₈).thr (.inr (.inl hg₄))]; decide, .inr rfl, by
+      obtain ⟨m', hj⟩ := join_ok hi₁₈ (.inr ⟨hg₄, rfl⟩)
+      exact Proto.join_valid hj⟩, fun hfin =>
       ⟨fun _ => join_ok hi₁₈ (.inr ⟨hg₄, rfl⟩), fun m₁₉ hj => ?_⟩⟩⟩)
   obtain ⟨hc₁₉, hs₁₉, hi₁₉⟩ := inv_join hi₁₈ (.inr ⟨hg₄, rfl, rfl⟩) hfin hj
   -- the acquire load of the head (a stop)

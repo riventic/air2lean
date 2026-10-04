@@ -1157,7 +1157,9 @@ theorem wp_join {σ : Type} {s : σ} {i : Nat} (u : ThreadId) (hu : u = i + 1) (
   refine WP.joinC fun k hk => ⟨gJoins i, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
   have hX : (G₁ 0).2 = .joins i := by rw [hg₁]; rfl
   obtain ⟨hlt, hex⟩ := join_ok hi3 hi₁ hX
-  refine ⟨fun _ => ⟨Nat.succ_pos _, hlt, rfl, i, rfl⟩, fun hfin => ⟨fun _ => hex, fun m' hj => ?_⟩⟩
+  refine ⟨fun _ => ⟨Nat.succ_pos _, hlt, ⟨rfl, i, rfl⟩, by
+    obtain ⟨m', hj⟩ := hex
+    exact Proto.join_valid hj⟩, fun hfin => ⟨fun _ => hex, fun m' hj => ?_⟩⟩
   obtain ⟨hc', hi'⟩ := inv_join hi3 hi₁ hg₁ hfin hj
   exact h k hk G₁ m' hc' hi'
 
