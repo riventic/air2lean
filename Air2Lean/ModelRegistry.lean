@@ -136,10 +136,20 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
         "illegal", "deadlock"].contains e do throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
-    pure { symbol := symbol, profile := profile, params := params, ret := ret,
-      importModule := importModule, implementation := implementation, contract := contract,
-      proof := proof, termination := termination, effects := effects, errors := errors,
-      dependencies := dependencies }
+    pure {
+      symbol := symbol
+      profile := profile
+      params := params
+      ret := ret
+      importModule := importModule
+      implementation := implementation
+      contract := contract
+      proof := proof
+      termination := termination
+      effects := effects
+      errors := errors
+      dependencies := dependencies
+    }
 
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
