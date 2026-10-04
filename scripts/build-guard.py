@@ -259,39 +259,48 @@ def parse_args(argv):
     return a
 
 
+# Exact common operand-consuming branches of cmdBuild in pinned 0.14.1,
+# 0.15.2 and 0.16.0 src/main.zig. Later build-runner options are not this parser.
+FRONTEND_VALUES = frozenset({"--build-file", "--zig-lib-dir", "--build-runner",
+                             "--cache-dir", "--global-cache-dir", "--system",
+                             "--debug-log", "--debug-target", "--color", "--seed"})
+FRONTEND_STAGES = (FRONTEND_VALUES, FRONTEND_VALUES | {"--debug-libc"})  # 14; 15/16
+RUNNER_VALUES = FRONTEND_VALUES | {"-p", "--prefix", "--prefix-lib-dir", "--prefix-exe-dir",
+                                  "--prefix-include-dir", "--sysroot", "--search-prefix", "--libc",
+                                  "--summary", "--maxrss", "--debounce", "--port",
+                                  "--libc-runtimes", "--glibc-runtimes", "--test-timeout",
+                                  "--error-style", "--multiline-errors"}
+
+
+def validate_build_tokens(arguments, values):
+    i = 0
+    while i < len(arguments):
+        arg = arguments[i]
+        if arg == "--":
+            return  # only a boundary not already consumed as an option value
+        if arg.startswith("@"):
+            raise ValueError("zig build response files before -- are unsupported")
+        if arg in values:
+            if i + 1 == len(arguments):
+                raise ValueError(f"missing zig build option value: {arg}")
+            if arguments[i + 1].startswith("@"):
+                raise ValueError("zig build response-like option values before -- are unsupported")
+            i += 2
+            continue
+        if arg.startswith("-j") and arg != "-j1":
+            raise ValueError("zig build must use -j1")
+        i += 1
+
+
 def sequential_command(command, zig_names):
     command = list(command)
     if Path(command[0]).name in zig_names and command[1:2] == ["build"]:
-        # Inject the actual build option at a guaranteed option position. A
-        # value named -j1 or an application argument after -- is not this flag.
-        values = {"-p", "--prefix", "--prefix-lib-dir", "--prefix-exe-dir",
-                  "--prefix-include-dir", "--sysroot", "--search-prefix", "--libc",
-                  "--zig-lib-dir", "--build-file", "--cache-dir", "--global-cache-dir",
-                  "--color", "--summary", "--seed", "--maxrss", "--debug-log"}
-        result = command[:2] + ["-j1"]
-        i = 2
-        while i < len(command):
-            arg = command[i]
-            if arg == "--":
-                result.extend(command[i:])
-                break
-            if arg in values:
-                if i + 1 == len(command):
-                    raise ValueError(f"missing zig build option value: {arg}")
-                result.extend(command[i:i + 2])
-                i += 2
-                continue
-            if arg.startswith("@"):
-                raise ValueError("zig build response files can hide parallel job options")
-            if arg.startswith("-j"):
-                jobs = command[i + 1] if arg == "-j" and i + 1 < len(command) else arg[2:]
-                if jobs != "1":
-                    raise ValueError("zig build must use -j1")
-                i += 2 if arg == "-j" else 1
-                continue
-            result.append(arg)
-            i += 1
-        command = result
+        # The frontend scans --prefix -j2 as a job override before the runner
+        # consumes prefix's operand. Validate both stages before inserting -j1.
+        for frontend in FRONTEND_STAGES:
+            validate_build_tokens(command[2:], frontend)
+            validate_build_tokens(command[2:], RUNNER_VALUES | frontend)
+        command.insert(2, "-j1")
     return command
 
 
@@ -299,6 +308,22 @@ def write_chunk(output, report, limit, chunk):
     remaining = max(0, limit - report["output_bytes"])
     output.write(chunk[:remaining])
     report["output_bytes"] += len(chunk)
+
+
+def drain_pipe(fd, output, report, limit, cancelled, deadline):
+    # Cleanup may be unconfirmed: a surviving writer must never keep this
+    # final phase running. Bound reads/bytes/time even if every read has data.
+    for _ in range(16):
+        if cancelled() or time.monotonic() >= deadline:
+            return True
+        try:
+            chunk = os.read(fd, 65536)
+        except BlockingIOError:
+            return True
+        if not chunk:
+            return False
+        write_chunk(output, report, limit, chunk)
+    return True
 
 
 def run(a):
@@ -320,7 +345,7 @@ def run(a):
                          "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace},
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
               "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0,
-              "output_bytes": 0, "log_truncated": False}
+              "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
     started = time.monotonic()
     try:
         names = {"zig", "zig-air", "zig-unlocked", *a.zig_name}
@@ -368,6 +393,7 @@ def run(a):
             except OSError as error:
                 report.update(outcome="spawn_error", exit_code=127, error=str(error)[:256])
                 return report
+            report["drain_incomplete"] = True
             tree = Tree(child.pid)
             os.set_blocking(child.stdout.fileno(), False)
             selector.register(child.stdout, selectors.EVENT_READ)
@@ -417,18 +443,14 @@ def run(a):
                             selector.unregister(key.fileobj)
                             break
                         write_chunk(output, report, a.log_bytes, chunk)
-            # Drain output already in the pipe after the entire workload stopped.
-            while True:
-                try:
-                    chunk = os.read(child.stdout.fileno(), 65536)
-                except BlockingIOError:
-                    break
-                if not chunk:
-                    break
-                write_chunk(output, report, a.log_bytes, chunk)
+            report["drain_incomplete"] = drain_pipe(
+                child.stdout.fileno(), output, report, a.log_bytes, lambda: cancelled[0],
+                min(time.monotonic() + 0.05, build_start + a.timeout))
+            if cancelled[0]:
+                reason, code = "cancelled", 128 + cancelled[0]
             report.update(outcome=reason, exit_code=code, child_status=peek_status(child),
                           workload_seconds=round(time.monotonic() - build_start, 3),
-                          log_truncated=report["output_bytes"] > a.log_bytes)
+                          log_truncated=report["output_bytes"] > a.log_bytes or report["drain_incomplete"])
         report["log_sha256"] = digest(a.log)
         report["log_bytes"] = a.log.stat().st_size
         report["outputs"] = [file_evidence(a.cwd / path) for path in a.output]
@@ -452,6 +474,7 @@ def run(a):
             lock.close()  # never unlink a flock inode: concurrent waiters reuse it
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+        report["log_truncated"] = report["output_bytes"] > a.log_bytes or report["drain_incomplete"]
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         atomic_report(a.report, report)
     return report

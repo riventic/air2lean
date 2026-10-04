@@ -175,6 +175,8 @@ else:
             report = guard.run(a)
         self.assertEqual(report["exit_code"], 70)
         self.assertEqual(report["outcome"], "cleanup_failed")
+        self.assertTrue(report["drain_incomplete"])
+        self.assertTrue(report["log_truncated"])
 
     def test_sequential_zig_flags_and_leaf_count(self):
         names = {"zig"}
@@ -377,6 +379,85 @@ os._exit(0)
             guard.write_chunk(output, report, limit, b"d")
             self.assertEqual(output.getvalue(), b"abcd"[:limit])
             self.assertEqual(report["output_bytes"], 4)
+
+    def test_final_drain_is_bounded_with_an_infinite_read_provider(self):
+        import io
+        report = {"output_bytes": 0}
+        output = io.BytesIO()
+        with mock.patch.object(guard.os, "read", return_value=b"abc") as reads, \
+                mock.patch.object(guard.time, "monotonic", return_value=0):
+            self.assertTrue(guard.drain_pipe(99, output, report, 3, lambda: False, 1))
+        self.assertEqual(reads.call_count, 16)
+        self.assertEqual(report["output_bytes"], 48)
+        self.assertEqual(output.getvalue(), b"abc")
+        for cancelled, deadline in ((True, 1), (False, 0)):
+            with mock.patch.object(guard.os, "read", return_value=b"abc") as reads, \
+                    mock.patch.object(guard.time, "monotonic", return_value=0):
+                self.assertTrue(guard.drain_pipe(99, output, report, 3, lambda: cancelled, deadline))
+                self.assertEqual(reads.call_count, 0)
+        with mock.patch.object(guard.os, "read", return_value=b""):
+            self.assertFalse(guard.drain_pipe(99, output, report, 3, lambda: False, time.monotonic() + 1))
+
+    def test_incomplete_final_drain_still_reports_and_releases_the_lock(self):
+        args, path, log = self.command("pass", "--log-bytes", "64")
+        original_drain = guard.drain_pipe
+        def replenished_pipe(*args):
+            with mock.patch.object(guard.os, "read", return_value=b"x" * 65536), \
+                    mock.patch.object(guard.time, "monotonic", return_value=0):
+                return original_drain(*args)
+        with mock.patch.object(guard, "drain_pipe", side_effect=replenished_pipe):
+            report = guard.run(guard.parse_args(args[2:]))
+        self.assertEqual(report["exit_code"], 0)
+        self.assertTrue(report["drain_incomplete"])
+        self.assertTrue(report["log_truncated"])
+        self.assertEqual(report["output_bytes"], 16 * 65536)
+        self.assertEqual(log.stat().st_size, 64)
+        self.assertEqual(json.loads(path.read_text())["output_bytes"], report["output_bytes"])
+        result, _, _ = self.run_guard("pass")
+        self.assertEqual(result.returncode, 0)
+
+    def test_pinned_frontend_stage_contracts(self):
+        # Operand-consuming branches in each official pinned cmdBuild. This
+        # models the external frontend, not build_runner's later argument pass.
+        common = {"--build-file", "--zig-lib-dir", "--build-runner", "--cache-dir",
+                  "--global-cache-dir", "--system", "--debug-log", "--debug-target",
+                  "--color", "--seed"}
+        versions = {"0.14.1": common, "0.15.2": common | {"--debug-libc"},
+                    "0.16.0": common | {"--debug-libc"}}
+        self.assertEqual(guard.FRONTEND_VALUES, set.intersection(*versions.values()))
+        self.assertEqual(set(guard.FRONTEND_STAGES), {frozenset(values) for values in versions.values()})
+        def frontend_jobs(arguments, operands):
+            jobs = None
+            i = 0
+            while i < len(arguments):
+                arg = arguments[i]
+                if arg in operands:
+                    i += 2
+                    continue
+                if arg == "--":
+                    break
+                if arg.startswith("-j"):
+                    jobs = int(arg[2:])
+                i += 1
+            return jobs
+        dangerous = (["--prefix", "-j2"], ["--sysroot", "-j2"],
+                     ["--prefix", "--", "-j2"], ["--prefix", "@flags"],
+                     ["--build-file", "@flags"], ["--debug-libc", "-j2"],
+                     ["--debug-libc", "--", "-j2"])
+        for suffix in dangerous:
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    guard.sequential_command(["zig", "build", *suffix], {"zig"})
+        accepted = (["--prefix", "-j1"], ["--sysroot", "root"],
+                    ["--build-file", "-j2"], ["run", "--", "-j2", "@application"],
+                    ["--build-file", "--", "run", "--", "-j2"])
+        for version, operands in versions.items():
+            for suffix in accepted:
+                with self.subTest(version=version, suffix=suffix):
+                    command = guard.sequential_command(["zig", "build", *suffix], {"zig"})
+                    self.assertEqual(command[2], "-j1")
+                    self.assertEqual(command[3:], list(suffix))
+                    self.assertEqual(frontend_jobs(command[2:], operands), 1)
 
 
 if __name__ == "__main__":

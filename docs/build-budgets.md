@@ -26,8 +26,17 @@ participating callers; unguarded builds are outside its control. Existing
 The guard sets `LEAN_NUM_THREADS=1`. For a direct `zig build` command, it inserts
 `-j1` at a guaranteed build-option position, rejects conflicting build job counts
 and response files that could hide job options, and records both requested and
-executed arguments. Known build-option values and arguments forwarded after `--`
-are preserved; a value named `-j1` does not replace the injected build option. It also stops a
+executed arguments. Validation distinguishes the frontend from the later build
+runner: `--prefix -j2` is rejected because the frontend sees that job override
+before the runner consumes the prefix value. The exact operand-consuming tables
+of pinned 0.14.1/0.15.2/0.16.0 frontends are checked independently; tokens must
+be safe under every supported frontend. The runner is also checked, so
+`--prefix -- -j2` cannot hide an override behind a consumed
+boundary. Genuine forwarded application arguments after `--` are preserved.
+Response-like `@...` tokens before that boundary are refused conservatively,
+including literal filename values. Version-specific operands can also cause a
+conservative refusal (for example, `--debug-libc -j2`, absent in 0.14.1). A value
+named `-j1` does not replace the injected build option. It also stops a
 workload when a sample contains multiple leaf Zig processes. A build driver
 supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
 are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
@@ -88,7 +97,12 @@ publication deliberately.
 
 Child output is drained even after the saved log reaches `--log-bytes` (default
 1 MiB, maximum 16 MiB), avoiding a full-pipe deadlock. Extra output is discarded
-and reported as truncated. Use distinct report/log names for concurrent attempts.
+and reported as truncated. The final pipe drain is capped at 16 reads (1 MiB),
+50 milliseconds, the workload deadline and cancellation, even if cleanup is
+unconfirmed or a writer keeps replenishing the pipe. `drain_incomplete` indicates
+that EOF was not confirmed; `output_bytes` counts consumed bytes, not unknown
+unread output, and an incomplete drain marks the saved log as truncated. Cleanup
+retries and reporting remain reachable. Use distinct report/log names for concurrent attempts.
 The log and report must not alias the lock. Child exit codes are preserved;
 signal exits become `128 + signal`. Guard outcomes disambiguate reserved codes:
 
