@@ -74,8 +74,11 @@ building the updated patched exporter in 290 seconds (4422 MiB peak memory).
 The driver checked the runtime's five theorem definitions, nine semantic cases,
 one killed mutant, eight native observation lines, and two compiler rejection
 roots. The shared-predicate cleanup subsequently passed the complete gate at `e1d5123`
-in 19.7 seconds (740 MiB peak memory). A later successful-type-check cache change
-and two repeated-type per-value rejection regressions await a full rerun.
+in 19.7 seconds (740 MiB peak memory). The complete driver passed again at
+`8eb82fb` in 15.5 seconds (809 MiB peak memory), including the successful-type-check
+cache and both repeated-type per-value rejection regressions. The cache skips
+only previously successful type-graph checks; null constants, unsupported pointer
+constants and global-pointer alignment remain checked for every operand.
 
 The recorded local toolchains were the worktree's
 `.lake/roadmap-null-zig16/bin/zig` (patched AIR exporter),
