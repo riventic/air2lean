@@ -198,4 +198,82 @@ def main (args : List String) : IO Unit := do
   require (isRegisterConstraint "=&{edx}" && isRegisterConstraint "=&r") "early-clobber output rejected"
   let _ ← accept (asmFile "=&{edx}" "r")
   reject (asmFile "=r" "=&r") "output constraint on asm input"
+  -- Type-graph validation must precede recursive packed width and memory analysis.
+  let cycPacked := obj [("k", .str "struct"), ("name", .str "Cycle"),
+    ("layout", .str "packed"), ("fields", .arr #[obj [("name", .str "self"), ("ty", num 0)]])]
+  let undef (ty : Nat) := obj [("ty", num ty), ("undef", .bool true)]
+  for t in #[cycPacked, obj [("k", .str "optional"), ("child", num 0)],
+      obj [("k", .str "array"), ("len", num 1), ("child", num 0)]] do
+    reject (file "cycle" #[t, nrTy] #[] 0 #[inst 0 "ret" 1 #[undef 0]]) "cyclic value type"
+  let node := obj [("k", .str "struct"), ("name", .str "Node"), ("layout", .str "auto"),
+    ("fields", .arr #[obj [("name", .str "next"), ("ty", num 1)]])]
+  let _ ← accept (file "recursivePointer" #[node, ptrTy "one" 0, nrTy] #[] 1
+    #[inst 0 "ret" 2 #[undef 1]])
+  reject (file "selfUse" #[intTy 8, nrTy] #[] 0
+    #[inst 10 "add" 0 #[ref 10, lit 0 "1"], inst 20 "ret" 1 #[ref 10]]) "self SSA use"
+  reject (file "forwardUse" #[intTy 8, nrTy] #[] 0
+    #[inst 10 "add" 0 #[ref 20, lit 0 "1"], inst 20 "add" 0 #[lit 0 "1", lit 0 "2"],
+      inst 30 "ret" 1 #[ref 10]]) "forward SSA use"
+  let branched (sibling : Bool) := file "branchScope" #[boolTy, intTy 8, nrTy] #[0] 1
+    #[inst 10 "arg" 0 #[] [("param", num 0)], inst 20 "add" 1 #[lit 1 "1", lit 1 "2"],
+      inst 30 "cond_br" 2 #[ref 10]
+        [("then", .arr #[inst 40 "add" 1 #[ref 20, lit 1 "1"], inst 50 "ret" 2 #[ref 40]]),
+         ("else", .arr #[inst 60 "ret" 2 #[ref (if sibling then 40 else 20)]])]]
+  reject (branched true) "sibling SSA use"
+  let _ ← accept (branched false)
+  let agg (ty : Nat) (elems : Array Json) := obj [("ty", num ty), ("elems", .arr elems)]
+  reject (file "scalarAggregate" #[intTy 8, nrTy] #[] 0
+    #[inst 0 "ret" 1 #[agg 0 #[]]]) "aggregate constant on scalar"
+  let arr := obj [("k", .str "array"), ("len", num 1), ("child", num 0)]
+  for elems in #[#[], #[lit 0 "1", lit 0 "2"], #[lit 1 "1"]] do
+    reject (file "badAggregate" #[intTy 8, intTy 16, arr, nrTy] #[] 2
+      #[inst 0 "ret" 3 #[agg 2 elems]]) "aggregate count or child type"
+  let _ ← accept (file "goodAggregate" #[intTy 8, arr, nrTy] #[] 1
+    #[inst 0 "ret" 2 #[agg 1 #[lit 0 "7"]]])
+  let optional := obj [("k", .str "optional"), ("child", num 0)]
+  reject (file "badPayload" #[intTy 8, intTy 16, optional, nrTy] #[] 2
+    #[inst 0 "ret" 3 #[obj [("ty", num 2), ("some", lit 1 "7")]]]) "optional child type"
+  for marker in #[.bool false, .str "true", num 1, Json.null] do
+    reject (file "badUndef" #[intTy 8, nrTy] #[] 0
+      #[inst 0 "ret" 1 #[obj [("ty", num 0), ("undef", marker)]]]) "non-true undef marker"
+    reject (file "badNull" #[intTy 8, optional, nrTy] #[] 1
+      #[inst 0 "ret" 2 #[obj [("ty", num 1), ("null", marker)]]]) "non-true null marker"
+    require ((Raw.parseMaskLane "mask" #[.int false 8]
+      (obj [("u", marker)])).toOption.isNone) "accepted non-true shuffle marker"
+  for k in #["noreturn", "volatile", "unsupported", "sentinel"] do
+    require ((Raw.boolField (obj [(k, .str "false")]) k).toOption.isNone)
+      s!"accepted malformed flag {k}"
+    require ((Raw.boolField (obj [(k, .bool false)]) k).toOption == some false)
+      s!"rejected literal false flag {k}"
+  reject (file "badFlag" #[intTy 8, nrTy] #[] 0
+    #[inst 0 "ret" 1 #[lit 0 "7"] [("unsupported", .str "false")]]) "malformed instruction flag"
+  reject (file "ambiguousConstant" #[intTy 8, nrTy] #[] 0
+    #[inst 0 "ret" 1 #[obj [("ty", num 0), ("undef", .bool true), ("val", .str "7")]]])
+    "ambiguous constant form"
+  for text in #[".{ .x = 12", ".{ .x = 12X"] do
+    reject (packedNegative.setObjVal! "body" (.arr #[inst 10 "ret" 2 #[lit 1 text]]))
+      "packed constant without closing brace"
+  let vec (child : Nat) := obj [("k", .str "vector"), ("len", num 2), ("child", num child)]
+  reject (file "pointerVector" #[intTy 8, ptrTy "one" 0, vec 1, nrTy] #[2] 2
+    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ret" 3 #[ref 0]]) "pointer vector"
+  let castFile (source dest : Nat) := file "vectorCast" #[intTy 32, vec 0, intTy 64,
+    obj [("k", .str "float"), ("bits", num 32)], vec 3, nrTy] #[source] dest
+    #[inst 0 "arg" source #[] [("param", num 0)], inst 1 "bitcast" dest #[ref 0],
+      inst 2 "ret" 5 #[ref 1]]
+  reject (castFile 1 2) "vector-to-scalar bitcast"
+  reject (castFile 2 1) "scalar-to-vector bitcast"
+  reject (castFile 1 4) "integer-to-float vector bitcast"
+  let _ ← accept (castFile 1 1)
+  let tuple := obj [("k", .str "tuple"), ("fields", .arr #[obj [("ty", num 0)]])]
+  for (callee, args) in #[ ("Thread.spawn", #[lit 1 "{}", ref 0]),
+      ("Io.Group.async", #[lit 1 "{}", lit 1 "{}", ref 0]) ] do
+    let spawn := file "spawnMissing" #[intTy 8, voidTy, tuple, nrTy] #[] 1
+      #[inst 0 "aggregate_init" 2 #[lit 0 "7"], inst 1 "call" 1 args
+        [("callee", obj [("func", .str callee), ("comptime_fn", .str "missingWorker")])],
+        inst 2 "ret" 3 #[lit 1 "{}"]]
+    let f ← accept spawn
+    require ((checkProgram #[f]).toOption.isNone) s!"accepted missing worker for {callee}"
+    let worker ← accept (file "missingWorker" #[intTy 8, nrTy] #[0] 0
+      #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]])
+    require ((checkProgram #[f, worker]).toOption.isSome) s!"rejected present worker for {callee}"
   IO.println "parser regressions passed"
