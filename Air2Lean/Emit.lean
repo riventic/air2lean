@@ -2538,13 +2538,13 @@ identifiers are rooted so generated names cannot shadow the user's definitions. 
 def emitModel (models : Array ModelBinding) (index : Nat) (f : Func) (args : Array Val)
     (ret : TyId) (structNames : Array (String × String)) : String := Id.run do
   let m := models[index]!
-  let insts := f.allInsts
-  let ids := args.map fun arg => match arg with
-    | .inst id => ((insts.find? (·.id == id)).map (·.ty)).getD 0
-    | .bool _ => (f.types.findIdx? (· == .bool)).getD 0
-    | .void => (f.types.findIdx? (· == .void)).getD 0
+  let insts : Array Inst := f.allInsts
+  let ids : Array TyId := args.map fun (arg : Val) => match arg with
+    | .inst id => ((insts.find? fun (i : Inst) => i.id == id).map Inst.ty).getD 0
+    | .bool _ => (f.types.findIdx? fun (t : Ty) => t == Ty.bool).getD 0
+    | .void => (f.types.findIdx? fun (t : Ty) => t == Ty.void).getD 0
     | v => v.constTy?.getD 0
-  let tys := ids.map fun id => emitTy structNames f.types f.types[id]!
+  let tys : Array String := ids.map fun (id : TyId) => emitTy structNames f.types f.types[id]!
   let result := emitTy structNames f.types f.types[ret]!
   let argsTy := if tys.isEmpty then "Unit" else " × ".intercalate tys.toList
   let names := (Array.range tys.size).map fun i => s!"p{i}"
