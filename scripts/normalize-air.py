@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Normalize compiler identities and writer metadata for AIR golden comparison."""
 
+import argparse
+from collections import Counter
+from functools import cache
+import hashlib
 import json
+from pathlib import Path
+import runpy
 import re
 import sys
 
@@ -9,7 +15,23 @@ import sys
 IDENTITY_MARKER = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
 
 
-def normalize(value, root=True, type_entry=False):
+@cache
+def load_helpers():
+    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))
+
+
+def normalize(value, root=True, type_entry=False, checked_profile=None, actual=False, helpers=None):
+    if root and checked_profile is not None:
+        helpers = helpers if helpers is not None else load_helpers()
+        profile = helpers["profile_for_air"](value)
+        if actual and profile != checked_profile:
+            raise ValueError("AIR profile differs from validated translation report")
+        # The only schema compatibility transition is 12 (mandatory metadata) to
+        # 11 (the same AIR semantic payload). Older schemas remain observable.
+        if value["schema"] == 12:
+            value = {k: v for k, v in value.items() if k != "profile"}
+            value["schema"] = 11
+
     # Match Air2Lean.Anon.renameIdentities: only the root/type-entry name and
     # function references are identities. Nested names and all other data remain
     # observable, even when they contain compiler-looking markers.
@@ -29,8 +51,77 @@ def normalize(value, root=True, type_entry=False):
     return result
 
 
+class ValidationContext:
+    """Load the helpers and receipt once, with constant-time AIR filename lookup."""
+    def __init__(self, report_path=None, actual=False):
+        self.helpers = load_helpers()
+        self.actual = actual
+        self.profile = None
+        self.inputs = {}
+        if report_path:
+            report = self.helpers["load_report"](report_path)
+            self.profile = report["metadata"]["profile"]
+            for entry in report["air"]:
+                if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+                    raise ValueError("malformed AIR receipt entry")
+                name = entry["file"]
+                if name in self.inputs:
+                    raise ValueError(f"duplicate AIR receipt filename {name!r}")
+                self.inputs[name] = entry["sha256"]
+        elif actual:
+            raise ValueError("--actual requires a validated --check-report")
+
+    def file(self, path):
+        path = Path(path)
+        raw = path.read_bytes()
+        if self.actual and self.inputs.get(path.name) != self.helpers["digest"](raw):
+            raise ValueError(f"{path}: AIR artifact does not match validated translation report")
+        document = self.helpers["parse_json"](raw.decode("utf-8"))
+        value = normalize(document, checked_profile=self.profile, actual=self.actual, helpers=self.helpers)
+        return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+
+def add_directory(source, destination, context):
+    """Apply a validated directory overlay, preserving the legacy collision filenames."""
+    source, destination = Path(source), Path(destination)
+    if not source.is_dir():
+        raise ValueError(f"not an AIR directory: {source}")
+    # Validate every input before removing an earlier overlay or writing any new file.
+    entries = [(re.sub(r"__anon_[0-9]+", "__anon_N", p.name), context.file(p))
+               for p in sorted(source.glob("*.json")) if p.is_file()]
+    counts = Counter(name for name, _ in entries)
+    destination.mkdir(parents=True, exist_ok=True)
+    # Inspect existing files once, rather than scanning the directory for each basename.
+    for previous in destination.iterdir():
+        if not previous.name.endswith(".json"):
+            continue
+        stem = previous.name.removesuffix(".json")
+        while True:
+            if stem + ".json" in counts:
+                previous.unlink()
+                break
+            if "." not in stem:
+                break
+            stem = stem.rsplit(".", 1)[0]
+    for name, data in entries:
+        if counts[name] > 1:
+            # This is the old shasum hash of the exact pretty JSON, including its newline.
+            name = name.removesuffix(".json") + "." + hashlib.sha1(data).hexdigest()[:12] + ".json"
+        (destination / name).write_bytes(data)
+
+
 if __name__ == "__main__":
-    with open(sys.argv[1], encoding="utf-8") as source:
-        document = json.load(source)
-    json.dump(normalize(document), sys.stdout, ensure_ascii=False, sort_keys=True, indent=2)
-    sys.stdout.write("\n")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source")
+    parser.add_argument("--check-report")
+    parser.add_argument("--actual", action="store_true")
+    parser.add_argument("--output-dir", help="normalize a whole AIR directory as one overlay")
+    args = parser.parse_args()
+    try:
+        context = ValidationContext(args.check_report, args.actual)
+        if args.output_dir:
+            add_directory(args.source, args.output_dir, context)
+        else:
+            sys.stdout.buffer.write(context.file(args.source))
+    except (ValueError, KeyError, OSError) as error:
+        parser.exit(1, f"error: {error}\n")
