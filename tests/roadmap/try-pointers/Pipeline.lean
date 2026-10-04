@@ -174,8 +174,12 @@ def main (args : List String) : IO Unit := do
     match check duplicated with
     | .ok _ => throw (IO.userError "same-ID error body accepted by aliased summary")
     | .error e => require ((e.splitOn "must exit").length > 1) s!"duplicate-ID diagnostic order changed: {e}"
-  let bare : CheckCtx := { fnName := hot.name, types := hot.types, layouts := hot.layouts,
-    instTys := hot.allInsts.map (fun i => (i.id, i.ty)), places := #[] }
+  let bare : CheckCtx := {
+    fnName := hot.name
+    types := hot.types
+    layouts := hot.layouts
+    instTys := hot.allInsts.map (fun i => (i.id, i.ty))
+    places := #[] }
   for i in hot.body do
     if let .tryPtr p _ := i.op then
       match checkOp bare 0 i.ty (.tryPtr p #[]) with
