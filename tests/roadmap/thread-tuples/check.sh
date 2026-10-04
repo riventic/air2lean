@@ -73,6 +73,7 @@ PYADAPTER
     translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
     "$translator" "$adapter_output/air" -o "$adapter_output/Gen.lean" \
       --namespace ThreadAdapterContract --prefix thread_adapter_contract.
+    export LEAN_PATH="$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
     if [ -n "${AIR2LEAN_LEAN:-}" ]; then
       "$AIR2LEAN_LEAN" "$adapter_output/Gen.lean"
     else

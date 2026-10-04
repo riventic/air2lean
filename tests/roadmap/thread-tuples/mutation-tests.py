@@ -68,5 +68,73 @@ class CIInvocation(unittest.TestCase):
         self.assertEqual({line.split()[2] for line in invocations},
                          {"--export", "--native", "--check-artifacts", "--adapter-contract"})
 
+class AdapterEnvironment(unittest.TestCase):
+    def setUp(self):
+        import shutil
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        fixture = self.root / "tests/roadmap/thread-tuples"
+        fixture.mkdir(parents=True)
+        original = Path(__file__).resolve().parent
+        for name in ("check.sh", "adapter-contract.zig"):
+            shutil.copyfile(original / name, fixture / name)
+        self.fixture = fixture
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        tools = {
+            "fake-air": """import json,os
+from pathlib import Path
+for name in ('mutableCapture','strongCapture','weakCapture','sliceWorker'):
+ (Path(os.environ['ZIG_AIR_JSON_DIR'])/(name+'.json')).write_text(json.dumps({'name':'thread_adapter_contract.'+name,'zig_version':'0.16.0','schema':11,'target_endian':'little'}))
+""",
+            "fake-translator": """import sys
+from pathlib import Path
+Path(sys.argv[sys.argv.index('-o')+1]).write_text('import ZigLean\\n')
+""",
+            "lean-override": """import json,os,sys
+from pathlib import Path
+Path(os.environ['ENV_CAPTURE']).write_text(json.dumps({'lean_path':os.environ.get('LEAN_PATH'),'args':sys.argv[1:]}))
+""",
+        }
+        tools["lake"] = tools["lean-override"]
+        for name, body in tools.items():
+            tool = self.bin / name
+            tool.write_text("#!/usr/bin/env python3\n" + body)
+            tool.chmod(0o755)
+
+    def check_branch(self, override):
+        import os
+        import subprocess
+        for inherited in (None, "/inherited/lean"):
+            with self.subTest(inherited=inherited, override=override):
+                capture = self.root / "environment.json"
+                output = self.root / ("unset" if inherited is None else "inherited")
+                env = dict(os.environ, PATH=str(self.bin)+os.pathsep+os.environ["PATH"],
+                           AIR2LEAN_ZIG_AIR=str(self.bin/"fake-air"),
+                           AIR2LEAN_TRANSLATOR=str(self.bin/"fake-translator"),
+                           ENV_CAPTURE=str(capture))
+                env.pop("LEAN_PATH", None)
+                env.pop("AIR2LEAN_LEAN", None)
+                if inherited is not None:
+                    env["LEAN_PATH"] = inherited
+                if override:
+                    env["AIR2LEAN_LEAN"] = str(self.bin/"lean-override")
+                result = subprocess.run(["bash", str(self.fixture/"check.sh"), "--adapter-contract", str(output)],
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+                import json
+                observed = json.loads(capture.read_text())
+                paths = observed["lean_path"].split(os.pathsep)
+                self.assertEqual(Path(paths[0]).resolve(), self.root.resolve()/".lake/build/lib/lean")
+                self.assertEqual(paths[1:], [] if inherited is None else [inherited])
+                self.assertEqual(observed["args"][:-1], [] if override else ["env", "lean"])
+
+    def test_explicit_override_environment(self):
+        self.check_branch(True)
+
+    def test_default_lake_environment(self):
+        self.check_branch(False)
+
 if __name__ == "__main__":
     unittest.main()

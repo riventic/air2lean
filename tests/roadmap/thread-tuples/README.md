@@ -56,7 +56,7 @@ AIR2LEAN_ZIG_AIR=/path/to/qualified-patched-zig \
   bash tests/roadmap/thread-tuples/check.sh --export /absolute/empty/output
 ```
 
-The tuple-order mutant is counted only for normal Lean exit 1 with exactly one located `rfl` non-definitional-equality diagnostic at the dispatcher equality assertion. Import, I/O, syntax, signal exits and mixed/unlocated errors fail the gate. Eleven compiler-free adversarial/CI invocation tests accompany this classifier. The pinned Lean tactic source defines the expected diagnostic; actual root classification must pass before claiming the revised gate result.
+The tuple-order mutant is counted only for normal Lean exit 1 with exactly one located `rfl` non-definitional-equality diagnostic at the dispatcher equality assertion. Import, I/O, syntax, signal exits and mixed/unlocated errors fail the gate. Thirteen compiler-free adversarial/CI/environment tests accompany this classifier. Both adapter Lean branches prepend the built repository library path and preserve an inherited `LEAN_PATH`, including an explicit `AIR2LEAN_LEAN` binary override. The pinned Lean tactic source defines the expected diagnostic; actual root classification must pass before claiming the revised gate result.
 
 The artifact gate regenerates Lean from checked AIR and compares it with checked `Gen.lean`, then checks the generated definitions, proofs, runtime samples, pipeline fixtures, and mutation. It needs no production repository and no Zig compiler. `AIR2LEAN_TRANSLATOR` can select an already-built translator; `AIR2LEAN_LEAN` can select the exact Lean binary, otherwise the gate uses `lake env lean`.
 
