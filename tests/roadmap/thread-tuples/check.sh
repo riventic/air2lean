@@ -65,8 +65,8 @@ mkdir -p "$work/ThreadTuples"
 "$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuples/Gen.lean" \
   --namespace ThreadTuples --prefix thread_tuples.
 cmp "$work/ThreadTuples/Gen.lean" tests/roadmap/thread-tuples/ThreadTuples/Gen.lean
-"${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
+"${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
 "${lean_cmd[@]}" --run tests/roadmap/thread-tuples/Pipeline.lean "$work/TuplePipeline.lean"
