@@ -310,8 +310,8 @@ private inductive PackedVisit where
   deriving Inhabited
 
 /-- The bit width of an integer, bool, enum tag, or packed struct (the `packedBits` model
-in `Memory.lean`, which this file cannot import). Memoized explicit DFS: shared field types are completed once; cycles/unknown widths
-return `none` even for direct API calls that did not run `validateTypeGraph`. -/
+in `Memory.lean`, which this file cannot import). Memoized explicit DFS completes shared
+field types once; cycles/unknown widths return `none` even for direct API calls that did not run `validateTypeGraph`. -/
 def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
   let mut states : Array PackedVisit := Array.replicate types.size .unseen
   let mut tasks : List (TyId × Bool) := [(id, false)]
@@ -320,13 +320,13 @@ def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
     tasks := tasks.tail!
     let some t := types[current]? | return none
     if finish then
-      let children := match t with
+      let children : Array TyId := match t with
         | .enum _ tag _ _ => #[tag]
-        | .struct _ "packed" fs => fs.map (·.2)
+        | .struct _ "packed" fs => fs.map (fun (field : String × TyId) => field.2)
         | _ => #[]
-      let mut width := 0
+      let mut width : Nat := 0
       for child in children do
-        let some (.done w) := states[child]? | return none
+        let some (PackedVisit.done w) := states[child]? | return none
         width := width + w
       states := states.set! current (.done width)
     else
