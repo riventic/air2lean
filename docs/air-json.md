@@ -1,6 +1,6 @@
 # AIR JSON format (schema 12)
 
-The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
+The patched compiler writes one file per function. Safe short names use `$ZIG_AIR_JSON_DIR/<fqn>.json`; long or unsafe names use a reserved SHA-256 basename while JSON retains the complete identity. See [Exported function filenames](export-names.md) for the naming and collision contract. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
 ## File
 

@@ -1,6 +1,8 @@
 //! air2lean: write the AIR of one function as JSON.
 //! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
-//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
+//! Safe short names use `<dir>/<fully qualified name>.json`; other names use a SHA-256
+//! basename (see docs/export-names.md). JSON retains the full name.
+//! `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
 //! to functions whose fully qualified name starts with one of the prefixes. Instructions outside
 //! the air2lean subset are written with their tag and `"unsupported": true`, so the reader can
 //! reject them. Types are interned into a `types` table; everywhere a type appears in the
@@ -61,7 +63,29 @@ const Compat = struct {
     }
 
     fn createFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
-        return if (v16) dir.createFile(pt.zcu.comp.io, name, .{}) else dir.createFile(name, .{});
+        const options = .{ .read = true, .exclusive = true, .lock = .exclusive, .lock_nonblocking = true };
+        return if (v16) dir.createFile(pt.zcu.comp.io, name, options) else dir.createFile(name, options);
+    }
+
+    fn openExistingFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
+        const options = .{ .mode = .read_write, .lock = .exclusive, .lock_nonblocking = true };
+        return if (v16) dir.openFile(pt.zcu.comp.io, name, options) else dir.openFile(name, options);
+    }
+
+    fn statPath(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File.Stat {
+        return if (v16) dir.statFile(pt.zcu.comp.io, name, .{}) else dir.statFile(name);
+    }
+
+    fn statFile(pt: Zcu.PerThread, file: File) !File.Stat {
+        return if (v16) file.stat(pt.zcu.comp.io) else file.stat();
+    }
+
+    fn readFile(pt: Zcu.PerThread, file: File, bytes: []u8) !usize {
+        return if (v16) file.readPositionalAll(pt.zcu.comp.io, bytes, 0) else file.preadAll(bytes, 0);
+    }
+
+    fn truncateFile(pt: Zcu.PerThread, file: File) !void {
+        if (v16) try file.setLength(pt.zcu.comp.io, 0) else try file.setEndPos(0);
     }
 
     fn closeFile(pt: Zcu.PerThread, file: File) void {
@@ -374,6 +398,64 @@ fn readAsmNamePair(words: []const u32) struct { constraint: []const u8, name: []
 
 const Error = Compat.WriteError || Zcu.SemaError;
 
+// Reserve '~' for hashes: direct names and fallback names cannot collide. The cap
+// includes .json and is portable to filesystems with a 255-byte component limit.
+const output_name_capacity = @min(255, std.fs.max_name_bytes);
+const hashed_name_prefix = "~air2lean-sha256-";
+
+fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8 {
+    var direct = fqn.len > 0 and fqn.len <= output_name_capacity - ".json".len;
+    for (fqn) |byte| {
+        if (!std.ascii.isAlphanumeric(byte) and byte != '_' and byte != '-' and byte != '.') direct = false;
+    }
+    // Leading dots are hidden by shell globs; leading hyphens are CLI-unsafe.
+    if (fqn.len > 0 and (fqn[0] == '.' or fqn[0] == '-')) direct = false;
+    const stem = fqn[0 .. (std.mem.indexOfScalar(u8, fqn, '.') orelse fqn.len)];
+    if (std.ascii.eqlIgnoreCase(stem, "con") or std.ascii.eqlIgnoreCase(stem, "prn") or
+        std.ascii.eqlIgnoreCase(stem, "aux") or std.ascii.eqlIgnoreCase(stem, "nul")) direct = false;
+    if (stem.len == 4 and stem[3] >= '1' and stem[3] <= '9' and
+        (std.ascii.eqlIgnoreCase(stem[0..3], "com") or std.ascii.eqlIgnoreCase(stem[0..3], "lpt"))) direct = false;
+    if (direct) return std.fmt.bufPrint(buffer, "{s}.json", .{fqn}) catch unreachable;
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(fqn, &digest, .{});
+    @memcpy(buffer[0..hashed_name_prefix.len], hashed_name_prefix);
+    const alphabet = "0123456789abcdef";
+    for (digest, 0..) |byte, i| {
+        buffer[hashed_name_prefix.len + i * 2] = alphabet[byte >> 4];
+        buffer[hashed_name_prefix.len + i * 2 + 1] = alphabet[byte & 15];
+    }
+    const end = hashed_name_prefix.len + digest.len * 2;
+    @memcpy(buffer[end .. end + 5], ".json");
+    return buffer[0 .. end + 5];
+}
+
+// Exclusive creation protects fresh files. Repeated analysis may export the same
+// function again: permit this only after validating its existing full JSON name,
+// without truncating first. The advisory lock coordinates cooperating exporters.
+fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8, allocator: Allocator) !Compat.File {
+    return Compat.createFile(pt, dir, name) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+        // Reject stable nonregular paths before a potentially blocking open.
+        if ((try Compat.statPath(pt, dir, name)).kind != .file) return error.ExistingOutputNotRegular;
+        const file = try Compat.openExistingFile(pt, dir, name);
+        errdefer Compat.closeFile(pt, file);
+        const stat = try Compat.statFile(pt, file);
+        if (stat.kind != .file) return error.ExistingOutputNotRegular;
+        if (stat.size > 64 * 1024 * 1024) return error.ExistingOutputTooLarge;
+        const bytes = try allocator.alloc(u8, @as(usize, @intCast(stat.size)) + 1);
+        defer allocator.free(bytes);
+        const count = try Compat.readFile(pt, file, bytes);
+        if (count != stat.size) return error.ExistingOutputChanged;
+        const parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes[0..count], .{ .duplicate_field_behavior = .@"error" });
+        defer parsed.deinit();
+        if (parsed.value != .object) return error.OutputIdentityCollision;
+        const identity = parsed.value.object.get("name") orelse return error.OutputIdentityCollision;
+        if (identity != .string or !std.mem.eql(u8, identity.string, fqn)) return error.OutputIdentityCollision;
+        try Compat.truncateFile(pt, file);
+        return file;
+    };
+}
+
 pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
     const zcu = pt.zcu;
@@ -394,21 +476,17 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
         return;
     };
     defer Compat.closeDir(pt, &dir);
-    var name_buf: [std.fs.max_name_bytes]u8 = undefined;
-    const file_name = std.fmt.bufPrint(&name_buf, "{s}.json", .{fqn}) catch {
-        std.log.warn("air2lean: name too long for a file, no JSON for {s}", .{fqn});
-        return;
-    };
-    const file = Compat.createFile(pt, dir, file_name) catch |err| {
-        std.log.warn("air2lean: no JSON for {s}: {s}", .{ fqn, @errorName(err) });
+    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
+    defer arena.deinit();
+    var name_buf: [output_name_capacity]u8 = undefined;
+    const file_name = outputFileName(fqn, &name_buf);
+    const file = openOwnedOutput(pt, dir, file_name, fqn, arena.allocator()) catch |err| {
+        std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
     };
     defer Compat.closeFile(pt, file);
     var sink: Compat.Sink = undefined;
     sink.init(pt, file);
-
-    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
-    defer arena.deinit();
 
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
     // A partly written file is invalid JSON; say which one, like the open failures above.
