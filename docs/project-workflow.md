@@ -132,3 +132,9 @@ Run the mocked regressions without Zig, Lean or Lake:
 ```sh
 python3 -m unittest discover -s tests/roadmap/project -v
 ```
+
+The full Zig 0.16 CI job runs these offline regressions after building the translator,
+then translates `example-project.json` with that executable and verifies the resulting
+artifact hashes. The artifact and JSON reports stay under `RUNNER_TEMP` and are not
+uploaded by this gate. This checks translation and stale-input detection; it does not
+check the declared Lean proof goals or establish source/export/backend correspondence.
