@@ -18,7 +18,7 @@ theorem WP.assignmentChoice {count : Mem → Nat} {body : Nat → CM Tgt σ α} 
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
         P.WP t ((body c).run s) Q G₁ { m₁ with current := t } k) :
-    P.WP t ((do let c ← pickC count; body c : CM Tgt σ α).run s) Q G m n := by
+    P.WP t ((do let c ← Zig.pickC count; body c : CM Tgt σ α).run s) Q G m n := by
   simp only [StateT.run_bind]
   apply WP.bind
   exact WP.pickC h

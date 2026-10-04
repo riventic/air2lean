@@ -46,8 +46,14 @@ private partial def parseArgsGo (args : List String)
         | none | some "available" => pure SpawnSemantics.available
         | some "fallible" => pure SpawnSemantics.fallible
         | some other => throw s!"invalid --spawn-policy '{other}' (want 'available' or 'fallible')\n{usage}"
-      pure { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := floats,
-        spawnSemantics := spawning }
+      pure {
+        airDir := airDir
+        outPath := outPath
+        ns := ns
+        prefix_ := prefix_.getD ""
+        floatSemantics := floats
+        spawnSemantics := spawning
+      }
     | none, _, _ => .error s!"missing <air-dir>\n{usage}"
     | _, none, _ => .error s!"missing -o <out.lean>\n{usage}"
     | _, _, none => .error s!"missing --namespace <Ns>\n{usage}"
@@ -104,7 +110,7 @@ private def run (args : List String) : IO UInt32 := do
       let checked := do
         match err with | some e => throw e | none => pure ()
         checkProgram funcs
-        if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
+        if a.spawnSemantics == SpawnSemantics.fallible then checkFallibleSpawnCalls funcs
       match checked with
       | .error e => die e
       | .ok () =>
