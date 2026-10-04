@@ -649,9 +649,9 @@ def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
 private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
 
 private structure SpawnMessages where
-  missingTuple : String
-  notTuple : String
-  count : String
+  missingTuple : Unit → String
+  notTuple : Unit → String
+  count : Unit → String
   argument : Nat → String
 
 /-- Validate the worker tuple with one shared policy. Newly successful type pairs
@@ -660,9 +660,9 @@ transactionally. Local duplicate pairs preserve the cached caller's comparison o
 private def checkSpawnSignatureWith (f target : Func) (args : Array Val) (k : Nat)
     (index : OperandTypes) (sameType : TyId → TyId → Bool) (messages : SpawnMessages) :
     Except String (Array (TyId × TyId)) := do
-  let some tuple := args[k]?.bind index.valTy? | throw messages.missingTuple
-  let some (.tuple fields) := f.types[tuple]? | throw messages.notTuple
-  unless fields.size == target.params.size do throw messages.count
+  let some tuple := args[k]?.bind index.valTy? | throw (messages.missingTuple ())
+  let some (.tuple fields) := f.types[tuple]? | throw (messages.notTuple ())
+  unless fields.size == target.params.size do throw (messages.count ())
   let mut seen : Std.HashSet (TyId × TyId) := {}
   let mut pairs := #[]
   for (ty, n) in fields.zipIdx do
@@ -1092,9 +1092,9 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           let key (x y : TyId) := ((fileIndex, targetIndex), (x, y))
           let pairs ← checkSpawnSignatureWith f target args k index
             (fun x y => signatures.contains (key x y) || compatibleType f target x y)
-            { missingTuple := s!"{f.name}: inst {i.id}: spawn args have no type",
-              notTuple := s!"{f.name}: inst {i.id}: spawn args are not a tuple",
-              count := s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count",
+            { missingTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args have no type",
+              notTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args are not a tuple",
+              count := fun _ => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count",
               argument := fun n => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type" }
           for (x, y) in pairs do signatures := signatures.insert (key x y)
         unless functionNames.contains callee do
@@ -1219,8 +1219,8 @@ def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log)
 private def diagnosticSpawnSignature (f target : Func) (i : Inst) (args : Array Val)
     (k : Nat) (index : OperandTypes) : Except String Unit := do
   let _ ← checkSpawnSignatureWith f target args k index (compatibleType f target)
-    { missingTuple := "spawn args have no type", notTuple := "spawn args are not a tuple",
-      count := "spawned callee has an incompatible argument count",
+    { missingTuple := fun _ => "spawn args have no type", notTuple := fun _ => "spawn args are not a tuple",
+      count := fun _ => "spawned callee has an incompatible argument count",
       argument := fun n => s!"spawned callee has an incompatible argument {n} type (inst {i.id})" }
   pure ()
 
