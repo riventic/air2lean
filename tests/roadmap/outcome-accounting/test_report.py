@@ -53,6 +53,14 @@ class Outcomes(unittest.TestCase):
         self.assertIn('import Outcome',(ROOT/'tests/roadmap/outcome-accounting/Check.lean').read_text().splitlines())
         self.assertNotIn('  prefix :',(ROOT/'tests/diff/Outcome.lean').read_text())
 
+    def test_observation_constructors_use_named_fields_with_default_search(self):
+        outcome=(ROOT/'tests/diff/Outcome.lean').read_text()
+        self.assertIn('search : Option Search := none',outcome)
+        for name in ('tests/diff/Outcome.lean','tests/diff/Diff.lean','tests/roadmap/outcome-accounting/Search.lean'):
+            source=(ROOT/name).read_text()
+            self.assertNotIn('⟨"',source,name)
+            self.assertIn('{ line := "',source,name)
+
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})
         code,data=self.compare()

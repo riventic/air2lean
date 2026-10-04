@@ -159,7 +159,7 @@ def renderOk {α : Type} [ReturnedError α] (r : Zig.Result α) (payload : α �
   match r.run with
   | none => DiffOutcome.noResult
   | some (.error e) => DiffOutcome.failure e
-  | some (.ok v) => ⟨"{\"ok\":" ++ payload v ++ "}", DiffOutcome.valueKind v⟩
+  | some (.ok v) => { line := "{\"ok\":" ++ payload v ++ "}", kind := DiffOutcome.valueKind v }
 
 /-- An integer value; `wide`: quoted (u64 results). -/
 def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
@@ -755,7 +755,7 @@ def renderMem {α : Type} [ReturnedError α] (g n : Nat) (r : Zig.Result (α × 
       "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
     let live := if heap then s!",\"live\":{(m.blocks.filter fun b => b.kind == .heap && b.live).size}"
       else ""
-    ⟨"{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}", DiffOutcome.valueKind v⟩
+    { line := "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}", kind := DiffOutcome.valueKind v }
 
 /-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
 memory, from the memory `m0` of the example. `call` gets the number of globals. `heap`: the
@@ -967,7 +967,7 @@ def renderOut {α : Type} [ReturnedError α] (r : Zig.Sched.Out α) (payload : �
   match r with
   | none => DiffOutcome.noResult
   | some (.error e) => DiffOutcome.failure e
-  | some (.ok (v, _)) => ⟨"{\"ok\":" ++ payload v ++ "}", DiffOutcome.valueKind v⟩
+  | some (.ok (v, _)) => { line := "{\"ok\":" ++ payload v ++ "}", kind := DiffOutcome.valueKind v }
 
 /-- The most runs (schedules) that `searchSchedules` tries for one input. -/
 def scheduleCap : Nat := 2000
