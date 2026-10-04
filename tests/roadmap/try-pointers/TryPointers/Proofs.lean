@@ -166,12 +166,11 @@ theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Opt
       (fun result => ⌜result = (match e with
         | none => .ok (errPayloadPtr α p) | some name => .error name)⌝ ∗
         readableUnion α p n a e) := by
-  cases e <;> apply Triple.of_run
-  all_goals
-    intro m h hF hd hm hp hs
-    obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run
-      (α := α) (p := p) (n := n) (a := a) (m := m) (h := h) (hF := hF) hp hm hs
-    exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+  apply Triple.of_run
+  intro m h hF hd hm hp hs
+  obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run
+    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m) (h := h) (hF := hF) hp hm hs
+  exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨by cases e <;> rfl, hp⟩, hs'⟩
 
 theorem payload8_owned (p : Ptr) (e : Option ErrName) (R : Assn) :
     Triple (readableUnion (BitVec 8) p 4 2 e ∗ R) (TryPointers.payload8 p)
