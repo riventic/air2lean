@@ -231,4 +231,92 @@ expect_pass "source restored after undetected mutation" cmp "$mutate/original-th
 expect_pass "genuine mutant proof error" run_mutant mutant-error baseline4
 expect_pass "mutation source restored" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
 
+# The emitter must elaborate every generated/caller fixture and propagate list failures.
+emitter="$test_dir/emitter"
+mkdir -p "$emitter/tests/review" "$emitter/bin" "$emitter/-fixtures"
+cp "$repo_root/tests/review/emitter.sh" "$emitter/tests/review/"
+cat > "$emitter/bin/lake" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${3:-}" = --run ]; then
+  output=$5
+  mkdir -p "$output"
+  for name in pointerCasts tuples names indirectCapture unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames; do
+    [ "${EMITTER_MODE:-}" != missing ] || [ "$name" != tuples ] || continue
+    : > "$output/$name.lean"
+  done
+else
+  printf '%s\n' "$3" >> "$EMITTER_LOG"
+fi
+EOF
+real_find=$(command -v find)
+real_sort=$(command -v sort)
+cat > "$emitter/bin/find" <<'EOF'
+#!/usr/bin/env bash
+if [ "${LIST_MODE:-}" = find-failure ]; then echo 'find failed' >&2; exit 1; fi
+if [ "${LIST_MODE:-}" = truncated ]; then "$REAL_FIND" "$@" | head -n 1; else "$REAL_FIND" "$@"; fi
+EOF
+cat > "$emitter/bin/sort" <<'EOF'
+#!/usr/bin/env bash
+if [ "${LIST_MODE:-}" = sort-failure ]; then echo 'sort failed' >&2; exit 1; fi
+if [ "${LIST_MODE:-}" = sort-truncated ]; then "$REAL_SORT" "$@" | head -n 1; else "$REAL_SORT" "$@"; fi
+EOF
+chmod +x "$emitter/bin/"*
+run_emitter() {
+  env PATH="$emitter/bin:$PATH" REAL_FIND="$real_find" REAL_SORT="$real_sort" \
+    EMITTER_LOG="$emitter/checked" LIST_MODE="$1" EMITTER_MODE="${2:-}" \
+    bash "$emitter/tests/review/emitter.sh" -fixtures
+}
+for name in parser1 parser2 parser3 parser4 parser5 parser6; do : > "$emitter/-fixtures/$name.lean"; done
+expect_pass "emitter checks 21 fixtures in leading-hyphen directory" run_emitter healthy
+expect_pass "all 21 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 21
+expect_failure "failed emitter find" "find failed" run_emitter find-failure
+expect_failure "failed emitter sort" "sort failed" run_emitter sort-failure
+expect_failure "truncated emitter find" "listing incomplete" run_emitter truncated
+expect_failure "truncated emitter sort" "listing incomplete" run_emitter sort-truncated
+# tuples.lean remains from the healthy run: it must not mask a missing fresh output.
+expect_failure "stale fixture cannot mask a missing emitter case" "missing emitter fixture: tuples" run_emitter healthy missing
+rm "$emitter/-fixtures/tuples.lean"
+expect_failure "missing emitter semantic fixture" "missing emitter fixture: tuples" run_emitter healthy missing
+
+# Focused mutation s: verify the real semantic edit, baseline rejection, and restoration.
+mkdir -p "$mutate/examples/lists"
+touch "$mutate/examples/lists/lists.zig"
+awk '{ for (i = 1; i <= NF; i++) if ($i != "s") printf "%s ", $i } END { print ""; print "s" }' \
+  "$repo_root/scripts/mutation-shards.txt" > "$mutate/scripts/mutation-shards.txt"
+cp "$mutate/ZigLean/Mem/Alloc.lean" "$mutate/original-alloc.lean"
+cat > "$mutate/scripts/diff.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ ! -f "$DIFF_BASELINE_MARKER" ]; then
+  touch "$DIFF_BASELINE_MARKER"
+  if [ "$DIFF_MODE" = baseline-error ]; then echo 'TOTAL: mismatch=1'; exit 1; fi
+  cmp original-alloc.lean ZigLean/Mem/Alloc.lean || exit 1
+  exit 0
+fi
+python3 - <<'PYTEST'
+from pathlib import Path
+before = Path('original-alloc.lean').read_text()
+after = Path('ZigLean/Mem/Alloc.lean').read_text()
+old = 'poisonFree s.ptr (size * (s.len.toNat + 1))'
+new = 'poisonFree s.ptr (size * s.len.toNat)'
+assert before.count(old) == 1 and after == before.replace(old, new), 'mutation changed more than sentinel byte count'
+PYTEST
+if [ "$DIFF_MODE" = undetected ]; then echo 'TOTAL: mismatch=0'; exit 0; fi
+echo 'TOTAL: mismatch=1'
+exit 1
+EOF
+run_sentinel() {
+  env PATH="$mutate/bin:$PATH" AIR2LEAN_ZIG_AIR="$check/bin/zig" \
+    AIR2LEAN_EXAMPLES=lists AIR2LEAN_MUTATION_SHARD=2 AIR2LEAN_MUTATION_SHARDS=2 \
+    DIFF_MODE="$1" DIFF_BASELINE_MARKER="$mutate/$2" \
+    bash "$mutate/scripts/mutate.sh"
+}
+expect_failure "unmutated differential mismatch cannot detect a mutant" "unmutated differential baseline failed" run_sentinel baseline-error diff-baseline-fail
+expect_pass "baseline failure preserves allocator source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+expect_pass "sentinel mutation changes only sentinel byte count and is detected" run_sentinel detected diff-baseline-pass
+expect_pass "sentinel mutation restores allocator source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+expect_failure "undetected sentinel mutation fails" "NOT detected" run_sentinel undetected diff-baseline-undetected
+expect_pass "undetected sentinel mutation restores source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+
 echo "shell review checks: $passed passed"
