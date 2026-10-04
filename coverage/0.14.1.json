@@ -1,6 +1,7 @@
 {
   "format": 1,
   "zig_version": "0.14.1",
+  "golden_os": "linux",
   "evidence_level": "source-inventory; no compiler execution, proof checking or support qualification",
   "compiler_source_sha256": {
     "src/Air.zig": "5b90f7e24e03ef9c4563ba4c870e8eaf09f1cd3be191584447186945ddeb356e",
@@ -364,7 +365,87 @@
           "tests/golden/0.14.1/layout/air/layout.wordHalf.json",
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -411,7 +492,20 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/variants/air/variants.totalArea.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -458,7 +552,19 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.ctlSum.json"
+          "tests/golden/0.14.1/layout/air/layout.ctlSum.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -550,7 +656,10 @@
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.bumpPair.json",
           "tests/golden/0.14.1/layout/air/layout.growCircle.json",
-          "tests/golden/0.14.1/layout/air/layout.laneSet.json"
+          "tests/golden/0.14.1/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.succ.json"
         ]
       },
       "proofs": {
@@ -597,7 +706,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.clampAdd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -643,7 +754,15 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.lerp.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -689,7 +808,15 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -869,7 +996,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.lerp.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -916,7 +1052,11 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/variants/air/variants.area.json"
         ]
       },
       "proofs": {
@@ -1006,7 +1146,9 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.shapeArea.json"
+          "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.square.json"
         ]
       },
       "proofs": {
@@ -1099,7 +1241,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1192,7 +1340,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1287,7 +1442,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1477,7 +1638,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/recursion/air/recursion.gcd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1572,7 +1740,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1754,7 +1928,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1800,7 +1980,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2040,7 +2226,23 @@
           "tests/golden/0.14.1/layout/air/layout.setHalf.json",
           "tests/golden/0.14.1/layout/air/layout.setNib.json",
           "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
-          "tests/golden/0.14.1/layout/air/layout.wordByte.json"
+          "tests/golden/0.14.1/layout/air/layout.wordByte.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -2318,7 +2520,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2385,7 +2592,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.cmp64.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2441,7 +2650,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskStore.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2872,7 +3083,33 @@
           "tests/golden/0.14.1/layout/air/layout.regSigned.json",
           "tests/golden/0.14.1/layout/air/layout.setHalf.json",
           "tests/golden/0.14.1/layout/air/layout.setNib.json",
-          "tests/golden/0.14.1/layout/air/layout.setRegFlags.json"
+          "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -2945,7 +3182,50 @@
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -3040,7 +3320,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -3127,7 +3416,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -3195,7 +3493,50 @@
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -3432,7 +3773,35 @@
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
           "tests/golden/0.14.1/layout/air/layout.wordHalf.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -3909,7 +4278,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.hypot2.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -3962,7 +4338,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4013,7 +4395,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4064,7 +4452,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4115,7 +4509,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4166,7 +4566,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4217,7 +4623,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4268,7 +4680,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4319,7 +4737,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4375,7 +4799,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4424,7 +4854,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4470,7 +4907,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4516,7 +4959,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4562,7 +5011,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4616,7 +5071,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4709,7 +5170,21 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.headerLen.json",
-          "tests/golden/0.14.1/layout/air/layout.wordByte.json"
+          "tests/golden/0.14.1/layout/air/layout.wordByte.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -4798,7 +5273,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.cmp64.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4888,7 +5365,24 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.numInt.json",
-          "tests/golden/0.14.1/variants/air/variants.radius.json"
+          "tests/golden/0.14.1/variants/air/variants.radius.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json"
         ]
       },
       "proofs": {
@@ -4977,7 +5471,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5065,7 +5562,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/layout/air/layout.digit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5154,7 +5658,12 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.headerLen.json"
+          "tests/golden/0.14.1/layout/air/layout.headerLen.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/recursion/air/recursion.gcd.json"
         ]
       },
       "proofs": {
@@ -5243,7 +5752,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskStore.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5338,7 +5849,41 @@
           "tests/golden/0.14.1/layout/air/layout.numInt.json",
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
-          "tests/golden/0.14.1/variants/air/variants.radius.json"
+          "tests/golden/0.14.1/variants/air/variants.radius.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -5388,7 +5933,17 @@
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.growCircle.json",
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json"
         ]
       },
       "proofs": {
@@ -5529,7 +6084,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.sumDigits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5751,7 +6308,87 @@
           "tests/golden/0.14.1/layout/air/layout.wordHalf.json",
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -5798,7 +6435,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5861,7 +6507,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5944,7 +6596,19 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.regSigned.json",
-          "tests/golden/0.14.1/layout/air/layout.wordByte.json"
+          "tests/golden/0.14.1/layout/air/layout.wordByte.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -5998,7 +6662,23 @@
           "tests/golden/0.14.1/layout/air/layout.readHeader.json",
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -6045,7 +6725,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6137,7 +6823,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6229,7 +6919,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.bumpOpt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6329,7 +7021,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6597,7 +7293,32 @@
           "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -6783,7 +7504,87 @@
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
           "tests/golden/0.14.1/layout/air/layout.wordHalf.json",
-          "tests/golden/0.14.1/variants/air/variants.radius.json"
+          "tests/golden/0.14.1/variants/air/variants.radius.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -6922,7 +7723,9 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/variants/air/variants.advance.json"
         ]
       },
       "proofs": {
@@ -7022,7 +7825,32 @@
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
           "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -7107,7 +7935,20 @@
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/floatops/air/floatops.divExact64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.next.json"
         ]
       },
       "proofs": {
@@ -7254,7 +8095,15 @@
           "tests/golden/0.14.1/layout/air/layout.ctlMode.json",
           "tests/golden/0.14.1/layout/air/layout.ctlSum.json",
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
-          "tests/golden/0.14.1/layout/air/layout.wordByte.json"
+          "tests/golden/0.14.1/layout/air/layout.wordByte.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/variants/air/variants.area.json"
         ]
       },
       "proofs": {
@@ -7318,7 +8167,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.lightOf.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7440,7 +8293,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7503,7 +8360,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.bumpOpt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7549,7 +8408,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.setOptJob.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7596,7 +8457,9 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.headerLen.json"
+          "tests/golden/0.14.1/layout/air/layout.headerLen.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/options/air/options.find.json"
         ]
       },
       "proofs": {
@@ -7643,7 +8506,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/layout/air/layout.bumpDigit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7689,7 +8555,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/layout/air/layout.bumpDigit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7737,7 +8607,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.bump.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7786,7 +8658,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.bump.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7883,7 +8757,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/layout/air/layout.digit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7929,7 +8807,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.sumDigits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8034,7 +8914,9 @@
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
           "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json"
         ]
       },
       "proofs": {
@@ -8089,7 +8971,9 @@
           "tests/golden/0.14.1/layout/air/layout.setHalf.json",
           "tests/golden/0.14.1/layout/air/layout.setNib.json",
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json"
         ]
       },
       "proofs": {
@@ -8139,7 +9023,9 @@
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.setRegFlags.json",
           "tests/golden/0.14.1/layout/air/layout.wordByte.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json"
         ]
       },
       "proofs": {
@@ -8186,7 +9072,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.incCount.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8240,7 +9128,10 @@
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/layout/air/layout.wordHalf.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/basic/air/basic.weightedTardiness.json",
+          "tests/golden/variants/air/variants.area.json"
         ]
       },
       "proofs": {
@@ -8344,7 +9235,9 @@
           "tests/golden/0.14.1/layout/air/layout.numInt.json",
           "tests/golden/0.14.1/layout/air/layout.shapeArea.json",
           "tests/golden/0.14.1/variants/air/variants.radius.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/golden/variants/air/variants.area.json",
+          "tests/golden/variants/air/variants.isRound.json"
         ]
       },
       "proofs": {
@@ -8449,7 +9342,14 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.headerLen.json"
+          "tests/golden/0.14.1/layout/air/layout.headerLen.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.findOr.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -8639,7 +9539,9 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.lowByte.json",
-          "tests/golden/0.14.1/layout/air/layout.wordByte.json"
+          "tests/golden/0.14.1/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.writeTable.json"
         ]
       },
       "proofs": {
@@ -8686,7 +9588,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.totalWeightedTardiness.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/variants/air/variants.totalArea.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8825,7 +9734,9 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.laneSet.json"
+          "tests/golden/0.14.1/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.writeTable.json"
         ]
       },
       "proofs": {
@@ -9064,7 +9975,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9260,7 +10174,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10099,7 +11016,8 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.nibArg.json"
+          "tests/golden/0.14.1/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.wordArg.json"
         ]
       },
       "proofs": {
@@ -10192,7 +11110,13 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatops/air/floatops.op128.json",
+          "tests/golden/floatops/air/floatops.op16.json",
+          "tests/golden/floatops/air/floatops.op32.json",
+          "tests/golden/floatops/air/floatops.op64.json",
+          "tests/golden/floatops/air/floatops.op80.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -11211,48 +12135,48 @@
   "pointer_bases": [
     {
       "name": "nav",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "comptime_alloc",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "uav",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "comptime_field",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "int",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "eu_payload",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "opt_payload",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "field",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "arr_elem",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     }
   ],
   "models": [
@@ -11427,7 +12351,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "ee6643e0ed742cc348324dbfeb87ba7799e5f027e903dd1738c06d80de19c5a5",
+      "scripts/coverage.py": "238e886065cc6b6de308b571074d6137b23ca37648b8c9760bfaaa9889189758",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {

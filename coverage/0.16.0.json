@@ -1,6 +1,7 @@
 {
   "format": 1,
   "zig_version": "0.16.0",
+  "golden_os": "linux",
   "evidence_level": "source-inventory; no compiler execution, proof checking or support qualification",
   "compiler_source_sha256": {
     "src/Air.zig": "72ee161f40a1f23c181af252632b33f81b2d8629f90f4f2a114af10bb4651427",
@@ -376,7 +377,219 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.bswap32.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/asm/air/asm.lzcnt64.json",
+          "tests/golden/asm/air/asm.popcnt64.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatconv/air/floatconv.bits32.json",
+          "tests/golden/floatconv/air/floatconv.f16ToF128.json",
+          "tests/golden/floatconv/air/floatconv.f64ToF16.json",
+          "tests/golden/floatconv/air/floatconv.f80ToF64.json",
+          "tests/golden/floatconv/air/floatconv.fromI64.json",
+          "tests/golden/floatconv/air/floatconv.fromU128.json",
+          "tests/golden/floatconv/air/floatconv.ofBits64.json",
+          "tests/golden/floatconv/air/floatconv.toByte.json",
+          "tests/golden/floatconv/air/floatconv.toI32.json",
+          "tests/golden/floatconv/air/floatconv.toU64.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.parentOfX.json",
+          "tests/golden/layout/air/layout.parentOfY.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.clear.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.fill.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/slices/air/slices.total.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.andLanes.json",
+          "tests/golden/vectors/air/vectors.checkedAdd.json",
+          "tests/golden/vectors/air/vectors.fDot.json",
+          "tests/golden/vectors/air/vectors.fMax.json",
+          "tests/golden/vectors/air/vectors.fMin.json",
+          "tests/golden/vectors/air/vectors.interleave.json",
+          "tests/golden/vectors/air/vectors.maxLane.json",
+          "tests/golden/vectors/air/vectors.minLane.json",
+          "tests/golden/vectors/air/vectors.orLanes.json",
+          "tests/golden/vectors/air/vectors.pick.json",
+          "tests/golden/vectors/air/vectors.reverse.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.satAdd.json",
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.uDotWrap.json",
+          "tests/golden/vectors/air/vectors.uMinLane.json",
+          "tests/golden/vectors/air/vectors.vAbs.json",
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vLess.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/golden/vectors/air/vectors.vNarrow.json",
+          "tests/golden/vectors/air/vectors.vNeg.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json",
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/golden/vectors/air/vectors.vToFloat.json",
+          "tests/golden/vectors/air/vectors.xorLanes.json"
         ]
       },
       "proofs": {
@@ -430,7 +643,24 @@
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
           "tests/golden/0.16.0/slices/air/slices.copyWithin.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -489,7 +719,36 @@
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
           "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json",
           "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.bump.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.checkedAdd.json"
         ]
       },
       "proofs": {
@@ -580,7 +839,18 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.16.0/slices/air/slices.bumpAt.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -627,7 +897,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/vectors/air/vectors.satAdd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -682,7 +956,11 @@
           "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
           "tests/golden/0.16.0/slices/air/slices.sumMid.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json"
         ]
       },
       "proofs": {
@@ -731,7 +1009,18 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
-          "tests/golden/0.16.0/slices/air/slices.sumMid.json"
+          "tests/golden/0.16.0/slices/air/slices.sumMid.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/vectors/air/vectors.vNeg.json"
         ]
       },
       "proofs": {
@@ -917,7 +1206,11 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/vectors/air/vectors.fDot.json"
         ]
       },
       "proofs": {
@@ -970,7 +1263,9 @@
           "tests/golden/0.16.0/basic/air/basic.weightedTardiness.json",
           "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/recursion/air/recursion.fact.json"
         ]
       },
       "proofs": {
@@ -1059,7 +1354,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/vectors/air/vectors.uDotWrap.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1256,7 +1556,9 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/vectors/air/vectors.vDiv.json"
         ]
       },
       "proofs": {
@@ -1554,7 +1856,10 @@
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
-          "tests/golden/0.16.0/slices/air/slices.localArr.json"
+          "tests/golden/0.16.0/slices/air/slices.localArr.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/vectors/air/vectors.sRem.json"
         ]
       },
       "proofs": {
@@ -1655,7 +1960,9 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -1753,7 +2060,11 @@
           "tests/golden/0.16.0/slices/air/slices.second.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
           "tests/golden/0.16.0/slices/air/slices.sumMid.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/slices/air/slices.copy.json"
         ]
       },
       "proofs": {
@@ -1853,7 +2164,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json"
         ]
       },
       "proofs": {
@@ -1905,7 +2217,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json"
         ]
       },
       "proofs": {
@@ -1952,7 +2265,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/vectors/air/vectors.vOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2171,7 +2486,99 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -2324,7 +2731,11 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json"
         ]
       },
       "proofs": {
@@ -2385,7 +2796,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/asm/air/asm.bswap32.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/asm/air/asm.lzcnt64.json",
+          "tests/golden/asm/air/asm.popcnt64.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2448,7 +2864,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/vectors/air/vectors.vBits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2516,7 +2941,11 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/atomics/air-linux/atomics.sbRelaxed.json"
+          "tests/golden/0.16.0/atomics/air-linux/atomics.sbRelaxed.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/golden/vectors/air/vectors.vShift.json"
         ]
       },
       "proofs": {
@@ -2573,7 +3002,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/vectors/air/vectors.vShift.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2674,7 +3106,10 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/atomics/air-linux/atomics.sbRelaxed.json"
+          "tests/golden/0.16.0/atomics/air-linux/atomics.sbRelaxed.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/vectors/air/vectors.vShift.json"
         ]
       },
       "proofs": {
@@ -2836,7 +3271,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/vectors/air/vectors.vBits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2920,7 +3357,12 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json"
+          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/vectors/air/vectors.vBits.json"
         ]
       },
       "proofs": {
@@ -3027,7 +3469,115 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatconv/air/floatconv.bits32.json",
+          "tests/golden/floatconv/air/floatconv.ofBits64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.parentOfX.json",
+          "tests/golden/layout/air/layout.parentOfY.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -3116,7 +3666,96 @@
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -3216,7 +3855,39 @@
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
           "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -3309,7 +3980,39 @@
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
           "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -3397,7 +4100,103 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -3654,7 +4453,92 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.total.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -4136,7 +5020,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/floats/air/floats.hypot2.json"
         ]
       },
       "proofs": {
@@ -4656,7 +5541,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op16.json",
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
-          "tests/golden/0.16.0/floatops/air/floatops.op80.json"
+          "tests/golden/0.16.0/floatops/air/floatops.op80.json",
+          "tests/golden/vectors/air/vectors.vAbs.json"
         ]
       },
       "proofs": {
@@ -5027,7 +5913,37 @@
           "tests/golden/0.16.0/slices/air/slices.bumpAt.json",
           "tests/golden/0.16.0/slices/air/slices.localArr.json",
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -5121,7 +6037,11 @@
           "tests/golden/0.16.0/slices/air/slices.copyWithin.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
           "tests/golden/0.16.0/slices/air/slices.sumMid.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/slices/air/slices.sentinelArr.json"
         ]
       },
       "proofs": {
@@ -5218,7 +6138,37 @@
           "tests/golden/0.16.0/slices/air/slices.copyWithin.json",
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
-          "tests/golden/0.16.0/variants/air/variants.radius.json"
+          "tests/golden/0.16.0/variants/air/variants.radius.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json"
         ]
       },
       "proofs": {
@@ -5308,7 +6258,13 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json"
+          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/slices/air/slices.copy.json"
         ]
       },
       "proofs": {
@@ -5397,7 +6353,17 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5486,7 +6452,22 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/slices/air/slices.sumZ.json"
+          "tests/golden/0.16.0/slices/air/slices.sumZ.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json"
         ]
       },
       "proofs": {
@@ -5575,7 +6556,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vLess.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5681,7 +6667,89 @@
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
           "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
-          "tests/golden/0.16.0/variants/air/variants.radius.json"
+          "tests/golden/0.16.0/variants/air/variants.radius.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -5735,7 +6803,18 @@
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.severity.json"
         ]
       },
       "proofs": {
@@ -5891,7 +6970,22 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json"
         ]
       },
       "proofs": {
@@ -6126,7 +7220,220 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.bswap32.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/asm/air/asm.lzcnt64.json",
+          "tests/golden/asm/air/asm.popcnt64.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatconv/air/floatconv.bits32.json",
+          "tests/golden/floatconv/air/floatconv.f16ToF128.json",
+          "tests/golden/floatconv/air/floatconv.f64ToF16.json",
+          "tests/golden/floatconv/air/floatconv.f80ToF64.json",
+          "tests/golden/floatconv/air/floatconv.fromI64.json",
+          "tests/golden/floatconv/air/floatconv.fromU128.json",
+          "tests/golden/floatconv/air/floatconv.ofBits64.json",
+          "tests/golden/floatconv/air/floatconv.toByte.json",
+          "tests/golden/floatconv/air/floatconv.toI32.json",
+          "tests/golden/floatconv/air/floatconv.toU64.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.parentOfX.json",
+          "tests/golden/layout/air/layout.parentOfY.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.bump.json",
+          "tests/golden/slices/air/slices.clear.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.fill.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/slices/air/slices.total.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.andLanes.json",
+          "tests/golden/vectors/air/vectors.checkedAdd.json",
+          "tests/golden/vectors/air/vectors.fDot.json",
+          "tests/golden/vectors/air/vectors.fMax.json",
+          "tests/golden/vectors/air/vectors.fMin.json",
+          "tests/golden/vectors/air/vectors.interleave.json",
+          "tests/golden/vectors/air/vectors.maxLane.json",
+          "tests/golden/vectors/air/vectors.minLane.json",
+          "tests/golden/vectors/air/vectors.orLanes.json",
+          "tests/golden/vectors/air/vectors.pick.json",
+          "tests/golden/vectors/air/vectors.reverse.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.satAdd.json",
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.uDotWrap.json",
+          "tests/golden/vectors/air/vectors.uMinLane.json",
+          "tests/golden/vectors/air/vectors.vAbs.json",
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vLess.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/golden/vectors/air/vectors.vNarrow.json",
+          "tests/golden/vectors/air/vectors.vNeg.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json",
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/golden/vectors/air/vectors.vToFloat.json",
+          "tests/golden/vectors/air/vectors.xorLanes.json"
         ]
       },
       "proofs": {
@@ -6178,7 +7485,38 @@
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
           "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -6254,7 +7592,25 @@
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
           "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json"
         ]
       },
       "proofs": {
@@ -6354,7 +7710,38 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json"
         ]
       },
       "proofs": {
@@ -6422,7 +7809,55 @@
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json",
+          "tests/golden/vectors/air/vectors.vShift.json"
         ]
       },
       "proofs": {
@@ -6481,7 +7916,25 @@
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
           "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json"
         ]
       },
       "proofs": {
@@ -6528,7 +7981,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/threads/air/threads.claim.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6576,7 +8033,24 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.16.0/options/air/options.findOr.json",
-          "tests/golden/0.16.0/slices/air/slices.lenOr.json"
+          "tests/golden/0.16.0/slices/air/slices.lenOr.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json"
         ]
       },
       "proofs": {
@@ -6669,7 +8143,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.bumpOpt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6769,7 +8245,14 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -6966,7 +8449,11 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json"
+          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/vectors/air/vectors.vDiv.json"
         ]
       },
       "proofs": {
@@ -7056,7 +8543,111 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/slices/air/slices.bump.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -7255,7 +8846,216 @@
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.radius.json"
+          "tests/golden/0.16.0/variants/air/variants.radius.json",
+          "tests/golden/asm/air/asm.bswap32.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/asm/air/asm.lzcnt64.json",
+          "tests/golden/asm/air/asm.popcnt64.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/basic/air/basic.clampAdd.json",
+          "tests/golden/basic/air/basic.classify.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/basic/air/basic.tardiness.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatconv/air/floatconv.bits32.json",
+          "tests/golden/floatconv/air/floatconv.f16ToF128.json",
+          "tests/golden/floatconv/air/floatconv.f64ToF16.json",
+          "tests/golden/floatconv/air/floatconv.f80ToF64.json",
+          "tests/golden/floatconv/air/floatconv.fromI64.json",
+          "tests/golden/floatconv/air/floatconv.fromU128.json",
+          "tests/golden/floatconv/air/floatconv.ofBits64.json",
+          "tests/golden/floatconv/air/floatconv.toByte.json",
+          "tests/golden/floatconv/air/floatconv.toI32.json",
+          "tests/golden/floatconv/air/floatconv.toU64.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.clamp.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.hypot2.json",
+          "tests/golden/floats/air/floats.isNan.json",
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.addrEq.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.applyTwice.json",
+          "tests/golden/layout/air/layout.asConst.json",
+          "tests/golden/layout/air/layout.asVolatile.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.byteToFlags.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/layout/air/layout.double.json",
+          "tests/golden/layout/air/layout.dropConst.json",
+          "tests/golden/layout/air/layout.flagsToByte.json",
+          "tests/golden/layout/air/layout.floatBits.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibArg.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.parentOfX.json",
+          "tests/golden/layout/air/layout.parentOfY.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.square.json",
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/golden/layout/air/layout.twice.json",
+          "tests/golden/layout/air/layout.wordArg.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/pointers/air/pointers.same.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/recursion/air/recursion.fact.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/recursion/air/recursion.isEven.json",
+          "tests/golden/recursion/air/recursion.isOdd.json",
+          "tests/golden/slices/air/slices.bump.json",
+          "tests/golden/slices/air/slices.clear.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/golden/slices/air/slices.fill.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/slices/air/slices.total.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.isRound.json",
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/variants/air/variants.prioValue.json",
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.andLanes.json",
+          "tests/golden/vectors/air/vectors.checkedAdd.json",
+          "tests/golden/vectors/air/vectors.fDot.json",
+          "tests/golden/vectors/air/vectors.fMax.json",
+          "tests/golden/vectors/air/vectors.fMin.json",
+          "tests/golden/vectors/air/vectors.interleave.json",
+          "tests/golden/vectors/air/vectors.maxLane.json",
+          "tests/golden/vectors/air/vectors.minLane.json",
+          "tests/golden/vectors/air/vectors.orLanes.json",
+          "tests/golden/vectors/air/vectors.pick.json",
+          "tests/golden/vectors/air/vectors.reverse.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.satAdd.json",
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.uDotWrap.json",
+          "tests/golden/vectors/air/vectors.uMinLane.json",
+          "tests/golden/vectors/air/vectors.vAbs.json",
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vLess.json",
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/golden/vectors/air/vectors.vNarrow.json",
+          "tests/golden/vectors/air/vectors.vNeg.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json",
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/golden/vectors/air/vectors.vToFloat.json",
+          "tests/golden/vectors/air/vectors.xorLanes.json"
         ]
       },
       "proofs": {
@@ -7334,7 +9134,11 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json"
         ]
       },
       "proofs": {
@@ -7404,7 +9208,20 @@
           "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/variants/air/variants.advance.json"
         ]
       },
       "proofs": {
@@ -7525,7 +9342,117 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bitsToFloat.json",
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.numRoundTrip.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupe.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/golden/pointers/air/pointers.copyJob.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.setOpt.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/pointers/air/pointers.sumTo.json",
+          "tests/golden/pointers/air/pointers.swap.json",
+          "tests/golden/slices/air/slices.bump.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/variants/air/variants.advance.json",
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/golden/vectors/air/vectors.addTo.json",
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -7618,7 +9545,42 @@
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/debug.assert.json",
+          "tests/golden/layout/air/layout.align4.json",
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.ptrFromAddr.json",
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/debug.assert.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/debug.assert.json",
+          "tests/golden/variants/air/variants.next.json",
+          "tests/golden/vectors/air/vectors.sMod.json",
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json"
         ]
       },
       "proofs": {
@@ -7665,7 +9627,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatconv/air/floatconv.f64ToF16.json",
+          "tests/golden/floatconv/air/floatconv.f80ToF64.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7711,7 +9676,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatconv/air/floatconv.f16ToF128.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7766,7 +9733,22 @@
           "tests/golden/0.16.0/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/0.16.0/basic/air/basic.weightedTardiness.json",
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
-          "tests/golden/0.16.0/variants/air/variants.area.json"
+          "tests/golden/0.16.0/variants/air/variants.area.json",
+          "tests/golden/asm/air/asm.divmod.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/basic/air/basic.scale.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/pointers/air/pointers.addDown.json",
+          "tests/golden/pointers/air/pointers.addTo.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -7830,7 +9812,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/basic/air/basic.absDiff.json",
+          "tests/golden/variants/air/variants.codeOf.json",
+          "tests/golden/variants/air/variants.lightOf.json",
+          "tests/golden/vectors/air/vectors.vNarrow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7896,7 +9883,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/vectors/air/vectors.vShift.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7952,7 +9944,24 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.16.0/options/air/options.findOr.json",
-          "tests/golden/0.16.0/slices/air/slices.lenOr.json"
+          "tests/golden/0.16.0/slices/air/slices.lenOr.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/options/air/options.firstIndexPlusOne.json",
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json"
         ]
       },
       "proofs": {
@@ -8016,7 +10025,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.bumpOpt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8062,7 +10073,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/pointers/air/pointers.setOptJob.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8108,7 +10121,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8154,7 +10172,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/layout/air/layout.bumpDigit.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8215,7 +10236,26 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/errors/air/errors.digitOrZero.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Condition.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json"
         ]
       },
       "proofs": {
@@ -8264,7 +10304,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.bump.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8313,7 +10355,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.bump.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8425,7 +10469,18 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/errors/air/errors.parseDigit.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sumRange.json"
         ]
       },
       "proofs": {
@@ -8487,7 +10542,23 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).append.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/sync/air/Io.Condition.wait.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json"
         ]
       },
       "proofs": {
@@ -8535,7 +10606,8 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json"
+          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
+          "tests/golden/sync/air/sync.producer.json"
         ]
       },
       "proofs": {
@@ -8601,7 +10673,69 @@
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomic.Value(u32).init.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordOf.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/pointers/air/pointers.delay.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
+          "tests/golden/threads/air/atomic.Value(u32).init.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -8665,7 +10799,56 @@
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
           "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.mpWriter.json",
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.bumpPair.json",
+          "tests/golden/layout/air/layout.ctlMode.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.isOk.json",
+          "tests/golden/layout/air/layout.nibSigned.json",
+          "tests/golden/layout/air/layout.regSigned.json",
+          "tests/golden/layout/air/layout.setHalf.json",
+          "tests/golden/layout/air/layout.setNib.json",
+          "tests/golden/layout/air/layout.setNum.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/layout/air/layout.wordHalf.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/lists.freeAll.json",
+          "tests/golden/lists/air/lists.push.json",
+          "tests/golden/lists/air/lists.reverse.json",
+          "tests/golden/lists/air/lists.sum.json",
+          "tests/golden/pointers/air/pointers.dueOf.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/slices/air/slices.sentinelArr.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json",
+          "tests/golden/threads/air/threads.writeFlag.json",
+          "tests/golden/vectors/air/vectors.vOverflow.json"
         ]
       },
       "proofs": {
@@ -8719,7 +10902,26 @@
           "tests/golden/0.16.0/sync/air-linux/sync.mutexCounter.json",
           "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json",
           "tests/golden/0.16.0/sync/air-linux/sync.semaphoreCounter.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/iogroup/air/iogroup.add.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/layout/air/layout.ctlSum.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.setMode.json",
+          "tests/golden/layout/air/layout.setRegFlags.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/sync/air/Io.Semaphore.post.json",
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/golden/sync/air/sync.producer.json",
+          "tests/golden/sync/air/sync.readShared.json",
+          "tests/golden/sync/air/sync.semWork.json",
+          "tests/golden/sync/air/sync.work.json",
+          "tests/golden/sync/air/sync.writer.json"
         ]
       },
       "proofs": {
@@ -8767,7 +10969,9 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json"
+          "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
+          "tests/golden/layout/air/layout.incCount.json",
+          "tests/golden/sync/air/sync.producer.json"
         ]
       },
       "proofs": {
@@ -8816,7 +11020,8 @@
         "status": "golden-input-presence-only",
         "paths": [
           "tests/golden/0.16.0/variants/air/variants.area.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/layout/air/layout.shapeArea.json"
         ]
       },
       "proofs": {
@@ -8864,7 +11069,9 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/layout/air/layout.setCircle.json",
+          "tests/golden/layout/air/layout.setNum.json"
         ]
       },
       "proofs": {
@@ -8914,7 +11121,11 @@
         "paths": [
           "tests/golden/0.16.0/variants/air/variants.area.json",
           "tests/golden/0.16.0/variants/air/variants.radius.json",
-          "tests/golden/0.16.0/variants/air/variants.scale.json"
+          "tests/golden/0.16.0/variants/air/variants.scale.json",
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/layout/air/layout.numInt.json",
+          "tests/golden/layout/air/layout.shapeArea.json",
+          "tests/golden/variants/air/variants.isRound.json"
         ]
       },
       "proofs": {
@@ -8971,7 +11182,9 @@
           "tests/golden/0.16.0/slices/air/slices.copyWithin.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
           "tests/golden/0.16.0/slices/air/slices.sumMid.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json"
         ]
       },
       "proofs": {
@@ -9031,7 +11244,23 @@
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
           "tests/golden/0.16.0/slices/air/slices.sumMid.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/slices/air/slices.clear.json",
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/golden/slices/air/slices.fill.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -9082,7 +11311,10 @@
           "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
           "tests/golden/0.16.0/slices/air/slices.copyWithin.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
-          "tests/golden/0.16.0/slices/air/slices.sumMid.json"
+          "tests/golden/0.16.0/slices/air/slices.sumMid.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/slices/air/slices.copy.json"
         ]
       },
       "proofs": {
@@ -9135,7 +11367,13 @@
           "tests/golden/0.16.0/options/air/options.findOr.json",
           "tests/golden/0.16.0/slices/air/slices.lenOr.json",
           "tests/golden/0.16.0/slices/air/slices.reverse.json",
-          "tests/golden/0.16.0/slices/air/slices.sumMid.json"
+          "tests/golden/0.16.0/slices/air/slices.sumMid.json",
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json"
         ]
       },
       "proofs": {
@@ -9182,7 +11420,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.headerLen.json",
+          "tests/golden/layout/air/layout.readHeader.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9228,7 +11471,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.applyOp.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/slices/air/slices.factorial.json",
+          "tests/golden/slices/air/slices.sentinelArr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9277,7 +11525,16 @@
         "paths": [
           "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
           "tests/golden/0.16.0/slices/air/slices.subZ.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/basic/air/basic.sum.json",
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/lists/air/lists.evens.json",
+          "tests/golden/lists/air/lists.listSum.json",
+          "tests/golden/lists/air/lists.sumRange.json",
+          "tests/golden/options/air/options.find.json",
+          "tests/golden/slices/air/slices.sumSlice.json",
+          "tests/golden/variants/air/variants.totalArea.json"
         ]
       },
       "proofs": {
@@ -9327,7 +11584,10 @@
         "paths": [
           "tests/golden/0.16.0/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
-          "tests/golden/0.16.0/slices/air/slices.reverse.json"
+          "tests/golden/0.16.0/slices/air/slices.reverse.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
+          "tests/golden/lists/air/lists.dupeZLen.json",
+          "tests/golden/lists/air/lists.sumRange.json"
         ]
       },
       "proofs": {
@@ -9428,7 +11688,15 @@
           "tests/golden/0.16.0/slices/air/slices.prevItem.json",
           "tests/golden/0.16.0/slices/air/slices.second.json",
           "tests/golden/0.16.0/slices/air/slices.sumZ.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/layout/air/layout.laneSet.json",
+          "tests/golden/layout/air/layout.lowByte.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/layout/air/layout.wordByte.json",
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/golden/slices/air/slices.indexOfScalar.json",
+          "tests/golden/slices/air/slices.sentinelArr.json"
         ]
       },
       "proofs": {
@@ -9475,7 +11743,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/slices/air/slices.total.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9617,7 +11887,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatconv/air/floatconv.toByte.json",
+          "tests/golden/floatconv/air/floatconv.toI32.json",
+          "tests/golden/floatconv/air/floatconv.toU64.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9709,7 +11983,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/floatconv/air/floatconv.fromI64.json",
+          "tests/golden/floatconv/air/floatconv.fromU128.json",
+          "tests/golden/vectors/air/vectors.vToFloat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9760,7 +12038,22 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/vectors/air/vectors.andLanes.json",
+          "tests/golden/vectors/air/vectors.fDot.json",
+          "tests/golden/vectors/air/vectors.fMax.json",
+          "tests/golden/vectors/air/vectors.fMin.json",
+          "tests/golden/vectors/air/vectors.maxLane.json",
+          "tests/golden/vectors/air/vectors.minLane.json",
+          "tests/golden/vectors/air/vectors.orLanes.json",
+          "tests/golden/vectors/air/vectors.uDotWrap.json",
+          "tests/golden/vectors/air/vectors.uMinLane.json",
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/golden/vectors/air/vectors.xorLanes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9854,7 +12147,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/vectors/air/vectors.splatAdd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9905,7 +12200,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/vectors/air/vectors.reverse.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -9955,7 +12252,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/vectors/air/vectors.interleave.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10006,7 +12305,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.maskCount.json",
+          "tests/golden/layout/air/layout.maskStore.json",
+          "tests/golden/vectors/air/vectors.pick.json",
+          "tests/golden/vectors/air/vectors.vLess.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10112,7 +12416,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/slices/air/slices.clear.json",
+          "tests/golden/slices/air/slices.fill.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10165,7 +12472,10 @@
       "tests": {
         "status": "golden-input-presence-only",
         "paths": [
-          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json"
+          "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/golden/slices/air/slices.copy.json"
         ]
       },
       "proofs": {
@@ -10275,7 +12585,12 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10336,7 +12651,16 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.tryLock.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.tryLock.json",
+          "tests/golden/threads/air/threads.claim.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10397,7 +12721,13 @@
           "tests/golden/0.16.0/atomics/air-linux/atomics.twoPlusTwoW.json",
           "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/atomics/air/atomics.push.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.waitUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json"
         ]
       },
       "proofs": {
@@ -10490,7 +12820,11 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/atomics/air/atomics.mpWriterRelaxed.json",
+          "tests/golden/atomics/air/atomics.sb.json",
+          "tests/golden/atomics/air/atomics.ww.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10536,7 +12870,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/atomics/air/atomics.mpWriter.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10628,7 +12964,24 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/iogroup/air/Io.Mutex.lock.json",
+          "tests/golden/iogroup/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/iogroup/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json",
+          "tests/golden/sync/air/Io.Event.set.json",
+          "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/golden/sync/air/Io.Mutex.lockUncancelable.json",
+          "tests/golden/sync/air/Io.Mutex.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.lockUncancelable.json",
+          "tests/golden/sync/air/Io.RwLock.unlock.json",
+          "tests/golden/sync/air/Io.RwLock.unlockShared.json",
+          "tests/golden/threads/air/threads.bump.json",
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/golden/threads/air/threads.swapFlag.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10674,7 +13027,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.growCircle.json",
+          "tests/golden/slices/air/slices.colorName.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10720,7 +13076,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/slices/air/slices.colorName.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10769,7 +13127,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/slices/air/slices.failName.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10873,7 +13233,11 @@
           "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
           "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/0.16.0/threads/air-linux/threads.race.json",
-          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json"
+          "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+          "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+          "tests/golden/iogroup/air/iogroup.groupCounter.json",
+          "tests/golden/sync/air/Io.Condition.signal.json",
+          "tests/golden/sync/air/Io.Condition.waitInner.json"
         ]
       },
       "proofs": {
@@ -10920,7 +13284,9 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.wordArg.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -11064,7 +13430,10 @@
       },
       "tests": {
         "status": "golden-input-presence-only",
-        "paths": []
+        "paths": [
+          "tests/golden/layout/air/layout.parentOfX.json",
+          "tests/golden/layout/air/layout.parentOfY.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12154,48 +14523,48 @@
   "pointer_bases": [
     {
       "name": "nav",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "comptime_alloc",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "uav",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "comptime_field",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "int",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "eu_payload",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "opt_payload",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "field",
-      "disposition": "conditional-global-resolution",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-explicit-arm-conditional-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "arr_elem",
-      "disposition": "exporter-unsupported-base",
-      "qualification": "writePtr and Check.lean restrict global provenance and packed field resolution."
+      "disposition": "exporter-fallback-unsupported-marker-review",
+      "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     }
   ],
   "models": [
@@ -12370,7 +14739,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "ee6643e0ed742cc348324dbfeb87ba7799e5f027e903dd1738c06d80de19c5a5",
+      "scripts/coverage.py": "238e886065cc6b6de308b571074d6137b23ca37648b8c9760bfaaa9889189758",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {

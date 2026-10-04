@@ -9,7 +9,10 @@ compiler representation list, not a claim that every key reaches executable AIR.
 
 The parser tokenizes Zig, ignores comments, preserves escaped identifiers and
 tracks nested braces, parentheses and brackets. It reads top-level enum/union
-fields while skipping methods and nested declarations. Unexpected syntax,
+fields while skipping methods and nested declarations. Zig quoted identifiers
+use Zig byte (`\xHH`) and Unicode scalar (`\u{...}`) escapes; malformed escapes
+and invalid UTF-8/scalars fail. File bytes, decoded tokens, hashes and symbol
+indices are cached within one invocation and refreshed on the next invocation. Unexpected syntax,
 duplicate fields, missing files and malformed golden JSON fail the command.
 It never substitutes a README or exporter tag list for missing compiler sources.
 
@@ -23,9 +26,9 @@ identity. Review source provenance before publishing an inventory.
 
 ```sh
 python3 scripts/coverage.py generate --version 0.16.0 \
-  --source /path/to/zig-0.16.0 --inventory coverage/0.16.0.json
+  --source /path/to/zig-0.16.0 --os linux --inventory coverage/0.16.0.json
 python3 scripts/coverage.py check --version 0.16.0 \
-  --source /path/to/zig-0.16.0 --inventory coverage/0.16.0.json
+  --source /path/to/zig-0.16.0 --os linux --inventory coverage/0.16.0.json
 python3 tests/roadmap/inventory/test_inventory.py
 ```
 
@@ -66,14 +69,21 @@ compiler execution, differential agreement, proof checking or preservation claim
   symbol index, not a semantic implementation or theorem-coverage assertion.
   A missing hit is not a proof that the operation is unsupported. No theorem
   strength, input domain, all-schedules claim or current kernel result is inferred.
-* **Tests:** actual JSON tags in the version's golden AIR inputs are indexed.
-  Presence does not mean the test was run, passed, covers boundaries or has a
+* **Tests:** AIR instruction tags in selected golden inputs are indexed. Selection
+  follows `check.sh`: shared files, then the version layer, then `--os` (default
+  `linux`), with later layers replacing all anonymous instances of the same
+  normalized filename. Examples excluded by `zig-versions` contribute no paths.
+  Other OS layers and overridden files contribute no evidence. Shared fixture
+  applicability does not establish an actual run for this version/OS. Presence
+  does not mean the test was run, passed, covers boundaries or has a
   differential/proof contract. Missing golden paths remain explicit.
 * **Types/constants:** type exporter arms require conditional checker review.
   All intern keys are listed with an explicit unclassified disposition pending
   `writeRef`/checker review. Pointer bases record conditional global resolution
-  for `nav`, `uav` and `field`; others are exporter-unsupported bases. This does
-  not qualify all pointer fields or layouts.
+  from the actual `writePtr` switch: explicit arms require conditional review;
+  missing arms are marked by the actual unsupported fallback marker, or left
+  unclassified if no such marker exists. No base names are hardcoded as
+  supported. This does not qualify pointer provenance, fields or layouts.
 * **Models:** names recognized/rejected by `allocFn?`, `threadFn?` and
   `rejectedThreadFn?` are extracted from `Memory.lean`, with its anonymous-instance
   recognition rule. Recognition is a model boundary, not verification. Timer
@@ -113,5 +123,6 @@ qualification process requiring those actual results.
 
 The offline synthetic tests cover nested syntax, escaped identifiers, malformed
 input rejection, all four compiler universes, unknown AIR tags, rename impact,
-fingerprint-only changes, switch scoping and model recognition. They intentionally
+fingerprint-only changes, Zig escapes, shared/version/OS overlays, new pointer
+source arms, invocation cache freshness, switch scoping and model recognition. They intentionally
 invoke no compiler.
