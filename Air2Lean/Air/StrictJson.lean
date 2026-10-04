@@ -8,6 +8,32 @@ open Lean Std.Internal.Parsec Std.Internal.Parsec.String
 
 /-- Maximum UTF-8 input bytes per AIR file. -/
 def maxBytes : Nat := 64 * 1024 * 1024
+/-- Read at most `limit + 1` bytes, including when a stream grows after metadata was read.
+No UTF-8 string is constructed until the byte limit is checked. The injectable reader also
+allows deterministic short-read/growth regression checks. -/
+def readBounded (read : USize → IO ByteArray) (limit : Nat := maxBytes) : IO ByteArray := do
+  let mut bytes := ByteArray.empty
+  repeat
+    let request := min 65536 (limit + 1 - bytes.size)
+    let chunk ← read request.toUSize
+    if chunk.isEmpty then return bytes
+    bytes := bytes ++ chunk
+    if bytes.size > limit then
+      throw (IO.userError s!"AIR JSON exceeds {limit} UTF-8 bytes")
+  return bytes
+
+/-- The per-file CLI reader. Metadata rejects oversized regular files cheaply; the bounded
+read still checks growth and non-regular inputs rather than trusting that initial size. -/
+def readFile (path : System.FilePath) : IO String := do
+  let metadata ← path.metadata
+  if metadata.type == .file && metadata.byteSize.toNat > maxBytes then
+    throw (IO.userError s!"AIR JSON exceeds {maxBytes} UTF-8 bytes")
+  IO.FS.withFile path .read fun handle => do
+    let bytes ← readBounded handle.read
+    let some contents := String.fromUTF8? bytes
+      | throw (IO.userError s!"AIR file {path} contains non UTF-8 data")
+    return contents
+
 /-- Maximum nested JSON containers; root scalars have depth zero. -/
 def maxDepth : Nat := 128
 

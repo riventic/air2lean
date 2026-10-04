@@ -92,7 +92,7 @@ private def run (args : List String) : IO UInt32 := do
       die s!"no *.json files found in {a.airDir}"
     else
       let texts ← jsonPaths.mapM fun path => do
-        try IO.FS.readFile path catch e =>
+        try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]

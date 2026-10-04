@@ -53,7 +53,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
       unsupported)"
   | .float bits =>
-    if bits == 16 || bits == 32 || bits == 64 || bits == 80 || bits == 128 then pure ()
+    if supportedFloatWidth bits then pure ()
     else
       throw s!"{fnName}: near line {line}: float type of {bits} bits is outside the subset \
         (only 16, 32, 64, 80, 128)"
@@ -602,7 +602,7 @@ private partial def checkConstant (f : Func) (expected : TyId) (v : Val)
     if bits > 65535 then throw s!"{f.name}: packed integer width exceeds 65535 bits"
     unless integerFits false bits n do throw s!"{f.name}: packed integer constant does not fit type {expected}"
   | .float _ n, .float bits =>
-    unless bits == 16 || bits == 32 || bits == 64 || bits == 80 || bits == 128 do fail
+    unless supportedFloatWidth bits do fail
     unless n < 2 ^ bits do throw s!"{f.name}: float bit pattern does not fit type {expected}"
   | .err _ name, .errorSet names =>
     if let some names := names then

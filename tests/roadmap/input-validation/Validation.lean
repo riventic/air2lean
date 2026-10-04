@@ -107,4 +107,56 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
     "depth limit bypassed"
   require (parseOK (String.join (List.replicate 128 "[") ++ "0" ++ String.join (List.replicate 128 "]")))
     "depth boundary rejected"
+  let mut dag : Array Ty := #[.int false 0]
+  for _ in [:21] do
+    let child := dag.size - 1
+    dag := dag.push (.struct "Zero" "packed" #[("a", child), ("b", child)])
+  require (Raw.packedWidth dag (dag.size - 1) == some 0) "shared zero-width DAG rejected"
+  require (Raw.packedWidth #[.struct "Cycle" "packed" #[("self", 0)]] 0 == none)
+    "direct packed-width cycle did not return none"
+  require (Raw.packedWidth #[.enum "Missing" 99 true #[]] 0 == none)
+    "direct unknown packed-width child accepted"
+  let mut wide : Array Ty := #[.int false 1]
+  for _ in [:16] do
+    let child := wide.size - 1
+    wide := wide.push (.struct "Wide" "packed" #[("a", child), ("b", child)])
+  require (Raw.packedWidth wide (wide.size - 1) == some 65536) "exact shared width changed"
+  require (rejected ((Raw.parsePackedLit "wide" wide #[("x", wide.size - 1)] ".{ .x = 0 }").map (fun _ => ()))
+    "packed integer width exceeds") "oversized packed literal reached exponentiation"
+  require (rejected ((Raw.parseHexNat "float" 1048576 "not-hex").map (fun _ => ()))
+    "unsupported float width") "direct hex API did not reject unsupported width first"
+  let enumGraph (signed : Bool) (bits : Nat) (fields : Array (String × Int)) :=
+    validateTypeGraph "enum" #[.int signed bits, .enum "E" 0 true fields]
+  require (accepted (enumGraph false 0 #[("zero", 0)])) "u0 enum zero rejected"
+  require (rejected (enumGraph false 0 #[("one", 1), ("alsoOne", 1)]) "does not fit")
+    "enum duplicate reported before fit"
+  require (rejected (enumGraph false 0 #[("zero", 0), ("alsoZero", 0)]) "duplicate tag")
+    "u0 duplicate accepted"
+  require (accepted (enumGraph true 2 #[("min", -2), ("max", 1)])) "signed enum boundaries rejected"
+  require (rejected (enumGraph true 2 #[("below", -3)]) "does not fit") "signed enum underflow accepted"
+  require (rejected (enumGraph true 2 #[("above", 2)]) "does not fit") "signed enum overflow accepted"
+  require (accepted (enumGraph false 1 #[("min", 0), ("max", 1)])) "unsigned enum boundaries rejected"
+  require (rejected (enumGraph false 1 #[("negative", -1)]) "does not fit") "unsigned enum negative accepted"
+  require (rejected (enumGraph false 1 #[("above", 2)]) "does not fit") "unsigned enum overflow accepted"
+  let readChunks (text : String) : IO ((USize → IO ByteArray) × IO.Ref (Array Nat)) := do
+    let remaining ← IO.mkRef text.toUTF8
+    let requests ← IO.mkRef (#[] : Array Nat)
+    let read (n : USize) : IO ByteArray := do
+      requests.modify (·.push n.toNat)
+      let bytes ← remaining.get
+      let count := min 2 n.toNat
+      remaining.set (bytes.extract count bytes.size)
+      return bytes.extract 0 count
+    return (read, requests)
+  let (read, requests) ← readChunks "abcd"
+  let bytes ← StrictJson.readBounded read 4
+  require (bytes == "abcd".toUTF8 && (← requests.get) == #[5, 3, 1])
+    "short-read boundary was not read to EOF"
+  let (growingRead, growthRequests) ← readChunks "abcde"
+  let exceeded ← try
+    let _ ← StrictJson.readBounded growingRead 4
+    pure false
+  catch e => pure (decide ((e.toString.splitOn "AIR JSON exceeds 4 UTF-8 bytes").length > 1))
+  require (exceeded && (← growthRequests.get) == #[5, 3, 1])
+    "growth did not stop at limit plus one byte"
   IO.println "whole-program direct API and strict JSON checks passed"

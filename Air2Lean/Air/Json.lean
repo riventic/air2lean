@@ -276,6 +276,8 @@ def hexDigitVal (c : Char) : Option Nat :=
 /-- A float's bits as `"0x"` + exactly `bits / 4` hex digits: an `fbits` constant
 (`docs/air-json.md`) or a diff-protocol value (`tests/diff/Diff.lean`). -/
 def parseHexNat (fnName : String) (bits : Nat) (s : String) : Except String Nat := do
+  unless supportedFloatWidth bits do
+    throw s!"{fnName}: unsupported float width {bits} (only 16, 32, 64, 80, 128)"
   if !s.startsWith "0x" then throw s!"{fnName}: not a hex literal: {s}"
   let digits := (s.drop 2).toString.toList
   if digits.length != bits / 4 then
@@ -303,15 +305,48 @@ def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except
     else throw s!"{fnName}: not a void literal: {s}"
   | other => throw s!"{fnName}: constant of unsupported type {repr other}"
 
-/-- The bit width of a packed struct field of type `id`: an integer, a `bool`, an enum (its tag),
-or a packed struct (`Air2Lean/Memory.lean`'s `packedBits`, which this file cannot import). -/
-partial def packedWidth (types : Array Ty) (id : TyId) : Option Nat :=
-  match types[id]? with
-  | some (.int _ bits) => some bits
-  | some .bool => some 1
-  | some (.enum _ tag _ _) => packedWidth types tag
-  | some (.struct _ "packed" fs) => fs.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedWidth types t
-  | _ => none
+private inductive PackedVisit where
+  | unseen | active | done (width : Nat)
+  deriving Inhabited
+
+/-- The bit width of an integer, bool, enum tag, or packed struct (the `packedBits` model
+in `Memory.lean`, which this file cannot import). Memoized explicit DFS: shared field types are completed once; cycles/unknown widths
+return `none` even for direct API calls that did not run `validateTypeGraph`. -/
+def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
+  let mut states : Array PackedVisit := Array.replicate types.size .unseen
+  let mut tasks : List (TyId × Bool) := [(id, false)]
+  while !tasks.isEmpty do
+    let (current, finish) := tasks.head!
+    tasks := tasks.tail!
+    let some t := types[current]? | return none
+    if finish then
+      let children := match t with
+        | .enum _ tag _ _ => #[tag]
+        | .struct _ "packed" fs => fs.map (·.2)
+        | _ => #[]
+      let mut width := 0
+      for child in children do
+        let some (.done w) := states[child]? | return none
+        width := width + w
+      states := states.set! current (.done width)
+    else
+      match states[current]? with
+      | some (.done _) => pure ()
+      | some .active | none => return none
+      | some .unseen =>
+        match t with
+        | .int _ bits => states := states.set! current (.done bits)
+        | .bool => states := states.set! current (.done 1)
+        | .enum _ tag _ _ =>
+          states := states.set! current .active
+          tasks := (tag, false) :: (current, true) :: tasks
+        | .struct _ "packed" fs =>
+          states := states.set! current .active
+          tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
+        | _ => return none
+  match states[id]? with
+  | some (.done width) => return some width
+  | _ => return none
 
 /-- A packed struct constant written as `.{ .f = v, … }` (the exporter's `fmtValue` for some
 constants): its backing integer, field 0 in the lowest bits. A field value is an integer or

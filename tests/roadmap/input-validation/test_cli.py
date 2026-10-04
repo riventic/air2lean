@@ -53,6 +53,25 @@ def run(binary, documents, error=None):
     return 1
 
 
+
+def run_sparse(binary):
+    # A terabyte logical file must be rejected from metadata, without reading its zeros.
+    with tempfile.TemporaryDirectory(prefix="air2lean-input-validation-sparse-") as directory:
+        directory = Path(directory)
+        air = directory / "air"
+        air.mkdir()
+        with (air / "huge.json").open("wb") as source:
+            source.truncate(1 << 40)
+        output = directory / "Gen.lean"
+        output.write_text("sentinel\n")
+        result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
+                                text=True, capture_output=True, check=False, timeout=10)
+        assert result.returncode == 1, (result.returncode, result.stderr)
+        assert "UTF-8 bytes" in result.stderr, result.stderr
+        assert output.read_text() == "sentinel\n", "sparse rejection replaced output"
+    return 1
+
+
 def global_(name, ty, value, const=False):
     return dict(name=name, ty=ty, const=const, threadlocal=False, extern=False, init=value)
 
@@ -218,6 +237,12 @@ def main():
     chain["body"] = []
     checks += run(binary, [chain], "value type traversal exceeds")
     checks += run(binary, [raw[:-1] + ',"extra":"' + 'a' * (64 * 1024 * 1024) + '"}'], "UTF-8 bytes")
+    mutate = copy.deepcopy(TARGET)
+    mutate["types"][1] = dict(k="float", bits=1048576)
+    mutate["body"] = [inst(0, "arg", 1, param=0), inst(1, "ret", 2,
+                       [dict(ty=1, fbits="0x" + "f" * 262144)])]
+    checks += run(binary, [mutate], "float type of 1048576 bits is outside the subset")
+    checks += run_sparse(binary)
     print(f"{checks} whole-program CLI positive/mutation checks passed")
 
 
