@@ -63,12 +63,12 @@ const Compat = struct {
     }
 
     fn createFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
-        const options = .{ .read = true, .exclusive = true, .lock = .exclusive, .lock_nonblocking = true };
+        const options: if (v16) Dir.CreateFileOptions else File.CreateFlags = .{ .read = true, .exclusive = true, .lock = .exclusive, .lock_nonblocking = true };
         return if (v16) dir.createFile(pt.zcu.comp.io, name, options) else dir.createFile(name, options);
     }
 
     fn openExistingFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
-        const options = .{ .mode = .read_write, .lock = .exclusive, .lock_nonblocking = true };
+        const options: if (v16) Dir.OpenFileOptions else File.OpenFlags = .{ .mode = .read_write, .lock = .exclusive, .lock_nonblocking = true };
         return if (v16) dir.openFile(pt.zcu.comp.io, name, options) else dir.openFile(name, options);
     }
 
