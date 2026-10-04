@@ -26,6 +26,20 @@ def digest(path):
     return value.hexdigest()
 
 
+def retained_files(directory):
+    """Prune excluded cache components before visiting or sorting retained files."""
+    paths = []
+    for parent, directories, files in os.walk(directory, topdown=True):
+        directories[:] = [name for name in directories if "cache" not in name]
+        for name in files:
+            if name == "report.json" or "cache" in name:
+                continue
+            path = Path(parent) / name
+            if path.is_file():
+                paths.append(path)
+    return sorted(paths)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("artifact-only", "full"), nargs="?", default="artifact-only")
@@ -115,8 +129,10 @@ def main():
             # Preserve raw env output; supported Zig snapshots can print ZON instead of JSON.
             compiler_env = dict(re.findall(r'[.]?(\w+)\s*[:=]\s*"([^"\n]+)"', raw_env))
         binary = Path(compiler_env.get("zig_exe", str(executable))).resolve()
-        entry = {"version": version, "executable": str(executable), "sha256": digest(executable),
-                 "binary": str(binary), "binary_sha256": digest(binary), "env_log": str(env_log)}
+        executable_hash = digest(executable)
+        binary_hash = executable_hash if executable.samefile(binary) else digest(binary)
+        entry = {"version": version, "executable": str(executable), "sha256": executable_hash,
+                 "binary": str(binary), "binary_sha256": binary_hash, "env_log": str(env_log)}
         report["compiler_inputs"][name] = entry
         save()
         lib = compiler_env.get("lib_dir") or compiler_env.get("zig_lib_dir")
@@ -208,8 +224,7 @@ def main():
         report["error"] = str(error)
         print(str(error), file=sys.stderr)
     finally:
-        report["artifact_hashes"] = {str(p.relative_to(artifacts)): digest(p) for p in sorted(artifacts.rglob("*"))
-                                    if p.is_file() and p.name != "report.json" and not any("cache" in a for a in p.relative_to(artifacts).parts)}
+        report["artifact_hashes"] = {str(p.relative_to(artifacts)): digest(p) for p in retained_files(artifacts)}
         save()
         print(f"Progress qualification {report['status']}: {artifacts / 'report.json'}", flush=True)
     return 0 if report["status"] == "passed" else 1
