@@ -432,7 +432,7 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
 // Exclusive creation protects fresh files. Repeated analysis may export the same
 // function again: permit this only after validating its existing full JSON name,
 // without truncating first. The advisory lock coordinates cooperating exporters.
-fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8, allocator: Allocator) !Compat.File {
+fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8) !Compat.File {
     return Compat.createFile(pt, dir, name) catch |err| {
         if (err != error.PathAlreadyExists) return err;
         // Reject stable nonregular paths before a potentially blocking open.
@@ -442,6 +442,10 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
         const stat = try Compat.statFile(pt, file);
         if (stat.kind != .file) return error.ExistingOutputNotRegular;
         if (stat.size > 64 * 1024 * 1024) return error.ExistingOutputTooLarge;
+        // Validation storage must be released before the writer arena grows.
+        var validation_arena = std.heap.ArenaAllocator.init(pt.zcu.gpa);
+        defer validation_arena.deinit();
+        const allocator = validation_arena.allocator();
         const bytes = try allocator.alloc(u8, @as(usize, @intCast(stat.size)) + 1);
         defer allocator.free(bytes);
         const count = try Compat.readFile(pt, file, bytes);
@@ -480,7 +484,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     defer arena.deinit();
     var name_buf: [output_name_capacity]u8 = undefined;
     const file_name = outputFileName(fqn, &name_buf);
-    const file = openOwnedOutput(pt, dir, file_name, fqn, arena.allocator()) catch |err| {
+    const file = openOwnedOutput(pt, dir, file_name, fqn) catch |err| {
         std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
     };

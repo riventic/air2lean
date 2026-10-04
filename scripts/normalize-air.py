@@ -18,6 +18,16 @@ HASHED_NAME = re.compile(r"~air2lean-sha256-[0-9a-f]{64}\.json")
 IDENTITY_MARKER = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
 
 
+def canonical_filename(name):
+    """Portable naming for normalized identities, reserving legacy collision suffix space."""
+    stem = name.split(".", 1)[0].upper()
+    reserved = stem in {"CON", "PRN", "AUX", "NUL"} or re.fullmatch(r"(COM|LPT)[1-9]", stem)
+    if (re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", name) and
+            len(name.encode("utf-8")) + 5 + 13 <= 255 and not reserved):
+        return name + ".json"
+    return "~air2lean-sha256-" + hashlib.sha256(name.encode("utf-8")).hexdigest() + ".json"
+
+
 @cache
 def load_helpers():
     return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))
@@ -81,14 +91,15 @@ class ValidationContext:
             raise ValueError(f"{path}: AIR artifact does not match validated translation report")
         document = self.helpers["parse_json"](raw.decode("utf-8"))
         value = normalize(document, checked_profile=self.profile, actual=self.actual, helpers=self.helpers)
-        name = re.sub(r"__anon_[0-9]+", "__anon_N", path.name)
+        if not isinstance(document, dict) or not isinstance(document.get("name"), str):
+            raise ValueError(f"{path}: AIR filename requires a full JSON name")
         if path.name.startswith("~air2lean-sha256-"):
-            if not HASHED_NAME.fullmatch(path.name) or not isinstance(document, dict) or not isinstance(document.get("name"), str):
+            if not HASHED_NAME.fullmatch(path.name):
                 raise ValueError(f"{path}: malformed reserved AIR filename")
             expected = "~air2lean-sha256-" + hashlib.sha256(document["name"].encode("utf-8")).hexdigest() + ".json"
             if path.name != expected:
                 raise ValueError(f"{path}: reserved AIR filename does not match full JSON name")
-            name = "~air2lean-sha256-" + hashlib.sha256(value["name"].encode("utf-8")).hexdigest() + ".json"
+        name = canonical_filename(value["name"])
         data = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
         return name, data
 

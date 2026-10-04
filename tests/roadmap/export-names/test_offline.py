@@ -21,6 +21,8 @@ CURRENT = json.loads((ROOT / 'tests/roadmap/profiles/current.json').read_text())
 class Names(unittest.TestCase):
     def test_byte_boundary_and_full_digest(self):
         filename = CHECK['filename']
+        for name in ('a'*237, 'a'*251, 'unsafe/slash', 'CON', 'naïve😀'):
+            self.assertEqual(NORM['canonical_filename'](name), filename(name))
         self.assertEqual(filename('a'*250), 'a'*250+'.json')
         name = 'a'*251
         self.assertEqual(filename(name), CHECK['PREFIX']+hashlib.sha256(name.encode()).hexdigest()+'.json')
@@ -57,6 +59,10 @@ class Names(unittest.TestCase):
         self.assertIn('error.PathAlreadyExists', owned)
         self.assertIn('error.OutputIdentityCollision', owned)
         self.assertIn('error.ExistingOutputTooLarge', owned)
+        self.assertIn('var validation_arena = std.heap.ArenaAllocator.init(pt.zcu.gpa)', owned)
+        self.assertIn('defer validation_arena.deinit()', owned)
+        self.assertNotIn('allocator: Allocator', owned)
+        self.assertNotIn('openOwnedOutput(pt, dir, file_name, fqn, arena.allocator())', source)
         self.assertLess(owned.index('Compat.statPath'), owned.index('Compat.openExistingFile'))
         self.assertIn('.exclusive = true', source)
         self.assertIn('.lock_nonblocking = true', source)
@@ -108,6 +114,69 @@ class Normalization(unittest.TestCase):
         NORM['add_directory'](self.air, self.out, self.context())
         self.assertEqual(set(p.name for p in self.out.iterdir()), {CHECK['filename'](canonical), 'unrelated.json'})
         self.assertEqual((self.out/'unrelated.json').read_bytes(), b'KEEP')
+
+    def test_direct_and_hashed_raw_names_share_one_normalized_key(self):
+        short = 'a'*240+'__anon_1'
+        long = 'a'*240+'__anon_12345'
+        direct = self.write(short)
+        hashed = self.write(long)
+        self.assertFalse(direct.name.startswith(CHECK['PREFIX']))
+        self.assertTrue(hashed.name.startswith(CHECK['PREFIX']))
+        context = self.context()
+        direct_entry = context.file_entry(direct)
+        hashed_entry = context.file_entry(hashed)
+        self.assertEqual(direct_entry, hashed_entry)
+        self.assertEqual(direct_entry[0], NORM['canonical_filename']('a'*240+'__anon_N'))
+        self.assertTrue(direct_entry[0].startswith(CHECK['PREFIX']))
+        # Independent directories (e.g. actual and golden) must compare identically.
+        other = self.root/'other'
+        other.mkdir()
+        hashed.rename(other/hashed.name)
+        context = self.context()
+        NORM['add_directory'](self.air, self.out, context)
+        other_out = self.root/'other-normalized'
+        NORM['add_directory'](other, other_out, NORM['ValidationContext'](self.report))
+        self.assertEqual({p.name:p.read_bytes() for p in self.out.iterdir()},
+                         {p.name:p.read_bytes() for p in other_out.iterdir()})
+        (self.out/'unrelated.json').write_bytes(b'KEEP')
+        hashed = other/hashed.name
+        doc = json.loads(hashed.read_text()); doc['body'][0]['observable'] = 99
+        hashed.write_text(json.dumps(doc))
+        NORM['add_directory'](other, self.out, NORM['ValidationContext'](self.report))
+        self.assertEqual(set(p.name for p in self.out.iterdir()), {direct_entry[0], 'unrelated.json'})
+        self.assertEqual(json.loads((self.out/direct_entry[0]).read_text())['body'][0]['observable'], 99)
+
+    def test_boundary_collision_suffixes_and_later_hashed_overlay(self):
+        paths = [self.write('a'*240+f'__anon_{i}', i) for i in (1, 12345)]
+        context = self.context()
+        entries = [context.file_entry(p) for p in paths]
+        self.assertEqual(entries[0][0], entries[1][0])
+        NORM['add_directory'](self.air, self.out, context)
+        expected = {n.removesuffix('.json')+'.'+hashlib.sha1(data).hexdigest()[:12]+'.json':data for n,data in entries}
+        self.assertEqual({p.name:p.read_bytes() for p in self.out.iterdir()}, expected)
+        for p in paths: p.unlink()
+        replacement = self.write('a'*240+'__anon_99999', 9)
+        self.assertTrue(replacement.name.startswith(CHECK['PREFIX']))
+        NORM['add_directory'](self.air, self.out, self.context())
+        self.assertEqual(set(p.name for p in self.out.iterdir()), {entries[0][0]})
+        self.assertEqual(json.loads((self.out/entries[0][0]).read_text())['body'][0]['observable'], 9)
+
+    def test_canonical_collision_suffix_fits_exact_byte_limit(self):
+        for padding, hashed in ((229, False), (230, True)):
+            with self.subTest(padding=padding):
+                for p in self.air.iterdir(): p.unlink()
+                paths = [self.write('a'*padding+f'__anon_{i}', i) for i in (1, 12345)]
+                context = self.context()
+                entries = [context.file_entry(p) for p in paths]
+                self.assertEqual(entries[0][0], entries[1][0])
+                self.assertEqual(entries[0][0].startswith(CHECK['PREFIX']), hashed)
+                destination = self.root/f'boundary-{padding}'
+                NORM['add_directory'](self.air, destination, context)
+                expected = {n.removesuffix('.json')+'.'+hashlib.sha1(data).hexdigest()[:12]+'.json':data for n,data in entries}
+                self.assertEqual({p.name:p.read_bytes() for p in destination.iterdir()}, expected)
+                self.assertTrue(all(len(name.encode('utf-8')) <= 255 for name in expected))
+                if not hashed:
+                    self.assertTrue(all(len(name.encode('utf-8')) == 255 for name in expected))
 
     def test_hash_mismatch_preserves_overlay_even_when_receipt_matches(self):
         path = self.write('long'+'a'*260)

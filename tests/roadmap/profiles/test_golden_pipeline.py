@@ -164,7 +164,7 @@ class ReceiptTests(unittest.TestCase):
         context = NORMALIZER["ValidationContext"](self.report)
         destination = self.directory / "normalized"
         NORMALIZER["add_directory"](source, destination, context)
-        self.assertEqual(json.loads((destination / path.name).read_text())["schema"], 11)
+        self.assertEqual(json.loads((destination / NORMALIZER["canonical_filename"](LEGACY["name"])).read_text())["schema"], 11)
         malformed = copy.deepcopy(LEGACY)
         malformed["target_endian"] = "big"
         path.write_text(json.dumps(malformed))
@@ -214,7 +214,7 @@ class ReceiptTests(unittest.TestCase):
         (destination / "math.sub__anon_N.arbitrary.extra.json").write_bytes(b"stale\n")
         overlay = self.directory / "overlay"
         overlay.mkdir()
-        (overlay / "math.sub__anon_99.json").write_text(json.dumps(LEGACY))
+        (overlay / "math.sub__anon_99.json").write_text(json.dumps(dict(LEGACY, name="math.sub__anon_99")))
         NORMALIZER["add_directory"](overlay, destination, context)
         self.assertEqual(sorted(p.name for p in destination.iterdir()),
                          ["math.sub__anon_N.json", "unrelated.json"])

@@ -21,17 +21,24 @@ truncating, obtains a nonblocking exclusive advisory lock, parses its JSON with
 standard duplicate-key rejection, and checks the complete `name`. Only an exact
 identity match permits truncation and replacement. A distinct identity, malformed
 JSON, nonregular file, changed read length, file larger than 64 MiB, or unavailable
-lock produces an explicit warning and preserves the existing contents. Successful
-writes hold the lock until close. These checks coordinate cooperating exporters;
+lock produces an explicit warning and preserves the existing contents. Validation
+uses a separate arena released before serialization. Successful writes hold the
+lock until close. These checks coordinate cooperating exporters;
 output directories are trusted, and this is not protection against concurrent
 path replacement or writers that ignore advisory locks. A failed JSON write still
 reports incomplete output, as before.
 
 Golden normalization first verifies the actual raw artifact's receipt hash and
 profile, then checks a reserved filename against the full original JSON name.
-It recomputes the golden hash from the normalized JSON name so compiler anonymous
-IDs can differ between versions. Several raw identities that normalize to one
-identity retain the existing SHA-1 suffix over exact normalized pretty JSON.
+It derives every canonical filename from the normalized JSON name using one
+portable direct-or-SHA policy, so compiler anonymous IDs can differ between
+versions even when their raw lengths cross the direct-name limit. Comparison
+basenames reserve 13 of the 255 bytes for the legacy collision suffix; normalized
+identities longer than 237 ASCII bytes therefore use SHA storage keys, regardless
+of whether a particular overlay currently contains one or several instances.
+Production export filenames retain their full 255-byte direct-name budget. Several
+raw identities that normalize to one identity retain the existing SHA-1 suffix over
+exact normalized pretty JSON.
 Directory overlays continue removing every earlier variant of the same normalized
 basename. Neither production JSON identities nor receipt hashes are rewritten.
 
