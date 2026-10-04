@@ -58,7 +58,7 @@ theorem sound {α : Type} (program : ResultProgram α) :
     intro post hp
     refine ⟨left + right, ?_, hp.2⟩
     simp only [eval, Zig.add_unsigned]
-    rw [if_neg (Nat.not_le_of_lt hp.1)]
+    rw [ite_eq_right (Nat.not_le_of_lt hp.1)]
   | widen value width =>
     intro post hp
     exact ⟨value.setWidth width, Zig.intCast_unsigned_widen value width hp.1, hp.2⟩

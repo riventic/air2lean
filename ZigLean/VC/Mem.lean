@@ -29,8 +29,8 @@ namespace MemProgram
 
 def eval {α : Type} : MemProgram α → MemM α
   | .ret value => pure value
-  | .read pointer alignment _ => Zig.load _ alignment pointer
-  | .write pointer alignment _ value => Zig.store alignment pointer value
+  | @read T enc pointer alignment _ => @Zig.load T enc alignment pointer
+  | @write T enc _ pointer alignment _ value => @Zig.store T enc alignment pointer value
   | .lift program => StateT.lift program.eval
   | .call _ action _ _ _ => action
   | .bind first next => eval first >>= fun value => eval (next value)
@@ -39,10 +39,12 @@ def eval {α : Type} : MemProgram α → MemM α
 def vc {α : Type} (program : MemProgram α) (post : α → Assn) : Assn :=
   match program with
   | .ret value => post value
-  | .read (T := T) pointer alignment old => fun h =>
-      0 < Enc.size T ∧ pts pointer alignment old h ∧ post old h
-  | .write (T := T) pointer alignment old value => fun h =>
-      0 < Enc.size T ∧ pts pointer alignment old h ∧
+  | @read T enc pointer alignment old =>
+      letI : Enc T := enc
+      fun h => 0 < Enc.size T ∧ pts pointer alignment old h ∧ post old h
+  | @write T enc _ pointer alignment old value =>
+      letI : Enc T := enc
+      fun h => 0 < Enc.size T ∧ pts pointer alignment old h ∧
         ∀ h', pts pointer alignment value h' → post () h'
   | .lift program => fun h => program.vc (fun value => post value h)
   | .call _ _ pre summary _ => fun h =>
@@ -55,7 +57,7 @@ theorem sound {α : Type} (program : MemProgram α) :
   induction program with
   | ret value =>
     intro post
-    exact Triple.ret value
+    exact Triple.ret (Q := post) value
   | read pointer alignment old =>
     intro post
     apply Triple.of_run
@@ -76,7 +78,9 @@ theorem sound {α : Type} (program : MemProgram α) :
     refine ⟨value, m, hP, ?_, hd, hm, hpost, hs⟩
     simp only [eval, StateT.run, StateT.lift, hr, pure_bind]
   | call label action pre summary checked =>
-    intro post m hP hF hd hm hp hs
+    intro post
+    change Triple (fun h => pre h ∧ ∀ value h', summary value h' → post value h') action post
+    intro m hP hF hd hm hp hs
     have hrun := checked m hP hF hd hm hp.1 hs
     split at hrun
     · trivial

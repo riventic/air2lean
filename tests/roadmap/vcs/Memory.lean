@@ -2,6 +2,20 @@ import ZigLean.VC.Mem
 
 open Zig Assn VC
 
+-- The constructor's encoding dictionary is retained even without an active Enc instance.
+example (T : Type) (enc : Enc T) (p : Ptr) (alignment : Nat) (old : T) :
+    (@MemProgram.read T enc p alignment old).eval = @Zig.load T enc alignment p := rfl
+
+example (T : Type) (enc : Enc T) (p : Ptr) (alignment : Nat) (old : T)
+    (Q : T → Assn) (h : Heap) :
+    MemProgram.vc (@MemProgram.read T enc p alignment old) Q h ↔
+      0 < @Enc.size T enc ∧ @pts T enc p alignment old h ∧ Q old h := Iff.rfl
+
+example (T : Type) (enc : Enc T) (lawful : @LawfulEnc T enc)
+    (p : Ptr) (alignment : Nat) (old value : T) :
+    (@MemProgram.write T enc lawful p alignment old value).eval =
+      @Zig.store T enc alignment p value := rfl
+
 -- Ownership and a positive access size are generated rather than assumed by the AST.
 example (p : Ptr) (old : BitVec 32) (Q : BitVec 32 → Assn) (h : Heap) :
     MemProgram.vc (.read p 4 old) Q h ↔ 0 < Enc.size (BitVec 32) ∧ pts p 4 old h ∧ Q old h :=
