@@ -25,27 +25,7 @@ case "${1:---check-artifacts}" in
     ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER="$export_filter" \
       "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
       -target x86_64-linux -mcpu=baseline tests/roadmap/thread-tuples/thread_tuples.zig
-    python3 - "$air_output" <<'PYEXPORT'
-import json
-from pathlib import Path
-import sys
-manifest = json.loads(Path("tests/roadmap/thread-tuples/provenance.json").read_text())
-files = list(Path(sys.argv[1]).glob("*.json"))
-data = [json.loads(p.read_text()) for p in files]
-versions = {d["zig_version"] for d in data}
-if len(versions) != 1 or not versions.issubset({"0.14.1", "0.15.2", "0.16.0"}):
-    raise SystemExit("AIR export has an unsupported or missing version")
-expected = {"thread_tuples." + n for n in manifest["functions"]}
-expected.update(manifest["stdlib_functions"])
-if versions != {"0.16.0"}:
-    expected.remove("thread_tuples.groupMixed")
-names = [d["name"] for d in data]
-if set(names) != expected or len(names) != len(expected):
-    raise SystemExit("AIR export function inventory differs from the required source and std callees")
-if any(d["schema"] != 11 or d.get("target_endian") != "little" for d in data):
-    raise SystemExit("AIR export has a wrong schema or target endianness")
-print("thread tuple fresh AIR inventory passed")
-PYEXPORT
+    python3 tests/roadmap/thread-tuples/check-export.py "$air_output"
     exit
     ;;
   --adapter-contract)
@@ -60,16 +40,7 @@ PYEXPORT
     ZIG_AIR_JSON_FILTER='thread_adapter_contract.mutableCapture,thread_adapter_contract.strongCapture,thread_adapter_contract.weakCapture,thread_adapter_contract.sliceWorker' \
       "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
       -target x86_64-linux -mcpu=baseline "$adapter_output/thread_adapter_contract.zig" --cache-dir "$adapter_output/cache"
-    python3 - "$adapter_output/air" <<'PYADAPTER'
-import json,sys
-from pathlib import Path
-files = [json.loads(p.read_text()) for p in Path(sys.argv[1]).glob("*.json")]
-expected = {"thread_adapter_contract." + name for name in ("mutableCapture", "strongCapture", "weakCapture", "sliceWorker")}
-if len(files) != 4 or {f["name"] for f in files} != expected:
-    raise SystemExit("adapter AIR function inventory differs from the four required roots")
-if any(f["zig_version"] != "0.16.0" or f["schema"] != 11 or f.get("target_endian") != "little" for f in files):
-    raise SystemExit("adapter AIR has a wrong version/schema/endianness")
-PYADAPTER
+    python3 tests/roadmap/thread-tuples/check-export.py "$adapter_output/air" --adapter
     translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
     "$translator" "$adapter_output/air" -o "$adapter_output/Gen.lean" \
       --namespace ThreadAdapterContract --prefix thread_adapter_contract.
@@ -104,12 +75,15 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
-work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-thread-tuples.XXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-thread-tuples.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/ThreadTuples"
 "$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuples/Gen.lean" \
   --namespace ThreadTuples --prefix thread_tuples.
-cmp "$work/ThreadTuples/Gen.lean" tests/roadmap/thread-tuples/ThreadTuples/Gen.lean
+python3 scripts/normalize-generated.py report "$work/ThreadTuples/Gen.lean" \
+  tests/roadmap/thread-tuples/air/0.16.0 "$work/generated-report.json"
+python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean \
+  "$work/ThreadTuples/Gen.lean" "$work/generated-report.json"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 "${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean

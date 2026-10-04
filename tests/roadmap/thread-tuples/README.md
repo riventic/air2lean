@@ -62,6 +62,17 @@ it does not assert an exact host CPU profile or correspondence with the Linux AI
 The checked source and all twelve AIR hashes remain unchanged. Lean is pinned to v4.34.0.
 Recorded timings describe individual validation runs with existing build artifacts.
 
+Current profile-aware translators prepend a validated profile record. The artifact
+gate binds the raw retained AIR and full headered generated output in a temporary
+receipt, then compares the complete semantic body to historical `Gen.lean`; it
+kernel-checks the full generated module. Fresh export gates validate uniform schema
+11/12 profiles and the exact function inventory. CI also binds fresh AIR and full
+headered output, compares its semantic body, and kernel-checks that fresh module.
+Only the validated generated profile header is excluded from the body comparison;
+source, checked AIR, historical generated definitions, and origin receipts are
+retained. These compatibility checks do not establish compiler preservation or
+change the original qualification scope.
+
 CI runs the complete scoped gate in the existing full nonmutation Zig 0.16.0 Linux job.
 It checks matching patched/stock compiler versions, exports into a fresh `RUNNER_TEMP`
 directory, compares fresh translation with checked generated Lean, and runs native/artifact
@@ -96,7 +107,7 @@ AIR2LEAN_ZIG_AIR=/path/to/qualified-patched16-zig \
   bash tests/roadmap/thread-tuples/check.sh --adapter-contract /absolute/empty/adapter-output
 ```
 
-The tuple-order mutant is counted only for normal Lean exit 1 with exactly one located `rfl` non-definitional-equality diagnostic at the dispatcher equality assertion. Import, I/O, syntax, signal exits and mixed/unlocated errors fail the gate. The guarded artifact gate passed this classification. Seventeen offline guard tests and thirteen adversarial diagnostic/CI/environment tests accompany the gate. Both adapter Lean branches prepend the built repository library path and preserve an inherited `LEAN_PATH`, including an explicit `AIR2LEAN_LEAN` binary override.
+The tuple-order mutant is counted only for normal Lean exit 1 with exactly one located `rfl` non-definitional-equality diagnostic at the dispatcher equality assertion. Import, I/O, syntax, signal exits and mixed/unlocated errors fail the gate. The guarded artifact gate passed this classification. Thirty-four offline guard tests and thirteen adversarial diagnostic/CI/environment tests accompany the gate. Both adapter Lean branches prepend the built repository library path and preserve an inherited `LEAN_PATH`, including an explicit `AIR2LEAN_LEAN` binary override.
 
 The artifact gate regenerates Lean from checked AIR and compares it with checked `Gen.lean`, then checks the generated definitions, proofs, runtime samples, pipeline fixtures, and mutation. It needs no production repository and no Zig compiler. `AIR2LEAN_TRANSLATOR` can select an already-built translator; `AIR2LEAN_LEAN` can select the exact Lean binary, otherwise the gate uses `lake env lean`.
 

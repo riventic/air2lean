@@ -85,8 +85,11 @@ class AdapterEnvironment(unittest.TestCase):
         fixture = self.root / "tests/roadmap/thread-tuples"
         fixture.mkdir(parents=True)
         original = Path(__file__).resolve().parent
-        for name in ("check.sh", "adapter-contract.zig"):
+        for name in ("check.sh", "check-export.py", "adapter-contract.zig"):
             shutil.copyfile(original / name, fixture / name)
+        (self.root / "scripts").mkdir()
+        shutil.copyfile(original.parents[2] / "scripts/normalize-generated.py",
+                        self.root / "scripts/normalize-generated.py")
         self.fixture = fixture
         self.bin = self.root / "bin"
         self.bin.mkdir()

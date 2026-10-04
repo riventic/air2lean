@@ -211,7 +211,9 @@ jobs:
           trap 'rm -rf "$work"' EXIT
           bash tests/roadmap/thread-tuples/check.sh --export "$work/air"
           "$AIR2LEAN_TRANSLATOR" "$work/air" -o "$work/Gen.lean" --namespace ThreadTuples --prefix thread_tuples.
-          cmp "$work/Gen.lean" tests/roadmap/thread-tuples/ThreadTuples/Gen.lean
+          python3 scripts/normalize-generated.py report "$work/Gen.lean" "$work/air" "$work/generated-report.json"
+          python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean "$work/Gen.lean" "$work/generated-report.json"
+          lake env lean -R "$work" "$work/Gen.lean"
           bash tests/roadmap/thread-tuples/check.sh --native
           bash tests/roadmap/thread-tuples/check.sh --check-artifacts
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
