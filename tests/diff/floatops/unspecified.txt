@@ -1,3 +1,5 @@
-op32 4
-op64 4
-op80 414
+# Six opposite-sign zero pairs per min/max selector in the deterministic corners.
+op32 12
+op64 12
+# f80 invalid/pseudo encodings: 65 deterministic rows + 308 unchanged random rows.
+op80 373
