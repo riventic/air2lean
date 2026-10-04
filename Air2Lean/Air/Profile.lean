@@ -1,4 +1,5 @@
 import Lean.Data.Json
+import Std.Data.HashSet
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
 Only the existing 64-bit little-endian memory model is admitted. Schema 12 makes the
@@ -84,10 +85,10 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   let cpu ← strField p "cpu"
   let fs ← ((p.getObjVal? "features").bind Json.getArr?).mapError fun e => s!"profile.features: {e}"
   let features ← fs.mapM fun f => f.getStr? |>.mapError fun e => s!"profile.features: {e}"
-  let mut seen : Array String := #[]
+  let mut seen : Std.HashSet String := {}
   for f in features do
     unless !f.isEmpty && !seen.contains f do throw "profile.features: empty or duplicate feature"
-    seen := seen.push f
+    seen := seen.insert f
   let buildMode ← strField p "build_mode"
   unless ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"].contains buildMode do
     throw s!"unsupported profile.build_mode '{buildMode}'"
@@ -106,22 +107,22 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless exportStage == "analyzed-air" do
     throw "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
   return {
-    name := name
-    schema := schema
-    zigVersion := zigVersion
-    targetTriple := targetTriple
-    pointerBits := pointerBits
-    endian := endian
-    abi := abi
-    backend := backend
-    cpu := cpu
-    features := features
-    buildMode := buildMode
-    floatMode := floatMode
-    errorSetBits := errorSetBits
-    errorLayout := errorLayout
-    errorTracing := errorTracing
-    exportStage := exportStage
+    name
+    schema
+    zigVersion
+    targetTriple
+    pointerBits
+    endian
+    abi
+    backend
+    cpu
+    features
+    buildMode
+    floatMode
+    errorSetBits
+    errorLayout
+    errorTracing
+    exportStage
   }
 
 /-- Serialized in generated source and proof reports. Legacy assumptions remain explicit. -/
@@ -141,14 +142,14 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
   if let some expected := expected then
     unless first.name == expected do
       throw s!"selected profile '{expected}' differs from input profile '{first.name}'"
-  let firstJson := first.toJson
-  let fields ← firstJson.getObj?
   for p in profiles do
-    let current := p.toJson
-    for (key, value) in fields.toArray do
-      let other := current.getObjValD key
-      unless value == other do
-        throw s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
+    unless p == first do
+      let fields ← first.toJson.getObj?
+      let current := p.toJson
+      for (key, value) in fields.toArray do
+        let other := current.getObjValD key
+        unless value == other do
+          throw s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
   pure first
 
 end BuildProfile
