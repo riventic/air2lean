@@ -64,7 +64,12 @@ def classify(status, proof_path, proof, log):
         raise ValueError('unlocated error is not a semantic mutant rejection')
     for match in errors:
         path, line, _, message = match.groups()
-        if path != expected or not lo <= int(line) <= hi:
+        diagnostic_path = Path(path)
+        if not diagnostic_path.is_absolute():
+            raise ValueError('diagnostic path must be absolute')
+        # Lean retains repeated separators from RUNNER_TEMP/TMPDIR. Resolve both
+        # absolute paths consistently without broadening the accepted proof region.
+        if str(diagnostic_path.resolve()) != expected or not lo <= int(line) <= hi:
             raise ValueError('error is outside the expected payload8 bridge')
         if not (message == 'unsolved goals' or message.startswith("Tactic `rfl` failed")):
             raise ValueError('expected a kernel equality proof failure, not another diagnostic')

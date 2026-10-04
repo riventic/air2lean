@@ -40,6 +40,25 @@ class OffsetMutationTests(unittest.TestCase):
     def test_exact_located_bridge_kernel_failure_passes(self):
         self.assertTrue(mutation.classify(1, self.path, self.proof, self.log))
 
+    def test_actual_doubled_separator_bridge_diagnostic_passes(self):
+        proof = Path(__file__).with_name('TryPointers') / 'Proofs.lean'
+        expected = '/private/tmp/T/air2lean-try-pointers.b2HHiB/offset-mutant/TryPointers/Proofs.lean'
+        logged = expected.replace('/T/', '/T//')
+        log = (f'{logged}:66:17: error: unsolved goals\n'
+               'case some.ok.some.ok.ok\n'
+               'q : Ptr\n'
+               '⊢ some (Except.ok (Except.ok (q.add 1), m₂)) = '
+               'some (Except.ok (Except.ok q, m₂))\n')
+        self.assertTrue(mutation.classify(1, expected, proof.read_text(), log))
+        with self.assertRaises(ValueError):
+            mutation.classify(1, expected, proof.read_text(),
+                              log.replace('/TryPointers/Proofs.lean', '/Wrong/Proofs.lean'))
+
+    def test_relative_diagnostic_path_rejected(self):
+        for path in ['Proofs.lean', 'TryPointers/Proofs.lean', '../mutant/TryPointers/Proofs.lean']:
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                mutation.classify(1, self.path, self.proof, self.log.replace(self.path, path))
+
     def test_exit_status_success_signal_or_tool_failure_rejected(self):
         for code in [0, 2, 137, -9]:
             with self.subTest(code=code), self.assertRaises(ValueError):
