@@ -376,6 +376,23 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(report['counts'],{'native_harness_failure':1})
         self.assertEqual(report['mutation_eligible'],0)
 
+    def test_actual_successful_comparison_skips_panic_policy_lookup(self):
+        self.seed({'ok':1},{'ok':1})
+        scripts=self.root/'scripts'
+        (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
+        source=(ROOT/'scripts/diff.sh').read_text()
+        functions=source[source.index('functions_of()'):source.index('\n}',source.index('functions_of()'))+2]
+        tail=source[source.index('# Classifies one JSONL'):]
+        anchor='# The pin of function'
+        tail=tail.replace(anchor,'expected_ctor_for_zig_kind() { echo "UNEXPECTED_PANIC_LOOKUP" >&2; return 99; }\n\n'+anchor,1)
+        runner=self.root/'compare.sh'
+        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+functions+'\n'+tail)
+        result=subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertNotIn('UNEXPECTED_PANIC_LOOKUP',result.stderr)
+        self.assertIn('TOTAL: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=0',result.stdout)
+        self.assertEqual(json.loads(self.summary.read_text())['counts'],{'value_match':1})
+
     def mutation_mock(self, native, model, nk, mk, search=None, host=False, legacy=False, total=True, retain=False):
         self.seed(native,model,nk,mk,search)
         scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)

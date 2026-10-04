@@ -346,7 +346,6 @@ for ex in $examples; do
       lval=${val:-}
       lbufs=$bufs
       llive=$live
-      expected_ctor_for_zig_kind "$zval"
 
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
         bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
@@ -356,6 +355,7 @@ for ex in $examples; do
       elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
         fn_capped=$((fn_capped + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
+        expected_ctor_for_zig_kind "$zval" &&
         [ -n "$expected_ctor" ] &&
         [ "$expected_ctor" = "${lval#'Zig.Error.'}" ]; then
         fn_fail_match=$((fn_fail_match + 1))
