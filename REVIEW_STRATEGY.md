@@ -127,8 +127,8 @@ head ancestry now include that dependency. Local passes do not imply a completed
 
 ## Supplemental coverage for added files
 
-The baseline ledger remains 838 files. The baseline-to-integration `HEAD` added-file
-inventory (`git diff --diff-filter=A --name-only BASELINE HEAD`) contains these 27 files.
+The baseline ledger remains 838 files. Before the merge reconciliation below, the
+baseline-to-integration added-file inventory contained these 27 files.
 Every added path has an owner and final-review assignment; none is uncovered. Assignments
 record review scope separately from the completed local checks and Linux CI results.
 
@@ -151,7 +151,7 @@ translation, runtime/concurrency and tooling; separate adversarial agents checke
 scope. Four additional agents applied `/simple`'s reuse, simplification, efficiency and
 altitude angles. Reviewers remained static-only; the coordinator kept the single global
 compiler queue and unchanged 8 GiB memory cap. This wave changes 26 already-covered files
-and adds no tracked files: all 865 tracked paths retain primary coverage.
+and adds no tracked files: all 865 tracked paths at that wave's head retain primary coverage.
 
 | Scope | Independently checked files |
 |---|---|
@@ -204,3 +204,28 @@ golden and native differential results and complete-stack Linux CI status are re
 | Matching-version native 0.16 differential | Passed 85,861 selected cases: 79,049 `ok`, 4,975 matching failures, 1,077 pinned unspecified, zero capped/mismatch, 760 host differences. Peak 756.1 MiB, 190.8 s (`diff16.log`). |
 | Real allocator mutations | Clean lists baseline passed all 1,500 cases. Mutation h produced 414 mismatches; repaired sentinel mutation s changed a pinned count and was detected. Source restoration checked; peak 765.7 MiB, 65.8 s (`mutations-lists.log`). |
 | Complete-stack Linux CI | All eight jobs passed at `c19a260`: full 0.15.2/0.16.0 native differential jobs, the 0.14.1 exporter/translation/proof job and all five mutation shards ([run 37159767654](https://github.com/riventic/air2lean/actions/runs/37159767654)). The final reserved-token follow-up is locally checked above; its CI run is tracked on PR 57. Mac host exception lists remain unchanged. |
+
+## Merge reconciliation with current main
+
+Before merging the review PRs, current main `2848b84` also contained PR 46's RwLock
+proof and semaphore changes. The complete review stack at `3ffb793` had passed all eight
+Linux jobs ([run 37161282164](https://github.com/riventic/air2lean/actions/runs/37161282164));
+that run preceded this reconciliation.
+
+Independent GPT-6.1 Sol agents `merge_sync_compat` and `merge_policy_compat` checked
+the synchronization API, proof-discovery and documentation interactions. The former
+read the entire newly added `Proofs/Sync/RwLock.lean` (4,559 lines before the fix).
+This adds one supplemental covered file, making 866 tracked files; the original
+838-file ledger remains unchanged.
+
+The RwLock join proof now supplies `Thread.joinValid` from its existing invariant,
+without weakening its theorem or the runtime API. `tests/review/AllProofs.lean` now
+imports RwLock, bringing the aggregate check to 41 handwritten modules. A separate
+static verification confirmed both changes.
+
+Serialized local checks passed all three version-specific full `Proofs` builds
+(104 jobs each), all 41 aggregate imports, Darwin Threadsync, all 46 shell checks,
+runtime/parser/input regressions, all 25 emitted semantic fixtures, actual 0.15/0.16
+exporter round trips and no-sorry. The guarded run peaked at 2,210.7 MiB; generated
+proofs and goldens were restored unchanged. The intentional RwLock source fix was
+the sole remaining proof diff before commit.
