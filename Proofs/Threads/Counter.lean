@@ -1771,43 +1771,45 @@ theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (h
       rw [this]
       exact decode_tid _ (by unfold ThreadId at *; omega)
 
-/-- The invariant of `main`'s spawn loop: it spawned `local27` threads. -/
-def inv30 (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  s.local27.toNat ≤ 4 ∧ m.current = 0 ∧ Inv n (Conc.upd G 0 (.main s.local27.toNat [])) m ∧
-    Ex (Conc.upd G 0 (.main s.local27.toNat [])) m
+/-- The invariant of `main`'s spawn loop: it spawned `local29` threads, and the cleanup
+counter `started` agrees with the loop index. -/
+def inv32 (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  s.started = s.local29 ∧ s.local29.toNat ≤ 4 ∧ m.current = 0 ∧
+    Inv n (Conc.upd G 0 (.main s.local29.toNat [])) m ∧
+    Ex (Conc.upd G 0 (.main s.local29.toNat [])) m
 
-def post30 (r : parallelCounterExit × parallelCounterLocals) (G : ThreadId → Gh) (m : Mem)
+def post32 (r : parallelCounterExit × parallelCounterLocals) (G : ThreadId → Gh) (m : Mem)
     (_ : Nat) : Prop :=
-  r.1 = .br29 ∧ m.current = 0 ∧ Inv n (Conc.upd G 0 (.main 4 [])) m ∧
+  r.1 = .br31 ∧ m.current = 0 ∧ Inv n (Conc.upd G 0 (.main 4 [])) m ∧
     Ex (Conc.upd G 0 (.main 4 [])) m
 
-theorem loop30_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (h : inv30 n s G m d) :
-    (proto n).WP 0 ((parallelCounter.loop30 ⟨some 0, 0⟩ ⟨some 2, 0⟩).run s) (fun r G' m' d' =>
-      if parallelCounter.again30 r.1 then inv30 n r.2 G' m' d' ∧
+theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (h : inv32 n s G m d) :
+    (proto n).WP 0 ((parallelCounter.loop32 ⟨some 0, 0⟩ ⟨some 2, 0⟩).run s) (fun r G' m' d' =>
+      if parallelCounter.again32 r.1 then inv32 n r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
-      else post30 n r G' m' d') G m d := by
-  obtain ⟨hle, hcur, hi, he⟩ := h
-  unfold parallelCounter.loop30
+      else post32 n r G' m' d') G m d := by
+  obtain ⟨hstarted, hle, hcur, hi, he⟩ := h
+  unfold parallelCounter.loop32
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   split
   · rename_i hlt
-    have hlt' : s.local27.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
+    have hlt' : s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
-    refine WP.bind (WP.spawnC fun k hk => ⟨.main s.local27.toNat [], ⟨hi, he⟩,
+    refine WP.bind (WP.spawnC fun k hk => ⟨.main s.local29.toNat [], ⟨hi, he⟩,
       fun G₁ m₁ hg₁ hie₁ => ⟨_, rfl, fun child m₂ hf => ?_⟩⟩)
     obtain ⟨hi₁, he₁⟩ := hie₁
-    have hsz₁ : m₁.threads.size = s.local27.toNat + 1 := by
+    have hsz₁ : m₁.threads.size = s.local29.toNat + 1 := by
       obtain ⟨s', J', hG', -, h, -⟩ := hi₁; rw [hg₁] at hG'; cases hG'; exact h
     have hcs₁ : m₁.clocks.size = m₁.threads.size := by
       obtain ⟨s', J', hG', -, h1, h2, -⟩ := hi₁; rw [h1, h2]
     obtain ⟨he₂, hcur₂, -⟩ := ex_fork (G' := G₁) he₁ rfl hcs₁ (by omega) hf
-    have hch : child = s.local27.toNat + 1 := by rw [(fork_ok hf).1]; exact hsz₁
-    obtain ⟨bk, hbk, hkk, -, hacc⟩ := access_blk (o := 8 * s.local27.toNat)
+    have hch : child = s.local29.toNat + 1 := by rw [(fork_ok hf).1]; exact hsz₁
+    obtain ⟨bk, hbk, hkk, -, hacc⟩ := access_blk (o := 8 * s.local29.toNat)
       (len := (Enc.encode child).size) (a := 8) he₂.2.2.1
       (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode (α := BitVec 64) _]; omega)
-      (fun A h => by omega) (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local27)
+      (fun A h => by omega) (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local29)
       (by simp [Ptr.elem, Ptr.add])
     simp only [StateT.run_bind, bind_assoc]
     refine WP.bind (WP.liftM (fun e h => (MemM.noErr_of_run
@@ -1815,19 +1817,25 @@ theorem loop30_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     obtain ⟨hc, hcur₃, hi₃⟩ := inv_spawn n hi₁ hg₁ hlt' hf hs₃ (by simp [Ptr.elem, Ptr.add])
     subst hc
     have he₃ := ex_handle (G := G₁)
-      (G' := Conc.upd (Conc.upd G₁ (s.local27.toNat + 1) (.bump (ctxPtr s.local27.toNat) 0 false))
-        0 (.main (s.local27.toNat + 1) [])) he₂ hg₁ (Conc.upd_self _ _ _) hlt' hcur₂
+      (G' := Conc.upd (Conc.upd G₁ (s.local29.toNat + 1) (.bump (ctxPtr s.local29.toNat) 0 false))
+        0 (.main (s.local29.toNat + 1) [])) he₂ hg₁ (Conc.upd_self _ _ _) hlt' hcur₂
       (by obtain ⟨_, h⟩ := (fork_ok hf); rw [(fork_eq hf).2]; simp [hcs₁])
       (by rw [(fork_ok hf).2]; omega) (by simp [Ptr.elem, Ptr.add]) hs₃
     refine ⟨by obtain ⟨b, blk, o, -, -, rfl⟩ := Proto.store_ok hs₃; rfl, ?_⟩
-    simp only [StateT.run_pure, pure_bind, StateT.run_bind]
-    refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.local27) (by omega) e h).elim)
+    simp only [StateT.run_pure, pure_bind, StateT.run_bind, StateT.run_get]
+    refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.started)
+      (by rw [hstarted]; omega) e h).elim) fun started' hstartedAdd => ?_)
+    have hstartedNat : started'.toNat = s.local29.toNat + 1 := by
+      rw [add_one_ok hstartedAdd (by rw [hstarted]; omega), hstarted]
+    simp only [StateT.run_modify, StateT.run_pure, pure_bind, StateT.run_bind]
+    refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.local29) (by omega) e h).elim)
       fun k' hadd => ?_)
-    have hkn : k'.toNat = s.local27.toNat + 1 := add_one_ok hadd (by omega)
+    have hkn : k'.toNat = s.local29.toNat + 1 := add_one_ok hadd (by omega)
     simp only [StateT.run_modify, pure_bind]
     refine WP.pure' ?_
-    simp only [parallelCounter.again30, ↓reduceIte]
-    refine ⟨⟨by show k'.toNat ≤ 4; omega, hcur₃, ?_, ?_⟩, .inl (by omega)⟩
+    simp only [parallelCounter.again32, ↓reduceIte]
+    refine ⟨⟨BitVec.eq_of_toNat_eq (hstartedNat.trans hkn.symm),
+      by show k'.toNat ≤ 4; omega, hcur₃, ?_, ?_⟩, .inl (by omega)⟩
     · show Inv n (Conc.upd _ 0 (.main k'.toNat [])) m₃
       rw [hkn, ctxPtr_elem]
       exact hi₃
@@ -1835,11 +1843,11 @@ theorem loop30_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       rw [hkn, ctxPtr_elem]
       exact he₃
   · rename_i hge
-    have hge' : ¬ s.local27.toNat < 4 := by simpa [lt, BitVec.ult] using hge
+    have hge' : ¬ s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hge
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
-    simp only [parallelCounter.again30, Bool.false_eq_true, ↓reduceIte]
-    have h4 : s.local27.toNat = 4 := by omega
+    simp only [parallelCounter.again32, Bool.false_eq_true, ↓reduceIte]
+    have h4 : s.local29.toNat = 4 := by omega
     exact ⟨rfl, hcur, h4 ▸ hi, h4 ▸ he⟩
 
 /-- `main`'s join keeps `Ex`. -/
@@ -1872,32 +1880,32 @@ theorem ex_join {G G' : ThreadId → Gh} {m m' : Mem} {tid : ThreadId} (he : Ex 
     · exact hsp r hr
     · exact hsp rec (Array.mem_of_getElem? hrec)
 
-/-- The invariant of `main`'s join loop: it joined `local51` threads (the list `J`). -/
-def inv54 (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  s.local51.toNat ≤ 4 ∧ m.current = 0 ∧
-    ∃ J : List Nat, J.length = s.local51.toNat ∧ (∀ u ∈ J, u ≤ s.local51.toNat) ∧
+/-- The invariant of `main`'s join loop: it joined `local85` threads (the list `J`). -/
+def inv88 (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  s.local85.toNat ≤ 4 ∧ m.current = 0 ∧
+    ∃ J : List Nat, J.length = s.local85.toNat ∧ (∀ u ∈ J, u ≤ s.local85.toNat) ∧
       Inv n (Conc.upd G 0 (.main 4 J)) m ∧ Ex (Conc.upd G 0 (.main 4 J)) m
 
-def post54 (r : parallelCounterExit × parallelCounterLocals) (G : ThreadId → Gh) (m : Mem)
+def post88 (r : parallelCounterExit × parallelCounterLocals) (G : ThreadId → Gh) (m : Mem)
     (_ : Nat) : Prop :=
-  r.1 = .br53 ∧ m.current = 0 ∧ ∃ J : List Nat, J.length = 4 ∧
+  r.1 = .br87 ∧ m.current = 0 ∧ ∃ J : List Nat, J.length = 4 ∧
     Inv n (Conc.upd G 0 (.main 4 J)) m ∧ Ex (Conc.upd G 0 (.main 4 J)) m
 
-theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (h : inv54 n s G m d) :
-    (proto n).WP 0 ((parallelCounter.loop54 ⟨some 2, 0⟩).run s) (fun r G' m' d' =>
-      if parallelCounter.again54 r.1 then inv54 n r.2 G' m' d' ∧
+theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (h : inv88 n s G m d) :
+    (proto n).WP 0 ((parallelCounter.loop88 ⟨some 2, 0⟩).run s) (fun r G' m' d' =>
+      if parallelCounter.again88 r.1 then inv88 n r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
-      else post54 n r G' m' d') G m d := by
+      else post88 n r G' m' d') G m d := by
   obtain ⟨hle, hcur, J, hJl, hJle, hi, he⟩ := h
   have hnd : ∀ q, (Conc.upd G 0 (.main 4 J)) m.current ≠ .bump q n.toNat true := by
     rw [hcur, Conc.upd_self]; intro q h; cases h
-  unfold parallelCounter.loop54
+  unfold parallelCounter.loop88
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   split
   · rename_i hlt
-    have hlt' : s.local51.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
+    have hlt' : s.local85.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
     have hsz : m.threads.size = 5 := by
       obtain ⟨s', J', hG', -, h, -⟩ := hi; rw [Conc.upd_self] at hG'; cases hG'; exact h
@@ -1906,38 +1914,38 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     have hG4 : (Conc.upd G 0 (.main 4 J)) 0 = .main 4 J := Conc.upd_self _ _ _
     obtain ⟨-, -, B2, hfp, hsp, s', J', hG', hd⟩ := id he
     rw [hG4] at hG'; cases hG'
-    obtain ⟨bk, hbk, -, hbs, hacc⟩ := access_blk (o := 8 * s.local51.toNat)
+    obtain ⟨bk, hbk, -, hbs, hacc⟩ := access_blk (o := 8 * s.local85.toNat)
       (len := Enc.size ThreadId) (a := 8) B2 (by show _ + 8 ≤ 32; omega) (fun A h => by omega)
-      (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local51) (by simp [Ptr.elem, Ptr.add])
-    have hdec := hd bk hbk s.local51.toNat hlt'
+      (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local85) (by simp [Ptr.elem, Ptr.add])
+    have hdec := hd bk hbk s.local85.toNat hlt'
     refine WP.bind (WP.callMC (fun e h => (MemM.noErr_of_run
-      (load_run (v := s.local51.toNat + 1) hacc hdec (noRace_b2 hfp hcur)) e h).elim)
+      (load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)) e h).elim)
       fun tid m₁ hl => ?_)
     have hl' := hl
-    rw [load_run (v := s.local51.toNat + 1) hacc hdec (noRace_b2 hfp hcur)] at hl'
+    rw [load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)] at hl'
     simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hl'
     obtain ⟨rfl, rfl⟩ := hl'
-    have hi₁ := inv_recordAt (b := 2) (o := 8 * s.local51.toNat) (len := Enc.size ThreadId)
+    have hi₁ := inv_recordAt (b := 2) (o := 8 * s.local85.toNat) (len := Enc.size ThreadId)
       (k := .read) n hi hnd (by rw [hcur, hsz]; decide)
-    have he₁ := ex_recordAt (b := 2) (o := 8 * s.local51.toNat) (l := Enc.size ThreadId)
+    have he₁ := ex_recordAt (b := 2) (o := 8 * s.local85.toNat) (l := Enc.size ThreadId)
       (k := .read) (G := Conc.upd G 0 (.main 4 J)) he (.inr (.inr ⟨rfl, hcur⟩))
       (by rw [hcur, hsz]; decide) hcs
     refine ⟨rfl, ?_⟩
     refine WP.bind (WP.joinC fun k hk => ⟨.main 4 J, ⟨hi₁, he₁⟩,
       fun G₁ m₂ hg₁ hie₂ => ?_⟩)
-    have hjoin : ∃ m', ((Thread.join (s.local51.toNat + 1)).run
+    have hjoin : ∃ m', ((Thread.join (s.local85.toNat + 1)).run
         { m₂ with current := 0 }).run = some (.ok ((), m')) := by
       obtain ⟨hi₂, he₂⟩ := hie₂
       obtain ⟨s₂, J₂, hG₂, -, hsz₂, -, -, -, -, -, hjoined, -⟩ := hi₂
       rw [hg₁] at hG₂; cases hG₂
-      have hlt₂ : s.local51.toNat + 1 < m₂.threads.size := by rw [hsz₂]; omega
-      have hjf : (m₂.threads[s.local51.toNat + 1]).joined = false := by
-        cases hjv : (m₂.threads[s.local51.toNat + 1]).joined
+      have hlt₂ : s.local85.toNat + 1 < m₂.threads.size := by rw [hsz₂]; omega
+      have hjf : (m₂.threads[s.local85.toNat + 1]).joined = false := by
+        cases hjv : (m₂.threads[s.local85.toNat + 1]).joined
         · rfl
         · rcases hjoined _ hlt₂ hjv with h | h
           · omega
           · have := hJle _ h; omega
-      exact Proto.join_run (rec := m₂.threads[s.local51.toNat + 1])
+      exact Proto.join_run (rec := m₂.threads[s.local85.toNat + 1])
         (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)) hjf
     refine ⟨fun _ => ?_, fun hfin => ⟨fun _ => hjoin, fun m' hj => ?_⟩⟩
     · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
@@ -1952,18 +1960,18 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       obtain ⟨s₂, J₂, -, -, h1, h2, -⟩ := hi₂; rw [h1, h2]
     have hsz₂ : 0 < m₂.threads.size := by
       obtain ⟨s₂, J₂, -, -, h1, -⟩ := hi₂; rw [h1]; omega
-    obtain ⟨he', -⟩ := ex_join (G' := Conc.upd G₁ 0 (.main 4 ((s.local51.toNat + 1) :: J)))
+    obtain ⟨he', -⟩ := ex_join (G' := Conc.upd G₁ 0 (.main 4 ((s.local85.toNat + 1) :: J)))
       he₂ (.inr ⟨4, J, _, hg₁, Conc.upd_self _ _ _⟩) hcs₂ hsz₂ hj
     simp only [StateT.run_pure, pure_bind, StateT.run_bind]
-    refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.local51) (by omega) e h).elim)
+    refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.local85) (by omega) e h).elim)
       fun k' hadd => ?_)
-    have hkn : k'.toNat = s.local51.toNat + 1 := add_one_ok hadd (by omega)
+    have hkn : k'.toNat = s.local85.toNat + 1 := add_one_ok hadd (by omega)
     simp only [StateT.run_modify, pure_bind]
     refine WP.pure' ?_
-    simp only [parallelCounter.again54, ↓reduceIte]
-    refine ⟨⟨by show k'.toNat ≤ 4; omega, hcur', (s.local51.toNat + 1) :: J, ?_, ?_, hi', he'⟩,
+    simp only [parallelCounter.again88, ↓reduceIte]
+    refine ⟨⟨by show k'.toNat ≤ 4; omega, hcur', (s.local85.toNat + 1) :: J, ?_, ?_, hi', he'⟩,
       .inl (by omega)⟩
-    · show ((s.local51.toNat + 1) :: J).length = k'.toNat
+    · show ((s.local85.toNat + 1) :: J).length = k'.toNat
       rw [hkn, List.length_cons, hJl]
     · intro u hu
       show u ≤ k'.toNat
@@ -1972,10 +1980,10 @@ theorem loop54_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       · exact Nat.le_refl _
       · exact Nat.le_succ_of_le (hJle u hu)
   · rename_i hge
-    have hge' : ¬ s.local51.toNat < 4 := by simpa [lt, BitVec.ult] using hge
+    have hge' : ¬ s.local85.toNat < 4 := by simpa [lt, BitVec.ult] using hge
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
-    simp only [parallelCounter.again54, Bool.false_eq_true, ↓reduceIte]
+    simp only [parallelCounter.again88, Bool.false_eq_true, ↓reduceIte]
     exact ⟨rfl, hcur, J, by omega, hi, he⟩
 
 /-- `Ex` depends on the ghost values only through `main`'s. -/
@@ -2148,16 +2156,16 @@ theorem main_spec (d : Nat) :
     funext u; by_cases hu : u = 0
     · subst hu; simp [Conc.upd, G0]
     · simp [Conc.upd, hu]
-  refine WP.bind (WP.mono (fun r G' m' d' hp => ?_) (WP.loop _ _ (inv30 n)
-    (fun _ => 0) (post30 n) (fun s G m d h => loop30_body n s G m d h) _ _ _ _
-    ⟨by simp, hpa7.cur, by simpa [hG0] using hi₇, by simpa [hG0] using he₇⟩))
+  refine WP.bind (WP.mono (fun r G' m' d' hp => ?_) (WP.loop _ _ (inv32 n)
+    (fun _ => 0) (post32 n) (fun s G m d h => loop32_body n s G m d h) _ _ _ _
+    ⟨rfl, by simp, hpa7.cur, by simpa [hG0] using hi₇, by simpa [hG0] using he₇⟩))
   obtain ⟨hr, hcur8, hi₈, he₈⟩ := hp
   obtain ⟨e, s₂⟩ := r
   simp only at hr; subst hr
   simp only [StateT.run_bind, StateT.run_modify, pure_bind]
   -- The join loop.
-  refine WP.bind (WP.mono (fun r G' m' d' hp => ?_) (WP.loop _ _ (inv54 n)
-    (fun _ => 0) (post54 n) (fun s G m d h => loop54_body n s G m d h) _ _ _ _
+  refine WP.bind (WP.mono (fun r G' m' d' hp => ?_) (WP.loop _ _ (inv88 n)
+    (fun _ => 0) (post88 n) (fun s G m d h => loop88_body n s G m d h) _ _ _ _
     ⟨by simp, hcur8, [], rfl, by simp, hi₈, he₈⟩))
   obtain ⟨hr, hcur9, J, hJ4, hi₉, he₉⟩ := hp
   obtain ⟨e, s₃⟩ := r

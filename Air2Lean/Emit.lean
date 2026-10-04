@@ -37,7 +37,32 @@ def leanKeywords : List String :=
    "have", "show", "from", "this", "suffices", "calc", "for", "in", "return", "try", "catch",
    "finally", "unsafe", "noncomputable", "macro", "syntax", "elab", "axiom", "constant",
    "forall", "exists", "Type", "Prop", "Sort", "opaque", "attribute", "set_option", "universe",
-   "extends", "renaming", "hiding", "at"]
+   "extends", "renaming", "hiding", "at", "private", "protected", "include", "omit",
+   "export", "prelude", "initialize", "infix", "infixl", "infixr", "prefix", "postfix",
+   "scoped", "local", "termination_by", "decreasing_by", "throw"]
+
+/-- Quote identifiers that Zig permits but Lean does not accept bare. -/
+def mangleField (raw : String) : String :=
+  let bare := match raw.toList with
+    | [] => false
+    | c :: cs => (c.isAlpha || c == '_') && cs.all fun c =>
+        c.isAlphanum || c == '_' || c == '\'' || c == '?' || c == '!'
+  if bare && raw != "_" && !leanKeywords.contains raw then raw
+  else if !raw.isEmpty && !raw.toList.any (fun c => c == '«' || c == '»' || c == '\n' || c == '\r') then
+    s!"«{raw}»"
+  else
+    "airName" ++ String.join (raw.toUTF8.toList.map fun b => s!"_{b.toNat}")
+
+def plainName (name : String) : String :=
+  ((name.dropPrefix "«").dropSuffix "»").toString
+
+/-- Preserve the preferred spelling unless it is already occupied. -/
+def freshName (raw : String) (used : Array String) : String := Id.run do
+  let base := mangleField raw
+  if !used.contains base then return base
+  let mut k := 1
+  while used.contains (mangleField s!"{raw}_air2lean{k}") do k := k + 1
+  return mangleField s!"{raw}_air2lean{k}"
 
 def mangleName (prefix_ : String) (raw : String) : String :=
   let stripped : String :=
@@ -47,10 +72,63 @@ def mangleName (prefix_ : String) (raw : String) : String :=
   -- `array_list_Aligned_u32_null`.
   let underscored := String.ofList (stripped.toList.filterMap fun c =>
     if c.isAlphanum || c == '_' then some c else if c == ')' then none else some '_')
-  if leanKeywords.contains underscored then s!"«{underscored}»" else underscored
+  mangleField underscored
 
-def mangleField (raw : String) : String :=
-  if leanKeywords.contains raw then s!"«{raw}»" else raw
+/-- Names Lean itself generates below a structure or inductive. -/
+def typeCoreNames : Array String :=
+  #["rec", "recOn", "casesOn", "below", "brecOn", "binductionOn", "noConfusion",
+    "noConfusionType", "ctorIdx", "ctorElim", "ctorElimType", "sparseCasesOn"]
+
+/-- Unqualified runtime names in the emitted source must not be shadowed by program defs. -/
+def runtimeNames : Array String :=
+  #["BitVec", "Bool", "Unit", "Vector", "Array", "Option", "Except", "StateT", "Int",
+    "Nat", "String", "List", "Prod", "Repr", "Inhabited", "DecidableEq",
+    "Zig", "default", "pure", "get", "modify", "discard", "id"]
+
+def memberNames (ty : Ty) (reserved : Array String := #[]) : Array (String × String) := Id.run do
+  let fields : Array String := match ty with
+    | .struct _ _ fs | .union _ _ _ fs => fs.map (fun (p : String × TyId) => p.1)
+    | .enum _ _ _ fs => fs.map (fun (p : String × Int) => p.1)
+    | _ => #[]
+  let mut used := typeCoreNames ++ runtimeNames ++ reserved
+  if let .struct .. := ty then used := used.push "mk"
+  let mut out := #[]
+  for raw in fields do
+    let name := freshName raw used
+    used := used.push name
+    out := out.push (raw, name)
+  return out
+
+/-- Capture the collision table once for every member emitted in the same type scope. -/
+def memberLookup (ty : Ty) (reserved : Array String := #[]) : String → String :=
+  let names := memberNames ty reserved
+  fun raw => (names.find? (·.1 == raw)).map (·.2) |>.getD (mangleField raw)
+
+def memberName (ty : Ty) (raw : String) (reserved : Array String := #[]) : String := memberLookup ty reserved raw
+
+/-- Generated helpers share their type's namespace with source members. Allocate them after
+those members, so a constructor named `toBits` or `get_a` keeps its source spelling. -/
+def helperNames (ty : Ty) (reserved : Array String := #[]) : Array (String × String) := Id.run do
+  let stems := match ty with
+    | .enum _ _ exhaustive _ =>
+      (if exhaustive then #[] else #["bits", "mk"]) ++ #["toBits", "ofInt?", "isNamed", "tagName"]
+    | .union _ _ tag fs =>
+      (if tag.isSome then #["tag"] else #[]) ++ fs.flatMap fun (p : String × TyId) =>
+        #[s!"get_{p.1}", s!"modify_{p.1}"] ++ (if tag.isSome then #[s!"setTag_{p.1}"] else #[])
+    | _ => #[]
+  let mut used := typeCoreNames ++ runtimeNames ++ reserved ++ (memberNames ty reserved).map (·.2)
+  let mut out := #[]
+  for stem in stems do
+    let name := freshName stem used
+    used := used.push name
+    out := out.push (stem, name)
+  return out
+
+def helperLookup (ty : Ty) (reserved : Array String := #[]) : String → String :=
+  let names := helperNames ty reserved
+  fun raw => (names.find? (·.1 == raw)).map (·.2) |>.getD (mangleField raw)
+
+def helperName (ty : Ty) (raw : String) (reserved : Array String := #[]) : String := helperLookup ty reserved raw
 
 /-! ## Types (`docs/generated-code.md` §Types) -/
 
@@ -226,6 +304,8 @@ def rawUnionInit (u layout : String) (size : Nat) (v t : String) : String :=
 the size, alignment and field offsets from the exporter. -/
 def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   let n := s.leanName
+  let fm := memberLookup s.ty (structNames.map (·.2))
+  let hn := helperLookup s.ty (structNames.map (·.2))
   let size := s.layout.size.getD 0
   let head := [s!"instance : Zig.Enc {n} where", s!"  size := {size}",
                s!"  align := {s.layout.align.getD 1}"]
@@ -240,11 +320,11 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     let enc := fields.toList.map fun (f, id) =>
-      if isVoid id then s!"    | .{mangleField f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag)]"
-      else s!"    | .{mangleField f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.tag), ({po}, Zig.Enc.encode x)]"
+      if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
+      else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, Zig.Enc.encode x)]"
     let dec := fields.toList.map fun (f, id) =>
-      if isVoid id then s!"    | .{mangleField f} => pure .{mangleField f}"
-      else s!"    | .{mangleField f} => pure (.{mangleField f} (← Zig.Enc.decodeAt bs {po}))"
+      if isVoid id then s!"    | .{fm f} => pure .{fm f}"
+      else s!"    | .{fm f} => pure (.{fm f} (← Zig.Enc.decodeAt bs {po}))"
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
@@ -255,9 +335,9 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
        s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
-      s!"({o}, Zig.Enc.encode v.{mangleField f})"
+      s!"({o}, Zig.Enc.encode v.{fm f})"
     let decs := (fields.zip s.layout.offsets).toList.map fun ((f, _), o) =>
-      s!"{mangleField f} := ← Zig.Enc.decodeAt bs {o}"
+      s!"{fm f} := ← Zig.Enc.decodeAt bs {o}"
     String.intercalate "\n" (head ++
       [s!"  encode v := Zig.Enc.fields {size} [{String.intercalate ", " parts}]",
        s!"  decode bs := do pure \{ {String.intercalate ", " decs} }"])
@@ -265,56 +345,58 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let (signed, bits) := match s.srcTypes[tag]! with | .int sg b => (sg, b) | _ => (false, 0)
     let dec := if exhaustive then
         -- A tag value without a name is not a value of the enum: illegal behaviour.
-        [s!"    match {n}.ofInt? (Zig.val {signed} b) with",
+        [s!"    match {n}.{hn "ofInt?"} (Zig.val {signed} b) with",
          "    | some v => pure v", "    | none => throw .illegal"]
       else ["    pure ⟨b⟩"]
     String.intercalate "\n" (head ++
-      ["  encode v := Zig.Enc.encode v.toBits", "  decode bs := do",
+      [s!"  encode v := Zig.Enc.encode v.{hn "toBits"}", "  decode bs := do",
        s!"    let b : BitVec {bits} ← Zig.Enc.decode bs"] ++ dec)
   | _ => ""
 
 def emitNamedType (structNames : Array (String × String)) (s : NamedType) : String :=
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
+  let fm := memberLookup s.ty (structNames.map (·.2))
+  let hn := helperLookup s.ty (structNames.map (·.2))
   match s.ty with
   | .enum _ tag exhaustive fields =>
     let (signed, bits) := match s.srcTypes[tag]! with | .int sg b => (sg, b) | _ => (false, 0)
     let lo : Int := if signed then -(2 ^ (bits - 1)) else 0
     let hi : Int := if signed then 2 ^ (bits - 1) - 1 else 2 ^ bits - 1
     if exhaustive then
-      let ctors := fields.toList.map fun (f, _) => s!"  | {mangleField f}"
-      let toBits := fields.toList.map fun (f, v) => s!"  | .{mangleField f} => {tagLit bits v}"
+      let ctors := fields.toList.map fun (f, _) => s!"  | {fm f}"
+      let toBits := fields.toList.map fun (f, v) => s!"  | .{fm f} => {tagLit bits v}"
       -- `Option.none`: in the namespace of `{n}`, a field named `none` would be `{n}.none`.
-      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then Option.some .{mangleField f} else {acc}") "Option.none"
+      let ofInt := fields.foldr (fun (f, v) acc => s!"if v = {v} then Option.some .{fm f} else {acc}") "Option.none"
       String.intercalate "\n"
         ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
-          s!"def {n}.toBits : {n} → BitVec {bits}"] ++ toBits ++ ["",
-          s!"def {n}.ofInt? (v : Int) : Option {n} :=", s!"  {ofInt}", "",
-          s!"def {n}.isNamed (_ : {n}) : Bool := true", "",
+          s!"def {n}.{hn "toBits"} : {n} → BitVec {bits}"] ++ toBits ++ ["",
+          s!"def {n}.{hn "ofInt?"} (v : Int) : Option {n} :=", s!"  {ofInt}", "",
+          s!"def {n}.{hn "isNamed"} (_ : {n}) : Bool := true", "",
           -- A field of a packed struct (`ZigLean/Packed.lean`): a tag value without a name is
           -- not `valid`.
-          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits",
-          s!"  ofBits b := ({n}.ofInt? (Zig.val {signed} b)).getD default",
-          s!"  valid b := ({n}.ofInt? (Zig.val {signed} b)).isSome"])
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.{hn "toBits"}",
+          s!"  ofBits b := ({n}.{hn "ofInt?"} (Zig.val {signed} b)).getD default",
+          s!"  valid b := ({n}.{hn "ofInt?"} (Zig.val {signed} b)).isSome"])
     else
-      let named := fields.toList.map fun (f, v) => s!"def {n}.{mangleField f} : {n} := ⟨{tagLit bits v}⟩"
-      let isNamed := String.intercalate " || " (fields.toList.map fun (_, v) => s!"e.bits == {tagLit bits v}")
+      let named := fields.toList.map fun (f, v) => s!"def {n}.{fm f} : {n} := ⟨{tagLit bits v}⟩"
+      let isNamed := String.intercalate " || " (fields.toList.map fun (_, v) => s!"e.{hn "bits"} == {tagLit bits v}")
       String.intercalate "\n"
-        ([s!"structure {n} where", s!"  bits : BitVec {bits}", "  deriving Repr, Inhabited, DecidableEq", ""]
+        ([s!"structure {n} where"] ++ (if hn "mk" == "mk" then [] else [s!"  {hn "mk"} ::"]) ++ [s!"  {hn "bits"} : BitVec {bits}", "  deriving Repr, Inhabited, DecidableEq", ""]
           ++ named ++ ["",
-          s!"def {n}.toBits (e : {n}) : BitVec {bits} := e.bits", "",
-          s!"def {n}.ofInt? (v : Int) : Option {n} :=",
+          s!"def {n}.{hn "toBits"} (e : {n}) : BitVec {bits} := e.{hn "bits"}", "",
+          s!"def {n}.{hn "ofInt?"} (v : Int) : Option {n} :=",
           s!"  if {lo} ≤ v ∧ v ≤ {hi} then Option.some ⟨BitVec.ofInt {bits} v⟩ else Option.none", "",
-          s!"def {n}.isNamed (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}", "",
-          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.toBits", "  ofBits b := ⟨b⟩"])
+          s!"def {n}.{hn "isNamed"} (e : {n}) : Bool := {if isNamed.isEmpty then "false" else isNamed}", "",
+          s!"instance : Zig.Packed {n} {bits} where", s!"  toBits := {n}.{hn "toBits"}", "  ofBits b := ⟨b⟩"])
   | .union _ layout none fields =>
     -- `extern`, `packed`: the bytes; every field at byte 0 (`ZigLean/Union.lean`).
     let size := s.layout.size.getD 0
     let ns := rawUnionNs layout
     let perField := fields.toList.flatMap fun (f, id) =>
       let t := tyStr id
-      ["", s!"def {n}.get_{f} (u : {n}) : Zig.Result ({t}) := {ns}.get ({t}) u.bytes", "",
-       s!"def {n}.modify_{f} (g : {t} → {t}) (u : {n}) : {n} :=",
+      ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {ns}.get ({t}) u.bytes", "",
+       s!"def {n}.{hn s!"modify_{f}"} (g : {t} → {t}) (u : {n}) : {n} :=",
        s!"  ⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"]
     String.intercalate "\n"
       ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
@@ -326,12 +408,12 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
     let ctors := fields.toList.map fun (f, id) =>
-      if isVoid id then s!"  | {mangleField f}" else s!"  | {mangleField f} (v : {tyStr id})"
+      if isVoid id then s!"  | {fm f}" else s!"  | {fm f} (v : {tyStr id})"
     let tagArms := fields.toList.map fun (f, id) =>
-      let pat := if isVoid id then s!".{mangleField f}" else s!".{mangleField f} _"
-      s!"  | {pat} => .{mangleField f}"
+      let pat := if isVoid id then s!".{fm f}" else s!".{fm f} _"
+      s!"  | {pat} => .{fm f}"
     let perField := fields.toList.flatMap fun (f, id) =>
-      let fm := mangleField f
+      let fm := fm f
       let (pat, val, pty) :=
         if isVoid id then (s!".{fm}", "()", "Unit") else (s!".{fm} v", "v", tyStr id)
       -- Another field is active: `f` becomes active, its payload `default` (Zig: undefined).
@@ -339,31 +421,31 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
         if isVoid id then (s!".{fm}", s!".{fm}", s!".{fm}", s!".{fm}", "_g")
         else (s!".{fm} v", s!".{fm} (g v)", s!".{fm} default", s!".{fm} (g default)", "g")
       let multi (l : String) : List String := if fields.size > 1 then [l] else []
-      ["", s!"def {n}.get_{f} : {n} → Zig.Result ({pty})", s!"  | {pat} => pure {val}"] ++ wild ++
-      ["", s!"def {n}.modify_{f} ({g} : {pty} → {pty}) : {n} → {n}", s!"  | {pat} => {apply}"] ++
+      ["", s!"def {n}.{hn s!"get_{f}"} : {n} → Zig.Result ({pty})", s!"  | {pat} => pure {val}"] ++ wild ++
+      ["", s!"def {n}.{hn s!"modify_{f}"} ({g} : {pty} → {pty}) : {n} → {n}", s!"  | {pat} => {apply}"] ++
         multi s!"  | _ => {applyFresh}" ++
-      ["", s!"def {n}.setTag_{f} : {n} → {n}", s!"  | {pat} => {keep}"] ++ multi s!"  | _ => {fresh}"
+      ["", s!"def {n}.{hn s!"setTag_{f}"} : {n} → {n}", s!"  | {pat} => {keep}"] ++ multi s!"  | _ => {fresh}"
     String.intercalate "\n"
       ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
-        s!"def {n}.tag : {n} → {tagName}"] ++ tagArms ++ perField)
+        s!"def {n}.{hn "tag"} : {n} → {tagName}"] ++ tagArms ++ perField)
   | .struct _ layout fields =>
-    let fieldLines := (fields.map fun (fname, fty) => s!"  {mangleField fname} : {tyStr fty}").toList
+    let fieldLines := (fields.map fun (fname, fty) => s!"  {fm fname} : {tyStr fty}").toList
     let decl := [s!"structure {n} where"] ++ fieldLines ++ ["  deriving Repr, Inhabited, DecidableEq"]
     if layout != "packed" then String.intercalate "\n" decl else
     -- `Zig.Packed`: field 0 in the lowest bits (`ZigLean/Packed.lean`).
     let bits := fields.foldl (fun acc (_, t) => acc + (packedBits s.srcTypes t).getD 0) 0
     let offs := (List.range fields.size).map (packedFieldBit s.srcTypes fields)
     let toBits := (fields.toList.zip offs).map fun ((f, _), o) =>
-      s!"((Zig.Packed.toBits v.{mangleField f}).setWidth {bits} <<< {o})"
+      s!"((Zig.Packed.toBits v.{fm f}).setWidth {bits} <<< {o})"
     let ofBits := (fields.toList.zip offs).map fun ((f, _), o) =>
-      s!"{mangleField f} := Zig.Packed.get b {o}"
+      s!"{fm f} := Zig.Packed.get b {o}"
     -- `valid`: the fields that can hold bits that are not a value (an enum, in any depth).
     let valid := (fields.toList.zip offs).filterMap fun ((_, t), o) =>
       if packedHasEnum s.srcTypes t then some s!"Zig.Packed.validAt ({tyStr t}) b {o}" else none
     String.intercalate "\n" (decl ++ ["",
       s!"instance : Zig.Packed {n} {bits} where",
-      s!"  toBits v := {String.intercalate " ||| " toBits}",
-      s!"  ofBits b := \{ {String.intercalate ", " ofBits} }"] ++
+      s!"  toBits {if toBits.isEmpty then "_" else "v"} := {if toBits.isEmpty then "(0 : BitVec 0)" else String.intercalate " ||| " toBits}",
+      s!"  ofBits {if ofBits.isEmpty then "_" else "b"} := \{ {String.intercalate ", " ofBits} }"] ++
       (if valid.isEmpty then [] else [s!"  valid b := {String.intercalate " && " valid}"]))
   | _ => ""
 
@@ -426,7 +508,7 @@ field. -/
 inductive PathStep where
   | field (name : String)
   /-- `union`: the union's Lean name; `name`: the field's Zig name (`FCtx.unionField?`). -/
-  | ufield (union : String) (name : String)
+  | ufield (union : String) (getName modifyName : String)
   deriving Inhabited
 
 structure FCtx where
@@ -472,6 +554,13 @@ structure FCtx where
   /-- The functions whose address the program takes (`fnRefs`), as `(function type name,
   function name, block)`: an indirect call compares its pointer with these blocks. -/
   fnBlocks : Array (String × String × Nat) := #[]
+
+def FCtx.memberLookup (fc : FCtx) (ty : Ty) : String → String :=
+  Air2Lean.memberLookup ty (fc.structNames.map (·.2))
+def FCtx.memberName (fc : FCtx) (ty : Ty) (raw : String) : String :=
+  fc.memberLookup ty raw
+def FCtx.helperName (fc : FCtx) (ty : Ty) (raw : String) : String :=
+  Air2Lean.helperName ty raw (fc.structNames.map (·.2))
 
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
@@ -574,8 +663,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     match fc.tyOfId tid with
     | .enum _ tag _ fields =>
       match fields.find? (·.2 == v) with
-      | some (f, _) => s!"{e}.{mangleField f}"
-      | none => s!"({e}.mk (BitVec.ofInt {fc.tyBits tag} ({v})))"
+      | some (f, _) => s!"{e}.{fc.memberName (fc.tyOfId tid) f}"
+      | none => s!"({e}.{fc.helperName (fc.tyOfId tid) "mk"} (BitVec.ofInt {fc.tyBits tag} ({v})))"
     | _ => "default" -- unreachable: `Json.lean` builds `enumTag` only for an enum type
   | .unionVal tid idx p =>
     let u := fc.emitTyOf tid
@@ -589,8 +678,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     | .union _ _ _ fields =>
       match fields[idx]? with
       | some (f, fty) =>
-        if fc.tyOfId fty == .void then s!"{u}.{mangleField f}"
-        else s!"({u}.{mangleField f} {fc.resolveVal env p})"
+        if fc.tyOfId fty == .void then s!"{u}.{fc.memberName (fc.tyOfId tid) f}"
+        else s!"({u}.{fc.memberName (fc.tyOfId tid) f} {fc.resolveVal env p})"
       | none => "default"
     | _ => "default" -- unreachable: `Json.lean` builds `unionVal` only for a union type
   | .agg tid elems =>
@@ -602,8 +691,9 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     -- A vector has no sentinel (`docs/air-json.md`'s `elems`).
     | .vector len _ => s!"((⟨#v[{items (elems.extract 0 len)}]⟩) : {fc.emitTyOf tid})"
     | .struct _ _ fields =>
+      let fm := fc.memberLookup (fc.tyOfId tid)
       let assigns := (fields.zip elems).toList.map fun ((f, _), e) =>
-        s!"{mangleField f} := {fc.resolveVal env e}"
+        s!"{fm f} := {fc.resolveVal env e}"
       s!"(\{ {", ".intercalate assigns} } : {fc.emitTyOf tid})"
     | .tuple _ => if elems.isEmpty then "()" else s!"({items elems})"
     | _ => "default" -- unreachable: the exporter writes `elems` only for these types
@@ -618,16 +708,23 @@ def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   | _ => (false, "panic! \"air2lean: indirect calls are outside the subset\"")
 
 
-/-- The field name to project for `struct_field_val s index`: `s`'s own field name if `s` is a
-struct, else a positional `1`/`2` (for example the pair `@addWithOverflow` returns). -/
+/-- A right-associated tuple projection, empty for the single-field representation. -/
+def tupleProjection (size index : Nat) : String :=
+  String.join (List.replicate index ".2") ++ (if index + 1 < size then ".1" else "")
+
+/-- The projection suffix for `struct_field_val s index`. -/
 def FCtx.structFieldName (fc : FCtx) (s : Val) (index : Nat) : String :=
   match fc.valTy s with
-  | .struct _ _ fields => (fields[index]?).map (fun (n, _) => mangleField n) |>.getD s!"fld{index}"
-  | _ => if index == 0 then "1" else "2"
+  | .struct _ _ fields =>
+    "." ++ ((fields[index]?).map (fun (n, _) => fc.memberName (fc.valTy s) n) |>.getD s!"fld{index}")
+  | .tuple fields => tupleProjection fields.size index
+  | _ => if index == 0 then ".1" else ".2"
 
-def FCtx.structFieldNamesFor (_fc : FCtx) (ty : Ty) : Array String :=
+def FCtx.structFieldNamesFor (fc : FCtx) (ty : Ty) : Array String :=
   match ty with
-  | .struct _ _ fields => fields.map (fun (n, _) => mangleField n)
+  | .struct _ _ fields =>
+    let fm := fc.memberLookup ty
+    fields.map (fun (n, _) => fm n)
   | _ => #[]
 
 /-- The Lean type of `v`. -/
@@ -642,12 +739,12 @@ def FCtx.enumIntCast (fc : FCtx) (a : Val) (dstId : TyId) (av : String) : String
   let dst := fc.tyOfId dstId
   match fc.valTy a, dst with
   | .enum _ tag _ _, .enum .. =>
-    s!"Zig.enumOf ({fc.emitTyOf dstId}.ofInt? (Zig.val {fc.tySigned tag} ({fc.emitValTy a}.toBits {av})))"
+    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.tySigned tag} ({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {av})))"
   | _, .enum .. =>
     -- An unnamed value of an exhaustive enum: `invalidEnumValue` (`.panic`).
-    s!"Zig.enumOf ({fc.emitTyOf dstId}.ofInt? (Zig.val {fc.valSigned a} {av}))"
+    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.valSigned a} {av}))"
   | .enum _ tag _ _, _ =>
-    let bits := s!"({fc.emitValTy a}.toBits {av})"
+    let bits := s!"({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {av})"
     if fc.tyOfId tag == dst then s!"pure {bits}"
     else s!"Zig.intCast {fc.tySigned tag} {fc.tySigned dstId} {fc.tyBits dstId} {bits}"
   | _, _ => s!"Zig.intCast {fc.valSigned a} {fc.tySigned dstId} {fc.tyBits dstId} {av}"
@@ -698,10 +795,10 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
         let base := fc.pointee b
         let step := match base with
           | .struct _ _ fields =>
-            PathStep.field ((fields[idx]?).map (mangleField ·.1) |>.getD s!"fld{idx}")
+            PathStep.field ((fields[idx]?).map (fc.memberName base ·.1) |>.getD s!"fld{idx}")
           | .union .. =>
             match fc.unionField? base idx with
-            | some (u, f, _) => .ufield u f
+            | some (u, f, _) => .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}")
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
         acc.push (i.id, root, path.push step)
@@ -712,7 +809,8 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
       | none => acc
     | .bitcast (.inst b) =>
       match acc.find? (·.1 == b) with
-      | some (_, root, path) => acc.push (i.id, root, path)
+      | some (_, root, path) =>
+        if samePointee fc.types (fc.instTyId b) i.ty then acc.push (i.id, root, path) else acc
       | none => acc
     | _ => acc
 
@@ -754,7 +852,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
     path.foldl (init := s!"(← get).{field}") fun e step =>
       match step with
       | .field f => s!"({e}).{f}"
-      | .ufield u f => s!"(← {fc.callRName} ({u}.get_{f} {e}))"
+      | .ufield u g _ => s!"(← {fc.callRName} ({u}.{g} {e}))"
   | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
@@ -762,10 +860,10 @@ def setPath (path : List PathStep) (new : String → String) (base : String) : S
   match path with
   | [] => new base
   | .field f :: rest => s!"\{ {base} with {f} := {setPath rest new s!"({base}).{f}"} }"
-  | .ufield u f :: rest =>
+  | .ufield u _ m :: rest =>
     let inner := setPath rest new "x"
     let x := if inner == setPath rest new "y" then "_" else "x"
-    s!"({u}.modify_{f} (fun {x} => {inner}) {base})"
+    s!"({u}.{m} (fun {x} => {inner}) {base})"
 
 /-- The statement that replaces the value `old` at a place by `new old`. -/
 def FCtx.modifyPlace (fc : FCtx) (ptr : Val) (new : String → String) : String :=
@@ -944,19 +1042,24 @@ def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
 
 /-- `(allocId, fieldName, childTy)` for every `alloc` in the function: the field name is the
 `dbg_var_ptr`-given name when one names that alloc, else `local<id>`. -/
-def collectAllocs (types : Array Ty) (allInsts : Array Inst) : Array (InstId × String × TyId) :=
+def collectAllocs (types : Array Ty) (allInsts : Array Inst) (reserved : Array String := #[]) : Array (InstId × String × TyId) := Id.run do
   let allocIds := allInsts.filterMap fun i => match i.op with | .alloc => some i.id | _ => none
   let names := allInsts.filterMap fun i => match i.op with
     | .dbg (some nm) (some (.inst aid)) => if allocIds.contains aid then some (aid, nm) else none
     | _ => none
-  allocIds.map fun aid =>
-    let nm := (names.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
+  let mut used := typeCoreNames.push "mk" ++ runtimeNames ++ reserved
+  let mut out := #[]
+  for aid in allocIds do
+    let raw := (names.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
+    let nm := freshName raw used
+    used := used.push nm
     let childTy := match allInsts.find? (·.id == aid) with
       | some i => match types[i.ty]! with
         | .ptr _ _ child => child
         | _ => i.ty
       | none => 0
-    (aid, nm, childTy)
+    out := out.push (aid, nm, childTy)
+  return out
 
 /-- An escaping `alloc`'s field holds the pointer to its stack block. `mem`: the function uses
 memory. -/
@@ -1055,7 +1158,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .alloc => #[]
   | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
   | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
-  | .setUnionTag .. => #[]
+  | .setUnionTag p tag => if fc.isMemPtr p then #[p, tag] else #[]
   | .retLoad p | .load p => if fc.isMemPtr p then #[p] else #[]
   | .isNullPtr _ p | .optPayloadPtr _ p | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p => #[p]
   | .store p v => (if fc.isMemPtr p then #[p] else #[]) ++ #[v]
@@ -1071,7 +1174,10 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sliceElemVal s i => #[s, i]
   | .structFieldVal s _ => #[s]
   | .aggregateInit elems => elems
-  | .call callee args => match callee with | .func _ true .. => #[] | _ => args
+  | .call callee args => match callee with
+    | .func _ true .. => #[]
+    | .inst _ => #[callee] ++ args
+    | _ => args
   | .block _ => #[]
   | .loop _ => #[]
   | .br target v => match fc.targetTy target with | .void => #[] | _ => #[v]
@@ -1517,7 +1623,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a} {rv b} {rv c}"; (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty
-    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.conv {fmt} {rv a})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"Zig.Float.conv{fc.rtSuffix}Chk {fmt} {rv a}"
+    (env, some l)
   | .floatFromInt a =>
     let fmt := fc.floatFmtTerm inst.ty
     let sgn := if fc.valSigned a then "true" else "false"
@@ -1575,18 +1682,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let ety := fc.emitTyOf inst.ty
     let (env, l) := bindLet fc env inst.id s!"pure ((.error {rv a}) : {ety})"; (env, some l)
   | .isNamedEnum a =>
-    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.isNamed {rv a})"
+    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.{fc.helperName (fc.valTy a) "isNamed"} {rv a})"
     (env, some l)
   | .unionTag a =>
-    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.tag {rv a})"
+    let (env, l) := bindLet fc env inst.id s!"pure ({fc.emitValTy a}.{fc.helperName (fc.valTy a) "tag"} {rv a})"
     (env, some l)
   | .unionInit idx a =>
     let expr := match fc.tyOfId inst.ty, fc.unionField? (fc.tyOfId inst.ty) idx with
       | .union _ layout none fields, some (u, _, _) =>
         let t := ((fields[idx]?).map fun (_, fty) => fc.emitTyOf fty).getD "Unit"
         s!"pure {rawUnionInit u layout ((fc.layouts[inst.ty]?.bind (·.size)).getD 0) (rv a) t}"
-      | _, some (u, f, true) => s!"pure {u}.{mangleField f}"
-      | _, some (u, f, false) => s!"pure ({u}.{mangleField f} {rv a})"
+      | _, some (u, f, true) => s!"pure {u}.{fc.memberName (fc.tyOfId inst.ty) f}"
+      | _, some (u, f, false) => s!"pure ({u}.{fc.memberName (fc.tyOfId inst.ty) f} {rv a})"
       | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .alloc =>
@@ -1611,6 +1718,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
+    -- Old AIR retains a vestigial tag write for an extern or packed union with no tag.
+    if let .union _ _ none _ := fc.pointeeOf ptr then (env, none) else
     if fc.isMemPtr ptr then
       -- Write the tag; the payload bytes stay (Zig).
       match fc.pointeeOf ptr with
@@ -1622,7 +1731,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
     else
     match fc.unionFieldOfTag? (fc.pointeeOf ptr) tag with
-    | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.setTag_{f} {old})"))
+    | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.{fc.helperName (fc.pointeeOf ptr) s!"setTag_{f}"} {old})"))
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
   | .load ptr =>
     if fc.isMemPtr ptr then
@@ -1717,17 +1826,17 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let size := fc.sizeOf (fc.itemTyId dst)
     (env, some s!"{fc.callMName} (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
   | .tagName a =>
-    let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.tagName {rv a}")
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.{fc.helperName (fc.valTy a) "tagName"} {rv a}")
     (env, some l)
   | .errorName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"errorNameOf {rv a}"); (env, some l)
   | .structFieldVal s index =>
     match fc.unionField? (fc.valTy s) index with
     | some (u, f, _) =>
-      let (env, l) := bindLet fc env inst.id (fc.liftR s!"{u}.get_{f} {rv s}"); (env, some l)
+      let (env, l) := bindLet fc env inst.id (fc.liftR s!"{u}.{fc.helperName (fc.valTy s) s!"get_{f}"} {rv s}"); (env, some l)
     | none =>
       let fname := fc.structFieldName s index
-      let (env, l) := bindLet fc env inst.id s!"pure (({rv s}).{fname})"; (env, some l)
+      let (env, l) := bindLet fc env inst.id s!"pure (({rv s}){fname})"; (env, some l)
   | .aggregateInit elems =>
     match fc.tyOfId inst.ty with
     | .array .. =>
@@ -1805,7 +1914,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let t := s!"a{inst.id}"
       let n := outputs.size
       let proj (k : Nat) : String :=
-        t ++ String.join (List.replicate k ".2") ++ (if k + 1 < n then ".1" else "")
+        t ++ tupleProjection n k
       let (env, lines) := outputs.toList.zipIdx.foldl (init := (env, [s!"let {t} := {call}"]))
         fun (env, ls) (o, k) => match o.ref with
           | none =>
@@ -1970,11 +2079,12 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     | .enum _ _ true fields =>
       -- Every name has a case: a `match` with one arm per case, no `else` arm (it is the
       -- `corruptSwitch` panic, which a valid enum value never reaches).
+      let fm := fc.memberLookup (fc.valTy v)
       let caseNames := cases.map fun c => c.items.filterMap fun it => match it with
-        | .enumTag _ tv => (fields.find? (·.2 == tv)).map (mangleField ·.1)
+        | .enumTag _ tv => (fields.find? (·.2 == tv)).map (fm ·.1)
         | _ => none
       let covered := caseNames.flatten
-      if cases.all (·.ranges.isEmpty) && fields.all (fun (f, _) => covered.contains (mangleField f)) &&
+      if cases.all (·.ranges.isEmpty) && fields.all (fun (f, _) => covered.contains (fm f)) &&
           (cases.zip caseNames).all (fun (c, ns) => c.items.size == ns.size) then
         let arms := (cases.zip caseNames).toList.map fun (c, ns) =>
           let pats := String.intercalate " | " (ns.toList.map (s!".{·}"))
@@ -2088,13 +2198,13 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   -- `«at»` (a keyword) gives `atLocals`.
-  let plain := ((leanName.dropPrefix "«").dropSuffix "»").toString
-  let allocs := collectAllocs f.types allInsts
+  let plain := plainName leanName
+  let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
   let fc : FCtx :=
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
-      allInsts, retTy := f.ret, fnName := leanName, localsName := s!"{plain}Locals",
-      exitName := s!"{plain}Exit", floatSemantics, zigVersion := f.zigVersion, places := #[],
+      allInsts, retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
+      exitName := mangleField s!"{plain}Exit", floatSemantics, zigVersion := f.zigVersion, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds }
@@ -2107,7 +2217,7 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
   let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
-  let allocs := collectAllocs f.types allInsts
+  let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
   let blTys := fc.blockTys
   let brT := brTargets allInsts
   let repT := repTargets allInsts
@@ -2196,9 +2306,11 @@ def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
   for f in funcs do
     let insts := f.allInsts
     for i in insts do
-      if let .tagName (.inst a) := i.op then
-        let some ai := insts.find? (·.id == a) | continue
-        if let some (.enum name tag exhaustive fields) := f.types[ai.ty]? then
+      if let .tagName a := i.op then
+        let tid : Option TyId := match a with
+          | .inst id => (insts.find? (fun (j : Inst) => j.id == id)).map Inst.ty
+          | v => v.constTy?
+        if let some (.enum name tag exhaustive fields) := tid.bind (f.types[·]?) then
           if !out.any (·.1 == name) then
             let lean := (structNames.find? (·.1 == name)).map (·.2) |>.getD name
             let bits := match f.types[tag]? with | some (.int _ b) => b | _ => 0
@@ -2239,16 +2351,19 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
-    (first : Nat) : String :=
+    (first : Nat) (reserved : Array String := #[]) : String :=
+  let ty := Ty.enum "" 0 exhaustive fields
+  let fm := memberLookup ty reserved
+  let hn := helperLookup ty reserved
   let slice (k : Nat) (f : String) := s!"⟨⟨some {first + k}, 0⟩, {f.toUTF8.size}⟩"
-  let head := s!"def {lean}.tagName (e : {lean}) : Zig.Result Zig.Slice :="
+  let head := s!"def {lean}.{hn "tagName"} (e : {lean}) : Zig.Result Zig.Slice :="
   if exhaustive then
-    let arms := fields.toList.zipIdx.map fun ((f, _), k) => s!"  | .{mangleField f} => pure {slice k f}"
+    let arms := fields.toList.zipIdx.map fun ((f, _), k) => s!"  | .{fm f} => pure {slice k f}"
     String.intercalate "\n" ([head, "  match e with"] ++ arms)
   else
     -- A value without a name has no tag name: the AIR checks `is_named_enum_value` before.
     let arms := fields.toList.zipIdx.map fun ((f, v), k) =>
-      s!"  if e.toBits == {tagLit bits v} then pure {slice k f} else"
+      s!"  if e.{hn "toBits"} == {tagLit bits v} then pure {slice k f} else"
     String.intercalate "\n" ([head] ++ arms ++ ["  throw .panic"])
 
 /-! ## Call graph / emission order -/
@@ -2325,45 +2440,94 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 type `Tgt`, one constructor per spawned function with its one argument, and `dispatch`, which
 runs a target. `targets`: (Lean name, argument type, kind: 2 concurrent, 1 memory, 0 pure). A
 target's result is discarded (Zig's `Thread.spawn` discards it too). -/
-def emitTgt (_structNames : Array (String × String)) (targets : Array (String × String × Nat)) :
+def emitTgt (_structNames : Array (String × String))
+    (targets : Array (String × String × Nat × Option (String × Nat))) :
     List String × List String :=
-  let ctors := targets.toList.map fun (n, a, _) => s!"  | {n} (a : {a})"
+  let ctors := targets.toList.map fun (n, a, _, _) => s!"  | {n} (a : {a})"
   let tgt := String.intercalate "\n" (["/-- The spawn targets of the program. -/",
     "inductive Tgt where"] ++ ctors)
-  let arms := targets.toList.map fun (n, _, k) =>
-    let call := match k with
-      | 2 => s!"{n} a"
-      | 1 => s!"Zig.ConcM.liftMem ({n} a)"
-      | _ => s!"Zig.ConcM.liftMem (StateT.lift ({n} a))"
+  let arms := targets.toList.map fun (n, _, k, adapter) =>
+    let call := match k, adapter with
+      | 2, _ => s!"{n} a"
+      | 1, _ => s!"Zig.ConcM.liftMem ({n} a)"
+      | _, none => s!"Zig.ConcM.liftMem (StateT.lift ({n} a))"
+      | _, some (item, align) => s!"Zig.ConcM.liftMem (do\n\
+          let items ← Zig.readSlice ({item}) {align} a\n\
+          StateT.lift ({n} items))"
     s!"  | .{n} a => discard ({call})"
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   ([tgt], [dispatch])
 
+/-- Allocate source declarations together with their generated names. The unambiguous
+historical spelling stays unchanged; a collision gets a stable suffix. -/
+def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ : String)
+    (fixed : Array String) : Array NamedType × Array (String × String) := Id.run do
+  let preferred := structs.map (·.leanName) ++ funcs.map (mangleName prefix_ ·.name)
+  let mut used := fixed
+  let mut named := #[]
+  for s in structs do
+    let base := plainName s.leanName
+    -- Lean's anonymous instances capitalize the final type-name component.
+    let occupied (name : String) : Array String :=
+      #[name] ++ #["Repr", "Inhabited", "DecidableEq", "Enc", "Packed"].map
+        (fun cls => mangleField s!"inst{cls}{(plainName name).capitalize}")
+    let mut k := 0
+    let mut name := mangleField base
+    while (occupied name).any used.contains ||
+        (k != 0 && (occupied name).any preferred.contains) do
+      k := k + 1
+      name := mangleField s!"{base}_air2lean{k}"
+    used := used ++ occupied name
+    named := named.push { s with leanName := name }
+  let targets := (spawnTargets funcs).map (·.1)
+  let mut names := #[]
+  for f in funcs do
+    let base := plainName (mangleName prefix_ f.name)
+    let occupied (name : String) : Array String :=
+      let locals := s!"{plainName name}Locals"
+      #[name, mangleField locals, mangleField s!"{plainName name}Exit",
+        mangleField s!"instInhabited{locals.capitalize}"]
+    let mut k := 0
+    let mut name := mangleField base
+    while (occupied name).any used.contains ||
+        (targets.contains f.name && typeCoreNames.contains name) ||
+        (k != 0 && (occupied name).any preferred.contains) do
+      k := k + 1
+      name := mangleField s!"{base}_air2lean{k}"
+    used := used ++ occupied name
+    names := names.push (f.name, name)
+  return (named, names)
+
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
 `--float-semantics` (default `ieee`). -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) : String :=
-  let structs := collectNamed funcs prefix_
-  let structNames := structs.map fun s => (s.zigName, s.leanName)
-  let funcNames := funcs.map fun f => (f.name, mangleName prefix_ f.name)
   let memFuncs := memoryFunctions funcs
   let concFuncs := concFunctions funcs
+  let asmDefs := collectAsmOps funcs
+  let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
+  let fixed := runtimeNames ++
+    (if memFuncs.isEmpty then #[] else #["mem0"]) ++
+    (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
+    (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
+  let (structs, funcNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+  let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
-  let asmStr := (collectAsmOps funcs).toList.map emitAsmDef
+  let asmStr := asmDefs.toList.map emitAsmDef
   let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
     fun (gs, defs) (_, lean, fields, exhaustive, bits) =>
-      let d := emitTagName lean fields exhaustive bits gs.size
+      let d := emitTagName lean fields exhaustive bits gs.size (structNames.map (·.2))
       let gs := fields.foldl (fun gs (f, _) =>
         gs.push { label := s!"the name of {lean}.{f}", bytes := nameBytes f, align := 1 }) gs
       (gs, defs.push d)
   let errNames := errorNames funcs
-  let errDefs := if errNames.isEmpty then [] else [emitErrorNameOf errNames globals.size]
+  let errDefs := if hasErrorName then [emitErrorNameOf errNames globals.size] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
@@ -2385,8 +2549,15 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
   let targets := spawnTargets funcs
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
-    emitTgt structNames (targets.map fun (nm, f, a) => (leanOf nm, emitTy structNames f.types f.types[a]!,
-      if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0))
+    emitTgt structNames (targets.map fun (nm, f, a) =>
+      let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
+      let adapter := if kind != 0 then none else match f.types[a]! with
+        | .ptr "slice" true child =>
+          some (emitTy structNames f.types f.types[child]!,
+            Nat.min ((f.layouts[a]?.bind (·.ptrAlign)).getD 1)
+              ((f.layouts[child]?.bind (·.align)).getD 1))
+        | _ => none
+      (leanOf nm, emitTy structNames f.types f.types[a]!, kind, adapter))
   String.intercalate "\n\n"
     (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"])

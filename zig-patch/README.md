@@ -11,6 +11,10 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   function body is analysed. The only per-version file of the exporter.
 - `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
+New dumps include `target_endian` (`little` or `big`) in schema 11. The translator rejects
+explicitly non-little-endian dumps; older dumps without this optional field assume little
+endian. Memory layout checks also enforce the model's 64-bit ABI.
+
 ## Env vars
 - `ZIG_AIR_JSON_DIR` — output directory. Unset disables the exporter.
 - `ZIG_AIR_JSON_FILTER=<prefix>` — dump only functions whose fqn starts with it.
@@ -28,6 +32,8 @@ applies `<version>/hook.patch`, builds with
 (no `-Dno-lib`) so the built `zig` needs no `--zig-lib-dir`. Needs a host `zig`
 of the same version on `PATH`: `Compat` selects its branch by that version. `AIR2LEAN_OPTIMIZE` / `AIR2LEAN_CACHE` override
 the optimize mode and download cache dir.
+Concurrent builds download into separate temporary files and publish only verified tarballs.
+An invalid existing cache entry is reported with its path; remove it before retrying.
 
 ### With or without LLVM
 
@@ -41,6 +47,10 @@ the optimize mode and download cache dir.
 `AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.
 
 Why the lock: without LLVM, the compiler makes native code with Zig's own backends. On aarch64-macos that backend crashes at once (SIGBUS), also for a hello world, and each crash made macOS's crash reporter use tens of GB of memory. Build and run programs (for example `tests/diff/gen_inputs.zig`) with a stock `zig`.
+
+The lock rejects response-file arguments (`@file`) and every explicit `-femit-bin` override.
+For allowed compilation commands it inserts `-fno-emit-bin` immediately after the command,
+where Zig parses it as an option even when another flag-looking argument is an option value.
 
 ## Porting to a new Zig version
 See PLAN.md §Zig version support.

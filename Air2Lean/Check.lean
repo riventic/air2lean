@@ -26,7 +26,7 @@ namespace Air2Lean
 /-- Is `c` a register constraint (`docs/generated-code.md` §asm)? Register class letter `r`, or a
 named register in braces — either alone or with a leading `=` (write-only) marker. -/
 def isRegisterConstraint (c : String) : Bool :=
-  let body := if c.startsWith "=" then c.drop 1 else c
+  let body := if c.startsWith "=&" then c.drop 2 else if c.startsWith "=" then c.drop 1 else c
   body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
 
 /-- Is `c` a matching constraint on an input, tying it to output operand `k < outputs` — the
@@ -63,6 +63,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
       throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
         integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
+    if l.hostSize != 0 then
+      if let some bits := packedBits types child then
+        if l.bitOffset + bits > 8 * l.hostSize then
+          throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
     match size with
     -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`
@@ -143,8 +147,10 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
     match types[c]? with
-    | some (.int ..) | some (.float _) =>
+    | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c
+      unless bits != 0 && bits == 8 * s do
+        throw "a vector in memory with non-byte-width or ABI-padded lanes is outside the subset"
       pure (Zig.vecLayout len s, Zig.vecLayout len s)
     | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
     | _ => throw "a vector of a type other than an integer, a float or `bool`"
@@ -280,6 +286,7 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
       if cx.types[e]? == some .bool then
         cx.fail line "a pointer to a lane of a `bool` vector is outside the subset (the lane is a \
           bit, and the AIR file has no lane index)"
+      checkMemTy cx.fnName cx.types cx.layouts line c
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
   checkMemTy cx.fnName cx.types cx.layouts line e
@@ -380,8 +387,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     checkMemTy fnName cx.types cx.layouts line parent
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
-  | .ptrAdd _ _ _ | .elemPtr _ _ =>
+  | .ptrAdd _ p _ | .elemPtr p _ =>
     -- The result is a pointer to an item: its child is the item type.
+    if let some pty := cx.valTy? p then
+      if let some (.ptr "one" _ c) := cx.types[pty]? then
+        if let some (.vector ..) := cx.types[c]? then
+          cx.itemAccess line p
     cx.knownSize line (ptrChild cx.types ty).get!
     pure line
   | .memcpy dst src =>
@@ -447,7 +458,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     if (outputs.filter (·.ref.isNone)).size > 1 then
       cx.fail line "an asm expression with two result outputs (malformed input in the AIR file)"
     for i in inputs do
-      if !(isRegisterConstraint i.constraint ||
+      if !((!i.constraint.startsWith "=" && isRegisterConstraint i.constraint) ||
           isMatchingConstraint outputs.size i.constraint) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
           register or matching constraint (M21)"
@@ -623,8 +634,16 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
       for i in insts do
         let items := match i.op with
           | .sliceElemVal s _ => (sliceItem s).toArray
-          | .call (.func callee ..) args =>
-            if mem.contains callee then #[] else args.filterMap sliceItem
+          | .call (.func callee _ spawnFn) args =>
+            if let some k := (threadFn? callee).bind (·.spawnArgs?) then
+              if (spawnFn.map mem.contains).getD true then #[] else
+              let child := ((args[k]? : Option Val).bind tyOf).bind fun t =>
+                match f.types[t]? with
+                | some (.tuple fields) => fields[0]?
+                | _ => none
+              ((child.bind (f.types[·]?)).bind fun t => match t with
+                | .ptr "slice" _ c => some c | _ => none).toArray
+            else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
           checkMemTy f.name f.types f.layouts 0 c

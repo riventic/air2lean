@@ -75,7 +75,7 @@
      "name": "q"
     },
     {
-     "constraint": "={edx}",
+     "constraint": "=&{edx}",
      "name": "r",
      "ref": {
       "inst": 3

@@ -81,6 +81,7 @@ pub fn waitGroup() !u32 {
     var s: Tally = .{};
     s.wg.startMany(2);
     const t1 = try Thread.spawn(.{}, task, .{&s});
+    errdefer t1.join();
     const t2 = try Thread.spawn(.{}, task, .{&s});
     s.wg.wait();
     const n = s.n;

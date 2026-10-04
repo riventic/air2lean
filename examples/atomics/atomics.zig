@@ -66,6 +66,7 @@ pub fn sbRelaxed() !u32 {
     var c1: SbCtx = .{ .mine = &x, .other = &y, .out = &r1 };
     var c2: SbCtx = .{ .mine = &y, .other = &x, .out = &r2 };
     const h1 = try Thread.spawn(.{}, sb, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, sb, .{&c2});
     h1.join();
     h2.join();
@@ -90,6 +91,7 @@ pub fn twoPlusTwoW() !u32 {
     var c1: WwCtx = .{ .a = &x, .b = &y };
     var c2: WwCtx = .{ .a = &y, .b = &x };
     const h1 = try Thread.spawn(.{}, ww, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, ww, .{&c2});
     h1.join();
     h2.join();
@@ -123,6 +125,7 @@ pub fn stackPush() !u32 {
     var c1: PushCtx = .{ .s = &s, .node = 1 };
     var c2: PushCtx = .{ .s = &s, .node = 2 };
     const h1 = try Thread.spawn(.{}, push, .{&c1});
+    errdefer h1.join();
     const h2 = try Thread.spawn(.{}, push, .{&c2});
     h1.join();
     h2.join();

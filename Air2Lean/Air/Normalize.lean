@@ -324,7 +324,7 @@ def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
-  let raw := Raw.canonicalize raw
+  let raw ← Raw.canonicalize raw
   unless supportedVersions.contains raw.zigVersion do
     throw s!"{raw.name}: unsupported zig_version '{raw.zigVersion}' (supported: \
       {String.intercalate ", " supportedVersions})"
