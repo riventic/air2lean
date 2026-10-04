@@ -143,6 +143,20 @@ class Outcomes(unittest.TestCase):
         kind,_=REPORT.observation(metadata,REPORT.wire('{"ok":{"x":1.0}}'),'native')
         self.assertEqual(kind,K.VALUE)
 
+    def test_native_regression_checker_rejects_lost_prefix_and_false_panic(self):
+        spec=importlib.util.spec_from_file_location('native_check',ROOT/'tests/roadmap/outcome-accounting/test_native.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        directory=self.root/'tests/diff/out/zig/outcome-accounting';directory.mkdir(parents=True)
+        def records(name,values):
+            (directory/name).write_text(''.join(json.dumps(v,separators=(',',':'))+'\n' for v in values))
+        prefix=[{'schema':1,'kind':'value','legacy':{'ok':7}},{'schema':1,'kind':'input_failure'}]
+        records('prefix.jsonl',[{'ok':7}]);records('prefix.jsonl.outcomes',prefix[1:])
+        with self.assertRaisesRegex(AssertionError,'prefix or failure row lost'):module.verify(self.root)
+        records('prefix.jsonl.outcomes',prefix)
+        records('renderer.jsonl',[{'fail':'harnessRenderFailure'}])
+        records('renderer.jsonl.outcomes',[{'schema':1,'kind':'native_panic','legacy':{'fail':'harnessRenderFailure'}}])
+        with self.assertRaisesRegex(AssertionError,'semantic mismatch'):module.verify(self.root)
+
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})
         code,data=self.compare()

@@ -48,3 +48,16 @@ After a real `scripts/diff.sh` build, the package checks are:
 ```
 
 Run the real differential gate with explicit matching `AIR2LEAN_ZIG`, exporter version and eligible example selection. Retain its report outside build caches. Run selected differential mutations with `AIR2LEAN_MUTATION_REPORT_DIR` after reconciling the later accepted mutation repairs; baseline or setup failures are failures of qualification, not mutation detections. Native version matrices and cross-host validation remain necessary before claiming those scopes passed.
+
+## Native producer boundary regressions
+
+`Native.zig` plus `test_native.py` exercise the buffered valid-row prefix before malformed input, post-call renderer allocation failure, mutation ineligibility and the unchanged tested-source panic category. The renderer fixture passes a zero-capacity fixed-buffer allocator only to result rendering; it does not alter the tested function's allocator or allocate large amounts of memory. The native fixture has not been executed by this implementation agent. Root's serialized queue should compile and run it for each claimed native harness version:
+
+```sh
+"$AIR2LEAN_ZIG" build-exe -OReleaseSafe -lc --dep common \
+  -Mroot=tests/roadmap/outcome-accounting/Native.zig \
+  -Mcommon=tests/diff/common.zig -femit-bin="$NATIVE_FIXTURE_BINARY"
+python3 tests/roadmap/outcome-accounting/test_native.py "$NATIVE_FIXTURE_BINARY"
+```
+
+The Python wrapper executes only the supplied precompiled binary in a temporary directory with a five-second timeout. It verifies the second metadata record is the malformed-input failure, runs real native renderer evidence through report accounting, requires zero mutation eligibility, and checks the tested function's panic still has the native-panic tag. Offline tests check that this verifier rejects a lost metadata prefix and a renderer failure mislabeled as a panic.

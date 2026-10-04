@@ -385,6 +385,19 @@ pub fn forkCallBufs(
     quote_wide: bool,
     bufs: ?[]const Buf,
 ) !Outcome {
+    return forkCallBufsWithRenderingAllocator(Args, args, func, quote_wide, bufs, out_gpa);
+}
+
+/// Test-runner injection point for the post-call renderer only. The tested function,
+/// its allocator arguments and the parent's result storage are unchanged.
+pub fn forkCallBufsWithRenderingAllocator(
+    comptime Args: type,
+    args: Args,
+    comptime func: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+    rendering_allocator: std.mem.Allocator,
+) !Outcome {
     const fds = try compat.pipe();
     const pid = try compat.fork();
     if (pid == 0) {
@@ -397,22 +410,22 @@ pub fn forkCallBufs(
         compat.silenceStderr();
 
         const raw = @call(.auto, func, args);
-        var aw: std.Io.Writer.Allocating = .init(out_gpa);
+        var aw: std.Io.Writer.Allocating = .init(rendering_allocator);
         // One typed byte on the private pipe; it is removed from the legacy JSON payload.
-        aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V') catch unreachable;
+        aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V') catch reportHarnessFailure("harnessRenderFailure");
         render_bufs = bufs orelse &.{};
-        renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch unreachable;
+        renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch reportHarnessFailure("harnessRenderFailure");
         if (bufs) |bs| {
-            aw.writer.writeAll(",\"bufs\":[") catch unreachable;
+            aw.writer.writeAll(",\"bufs\":[") catch reportHarnessFailure("harnessRenderFailure");
             for (bs, 0..) |b, i| {
-                if (i > 0) aw.writer.writeAll(",") catch unreachable;
-                aw.writer.writeAll("\"") catch unreachable;
-                for (b) |byte| aw.writer.print("{x:0>2}", .{byte}) catch unreachable;
-                aw.writer.writeAll("\"") catch unreachable;
+                if (i > 0) aw.writer.writeAll(",") catch reportHarnessFailure("harnessRenderFailure");
+                aw.writer.writeAll("\"") catch reportHarnessFailure("harnessRenderFailure");
+                for (b) |byte| aw.writer.print("{x:0>2}", .{byte}) catch reportHarnessFailure("harnessRenderFailure");
+                aw.writer.writeAll("\"") catch reportHarnessFailure("harnessRenderFailure");
             }
-            aw.writer.writeAll("]") catch unreachable;
+            aw.writer.writeAll("]") catch reportHarnessFailure("harnessRenderFailure");
         }
-        if (test_alloc) |ta| aw.writer.print(",\"live\":{d}", .{ta.live.items.len}) catch unreachable;
+        if (test_alloc) |ta| aw.writer.print(",\"live\":{d}", .{ta.live.items.len}) catch reportHarnessFailure("harnessRenderFailure");
         writeAll(fds[1], aw.written());
         compat.exit(0);
     }
@@ -509,14 +522,15 @@ fn forEachValue(
     const writer = out_file.writer();
     var metadata_file = try compat.OutFile.open(out_path ++ ".outcomes");
     defer metadata_file.close();
-    metadata_writer = metadata_file.writer();
+    const metadata = metadata_file.writer();
+    metadata_writer = metadata;
     defer metadata_writer = null;
 
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         var parsed = std.json.parseFromSlice(std.json.Value, gpa, line, .{}) catch |err| {
-            try metadata_file.writer().writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
+            try metadata.writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
             return err;
         };
         defer parsed.deinit();
