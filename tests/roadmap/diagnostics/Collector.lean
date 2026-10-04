@@ -117,7 +117,9 @@ private def collectorChecks : IO Unit := do
   require (retained.items.all (fun d => d.message.length ≤ 2048 && d.messageTruncated)) "truncate before retaining diagnostic messages"
   require (retained.items[0]?.map (fun d => (d.toJson.getObjValAs? Bool "message_truncated").toOption) == some (some true))
     "JSON must preserve the original truncation flag after retaining a short message"
-  require (retained.payloadBytes == retained.items[0]!.toJson.compress.utf8ByteSize && retained.failed)
+  let some retainedDiagnostic := retained.items[0]?
+    | throw (IO.userError "bounded log unexpectedly dropped its single retained diagnostic")
+  require (retained.payloadBytes == retainedDiagnostic.toJson.compress.utf8ByteSize && retained.failed)
     "payload accounting must use retained serialized diagnostics"
   let longType := { malformedType with types := malformedType.types.set! 4 (.other huge) }
   let longErrors := collectFunctionChecks "large.json" longType {}
