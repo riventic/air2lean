@@ -133,5 +133,43 @@ for i, name in enumerate(names):
         (self.fixture / "filter").unlink()
         self.check(False, expected="filter")
 
+class ProofTrustScan(unittest.TestCase):
+    """Run the real shell scan before the absent translator; no compiler is started."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.fixture = self.root / "tests/roadmap/thread-tuples"
+        (self.fixture / "ThreadTuples").mkdir(parents=True)
+        shutil.copyfile(ROOT / "check.sh", self.fixture / "check.sh")
+        # Isolate the source scan from unrelated AIR/provenance checks.
+        (self.fixture / "check-artifacts.py").write_text("pass\n")
+        self.proof = self.fixture / "ThreadTuples/Proofs.lean"
+
+    def check(self, expected):
+        result = subprocess.run(["bash", str(self.fixture / "check.sh"), "--check-artifacts"],
+            capture_output=True, text=True, env=dict(os.environ, AIR2LEAN_TRANSLATOR=str(self.root / "absent-translator")))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(expected, result.stdout + result.stderr)
+
+    def test_clean_source_reaches_translator_check(self):
+        self.proof.write_text("theorem clean : True := by trivial\n-- axiomatic sorry_name admit_ native_decideX\n")
+        self.check("build the translator first")
+
+    def test_each_forbidden_word_rejected(self):
+        for word in ("sorry", "admit", "native_decide", "axiom"):
+            with self.subTest(word=word):
+                # The original scan also rejected forbidden words in comments.
+                self.proof.write_text(f"theorem clean : True := by trivial\n-- {word}\n")
+                self.check(f"proof contains an untrusted declaration: {self.proof.relative_to(self.root)}:2:")
+
+    def test_unreadable_sources_rejected(self):
+        self.check("proof scan failed:")  # Missing file.
+        self.proof.mkdir()
+        self.check("proof scan failed:")  # Directory cannot be read as source.
+        self.proof.rmdir()
+        self.proof.write_bytes(b"\xff")
+        self.check("proof scan failed:")  # Invalid UTF-8 must not pass the scan.
+
 if __name__ == "__main__":
     unittest.main()

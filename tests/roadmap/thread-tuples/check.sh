@@ -86,9 +86,20 @@ PYADAPTER
   *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR|--adapter-contract OUTPUT_DIR]' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/thread-tuples/check-artifacts.py
-status=0
-rg -n '\b(sorry|admit|native_decide|axiom)\b' tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean || status=$?
-[ "$status" -eq 1 ] || { echo 'proof scan failed or contains an untrusted declaration' >&2; exit 1; }
+python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean <<'PYPROOF'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+try:
+    source = path.read_text(encoding="utf-8")
+except (OSError, UnicodeError) as error:
+    sys.exit(f"proof scan failed: {path}: {error}")
+for number, line in enumerate(source.splitlines(), 1):
+    if re.search(r"\b(sorry|admit|native_decide|axiom)\b", line):
+        sys.exit(f"proof contains an untrusted declaration: {path}:{number}: {line}")
+PYPROOF
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }
 lean_cmd=(lake env lean)
