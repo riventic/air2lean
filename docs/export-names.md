@@ -85,5 +85,21 @@ The collision run must report `OutputIdentityCollision`; the inspector verifies
 byte preservation and that independent siblings remain present. Distinct cache
 directories force fresh analysis instead of relying on a compiler cache hit.
 The root also runs the existing exporter regressions and fresh profile/golden/proof
-pipeline. Qualification results must be recorded separately; these instructions
-make no claim that compiler or translator qualification has already passed.
+pipeline. The qualification record below distinguishes completed checks from
+pending checks; the commands alone are not qualification evidence.
+
+CI runs `bash scripts/check-export-names.sh` after the existing runtime/translator
+build in each non-mutation Zig 0.14.1, 0.15.2 and 0.16.0 job. It reuses that job's
+guarded patched compiler, requires the explicit collision warning, and checks the
+public translation with a temporary Lean package root. All generated artifacts and
+local/global Zig caches live under a disposable `RUNNER_TEMP` directory; this gate
+adds no uploads and does not update tracked generated files.
+
+Root qualification on 2026-10-05 passed with a freshly rebuilt AIR-only Zig
+0.15.2 exporter: all ten exact public identities and seven hash filenames,
+translation with `abi64-le-v1`, kernel checking of the generated Lean source,
+same-identity re-export, and explicit distinct-identity collision warning with
+byte preservation and retained siblings. The 14 bounded offline filename tests
+and 21 existing profile/golden mock tests also passed. The exact CI helper and
+Zig 0.14.1/0.16.0 qualification remain pending; this evidence covers the public
+filename fixture rather than a source-to-binary correspondence theorem.

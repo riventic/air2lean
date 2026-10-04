@@ -141,6 +141,12 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      - name: Public exporter filename qualification
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+        run: bash scripts/check-export-names.sh
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
