@@ -103,7 +103,7 @@ private def previousGlobalCached (a b : Func) (x y : Nat)
   return some (Std.HashSet.fold (fun (cache : Std.HashSet (Nat × Nat)) pair => cache.insert pair) completed seen)
 
 
-#eval do
+private def validationChecks : IO Unit := do
   let source := mkFunc "caller" #[.int false 32, .void] #[0] 0 #[
     { id := 0, ty := 0, op := .arg 0 },
     { id := 1, ty := 0, op := .call (.func "target" false) #[.inst 0] },
@@ -233,7 +233,7 @@ private def previousGlobalCached (a b : Func) (x y : Nat)
     "short-read boundary was not read to EOF"
   let (growingRead, growthRequests) ← readChunks "abcde"
   let exceeded ← try
-    let _ ← StrictJson.readBounded growingRead 4
+    let _ : ByteArray ← StrictJson.readBounded growingRead 4
     pure false
   catch e => pure (decide ((e.toString.splitOn "AIR JSON exceeds 4 UTF-8 bytes").length > 1))
   require (exceeded && (← growthRequests.get) == #[5, 3, 1])
@@ -317,11 +317,11 @@ private def previousGlobalCached (a b : Func) (x y : Nat)
   require (accepted (checkProgram #[spawn, target])) "indexed spawn arguments rejected"
   require (rejected (checkProgram #[spawn, { target with params := #[], body := #[] }])
     "spawned callee 'target' has an incompatible argument count") "spawn argument index changed"
-  let opaque := mkFunc "opaque" #[.other "anyopaque", .ptr "one" true 0, .void] #[1] 2 #[
+  let opaqueFn := mkFunc "opaque" #[.other "anyopaque", .ptr "one" true 0, .void] #[1] 2 #[
     { id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 2, op := .call (.inst 0) #[] },
     { id := 2, ty := 2, op := .ret .void }]
-  require ((opaque.calleeFnTy? 0).isNone) "opaque pointer was classified as a function pointer"
-  require (rejected (checkProgram #[opaque]) "inst 1: indirect callee is not a function pointer")
+  require ((opaqueFn.calleeFnTy? 0).isNone) "opaque pointer was classified as a function pointer"
+  require (rejected (checkProgram #[opaqueFn]) "inst 1: indirect callee is not a function pointer")
     "opaque indirect call accepted without targets"
   require (indirect.calleeFnTy? 0 == some fnTy) "known function pointer classification changed"
   let twice := { source with body := #[
@@ -403,3 +403,5 @@ private def previousGlobalCached (a b : Func) (x y : Nat)
     require (before.isSome == shouldAgree && after.isSome == shouldAgree)
       "local successful type cache changed value/layout equality or leaked between file tables"
   IO.println "whole-program direct API and strict JSON checks passed"
+
+#eval validationChecks

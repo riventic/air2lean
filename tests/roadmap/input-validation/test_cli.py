@@ -247,8 +247,9 @@ def main():
     checks += run(binary, [mutate], "Timer pointer/u64")
     # Successful header type equality must not suppress initializer value comparisons.
     error_a = function("errorA", [dict(k="error_set", errors=["Left", "Right"], abi_size=2, abi_align=2),
-        VOID, NORETURN], [], 1, [inst(0, "ret", 2, [dict(ty=1, val="{}")])],
-        [global_("error.state", 0, dict(ty=0, err="Left"), const=True)])
+        VOID, NORETURN, dict(k="error_union", error=0, payload=1, abi_size=2, abi_align=2)], [], 1,
+        [inst(0, "ret", 2, [dict(ty=1, val="{}")])],
+        [global_("error.state", 3, dict(ty=3, err="Left"), const=True)])
     error_b = copy.deepcopy(error_a)
     error_b["name"] = "errorB"
     checks += run(binary, [error_a, error_b])
