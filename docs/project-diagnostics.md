@@ -10,10 +10,11 @@ python3 scripts/project-diagnostics.py check project.json \
 ```
 
 The consumer targets schema 1, `air2lean-check-diagnostics`, frozen at producer
-revision `cec6908b09af03d33a61b7e36b33989544264d8c`. Producer compilation, tests and
-independent review are pending at this implementation checkpoint. Matching the protocol
-is not executable qualification: the adapter records the actual executable hash and
-reports qualification as `not_attested_by_adapter`. It never builds or downloads tools.
+revision `cec6908b09af03d33a61b7e36b33989544264d8c`. The required diagnostic-capable
+producer is supplied by [PR 78](https://github.com/riventic/air2lean/pull/78), separately
+from the project manifest base in [PR 68](https://github.com/riventic/air2lean/pull/68).
+Matching the protocol is not executable qualification: the adapter records the actual
+executable hash and reports qualification as `not_attested_by_adapter`. It never builds or downloads tools.
 
 The new `air2lean-project-diagnostics` envelope retains the existing manifest/profile,
 input hashes, declared source closure, Git availability, goals, assumptions, exclusions
@@ -82,7 +83,21 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
   -s tests/roadmap/project-diagnostics -v
 ```
 
-After producer qualification, the root validation queue must run this command on actual
-malformed/dependency/profile fixtures and a successful selected project, and rerun the
-existing project's translation/hash gates with the same executable. Mock success is not
-actual translator, native-program or proof qualification.
+Local integration qualification passed at consumer revision
+`a17882e297875cd124ba8da51b275d8aecb985d2`, against producer checkpoint
+`2f3a86a65cfaa90a40b70daaceb545441c1ddaa6`. The tested executable was compiled from
+production source revision `1c174cea9b9c7a234bbd6b4fab98c1f2ef53c636`; its SHA-256 was
+`dea3cacb093cc31615a2e09cc29659f363f37848307c24562f49a844c8b69e40`.
+The observed checks covered the 37 project compatibility and 30 consumer mock tests,
+actual example success, malformed and valid sibling roots, a missing declared input
+with an independent sibling, a missing direct callee, profile and schema rejection,
+diagnostic cap 1, absence of generated Lean, no-clobber publication, protected inputs,
+and ordinary example translation followed by hash verification. This records observed
+checks; the adapter continues to report `not_attested_by_adapter` and does not attest
+native-program behavior or proofs.
+
+The existing full Zig 0.16.0 project CI step also runs the 30 offline consumer tests.
+This separate consumer branch retains the PR 68 base, whose translator does not yet
+provide the diagnostic producer. Actual consumer CI qualification requires integration
+with PR 78; it is not claimed by the offline gate. No producer implementation is copied
+into this branch, and the consumer gate adds no artifact upload.
