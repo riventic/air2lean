@@ -24,10 +24,10 @@ var test_alloc: common.TestAllocator = undefined;
 /// allocator, from the line.
 fn run(gpa: std.mem.Allocator, comptime name: []const u8, comptime func: anytype, comptime quote_wide: bool, comptime args: anytype) !void {
     try common.forEachMemLine(gpa, "lists", name, struct {
-        fn call(gpa: std.mem.Allocator, bufs: []common.Buf, items: []std.json.Value, writer: anytype) !void {
+        fn call(policy_gpa: std.mem.Allocator, bufs: []common.Buf, items: []std.json.Value, writer: anytype) !void {
             const Args = std.meta.ArgsTuple(@TypeOf(func));
-            test_alloc = try common.TestAllocator.fromJson(gpa, items[0]);
-            defer if (test_alloc.failures.len != 0) gpa.free(test_alloc.failures);
+            test_alloc = try common.TestAllocator.fromJson(policy_gpa, items[0]);
+            defer if (test_alloc.failures.len != 0) policy_gpa.free(test_alloc.failures);
             common.test_alloc = &test_alloc;
             defer common.test_alloc = null;
             const a = test_alloc.allocator();

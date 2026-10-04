@@ -70,8 +70,9 @@ continues to remove only legacy `failAt`, retaining the configured policy.
 kernel build, ten exact native comparisons and three detected semantic mutants at revision
 `853cef53211d08a62e368739160f56dea6a3408e`, using Zig 0.16.0 on aarch64-macos with
 baseline CPU/ReleaseSafe. It lists the actual caps and failure indices, log hashes and
-sampled resource measurements. Zig 0.15.2 CI, the existing lists-client differential gate
-and central review remain pending. M03 is not fully qualified until remaining gates and
+sampled resource measurements. A subsequent local Zig 0.15.2 run also passed ten exact cases, and the full committed
+proof package passed (104 jobs). Reference Linux CI, the existing lists-client differential
+rerun after a nested allocator-parameter rename, and central review remain pending. M03 is not fully qualified until remaining gates and
 the universal acceptance review pass against an exact revision/profile. This fixture
 compares the selected model policy on native reference layouts; it is not general allocator
 or cross-target correspondence.

@@ -25,6 +25,14 @@
       "cpu": "baseline",
       "build_mode": "ReleaseSafe",
       "scope": "selected native 64-bit allocation-policy TestAllocator fixture; not full ABI/native allocator qualification"
+    },
+    "additional_locally_checked_profile": {
+      "zig": "0.15.2",
+      "lean_toolchain": "leanprover/lean4:v4.34.0",
+      "host": "aarch64-macos",
+      "cpu": "baseline",
+      "build_mode": "ReleaseSafe",
+      "scope": "selected native 64-bit allocation-policy TestAllocator fixture; not full ABI/native allocator qualification"
     }
   },
   "checks": [
@@ -104,8 +112,84 @@
     {
       "kind": "existing_client_differential",
       "command": "AIR2LEAN_EXAMPLES=lists scripts/diff.sh",
-      "status": "not_run",
-      "reason": "Coordinator exclusively owns compiler execution."
+      "status": "pending_rerun",
+      "reason": "First attempt failed on nested Zig allocator-parameter shadowing before native execution; narrow rename now applied.",
+      "previous_attempt": {
+        "status": "fail",
+        "revision": "75c473bcaf352778b576b54592df97b2d15a6f81",
+        "profile": {
+          "zig": "0.16.0",
+          "lean_toolchain": "leanprover/lean4:v4.34.0",
+          "host": "aarch64-macos",
+          "cpu": "baseline",
+          "build_mode": "ReleaseSafe",
+          "scope": "selected native 64-bit allocation-policy TestAllocator fixture; not full ABI/native allocator qualification"
+        },
+        "date": "2026-10-04",
+        "log": {
+          "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-lists-diff.log",
+          "sha256": "dd51dd05f77213734bc9ce082550c230880cdf9e292e2df976252ea7667a1367",
+          "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+        },
+        "stage": "Native lists harness compilation; no differential result claimed."
+      }
+    },
+    {
+      "kind": "kernel_and_differential_native15",
+      "command": "bash tests/roadmap/allocation-policy/check.sh",
+      "environment": {
+        "AIR2LEAN_ZIG": "coordinator-selected stock Zig 0.15.2"
+      },
+      "status": "pass",
+      "revision": "75c473bcaf352778b576b54592df97b2d15a6f81",
+      "profile": {
+        "zig": "0.15.2",
+        "lean_toolchain": "leanprover/lean4:v4.34.0",
+        "host": "aarch64-macos",
+        "cpu": "baseline",
+        "build_mode": "ReleaseSafe",
+        "scope": "selected native 64-bit allocation-policy TestAllocator fixture; not full ABI/native allocator qualification"
+      },
+      "date": "2026-10-04",
+      "log": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-native15.log",
+        "sha256": "b94c01ff2f90d58a616e6f9dff003b6d734904ee8ef0907f81f4ab8afa6017d9",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "result": {
+        "kernel_build_jobs": 34,
+        "exact_comparisons": 10,
+        "exclusions": 0,
+        "capped_searches": 0
+      },
+      "coordinator_reported_metrics": {
+        "elapsed_seconds": 8.2,
+        "sampled_peak_memory_mib": 950
+      }
+    },
+    {
+      "kind": "existing_proofs",
+      "command": "lake build Proofs",
+      "status": "pass",
+      "revision": "75c473bcaf352778b576b54592df97b2d15a6f81",
+      "profile": {
+        "lean_toolchain": "leanprover/lean4:v4.34.0",
+        "translations": "Committed default Proofs/Gen.lean source modules at checked revision",
+        "host": "aarch64-macos"
+      },
+      "date": "2026-10-04",
+      "log": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-existing-proofs.log",
+        "sha256": "df82b59ac31581368497fa6c86774f2830015fc1e7a77ea277388ab68731768c",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "result": {
+        "kernel_build_jobs": 104
+      },
+      "coordinator_reported_metrics": {
+        "elapsed_seconds": 89.6,
+        "sampled_peak_memory_mib": 2180
+      }
     }
   ],
   "qualified": false,
@@ -130,6 +214,11 @@
       "tests/roadmap/allocation-policy/static.py": "238e00f0b1fdaa9e0268652ce62032e8d9770c48d37c3d121f5fcd215a1a9b9e",
       "scripts/mutate.sh": "e96c0af7343d52d0fc6d95892a590d72230c56beb7a5ef912cba2e0b0f26e69a",
       ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
+    },
+    "pending_code_change": {
+      "path": "tests/diff/lists/harness.zig",
+      "sha256": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
+      "reason": "Nested allocator parameter renamed; existing client differential needs rerun. Previously checked hashes still identify the earlier exact source state."
     }
   },
   "execution_controls": {
@@ -305,8 +394,8 @@
   ],
   "pending": [
     "Eight independent central review angles",
-    "Existing lists-client differential pipeline with explicit JSON policy inputs",
-    "CI qualification for Zig 0.15.2 and reference CI host",
-    "Universal acceptance review and current runtime/proof regression gates beyond this bounded fixture"
+    "Existing lists-client differential rerun after allocator-parameter rename",
+    "CI qualification on the reference Linux host for Zig 0.16.0/0.15.2",
+    "Universal acceptance review"
   ]
 }
