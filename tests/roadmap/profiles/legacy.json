@@ -1,0 +1,33 @@
+{
+  "schema": 11,
+  "zig_version": "0.16.0",
+  "target_endian": "little",
+  "name": "profileFixture",
+  "params": [],
+  "ret": 0,
+  "types": [
+    {
+      "k": "int",
+      "signed": false,
+      "bits": 8,
+      "abi_size": 1,
+      "abi_align": 1
+    },
+    {
+      "k": "noreturn"
+    }
+  ],
+  "body": [
+    {
+      "id": 0,
+      "tag": "ret",
+      "ty": 1,
+      "args": [
+        {
+          "ty": 0,
+          "val": "42"
+        }
+      ]
+    }
+  ]
+}
