@@ -383,10 +383,16 @@ def mixed (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName 
 
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
-  | .atomicWorker a => discard (atomicWorker a.1 a.2.1 a.2.2.1 a.2.2.2)
-  | .copyWorker a => discard (Zig.ConcM.liftMem (copyWorker a.1 a.2.1 a.2.2.1 a.2.2.2))
+  | .atomicWorker a =>
+    let (capture0, capture1, capture2, capture3) := a
+    discard (atomicWorker capture0 capture1 capture2 capture3)
+  | .copyWorker a =>
+    let (capture0, capture1, capture2, capture3) := a
+    discard (Zig.ConcM.liftMem (copyWorker capture0 capture1 capture2 capture3))
   | .zeroWorker a => discard (Zig.ConcM.liftMem (StateT.lift (zeroWorker)))
   | .ZeroWorker_u8_run a => discard (Zig.ConcM.liftMem (StateT.lift (ZeroWorker_u8_run)))
-  | .mixedWorker a => discard (Zig.ConcM.liftMem (mixedWorker a.1 a.2.1 a.2.2.1 a.2.2.2))
+  | .mixedWorker a =>
+    let (capture0, capture1, capture2, capture3) := a
+    discard (Zig.ConcM.liftMem (mixedWorker capture0 capture1 capture2 capture3))
 
 end ThreadTuples

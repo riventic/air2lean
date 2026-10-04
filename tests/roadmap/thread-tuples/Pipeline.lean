@@ -185,7 +185,9 @@ def main (args : List String) : IO Unit := do
   let fs := fs.set! 1 (← parse orderWorker)
   -- A declaration matching a dispatcher local must be renamed by the shared
   -- allocator, or the local would shadow an unqualified generated call.
-  let fs := fs.push { fs[1]! with name := "capture0" }
+  let some capturedWorker := fs[1]?
+    | throw (IO.userError "ordered spawn fixture is missing its worker")
+  let fs := fs.push { capturedWorker with name := "capture0" }
   let generated := emit fs "TuplePipeline" ""
   require ((generated.splitOn "def capture0_air2lean1").length == 2)
     "dispatcher capture local was not reserved by the declaration allocator"
