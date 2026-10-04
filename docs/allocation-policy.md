@@ -69,3 +69,11 @@ from unavailable compiler/kernel/differential checks. M03 is not qualified until
 and the universal acceptance review pass against an exact revision/profile. This fixture
 compares the selected model policy on native reference layouts; it is not general allocator
 or cross-target correspondence.
+
+The gate explicitly builds `ZigLean.Sep.Alloc` before compiling its client fixture;
+`lake build ZigLean` alone does not produce that imported separation module. CI runs the
+policy gate and semantic mutants in the 0.16.0/0.15.2 full jobs, on the native 64-bit
+reference host. `AIR2LEAN_ALLOCATION_REPORT_DIR` retains raw Lean/native JSON comparisons;
+CI sets it under `RUNNER_TEMP` and retains run logs there, outside the cached `.lake`
+directories. It does not introduce an artifact upload or publish a qualified claim from
+an incomplete gate.

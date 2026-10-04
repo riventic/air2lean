@@ -24,7 +24,7 @@
       "kind": "static",
       "command": "PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/allocation-policy/static.py",
       "status": "pass",
-      "detail": "Five offline mutation-anchor/comparison-accounting regressions; no compiler invoked."
+      "detail": "Six offline mutation-anchor/comparison-accounting/gate-scope regressions; no compiler invoked."
     },
     {
       "kind": "static",

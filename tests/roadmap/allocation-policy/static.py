@@ -47,6 +47,13 @@ class PolicyChecks(unittest.TestCase):
             path.write_text('\n'.join(json.dumps(line) for line in lines))
             self.assertEqual(COMPARE.records(path), lines)
 
+    def test_gate_builds_imported_separation_library(self):
+        gate = (HERE / 'check.sh').read_text()
+        self.assertIn('lake build ZigLean ZigLean.Sep.Alloc', gate)
+        self.assertLess(gate.index('lake build ZigLean ZigLean.Sep.Alloc'),
+                        gate.index('lake env lean tests/roadmap/allocation-policy/Check.lean'))
+        self.assertIn('AIR2LEAN_ALLOCATION_REPORT_DIR', gate)
+
     def test_legacy_mutation_still_targets_fail_at(self):
         source = (ROOT / 'scripts/mutate.sh').read_text()
         self.assertIn('if m.allocs ∈ m.allocPolicy.failures ∨ m.allocPolicy.maxBytes < n then return none', source)

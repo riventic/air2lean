@@ -141,6 +141,20 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # Selected policy correspondence on the native 64-bit reference CI host. Keep
+      # reports in RUNNER_TEMP, outside cached .lake directories; no artifact upload.
+      - name: Allocation policy proofs, correspondence and semantic mutations
+        if: matrix.full
+        env:
+          AIR2LEAN_ALLOCATION_REPORT_DIR: ${{ runner.temp }}/allocation-policy-${{ matrix.zig }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$AIR2LEAN_ALLOCATION_REPORT_DIR"
+          cp docs/allocation-policy-report.json "$AIR2LEAN_ALLOCATION_REPORT_DIR/source-qualification-status.json"
+          python3 tests/roadmap/allocation-policy/static.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/static.log"
+          bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
+          python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
