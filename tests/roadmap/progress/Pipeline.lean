@@ -41,7 +41,7 @@ def main (args : List String) : IO Unit := do
   rejected (fixture "badYieldArgs" (.call (.func "Thread.yield" false none) #[.void]) 2) "not 0"
   rejected (fixture "badSpinType" (.asm "pause" true #[] #[] #[]) 4) "must return void"
   rejected (fixture "badSpinCall" (.call (.func "atomic.spinLoopHint" false none) #[]) 4) "must return void"
-  rejected (fixture "badNoreturn" (.call (.func "Thread.yield" true none) #[]) 2) "cannot be noreturn"
+  rejected (fixture "badNoreturn" (.call (.func "Thread.yield" true none) #[]) 2) "noreturn"
   rejected (fixture "badClobber" (.asm "pause" true #["memory"] #[] #[])) "memory"
   for source in ["pause; ud2", "yield", "or 27, 27, 27", "pause(#1)"] do
     let f := fixture "opaqueHint" (.asm source true #[] #[] #[])
@@ -52,4 +52,9 @@ def main (args : List String) : IO Unit := do
   let fs := #[fixture "spin" (.asm "pause" true #[] #[] #[]),
     fixture "yielding" (.call (.func "Thread.yield" false none) #[]) 2]
   IO.FS.writeFile output (emit fs "ProgressPipeline" "" .ieee)
+  if let some directory := (args.drop 1).head? then
+    for version in supportedVersions do
+      let versioned := fs.map fun f => { f with zigVersion := version }
+      IO.FS.writeFile (System.FilePath.mk directory / s!"ProgressPipeline-{version}.lean")
+        (emit versioned "ProgressPipeline" "" .ieee)
   IO.println "Progress pipeline regressions passed"

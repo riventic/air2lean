@@ -68,23 +68,49 @@ no-result behavior and absence of hint-created access/clock edges.
 and writes generated Lean for separate elaboration. Assertions detect mutations
 that make a hint pure, force yield success, or require a different thread to run.
 
-Reproduce qualification from the repository root (select each patched compiler
-explicitly; keep exports separate by version/target):
+The portable default gate needs Lean and Python but no Zig compiler:
 
 ```sh
-lake build ZigLean Air2Lean air2lean
-lake env lean --run tests/roadmap/progress/Runtime.lean
-lake env lean --run tests/roadmap/progress/Pipeline.lean /tmp/ProgressPipeline.lean
-lake env lean /tmp/ProgressPipeline.lean
-progress_air=$(mktemp -d /tmp/progress-air.XXXXXX)
-ZIG_AIR_JSON_DIR="$progress_air" ZIG_AIR_JSON_FILTER='progress.' "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing tests/roadmap/progress/progress.zig
-lake exe air2lean "$progress_air" -o /tmp/ProgressSource.lean --namespace ProgressSource --prefix progress.
-lake env lean /tmp/ProgressSource.lean
+scripts/progress-hints.sh
 ```
 
-Keep the fresh AIR directory, generated Lean, command logs and compiler/source
-hashes with the qualification record; do not reuse a directory containing exports
-from a previous version or target.
+It builds the runtime/translator, kernel-checks the safety contracts, executes the
+runtime and signature regressions, elaborates fresh synthetic translations for
+all three supported versions, and verifies that an isolated mutant removing the
+spin scheduling operation is rejected by the scheduler-participation assertion.
+The mutation must fail at that assertion; a parse or compile error does not count.
+
+Opt into source and native qualification with explicit 0.16.0 compilers:
+
+```sh
+AIR2LEAN_ZIG_AIR=/path/to/patched/zig AIR2LEAN_ZIG=/path/to/stock/zig scripts/progress-hints.sh full
+```
+
+Full mode exports all four `progress.*` source roots on `x86_64-linux` with baseline
+CPU features, `ReleaseSafe`, and disabled error tracing. `Thread.yield` is a modeled
+boundary, so its syscall implementation is not exported as another translated body.
+The gate checks a fresh `ProgressSource.lean`, then runs 64 finite native hint/yield
+calls on the stock compiler's native host target. It never executes `idle`. On a
+non-Linux host, that native smoke check is a separate target observation and does
+not qualify native execution of the Linux AIR. The kernel safety contracts concern
+the model's hints; source translation compilation and finite native smoke checks
+are additional evidence and do not prove source/model correspondence or liveness.
+
+Each local invocation retains a fresh `.lake/progress-hints-*` directory even on
+failure. `AIR2LEAN_PROGRESS_ARTIFACT_DIR` selects a different retention directory.
+`report.json` records exact command arguments, stage statuses, durations, revision,
+dirty-tree state, source/model hashes, Lean/Lake binaries, translator binary,
+patched/stock compiler binaries and versions, complete Zig library hash manifests,
+artifact hashes, target/build profile and explicit claim exclusions. Logs, AIR,
+generated Lean, fixtures and finite native binary remain available. Compiler caches
+are retained locally but excluded from artifact hashes. Per-command timeouts default
+to 600 seconds (`AIR2LEAN_PROGRESS_TIMEOUT_SECONDS`); a timeout is a failed
+qualification, never a proof of divergence. Artifact-only runs explicitly report
+that source export and native execution were not run. The gate is suitable for
+separate artifact-only and 0.16.0 full CI invocation. CI runs the portable gate
+in its non-mutation version jobs and full qualification in its 0.16.0 job. Detailed
+CI evidence stays under `RUNNER_TEMP` outside the `.lake` cache; no new upload step
+is added.
 
 The source semantics audit is separate from successful execution of these
 commands. Compiler runs, kernel checks and exported fixture evidence must be
