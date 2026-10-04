@@ -74,9 +74,10 @@ search path, installed standard-library modules, and environment extractor remai
 inputs; the module prefix classification is not a package authenticity check.
 
 CI runs the full audit and environment regressions after building proofs for the complete
-Zig 0.16.0 Linux translation. It uploads `assumptions.json` after either audit success or
-failure. Other translation profiles require their own reviewed policy and audit; the CI
-step does not qualify them.
+Zig 0.16.0 Linux translation. The report is written to
+`$RUNNER_TEMP/air2lean-assumptions.json`, outside the cached build directory, and retained
+only for the runner's lifetime. Other translation profiles require their own reviewed
+policy and audit; the CI step does not qualify them.
 
 ## Reading the JSON
 
