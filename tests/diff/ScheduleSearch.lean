@@ -23,13 +23,13 @@ private partial def nextSchedule (pre opts : Array Nat) : Option (Array Nat) :=
 The limits constrain only probes; omitted alternatives remain in the DFS fallback. -/
 partial def scheduleProbePrefixes (frontierCap prefixCap : Nat) (pre opts : Array Nat)
     (pending : List (Array Nat)) : List (Array Nat) :=
-  let rec choices (j c : Nat) (pending : List (Array Nat)) : List (Array Nat) :=
-    if pending.length >= frontierCap || j >= opts.size || j >= prefixCap then pending
+  let rec choices (j c pendingCount : Nat) (pending : List (Array Nat)) : List (Array Nat) :=
+    if pendingCount >= frontierCap || j >= opts.size || j >= prefixCap then pending
     else if c < opts[j]! then
       let p := ((Array.range j).map fun x => pre.getD x 0).push c
-      choices j (c + 1) (pending ++ [p])
-    else choices (j + 1) 1 pending
-  choices pre.size 1 pending
+      choices j (c + 1) (pendingCount + 1) (pending ++ [p])
+    else choices (j + 1) 1 pendingCount pending
+  choices pre.size 1 pending.length pending
 
 /-- Search first with a bounded FIFO of sparse oracle prefixes, then resume the original DFS.
 Every execution uses the same total cap. Probe exhaustion, a full queue, or a long prefix

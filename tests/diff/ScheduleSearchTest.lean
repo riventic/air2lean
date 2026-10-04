@@ -54,6 +54,9 @@ def main : IO Unit := do
   let pending := scheduleProbePrefixes 3 4 #[] (Array.replicate 100 10) []
   unless pending.length == 3 && pending.all (fun p => p.size <= 4) do
     throw (IO.userError "probe metadata exceeded queue/prefix bounds")
+  let seeded := scheduleProbePrefixes 3 8 #[] #[1, 1, 1, 2, 2] [#[7], #[8]]
+  unless seeded == [#[7], #[8], #[0, 0, 0, 1]] do
+    throw (IO.userError "prefilled queue lost its capacity or FIFO order across deterministic choices")
   let bounded := scheduleProbePrefixes 20 2 #[] (Array.replicate 100 2) []
   unless bounded.length == 2 && bounded.all (fun p => p.size <= 2) do
     throw (IO.userError "probe prefix-length limit was not enforced")
