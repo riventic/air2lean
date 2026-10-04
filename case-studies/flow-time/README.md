@@ -1,0 +1,96 @@
+# Flow timestamp addition: original production source
+
+This case study translates Flow's `addDuration` from the production file
+`optimizer/engine/src/des/time.zig` in `/opt/dev/boxhub`. The wrapper imports that
+file as the Zig module `flow_time_original` and instantiates its generic function
+at `u32` and `u64`. It contains no timestamp arithmetic. Zig inlines the original
+function into both AIR entry points; `FlowTime/Gen.lean` is generated from that AIR.
+
+The recorded production revision, source SHA-256, export profile and toolchain
+are in `provenance.json`. The source is an external dependency, not a vendored
+copy. The same file bytes may be supplied from a different checkout with
+`FLOW_TIME_SOURCE`; a missing or changed file fails before compiler execution.
+Changing the expected hash requires a new original-source export and proof check.
+
+`FlowTime/Proofs.lean` proves the following for **every** pair of `u32` inputs and
+for **every** pair of `u64` inputs:
+
+- If the natural-number sum is below `2^width - 1`, the generated definition
+  returns that exact sum. The addition does not wrap and the reserved maximum
+  cannot be returned successfully.
+- The definition returns `error.TimeOverflow` **if and only if** the natural sum
+  overflows the machine width or equals the reserved maximum.
+- Both generated definitions equal a total contract returning an ordinary Zig
+  error union, so neither panics nor diverges for any input.
+
+The body lemmas unfold `timestamp32` and `timestamp64` from the generated module.
+The generic arithmetic lemmas then establish the shared representability rule;
+they are connected to the production-derived definitions by those body lemmas.
+No extra axioms, admitted proofs, or native decision procedure are used.
+
+## Reproduce
+
+Use an existing **patched** Zig 0.16.0 compiler for AIR export, a separate stock
+Zig 0.16.0 compiler for native tests, and the built air2lean executable:
+
+```sh
+FLOW_TIME_SOURCE=/path/to/boxhub/optimizer/engine/src/des/time.zig \
+AIR2LEAN_ZIG_AIR=/path/to/zig-air-0.16.0/bin/zig \
+AIR2LEAN_ZIG_NATIVE=/path/to/stock-zig-0.16.0/zig \
+AIR2LEAN_TRANSLATOR=/path/to/air2lean \
+  bash scripts/flow-time.sh
+```
+
+Run this command from the air2lean repository with the pinned Lean toolchain
+available. It checks the production hash, exports AIR with the explicit
+`x86_64-linux` / `baseline` / `ReleaseSafe` profile, compares both complete JSON
+exports and the generated Lean with committed artifacts, tests the wrapper's
+native boundary cases, builds `ZigLean`, and kernel-checks the generated module
+and proofs. The native compiler version is checked before export. Only the stock-compiler
+native test uses the host target; it imports the same wrapper
+and original source. The script creates temporary compiler and Lean outputs and
+removes them on exit. It never updates the checked artifacts silently.
+
+The essential original-source binding is:
+
+```sh
+mkdir -p out FlowTime
+ZIG_AIR_JSON_DIR="$PWD/out" ZIG_AIR_JSON_FILTER=flow_time. "$AIR2LEAN_ZIG_AIR" \
+  build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+  -target x86_64-linux -mcpu=baseline \
+  --dep flow_time_original -Mroot=case-studies/flow-time/flow_time.zig \
+  -Mflow_time_original="$FLOW_TIME_SOURCE"
+"$AIR2LEAN_TRANSLATOR" out -o FlowTime/Gen.lean \
+  --namespace FlowTime --prefix flow_time.
+```
+
+Provenance guards can be checked without invoking any compiler:
+
+```sh
+bash scripts/flow-time.sh --check-source
+python3 tests/roadmap/flow-time/test_provenance.py
+```
+
+The boundary tests cover ordinary addition, the largest allowed result, equality
+with the reserved timestamp, `max + 0`, and wrapped results including zero for
+both widths. These samples supplement the universal Lean proofs.
+
+## Trust and scope
+
+The Lean kernel checks the generated Lean contracts. Applying them to the
+production Zig function also trusts Zig semantic analysis and inlining, the AIR
+export patch, air2lean translation, and `ZigLean` bit-vector/error semantics.
+The pinned original-source hash and regenerated artifacts make that provenance
+reviewable; they do not remove those compiler and translation assumptions.
+
+This is a proof of the production timestamp addition rule at two unsigned widths.
+It does not establish invariants of Flow's entire scheduler, event queues, or
+other production callers. CI can kernel-check the committed generated definitions and proofs without an
+external checkout or either Zig compiler:
+
+```sh
+bash scripts/flow-time.sh --check-artifacts
+```
+
+This checks the committed artifacts only. The full original-source reproduction
+requires the source dependency, reexports and compares AIR, and reruns native tests.
