@@ -20,7 +20,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt]"
+    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1]"
 
 structure Args where
   airDir : System.FilePath
@@ -30,34 +30,39 @@ structure Args where
   /-- `--float-semantics` (default `ieee`; `docs/floats.md` §Semantics, `Air2Lean/Emit.lean`'s
   `FloatSemantics`). -/
   floatSemantics : FloatSemantics
+  profile : Option String
 
 private partial def parseArgsGo (args : List String)
-    (airDir outPath ns prefix_ floatSemantics : Option String) : Except String Args :=
+    (airDir outPath ns prefix_ floatSemantics profile : Option String) : Except String Args :=
   match args with
   | [] =>
     match airDir, outPath, ns with
     | some airDir, some outPath, some ns =>
       match floatSemantics with
-      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee }
-      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt }
+      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee, profile }
+      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt, profile }
       | some other => .error s!"invalid --float-semantics '{other}' (want 'ieee' or 'compiler-rt')\n{usage}"
     | none, _, _ => .error s!"missing <air-dir>\n{usage}"
     | _, none, _ => .error s!"missing -o <out.lean>\n{usage}"
     | _, _, none => .error s!"missing --namespace <Ns>\n{usage}"
-  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics
-  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics
-  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics
-  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v)
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] =>
+  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics profile
+  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics profile
+  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics profile
+  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile
+  | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v)
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
-    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics
+    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics profile
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
-  let a ← parseArgsGo args none none none none none
+  let a ← parseArgsGo args none none none none none none
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
+  if let some p := a.profile then
+    unless p == BuildProfile.legacyName || p == BuildProfile.currentName do
+      throw s!"invalid --profile '{p}'\n{usage}"
   pure a
 
 /-- Parse, normalize, and check one AIR JSON file's contents into a `Func`. -/
@@ -86,20 +91,35 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try IO.FS.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
         if err.isNone then
-          match processOne contents with
+          match Raw.parseFile contents with
           | .error e => err := some s!"{path}: {e}"
-          | .ok f => funcs := funcs.push f
+          | .ok raw =>
+            profiles := profiles.push raw.profile
+            match (do
+              let f ← normalize raw
+              check f
+              pure f : Except String Func) with
+            | .error e => err := some s!"{path}: {e}"
+            | .ok f => funcs := funcs.push f
       match (match err with | some e => Except.error e | none => checkProgram funcs) with
       | .error e => die e
       | .ok () =>
-        let src := emit funcs a.ns a.prefix_ a.floatSemantics
-        try IO.FS.writeFile a.outPath src catch e =>
-          throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
-        pure 0
+        match BuildProfile.checkProgram profiles a.profile with
+        | .error e => die e
+        | .ok profile =>
+          let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
+          let metadata := Lean.Json.mkObj [("profile", profile.toJson),
+            ("float_semantics", .str semantics), ("correspondence", .str "model")]
+          let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+            emit funcs a.ns a.prefix_ a.floatSemantics
+          try IO.FS.writeFile a.outPath src catch e =>
+            throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+          pure 0
 
 def main (args : List String) : IO UInt32 := do
   if args == ["--help"] || args == ["-h"] then
