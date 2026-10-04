@@ -545,6 +545,9 @@ structure FCtx where
   exitName : String
   /-- `--float-semantics` (default `ieee`), for `.div`/`.divFloat`/`.mulAdd` on a float operand. -/
   floatSemantics : FloatSemantics
+  spawnSemantics : SpawnSemantics := .available
+  /-- Typed caller execution of each complete capture, including pure slice adapters. -/
+  spawnFallbacks : Array (String × String) := #[]
   /-- The Zig version that wrote the AIR (`Func.zigVersion`), for the float ops whose result
   differs by version (`docs/floats.md` §Per-version differences). -/
   zigVersion : String
@@ -1020,7 +1023,8 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .spawn =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
-    s!"Zig.spawnC (Tgt.{target} {rv (args[1]?.getD .void)})"
+    let op := if fc.spawnSemantics == .fallible then "spawnWithPolicyC .fallible" else "spawnC"
+    s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
   | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
@@ -1038,9 +1042,15 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .groupAsync | .groupConcurrent =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
+    let capture := rv (args[2]?.getD .void)
     let op := if fn == .groupAsync then "groupAsyncC" else "groupConcurrentC"
+    let op := if fc.spawnSemantics == .fallible then op.replace "C" "WithPolicyC .fallible" else op
+    let fallback := if fc.spawnSemantics == .fallible && fn == .groupAsync then
+      let body := (fc.spawnFallbacks.find? (·.1 == spawnFn)).map (·.2) |>.getD ""
+      s!" (({body}) {capture})"
+      else ""
     s!"Zig.{op} {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)} \
-      (Tgt.{target} {rv (args[2]?.getD .void)})"
+      (Tgt.{target} {capture}){fallback}"
   | .groupAwait => s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
   | .groupCancel => s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
 
@@ -2228,8 +2238,10 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
-    (concFuncs : Array String := #[]) : FuncParts :=
-  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
+    (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
+    (spawnFallbacks : Array (String × String) := #[]) : FuncParts :=
+  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with
+    fnBlocks, spawnSemantics, spawnFallbacks }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -2451,6 +2463,29 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 
 /-! ## Top level -/
 
+/-- Render one execution from a complete capture. Both dispatch and synchronous
+fallback use this call, so their slice reads and memory/provenance treatment agree. -/
+def emitCapturedCall (name : String) (args : Array (String × Option (String × Nat)))
+    (kind : Nat) : String :=
+  let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
+  let itemName (i : Nat) := if args.size == 1 then "items" else s!"items{i}"
+  let values := args.mapIdx fun i (_, adapter) =>
+    match adapter with | none => arg i | some _ => itemName i
+  let term := name ++ (if values.isEmpty then "" else " " ++ String.intercalate " " values.toList)
+  let reads := args.toList.zipIdx |>.filterMap fun ((_, adapter), i) =>
+    adapter.map fun (item, align) => s!"          let {itemName i} ← Zig.readSlice ({item}) {align} {arg i}"
+  match kind with
+  | 2 => term
+  | 1 => s!"Zig.ConcM.liftMem ({term})"
+  | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
+      "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
+
+def emitCapturedFallback (name : String) (args : Array (String × Option (String × Nat)))
+    (kind : Nat) : String :=
+  let binders := (List.range args.size).map fun i => s!"capture{i}"
+  let unpack := if args.size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
+  s!"fun a => (do {unpack}discard ({emitCapturedCall name args kind}) : Zig.ConcM Tgt Unit)"
+
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in
 source order, adapting every slice argument for a pure worker in the child thread. -/
 def emitTgt (_structNames : Array (String × String)) (extendedCapture : Bool)
@@ -2469,17 +2504,7 @@ def emitTgt (_structNames : Array (String × String)) (extendedCapture : Bool)
     "abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (ghost : γ) : Prop :=\n  P.init target ghost"
   let arms := targets.toList.map fun (n, args, k) =>
     let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
-    let itemName (i : Nat) := if args.size == 1 then "items" else s!"items{i}"
-    let values := args.mapIdx fun i (_, adapter) =>
-      match adapter with | none => arg i | some _ => itemName i
-    let term := n ++ (if values.isEmpty then "" else " " ++ String.intercalate " " values.toList)
-    let reads := args.toList.zipIdx |>.filterMap fun ((_, adapter), i) =>
-      adapter.map fun (item, align) => s!"          let {itemName i} ← Zig.readSlice ({item}) {align} {arg i}"
-    let call := match k with
-      | 2 => term
-      | 1 => s!"Zig.ConcM.liftMem ({term})"
-      | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
-          "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
+    let call := emitCapturedCall n args k
     if args.size ≤ 1 then s!"  | .{n} a => discard ({call})" else
       let binders := (List.range args.size).map arg
       s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    discard ({call})"
@@ -2557,7 +2582,8 @@ def allocateDeclNames (structs : Array NamedType) (funcs : Array Func) (prefix_ 
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
 `--float-semantics` (default `ieee`). -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
-    (floatSemantics : FloatSemantics := .ieee) : String :=
+    (floatSemantics : FloatSemantics := .ieee)
+    (spawnSemantics : SpawnSemantics := .available) : String :=
   let memFuncs := memoryFunctions funcs
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
@@ -2590,21 +2616,8 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
   let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
-  let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
-    let parts := members.toList.map fun f =>
-      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks concFuncs
-    if recursive then
-      -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
-      -- call a group member. Types and `again` defs do not recurse, so they come first.
-      let fix (d : String) := s!"{d}\npartial_fixpoint"
-      let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
-      String.intercalate "\n\n"
-        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
-    else
-      String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-  let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
-    emitTgt structNames extendedCapture (targets.map fun (nm, f, fields) =>
+  let targetDescriptions := targets.map fun (nm, f, fields) =>
       let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
       -- The physical capture comes from the first call; conversion requirements
       -- belong to the worker contract and must also accept later weaker captures.
@@ -2618,9 +2631,27 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
                 ((worker.layouts[child]?.bind (·.align)).getD 1))
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
-      (leanOf nm, args, kind))
+      (nm, leanOf nm, args, kind)
+  let spawnFallbacks := targetDescriptions.map fun (nm, name, args, kind) =>
+    (nm, emitCapturedFallback name args kind)
+  let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
+    emitTgt structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
+  let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
+    let parts := members.toList.map fun f =>
+      emitOneFunction f structNames funcNames floatSemantics memFuncs (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks
+    if recursive then
+      -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
+      -- call a group member. Types and `again` defs do not recurse, so they come first.
+      let fix (d : String) := s!"{d}\npartial_fixpoint"
+      let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
+      String.intercalate "\n\n"
+        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
+    else
+      String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
   String.intercalate "\n\n"
-    (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
+    (["import ZigLean"] ++
+      (if spawnSemantics == .fallible then ["/-- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
+      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"])
 
 end Air2Lean

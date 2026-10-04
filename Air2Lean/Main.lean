@@ -20,7 +20,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt]"
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible]"
 
 structure Args where
   airDir : System.FilePath
@@ -30,32 +30,40 @@ structure Args where
   /-- `--float-semantics` (default `ieee`; `docs/floats.md` §Semantics, `Air2Lean/Emit.lean`'s
   `FloatSemantics`). -/
   floatSemantics : FloatSemantics
+  spawnSemantics : SpawnSemantics
 
 private partial def parseArgsGo (args : List String)
-    (airDir outPath ns prefix_ floatSemantics : Option String) : Except String Args :=
+    (airDir outPath ns prefix_ floatSemantics spawnSemantics : Option String) : Except String Args :=
   match args with
   | [] =>
     match airDir, outPath, ns with
-    | some airDir, some outPath, some ns =>
-      match floatSemantics with
-      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee }
-      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt }
-      | some other => .error s!"invalid --float-semantics '{other}' (want 'ieee' or 'compiler-rt')\n{usage}"
+    | some airDir, some outPath, some ns => do
+      let floats ← match floatSemantics with
+        | none | some "ieee" => pure FloatSemantics.ieee
+        | some "compiler-rt" => pure FloatSemantics.compilerRt
+        | some other => throw s!"invalid --float-semantics '{other}' (want 'ieee' or 'compiler-rt')\n{usage}"
+      let spawning ← match spawnSemantics with
+        | none | some "available" => pure SpawnSemantics.available
+        | some "fallible" => pure SpawnSemantics.fallible
+        | some other => throw s!"invalid --spawn-policy '{other}' (want 'available' or 'fallible')\n{usage}"
+      pure { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := floats,
+        spawnSemantics := spawning }
     | none, _, _ => .error s!"missing <air-dir>\n{usage}"
     | _, none, _ => .error s!"missing -o <out.lean>\n{usage}"
     | _, _, none => .error s!"missing --namespace <Ns>\n{usage}"
-  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics
-  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics
-  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics
-  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v)
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] =>
+  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics spawnSemantics
+  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics spawnSemantics
+  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics spawnSemantics
+  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) spawnSemantics
+  | "--spawn-policy" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v)
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--spawn-policy"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
-    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics
+    if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics spawnSemantics
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
-  let a ← parseArgsGo args none none none none none
+  let a ← parseArgsGo args none none none none none none
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   pure a
@@ -93,10 +101,14 @@ private def run (args : List String) : IO UInt32 := do
           match processOne contents with
           | .error e => err := some s!"{path}: {e}"
           | .ok f => funcs := funcs.push f
-      match (match err with | some e => Except.error e | none => checkProgram funcs) with
+      let checked := do
+        match err with | some e => throw e | none => pure ()
+        checkProgram funcs
+        if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
+      match checked with
       | .error e => die e
       | .ok () =>
-        let src := emit funcs a.ns a.prefix_ a.floatSemantics
+        let src := emit funcs a.ns a.prefix_ a.floatSemantics a.spawnSemantics
         try IO.FS.writeFile a.outPath src catch e =>
           throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
         pure 0

@@ -1,0 +1,5 @@
+spawn_failure.threadPair
+spawn_failure.threadCatch
+spawn_failure.groupAsync
+spawn_failure.groupConcurrent
+spawn_failure.writeWorker

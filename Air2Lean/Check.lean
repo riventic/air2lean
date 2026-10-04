@@ -670,6 +670,43 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
   unless validRet do
     throw s!"{f.name}: {callee} worker '{worker.name}' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
 
+/-- Explicit environment policy for translated thread assignment. The default retains
+existing proofs under an availability assumption; fallible includes API failure. -/
+inductive SpawnSemantics where
+  | available
+  | fallible
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The fallible boundary accepts only the audited std versions and a constant
+SpawnConfig with a positive stack size and null custom allocator. Runtime configs
+and allocator-specific semantics remain outside this model. -/
+def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
+  for f in funcs do
+    for i in f.allInsts do
+      if let .call (.func name _ _) args := i.op then
+        if let some kind := threadFn? name then
+          if kind.spawnArgs?.isSome then
+            unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+              throw s!"{f.name}: fallible spawn requires an audited Zig version"
+            if kind == .spawn then
+              let some (.agg ty fields) := args[0]?
+                | throw s!"{f.name}: fallible Thread.spawn requires a constant SpawnConfig"
+              let some (.struct "Thread.SpawnConfig" _ names) := f.types[ty]?
+                | throw s!"{f.name}: fallible Thread.spawn requires Thread.SpawnConfig"
+              unless names.size == 2 && names[0]!.1 == "stack_size" && names[1]!.1 == "allocator" do
+                throw s!"{f.name}: fallible Thread.spawn has an unaudited SpawnConfig layout"
+              unless fields.size == 2 do
+                throw s!"{f.name}: fallible Thread.spawn has an incomplete SpawnConfig"
+              let .int _ stack := fields[0]!
+                | throw s!"{f.name}: fallible Thread.spawn requires a constant stack_size"
+              unless stack > 0 do
+                throw s!"{f.name}: fallible Thread.spawn requires a positive stack_size"
+              let .optNull _ := fields[1]!
+                | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
+            else
+              unless f.zigVersion == "0.16.0" do
+                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
