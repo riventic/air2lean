@@ -25,26 +25,29 @@ invert the overflow flag, and allow an illegal oversized shift. Their assertions
 The scalar domains should exhaust all 256 u8/i8 bit patterns and all eight shifts (four for
 u3/i3, with shift 3 excluded from native execution as illegal behavior); vector probes should mix zero, maximum, sign boundary, and overflow within one vector. The gate compares 3,092
 observation rows exactly and records 256 excluded narrow-shift rows (512 function evaluations)
-separately. Kernel assertions check invalid scalar and vector results.
+separately. Kernel assertions check invalid scalar results; compiled fixture checks cover invalid vector lanes.
 `firstSet`, `clearLowest`, and `cardinality` form the production-style bitset workload.
 The generated AIR and Lean fixture, commands, and results are recorded by the root validation
 queue in `qualified/0.16.0/`. Generated fixture assertions use compiled evaluation; the pure runtime assertions and runtime lemmas use kernel reduction. Only Zig 0.16.0 is qualified by this package; other exporter versions
 already decode these tags but require their own fixture/differential qualification.
 
 The checked-in `qualified/0.16.0/` snapshot contains the 16 fresh AIR files, `Gen.lean`,
-the exact native/Lean observation streams, and the unmodified successful-run manifest.
+the exact native/Lean observation streams, and a portable derivative of the successful-run manifest.
 The manifest's artifact paths are relative to the original complete gate output, and its
 hashes also cover all generated fixtures, mutant source/log files and the native executable.
-Those additional artifacts are retained locally in `.lake/bitops-checked/` (ignored by Git);
-their presence is not claimed by the tracked snapshot. Compiler paths identify the original
-local execution, while their hashes preserve the binary identities. CI retains the complete
+Those additional artifacts and the raw manifest are retained locally in `.lake/bitops-rechecked/`
+(ignored by Git); their presence is not claimed by the tracked snapshot. The tracked manifest
+replaces the three machine-specific compiler paths with documented environment inputs and
+the delegated compiler sibling filename. Its derivation records the raw manifest hash; the
+raw manifest preserves the actual original paths. All binary, source and artifact hashes,
+validation classifications and execution facts remain unchanged. CI retains the complete
 output in its runner temporary directory for the current job.
 
 To reproduce the complete evidence from fresh compiler exports, run:
 
 ```sh
 AIR2LEAN_ZIG_AIR="$PWD/zig-air-0.16.0/bin/zig" AIR2LEAN_ZIG=zig \
-  AIR2LEAN_BITOPS_OUT_DIR="$PWD/.lake/bitops-checked" tests/roadmap/bitops/check.sh
+  AIR2LEAN_BITOPS_OUT_DIR="$PWD/.lake/bitops-rechecked" tests/roadmap/bitops/check.sh
 ```
 
 The tracked snapshot is historical evidence; the gate validates fresh exports and execution,

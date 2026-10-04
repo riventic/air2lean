@@ -1,10 +1,16 @@
 {
   "air_compiler": {
     "delegated_compiler": {
-      "path": "/Users/konstantinrr/.codex/worktrees/review-more-tooling/air2lean/.lake/review-more-compiler16/bin/zig-unlocked",
+      "location": {
+        "filename": "zig-unlocked",
+        "kind": "sibling of AIR compiler launcher"
+      },
       "sha256": "1799798a07e3e49cfce0a3f6fe3e0f447f017859837f2256bdef8fd2aa82bcf6"
     },
-    "path": "/Users/konstantinrr/.codex/worktrees/review-more-tooling/air2lean/.lake/review-more-compiler16/bin/zig",
+    "location": {
+      "environment_variable": "AIR2LEAN_ZIG_AIR",
+      "kind": "provided local AIR compiler launcher"
+    },
     "sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459"
   },
   "air_target": "x86_64-linux",
@@ -42,19 +48,19 @@
     "generated/shiftVector.lean": "5596f8cb7f2d17975def975f2ba9223c894bc6b1a6c70bf8ce5f3f9c6e2d91db",
     "lean.txt": "316be637a0f1683289d3c9acbd4beb3fb4af3a7825d25a54cf4ad988a4dc5012",
     "mutants/clz_is_ctz.lean": "c844ca2d8584cf533e62220eb5d3c7dac5d3284dffe0f9f84d057c97a1765280",
-    "mutants/clz_is_ctz.log": "edc8fca8f9db3d434c61c357e69e3650381b45708c9231b4ffb5ff0a635a8f87",
+    "mutants/clz_is_ctz.log": "a17f711191df2db1f97b8ad58526a696b12f130385c9b5bdb1ade09e14eed471",
     "mutants/control.lean": "4938ce948b29024a44160c83dda5c3c1f4955b4325fe7ccebc5543707123e492",
     "mutants/ctz_is_clz.lean": "1a0bab93f37da5ab3df548dac41cf539cdd096ac83fbf5bab222408bc2145f3d",
-    "mutants/ctz_is_clz.log": "9c0f7bebbd279550b6eb810ef4127b8a4ac8680dd21466bade439ae0a9564386",
+    "mutants/ctz_is_clz.log": "6a28d98aff31cc16565e34c722d4ee1b082c30eaff3931c808f5d90c3bdc8bb4",
     "mutants/overflow_flag_inverted.lean": "66c6c836ede4f032946755b301479cc357adbd95fb0f4b2473a8174987e1060c",
-    "mutants/overflow_flag_inverted.log": "4906ecaedc0c22e786bc3bd201e56970e7e8589bbadc17103454d977c6361f3f",
+    "mutants/overflow_flag_inverted.log": "4caa7733cf61fe076095a892af218eda9fcdb236d4b0ed4f784d996d7202c308",
     "mutants/oversized_shift_allowed.lean": "cbeb522c8f9c360fa20ac6d11ab1801500bb70fb3d8298a7c2fd76ad8e6a834b",
-    "mutants/oversized_shift_allowed.log": "9aa7897e2de163307a8c74151ff677fd654295a8c20979f8006eb7d6636a43ca",
+    "mutants/oversized_shift_allowed.log": "ca837d3f1f6b3e7c0a547af15a4f0f1b5905aa091749b543d4ef79af2ec487d0",
     "mutants/population_is_zero.lean": "63833e99568840e1c7eabd3d5d644281ef0fa1596c375c52f08798060e647486",
-    "mutants/population_is_zero.log": "7cf439bb21c36b92f882d8a528cf89a39acfa4a31f114b7f51c471acaebd73ad",
+    "mutants/population_is_zero.log": "ac0e232b9ecd64dfb928bde64a664971ba0bbbdec8020b8bb77cd50fb09db08d",
     "mutants/signed_shift_is_unsigned.lean": "d9b5af5e3cdb07c13423cdd4beb133801688000a8fdf7afbff6e1dd0cfce878b",
-    "mutants/signed_shift_is_unsigned.log": "85ce806dc3016e4a51cc8f23fac3ba1364d2768186377e7541276280ed61d0b4",
-    "native": "e5795381a32600927dd8744e850c6cae9369e1f74b852e9f63bd466224b368a4",
+    "mutants/signed_shift_is_unsigned.log": "aa5d9a44777cc5b7b8bc04b8dbcdb93abce63ba3b5babd4dd00f05b29c07f748",
+    "native": "194da973e6a616694927a55b0a6f9942e60783cfdb3c3ada99b937bba1b0ba99",
     "native.txt": "316be637a0f1683289d3c9acbd4beb3fb4af3a7825d25a54cf4ad988a4dc5012"
   },
   "build_mode": "ReleaseSafe",
@@ -64,6 +70,11 @@
     "os": "Darwin"
   },
   "lean_toolchain": "leanprover/lean4:v4.34.0",
+  "manifest_derivation": {
+    "original_manifest_local_retention": ".lake/bitops-rechecked/manifest.json (ignored by Git)",
+    "original_manifest_sha256": "38d49d6a7e11edf9b87f2165ec94efb42058e16cafdfa8210ed6578870af834e",
+    "transformation": "Only the three absolute compiler path fields were replaced by documented portable input/sibling locations. All binary hashes, source hashes, artifact hashes, validation evidence and execution facts are unchanged. The original manifest preserves the actual local paths."
+  },
   "native_execution_target": "host default; architecture and OS recorded in host",
   "observations": {
     "exact_matches": 3092,
@@ -139,22 +150,39 @@
     "ZigLean/Union.lean": "c86c9f834b81eb16b866faa577c2a9ac29980b51f4fe67d638aebf65191f5060",
     "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73",
     "lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
-    "tests/roadmap/bitops/Cases.lean": "bf54933f54209066f345ca0096803edf25405770d6454ecbed6b9033da26fe5f",
+    "tests/roadmap/bitops/Cases.lean": "dd2d3ad8e2fd760b3251656291a765b29127339f5646459c0b2b903984372baa",
     "tests/roadmap/bitops/DiffMain.lean.inc": "fe74457f4647f79a19f06affce4909cf7f6892bd6afa579c262150720c2287c2",
     "tests/roadmap/bitops/Runtime.lean": "31529f6df5d1286f4425d81bf7b85ec9a0801022fea895dda2d7ca6f1c61f1de",
     "tests/roadmap/bitops/bitops.zig": "dde2bede43325861cd50a5938fd0ee504f673b427188f3cb02f5bd1cfa212837",
-    "tests/roadmap/bitops/check.sh": "74dc3f44b8168369382085521000faa61cd4825c12b65e5008f01bdd42047495",
-    "tests/roadmap/bitops/manifest.py": "e073f17b1fe7c88cea2c812ebd3ff6f210089c4b9a70cb34f1c318ce343e3944",
+    "tests/roadmap/bitops/check.sh": "d60c2020183219490c5b057f3035e84c80c5bbc6f59773c5296e1c4e79f84a04",
+    "tests/roadmap/bitops/classify_mutant.py": "96267119ab5c558e3bb428ac79ba12cce9362327393b6616b23a1b81a12bba47",
+    "tests/roadmap/bitops/manifest.py": "6564745127c43cdd7134541ed73581cc49288147477d7995cb09b18219adb6df",
     "tests/roadmap/bitops/mutations.py": "4bdbb2c6546e9b441d928b5588897c8e62bcdb60faecf34def92e2db34509353",
     "tests/roadmap/bitops/native.zig": "ff8ea81a1d9ee12579960bf03a37a1fd681d433bbe79225306e0e00a42783a2c",
+    "tests/roadmap/bitops/test_classifier.py": "46e50dc8fdcfca0303ca6eea075c4b7bbc7602f4917d633d6248c5b4d32b418e",
     "zig-patch/air-json/json.zig": "0afedc92a9942f835c94f07c0c2903bd55b98cbaef02cbdaed9707d1cf903b87"
   },
   "status": "passed",
   "stock_compiler": {
-    "path": "/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig",
+    "location": {
+      "environment_variable": "AIR2LEAN_ZIG",
+      "kind": "provided stock compiler"
+    },
     "sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec"
   },
   "target_scope": "Reference x86_64-linux AIR compared against host-native scalar/vector/bitset execution. This does not qualify all x86_64 backend or ABI behavior.",
-  "trust_boundary": "Kernel checks the runtime lemmas and asserted Lean outputs. Zig Sema/export/backend and AIR normalization/emission preservation remain unproved.",
+  "trust_boundary": "Kernel checks runtime lemmas, Runtime.lean assertions and mutation decide refutations. Generated fixture IO assertions and differential rows are compiled execution evidence. Zig Sema/export/backend and AIR normalization/emission preservation remain unproved.",
+  "validation": {
+    "compiled_execution": [
+      "Cases.lean parser/normalizer/checker regressions",
+      "13 generated fixture IO assertions",
+      "3092 native/Lean differential observation rows"
+    ],
+    "kernel_checked": [
+      "ZigLean/Bit.lean runtime lemmas",
+      "Runtime.lean edge assertions",
+      "mutation control assertions and decide refutations"
+    ]
+  },
   "zig_version": "0.16.0"
 }
