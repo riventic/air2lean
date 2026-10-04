@@ -10,9 +10,20 @@ The translator retains every field of the Zig argument tuple in source order. Em
 
 ## Qualification and provenance
 
-`provenance.json` pins the source hash, checked AIR hashes and inventory, std Thread source hashes, and the export profile. The checked AIR profile is Zig 0.16.0 schema 11, x86_64-linux, baseline CPU, ReleaseSafe, with error tracing disabled. Native testing uses a stock host compiler separately from the patched AIR-only compiler.
+`provenance.json` pins the source hash, checked AIR hashes and twelve-root inventory, std Thread source hashes, and the declared export profile. The actual export command uses Zig 0.16.0 with `-target x86_64-linux -mcpu=baseline -OReleaseSafe -fno-error-tracing`. The checked schema 11 AIR has legacy/unverified target-profile metadata, so these recorded flags do not establish target-profile preservation or T01 qualification. Native testing uses a stock host compiler separately from the patched AIR-only compiler.
 
 The local Zig 0.14.1, 0.15.2, and 0.16.0 std `Thread.zig` implementations were inspected. Each copies the entire generic `Args` into child storage and eventually invokes `@call(.auto, f, args)`. Their source hashes are recorded. Zig 0.16 `Io.Group` converts the capture to `std.meta.ArgsTuple`, copies the context by value, and calls the worker with that tuple. AIR fields supply logical argument order, so translation does not assume tuple byte offsets or host layout. Source inspection alone does not qualify a compiler version; the manifest states which live validation has actually passed.
+
+At source revision `61c7ced`, the root serialized validation queue passed the fresh twelve-root export (including `atomic.Value(u32).init` and the instantiated generic worker), regenerated translation, generated kernel proofs, sixteen deterministic runtime schedules, pipeline fixtures, and the tuple-order mutant. The complete artifact gate passed in 3.1 seconds (515 MiB peak memory); the stock Zig 0.16.0 native gate passed both tests in 5.2 seconds (399 MiB peak memory) on the arm64 Darwin host. The native command uses ReleaseSafe without a target/CPU override, so it does not assert an exact host CPU profile. Lean is pinned to v4.34.0. Local retained logs are:
+
+- `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-source16-closure.log`
+- `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-translation-closure.log`
+- `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-pipeline-repaired.log`
+- `/opt/dev/air2lean/.lake/review-resume/roadmap/thread-tuples-native-first.log`
+
+CI runs the complete scoped gate only in the existing full nonmutation 0.16.0 Linux job. It checks matching patched/stock compiler versions, exports into a fresh `RUNNER_TEMP` directory, compares the fresh translation with the checked generated file, and runs the native and artifact gates sequentially. Fresh temporary evidence is cleaned up; this gate adds no cache or upload. Linux CI and 0.14.1/0.15.2 live export/native qualification remain pending.
+
+This is partial C01 evidence for complete zero/multiple-field captures and explicit ownership obligations at the accepted spawn boundaries. Sixteen schedules are finite samples. The change makes no detached-thread, TLS, foreign-memory or general lifecycle claim.
 
 ## Run the gates
 

@@ -141,6 +141,28 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # C01's checked source/export/proof fragment is qualified on 0.16.0.
+      # Fresh exports use the pinned patched compiler; native tests use stock Zig.
+      - name: Thread tuple source and ownership gate
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/thread-tuples/guard-tests.py
+          [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
+          [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
+          work=$(mktemp -d "$RUNNER_TEMP/thread-tuples.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
+          tests/roadmap/thread-tuples/check.sh --export "$work/air"
+          "$AIR2LEAN_TRANSLATOR" "$work/air" -o "$work/Gen.lean" --namespace ThreadTuples --prefix thread_tuples.
+          cmp "$work/Gen.lean" tests/roadmap/thread-tuples/ThreadTuples/Gen.lean
+          tests/roadmap/thread-tuples/check.sh --native
+          tests/roadmap/thread-tuples/check.sh --check-artifacts
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
