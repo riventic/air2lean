@@ -19,7 +19,11 @@ def addToPre (p : Ptr) (delta : BitVec 32) (old : BitVec 64) : Assn := fun h =>
 theorem addTo_source (p : Ptr) (delta : BitVec 32) (old : BitVec 64) :
     (addToProgram p delta old).eval = Pointers.addTo p delta := by
   funext m
-  simp [addToProgram, MemProgram.eval, ResultProgram.eval, Pointers.addTo, zig_unfold]
+  change ((addToProgram p delta old).eval).run m = (Pointers.addTo p delta).run m
+  -- Normalize the generated locals transformer using lawful monadic composition.
+  -- Keeping load/store opaque checks this equality for failures and divergence too.
+  simp [addToProgram, MemProgram.eval, ResultProgram.eval, Pointers.addTo,
+    ← bind_pure_comp]
 
 -- The generated obligation exposes positive size, ownership, widening, overflow, and
 -- the heap postcondition. Neither the intermediate memories nor an invariant is guessed.
@@ -50,7 +54,8 @@ def swapSelfProgram (p : Ptr) (old : BitVec 32) : MemProgram Unit :=
 theorem swapSelf_source (p : Ptr) (old : BitVec 32) :
     (swapSelfProgram p old).eval = Pointers.swap p p := by
   funext m
-  simp [swapSelfProgram, MemProgram.eval, Pointers.swap, zig_unfold]
+  change ((swapSelfProgram p old).eval).run m = (Pointers.swap p p).run m
+  simp [swapSelfProgram, MemProgram.eval, Pointers.swap, ← bind_pure_comp]
 
 -- Compare the explicit intermediate-memory proof in Proofs/Pointers/Sep.lean:
 -- the client proof here is the computed VC and its soundness theorem.
