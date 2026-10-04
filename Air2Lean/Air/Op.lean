@@ -1,3 +1,5 @@
+import Std.Data.HashSet
+
 /-!
 # Internal IR
 
@@ -55,6 +57,12 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
+/-- Constants must fit the declared Zig integer width; validation never inserts a wrap. -/
+def integerFits (signed : Bool) (bits : Nat) (v : Int) : Bool :=
+  if bits == 0 then v == 0 else
+  let bound : Int := 2 ^ (if signed then bits - 1 else bits)
+  if signed then decide (-bound ≤ v ∧ v < bound) else decide (0 ≤ v ∧ v < bound)
+
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
@@ -67,26 +75,55 @@ def childTys (ty : Ty) : Array TyId :=
   | _ => #[]
 
 private inductive TypeVisit where
-  | unseen | active | done
+  | unseen | active | done (height : Nat)
   deriving Inhabited
 
 /-- Reject cycles through values before width/layout traversal. Pointer edges break a
 value cycle, so ordinary linked structures remain valid. All child IDs are range checked. -/
 partial def validateTypeGraph (fnName : String) (types : Array Ty) : Except String Unit := do
   for t in types do
+    if let .int _ bits := t then
+      if bits > 65535 then throw s!"{fnName}: integer width {bits} exceeds Zig's 65535-bit limit"
     for c in childTys t do
       unless c < types.size do throw s!"{fnName}: unknown type id {c}"
-  let rec visit (id : TyId) (states : Array TypeVisit) : Except String (Array TypeVisit) := do
+    let fields : Array String := match t with
+      | .struct _ _ fs | .union _ _ _ fs => fs.map (fun (field : String × TyId) => field.1)
+      | .enum _ _ _ fs => fs.map (fun (field : String × Int) => field.1)
+      | _ => #[]
+    let mut names : Std.HashSet String := {}
+    for name in fields do
+      if names.contains name then throw s!"{fnName}: duplicate type field name '{name}'"
+      names := names.insert name
+    match t with
+    | .errorUnion set _ =>
+      unless (match types[set]? with | some (.errorSet _) => true | _ => false) do
+        throw s!"{fnName}: error union set type {set} is not an error set"
+    | .enum name tag _ fs =>
+      let some (.int signed bits) := types[tag]?
+        | throw s!"{fnName}: enum '{name}' tag type {tag} is not an integer"
+      if bits > 65535 then throw s!"{fnName}: enum '{name}' tag width exceeds 65535 bits"
+      let mut values : Std.HashSet Int := {}
+      for (_, v) in fs do
+        unless integerFits signed bits v do throw s!"{fnName}: enum '{name}' tag {v} does not fit its integer type"
+        if values.contains v then throw s!"{fnName}: enum '{name}' has duplicate tag {v}"
+        values := values.insert v
+    | _ => pure ()
+  let rec visit (id : TyId) (states : Array TypeVisit) (depth : Nat := 0) : Except String (Array TypeVisit) := do
+    if depth ≥ 256 then throw s!"{fnName}: value type traversal exceeds 256 levels"
     match states[id]? with
-    | some .done => return states
+    | some (.done _) => return states
     | some .active => throw s!"{fnName}: cyclic value type at type {id}"
     | none => throw s!"{fnName}: unknown type id {id}"
     | some .unseen =>
       let some t := types[id]? | throw s!"{fnName}: unknown type id {id}"
       let mut states := states.set! id .active
       unless (match t with | .ptr .. => true | _ => false) do
-        for c in childTys t do states ← visit c states
-      pure (states.set! id .done)
+        for c in childTys t do states ← visit c states (depth + 1)
+      let height : Nat := if (match t with | .ptr .. => true | _ => false) then 1 else
+        1 + (childTys t).foldl (fun n c => match states[c]? with
+          | some (.done h) => max n h | _ => n) (0 : Nat)
+      if height > 256 then throw s!"{fnName}: value type traversal exceeds 256 levels"
+      pure (states.set! id (.done height))
   let mut states : Array TypeVisit := Array.replicate types.size .unseen
   for id in Array.range types.size do states ← visit id states
 
@@ -115,7 +152,7 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, BEq
 
 inductive Val where
   | inst (id : InstId)

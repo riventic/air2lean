@@ -1,4 +1,4 @@
-import Lean.Data.Json
+import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Op
 import Air2Lean.Air.Profile
 
@@ -140,7 +140,8 @@ def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : V
   unless compatible do throw s!"{fnName}: constant does not match type {expected}"
 
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
-def parseIntLit (fnName : String) (s : String) : Except String Int :=
+def parseIntLit (fnName : String) (s : String) : Except String Int := do
+  if s.length > 32768 then throw s!"{fnName}: integer literal exceeds 32768 characters"
   if s.startsWith "-" then
     match (s.drop 1).toNat? with
     | some n => return (-(n : Int))
@@ -326,6 +327,7 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
   for ((name, fty), part) in fields.toList.zip parts do
     let some w := packedWidth types fty
       | throw s!"{fnName}: packed field {name} has no bit width"
+    if off + w > 65535 then throw s!"{fnName}: packed integer width exceeds 65535 bits"
     let v ← match (part.splitOn "=").map (·.trimAscii.toString) with
       | [lhs, rhs] =>
         if lhs != "." ++ name then throw s!"{fnName}: packed constant {s}: field {lhs}, expected .{name}"
@@ -628,7 +630,7 @@ def parseFunc (j : Json) : Except String RawFunc := do
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do
-  let j ← Json.parse contents
+  let j ← StrictJson.parse contents
   parseFunc j
 
 end Air2Lean.Raw
