@@ -5,6 +5,17 @@ namespace VCClients
 
 open Zig Assn VC
 
+-- A generated exit discards the Unit returned by a store. Rebuilding that pair
+-- preserves every Result case, including a safety error or nontermination.
+private theorem unit_result_eta (r : Result (Unit × Mem)) :
+    (r >>= fun pair => pure ((), pair.2)) = r := by
+  have h : (fun pair : Unit × Mem => ((), pair.2)) = id := by
+    funext pair
+    rcases pair with ⟨u, m⟩
+    cases u
+    rfl
+  rw [bind_pure_comp, h, id_map]
+
 -- Ghost values annotate reads/writes; they do not change eval's runtime behavior.
 def addToProgram (p : Ptr) (delta : BitVec 32) (old : BitVec 64) : MemProgram Unit :=
   .bind (.read p 8 old) fun loaded =>
@@ -23,7 +34,7 @@ theorem addTo_source (p : Ptr) (delta : BitVec 32) (old : BitVec 64) :
   -- Normalize the generated locals transformer using lawful monadic composition.
   -- Keeping load/store opaque checks this equality for failures and divergence too.
   simp [addToProgram, MemProgram.eval, ResultProgram.eval, Pointers.addTo,
-    ← bind_pure_comp]
+    ← bind_pure_comp, unit_result_eta]
 
 -- The generated obligation exposes positive size, ownership, widening, overflow, and
 -- the heap postcondition. Neither the intermediate memories nor an invariant is guessed.
@@ -55,7 +66,8 @@ theorem swapSelf_source (p : Ptr) (old : BitVec 32) :
     (swapSelfProgram p old).eval = Pointers.swap p p := by
   funext m
   change ((swapSelfProgram p old).eval).run m = (Pointers.swap p p).run m
-  simp [swapSelfProgram, MemProgram.eval, Pointers.swap, ← bind_pure_comp]
+  simp [swapSelfProgram, MemProgram.eval, Pointers.swap, ← bind_pure_comp,
+    unit_result_eta]
 
 -- Compare the explicit intermediate-memory proof in Proofs/Pointers/Sep.lean:
 -- the client proof here is the computed VC and its soundness theorem.
