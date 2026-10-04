@@ -382,6 +382,87 @@ class AdapterTests(unittest.TestCase):
         self.assertIsNotNone(result['failure'])
         self.assertLessEqual(len(result['stdout']) + len(result['stderr']), 1024)
 
+    def test_shared_air_decoded_once_and_schema_independent_of_name(self):
+        self.manifest['roots'].append(dict(self.root, id='sibling'))
+        self.air.pop('name')
+        self.air.update(schema=12, zig_version='0.15.2', profile=None)
+        raw = json.dumps(self.air).encode()
+        (self.base / 'air.json').write_bytes(raw)
+        self.save()
+        with mock.patch.object(project, 'bounded_json', wraps=project.bounded_json) as parsed:
+            report = self.check()
+        self.assertEqual(sum(call.args[0] == raw for call in parsed.call_args_list), 1)
+        for record in report['root_checks']:
+            self.assertEqual([d['code'] for d in record['preflight']],
+                             ['AIR_PROFILE', 'AIR_PROFILE', 'PROJECT_ROOT'])
+            self.assertEqual([d['message'] for d in record['preflight'][:2]],
+                ['AIR version/endian differs from manifest profile',
+                 'profiled AIR cannot use a legacy manifest profile'])
+        self.assertEqual([d['message'] for d in report['evidence']['diagnostics'] if d['code'] == 'AIR_JSON'],
+                         ['AIR must be an object with a function name'] * 2)
+
+    def test_boundary_schema_and_profile_none_keep_validation_order(self):
+        self.air.update(schema=True, zig_version='different')
+        (self.base / 'air.json').write_text(json.dumps(self.air))
+        first = self.check()['root_checks'][0]
+        self.assertEqual([d['code'] for d in first['preflight']], ['AIR_SCHEMA'])
+        self.air['schema'] = 11
+        (self.base / 'air.json').write_text(json.dumps(self.air))
+        (self.base / 'profile.json').write_bytes(b'{')
+        second = self.check()['root_checks'][0]
+        self.assertEqual([d['code'] for d in second['preflight']], ['PROJECT_PROFILE'])
+        self.assertEqual(second['status'], 'blocked')
+
+    def test_profile_shape_and_version_errors_are_both_observed(self):
+        profile = dict(name='abi64-le-v1', target_triple='x86_64-linux-gnu', pointer_bits=64,
+            endian='little', abi='gnu', zig_version='0.16.0', backend='stage2_llvm', cpu='baseline',
+            features=[], build_mode='ReleaseSafe', float_mode='per-instruction', error_set_bits=16,
+            error_layout='type-table', export_stage='analyzed-air', error_tracing=False)
+        raw = json.dumps(dict(self.air, schema=12, zig_version='wrong', profile={})).encode()
+        summary = project.summarize_air(raw, profile, project.LIMITS, include_boundary=True)
+        observed = adapter.preflight_air({'air.json': summary[3]})['air.json']
+        self.assertEqual([d['code'] for d in observed], ['AIR_PROFILE', 'AIR_PROFILE'])
+        self.assertEqual(summary[2][-1][1], 'AIR zig_version differs from declared profile')
+        self.assertIn('expected object', observed[1]['message'])
+
+    def test_mapping_occurs_in_owned_receipt_only_after_validation(self):
+        air = self.base / 'air'
+        source = str(air / '000000.json')
+        mapping = {source: 'air.json'}
+        d = diagnostic(source)
+        d['message'] = 'failure at ' + str(air)
+        owned = receipt(mapping, [d])
+        raw = json.dumps(owned).encode()
+        counters = owned['diagnostic_payload_bytes'], owned['diagnostics_observed']
+        with mock.patch.object(project, 'bounded_json', return_value=owned):
+            mapped = adapter.validate_receipt(raw, 1, mapping, air, 256)
+        self.assertIs(mapped, owned)
+        self.assertEqual((mapped['diagnostic_payload_bytes'], mapped['diagnostics_observed']), counters)
+        self.assertEqual(mapped['diagnostics'][0]['file'], 'air.json')
+        self.assertEqual(mapped['diagnostics'][0]['message'], 'failure at ${SELECTED_AIR}')
+        invalid = receipt(mapping, [diagnostic(source)])
+        invalid['diagnostic_payload_bytes'] += 1
+        before = copy.deepcopy(invalid)
+        with mock.patch.object(project, 'bounded_json', return_value=invalid), self.assertRaises(ValueError):
+            adapter.validate_receipt(json.dumps(invalid).encode(), 1, mapping, air, 256)
+        self.assertEqual(invalid, before)
+
+    def test_shared_runner_keeps_raw_streams_and_legacy_replacement_decode(self):
+        argv = [sys.executable, '-c', 'import os;os.write(1,b"\\xffout");os.write(2,b"\\xfeerr")']
+        limits = dict(project.LIMITS, timeout_seconds=2, max_output_bytes=1024)
+        separate = adapter.invoke(argv, self.base, limits)
+        self.assertEqual(separate, dict(returncode=0, stdout=b'\xffout', stderr=b'\xfeerr', failure=None))
+        merged = project.run_translation(argv, self.base, limits)
+        self.assertEqual(merged, dict(status='passed', code='TRANSLATION_OK', returncode=0,
+                                    message='\ufffdout\ufffderr', argv=argv))
+
+    def test_shared_runner_combined_cap_applies_to_two_individually_bounded_streams(self):
+        argv = [sys.executable, '-c', 'import os;os.write(1,b"a"*1024);os.write(2,b"b"*1024)']
+        result = adapter.invoke(argv, self.base, dict(project.LIMITS, timeout_seconds=2, max_output_bytes=1536))
+        self.assertEqual(result['failure'], 'CHECK_OUTPUT_LIMIT')
+        self.assertEqual(result['stdout'], b'a' * 1024)
+        self.assertEqual(result['stderr'], b'b' * 512)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded project preflight, translation, and hash-bound evidence (stdlib only)."""
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import math
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import NamedTuple, Optional
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
@@ -248,13 +250,48 @@ def input_names(manifest):
     return names
 
 
-def summarize_air(content, profile, limits):
+class AIRBoundary(NamedTuple):
+    """Compact import/schema/profile observations; never retains decoded AIR trees."""
+    syntax_error: Optional[str]
+    schema_valid: bool
+    version_endian_mismatch: bool
+    profile_error: Optional[str]
+
+
+def air_boundary(air, profile, syntax_error=None):
+    schema_valid = (isinstance(air, dict) and type(air.get('schema')) is int
+                    and 1 <= air['schema'] <= 12)
+    mismatch = False
+    profile_error = None
+    if schema_valid and profile is not None:
+        mismatch = (air.get('zig_version') != profile['zig_version'] or
+            air.get('target_endian', profile.get('endian', 'little')) != profile.get('endian', 'little'))
+        if profile['name'] == 'legacy-abi64-le':
+            if air['schema'] > 11 or 'profile' in air:
+                profile_error = 'profiled AIR cannot use a legacy manifest profile'
+        else:
+            try:
+                validate_profile(air.get('profile'))
+                if air['schema'] != 12 or air['profile'] != profile:
+                    raise Invalid('AIR profile differs from manifest profile')
+            except ValueError as error:
+                profile_error = str(error)
+    return AIRBoundary(syntax_error, schema_valid, mismatch, profile_error)
+
+
+def summarize_air(content, profile, limits, *, include_boundary=False):
     """Root-independent observations, replayed with each root's ID and path."""
     observed = None
     unsupported = 0
     diagnostics = []
+    air = None
+    syntax_error = None
     try:
-        air = bounded_json(content, limits)
+        try:
+            air = bounded_json(content, limits)
+        except (ValueError, UnicodeError) as error:
+            syntax_error = str(error)
+            raise
         if not isinstance(air, dict) or not isinstance(air.get('name'), str):
             raise Invalid('AIR must be an object with a function name')
         observed = air['name']
@@ -285,10 +322,14 @@ def summarize_air(content, profile, limits):
             raise Invalid('profiled AIR cannot be relabeled as legacy')
     except (ValueError, UnicodeError) as error:
         diagnostics.append(('AIR_JSON', str(error), 'malformed_input'))
-    return observed, unsupported, diagnostics
+    summary = (observed, unsupported, diagnostics)
+    if include_boundary:
+        return (*summary, air_boundary(air, profile, syntax_error))
+    return summary
 
 
-def collect(path):
+def collect(path, *, air_boundaries=None):
+    """Return the existing four-tuple; optionally fill compact per-file boundaries."""
     manifest, raw, limits = load_manifest(path)
     files = {'manifest': {'sha256': digest(raw), 'bytes': len(raw)}}
     data = {}
@@ -342,7 +383,11 @@ def collect(path):
                 diagnostics.append(diagnostic('AIR_MISSING', 'AIR unavailable', root['id'], name))
                 continue
             if name not in air_summaries:
-                air_summaries[name] = summarize_air(data[name], profile, limits)
+                summary = summarize_air(data[name], profile, limits,
+                                        include_boundary=air_boundaries is not None)
+                air_summaries[name] = summary[:3]
+                if air_boundaries is not None:
+                    air_boundaries[name] = summary[3]
             observed, unsupported, issues = air_summaries[name]
             if observed is not None:
                 record['observed_functions'].append(observed)
@@ -369,48 +414,77 @@ def collect(path):
     return manifest, limits, data, report
 
 
-def run_translation(argv, cwd, limits):
-    # No shell. Logs and output sizes are bounded, and the entire child process group is cancelled.
-    with tempfile.TemporaryFile() as log:
+def _run_bounded(argv, cwd, limits, *, merged):
+    """Raw bounded POSIX execution shared by adapters with different receipt policies."""
+    with ExitStack() as streams:
+        stdout = streams.enter_context(tempfile.TemporaryFile())
+        stderr = stdout if merged else streams.enter_context(tempfile.TemporaryFile())
+        logs = (stdout,) if merged else (stdout, stderr)
         def constrain():
             resource.setrlimit(resource.RLIMIT_FSIZE, (limits['max_output_bytes'], limits['max_output_bytes']))
-        child = subprocess.Popen(argv, cwd=cwd, stdout=log, stderr=log,
+        child = subprocess.Popen(argv, cwd=cwd, stdout=stdout, stderr=stderr,
                                  start_new_session=True, preexec_fn=constrain)
-        deadline = time.monotonic() + limits['timeout_seconds']
         def kill_group():
             try:
                 os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
             child.wait()
+        def size():
+            return sum(os.fstat(log.fileno()).st_size for log in logs)
+        deadline = time.monotonic() + limits['timeout_seconds']
+        failure = None
         try:
             while child.poll() is None:
                 if time.monotonic() >= deadline:
+                    failure = 'timeout'
+                    break
+                if size() > limits['max_output_bytes']:
+                    failure = 'output_limit'
+                    break
+                time.sleep(.02)
+            if failure:
+                kill_group()
+            else:
+                # A wrapper exiting before its helpers finish has not completed the stage.
+                try:
+                    os.killpg(child.pid, 0)
+                except ProcessLookupError:
+                    pass
+                else:
                     kill_group()
-                    return {'status': 'failed', 'code': 'TRANSLATION_TIMEOUT', 'message': 'translator exceeded timeout'}
-                if os.fstat(log.fileno()).st_size > limits['max_output_bytes']:
-                    kill_group()
-                    return {'status': 'failed', 'code': 'TRANSLATION_OUTPUT_LIMIT', 'message': 'translator log exceeded limit'}
-                time.sleep(0.02)
+                    failure = 'descendants'
         except BaseException:
             kill_group()
             raise
-        # A wrapper that exits before its helpers finish has not completed the stage.
-        try:
-            os.killpg(child.pid, 0)
-        except ProcessLookupError:
-            pass
-        else:
-            kill_group()
-            return {'status': 'failed', 'code': 'TRANSLATION_DESCENDANTS',
-                    'message': 'translator exited with unfinished child processes'}
-        log.seek(0)
-        text = log.read(limits['max_output_bytes']).decode('utf-8', errors='replace')
-        if os.fstat(log.fileno()).st_size > limits['max_output_bytes']:
-            return {'status': 'failed', 'code': 'TRANSLATION_OUTPUT_LIMIT', 'message': 'translator log exceeded limit'}
-        return {'status': 'passed' if child.returncode == 0 else 'failed',
-                'code': 'TRANSLATION_OK' if child.returncode == 0 else 'TRANSLATION_FAILED',
-                'returncode': child.returncode, 'message': text, 'argv': argv}
+        if merged and failure:
+            return {'returncode': child.returncode, 'stdout': b'', 'stderr': b'', 'failure': failure}
+        if not merged and size() > limits['max_output_bytes']:
+            failure = failure or 'output_limit'
+        stdout.seek(0)
+        out = stdout.read(limits['max_output_bytes'])
+        err = b''
+        if not merged:
+            stderr.seek(0)
+            err = stderr.read(max(0, limits['max_output_bytes'] - len(out)))
+        if merged and size() > limits['max_output_bytes']:
+            failure = failure or 'output_limit'
+        return {'returncode': child.returncode, 'stdout': out, 'stderr': err, 'failure': failure}
+
+
+def run_translation(argv, cwd, limits):
+    result = _run_bounded(argv, cwd, limits, merged=True)
+    failures = {'timeout': ('TRANSLATION_TIMEOUT', 'translator exceeded timeout'),
+                'output_limit': ('TRANSLATION_OUTPUT_LIMIT', 'translator log exceeded limit'),
+                'descendants': ('TRANSLATION_DESCENDANTS', 'translator exited with unfinished child processes')}
+    if result['failure']:
+        code, message = failures[result['failure']]
+        return {'status': 'failed', 'code': code, 'message': message}
+    passed = result['returncode'] == 0
+    return {'status': 'passed' if passed else 'failed',
+            'code': 'TRANSLATION_OK' if passed else 'TRANSLATION_FAILED',
+            'returncode': result['returncode'],
+            'message': result['stdout'].decode('utf-8', errors='replace'), 'argv': argv}
 
 
 def translate(manifest, limits, data, report, translator, staging):

@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Check selected project AIR with a versioned diagnostic producer; emit no Lean."""
 import argparse
-import copy
 import json
-import os
 from pathlib import Path
-import resource
 import signal
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
 
 import project
 
@@ -170,62 +166,22 @@ def validate_receipt(raw, returncode, mapping, air_dir, limit):
     else:
         demand(receipt['truncated'] or any(d['category'] != 'skipped_prerequisite' for d in diagnostics),
                'rejection lacks blocker')
-    # Original bytes are hashed before this copy. Map only paths supplied to this invocation.
-    mapped = copy.deepcopy(receipt)
-    for d in mapped['diagnostics']:
+    # All validation and raw-byte counters precede mapping this locally owned receipt.
+    for d in receipt['diagnostics']:
         d['file'] = mapping.get(d['file'], '${SELECTED_AIR}' if d['file'] == str(air_dir) else None)
         d['message'] = d['message'].replace(str(air_dir), '${SELECTED_AIR}')
-    for item in mapped['files']:
+    for item in receipt['files']:
         item['file'] = mapping[item['file']]
-    return mapped
+    return receipt
 
 
 def invoke(argv, cwd, limits):
-    """Separate bounded byte streams, with the project's POSIX cancellation policy."""
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        def constrain():
-            resource.setrlimit(resource.RLIMIT_FSIZE, (limits['max_output_bytes'], limits['max_output_bytes']))
-        child = subprocess.Popen(argv, cwd=cwd, stdout=stdout, stderr=stderr,
-                                 start_new_session=True, preexec_fn=constrain)
-        def kill_group():
-            try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            child.wait()
-        def size():
-            return os.fstat(stdout.fileno()).st_size + os.fstat(stderr.fileno()).st_size
-        deadline = time.monotonic() + limits['timeout_seconds']
-        failure = None
-        try:
-            while child.poll() is None:
-                if time.monotonic() >= deadline:
-                    failure = 'CHECK_TIMEOUT'
-                    break
-                if size() > limits['max_output_bytes']:
-                    failure = 'CHECK_OUTPUT_LIMIT'
-                    break
-                time.sleep(.02)
-            if failure:
-                kill_group()
-            else:
-                try:
-                    os.killpg(child.pid, 0)
-                except ProcessLookupError:
-                    pass
-                else:
-                    kill_group()
-                    failure = 'CHECK_DESCENDANTS'
-        except BaseException:
-            kill_group()
-            raise
-        if size() > limits['max_output_bytes']:
-            failure = failure or 'CHECK_OUTPUT_LIMIT'
-        stdout.seek(0)
-        stderr.seek(0)
-        out = stdout.read(limits['max_output_bytes'])
-        err = stderr.read(max(0, limits['max_output_bytes'] - len(out)))
-        return {'returncode': child.returncode, 'stdout': out, 'stderr': err, 'failure': failure}
+    """Keep separate raw streams and diagnostic execution codes."""
+    result = project._run_bounded(argv, cwd, limits, merged=False)
+    if result['failure']:
+        result['failure'] = {'timeout': 'CHECK_TIMEOUT', 'output_limit': 'CHECK_OUTPUT_LIMIT',
+                             'descendants': 'CHECK_DESCENDANTS'}[result['failure']]
+    return result
 
 
 def issue(code, stage, message, path=None):
@@ -233,37 +189,26 @@ def issue(code, stage, message, path=None):
             'source_span': None, 'source_span_status': 'unavailable_in_AIR'}
 
 
-def preflight_air(data, profile, limits):
-    """Classify at known validation boundaries, independent of legacy AIR_JSON text."""
+def preflight_air(boundaries):
+    """Classify typed boundaries observed during collection, without parsing message text."""
     issues = {}
-    for name, raw in data.items():
+    for name, boundary in boundaries.items():
         local = issues[name] = []
-        try:
-            air = project.bounded_json(raw, limits)
-        except (ValueError, UnicodeError, RecursionError) as error:
-            local.append(issue('AIR_SYNTAX', 'import', error, name))
-            continue
-        if not isinstance(air, dict) or type(air.get('schema')) is not int or not 1 <= air['schema'] <= 12:
+        if boundary.syntax_error is not None:
+            local.append(issue('AIR_SYNTAX', 'import', boundary.syntax_error, name))
+        elif not boundary.schema_valid:
             local.append(issue('AIR_SCHEMA', 'schema', 'unsupported or malformed AIR schema', name))
-            continue
-        if profile is None:
-            continue
-        if air.get('zig_version') != profile['zig_version'] or air.get('target_endian', profile.get('endian', 'little')) != profile.get('endian', 'little'):
-            local.append(issue('AIR_PROFILE', 'profile', 'AIR version/endian differs from manifest profile', name))
-        if profile['name'] == 'legacy-abi64-le':
-            if air['schema'] > 11 or 'profile' in air:
-                local.append(issue('AIR_PROFILE', 'profile', 'profiled AIR cannot use a legacy manifest profile', name))
         else:
-            try:
-                project.validate_profile(air.get('profile'))
-                demand(air['schema'] == 12 and air['profile'] == profile, 'AIR profile differs from manifest profile')
-            except ValueError as error:
-                local.append(issue('AIR_PROFILE', 'profile', error, name))
+            if boundary.version_endian_mismatch:
+                local.append(issue('AIR_PROFILE', 'profile', 'AIR version/endian differs from manifest profile', name))
+            if boundary.profile_error is not None:
+                local.append(issue('AIR_PROFILE', 'profile', boundary.profile_error, name))
     return issues
 
 
 def check_project(manifest_path, translator, limit, runner=invoke):
-    manifest, limits, data, evidence = project.collect(manifest_path)
+    boundaries = {}
+    manifest, limits, data, evidence = project.collect(manifest_path, air_boundaries=boundaries)
     translator = translator.resolve(strict=True)
     tool_hash, tool_bytes = project.hash_bounded(translator, 256 * 1024 * 1024)
     envelope = {'schema': 1, 'kind': 'air2lean-project-diagnostics', 'evidence': evidence,
@@ -272,8 +217,7 @@ def check_project(manifest_path, translator, limit, runner=invoke):
                                       'qualification': 'not_attested_by_adapter'},
                 'root_checks': [], 'complete': True, 'truncated': False,
                 'proof_status': 'not_run', 'runtime_outcomes': 'not_observed', 'source_correspondence': 'not_attested'}
-    air_data = {name: data[name] for root in manifest['roots'] for name in root['air'] if name in data}
-    preflight = preflight_air(air_data, evidence['profile'], limits)
+    preflight = preflight_air(boundaries)
     shared_names = set(manifest['source_closure']) | {manifest['profile']}
     for names in manifest['components'].values():
         shared_names.update(names)

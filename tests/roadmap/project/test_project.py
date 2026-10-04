@@ -432,6 +432,26 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(out.read_text(), 'unchanged')
         self.assertEqual(json.loads(stderr.getvalue())['diagnostics'][0]['code'], 'PROJECT_INPUT')
 
+    def test_optional_air_boundaries_preserve_four_tuple_and_report(self):
+        self.manifest['roots'].append(dict(self.manifest['roots'][0], id='second'))
+        self.air.update(schema=12, zig_version='0.15.2', profile=None,
+                        body=[{'id': 1, 'tag': 'timer', 'unsupported': True}])
+        (self.base / 'air.json').write_text(json.dumps(self.air))
+        self.save()
+        with mock.patch.object(project, 'git_state', return_value={}):
+            default = project.collect(self.path)
+            boundaries = {}
+            with mock.patch.object(project, 'bounded_json', wraps=project.bounded_json) as parsed:
+                observed = project.collect(self.path, air_boundaries=boundaries)
+        self.assertEqual(len(observed), 4)
+        self.assertEqual(observed, default)
+        self.assertEqual(sum(call.args[0] == (self.base / 'air.json').read_bytes()
+                             for call in parsed.call_args_list), 1)
+        self.assertEqual(boundaries, {'air.json': project.AIRBoundary(None, True, True,
+            'profiled AIR cannot use a legacy manifest profile')})
+        self.assertEqual([d['code'] for d in observed[3]['diagnostics']],
+                         ['AIR_EXPORT_UNSUPPORTED', 'AIR_JSON'] * 2)
+
 
 
 if __name__ == '__main__':
