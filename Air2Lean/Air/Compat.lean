@@ -38,9 +38,10 @@ private inductive DefinitionTask where
   | value (a b : Val)
   deriving Inhabited
 
-/-- Same global definition, following initializer pointers through each file's own table.
-Named references retain their identity; unnamed constants compare by their definition. -/
-def compatibleGlobal (a b : Func) (x y : Nat) : Bool := Id.run do
+/-- Compare globals within one exact ordered pair of file-local tables. Only a complete
+successful traversal publishes visited global pairs; failure leaves the caller's cache intact. -/
+def compatibleGlobalCached (a b : Func) (x y : Nat)
+    (completed : Std.HashSet (Nat × Nat) := {}) : Option (Std.HashSet (Nat × Nat)) := Id.run do
   let mut todo := [DefinitionTask.global x y]
   let mut seen : Std.HashSet (Nat × Nat) := {}
   while !todo.isEmpty do
@@ -48,43 +49,48 @@ def compatibleGlobal (a b : Func) (x y : Nat) : Bool := Id.run do
     todo := todo.tail!
     match task with
     | .global i j =>
-      if seen.contains (i, j) then continue
-      let some g := a.globals[i]? | return false
-      let some h := b.globals[j]? | return false
+      if completed.contains (i, j) || seen.contains (i, j) then continue
+      let some g := a.globals[i]? | return none
+      let some h := b.globals[j]? | return none
       unless g.name == h.name && g.isConst == h.isConst && g.threadlocal == h.threadlocal &&
-          g.isExtern == h.isExtern && compatibleType a b g.ty h.ty do return false
+          g.isExtern == h.isExtern && compatibleType a b g.ty h.ty do return none
       seen := seen.insert (i, j)
       match g.init, h.init with
       | some v, some w => todo := .value v w :: todo
       | none, none => pure ()
-      | _, _ => return false
+      | _, _ => return none
     | .value v w =>
       let ty (i j : TyId) := compatibleType a b i j
       match v, w with
       | .int i v, .int j w | .enumTag i v, .enumTag j w =>
-        unless v == w && ty i j do return false
-      | .float i v, .float j w => unless v == w && ty i j do return false
-      | .bool v, .bool w => unless v == w do return false
+        unless v == w && ty i j do return none
+      | .float i v, .float j w => unless v == w && ty i j do return none
+      | .bool v, .bool w => unless v == w do return none
       | .void, .void => pure ()
-      | .undef i, .undef j | .optNull i, .optNull j => unless ty i j do return false
+      | .undef i, .undef j | .optNull i, .optNull j => unless ty i j do return none
       | .err i v, .err j w | .errUnionErr i v, .errUnionErr j w
-      | .ptrOther i v, .ptrOther j w => unless v == w && ty i j do return false
-      | .func v n s, .func w m t => unless v == w && n == m && s == t do return false
+      | .ptrOther i v, .ptrOther j w => unless v == w && ty i j do return none
+      | .func v n s, .func w m t => unless v == w && n == m && s == t do return none
       | .optSome i v, .optSome j w | .errUnionOk i v, .errUnionOk j w =>
-        unless ty i j do return false
+        unless ty i j do return none
         todo := .value v w :: todo
       | .unionVal i k v, .unionVal j l w =>
-        unless k == l && ty i j do return false
+        unless k == l && ty i j do return none
         todo := .value v w :: todo
       | .agg i vs, .agg j ws =>
-        unless vs.size == ws.size && ty i j do return false
+        unless vs.size == ws.size && ty i j do return none
         todo := (vs.zip ws |>.toList.map fun (v, w) => .value v w) ++ todo
       | .ptrConst i g off, .ptrConst j h off' =>
-        unless off == off' && ty i j do return false
+        unless off == off' && ty i j do return none
         todo := .global g h :: todo
       | .sliceConst i p n, .sliceConst j q m =>
-        unless ty i j do return false
+        unless ty i j do return none
         todo := .value p q :: .value n m :: todo
-      | _, _ => return false
-  return true
+      | _, _ => return none
+  return some (Std.HashSet.fold (fun (cache : Std.HashSet (Nat × Nat)) pair => cache.insert pair) completed seen)
+
+/-- Same global definition, following initializer pointers through each file's own table.
+Named references retain their identity; unnamed constants compare by their definition. -/
+def compatibleGlobal (a b : Func) (x y : Nat) : Bool :=
+  (compatibleGlobalCached a b x y).isSome
 end Air2Lean

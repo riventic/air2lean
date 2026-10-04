@@ -558,23 +558,60 @@ def check (f : Func) : Except String Unit := do
   let _ ← checkInsts cx 0 f.body
   pure ()
 
-/-- A normalized operand's type. Bool/void literals carry no file-local ID. -/
-def Func.valTy? (f : Func) (v : Val) : Option TyId :=
+/-- First-occurrence instruction types and literal IDs for one function. Building this
+index does not hide duplicate-ID errors: structural validation still scans in source order. -/
+structure OperandTypes where
+  insts : Array Inst
+  instructions : Std.HashMap InstId TyId
+  boolId : Option TyId
+  voidId : Option TyId
+  deriving Inhabited
+
+def Func.operandTypes (f : Func) : OperandTypes := Id.run do
+  let insts := f.allInsts
+  let mut instructions : Std.HashMap InstId TyId := {}
+  for i in insts do
+    unless instructions.contains i.id do instructions := instructions.insert i.id i.ty
+  return {
+    insts
+    instructions
+    boolId := f.types.findIdx? (· == .bool)
+    voidId := f.types.findIdx? (· == .void)
+  }
+
+/-- A normalized operand's type, using a function's precomputed index. -/
+def OperandTypes.valTy? (index : OperandTypes) (v : Val) : Option TyId :=
   match v with
-  | .inst id => (f.allInsts.find? (·.id == id)).map (·.ty)
-  | .bool _ => f.types.findIdx? (· == .bool)
-  | .void => f.types.findIdx? (· == .void)
+  | .inst id => index.instructions[id]?
+  | .bool _ => index.boolId
+  | .void => index.voidId
   | v => v.constTy?
 
+/-- A normalized operand's type. Bool/void literals carry no file-local ID. -/
+def Func.valTy? (f : Func) (v : Val) : Option TyId := f.operandTypes.valTy? v
+
 /-- Exact argument type agreement between independent local type tables. -/
-def valueCompatible (f target : Func) (v : Val) (expected : TyId) : Bool :=
+def valueCompatible (f target : Func) (v : Val) (expected : TyId)
+    (index : OperandTypes := f.operandTypes) : Bool :=
   match v with
   | .bool _ => target.types[expected]? == some .bool
   | .void => target.types[expected]? == some .void
-  | v => ((f.valTy? v).map fun t => compatibleType f target t expected).getD false
+  | v => ((index.valTy? v).map fun t => compatibleType f target t expected).getD false
+
+/-- The same known local ID needs no structural comparison. Only callers which already
+validated the local table use this helper; constant form/range/payload checks remain separate. -/
+private def localTypeCompatible (f : Func) (x y : TyId) : Bool :=
+  if x == y then f.types[x]?.isSome else compatibleType f f x y
+
+private def localValueCompatible (f : Func) (index : OperandTypes) (v : Val) (expected : TyId) : Bool :=
+  match v with
+  | .bool _ => f.types[expected]? == some .bool
+  | .void => f.types[expected]? == some .void
+  | v => ((index.valTy? v).map fun t => localTypeCompatible f t expected).getD false
 
 /-- Validate a direct call (or one possible indirect target) against its exported signature. -/
-def checkCallSignature (f target : Func) (i : Inst) (args : Array Val) : Except String Unit := do
+def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
+    (index : OperandTypes := f.operandTypes) : Except String Unit := do
   unless args.size == target.params.size do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has {args.size} arguments, expected {target.params.size}"
   unless compatibleType f target i.ty target.ret do
@@ -582,17 +619,17 @@ def checkCallSignature (f target : Func) (i : Inst) (args : Array Val) : Except 
   for (arg, k) in args.zipIdx do
     if let .func .. := arg then
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' argument {k}: function values lack a structured signature in this AIR schema"
-    unless valueCompatible f target arg target.params[k]! do
+    unless valueCompatible f target arg target.params[k]! index do
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible argument {k} type (expected local type {target.params[k]!})"
 
 /-- Constant forms and nested payloads remain typed for direct normalized API clients too. -/
-private partial def checkConstant (f : Func) (expected : TyId) (v : Val)
+private partial def checkConstant (f : Func) (index : OperandTypes) (expected : TyId) (v : Val)
     (depth : Nat := 0) : Except String Unit := do
   if depth ≥ 256 then throw s!"{f.name}: constant traversal exceeds 256 levels"
   let fail : Except String Unit := throw s!"{f.name}: constant has an incompatible type or value form (type {expected})"
-  unless valueCompatible f f v expected do fail
+  unless localValueCompatible f index v expected do fail
   let some t := f.types[expected]? | fail
-  let recur (ty : TyId) (v : Val) := checkConstant f ty v (depth + 1)
+  let recur (ty : TyId) (v : Val) := checkConstant f index ty v (depth + 1)
   match v, t with
   | .undef _, _ => pure ()
   | .int _ n, .int signed bits =>
@@ -639,7 +676,7 @@ private partial def checkConstant (f : Func) (expected : TyId) (v : Val)
   | .sliceConst _ p n, .ptr "slice" _ child =>
     let some pty := p.constTy? | fail
     let some (.ptr "many" _ item) := f.types[pty]? | fail
-    unless compatibleType f f child item do fail
+    unless localTypeCompatible f child item do fail
     let some nty := n.constTy? | fail
     unless f.types[nty]? == some (.int false 64) do fail
     recur pty p
@@ -648,13 +685,13 @@ private partial def checkConstant (f : Func) (expected : TyId) (v : Val)
 
 /-- Check normalized signature/instruction/global references also for direct API clients.
 Raw canonicalization additionally checks lexical SSA scope and enclosing branch targets. -/
-private def checkFunctionStructure (f : Func) : Except String Unit := do
+private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except String Unit := do
   validateTypeGraph f.name f.types
   unless f.layouts.size == f.types.size do
     throw s!"{f.name}: layout table has {f.layouts.size} entries, expected {f.types.size}"
   for t in f.params ++ #[f.ret] do
     unless t < f.types.size do throw s!"{f.name}: signature has unknown type id {t}"
-  let insts := f.allInsts
+  let insts := index.insts
   let mut ids : Std.HashSet InstId := {}
   for i in insts do
     if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
@@ -663,7 +700,7 @@ private def checkFunctionStructure (f : Func) : Except String Unit := do
   let value (root : Val) (checkForm : Bool := true) : Except String Unit := do
     if let some t := root.constTy? then
       unless t < f.types.size do throw s!"{f.name}: constant has unknown type id {t}"
-      if checkForm then checkConstant f t root
+      if checkForm then checkConstant f index t root
     let mut todo : List (Val × Nat) := [(root, 0)]
     while !todo.isEmpty do
       let (v, depth) := todo.head!
@@ -688,7 +725,7 @@ private def checkFunctionStructure (f : Func) : Except String Unit := do
     if let .func name .. := v then
       unless g.name == some name && g.isConst && (f.types[g.ty]?.map isFnTy).getD false do
         throw s!"{f.name}: global function initializer must be its named constant function block"
-    else checkConstant f g.ty v
+    else checkConstant f index g.ty v
   for i in insts do
     let extra := match i.op with
       | .sliceFieldPtr _ p => #[p]
@@ -699,29 +736,46 @@ private def checkFunctionStructure (f : Func) : Except String Unit := do
     match i.op with
     | .arg k =>
       let some p := f.params[k]? | throw s!"{f.name}: inst {i.id}: unknown parameter {k}"
-      unless compatibleType f f i.ty p do
+      unless localTypeCompatible f i.ty p do
         throw s!"{f.name}: inst {i.id}: argument instruction has an incompatible parameter {k} type"
     | .ret v =>
-      unless valueCompatible f f v f.ret do
+      unless localValueCompatible f index v f.ret do
         throw s!"{f.name}: inst {i.id}: return value has an incompatible result type"
+    | .retLoad ptr =>
+      let some pty := index.valTy? ptr
+        | throw s!"{f.name}: inst {i.id}: loaded return has no pointer type"
+      let some (.ptr size _ child) := f.types[pty]?
+        | throw s!"{f.name}: inst {i.id}: loaded return operand is not a pointer"
+      unless size == "one" || size == "many" || size == "c" do
+        throw s!"{f.name}: inst {i.id}: loaded return operand is not a loadable pointer"
+      unless localTypeCompatible f child f.ret do
+        throw s!"{f.name}: inst {i.id}: loaded return has an incompatible result type"
     | _ => pure ()
 
 /-- The type graph reachable from emitted signatures, instructions, constants and globals.
 Recognized model types have no implementation children in the normalized IR. -/
-private def programUsedTypes (f : Func) : Std.HashSet TyId := Id.run do
-  let rec constantTypes (v : Val) : Array TyId :=
-    let own := v.constTy?.toArray
-    own ++ match v with
-      | .agg _ vs => vs.flatMap constantTypes
-      | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => constantTypes v
-      | .sliceConst _ p n => constantTypes p ++ constantTypes n
-      | _ => #[]
-  let insts := f.allInsts
-  let values := insts.flatMap fun i => valueOperands i.op ++ ptrOperands i.op
-  let roots := f.params ++ #[f.ret] ++ insts.map (·.ty) ++ values.flatMap constantTypes ++
-    f.globals.map (·.ty) ++ f.globals.flatMap (fun g => g.init.toArray.flatMap constantTypes)
-  let mut todo := roots.toList
+private def programUsedTypes (f : Func) (index : OperandTypes) : Std.HashSet TyId := Id.run do
   let mut seen : Std.HashSet TyId := {}
+  let mut values : List Val := []
+  let mut todo := (f.params ++ #[f.ret]).toList
+  for i in index.insts do
+    todo := i.ty :: todo
+    values := (valueOperands i.op ++ ptrOperands i.op).toList ++ values
+  for g in f.globals do
+    todo := g.ty :: todo
+    values := g.init.toList ++ values
+  while !values.isEmpty do
+    let v := values.head!
+    values := values.tail!
+    if let some t := v.constTy? then
+      unless seen.contains t do
+        seen := seen.insert t
+        todo := ((f.types[t]?.map childTys).getD #[]).toList ++ todo
+    match v with
+    | .agg _ vs => values := vs.toList ++ values
+    | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => values := v :: values
+    | .sliceConst _ p n => values := p :: n :: values
+    | _ => pure ()
   while !todo.isEmpty do
     let id := todo.head!
     todo := todo.tail!
@@ -731,25 +785,33 @@ private def programUsedTypes (f : Func) : Std.HashSet TyId := Id.run do
   return seen
 
 /-- Definitions which emission shares by name must agree across every file. -/
-private def checkSharedDefinitions (funcs : Array Func) : Except String Unit := do
+private def checkSharedDefinitions (funcs : Array Func) : Except String (Array OperandTypes) := do
   let mut functions : Std.HashSet String := {}
+  let mut indexes : Array OperandTypes := #[]
   for f in funcs do
     if functions.contains f.name then throw s!"duplicate function name '{f.name}'"
     functions := functions.insert f.name
-    checkFunctionStructure f
-  let mut globals : Std.HashMap String (Func × Nat) := {}
+    let index := f.operandTypes
+    checkFunctionStructure f index
+    indexes := indexes.push index
+  let mut globals : Std.HashMap String (Nat × Nat) := {}
+  let mut globalComparisons : Std.HashMap (Nat × Nat) (Std.HashSet (Nat × Nat)) := {}
   let mut namedTypes : Std.HashMap String (Func × TyId) := {}
-  for f in funcs do
+  for (f, fileIndex) in funcs.zipIdx do
     for (g, k) in f.globals.zipIdx do
       if let some n := g.name then
         if functions.contains n then
           unless (match g.init with | some (.func nm ..) => nm == n | _ => false) do
             throw s!"{f.name}: global '{n}' collides with a function name"
-        if let some (previous, id) := globals[n]? then
-          unless compatibleGlobal f previous k id do
-            throw s!"{f.name}: inconsistent shared global '{n}' (previous definition in '{previous.name}')"
-        else globals := globals.insert n (f, k)
-    let used := programUsedTypes f
+        if let some (previousIndex, id) := globals[n]? then
+          let previous := funcs[previousIndex]!
+          let key := (fileIndex, previousIndex)
+          let completed : Std.HashSet (Nat × Nat) := globalComparisons[key]?.getD {}
+          let some completed := compatibleGlobalCached f previous k id completed
+            | throw s!"{f.name}: inconsistent shared global '{n}' (previous definition in '{previous.name}')"
+          globalComparisons := globalComparisons.insert key completed
+        else globals := globals.insert n (fileIndex, k)
+    let used := programUsedTypes f indexes[fileIndex]!
     for (t, k) in f.types.zipIdx do
       unless used.contains k do continue
       let name := match t with
@@ -760,14 +822,14 @@ private def checkSharedDefinitions (funcs : Array Func) : Except String Unit := 
           unless compatibleType f previous k id do
             throw s!"{f.name}: inconsistent shared type '{n}' (previous definition in '{previous.name}')"
         else namedTypes := namedTypes.insert n (f, k)
+  return indexes
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
 arguments and result have a known item size and `ptr_align`, and a slice that it remaps has no
 sentinel. -/
-def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : Except String Unit := do
-  let tyOf (v : Val) : Option TyId := match v with
-    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-    | v => v.constTy?
+def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId)
+    (index : OperandTypes := f.operandTypes) : Except String Unit := do
+  let tyOf := index.valTy?
   -- `args[1]` is a pointer or slice, except the item count of `alloc`.
   let argPtr := if fn == .alloc || fn == .alignedAlloc then #[] else (args.extract 1 2).filterMap tyOf
   let ptrs := (match f.types[ret]? with
@@ -786,11 +848,9 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
 `Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),
 so `Emit.lean` needs the callee applied to exactly one Lean term; a 0- or 2+-field args tuple is
 outside the subset (v1, `docs/std-models.md` §Thread model). -/
-def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val) :
-    Except String Unit := do
-  let tyOf (v : Val) : Option TyId := match v with
-    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-    | v => v.constTy?
+def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val)
+    (index : OperandTypes := f.operandTypes) : Except String Unit := do
+  let tyOf := index.valTy?
   let some argsTy := args[k]?.bind tyOf
     | throw s!"{f.name}: a call to {callee} has no args-tuple type"
   match f.types[argsTy]? with
@@ -802,8 +862,9 @@ def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val) :
 
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
-def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : TyId) : Except String Unit := do
-  let argTy (k : Nat) := args[k]?.bind f.valTy? |>.bind (f.types[·]?)
+def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : TyId)
+    (index : OperandTypes := f.operandTypes) : Except String Unit := do
+  let argTy (k : Nat) := args[k]?.bind index.valTy? |>.bind (f.types[·]?)
   let result := f.types[ret]?
   let fail (what : String) : Except String Unit :=
     throw s!"{f.name}: model callee '{callee}' has an incompatible {what} signature"
@@ -828,9 +889,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
   let errorUnit := errorPayload == some .void
   let checkFutex (ptrIndex valueIndex : Nat) (sameValue : Bool := true) : Except String Unit := do
     require (pointer ptrIndex) "pointer argument"
-    let some v := args[valueIndex]?.bind f.valTy? | fail "value argument"
+    let some v := args[valueIndex]?.bind index.valTy? | fail "value argument"
     require (packedBits f.types v == some 32) "32-bit futex value"
-    let some p := args[ptrIndex]?.bind f.valTy? | fail "pointer argument"
+    let some p := args[ptrIndex]?.bind index.valTy? | fail "pointer argument"
     let some c := ptrChild f.types p | fail "pointer argument"
     let child := match f.types[c]? with
       | some (.struct _ _ fields) => if fields.size == 1 then fields[0]!.2 else c
@@ -840,6 +901,14 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
   if let some fn := allocFn? callee then
     count (if fn == .create then 1 else if fn == .remap then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
+    if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .dupe then
+      let hasOutOfMemory := match result with
+        | some (.errorUnion set _) => match f.types[set]? with
+          | some (.errorSet none) => true
+          | some (.errorSet (some names)) => names.contains "OutOfMemory"
+          | _ => false
+        | _ => false
+      require hasOutOfMemory "error set admitting OutOfMemory"
     match fn with
     | .create => require (isPtr "one" errorPayload) "error-union pointer result"
     | .alloc | .alignedAlloc =>
@@ -854,25 +923,25 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       require (isPtr "slice" (argTy 1) && isSize (argTy 2)) "slice/item-count arguments"
       require (isPtr "slice" optionalPayload) "optional slice result"
     if fn == .dupe || fn == .remap then
-      let some source := args[1]?.bind f.valTy? | fail "source slice argument"
+      let some source := args[1]?.bind index.valTy? | fail "source slice argument"
       let some srcChild := ptrChild f.types source | fail "source slice argument"
       let payload := match result with | some (.errorUnion _ p) | some (.optional p) => some p | _ => none
       let some dstChild := payload.bind (ptrChild f.types) | fail "slice result"
       require (compatibleType f f srcChild dstChild) "slice item type"
-    checkAllocCall f fn args ret
+    checkAllocCall f fn args ret index
   else if let some fn := threadFn? callee then
     match fn with
     | .spawn =>
       count 2
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
-      checkThreadSpawn f callee 1 args
+      checkThreadSpawn f callee 1 args index
     | .join => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
     | .groupAsync | .groupConcurrent =>
       count 3
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
       require (if fn == .groupAsync then unit else errorUnit) "result"
-      checkThreadSpawn f callee 2 args
+      checkThreadSpawn f callee 2 args index
     | .groupAwait | .groupCancel =>
       count 2
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
@@ -909,32 +978,33 @@ memory, and a call to a pure function copies each `[]const T` argument from memo
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
 function or has a model (`allocFn?`, `threadFn?`). -/
 def checkProgram (funcs : Array Func) : Except String Unit := do
-  checkSharedDefinitions funcs
+  let indexes ← checkSharedDefinitions funcs
   let refs := fnRefs funcs
   let mem := memoryFunctions funcs
   let names := funcs.map (·.name)
-  for f in funcs do
-    for i in f.allInsts do
+  for (f, index) in funcs.zip indexes do
+    for i in index.insts do
       if let .call (.inst p) args := i.op then
-        let some tn := f.calleeFnTy? p
+        let some tn := (index.instructions[p]?.bind (f.types[·]?)).bind (fun t => match t with
+          | .ptr _ _ c => (f.types[c]?).bind fun t => match t with | .other name => some name | _ => none
+          | _ => none)
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
         for (typ, callee) in refs do
           if typ == tn then
             let some target := funcs.find? (·.name == callee)
               | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
-            checkCallSignature f target i args
+            checkCallSignature f target i args index
       if let .call (.func callee false spawnFn) args := i.op then
-        checkModelSignature f callee args i.ty
+        checkModelSignature f callee args i.ty index
         if (allocFn? callee).isNone && (threadFn? callee).isNone then
           if let some target := funcs.find? (·.name == callee) then
-            checkCallSignature f target i args
-        if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
+            checkCallSignature f target i args index
+        if let some k := (threadFn? callee).bind (·.spawnArgs?) then
           let some worker := spawnFn
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
           let some target := funcs.find? (·.name == worker)
             | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-          let k := ((threadFn? callee).bind (·.spawnArgs?)).getD 0
-          let some tuple := args[k]?.bind f.valTy? | throw s!"{f.name}: inst {i.id}: spawn args have no type"
+          let some tuple := args[k]?.bind index.valTy? | throw s!"{f.name}: inst {i.id}: spawn args have no type"
           let some (.tuple fields) := f.types[tuple]? | throw s!"{f.name}: inst {i.id}: spawn args are not a tuple"
           unless fields.size == target.params.size do
             throw s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count"
@@ -946,12 +1016,10 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless (allocFn? callee).isSome || (threadFn? callee).isSome do
             throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
-  for f in funcs do
+  for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
-      let insts := f.allInsts
-      let tyOf (v : Val) : Option TyId := match v with
-        | .inst p => (insts.find? (·.id == p)).map (·.ty)
-        | v => v.constTy?
+      let insts := index.insts
+      let tyOf := index.valTy?
       let sliceItem (v : Val) : Option TyId := match (tyOf v).bind (f.types[·]?) with
         | some (.ptr "slice" _ c) => some c
         | _ => none

@@ -159,4 +159,83 @@ private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret
   catch e => pure (decide ((e.toString.splitOn "AIR JSON exceeds 4 UTF-8 bytes").length > 1))
   require (exceeded && (← growthRequests.get) == #[5, 3, 1])
     "growth did not stop at limit plus one byte"
+  let loaded := mkFunc "loaded" #[.int false 32, .ptr "one" false 0, .void] #[1] 0
+    #[{ id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 2, op := .retLoad (.inst 0) }]
+  require (accepted (checkProgram #[loaded])) "compatible loaded return rejected"
+  require (rejected (checkProgram #[{ loaded with ret := 2 }]) "loaded return has an incompatible result type")
+    "loaded return mismatch accepted"
+  let notPointer := { loaded with params := #[0], body := #[
+    { id := 0, ty := 0, op := .arg 0 }, { id := 1, ty := 2, op := .retLoad (.inst 0) }] }
+  require (rejected (checkProgram #[notPointer]) "loaded return operand is not a pointer")
+    "non-pointer loaded return accepted"
+  let indexed := mkFunc "indexed" #[.int false 32, .int false 64, .void, .bool] #[0] 0
+    #[{ id := 9, ty := 0, op := .arg 0 }, { id := 9, ty := 1, op := .arg 0 }]
+  let index := indexed.operandTypes
+  require (index.valTy? (.inst 9) == some 0 && indexed.valTy? (.inst 9) == some 0)
+    "instruction index lost first-occurrence behavior"
+  require (index.valTy? (.bool true) == some 3 && index.valTy? .void == some 2)
+    "literal IDs were not indexed"
+  require (rejected (checkProgram #[indexed]) "duplicate instruction id 9")
+    "type index concealed duplicate instruction ID"
+  let tupleTypes := #[Ty.int false 32, .int false 32, .tuple #[0], .void]
+  let tupleGlobal : Global := {
+    name := some "tuple", ty := 2, isConst := true, threadlocal := false,
+    isExtern := false, init := some (.agg 2 #[.int 1 7])
+  }
+  let constantFn := mkFunc "constants" tupleTypes #[] 3 #[] #[tupleGlobal]
+  require (accepted (checkProgram #[constantFn])) "distinct compatible local constant IDs rejected"
+  require (rejected (checkProgram #[{ constantFn with types := tupleTypes.set! 1 (.int false 64) }])
+    "incompatible type or value form") "distinct incompatible local constant IDs accepted"
+  let badRange := { tupleGlobal with init := some (.agg 2 #[.int 0 (-1)]) }
+  require (rejected (checkProgram #[{ constantFn with globals := #[badRange] }]) "integer constant does not fit")
+    "same-ID shortcut skipped nested integer range validation"
+  let badShape := { tupleGlobal with init := some (.agg 2 #[.bool true]) }
+  require (rejected (checkProgram #[{ constantFn with globals := #[badShape] }]) "incompatible type or value form")
+    "same-ID shortcut skipped nested form validation"
+  let allocTypes := #[Ty.allocator, .int false 32, .ptr "one" false 1, .errorUnion 4 2,
+    .errorSet (some #["OutOfMemory"]), .void, .int false 64, .ptr "slice" false 1, .errorUnion 4 7]
+  let allocLayouts : Array Layout := (Array.replicate allocTypes.size {}).set! 1
+    { size := some 4, align := some 4 }
+  let allocLayouts := (allocLayouts.set! 2 { ptrAlign := some 4 }).set! 7 { ptrAlign := some 4 }
+  let allocator := { (mkFunc "allocator" allocTypes #[] 5) with layouts := allocLayouts }
+  let allocCases : Array (String × Array Val × TyId) := #[
+      ("mem.Allocator.create__anon_1", #[Val.undef 0], 3),
+      ("mem.Allocator.alloc__anon_1", #[Val.undef 0, .int 6 2], 8),
+      ("mem.Allocator.alignedAlloc__anon_1", #[Val.undef 0, .int 6 2], 8),
+      ("mem.Allocator.dupe__anon_1", #[Val.undef 0, .undef 7], 8)]
+  for (callee, args, result) in allocCases do
+    require (accepted (checkModelSignature allocator callee args result)) "allocator OutOfMemory result rejected"
+    let openSet := { allocator with types := allocTypes.set! 4 (.errorSet none) }
+    require (accepted (checkModelSignature openSet callee args result)) "open allocator error set rejected"
+    for errors in #[#[], #["Unrelated"]] do
+      let closed := { allocator with types := allocTypes.set! 4 (.errorSet (some errors)) }
+      require (rejected (checkModelSignature closed callee args result) "error set admitting OutOfMemory")
+        "closed allocator error set lacking OutOfMemory accepted"
+  let head := { self with name := some "head", init := some (.ptrConst 1 1 0) }
+  let tail := { self with name := some "tail", init := some (.ptrConst 1 1 0) }
+  let graphA := mkFunc "graphA" nodeTypes #[] 0 #[] #[head, tail]
+  let graphB := mkFunc "graphB" b.types #[] 1 #[] #[
+    { tail with ty := 0, init := some (.ptrConst 0 0 0) },
+    { head with ty := 0, init := some (.ptrConst 0 0 0) }]
+  let some completed := compatibleGlobalCached graphA graphB 0 1
+    | throw (IO.userError "successful recursive global cache comparison failed")
+  require (completed.contains (0, 1) && completed.contains (1, 0) && completed.size == 2)
+    "successful comparison did not publish every visited global pair"
+  require ((compatibleGlobalCached graphA graphB 1 0 completed).map (·.size) == some 2)
+    "successful pair cache did not preserve recursive equality"
+  let broken := { graphB with
+    globals := graphB.globals.set! 0 { graphB.globals[0]! with init := some (.ptrConst 0 0 1) }
+  }
+  require ((compatibleGlobalCached graphA broken 0 1).isNone) "failed comparison published provisional pairs"
+  let graphC := { broken with name := "graphC" }
+  require (rejected (checkProgram #[graphA, graphB, graphC]) "inconsistent shared global 'tail'")
+    "global cache leaked between ordered file-table pairs or changed the first error"
+  let spawn := mkFunc "spawn" #[.int false 32, .tuple #[0], .struct "Thread.SpawnConfig" "auto" #[],
+    .errorSet none, .thread, .errorUnion 3 4, .void] #[] 5 #[
+      { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "target"))
+          #[.undef 2, .agg 1 #[.int 0 7]] },
+      { id := 1, ty := 6, op := .ret (.inst 0) }]
+  require (accepted (checkProgram #[spawn, target])) "indexed spawn arguments rejected"
+  require (rejected (checkProgram #[spawn, { target with params := #[], body := #[] }])
+    "spawned callee 'target' has an incompatible argument count") "spawn argument index changed"
   IO.println "whole-program direct API and strict JSON checks passed"

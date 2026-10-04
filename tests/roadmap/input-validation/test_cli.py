@@ -191,6 +191,48 @@ def main():
     mutate = copy.deepcopy(allocator)
     mutate["body"][1]["args"] = [dict(ty=1, val="0")]
     checks += run(binary, [mutate], "allocator argument")
+    for errors in ([], ["Unrelated"]):
+        mutate = copy.deepcopy(allocator)
+        mutate["types"][4]["errors"] = errors
+        checks += run(binary, [mutate], "error set admitting OutOfMemory")
+    open_allocator = copy.deepcopy(allocator)
+    open_allocator["types"][4]["any"] = True
+    checks += run(binary, [open_allocator])
+    for model in ("alloc", "alignedAlloc", "dupe"):
+        allocation = copy.deepcopy(allocator)
+        allocation["name"] = "allocation_" + model
+        allocation["types"][2] = dict(pointer, size="slice", child=1, ptr_align=4, abi_size=16)
+        allocation["types"][3]["abi_size"] = 24
+        allocation["types"].append(integer(64))
+        argument = 2 if model == "dupe" else 7
+        allocation["params"] = [0, argument]
+        allocation["body"] = [inst(0, "arg", 0, param=0), inst(1, "arg", argument, param=1),
+            inst(2, "call", 3, [dict(inst=0), dict(inst=1)],
+                 callee=dict(func=f"mem.Allocator.{model}__anon_1", noreturn=False)),
+            inst(3, "ret", 6, [dict(inst=2)])]
+        checks += run(binary, [allocation])
+        allocation["types"][4]["errors"] = ["Unrelated"]
+        checks += run(binary, [allocation], "error set admitting OutOfMemory")
+    # The existing qualified ret_ptr/ret_load example stays valid, while changing only
+    # its declared return to u32 must fail before producing an ill-typed Gen.lean.
+    golden = Path(__file__).resolve().parents[3] / "tests/golden/layout/air/layout.wordOf.json"
+    loaded = json.loads(golden.read_text())
+    checks += run(binary, [loaded])
+    loaded["ret"] = 0
+    checks += run(binary, [loaded], "loaded return has an incompatible result type")
+    # A third file must not inherit equality cached for the first two file tables.
+    chain_c = copy.deepcopy(chain_b)
+    chain_c["name"] = "chainC"
+    checks += run(binary, [chain_a, chain_b, chain_c])
+    chain_c["globals"][2]["init"]["val"] = "8"
+    checks += run(binary, [chain_a, chain_b, chain_c], "inconsistent shared global 'shared.head'")
+    nested = function("nested", [integer(), VOID, NORETURN,
+        dict(k="tuple", fields=[dict(ty=0, offset=0)], abi_size=4, abi_align=4, offsets=[0])], [], 1,
+        [inst(0, "ret", 2, [dict(ty=1, val="{}")])],
+        [global_("nested.constant", 3, dict(ty=3, elems=[dict(ty=0, val="7")]), const=True)])
+    checks += run(binary, [nested])
+    nested["globals"][0]["init"]["elems"][0]["val"] = "-1"
+    checks += run(binary, [nested], "integer constant does not fit")
     timer_type = dict(k="struct", name="time.Timer", layout="auto", fields=[dict(name="started", ty=1, offset=0)],
                       abi_size=8, abi_align=8)
     timer = function("timerRead", [dict(pointer, child=2), integer(64), timer_type, NORETURN], [0], 1, [

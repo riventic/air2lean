@@ -26,7 +26,7 @@ layouts, pointer restrictions, supported instructions and standard-library model
 
 `checkProgram` additionally validates signature IDs, parallel layout tables, duplicate
 function/instruction names or IDs, operand/global references, argument-instruction types,
-return values, typed constant forms and global initializers, cross-file calls and definitions shared by emission. Calling it directly on
+return values (including loaded-return pointer/pointee agreement), typed constant forms and global initializers, cross-file calls and definitions shared by emission. Calling it directly on
 normalized `Func` values runs these checks too. Direct API callers still run `check` for the
 subset and `normalize` for raw lexical scope validation; `checkProgram` is not a replacement
 for those stages.
@@ -39,7 +39,8 @@ calls check every address-taken exported target of the function-pointer type. Sp
 compare their captured tuple's fields with the worker's parameters; the worker result remains
 discarded by the established thread model.
 
-Recognized allocator/thread calls keep their existing model exemptions, with runtime arity,
+Allocator create/alloc/alignedAlloc/dupe results must admit the model’s `OutOfMemory` error;
+open error sets are accepted. Recognized allocator/thread calls keep their existing model exemptions, with runtime arity,
 argument/result forms, named mutable Group/DarwinImpl/Timer receivers and required
 pointee/item relationships checked before emission even
 when an AIR file with that model name is present. A direct `Val.func` runtime argument lacks a
@@ -50,7 +51,9 @@ a printable function-type name does not establish a binary ABI correspondence th
 Named globals must have the same type/layout, mutability, thread-local/extern flags and initial
 value everywhere. Comparison follows initializer pointers through the corresponding local
 global tables, tracks recursive pairs, and retains named target identity; different local
-indices are valid. An unnamed target compares by definition, consistent with the emitter's
+indices are valid. Successful comparisons cache all visited global pairs only for the exact
+ordered pair of local file tables; failed comparisons publish no provisional equality.
+An unnamed target compares by definition, consistent with the emitter's
 constant sharing. Conflicting used named aggregate definitions are rejected. Implementation
 fields hidden behind recognized model types do not become additional emitted definitions.
 A global that shares an exported function's name must be that function's address-taken
