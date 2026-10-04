@@ -430,7 +430,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let _ ← checkInsts cx line thenBody
     let _ ← checkInsts cx line elseBody
     pure line
-  | .switchBr _ cases elseBody => do
+  | .switchBr _ cases elseBody | .loopSwitchBr _ cases elseBody => do
     for c in cases do
       let _ ← checkInsts cx line c.body
     let _ ← checkInsts cx line elseBody
@@ -518,6 +518,47 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty
 
+/-- Check loop-switch selector contracts and lexical targets even for direct Core callers. -/
+partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
+    (targets : Array (InstId × Ty) := #[]) : Except String Unit := do
+  let valTy (v : Val) : Option Ty := match v with
+    | .bool _ => some .bool
+    | _ => (cx.valTy? v).bind (cx.types[·]?)
+  for i in body do
+    let recur (b : Array Inst) := checkDispatchScopes cx b targets
+    match i.op with
+    | .loopSwitchBr initial cases elseBody =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: loop_switch_br must have noreturn type"
+      let some selectorTy := valTy initial
+        | cx.fail 0 s!"inst {i.id}: loop-switch selector has no known type"
+      unless (match selectorTy with
+        | .int .. | .bool | .enum .. | .errorSet _ => true | _ => false) do
+        cx.fail 0 s!"inst {i.id}: loop-switch selector type is outside the scalar subset"
+      for c in cases do
+        for v in c.items ++ c.ranges.flatMap (fun (lo, hi) => #[lo, hi]) do
+          unless valTy v == some selectorTy do
+            cx.fail 0 s!"inst {i.id}: loop-switch case type differs from selector"
+        unless c.ranges.isEmpty || (match selectorTy with | .int .. => true | _ => false) do
+          cx.fail 0 s!"inst {i.id}: loop-switch ranges require an integer selector"
+        unless !c.items.isEmpty || !c.ranges.isEmpty do
+          cx.fail 0 s!"inst {i.id}: empty loop-switch case"
+        checkDispatchScopes cx c.body (targets.push (i.id, selectorTy))
+      checkDispatchScopes cx elseBody (targets.push (i.id, selectorTy))
+    | .switchDispatch target v =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: switch_dispatch must have noreturn type"
+      let some (_, selectorTy) := targets.find? (·.1 == target)
+        | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
+      unless valTy v == some selectorTy do
+        cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
+    | .block b | .loop b | .«try» _ b => recur b
+    | .condBr _ t e => recur t; recur e
+    | .switchBr _ cases e =>
+      for c in cases do recur c.body
+      recur e
+    | _ => pure ()
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
   validateTypeGraph f.name f.types
@@ -552,6 +593,7 @@ def check (f : Func) : Except String Unit := do
             outside the subset"
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places }
+  checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
 

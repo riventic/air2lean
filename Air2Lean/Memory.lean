@@ -31,7 +31,7 @@ partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
   | .block body => body.foldl flattenInst acc
   | .loop body => body.foldl flattenInst acc
   | .condBr _ t e => e.foldl flattenInst (t.foldl flattenInst acc)
-  | .switchBr _ cases e =>
+  | .switchBr _ cases e | .loopSwitchBr _ cases e =>
     let acc := cases.foldl (fun acc c => c.body.foldl flattenInst acc) acc
     e.foldl flattenInst acc
   | .«try» _ errBody => errBody.foldl flattenInst acc
@@ -88,9 +88,9 @@ def valueOperands (op : Op) : Array Val :=
   | .aggregateInit elems => elems
   | .call callee args => #[callee] ++ args
   | .block _ | .loop _ => #[]
-  | .br _ v | .ret v | .«try» v _ => #[v]
+  | .br _ v | .switchDispatch _ v | .ret v | .«try» v _ => #[v]
   | .condBr c _ _ => #[c]
-  | .switchBr v cases _ =>
+  | .switchBr v cases _ | .loopSwitchBr v cases _ =>
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]

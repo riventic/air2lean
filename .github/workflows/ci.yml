@@ -167,6 +167,21 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
 
+      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16.
+      - name: Loop-switch dispatch regressions
+        if: ${{ !matrix.mutate }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_DISPATCH_ZIG_STOCK: zig
+        run: |
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+            tests/roadmap/dispatch/check.sh
+          else
+            tests/roadmap/dispatch/check.sh --native-only
+          fi
+
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions

@@ -275,11 +275,21 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let thenBody ← raw.thenBody.mapM (normalizeInst fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
     return .condBr c thenBody elseBody
-  | "switch_br" =>
+  | "switch_br" | "loop_switch_br" =>
+    if raw.tag == "loop_switch_br" && raw.args.size != 1 then
+      throw s!"{fnName}: inst {raw.id}: loop_switch_br needs exactly 1 arg"
     let v ← arg1 fnName raw
     let cases ← raw.cases.mapM (normalizeCase fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
-    return .switchBr v cases elseBody
+    return if raw.tag == "loop_switch_br" then .loopSwitchBr v cases elseBody
+      else .switchBr v cases elseBody
+  | "switch_dispatch" =>
+    unless raw.args.size == 1 do
+      throw s!"{fnName}: inst {raw.id}: switch_dispatch needs exactly 1 arg"
+    let some target := raw.target
+      | throw s!"{fnName}: inst {raw.id}: 'switch_dispatch' needs 'target'"
+    let v ← arg1 fnName raw
+    return .switchDispatch target v
   | "try" | "try_cold" =>
     let v ← arg1 fnName raw
     let errBody ← raw.body.mapM (normalizeInst fnName)
