@@ -38,12 +38,13 @@ example (b : Bool) : ResultProgram.vc
 -- Zig errors returned through an error union are checked values, not safety panics.
 example : ResultProgram.vc
     (.ret (Except.error "Empty" : Except ErrName Nat))
-    (fun value => value = Except.error "Empty") := by
-  simp only [ResultProgram.vc] <;> decide
+    (fun value => value = Except.error "Empty") := rfl
 example : ¬ ResultProgram.vc
     (.ret (Except.error "Empty" : Except ErrName Nat))
     (fun value => value = Except.ok 0) := by
-  simp only [ResultProgram.vc] <;> decide
+  intro h
+  change (Except.error "Empty" : Except ErrName Nat) = Except.ok 0 at h
+  cases h
 
 -- A claimed modular call summary needs an actual kernel-checked callee contract.
 example : ¬ (True → ∃ value : Nat, (throw Error.panic : Result Nat) = pure value ∧ True) := by
