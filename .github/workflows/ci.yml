@@ -167,6 +167,17 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: lake build Proofs
 
+      # The complete review stack is required. Version-neutral parser/runtime regressions
+      # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
+      - name: Review regressions
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_REVIEW_ZIG14: ${{ matrix.zig == '0.14.1' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
+          AIR2LEAN_REVIEW_ZIG15: ${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
+          AIR2LEAN_REVIEW_ZIG16: ${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
+          AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: scripts/review.sh
+
       - name: Check for sorry/admit/native_decide
         if: matrix.full
         run: scripts/no-sorry.sh
