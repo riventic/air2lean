@@ -5,7 +5,7 @@ protocol. Existing `project.py report`, `translate` and `verify` commands are un
 Use a separately qualified diagnostic-capable translator:
 
 ```sh
-python3 scripts/project-diagnostics.py diagnosticcheck project.json \
+python3 scripts/project-diagnostics.py check project.json \
   --translator .lake/build/bin/air2lean --out check-receipt.json
 ```
 

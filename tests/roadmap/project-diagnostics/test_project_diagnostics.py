@@ -240,7 +240,7 @@ class AdapterTests(unittest.TestCase):
             return real_check(*args, runner=self.runner)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            result = adapter.main(['diagnosticcheck', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
+            result = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
         self.assertEqual(result, 2)
         self.assertEqual(stdout.getvalue(), '')
         self.assertEqual(destination.read_text(), 'KEEP')
@@ -250,7 +250,7 @@ class AdapterTests(unittest.TestCase):
     def test_report_input_overlap_rejected_before_producer(self):
         with mock.patch.object(adapter, 'check_project') as checker, mock.patch.object(adapter.signal, 'signal'), \
              contextlib.redirect_stderr(io.StringIO()):
-            rc = adapter.main(['diagnosticcheck', str(self.path), '--translator', str(self.tool), '--out', str(self.path)])
+            rc = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(self.path)])
         self.assertEqual(rc, 2)
         checker.assert_not_called()
 
@@ -301,7 +301,7 @@ class AdapterTests(unittest.TestCase):
             return real_check(*args, runner=self.runner)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            status = adapter.main(['diagnosticcheck', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
+            status = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
         self.assertEqual(status, 0, stderr.getvalue())
         self.assertEqual(destination.read_bytes(), stdout.getvalue().encode())
         self.assertFalse(list(self.base.rglob('Gen.lean')))
@@ -317,7 +317,7 @@ class AdapterTests(unittest.TestCase):
             return real_check(*args, runner=cancelled)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            rc = adapter.main(['diagnosticcheck', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
+            rc = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
         self.assertEqual(rc, 130)
         self.assertEqual(destination.read_text(), 'KEEP')
         self.assertEqual(stdout.getvalue(), '')

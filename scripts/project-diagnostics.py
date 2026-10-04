@@ -310,7 +310,7 @@ def check_project(manifest_path, translator, limit, runner=invoke):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('diagnosticcheck',))
+    parser.add_argument('command', choices=('check',))
     parser.add_argument('manifest', type=Path)
     parser.add_argument('--translator', type=Path, required=True)
     parser.add_argument('--out', type=Path)
