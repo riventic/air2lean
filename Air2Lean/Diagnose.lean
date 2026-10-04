@@ -118,7 +118,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     | log := log.record (boundary file none .jsonSyntax .decode .malformedInput) parsed
       return (empty, log.add (skipped file none .normalize "decoded_AIR"))
   let name := (json.getObjValAs? String "name").toOption
-  if (name.map (·.length > 1024)).getD false then
+  if (name.map (fun n => decide (n.length > 1024))).getD false then
     log := log.add (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters")
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
@@ -195,12 +195,12 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
         let paths := pathsFrom index name (maxFiles + 1)
         for (edge, code, unsupported) in blockers do
           if log.truncated then break
-          if let some prefix := paths[edge.caller]? then
+          if let some chain := paths[edge.caller]? then
             log := log.add { (boundary edge.file (some edge.caller) code .program
               (if unsupported.isSome then .unsupportedSemantics else .validationFailure)
               (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
               anchor := { idSpace := .canonical, instruction := some edge.instruction }
-              dependencyChain := prefix.push edge.callee }
+              dependencyChain := chain.push edge.callee }
   -- Retain the authoritative whole-program validator. Its first-error boundary
   -- includes shared definitions and memory effects not independently collected.
   if !funcs.isEmpty then
