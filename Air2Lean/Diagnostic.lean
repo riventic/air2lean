@@ -76,6 +76,7 @@ structure Diagnostic where
   phase : Phase
   category : Category
   message : String
+  messageTruncated : Bool := false
   file : Option String := none
   function : Option String := none
   anchor : Anchor := {}
@@ -93,17 +94,17 @@ def capture (context : Diagnostic) (result : Except String α) : Except Diagnost
 def Diagnostic.render (d : Diagnostic) : String := d.message
 
 def Diagnostic.toJson (d : Diagnostic) : Json := Json.mkObj [
-  ("code", toJson d.code.text), ("phase", toJson d.phase.text),
-  ("category", toJson d.category.text), ("message", toJson (d.message.take 2048).toString),
-  ("message_truncated", toJson (d.message.length > 2048)),
-  ("file", toJson d.file), ("function", toJson d.function),
-  ("anchor", Json.mkObj [("id_space", toJson d.anchor.idSpace.text),
-    ("instruction", toJson d.anchor.instruction), ("type", toJson d.anchor.typeId),
-    ("global", toJson d.anchor.globalId), ("nearest_dbg_line", toJson d.anchor.nearestDbgLine)]),
-  ("source_span", Json.null), ("source_span_status", toJson "unavailable_in_AIR"),
-  ("dependency_chain", toJson d.dependencyChain),
-  ("dependency_scope", toJson "selected_normalized_direct_calls_and_spawn_workers"),
-  ("prerequisites", toJson d.prerequisites), ("first_error_in_unit", toJson d.firstErrorInUnit)]
+  ("code", Lean.toJson d.code.text), ("phase", Lean.toJson d.phase.text),
+  ("category", Lean.toJson d.category.text), ("message", Lean.toJson (d.message.take 2048).toString),
+  ("message_truncated", Lean.toJson (d.messageTruncated || decide (d.message.length > 2048))),
+  ("file", Lean.toJson d.file), ("function", Lean.toJson d.function),
+  ("anchor", Json.mkObj [("id_space", Lean.toJson d.anchor.idSpace.text),
+    ("instruction", Lean.toJson d.anchor.instruction), ("type", Lean.toJson d.anchor.typeId),
+    ("global", Lean.toJson d.anchor.globalId), ("nearest_dbg_line", Lean.toJson d.anchor.nearestDbgLine)]),
+  ("source_span", Json.null), ("source_span_status", Lean.toJson "unavailable_in_AIR"),
+  ("dependency_chain", Lean.toJson d.dependencyChain),
+  ("dependency_scope", Lean.toJson "selected_normalized_direct_calls_and_spawn_workers"),
+  ("prerequisites", Lean.toJson d.prerequisites), ("first_error_in_unit", Lean.toJson d.firstErrorInUnit)]
 
 structure Log where
   limit : Nat := 256
@@ -115,15 +116,17 @@ structure Log where
   payloadBytes : Nat := 0
 
 def Log.add (log : Log) (d : Diagnostic) : Log :=
+  let d := { d with message := (d.message.take 2048).toString,
+    messageTruncated := d.messageTruncated || decide (d.message.length > 2048) }
   if log.items.size ≥ log.limit then
-    { log with observed := log.observed + 1, failed := log.failed || d.category != .skipped,
+    { log with observed := log.observed + 1, failed := log.failed || (d.category != .skipped),
       complete := false, truncated := true }
   else
     let bytes := d.toJson.compress.utf8ByteSize
     let fits := log.payloadBytes + bytes ≤ 1024 * 1024
     { log with
       observed := log.observed + 1
-      failed := log.failed || d.category != .skipped
+      failed := log.failed || (d.category != .skipped)
       complete := log.complete && !d.firstErrorInUnit && fits
       truncated := log.truncated || !fits
       payloadBytes := if fits then log.payloadBytes + bytes else log.payloadBytes

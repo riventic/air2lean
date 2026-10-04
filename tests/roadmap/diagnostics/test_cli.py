@@ -103,6 +103,22 @@ def run(binary, baseline=None):
         assert default.returncode == 1 and output.read_text() == "sentinel\n"
         checks += 2
 
+        prerequisite = function("prerequisite", [inst(0, "arg", 3, param=0),
+            inst(1, "ptr_elem_ptr", 4, [dict(inst=0), dict(ty=0, val="0")]),
+            inst(2, "ptr_elem_ptr", 4, [dict(inst=0), dict(ty=0, val="0")]),
+            inst(3, "assembly", 1, source="", volatile=False, clobbers=["memory"], outputs=[], inputs=[]),
+            inst(4, "ret", 2, [dict(ty=1, val="{}")])])
+        prerequisite.update(types=[INT, VOID, NORETURN, PTR, dict(k="other", name="x" * (100 * 1024))],
+                            params=[3], ret=1)
+        write(air, {"prerequisite.json": prerequisite})
+        report = decode(invoke(binary, air))
+        assert all(len(d["message"]) <= 2048 for d in report["diagnostics"])
+        assert len([d for d in report["diagnostics"] if d["message_truncated"]]) >= 2
+        assert len([d for d in report["diagnostics"] if d["code"] == "PREREQUISITE_SKIPPED" and
+                    d["prerequisites"] == ["instruction_result_type"]]) == 2
+        assert len([d for d in report["diagnostics"] if d["code"] == "INSTRUCTION_FAILURE"]) == 1
+        checks += 1
+
         write(air, {"root.json": calls("root", "mid", "missing_a", "missing_b"),
                     "mid.json": calls("mid", "root", "marked"), "marked.json": marked})
         report = decode(invoke(binary, air))

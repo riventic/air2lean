@@ -39,13 +39,19 @@ structure FileResult where
   file : String
   function : Option String := none
   normalized : Option Func := none
+  index : Option OperandTypes := none
   structureValid : Bool := false
   localPassed : Bool := false
 
 def FileResult.toJson (u : FileResult) : Json := Json.mkObj [
-  ("file", toJson u.file), ("function", toJson u.function),
-  ("normalized", toJson u.normalized.isSome), ("structure_valid", toJson u.structureValid),
-  ("local_check", toJson (if u.localPassed then "passed" else "blocked_or_rejected"))]
+  ("file", Lean.toJson u.file), ("function", Lean.toJson u.function),
+  ("normalized", Lean.toJson u.normalized.isSome), ("structure_valid", Lean.toJson u.structureValid),
+  ("local_check", Lean.toJson (if u.localPassed then "passed" else "blocked_or_rejected"))]
+
+private def FileResult.operandIndex (u : FileResult) (f : Func) : OperandTypes :=
+  match u.index with
+  | some index => index
+  | none => f.operandTypes
 
 structure Edge where
   caller : String
@@ -60,7 +66,7 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
   for u in units do
     if u.structureValid then
       if let some f := u.normalized then
-        for i in f.allInsts do
+        for i in (u.operandIndex f).insts do
           if let .call (.func callee false worker) _ := i.op then
             if (allocFn? callee).isNone && (threadFn? callee).isNone then
               result := result.push { caller := f.name, callee, instruction := i.id, file := u.file }
@@ -134,34 +140,40 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
   let .ok f := normalized
     | log := log.record (boundary file name .normalizationFailure .normalize .validationFailure) normalized
       return (unit, log.add (skipped file name .check "fully_normalized_function"))
-  let structureValid := match diagnosticStructure f with | .ok _ => true | .error _ => false
   let before := log.observed
-  log := collectFunctionChecks file f log
+  let checked := collectFunctionChecksDetailed file f log
+  log := checked.log
   -- A final compatibility check catches any checks not decomposed above. It is
   -- skipped only when rejection is already established, never when accepting.
   if log.observed == before then
     log := log.record (boundary file name .instructionFailure .check .validationFailure) (check f)
-  return ({ unit with normalized := some f, structureValid,
-    localPassed := structureValid && log.observed == before }, log)
+  return ({ unit with normalized := some f, index := some checked.index, structureValid := checked.structureValid,
+    localPassed := checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
   let mut log := initial
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
+  let snapshot := CallChecksSnapshot.build funcs
+  let mut selected : Std.HashMap String (Array FileResult) := {}
+  for u in units do
+    if let some name := u.function then
+      selected := selected.insert name ((selected[name]?.getD #[]).push u)
   let mut names : Std.HashSet String := {}
   for u in units do
     if let some name := u.function then
       if !names.contains name then
         names := names.insert name
-        if (units.filter (·.function == some name)).size > 1 then
+        if (selected[name]?.getD #[]).size > 1 then
           log := log.add (boundary u.file (some name) .duplicateFunction .program .malformedInput "function identity occurs in multiple selected files")
   for u in safe do
-    if let some f := u.normalized then log := collectCallChecks u.file f funcs log
+    if let some f := u.normalized then
+      log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
   let graph := edges units
   let index := adjacency graph
   let mut blockers : Array (Edge × Code × Option String) := #[]
   for edge in graph do
-    let targets := units.filter (·.function == some edge.callee)
+    let targets := selected[edge.callee]?.getD #[]
     let unsupported := if targets.isEmpty then rejectedThreadFn? edge.callee else none
     let code := if unsupported.isSome then some Code.modelFailure
       else if targets.isEmpty then some Code.calleeMissing
@@ -191,17 +203,17 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
   return log
 
 def report (units : Array FileResult) (log : Log) : Json := Json.mkObj [
-  ("schema", toJson (1 : Nat)), ("kind", toJson "air2lean-check-diagnostics"),
-  ("status", toJson (if log.failed then "rejected" else "checked")),
-  ("complete", toJson log.complete), ("truncated", toJson log.truncated),
-  ("diagnostic_limit", toJson log.limit), ("diagnostics_observed", toJson log.observed),
-  ("diagnostic_payload_bytes", toJson log.payloadBytes),
+  ("schema", Lean.toJson (1 : Nat)), ("kind", Lean.toJson "air2lean-check-diagnostics"),
+  ("status", Lean.toJson (if log.failed then "rejected" else "checked")),
+  ("complete", Lean.toJson log.complete), ("truncated", Lean.toJson log.truncated),
+  ("diagnostic_limit", Lean.toJson log.limit), ("diagnostics_observed", Lean.toJson log.observed),
+  ("diagnostic_payload_bytes", Lean.toJson log.payloadBytes),
   ("diagnostics", Json.arr (log.items.map Diagnostic.toJson)),
   ("files", Json.arr (units.map FileResult.toJson)),
-  ("scope", toJson "selected AIR validation; first error within opaque prerequisite units"),
-  ("proof_status", toJson "not_run"), ("runtime_outcomes", toJson "not_observed"),
-  ("dependency_completeness", toJson "not_attested; direct normalized calls and explicit spawn workers only"),
-  ("source_correspondence", toJson "not_attested")]
+  ("scope", Lean.toJson "selected AIR validation; first error within opaque prerequisite units"),
+  ("proof_status", Lean.toJson "not_run"), ("runtime_outcomes", Lean.toJson "not_observed"),
+  ("dependency_completeness", Lean.toJson "not_attested; direct normalized calls and explicit spawn workers only"),
+  ("source_correspondence", Lean.toJson "not_attested")]
 
 private def readInput (path : System.FilePath) (remaining : Nat) : IO String := do
   let metadata ← path.metadata

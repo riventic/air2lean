@@ -507,6 +507,18 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
+  if let some k := v.ptrOther? then throw (message k)
+
+/-- One pointer/global alignment policy, with caller-specific display context. -/
+private def checkPointerConstant (f : Func) (v : Val) (missing : String → String)
+    (alignment : Nat → Nat → String) : Except String Unit := do
+  checkPointerPresence v missing
+  if let .ptrConst pty g _ := v then
+    let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
+    let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
+    if pa > ga then throw (alignment pa ga)
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes. An array with a sentinel is encoded with the sentinel. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
@@ -515,8 +527,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   if g.isExtern then throw s!"{f.name}: global {what}: `extern` is outside the subset"
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
-  if let some k := init.ptrOther? then
-    throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
+  checkPointerPresence init fun k =>
+    s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
@@ -545,15 +557,10 @@ def check (f : Func) : Except String Unit := do
     checkGlobal f g
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
-      if let some k := v.ptrOther? then
-        throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"
-      -- The block of a global has the alignment of its type.
-      if let .ptrConst pty g _ := v then
-        let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
-        let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
-        if pa > ga then
-          throw s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
-            outside the subset"
+      checkPointerConstant f v
+        (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
+        (fun pa ga => s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
+          outside the subset")
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places }
   let _ ← checkInsts cx 0 f.body
@@ -640,6 +647,30 @@ def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
   checkCallSignatureWith f target i args index (compatibleType f target)
 
 private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
+
+private structure SpawnMessages where
+  missingTuple : String
+  notTuple : String
+  count : String
+  argument : Nat → String
+
+/-- Validate the worker tuple with one shared policy. Newly successful type pairs
+are returned only after the entire signature succeeds, so callers publish caches
+transactionally. Local duplicate pairs preserve the cached caller's comparison order. -/
+private def checkSpawnSignatureWith (f target : Func) (args : Array Val) (k : Nat)
+    (index : OperandTypes) (sameType : TyId → TyId → Bool) (messages : SpawnMessages) :
+    Except String (Array (TyId × TyId)) := do
+  let some tuple := args[k]?.bind index.valTy? | throw messages.missingTuple
+  let some (.tuple fields) := f.types[tuple]? | throw messages.notTuple
+  unless fields.size == target.params.size do throw messages.count
+  let mut seen : Std.HashSet (TyId × TyId) := {}
+  let mut pairs := #[]
+  for (ty, n) in fields.zipIdx do
+    let pair := (ty, target.params[n]!)
+    unless seen.contains pair || sameType pair.1 pair.2 do throw (messages.argument n)
+    seen := seen.insert pair
+    pairs := pairs.push pair
+  return pairs
 
 /-- Cache structural equality only for an exact ordered function-table/type-ID pair.
 Every call still checks its arity, operand types/forms and diagnostic context; only an
@@ -1058,17 +1089,14 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
           let some (targetIndex, target) := lookupFunction worker
             | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-          let some tuple := args[k]?.bind index.valTy? | throw s!"{f.name}: inst {i.id}: spawn args have no type"
-          let some (.tuple fields) := f.types[tuple]? | throw s!"{f.name}: inst {i.id}: spawn args are not a tuple"
-          unless fields.size == target.params.size do
-            throw s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count"
-          let mut completed := signatures
-          for (ty, n) in fields.zipIdx do
-            let key := ((fileIndex, targetIndex), (ty, target.params[n]!))
-            unless completed.contains key || compatibleType f target ty target.params[n]! do
-              throw s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type"
-            completed := completed.insert key
-          signatures := completed
+          let key (x y : TyId) := ((fileIndex, targetIndex), (x, y))
+          let pairs ← checkSpawnSignatureWith f target args k index
+            (fun x y => signatures.contains (key x y) || compatibleType f target x y)
+            { missingTuple := s!"{f.name}: inst {i.id}: spawn args have no type",
+              notTuple := s!"{f.name}: inst {i.id}: spawn args are not a tuple",
+              count := s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count",
+              argument := fun n => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type" }
+          for (x, y) in pairs do signatures := signatures.insert (key x y)
         unless functionNames.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
@@ -1117,8 +1145,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
   for i in body do
     let anchor : Diagnostics.Anchor := { idSpace := .canonical,
       instruction := some i.id, nearestDbgLine := if line == 0 then none else some line }
-    log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty })
-      (checkTy f.name f.types f.layouts line i.ty)
+    let typeCheck := checkTy f.name f.types f.layouts line i.ty
+    log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
+    if typeCheck.toOption.isNone then
+      log := log.add { (Diagnostics.skipped file (some f.name) .check "instruction_result_type") with anchor }
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -1131,17 +1161,26 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
       log := (collectInstChecks file f cx e line log).2
     | .«try» _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
-    | _ => log := log.record (checkDiagnostic file f .instructionFailure anchor)
-        (checkOp cx line i.ty i.op)
+    | _ =>
+      if typeCheck.toOption.isSome then
+        log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
-def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
+structure FunctionChecks where
+  index : OperandTypes
+  structureValid : Bool
+  log : Diagnostics.Log
+
+/-- Return the actual structural result and index alongside collected diagnostics. -/
+def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnostics.Log) : FunctionChecks := Id.run do
+  let index := f.operandTypes
   let mut log := initial
-  match diagnosticStructure f with
+  match checkFunctionStructure f index with
   | .error message =>
     log := log.add { (checkDiagnostic file f .structureFailure) with
       category := .malformedInput, message, firstErrorInUnit := true }
-    return log.add (Diagnostics.skipped file (some f.name) .check "normalized_function_structure")
+    return { index, structureValid := false,
+      log := log.add (Diagnostics.skipped file (some f.name) .check "normalized_function_structure") }
   | .ok _ => pure ()
   for p in f.params ++ #[f.ret] do
     log := log.record (checkDiagnostic file f .typeFailure { idSpace := .canonical, typeId := some p })
@@ -1150,7 +1189,7 @@ def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log)
     if let .union _ _ none _ := t then
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id)
-  let insts := f.allInsts
+  let insts := index.insts
   let escaping := escapingAllocs f
   let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p
   for i in insts do
@@ -1164,37 +1203,46 @@ def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log)
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
-      let result : Except String Unit := do
-        if let some k := v.ptrOther? then throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"
-        if let .ptrConst pty g _ := v then
-          let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
-          let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
-          if pa > ga then throw s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset"
+      let result := checkPointerConstant f v
+        (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
+        (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
       log := log.record (checkDiagnostic file f .constantFailure
         { idSpace := .canonical, instruction := some i.id }) result
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
     instTys := insts.map fun i => (i.id, i.ty), places }
-  return (collectInstChecks file f cx f.body 0 log).2
+  return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
+
+/-- Compatibility wrapper for clients that need only diagnostics. -/
+def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log :=
+  (collectFunctionChecksDetailed file f initial).log
 
 private def diagnosticSpawnSignature (f target : Func) (i : Inst) (args : Array Val)
     (k : Nat) (index : OperandTypes) : Except String Unit := do
-  let some tuple := args[k]?.bind index.valTy? | throw "spawn args have no type"
-  let some (.tuple fields) := f.types[tuple]? | throw "spawn args are not a tuple"
-  unless fields.size == target.params.size do throw "spawned callee has an incompatible argument count"
-  for (ty, n) in fields.zipIdx do
-    unless compatibleType f target ty target.params[n]! do
-      throw s!"spawned callee has an incompatible argument {n} type (inst {i.id})"
+  let _ ← checkSpawnSignatureWith f target args k index (compatibleType f target)
+    { missingTuple := "spawn args have no type", notTuple := "spawn args are not a tuple",
+      count := "spawned callee has an incompatible argument count",
+      argument := fun n => s!"spawned callee has an incompatible argument {n} type (inst {i.id})" }
+  pure ()
+
+structure CallChecksSnapshot where
+  references : Array (String × String)
+  targets : Std.HashMap String (Option Func)
+
+/-- Preserve function-reference order and record ambiguity in the safe subset. -/
+def CallChecksSnapshot.build (funcs : Array Func) : CallChecksSnapshot := Id.run do
+  let mut targets : Std.HashMap String (Option Func) := {}
+  for f in funcs do
+    targets := targets.insert f.name (if targets.contains f.name then none else some f)
+  return { references := fnRefs funcs, targets }
+
+def CallChecksSnapshot.unique (snapshot : CallChecksSnapshot) (name : String) : Option Func :=
+  snapshot.targets[name]?.join
 
 /-- Calls are independent units; the original whole-program check additionally covers
 shared definitions, indirect targets and memory propagation. -/
-def collectCallChecks (file : String) (f : Func) (funcs : Array Func)
+def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (snapshot : CallChecksSnapshot)
     (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
   let mut log := initial
-  let index := f.operandTypes
-  let references := fnRefs funcs
-  let unique (name : String) : Option Func :=
-    let matches := funcs.filter (·.name == name)
-    if matches.size == 1 then matches[0]? else none
   for i in index.insts do
     let diagnostic := { (checkDiagnostic file f .signatureFailure
       { idSpace := .canonical, instruction := some i.id }) with phase := .program }
@@ -1203,20 +1251,25 @@ def collectCallChecks (file : String) (f : Func) (funcs : Array Func)
       log := log.record { diagnostic with code := .modelFailure }
         (checkModelSignature f callee args i.ty index)
       if (allocFn? callee).isNone && (threadFn? callee).isNone then
-        if let some target := unique callee then
+        if let some target := snapshot.unique callee then
           log := log.record diagnostic (checkCallSignature f target i args index)
       if let some k := (threadFn? callee).bind (·.spawnArgs?) then
-        if let some target := worker.bind unique then
+        if let some target := worker.bind snapshot.unique then
           log := log.record diagnostic (diagnosticSpawnSignature f target i args k index)
     | .call (.inst p) args =>
       match index.calleeFnTy? f p with
       | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
       | some name =>
-        for (typ, callee) in references do
+        for (typ, callee) in snapshot.references do
           if typ == name then
-            if let some target := unique callee then
+            if let some target := snapshot.unique callee then
               log := log.record diagnostic (checkCallSignature f target i args index)
     | _ => pure ()
   return log
+
+/-- Compatibility wrapper; program collection builds and reuses one snapshot. -/
+def collectCallChecks (file : String) (f : Func) (funcs : Array Func)
+    (initial : Diagnostics.Log) : Diagnostics.Log :=
+  collectCallChecksIndexed file f f.operandTypes (CallChecksSnapshot.build funcs) initial
 
 end Air2Lean

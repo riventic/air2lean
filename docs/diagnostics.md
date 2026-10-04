@@ -16,8 +16,10 @@ emission mode keeps its fail-fast interfaces and generated source format.
 Schema 1 (`kind: air2lean-check-diagnostics`) gives each diagnostic an enum-backed
 stable `code`, `phase`, `category`, file/function identity, anchor, dependency chain,
 prerequisites and `first_error_in_unit`. Messages remain human-readable display
-text and are never scraped for codes, classifications or locations. Messages are
-limited to 2048 characters with an explicit truncation flag. Input is bounded to
+text and are never scraped for codes, classifications or locations. The bounded log
+copies at most 2048 message characters before retaining a diagnostic and preserves
+an explicit original-message truncation flag. Standalone compatibility rendering
+outside that log retains the original message. Input is bounded to
 256 sorted JSON files and an aggregate 64 MiB of contents. Function names and the
 directory argument are limited to 1024 characters. The diagnostic payload is
 bounded to 1 MiB and the requested count; `truncated: true` and `complete: false`
@@ -45,6 +47,13 @@ unsupported markers are reported with **exported** IDs. Successful canonicalizat
 produces full normalized functions; structural validation gates further inspection.
 The collector then checks independent parameter/return types, globals, escaping
 allocations, constant-pointer uses, instructions in each branch, and call sites.
+An instruction whose result type fails validation receives a skipped-prerequisite
+diagnostic; its dependent operation check is not called. Nested bodies and siblings
+remain inspectable. Structural results and operand indexes are reused by program
+collection, which builds function references and unique/ambiguous safe-subset call
+targets once. Duplicate identities across all selected files are reported separately.
+Pointer/global alignment and spawned-worker tuple signatures share the ordinary
+validator policies with caller-specific messages; cache publication stays transactional.
 Instructions diagnosed after canonicalization use **canonical** IDs. Rewrites can
 renumber, merge or drop instructions, so no original-ID correspondence is inferred.
 The function identity uses the ordinary anonymous-name normalization over readable
@@ -94,6 +103,10 @@ python3 tests/roadmap/diagnostics/test_cli.py .lake/build/bin/air2lean \
 The CLI driver checks independent malformed files and exporter markers, both
 branches, missing/blocked/duplicate dependencies and cycles, deterministic bytes,
 caps, incompatible flags, failure output preservation, and ordinary successful
-emission bytes against the supplied V05 baseline. Without `--baseline`, that byte
+emission bytes against the supplied V05 baseline. The collector evaluation also
+checks failed-type prerequisite gating, nested siblings, retained-message bounds,
+pointer/global alignment, shared spawn validation and snapshot ambiguity/order.
+The CLI's large-message case uses one 100 KiB type name and two failed instructions.
+Without `--baseline`, that byte
 comparison is explicitly reported as not run. `--self-test` runs only offline
 harness-oracle tests; it does not execute or validate the translator.
