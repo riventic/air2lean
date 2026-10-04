@@ -27,6 +27,12 @@ private def parse (j : Json) : IO Func := do
   match (do let f ← normalize (← Raw.parseFunc j); check f; pure f : Except String Func) with
   | .ok f => pure f
   | .error e => throw (IO.userError e)
+private def checkedProgram (files : Array Json) : IO (Array Func) := do
+  let fs ← files.mapM parse
+  match checkProgram fs with
+  | .ok _ => pure fs
+  | .error e => throw (IO.userError e)
+
 private def require (test : Bool) (message : String) : IO Unit :=
   unless test do throw (IO.userError message)
 
@@ -48,10 +54,7 @@ private def worker (params : Array Nat) (retVoid : Bool := false) : Json :=
 
 private def accepted (callee : String) (fields : Array Nat) (values : Array Json)
     (params : Array Nat) (retVoid : Bool := false) : IO (Array Func) := do
-  let fs ← #[spawner callee fields values, worker params retVoid].mapM parse
-  match checkProgram fs with
-  | .ok _ => pure fs
-  | .error e => throw (IO.userError e)
+  checkedProgram #[spawner callee fields values, worker params retVoid]
 
 private def rejected (name callee : String) (fields : Array Nat) (values : Array Json)
     (params : Array Nat) (retVoid : Bool := false) : IO Unit := do
@@ -74,10 +77,7 @@ private def pureSlices (sourceConst : Bool := true) : IO (Array Func) := do
   let target := file "sliceWorker" #[u8, slice, nrTy] #[0, 1, 1] 0
     #[node 0 "arg" 0 #[] [("param", num 0)], node 1 "arg" 1 #[] [("param", num 1)],
       node 2 "arg" 1 #[] [("param", num 2)], node 3 "ret" 2 #[ref 0]]
-  let fs ← #[source, target].mapM parse
-  match checkProgram fs with
-  | .error e => throw (IO.userError e)
-  | .ok _ => pure fs
+  checkedProgram #[source, target]
 
 private def alignedSlices : IO (Array Func) := do
   let u64 := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
@@ -95,10 +95,7 @@ private def alignedSlices : IO (Array Func) := do
       node 3 "ret" 4 #[lit 3 "{}"]]
   let target := file "alignedWorker" #[u64, slice 1, voidTy, nrTy] #[1] 2
     #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "ret" 3 #[lit 2 "{}"]]
-  let fs ← #[source "strongCapture" 8, source "weakCapture" 1, target].mapM parse
-  match checkProgram fs with
-  | .error e => throw (IO.userError e)
-  | .ok _ => pure fs
+  checkedProgram #[source "strongCapture" 8, source "weakCapture" 1, target]
 
 private def pointerSignature (sourceConst targetConst : Bool) (sourceAlign targetAlign : Nat)
     (expected : Bool) : IO Unit := do
@@ -133,10 +130,7 @@ private def nestedTuple : IO (Array Func) := do
   let target := file "worker" #[u8, u16, tuple #[0, 1], nrTy] #[2, 0] 0
     #[node 0 "arg" 2 #[] [("param", num 0)], node 1 "arg" 0 #[] [("param", num 1)],
       node 2 "ret" 3 #[ref 1]]
-  let fs ← #[source, target].mapM parse
-  match checkProgram fs with
-  | .error e => throw (IO.userError e)
-  | .ok _ => pure fs
+  checkedProgram #[source, target]
 
 private def nestedPointerSignature : IO Unit := do
   let ptr := fun child constant => obj [("k", .str "ptr"), ("size", .str "one"),
