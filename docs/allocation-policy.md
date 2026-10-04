@@ -66,18 +66,19 @@ Compiler errors, unexpected panics, missing tools and killed processes do not co
 mutation detection. Temporary copies preserve the original source. Existing mutation (h)
 continues to remove only legacy `failAt`, retaining the configured policy.
 
-[The qualification record](allocation-policy-report.json) records the coordinator's successful
-kernel build, ten exact native comparisons and three detected semantic mutants at revision
-`853cef53211d08a62e368739160f56dea6a3408e`, using Zig 0.16.0 on aarch64-macos with
-baseline CPU/ReleaseSafe. It lists the actual caps and failure indices, log hashes and
-sampled resource measurements. A subsequent local Zig 0.15.2 run also passed ten exact cases, and the full committed
-proof package passed (104 jobs). The existing lists-client differential rerun passed 1,503 exact comparisons with zero
-fail matches, unspecified outcomes, caps or mismatches; its libm self-check matched
-320/320 samples. Reference Linux CI, the fixtures/documentation second review, and
-post-cleanup checks for the moved default cap definition remain pending. M03 is not fully qualified until remaining gates and
-the universal acceptance review pass against an exact revision/profile. This fixture
-compares the selected model policy on native reference layouts; it is not general allocator
-or cross-target correspondence.
+[The qualification record](allocation-policy-report.json) preserves the earlier historical
+results and appends the coordinator's complete post-cleanup recheck at revision
+`6cf2011b33ee242be653b9fb2137661328307bd0`. The full committed proof package passed
+(104 jobs); selected native policy fixtures passed ten exact comparisons under both
+Zig 0.16.0 and 0.15.2 on aarch64-macos with baseline CPU/ReleaseSafe; all three semantic
+mutants were detected. The lists-client gate passed 1,503 exact comparisons with zero
+fail matches, unspecified outcomes, caps or mismatches, and its libm self-check matched
+320/320 samples. The appended record binds each command, code hash and distinct log path
+to that checked revision, including separate native-version logs even where their contents
+have the same hash. The default-cap cleanup and guard-order optimization have now been
+rechecked. Reference Linux CI, the fixtures/CI/documentation second review and universal
+acceptance review remain pending, so full M03 qualification remains false. These selected
+model-policy checks do not establish general allocator or cross-target correspondence.
 
 The gate explicitly builds `ZigLean.Sep.Alloc` before compiling its client fixture;
 `lake build ZigLean` alone does not produce that imported separation module. CI runs the

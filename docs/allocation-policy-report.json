@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "roadmap_id": "M03",
-  "status": "locally_checked_pending_review_and_remaining_gates",
+  "status": "locally_checked_pending_ci_and_final_review",
   "scope": {
     "policy": "per-request cap and finite zero-based failure-index list additive to legacy failAt",
     "default_max_bytes": 1048576,
@@ -268,36 +268,42 @@
       "scripts/mutate.sh": "e96c0af7343d52d0fc6d95892a590d72230c56beb7a5ef912cba2e0b0f26e69a",
       ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
     },
-    "pending_code_changes": [
+    "latest_locally_checked_revision": "6cf2011b33ee242be653b9fb2137661328307bd0",
+    "historical_review_changes": [
       {
-        "path": "ZigLean/Mem/Basic.lean",
-        "sha256": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
-      },
-      {
-        "path": "ZigLean/Mem/Alloc.lean",
-        "sha256": "11fe18625c91709a68984d9e07fa24e6216d2c0bd0080c9d483d9a6bf5bf8631",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
-      },
-      {
-        "path": "ZigLean/Sep/Alloc.lean",
-        "sha256": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
-      },
-      {
-        "path": "tests/diff/common.zig",
-        "sha256": "0cff6589b011d1ae24a7db194c0c926c0f1413fcb5d6a320f09b626f4f73c35b",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
-      },
-      {
-        "path": "scripts/mutate.sh",
-        "sha256": "3686066a7e850e98397c341d5de036ad62eb1125ef0881ddb35d3b744d39ec12",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
-      },
-      {
-        "path": "tests/roadmap/allocation-policy/static.py",
-        "sha256": "c72d6610d1a24d93e5f1490f6c5dca75e06d4a8c9e32f5cfeca6bc29ae5dae76",
-        "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+        "checked_revision": "6cf2011b33ee242be653b9fb2137661328307bd0",
+        "changes": [
+          {
+            "path": "ZigLean/Mem/Basic.lean",
+            "sha256": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          },
+          {
+            "path": "ZigLean/Mem/Alloc.lean",
+            "sha256": "11fe18625c91709a68984d9e07fa24e6216d2c0bd0080c9d483d9a6bf5bf8631",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          },
+          {
+            "path": "ZigLean/Sep/Alloc.lean",
+            "sha256": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          },
+          {
+            "path": "tests/diff/common.zig",
+            "sha256": "0cff6589b011d1ae24a7db194c0c926c0f1413fcb5d6a320f09b626f4f73c35b",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          },
+          {
+            "path": "scripts/mutate.sh",
+            "sha256": "3686066a7e850e98397c341d5de036ad62eb1125ef0881ddb35d3b744d39ec12",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          },
+          {
+            "path": "tests/roadmap/allocation-policy/static.py",
+            "sha256": "c72d6610d1a24d93e5f1490f6c5dca75e06d4a8c9e32f5cfeca6bc29ae5dae76",
+            "reason": "Review cleanup moves the unchanged default cap and checks the cap before failure-index membership; post-cleanup checks remain coordinator-owned."
+          }
+        ]
       }
     ]
   },
@@ -475,7 +481,202 @@
   "pending": [
     "CI and fixtures/documentation second independent review",
     "Reference Linux CI for Zig 0.16.0/0.15.2",
-    "Post-cleanup source-state checks for the moved default cap definition",
     "Universal acceptance review"
+  ],
+  "local_validation_records": [
+    {
+      "revision": "6cf2011b33ee242be653b9fb2137661328307bd0",
+      "cwd": "/Users/konstantinrr/.codex/worktrees/roadmap-allocation-policy/air2lean",
+      "date": "2026-10-04",
+      "code_sha256": {
+        "ZigLean/Mem/Basic.lean": "f44adbf97ecdd3a1a7fa485584db1f35209cc7e5ef73a83a3c1f827109ea6b00",
+        "ZigLean/Mem/Alloc.lean": "11fe18625c91709a68984d9e07fa24e6216d2c0bd0080c9d483d9a6bf5bf8631",
+        "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+        "tests/diff/common.zig": "0cff6589b011d1ae24a7db194c0c926c0f1413fcb5d6a320f09b626f4f73c35b",
+        "tests/diff/Diff.lean": "3903da2bed2f02316c4e801689a7a71e053e6ff815033dd888eebc82c1e7f6be",
+        "tests/diff/lists/harness.zig": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
+        "tests/diff/lists/inputs/sumRange.jsonl": "8f6316ebcf07cb012e3486d5c9ce0d294dd2b73d203f50489768eba0497b51bb",
+        "tests/roadmap/allocation-policy/Check.lean": "7113f34252a4c4c07e8059c65209aca3bd674bb360dfbbbef8903bd2f181fcd9",
+        "tests/roadmap/allocation-policy/fixture.zig": "dacde4e6f873f09f9e82858f50e9ca15b0803e48da59019d110110c6ecff5561",
+        "tests/roadmap/allocation-policy/check.sh": "ac7f235cc4bf9b3429d950f1dad5b41ba2296c45e23fe9fc51f67da7c1d6f5f8",
+        "tests/roadmap/allocation-policy/mutations.py": "80eb157bbb65c8a3dd1d8df8d29216d3fbc760fd8b0533286616c176a7fb7b58",
+        "tests/roadmap/allocation-policy/compare.py": "2c90d74517f1c71f33a49b0642c3f741bea1921cb18513a87c1189fa6ee6b24f",
+        "tests/roadmap/allocation-policy/static.py": "c72d6610d1a24d93e5f1490f6c5dca75e06d4a8c9e32f5cfeca6bc29ae5dae76",
+        "scripts/mutate.sh": "3686066a7e850e98397c341d5de036ad62eb1125ef0881ddb35d3b744d39ec12",
+        ".github/workflows/ci.yml": "81dfb04c4bb41441f1142ea2ca38c1b33f4fa07437fef909c5d64dc3a4874b90"
+      },
+      "queue_results": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/queue10-results.json",
+        "sha256": "c2da682c095936379a0f7290582bf9aa1a5c7ef19ea61433323fec959ec93885",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "queue_commands": {
+        "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/queue10.py",
+        "sha256": "a820965485be90246c579db80b81eb7c5139c3b8b6a4af72a5e4214831349fe8",
+        "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+      },
+      "execution_controls": {
+        "coordinator_only_compilers": true,
+        "global_compiler_guard": true,
+        "sampled_memory_limit_mib": 8192,
+        "time_limit_seconds": 900,
+        "limits_are_operational_controls_not_product_guarantees": true
+      },
+      "checks": [
+        {
+          "phase": "allocation-policy-cap-shared-proofs",
+          "command": [
+            "lake",
+            "build",
+            "Proofs"
+          ],
+          "status": "pass",
+          "profile": {
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "translations": "Committed default Proofs/Gen.lean source modules at checked revision"
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-cap-shared-proofs.log",
+            "sha256": "242a330bc55cf20169e45645daf89bc4db365deb09c4a195cea669aeca729ac4",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "kernel_build_jobs": 104
+          }
+        },
+        {
+          "phase": "allocation-policy-cap-native16",
+          "command": [
+            "env",
+            "AIR2LEAN_ZIG=/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig",
+            "bash",
+            "tests/roadmap/allocation-policy/check.sh"
+          ],
+          "status": "pass",
+          "profile": {
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "zig": "0.16.0",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures or translated lists client; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-cap-native16.log",
+            "sha256": "b94c01ff2f90d58a616e6f9dff003b6d734904ee8ef0907f81f4ab8afa6017d9",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "kernel_build_jobs": 34,
+            "exact_comparisons": 10,
+            "exclusions": 0,
+            "capped_searches": 0
+          }
+        },
+        {
+          "phase": "allocation-policy-cap-native15",
+          "command": [
+            "env",
+            "AIR2LEAN_ZIG=/opt/homebrew/bin/zig",
+            "bash",
+            "tests/roadmap/allocation-policy/check.sh"
+          ],
+          "status": "pass",
+          "profile": {
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "zig": "0.15.2",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures or translated lists client; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-cap-native15.log",
+            "sha256": "b94c01ff2f90d58a616e6f9dff003b6d734904ee8ef0907f81f4ab8afa6017d9",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "kernel_build_jobs": 34,
+            "exact_comparisons": 10,
+            "exclusions": 0,
+            "capped_searches": 0
+          }
+        },
+        {
+          "phase": "allocation-policy-cap-mutants",
+          "command": [
+            "env",
+            "AIR2LEAN_ZIG=/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig",
+            "python3",
+            "tests/roadmap/allocation-policy/mutations.py"
+          ],
+          "status": "pass",
+          "profile": {
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "zig": "0.16.0",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures or translated lists client; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-cap-mutants.log",
+            "sha256": "b70bb143ad00885164f2898c0a147fce2eb7872ae38dd89e0f7bc353a9849423",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "detected": [
+              "ignore-failure-trace",
+              "ignore-request-cap",
+              "omit-live-removal"
+            ],
+            "detector": "Explicit fixture outcome/ownership assertion; compiler failures do not qualify."
+          }
+        },
+        {
+          "phase": "allocation-policy-cap-lists",
+          "command": [
+            "env",
+            "AIR2LEAN_EXAMPLES=lists",
+            "AIR2LEAN_ZIG=/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig",
+            "bash",
+            "scripts/diff.sh"
+          ],
+          "status": "pass",
+          "profile": {
+            "lean_toolchain": "leanprover/lean4:v4.34.0",
+            "host": "aarch64-macos",
+            "zig": "0.16.0",
+            "cpu": "baseline",
+            "build_mode": "ReleaseSafe",
+            "scope": "Selected native allocation-policy fixtures or translated lists client; not general allocator/ABI qualification."
+          },
+          "log": {
+            "local_path": "/opt/dev/air2lean/.lake/review-resume/roadmap/allocation-policy-cap-lists.log",
+            "sha256": "54ce0e3b11484bfd8fc715225ff094d25029b591f8e05d6f3decfbf3d003b2a5",
+            "retention": "Coordinator local run log; CI retention is RUNNER_TEMP without artifact upload."
+          },
+          "result": {
+            "exact_comparisons": 1503,
+            "fail_matches": 0,
+            "unspecified": 0,
+            "capped_searches": 0,
+            "mismatches": 0,
+            "functions": {
+              "dupe": 300,
+              "dupeZLen": 300,
+              "evens": 300,
+              "listSum": 300,
+              "sumRange": 303
+            },
+            "libm_self_check": {
+              "matches": 320,
+              "mismatches": 0
+            }
+          }
+        }
+      ]
+    }
   ]
 }
