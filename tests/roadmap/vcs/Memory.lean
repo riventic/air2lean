@@ -33,7 +33,8 @@ example (p : Ptr) (old value : BitVec 32) (h h' : Heap) (hp' : pts p 4 value h')
 
 -- A lifted arithmetic operation keeps the owned heap; overflow is still an obligation.
 example (h : Heap) :
-    ¬ MemProgram.vc (.lift (.add (255#8) (1#8))) (fun _ _ => True) h := by decide
+    ¬ MemProgram.vc (.lift (.add (255#8) (1#8))) (fun _ _ => True) h := by
+  simp only [MemProgram.vc, ResultProgram.vc] <;> decide
 
 -- A lifted Zig error-union return follows its own memory postcondition.
 example (h : Heap) (Q : Except ErrName Nat → Assn) :

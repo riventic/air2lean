@@ -6,17 +6,23 @@ open Zig VC
 example (a b : BitVec 8) (Q : BitVec 8 → Prop) :
     ResultProgram.vc (.add a b) Q ↔ a.toNat + b.toNat < 256 ∧ Q (a + b) := Iff.rfl
 
-example : ResultProgram.vc (.add (254#8) (1#8)) (fun value => value = 255#8) := by decide
-example : ¬ ResultProgram.vc (.add (255#8) (1#8)) (fun _ => True) := by decide
+example : ResultProgram.vc (.add (254#8) (1#8)) (fun value => value = 255#8) := by
+  simp only [ResultProgram.vc] <;> decide
+example : ¬ ResultProgram.vc (.add (255#8) (1#8)) (fun _ => True) := by
+  simp only [ResultProgram.vc] <;> decide
 
 -- This is an executable-model counterexample, distinct from an unsolved VC.
-example : ResultProgram.eval (.add (255#8) (1#8)) = (throw Error.overflow) := by decide
+example : ResultProgram.eval (.add (255#8) (1#8)) = (throw Error.overflow) := by
+  have overflow : (255#8).toNat + (1#8).toNat ≥ 2 ^ 8 := by decide
+  simp only [ResultProgram.eval, Zig.add_unsigned, ite_eq_left overflow]
 
 -- Bind generates the continuation's obligation; a wrong return is rejected.
 example : ¬ ResultProgram.vc
-    (.bind (.ret (2 : Nat)) (fun n => .ret (n + 1))) (fun n => n = 4) := by decide
+    (.bind (.ret (2 : Nat)) (fun n => .ret (n + 1))) (fun n => n = 4) := by
+  simp only [ResultProgram.vc] <;> decide
 example : ResultProgram.vc
-    (.bind (.ret (2 : Nat)) (fun n => .ret (n + 1))) (fun n => n = 3) := by decide
+    (.bind (.ret (2 : Nat)) (fun n => .ret (n + 1))) (fun n => n = 3) := by
+  simp only [ResultProgram.vc] <;> decide
 
 -- Safety remains necessary even if the requested functional postcondition is True.
 example (b : Bool) : ResultProgram.vc (.guard b) (fun _ => True) ↔ b = true := by
@@ -32,10 +38,12 @@ example (b : Bool) : ResultProgram.vc
 -- Zig errors returned through an error union are checked values, not safety panics.
 example : ResultProgram.vc
     (.ret (Except.error "Empty" : Except ErrName Nat))
-    (fun value => value = Except.error "Empty") := by decide
+    (fun value => value = Except.error "Empty") := by
+  simp only [ResultProgram.vc] <;> decide
 example : ¬ ResultProgram.vc
     (.ret (Except.error "Empty" : Except ErrName Nat))
-    (fun value => value = Except.ok 0) := by decide
+    (fun value => value = Except.ok 0) := by
+  simp only [ResultProgram.vc] <;> decide
 
 -- A claimed modular call summary needs an actual kernel-checked callee contract.
 example : ¬ (True → ∃ value : Nat, (throw Error.panic : Result Nat) = pure value ∧ True) := by
