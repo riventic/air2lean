@@ -1,3 +1,4 @@
+import Lean
 import ZigLean.Sep.Alloc
 
 open Zig
@@ -10,8 +11,11 @@ private def checkCase (name : String) (cap : Nat) (failures : List Nat) (failAt 
     unless oks = expected ∧ final.allocs = sizes.length ∧
         final.blocks.all (fun b => !b.live) do
       throw (IO.userError s!"{name}: outcome, attempt count or cleanup mismatch")
-    let encoded := String.intercalate "," (oks.map fun b => if b then "1" else "0")
-    IO.println s!"{{\"case\":\"{name}\",\"outcomes\":[{encoded}],\"attempts\":{final.allocs},\"live\":0}}"
+    IO.println (Lean.Json.mkObj [
+      ("case", Lean.toJson name),
+      ("outcomes", Lean.toJson (oks.map fun b => if b then (1 : Nat) else 0)),
+      ("attempts", Lean.toJson final.allocs),
+      ("live", Lean.toJson (0 : Nat))]).compress
   | _ => throw (IO.userError s!"{name}: modeled error or missing result")
 
 private def checkZero : IO Unit := do

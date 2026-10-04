@@ -47,6 +47,12 @@ class PolicyChecks(unittest.TestCase):
             path.write_text('\n'.join(json.dumps(line) for line in lines))
             self.assertEqual(COMPARE.records(path), lines)
 
+    def test_lean_fixture_uses_json_serializer(self):
+        fixture = (HERE / 'Check.lean').read_text()
+        self.assertIn('Lean.Json.mkObj', fixture)
+        self.assertNotIn('s!"{{', fixture)
+        self.assertNotIn('\\n', fixture)
+
     def test_gate_builds_imported_separation_library(self):
         gate = (HERE / 'check.sh').read_text()
         self.assertIn('lake build ZigLean ZigLean.Sep.Alloc', gate)
