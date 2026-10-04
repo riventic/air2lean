@@ -1,0 +1,86 @@
+# Project diagnostic checks
+
+`project-diagnostics.py` is a separate check-only consumer of the typed translator
+protocol. Existing `project.py report`, `translate` and `verify` commands are unchanged.
+Use a separately qualified diagnostic-capable translator:
+
+```sh
+python3 scripts/project-diagnostics.py diagnosticcheck project.json \
+  --translator .lake/build/bin/air2lean --out check-receipt.json
+```
+
+The consumer targets schema 1, `air2lean-check-diagnostics`, frozen at producer
+revision `266dfacf7fcbec93aa3c2ce8f0932891a8c695c1`. Producer compilation, tests and
+independent review are pending at this implementation checkpoint. Matching the protocol
+is not executable qualification: the adapter records the actual executable hash and
+reports qualification as `not_attested_by_adapter`. It never builds or downloads tools.
+
+The new `air2lean-project-diagnostics` envelope retains the existing manifest/profile,
+input hashes, declared source closure, Git availability, goals, assumptions, exclusions
+and trust disclosures under `evidence`. Each root additionally has a `root_checks` entry,
+with typed preflight failures, an original-path/numeric-staging inverse map, execution
+hashes and the validated producer report. Numeric paths preserve declared AIR ordering.
+The adapter stages the retained original bytes, including readable malformed JSON;
+missing bytes never receive fabricated replacement files. A missing AIR dependency or
+invalid shared profile blocks that root. Other independently readable roots still run.
+Missing source/contract evidence is retained as an import blocker even when supplied AIR
+can be checked. Supplied AIR still does not attest source/export correspondence.
+
+Preflight syntax/import, schema and manifest-profile checks have separate typed stages.
+Producer codes, phases, categories, ID spaces, prerequisites and dependency chains are
+validated against the frozen vocabulary and retained. Generic `AIR_DECODE` or validator
+boundary failures are not reclassified by scraping display messages. The legacy evidence
+report's `AIR_JSON` remains a legacy preflight code; the separate checks identify the
+known boundary precisely. Whole-program shared-definition errors can overlap local
+errors. Missing/ambiguous/blocked dependency chains cover selected normalized direct
+calls and explicit spawn workers only. They do not establish compiler dependency closure.
+Source spans remain unavailable. A nearby debug line remains an approximate hint, and
+canonical instruction IDs are not relabeled as original/exported IDs.
+
+Root statuses are `checked`, `rejected`, `blocked`, `error` or `not_run`. `checked` requires
+a complete, successful producer validation and no manifest preflight blockers. It does
+not mark `analyzed`, `exported`, `translated`, `compiled`, `tested` or `proved` as passed.
+Proof status remains `not_run`, runtime outcomes `not_observed`, and source correspondence
+`not_attested`. Hashes bind supplied evidence and observed receipts; no theorem receipt or
+proof-stage failure is imported by this command. Ordinary artifact verification still
+reports hash agreement rather than proof attestation.
+
+`--diagnostic-limit` is 1–4096, default 256, per root. The producer's retained diagnostic
+payload is bounded to 1 MiB, files to 256, and input contents to 64 MiB per invocation.
+Its `diagnostics_observed` counts attempted additions, not every possible blocker.
+`first_error_in_unit`, `complete: false` and `truncated: true` survive import. The project
+manifest's stricter input/time/output limits still apply. Separate stdout/stderr capture
+uses bounded files and POSIX process-group cancellation, including unfinished descendants.
+Combined receipt/log bytes consume `max_total_output_bytes`; later roots explicitly become
+`not_run` after exhaustion. Final report encoding must also fit that limit. These are
+bounds for specified resources, not a hostile-process sandbox or a global time guarantee.
+
+The adapter validates strict UTF-8/JSON, schema, vocabulary, inventory, count/payload caps,
+source/proof disclosures and exit/status agreement. Invalid receipts become `error`,
+never successful validation evidence. Diagnostics follow manifest-root order and producer
+order. Paths and known staging-directory references in display messages are normalized;
+raw stdout/stderr SHA-256 and byte counts describe the actual streams before rewriting.
+Producer counters also describe the original receipt before path mapping, as marked by
+`producer_counters_basis`; they are not recomputed for the rewritten display paths.
+Raw receipt hashes may differ across temporary directories even when normalized diagnostics
+match. The report does not independently authenticate the producer or its receipts.
+
+No Lean output is emitted. Reports publish with atomic no-clobber links and cannot target
+an input or producer file. There is no overwrite flag. Failures and cancellation preserve
+prior artifacts; an invalid producer can still yield an explicitly rejected diagnostic
+report. A report-size or publication failure emits no successful receipt to stdout.
+Exit codes are 0 for all roots checked, 1 for a published rejected report, 2 for a command/
+publication failure and 130 for interruption. Malformed manifests prevent trusted root
+selection and are reported as command failures.
+
+Offline tests use bounded Python mocks, not the translator or a compiler:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s tests/roadmap/project-diagnostics -v
+```
+
+After producer qualification, the root validation queue must run this command on actual
+malformed/dependency/profile fixtures and a successful selected project, and rerun the
+existing project's translation/hash gates with the same executable. Mock success is not
+actual translator, native-program or proof qualification.
