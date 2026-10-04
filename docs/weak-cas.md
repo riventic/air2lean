@@ -62,9 +62,11 @@ requires the dedicated assertion marker and exit 85. A compiler failure cannot s
 
 Full mode freshly exports `weakcas.weak`, `weakcas.strong`, `weakcas.weakBool` and `weakcas.retry`
 from `tests/roadmap/weak-cas/weakcas.zig` with qualified 0.16 compilers. The AIR profile is
-`x86_64-linux`, baseline CPU, ReleaseSafe, without error tracing. It elaborates the actual
-emitted module, runs success and failure oracles and 256 bounded retry masks against allowed
-source outcomes, and executes a native test importing that same source. Native weak CAS may
+`x86_64-linux`, baseline CPU, ReleaseSafe, without error tracing. Its combined
+`source-kernel-and-allowed-outcomes` step elaborates the actual emitted module together with
+its appended checks, then runs success and failure oracles and 256 bounded retry masks against
+allowed source outcomes. A failure may arise during elaboration or execution; the retained log
+identifies it. Full mode also executes a native test importing that same source. Native weak CAS may
 never fail spuriously; the comparison checks allowed outcomes rather than identical failure
 frequency. Native results on another host target are a separately reported smoke test, not
 cross-target correspondence. Full mode checks no 0.14/0.15 source exports.
@@ -74,6 +76,13 @@ Every invocation creates a fresh retained directory under `.lake/weak-cas-*` by 
 state, complete input/model source hashes, translator and compiler binaries, compiler library
 hash manifests, versions, explicit profile/scope, commands, return codes and logs. Fresh AIR,
 emitted Lean, appended source checks, native executable, mutation and logs remain locally.
-CI retains this under `${RUNNER_TEMP}` outside cached `.lake` and adds no artifact-upload step.
+CI runs the complete gate in the non-mutation 0.16 job, including all three synthetic version
+labels; the existing 0.14/0.15 golden and proof gates remain required. CI retains the report
+under `${RUNNER_TEMP}` outside cached `.lake` and adds no artifact-upload step.
+A timed-out subprocess receives TERM and then KILL for its entire process group before the
+leader is reaped; bounded cleanup attempts and failures are recorded in its report step.
+`python3 tests/roadmap/weak-cas/Harness.py` checks signal/reap ordering and failures without
+compilers, plus one self-expiring TERM-ignoring child within a 32 MiB memory budget. The gate
+runs and retains this fixture too.
 The compiler/exporter and selected model remain trusted; these checks do not prove compiler
 correspondence or validate the remaining C11 gaps.

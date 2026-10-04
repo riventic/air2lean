@@ -39,6 +39,35 @@ def retained_files(directory):
     return sorted(paths)
 
 
+def cleanup_process_group(proc, grace_seconds=2, reap_seconds=2):
+    """Keep the timed-out leader unreaped until every group signal has been sent."""
+    cleanup = {"attempts": [], "errors": []}
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        attempt = {"signal": sig.name, "process_group": proc.pid}
+        cleanup["attempts"].append(attempt)
+        try:
+            os.killpg(proc.pid, sig)
+            attempt["status"] = "sent"
+        except ProcessLookupError:
+            attempt["status"] = "already_gone"
+        except OSError as error:
+            attempt["status"] = "failed"
+            cleanup["errors"].append(str(error))
+        if sig == signal.SIGTERM:
+            # No poll/wait here: the unreaped PID anchors this group through SIGKILL,
+            # even when its leader exits on TERM while a descendant ignores TERM.
+            try:
+                time.sleep(grace_seconds)
+            except Exception as error:
+                cleanup["errors"].append(str(error))
+    try:
+        cleanup["leader_exit_code"] = proc.wait(timeout=reap_seconds)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        cleanup["errors"].append(str(error))
+    cleanup["status"] = "failed" if cleanup["errors"] else "completed"
+    return cleanup
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("artifact-only", "full"), nargs="?", default="artifact-only")
@@ -84,15 +113,12 @@ def main():
             try:
                 code = proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGTERM)
-                try:
-                    proc.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                    proc.wait()
-                step.update(status="timeout", elapsed_seconds=time.monotonic() - start)
+                cleanup = cleanup_process_group(proc)
+                step.update(status="timeout", cleanup=cleanup,
+                            elapsed_seconds=time.monotonic() - start)
                 save()
-                raise RuntimeError(f"{name}: timed out; retained {log}")
+                detail = "; process-group cleanup failed" if cleanup["errors"] else ""
+                raise RuntimeError(f"{name}: timed out{detail}; retained {log}")
         step.update(exit_code=code, elapsed_seconds=time.monotonic() - start)
         if expected_failure:
             valid = code == 85 and expected_failure in log.read_text().splitlines()
@@ -161,11 +187,12 @@ def main():
         for path in sorted(paths):
             if path.is_file():
                 report["source_hashes"][str(path.relative_to(ROOT))] = digest(path)
-        for fixture in ["weakcas.zig", "native.zig", "Runtime.lean", "Preparation.lean", "Pipeline.lean", "Mutation.lean", "SourceCheck.lean.in"]:
+        for fixture in ["weakcas.zig", "native.zig", "Runtime.lean", "Preparation.lean", "Pipeline.lean", "Mutation.lean", "SourceCheck.lean.in", "Harness.py", "qualify.py"]:
             shutil.copy2(FIXTURES / fixture, artifacts / fixture)
         report["model_source_hashes"] = {p: h for p, h in report["source_hashes"].items()
                                           if p.startswith("ZigLean/") or p == "ZigLean.lean"}
         save()
+        run("harness-cleanup", [sys.executable, FIXTURES / "Harness.py"])
         run("lean-version", ["lake", "env", "lean", "--version"])
         run("lake-version", ["lake", "--version"])
         report["lean_toolchain_binaries"] = {}
@@ -209,10 +236,14 @@ def main():
             generated = artifacts / "WeakCasSource.lean"
             run("translate", ["lake", "exe", "air2lean", air, "-o", generated,
                               "--namespace", "WeakCasSource", "--prefix", "weakcas."])
-            run("source-kernel-check", ["lake", "env", "lean", "-R", artifacts, generated])
             source_check = artifacts / "WeakCasSourceCheck.lean"
             source_check.write_text(generated.read_text() + (FIXTURES / "SourceCheck.lean.in").read_text())
-            run("source-allowed-outcomes", ["lake", "env", "lean", "-R", artifacts, "--run", source_check])
+            report["source_validation"] = {
+                "step": "source-kernel-and-allowed-outcomes",
+                "checks": "combined emitted-module kernel elaboration and allowed-outcome execution",
+                "failure_scope": "failure may be elaboration or runtime; inspect the retained log"}
+            run("source-kernel-and-allowed-outcomes",
+                ["lake", "env", "lean", "-R", artifacts, "--run", source_check])
             run("native-finite", [stock, "test", "-OReleaseSafe", "-fno-error-tracing", "-target", "native",
                                   "--cache-dir", artifacts / "stock-cache", "--global-cache-dir", artifacts / "stock-global-cache",
                                   f"-femit-bin={artifacts / 'native-tests'}", FIXTURES / "native.zig"])
