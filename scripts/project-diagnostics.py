@@ -15,7 +15,7 @@ import time
 
 import project
 
-PROTOCOL_HEAD = '266dfacf7fcbec93aa3c2ce8f0932891a8c695c1'
+PROTOCOL_HEAD = 'cec6908b09af03d33a61b7e36b33989544264d8c'
 KIND = 'air2lean-check-diagnostics'
 CODES = frozenset('CLI_ARGUMENTS INPUT_READ INPUT_LIMIT JSON_SYNTAX AIR_DECODE EXPORTER_UNSUPPORTED OPTIMIZED_UNSUPPORTED CANONICAL_FAILURE NORMALIZATION_FAILURE STRUCTURE_FAILURE TYPE_FAILURE GLOBAL_FAILURE MEMORY_FAILURE INSTRUCTION_FAILURE CONSTANT_FAILURE SIGNATURE_FAILURE MODEL_FAILURE PROGRAM_FAILURE PROFILE_FAILURE DUPLICATE_FUNCTION CALLEE_MISSING CALLEE_BLOCKED CALLEE_AMBIGUOUS PREREQUISITE_SKIPPED'.split())
 PHASES = frozenset('cli input decode canonicalize normalize check program profile'.split())
@@ -39,7 +39,58 @@ def natural(value, maximum=None):
 
 
 def text(value, nullable=False):
-    return (nullable and value is None) or (isinstance(value, str) and '\0' not in value)
+    return (nullable and value is None) or (isinstance(value, str) and
+        all(not 0xD800 <= ord(c) <= 0xDFFF for c in value))
+
+
+def lean_compact_size(value):
+    """UTF-8 bytes of Lean 4.34 Json.compress for schema-1 typed JSON values.
+
+    Printer.lean escapeAux uses short escapes only for quote, backslash, LF and CR;
+    all other controls use six-byte Unicode escapes. Work iterators keep depth bounded
+    without materializing an encoded copy or rewriting literal backslash sequences.
+    """
+    def string_size(value):
+        demand(isinstance(value, str), 'JSON object key is not a string')
+        size = 2
+        for char in value:
+            code = ord(char)
+            demand(not 0xD800 <= code <= 0xDFFF, 'invalid Unicode scalar in receipt')
+            if char in ('"', '\\', '\n', '\r'):
+                size += 2
+            elif code < 0x20:
+                size += 6
+            else:
+                size += 1 if code < 0x80 else 2 if code < 0x800 else 3 if code < 0x10000 else 4
+        return size
+    total = 0
+    pending = [iter((value,))]
+    while pending:
+        try:
+            item = next(pending[-1])
+        except StopIteration:
+            pending.pop()
+            continue
+        if item is None:
+            total += 4
+        elif type(item) is bool:
+            total += 4 if item else 5
+        elif type(item) is int:
+            demand(item >= 0, 'producer protocol number is not Nat')
+            total += len(str(item))
+        elif isinstance(item, str):
+            total += string_size(item)
+        elif isinstance(item, list):
+            total += 2 + max(0, len(item) - 1)
+            pending.append(iter(item))
+        elif isinstance(item, dict):
+            total += 2 + max(0, len(item) - 1) + len(item)
+            total += sum(string_size(key) for key in item)
+            pending.append(iter(item.values()))
+        else:
+            raise project.Invalid('unsupported producer protocol value')
+        demand(len(pending) <= project.LIMITS['max_json_depth'] + 1, 'producer value exceeds JSON depth')
+    return total
 
 
 def validate_receipt(raw, returncode, mapping, air_dir, limit):
@@ -88,7 +139,7 @@ def validate_receipt(raw, returncode, mapping, air_dir, limit):
         demand(len(d['dependency_chain']) <= 257, 'dependency chain exceeds producer bound')
     if receipt['truncated'] or any(d['first_error_in_unit'] for d in diagnostics):
         demand(not receipt['complete'], 'hidden diagnostic incompleteness')
-    payload = sum(len(json.dumps(d, ensure_ascii=False, separators=(',', ':')).encode('utf-8')) for d in diagnostics)
+    payload = sum(lean_compact_size(d) for d in diagnostics)
     demand(payload <= 1024 * 1024 and receipt['diagnostic_payload_bytes'] == payload,
            'invalid retained diagnostic payload')
     if receipt['truncated']:

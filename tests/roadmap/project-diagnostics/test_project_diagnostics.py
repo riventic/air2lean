@@ -33,7 +33,7 @@ def receipt(files, diagnostics=(), truncated=False):
     return dict(schema=1, kind=adapter.KIND, status='rejected' if items or truncated else 'checked',
         complete=not items and not truncated, truncated=truncated, diagnostic_limit=256,
         diagnostics_observed=len(items) + int(truncated),
-        diagnostic_payload_bytes=sum(len(json.dumps(d, separators=(',', ':'), ensure_ascii=False).encode()) for d in items),
+        diagnostic_payload_bytes=sum(adapter.lean_compact_size(d) for d in items),
         diagnostics=items, files=[dict(file=f, function='unit', normalized=True,
         structure_valid=True, local_check='passed') for f in files],
         scope='selected AIR validation; first error within opaque prerequisite units',
@@ -305,6 +305,47 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(status, 0, stderr.getvalue())
         self.assertEqual(destination.read_bytes(), stdout.getvalue().encode())
         self.assertFalse(list(self.base.rglob('Gen.lean')))
+
+    def test_lean_compact_control_and_unicode_size_vectors(self):
+        vectors = [('"', b'"\\\""'), ('\\', b'"\\\\"'), ('\n', b'"\\n"'),
+                   ('\r', b'"\\r"'), ('\t', b'"\\u0009"'), ('\b', b'"\\u0008"'),
+                   ('\f', b'"\\u000c"'), ('\x00', b'"\\u0000"'),
+                   ('\x1f', b'"\\u001f"'), ('😀', b'"\xf0\x9f\x98\x80"'),
+                   (r'\t', b'"\\\\t"'), (r'\u0009', b'"\\\\u0009"')]
+        for decoded, encoded in vectors:
+            with self.subTest(decoded=repr(decoded)):
+                self.assertEqual(adapter.lean_compact_size(decoded), len(encoded))
+        value = {'a': [None, True, False, 12], 'empty': {}}
+        self.assertEqual(adapter.lean_compact_size(value), len(b'{"a":[null,true,false,12],"empty":{}}'))
+        for invalid in [-1, 1.0, float('nan'), {'a': -1}, {1: None}, ('tuple',), '\ud800', '\udfff']:
+            with self.subTest(invalid=repr(invalid)), self.assertRaises(ValueError):
+                adapter.lean_compact_size(invalid)
+
+    def test_control_receipt_literal_backslashes_and_emoji(self):
+        air = self.base / 'air'
+        mapping = {str(air / '000000.json'): 'air.json'}
+        for message in ['\t\b\f\n\r\x00\x1f😀', r'\t\b\f\u0009', '"\\😀']:
+            d = diagnostic(next(iter(mapping)))
+            d['message'] = message
+            r = receipt(mapping, [d])
+            python_bytes = len(json.dumps(d, ensure_ascii=False, separators=(',', ':')).encode())
+            extra = 4 * sum(message.count(control) for control in ('\t', '\b', '\f'))
+            self.assertEqual(r['diagnostic_payload_bytes'], python_bytes + extra)
+            parsed = adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air, 256)
+            self.assertEqual(parsed['diagnostics'][0]['message'], message)
+            r['diagnostic_payload_bytes'] += 1
+            with self.assertRaisesRegex(ValueError, 'retained diagnostic payload'):
+                adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air, 256)
+        for invalid in ['\ud800', '\udfff']:
+            d['message'] = invalid
+            r = receipt(mapping)
+            r.update(status='rejected', complete=False, diagnostics=[d], diagnostics_observed=1)
+            with self.assertRaises(ValueError):
+                adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air, 256)
+        r = receipt(mapping)
+        r['files'][0]['normalized'] = 1
+        with self.assertRaises(ValueError):
+            adapter.validate_receipt(json.dumps(r).encode(), 0, mapping, air, 256)
 
     def test_interruption_preserves_prior_receipt(self):
         destination = self.base / 'receipt.json'

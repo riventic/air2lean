@@ -10,7 +10,7 @@ python3 scripts/project-diagnostics.py check project.json \
 ```
 
 The consumer targets schema 1, `air2lean-check-diagnostics`, frozen at producer
-revision `266dfacf7fcbec93aa3c2ce8f0932891a8c695c1`. Producer compilation, tests and
+revision `cec6908b09af03d33a61b7e36b33989544264d8c`. Producer compilation, tests and
 independent review are pending at this implementation checkpoint. Matching the protocol
 is not executable qualification: the adapter records the actual executable hash and
 reports qualification as `not_attested_by_adapter`. It never builds or downloads tools.
@@ -55,7 +55,9 @@ Combined receipt/log bytes consume `max_total_output_bytes`; later roots explici
 `not_run` after exhaustion. Final report encoding must also fit that limit. These are
 bounds for specified resources, not a hostile-process sandbox or a global time guarantee.
 
-The adapter validates strict UTF-8/JSON, schema, vocabulary, inventory, count/payload caps,
+The adapter accounts for payload bytes using Lean’s compact serializer rules, including
+six-byte escapes for tab, backspace and formfeed and UTF-8 for non-ASCII scalar characters.
+Its own report encoding remains separate. It validates strict UTF-8/JSON, schema, vocabulary, inventory, count/payload caps,
 source/proof disclosures and exit/status agreement. Invalid receipts become `error`,
 never successful validation evidence. Diagnostics follow manifest-root order and producer
 order. Paths and known staging-directory references in display messages are normalized;
