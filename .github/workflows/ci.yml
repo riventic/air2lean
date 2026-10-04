@@ -141,6 +141,17 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # The scalar C/allowzero fragment is qualified on 0.16.0. Use this job's
+      # patched exporter and separately installed matching shipping compiler.
+      - name: Scalar nullable pointer source and semantic gate
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_NULL_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_NULL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_NULL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_NULL_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: tests/roadmap/null-pointers/check.sh
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

@@ -158,7 +158,7 @@ Support matrix:
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |
-| scalar nonoptional C/allowzero pointer null tests, casts and direct accesses; [scoped L05 gate](docs/null-pointers.md) | nullable-pointer storage, aggregates, optionals and projections remain outside the fragment; source-ready qualification results pending |
+| scalar nonoptional C/allowzero pointer null tests, casts and direct accesses; [scoped L05 gate](docs/null-pointers.md) | nullable-pointer storage, aggregates, optionals and projections remain outside the fragment; 0.16.0 macOS scoped gate passed; Linux CI rerun and other-version qualification pending |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove`; an array with a sentinel `[N:s]T` as one value (`N+1` items) | |
 | globals (`var`, `const`; a write to a `const` global throws `.illegal`), string literals, `@tagName`, `@errorName` | |
 | `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool`, enum or packed struct; a `packed` union in a packed struct (a union value can have undefined bits, and a packed struct value is a `BitVec` without undefined bits) |

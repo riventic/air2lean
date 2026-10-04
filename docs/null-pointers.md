@@ -68,7 +68,29 @@ with a live byte; invalid provenance/dead-block access is tested in the model.
 `native_decide` occurs only in generated regression fixtures, following the
 existing emitter-test convention. The five shipped universal theorem definitions
 use kernel reductions and do not use `native_decide`, `sorry`, `admit` or axioms.
-The implementation's initial handoff is source-ready: compiler, theorem and
-native gate results must be recorded by the serialized validation queue before
-claiming version/target qualification. Full L05 remains open for the deliberately
-rejected adjacent representations and operations above.
+The root serialized validation queue passed the complete driver at source
+revision `a63879e` on Zig 0.16.0 in 15.4 seconds (614 MiB peak memory), after
+building the updated patched exporter in 290 seconds (4422 MiB peak memory).
+The driver checked the runtime's five theorem definitions, nine semantic cases,
+one killed mutant, eight native observation lines, and two compiler rejection
+roots. The separate shared-predicate cleanup at `220cede` awaits a full rerun.
+
+The recorded local toolchains were the worktree's
+`.lake/roadmap-null-zig16/bin/zig` (patched AIR exporter),
+`/Users/konstantinrr/.cache/air2lean/host-0.16.0/zig` (shipping native compiler),
+and pinned Lean `leanprover/lean4:v4.34.0` at
+`/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lean`.
+Both Zig invocations used `-OReleaseSafe -fno-error-tracing`, with no `-target`
+or `-mcpu` override. The run was on the root's arm64 macOS host using compiler
+defaults; the retained logs do not establish an exact CPU profile. Exported
+schema 11 target metadata is legacy/unverified. This observation set therefore
+does not qualify the model's reference x86_64-linux target or every host CPU.
+
+Local retained logs are
+`/opt/dev/air2lean/.lake/review-resume/roadmap/null-pointers-full-first.log` and
+`/opt/dev/air2lean/.lake/review-resume/roadmap/null-exporter16-build.log`.
+CI reruns the driver in the full nonmutation 0.16.0 Linux job with that job's
+fresh/cache-keyed patched exporter and separately pinned shipping host compiler.
+Linux CI and 0.14.1/0.15.2 execution results are pending. Full L05 remains open
+for nullable storage, nested representations and the other deliberately rejected
+operations above; eight finite observations are not a preservation theorem.
