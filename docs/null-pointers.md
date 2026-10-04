@@ -73,7 +73,9 @@ revision `a63879e` on Zig 0.16.0 in 15.4 seconds (614 MiB peak memory), after
 building the updated patched exporter in 290 seconds (4422 MiB peak memory).
 The driver checked the runtime's five theorem definitions, nine semantic cases,
 one killed mutant, eight native observation lines, and two compiler rejection
-roots. The separate shared-predicate cleanup at `220cede` awaits a full rerun.
+roots. The shared-predicate cleanup subsequently passed the complete gate at `e1d5123`
+in 19.7 seconds (740 MiB peak memory). A later successful-type-check cache change
+and two repeated-type per-value rejection regressions await a full rerun.
 
 The recorded local toolchains were the worktree's
 `.lake/roadmap-null-zig16/bin/zig` (patched AIR exporter),

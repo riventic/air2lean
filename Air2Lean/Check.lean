@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Air2Lean.Memory
 import ZigLean.Mem.Enc
 import ZigLean.Vec
@@ -594,9 +595,13 @@ def check (f : Func) : Except String Unit := do
           checkMemTy f.name f.types f.layouts 0 c
   for g in f.globals do
     checkGlobal f g
+  let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
-      if let some vty := v.constTy? then checkTy f.name f.types f.layouts 0 vty
+      if let some vty := v.constTy? then
+        unless checkedConstTypes.contains vty do
+          checkTy f.name f.types f.layouts 0 vty
+          checkedConstTypes := checkedConstTypes.insert vty
       checkNullConstants f.name f.types f.layouts v
       if let some k := v.ptrOther? then
         throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"

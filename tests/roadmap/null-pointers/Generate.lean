@@ -85,6 +85,16 @@ def main (args : List String) : IO Unit := do
   reject (file "ambiguous" (types) #[] 2 #[inst 0 "ret" 4 #[ambiguous]]) "ambiguous null pointer"
   let fixed := obj [("ty", num 2), ("ptr", obj [("unsupported", .str "int"), ("off", num 1)])]
   reject (file "fixed" (types) #[] 2 #[inst 0 "ret" 4 #[fixed]]) "pointer constant without a global"
+  -- A successful type check on the first operand must not skip the second
+  -- operand's null or unsupported-pointer validation for that same type ID.
+  reject (file "repeatedNullableType" (types) #[] 3
+    #[inst 0 "cmp_eq" 3 #[nullVal 2, fixed], inst 1 "ret" 4 #[ref 0]])
+    "pointer constant without a global"
+  let ordinary := obj [("ty", num 2), ("ptr", obj [("global", num 0), ("off", num 0)])]
+  let repeatedOrdinary := (file "repeatedOrdinaryType" (types "one") #[] 3
+    #[inst 0 "cmp_eq" 3 #[ordinary, nullVal 2], inst 1 "ret" 4 #[ref 0]]).setObjVal!
+    "globals" (.arr #[obj [("ty", num 1), ("const", .bool true), ("init", lit 1 "0")]])
+  reject repeatedOrdinary "address-zero constant requires"
   for (size, zero) in #[ ("c", false), ("one", true) ] do
     let ts := (types size zero).push (obj [("k", .str "optional"), ("child", num 2)])
     reject (file "optionalNullable" ts #[6] 6
