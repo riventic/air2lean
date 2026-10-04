@@ -1010,9 +1010,9 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
 
 /-- A sync op of the thread model (`ZigLean/Conc/Call.lean`), a `Zig.CM Tgt` term. `.spawn`:
 `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
-program's `Tgt` (`emitTgt`); `args[1]` is the args tuple, its argument (`Check.lean`'s
-`checkThreadSpawn` requires exactly one field, so `rv` of the tuple is already the one Lean
-argument, not a genuine `Prod`). `.join`: `args[0]` is the `Thread` handle. -/
+program's `Tgt` (`emitTgt`); `args[1]` is the complete by-value captured tuple. Zero
+fields use `Unit`, one field keeps the historical scalar representation, and multiple
+fields form a right-associated product. Dispatch applies each field in source order. `.join`: `args[0]` is the `Thread` handle. -/
 def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
     (args : Array Val) : String :=
   let rv := fc.resolveVal env
@@ -2451,29 +2451,41 @@ def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
 
 /-! ## Top level -/
 
-/-- The spawn targets of a program with a concurrent function (`ZigLean/Conc/Basic.lean`): the
-type `Tgt`, one constructor per spawned function with its one argument, and `dispatch`, which
-runs a target. `targets`: (Lean name, argument type, kind: 2 concurrent, 1 memory, 0 pure). A
-target's result is discarded (Zig's `Thread.spawn` discards it too). -/
+/-- A target retains the complete source tuple. Each dispatcher applies the fields in
+source order, adapting every slice argument for a pure worker in the child thread. -/
 def emitTgt (_structNames : Array (String × String))
-    (targets : Array (String × String × Nat × Option (String × Nat))) :
+    (targets : Array (String × Array (String × Option (String × Nat)) × Nat)) :
     List String × List String :=
-  let ctors := targets.toList.map fun (n, a, _, _) => s!"  | {n} (a : {a})"
-  let tgt := String.intercalate "\n" (["/-- The spawn targets of the program. -/",
+  let extendedCapture := targets.any fun (_, args, _) => args.size != 1
+  let ctors := targets.toList.map fun (n, args, _) =>
+    let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
+      String.intercalate " × " (args.toList.map fun (ty, _) => s!"({ty})")
+    s!"  | {n} (a : {ty})"
+  let captureDoc := if extendedCapture then
+    "/-- The spawn targets of the program; fields are captured by value. -/"
+    else "/-- The spawn targets of the program. -/"
+  let tgt := String.intercalate "\n" ([captureDoc,
     "inductive Tgt where"] ++ ctors)
-  let arms := targets.toList.map fun (n, _, k, adapter) =>
-    let call := match k, adapter with
-      | 2, _ => s!"{n} a"
-      | 1, _ => s!"Zig.ConcM.liftMem ({n} a)"
-      | _, none => s!"Zig.ConcM.liftMem (StateT.lift ({n} a))"
-      | _, some (item, align) => s!"Zig.ConcM.liftMem (do\n\
-          let items ← Zig.readSlice ({item}) {align} a\n\
-          StateT.lift ({n} items))"
+  let obligation := "/-- The child protocol obligation for the complete captured tuple. Pointer\nidentities are copied; a proof must explicitly justify ownership transfer or sharing. -/\n" ++
+    "abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (ghost : γ) : Prop :=\n  P.init target ghost"
+  let arms := targets.toList.map fun (n, args, k) =>
+    let arg (i : Nat) := "a" ++ tupleProjection args.size i
+    let itemName (i : Nat) := if args.size == 1 then "items" else s!"items{i}"
+    let values := args.mapIdx fun i (_, adapter) =>
+      match adapter with | none => arg i | some _ => itemName i
+    let term := n ++ (if values.isEmpty then "" else " " ++ String.intercalate " " values.toList)
+    let reads := args.toList.zipIdx |>.filterMap fun ((_, adapter), i) =>
+      adapter.map fun (item, align) => s!"          let {itemName i} ← Zig.readSlice ({item}) {align} {arg i}"
+    let call := match k with
+      | 2 => term
+      | 1 => s!"Zig.ConcM.liftMem ({term})"
+      | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
+          "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
     s!"  | .{n} a => discard ({call})"
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
-  ([tgt], [dispatch])
+  ([tgt] ++ (if extendedCapture then [obligation] else []), [dispatch])
 
 /-- Binders introduced by generated helpers and function bodies. Types and calls are rendered
 unqualified, so their declarations must avoid these names even when the binder belongs to a
@@ -2481,12 +2493,14 @@ different declaration's body. Source field binders already avoid the allocated t
 `memberNames` and `collectAllocs`. The indexed names follow this program's parameters and AIR
 instruction IDs, including the unused-result spellings and extracted loop captures. -/
 def generatedBinderNames (funcs : Array Func) : Std.HashSet String := Id.run do
+  let extendedCapture := (spawnTargets funcs).any fun (_, _, fields) => fields.size != 1
   let mut names : Std.HashSet String := {}
   for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
     names := names.insert name
   for f in funcs do
     for k in [:f.params.size] do
       names := names.insert s!"p{k}"
+      if extendedCapture then names := names.insert s!"items{k}"
     for i in f.allInsts do
       for name in #[s!"i{i.id}", s!"_i{i.id}", s!"v{i.id}", s!"_v{i.id}", s!"a{i.id}", s!"s{i.id}"] do
         names := names.insert name
@@ -2545,6 +2559,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let fixed := runtimeNames ++
     (if memFuncs.isEmpty then #[] else #["mem0"]) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
+    (if (spawnTargets funcs).any (fun (_, _, fields) => fields.size != 1) then #["spawnInit"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
   let (structs, funcNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
   let structNames := structs.map fun s => (s.zigName, s.leanName)
@@ -2582,15 +2597,17 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
   let targets := spawnTargets funcs
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
-    emitTgt structNames (targets.map fun (nm, f, a) =>
+    emitTgt structNames (targets.map fun (nm, f, fields) =>
       let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
-      let adapter := if kind != 0 then none else match f.types[a]! with
-        | .ptr "slice" true child =>
-          some (emitTy structNames f.types f.types[child]!,
-            Nat.min ((f.layouts[a]?.bind (·.ptrAlign)).getD 1)
-              ((f.layouts[child]?.bind (·.align)).getD 1))
-        | _ => none
-      (leanOf nm, emitTy structNames f.types f.types[a]!, kind, adapter))
+      let args := fields.map fun a =>
+        let adapter := if kind != 0 then none else match f.types[a]! with
+          | .ptr "slice" true child =>
+            some (emitTy structNames f.types f.types[child]!,
+              Nat.min ((f.layouts[a]?.bind (·.ptrAlign)).getD 1)
+                ((f.layouts[child]?.bind (·.align)).getD 1))
+          | _ => none
+        (emitTy structNames f.types f.types[a]!, adapter)
+      (leanOf nm, args, kind))
   String.intercalate "\n\n"
     (["import ZigLean", s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"])

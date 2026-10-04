@@ -273,7 +273,10 @@ def main (args : List String) : IO Unit := do
         inst 2 "ret" 3 #[lit 1 "{}"]]
     let f ← accept spawn
     require ((checkProgram #[f]).toOption.isNone) s!"accepted missing worker for {callee}"
-    let worker ← accept (file "missingWorker" #[intTy 8, nrTy] #[0] 0
-      #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]])
+    let worker ← accept (if callee == "Thread.spawn" then
+      file "missingWorker" #[intTy 8, nrTy] #[0] 0
+        #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]]
+      else file "missingWorker" #[intTy 8, voidTy, nrTy] #[0] 1
+        #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 2 #[lit 1 "{}"]])
     require ((checkProgram #[f, worker]).toOption.isSome) s!"rejected present worker for {callee}"
   IO.println "parser regressions passed"

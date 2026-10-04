@@ -227,7 +227,7 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 | `call` of `Thread.join(handle)` | `Zig.joinC handle` |
 | `call` of `Io.futexWaitUncancelable(T, ptr, expected)` / `Io.futexWait` / `Io.futexWake(T, ptr, n)` (0.16.0) | `Zig.futexWaitC io ptr expected` / `Zig.futexWaitCancelableC …` / `Zig.futexWakeC io ptr n` |
 
-A program with a concurrent function gets the type `Tgt`, one constructor per spawned function with its one argument, and `dispatch : Tgt → Zig.ConcM Tgt Unit`, which runs a target (a memory function through `Zig.ConcM.liftMem`):
+A program with a concurrent function gets the type `Tgt`, one constructor per spawned function with its complete captured argument tuple, and `dispatch : Tgt → Zig.ConcM Tgt Unit`, which runs a target (a memory function through `Zig.ConcM.liftMem`):
 
 ```lean
 inductive Tgt where
@@ -238,6 +238,8 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .bump a => discard (bump a)
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
 ```
+
+An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture.
 
 Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint` and `Io.futexWaitTimeout` are rejected at translation time (`rejectedThreadFn?`), each with its own reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
 
