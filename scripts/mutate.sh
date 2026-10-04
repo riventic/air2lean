@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mutation testing for the differential test's panic-kind comparison (docs/generated-code.md
-# §Panics). Each mutation below must make scripts/diff.sh FAIL (exit 1, and mismatch>0 or a changed pinned count); this script
+# §Panics). Each mutation below needs a typed semantic mismatch or eligible semantic count change; this script
 # exits 0 only if every mutation was detected. Guards against a diff test that always passes.
 # Each mutation runs diff.sh over its own example only, so a mismatch elsewhere cannot count as
 # a detection.
@@ -152,7 +152,12 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
   exit 1
 }
 
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do printf '%s ' "${d%/}"; done)}
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
 example_count=0
 for ex in $examples; do
   case "$ex" in *[!a-zA-Z0-9_-]* | "")
@@ -394,22 +399,45 @@ run_and_report() {
   local out
   out=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-diff.XXXXXX")
   local status=0
-  AIR2LEAN_EXAMPLES=$ex bash scripts/diff.sh >"$out" 2>&1 || status=$?
+  local report_dir
+  if [ -n "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then
+    mkdir -p "$AIR2LEAN_MUTATION_REPORT_DIR"
+    report_dir=$(mktemp -d "$AIR2LEAN_MUTATION_REPORT_DIR/case.XXXXXX")
+    printf '%s: typed evidence %s\n' "$label" "$report_dir/summary.json" >&2
+  else
+    report_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-outcomes.XXXXXX")
+  fi
+  AIR2LEAN_DIFF_REPORT="$report_dir/summary.json" AIR2LEAN_EXAMPLES=$ex \
+    bash scripts/diff.sh >"$out" 2>&1 || status=$?
   local total_line
   total_line=$(grep '^TOTAL:' "$out" || true)
   if [ -z "$total_line" ]; then
     echo "error: $label: diff.sh produced no TOTAL line (setup broke, not just undetected)" >&2
     cat "$out" >&2
     rm -f "$out"
+    if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
     exit 1
   fi
   local mismatch counts
   mismatch=$(echo "$total_line" | sed -n 's/.*mismatch=\([0-9]*\).*/\1/p')
-  # A pinned `unspecified`/`capped` count that changed is a detection too (threads: a mutation
-  # that removes a race result changes no value, only the count).
+  # Retain the historical counters for logs and old isolated mocks. Typed evidence
+  # filters cap changes, host exclusions, bounded no-results and setup failures.
   counts=$(grep -c '^\(UNSPECIFIED\|CAPPED\) COUNT' "$out" || true)
+  local eligible=""
+  if [ -f "$report_dir/summary.json" ]; then
+    eligible=$(python3 scripts/diff-report.py eligible --summary "$report_dir/summary.json") || {
+      echo "error: $label: typed differential setup/accounting failed" >&2
+      cat "$out" >&2
+      rm -f "$out"
+      if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
+      exit 1
+    }
+  fi
   rm -f "$out"
-  if [ "$status" -ne 0 ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; then
+  if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
+  # Old isolated mocks have no report; real new runs always initialize one.
+  if [ "$status" -ne 0 ] && { { [ -n "$eligible" ] && [ "$eligible" -gt 0 ]; } ||
+      { [ -z "$eligible" ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; }; }; then
     echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=1
   else

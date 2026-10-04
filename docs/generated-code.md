@@ -348,6 +348,8 @@ Mutation (i) (`scripts/mutate.sh`) mutates this archive (`air2lean_asm_bswap32` 
 
 ## Differential test
 
+The runner also emits [typed outcome accounting](outcome-accounting.md), separating source error returns, runtime errors, excluded cases and bounded searches while retaining legacy counters.
+
 One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>.`. `<ex>` must not be the name of a std namespace (`enums`, `heap`, `mem`, `math`, …): the dump filter `<ex>.` would also match those std functions (e.g. `enums.EnumArray(…).get`, which std's debug code uses on x86_64-linux). Per example:
 
 | Path | What |

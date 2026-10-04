@@ -12,12 +12,12 @@
 # value) — classify_line() below folds all three into one comparable $val, so the match check
 # itself doesn't need to know which shape it's looking at. Anything else — a value mismatch, a
 # kind mismatch, a Zig kind with no table entry (including "unknown" — the child died without
-# reporting a kind), one side ok and the other fail, or a Lean "diverge" (none of basic's or
-# recursion's functions should ever not terminate) — is a mismatch: printed immediately, and
+# reporting a kind), one side ok and the other fail, or the legacy Lean "diverge" wire shape (a model no-result; bounded scheduler
+# evaluation does not establish divergence) — is a mismatch: printed immediately, and
 # makes the whole run exit 1.
 #
 # A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics)
-# matches any Zig line and is counted as "unspecified". The count per function must equal the
+# is projected into the legacy "unspecified" counter, distinct from an exact match in the typed report. The count per function must equal the
 # one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
 # expects 0), so a model that throws `unspecified` too often fails the test. "<fn> <min>-<max>"
 # pins a range: for a function whose count depends on the timing of the compiled threads (a race
@@ -26,7 +26,7 @@
 # A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
 # `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
 # `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
-# match, counted separately against tests/diff/<ex>/capped.txt.
+# legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
 # The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
 # other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
@@ -47,17 +47,23 @@ cd "$repo_root"
 
 zig_bin=${AIR2LEAN_ZIG:-zig}
 zig_version=$("$zig_bin" version)
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
-  if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
-  if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
-  printf '%s ' "${d%/}"
-done)}
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
 example_count=0
 for ex in $examples; do
   [ -f "tests/diff/$ex/harness.zig" ] || { echo "error: unknown example: $ex" >&2; exit 1; }
   example_count=$((example_count + 1))
 done
 [ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
+
+# Typed evidence is additional to the stable legacy TOTAL/pin protocol.
+export AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
+python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
+diff_phase=build_native
 
 # The names of an example's functions are the names of its input files (layout convention).
 functions_of() {
@@ -66,7 +72,15 @@ functions_of() {
 
 echo "== building zig harnesses ==" >&2
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
-trap 'rm -rf "$build_dir"' EXIT
+finish_diff() {
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    python3 scripts/diff-report.py failure --summary "$AIR2LEAN_DIFF_REPORT" \
+      --root "$repo_root" --examples "$examples" --phase "$diff_phase" || true
+  fi
+  rm -rf "$build_dir"
+}
+trap finish_diff EXIT
 for ex in $examples; do
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
   "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/$ex" \
@@ -75,6 +89,7 @@ for ex in $examples; do
   "$build_dir/$ex"
 done
 
+diff_phase=build_libm
 echo "== building libm ==" >&2
 # tests/diff/libm/libm.zig re-exports 8 compiler_rt transcendental functions per float width
 # (see its doc comment for the ABI). It calls compiler_rt by Zig name through a `crt` module we
@@ -153,6 +168,7 @@ mkdir -p tests/diff/out/asm
 "$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \
   -femit-bin=tests/diff/out/asm/air2lean_asm.a -Mroot=tests/diff/asm/asm.zig
 
+diff_phase=run_model
 echo "== building + running lean side ==" >&2
 # Lake does not track tests/diff/out/libm/air2lean_libm.a (linked in via lakefile.toml's
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
@@ -402,5 +418,11 @@ echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspec
 if [ "$total_host" -gt 0 ]; then
   echo "note: $total_host host-dependent float results differ from the x86_64-linux model" \
     "(tests/diff/<ex>/host.txt); CI checks them" >&2
+fi
+if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
+  diff_phase=compare
+  python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
+    --root "$repo_root" --examples "$examples" --version "$zig_version" \
+    --host "$(uname -s)-$(uname -m)" || mismatch_found=1
 fi
 [ "$mismatch_found" -eq 0 ]

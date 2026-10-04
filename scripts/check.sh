@@ -43,11 +43,12 @@ zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
 # The default list skips `asm` on a host that is not x86_64: its asm is x86_64 only
 # (examples/asm/asm.zig). It also skips an example whose `examples/<ex>/zig-versions` file (one
 # version per line) does not list this Zig version (`sync`: std code that only 0.16.0 has).
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
-  if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
-  if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
-  printf '%s ' "${d%/}"
-done)}
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
 restore_gen=""
 gen_targets=()
 

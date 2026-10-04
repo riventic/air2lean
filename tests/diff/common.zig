@@ -34,15 +34,21 @@ const compat = @import("compat.zig");
 
 /// The child's output text: the rendered ok-payload or the panic kind. Any length (a result
 /// with the input buffers can be long); `writeResult` frees it.
+pub const OutcomeKind = enum { value, error_return, native_panic, native_harness_failure, input_failure };
+var metadata_writer: ?*std.Io.Writer = null;
+
 pub const Outcome = union(enum) {
-    ok: []u8,
-    fail: []u8,
+    ok: struct { payload: []u8, kind: OutcomeKind },
+    fail: struct { name: []u8, kind: OutcomeKind },
 };
 
 const out_gpa = std.heap.page_allocator;
 
-fn failOutcome(kind: []const u8) Outcome {
-    return .{ .fail = out_gpa.dupe(u8, kind) catch @panic("out of memory") };
+fn harnessFailure() Outcome {
+    return .{ .fail = .{
+        .name = out_gpa.dupe(u8, "unknown") catch @panic("out of memory"),
+        .kind = .native_harness_failure,
+    } };
 }
 
 /// The input buffers of a function that uses memory (docs/generated-code.md §Differential test):
@@ -79,8 +85,8 @@ pub const TestAllocator = struct {
         const k = self.count;
         self.count += 1;
         if (self.fail_at == k or len > max_alloc_bytes) return null;
-        const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportPanic("harnessOutOfMemory");
-        self.live.append(out_gpa, p[0..len]) catch reportPanic("harnessOutOfMemory");
+        const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportHarnessFailure("harnessOutOfMemory");
+        self.live.append(out_gpa, p[0..len]) catch reportHarnessFailure("harnessOutOfMemory");
         return p;
     }
 
@@ -123,13 +129,22 @@ var panic_fd: std.posix.fd_t = -1;
 /// status instead of a signal. Best-effort write — a failed write is no worse than the
 /// zero-bytes case the parent already treats as `unknown`.
 fn reportPanic(kind: []const u8) noreturn {
+    reportChildFailure(kind, 'P');
+}
+
+fn reportHarnessFailure(kind: []const u8) noreturn {
+    reportChildFailure(kind, 'H');
+}
+
+fn reportChildFailure(kind: []const u8, tag: u8) noreturn {
     // The parent (not a forked child) panicked: a harness bug, not a tested outcome. Say so.
     // Not `std.debug.panic`: that calls this override again.
     if (panic_fd < 0) {
         std.debug.print("harness panic outside a child: {s}\n", .{kind});
         compat.abort();
     }
-    _ = compat.write(panic_fd, kind) catch {};
+    writeAll(panic_fd, &.{tag});
+    writeAll(panic_fd, kind);
     compat.exit(1);
 }
 
@@ -227,6 +242,15 @@ pub const panic = struct {
 /// a union and a struct (below), and a JSON array (lane 0 first) for a `@Vector(n, T)`.
 /// Recurses on `T`'s shape, so `?T`/`E!T` nesting composes without new cases (no example needs
 /// it today).
+/// Inspect the returned value, rather than infer source errors from rendered text.
+fn returnedError(comptime T: type, value: T) bool {
+    return switch (@typeInfo(T)) {
+        .error_union => if (value) |v| returnedError(@TypeOf(v), v) else |_| true,
+        .optional => if (value) |v| returnedError(@TypeOf(v), v) else false,
+        else => false,
+    };
+}
+
 fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !void {
     switch (@typeInfo(T)) {
         .optional => {
@@ -374,6 +398,8 @@ pub fn forkCallBufs(
 
         const raw = @call(.auto, func, args);
         var aw: std.Io.Writer.Allocating = .init(out_gpa);
+        // One typed byte on the private pipe; it is removed from the legacy JSON payload.
+        aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V') catch unreachable;
         render_bufs = bufs orelse &.{};
         renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch unreachable;
         if (bufs) |bs| {
@@ -406,21 +432,42 @@ pub fn forkCallBufs(
     const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
     if (text.items.len > 0 and (exited_ok or exited_fail)) {
         const s = try text.toOwnedSlice(out_gpa);
-        return if (exited_ok) .{ .ok = s } else .{ .fail = s };
+        if (!exited_ok) {
+            if (s.len > 1 and (s[0] == 'P' or s[0] == 'H')) {
+                const name = try out_gpa.dupe(u8, s[1..]);
+                const kind: OutcomeKind = if (s[0] == 'P') .native_panic else .native_harness_failure;
+                out_gpa.free(s);
+                return .{ .fail = .{ .name = name, .kind = kind } };
+            }
+            out_gpa.free(s);
+            return harnessFailure();
+        }
+        if (s[0] == 'V' or s[0] == 'E') return .{ .ok = .{
+            .payload = s, .kind = if (s[0] == 'E') .error_return else .value,
+        } };
+        out_gpa.free(s);
+        return harnessFailure();
     }
     text.deinit(out_gpa);
-    return failOutcome("unknown");
+    return harnessFailure();
 }
 
 pub fn writeResult(writer: anytype, outcome: Outcome) !void {
     switch (outcome) {
         .ok => |o| {
-            try writer.print("{{\"ok\":{s}}}\n", .{o});
-            out_gpa.free(o);
+            defer out_gpa.free(o.payload);
+            const payload = o.payload[1..];
+            try writer.print("{{\"ok\":{s}}}\n", .{payload});
+            if (metadata_writer) |meta| try meta.print(
+                "{{\"schema\":1,\"kind\":\"{s}\",\"legacy\":{{\"ok\":{s}}}}}\n",
+                .{ @tagName(o.kind), payload });
         },
         .fail => |f| {
-            try writer.print("{{\"fail\":\"{s}\"}}\n", .{f});
-            out_gpa.free(f);
+            defer out_gpa.free(f.name);
+            try writer.print("{{\"fail\":\"{s}\"}}\n", .{f.name});
+            if (metadata_writer) |meta| try meta.print(
+                "{{\"schema\":1,\"kind\":\"{s}\",\"legacy\":{{\"fail\":\"{s}\"}}}}\n",
+                .{ @tagName(f.kind), f.name });
         },
     }
 }
@@ -460,11 +507,18 @@ fn forEachValue(
     var out_file = try compat.OutFile.open(out_path);
     defer out_file.close();
     const writer = out_file.writer();
+    var metadata_file = try compat.OutFile.open(out_path ++ ".outcomes");
+    defer metadata_file.close();
+    metadata_writer = metadata_file.writer();
+    defer metadata_writer = null;
 
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
-        var parsed = try std.json.parseFromSlice(std.json.Value, gpa, line, .{});
+        var parsed = std.json.parseFromSlice(std.json.Value, gpa, line, .{}) catch |err| {
+            try metadata_file.writer().writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
+            return err;
+        };
         defer parsed.deinit();
         try perValue(gpa, parsed.value, writer);
     }
