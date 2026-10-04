@@ -123,6 +123,9 @@ evaluation, 15 diagnostics CLI checks including V05 emission-byte comparison, th
 input-validation API checks, all 78 input-validation CLI checks, and the extracted
 CI step replay. The subsequent test-oracle repair independently requires rejected
 status and exit 1 for negative fixtures; checked receipts must be complete, untruncated,
-diagnostic-free and have passed local file checks. Four offline harness tests pass,
-including contradictory checked receipts. Actual CLI and CI replay with this stronger
-oracle still await a targeted rerun; these test changes do not alter the producer.
+diagnostic-free and have passed local file checks. At revision `209e1e3`, the targeted
+rerun passed collector evaluation, four offline harness tests including contradictory
+checked receipts, all 15 diagnostics CLI checks including V05 emission-byte comparison,
+the input-validation API and 78 CLI checks, and exact CI replay with 14 diagnostics
+CLI checks. CI replay explicitly excludes the historical baseline comparison.
+These test changes do not alter the producer.
