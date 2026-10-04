@@ -158,6 +158,7 @@ echo "== building + running lean side ==" >&2
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
+(cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
 # Diff.lean runs only the examples this script compares.
 AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 
