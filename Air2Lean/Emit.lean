@@ -538,6 +538,9 @@ structure FCtx where
   /-- Actual emitted value uses across the entire function, including nested bodies.
   Computed once after places are known, so unused-load queries do not rescan all AIR. -/
   instUses : Std.HashSet InstId := {}
+  /-- Membership of actual `br` targets, prepared once for normal and bare contexts.
+  `none` lets a public bare `emitStmts` call prepare it before recursive emission. -/
+  branchTargetSet : Option (Std.HashSet InstId) := none
   retTy : TyId
   /-- This function's own generated (mangled) name, for naming its extracted loop-body defs
   (`<fnName>.loop<k>`, see `emitLoopDef`). -/
@@ -1097,6 +1100,16 @@ def blockLoopTys (allInsts : Array Inst) : Array (InstId × TyId) :=
 
 def brTargets (allInsts : Array Inst) : Array InstId :=
   dedupIds (allInsts.filterMap fun i => match i.op with | .br t _ => some t | _ => none)
+
+/-- Prepare target membership once; recursive block emission reuses this context. -/
+def FCtx.prepareBranchTargets (fc : FCtx) : FCtx :=
+  match fc.branchTargetSet with
+  | some _ => fc
+  | none =>
+    let empty : Std.HashSet InstId := {}
+    let targets := fc.allInsts.foldl (init := empty) fun targets i =>
+      match i.op with | .br target _ => targets.insert target | _ => targets
+    { fc with branchTargetSet := some targets }
 
 def repTargets (allInsts : Array Inst) : Array InstId :=
   dedupIds (allInsts.filterMap fun i => match i.op with | .«repeat» t => some t | _ => none)
@@ -2036,6 +2049,7 @@ without the surrounding `do`). The last effective instruction (per `isTerminatin
 tail expression; anything the exporter placed after it (a defensive `unreach`) is dead and
 dropped. -/
 partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
+  let fc := fc.prepareBranchTargets
   match insts with
   | [] => "pure default"
   | inst :: rest =>
@@ -2045,15 +2059,20 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
       match inst.op with
       | .block body =>
         let inner := fc.ascribedDo (emitStmts fc env body.toList)
-        match fc.targetTy inst.id with
-        | .void =>
-          let restStr := emitStmts fc env rest
-          s!"match ← {inner} with\n| .br{inst.id} => {doBlock restStr}\n| e => pure e"
-        | _ =>
-          -- `_v<id>` if nothing reads the block's result (Lean's unused-variable linter).
-          let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
-          let restStr := emitStmts fc (env.push (inst.id, vname)) rest
-          s!"match ← {inner} with\n| .br{inst.id} {vname} => {doBlock restStr}\n| e => pure e"
+        if !(fc.branchTargetSet.getD {}).contains inst.id then
+          -- There is no `.br<id>` constructor and no path resuming this block's
+          -- continuation. Propagate returns and enclosing-block branches directly.
+          inner
+        else
+          match fc.targetTy inst.id with
+          | .void =>
+            let restStr := emitStmts fc env rest
+            s!"match ← {inner} with\n| .br{inst.id} => {doBlock restStr}\n| e => pure e"
+          | _ =>
+            -- `_v<id>` if nothing reads the block's result (Lean's unused-variable linter).
+            let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
+            let restStr := emitStmts fc (env.push (inst.id, vname)) rest
+            s!"match ← {inner} with\n| .br{inst.id} {vname} => {doBlock restStr}\n| e => pure e"
       | .loop body =>
         -- A `loop` never falls through: the only way past it is a `br` to an *enclosing*
         -- block, so `rest` (anything after it in this same instruction array) is unreachable
@@ -2252,7 +2271,7 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds }
   let fc := { fc with places := fc.computePlaces }
-  { fc with instUses := fc.computeInstUses }
+  ({ fc with instUses := fc.computeInstUses } : FCtx).prepareBranchTargets
 
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)

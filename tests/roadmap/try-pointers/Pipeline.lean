@@ -141,6 +141,13 @@ def main (args : List String) : IO Unit := do
     (#[node 10 "block" 7 #[] [("body", .arr #[node 20 "block" 7 #[]
       [("body", .arr #[node 21 "br" 6 #[unit] [("target", num 10)], node 22 "trap" 6])],
       node 23 "unreach" 6])]] ++ errBody))
+  -- Neither the inner value block nor its continuation is targeted. The enclosing
+  -- error-name block receives the branch value and returns the original error.
+  let nestedValue ← accept (file "nestedValue" "try_ptr" types
+    #[node 10 "block" 1 #[] [("body", .arr #[node 20 "block" 0 #[]
+      [("body", .arr #[node 21 "unwrap_errunion_err_ptr" 1 #[ref 0],
+        node 22 "br" 6 #[ref 21] [("target", num 10)], node 23 "trap" 6])],
+      node 24 "unreach" 6])], node 30 "wrap_errunion_err" 5 #[ref 10], node 31 "ret" 6 #[ref 30]])
   let nestedErrors ← accept (file "nestedErrors" "try_ptr" types (nestedErrorBody 3))
   for depth in [1, 8, 32] do
     let _ ← accept (file "nestedDepth" "try_ptr" types (nestedErrorBody depth))
@@ -215,9 +222,14 @@ def main (args : List String) : IO Unit := do
   reject (file "bad" "try_ptr" types #[node 2 "unwrap_errunion_err_ptr" 1 #[ref 1],
     node 3 "wrap_errunion_err" 5 #[ref 2], node 4 "ret" 6 #[ref 3]])
     "payload value captured in error branch" "not available in this scope"
-  let generated := emit #[hot, cold, constPointer, resumes, nestedResumes, nestedErrors] "SyntheticTry" "" .ieee
-  require ((generated.splitOn "Zig.tryPayloadPtr").length == 10) "pointer try did not use the tag-only runtime helper"
+  for f in [nestedResumes, nestedValue] do
+    let cached := mkFCtx f #[] #[] .ieee #[f.name] #[]
+    let bare := { cached with branchTargetSet := none }
+    require (emitStmts bare #[] f.body.toList == emitStmts cached #[] f.body.toList)
+      "bare block context did not prepare target membership safely"
+  let generated := emit #[hot, cold, constPointer, resumes, nestedResumes, nestedValue, nestedErrors] "SyntheticTry" "" .ieee
+  require ((generated.splitOn "Zig.tryPayloadPtr").length == 11) "pointer try did not use the tag-only runtime helper"
   IO.FS.writeFile output (generated ++ "\n" ++
-"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes, SyntheticTry.nestedErrors] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
+"open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes, SyntheticTry.nestedValue, SyntheticTry.nestedErrors] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
   writeLoadCases output
   IO.println "pointer-try parser/checker/emitter regressions passed"
