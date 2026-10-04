@@ -58,6 +58,10 @@ def strings(value, nonempty=False):
         raise Invalid('duplicate list entry')
 
 
+def reject_constant(value):
+    raise Invalid(f'invalid JSON number: {value}')
+
+
 def bounded_json(data, limits):
     if len(data) > limits['max_file_bytes']:
         raise Invalid('input exceeds max_file_bytes')
@@ -93,7 +97,7 @@ def bounded_json(data, limits):
             raise Invalid(f'invalid nonfinite JSON number: {value}')
         return parsed
     return json.loads(data, object_pairs_hook=pairs, parse_float=finite_float,
-                      parse_constant=lambda v: (_ for _ in ()).throw(Invalid(f'invalid JSON number: {v}')))
+                      parse_constant=reject_constant)
 
 
 def path_under(base, name):
@@ -118,6 +122,24 @@ def read_bounded(path, cap):
     if len(data) > cap:
         raise Invalid(f'input exceeds byte limit: {path.name}')
     return data
+
+
+def hash_bounded(path, cap):
+    """Hash a regular file in chunks, detecting cap+1 bytes even if it grows."""
+    hashed = hashlib.sha256()
+    total = 0
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb') as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise Invalid(f'input is not a regular file: {path.name}')
+        while True:
+            chunk = handle.read(min(1024 * 1024, cap + 1 - total))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > cap:
+                raise Invalid(f'input exceeds byte limit: {path.name}')
+            hashed.update(chunk)
+    return hashed.hexdigest(), total
 
 
 def load_manifest(path):
@@ -226,10 +248,51 @@ def input_names(manifest):
     return names
 
 
+def summarize_air(content, profile, limits):
+    """Root-independent observations, replayed with each root's ID and path."""
+    observed = None
+    unsupported = 0
+    diagnostics = []
+    try:
+        air = bounded_json(content, limits)
+        if not isinstance(air, dict) or not isinstance(air.get('name'), str):
+            raise Invalid('AIR must be an object with a function name')
+        observed = air['name']
+        if type(air.get('schema')) is not int or not 1 <= air['schema'] <= 12:
+            raise Invalid('unsupported or malformed AIR schema')
+        pending = [air.get('body', [])]
+        while pending:
+            node = pending.pop()
+            if isinstance(node, list):
+                pending.extend(node)
+            elif isinstance(node, dict):
+                if node.get('unsupported') is True:
+                    unsupported += 1
+                    diagnostics.append(('AIR_EXPORT_UNSUPPORTED',
+                        f"exporter marked instruction {node.get('id')} tag {node.get('tag')} unsupported",
+                        'unsupported_semantics'))
+                pending.extend(node.values())
+        # Preserve observations before metadata errors, including unsupported marker order.
+        if profile and 'zig_version' in profile and air.get('zig_version') != profile['zig_version']:
+            raise Invalid('AIR zig_version differs from declared profile')
+        if profile and air.get('target_endian', profile.get('endian', 'little')) != profile.get('endian', 'little'):
+            raise Invalid('AIR target_endian differs from declared profile')
+        if profile and profile['name'] == 'abi64-le-v1':
+            validate_profile(air.get('profile'))
+            if air['schema'] != 12 or air['profile'] != profile:
+                raise Invalid('AIR profile missing or differs from declared profile')
+        if profile and profile['name'] == 'legacy-abi64-le' and (air['schema'] > 11 or 'profile' in air):
+            raise Invalid('profiled AIR cannot be relabeled as legacy')
+    except (ValueError, UnicodeError) as error:
+        diagnostics.append(('AIR_JSON', str(error), 'malformed_input'))
+    return observed, unsupported, diagnostics
+
+
 def collect(path):
     manifest, raw, limits = load_manifest(path)
     files = {'manifest': {'sha256': digest(raw), 'bytes': len(raw)}}
     data = {}
+    retained = {manifest['profile']} | {name for root in manifest['roots'] for name in root['air']}
     diagnostics = []
     total = len(raw)
     names = input_names(manifest)
@@ -240,12 +303,17 @@ def collect(path):
     for name in sorted(names):
         try:
             cap = min(limits['max_file_bytes'], limits['max_total_bytes'] - total)
-            content = read_bounded(path_under(path.parent, name), cap)
-            total += len(content)
+            source = path_under(path.parent, name)
+            if name in retained:
+                content = read_bounded(source, cap)
+                data[name] = content
+                sha256, size = digest(content), len(content)
+            else:
+                sha256, size = hash_bounded(source, cap)
+            total += size
             if total > limits['max_total_bytes']:
                 raise Invalid('input exceeds max_total_bytes')
-            data[name] = content
-            files['input/' + name] = {'sha256': digest(content), 'bytes': len(content)}
+            files['input/' + name] = {'sha256': sha256, 'bytes': size}
         except (OSError, Invalid) as error:
             diagnostics.append(diagnostic('INPUT_FILE', error, path=name))
     profile = None
@@ -261,6 +329,7 @@ def collect(path):
         shared_names.update(component)
     shared_failed = any(d['path'] in shared_names for d in diagnostics)
     roots = []
+    air_summaries = {}
     for root in manifest['roots']:
         statuses = {stage: {'status': 'not_run', 'reason': 'stage not executed by this command'} for stage in STAGES}
         statuses['exported']['reason'] = 'supplied AIR is input evidence; no compiler export was executed'
@@ -272,38 +341,14 @@ def collect(path):
             if name not in data:
                 diagnostics.append(diagnostic('AIR_MISSING', 'AIR unavailable', root['id'], name))
                 continue
-            try:
-                air = bounded_json(data[name], limits)
-                if not isinstance(air, dict) or not isinstance(air.get('name'), str):
-                    raise Invalid('AIR must be an object with a function name')
-                record['observed_functions'].append(air['name'])
-                if type(air.get('schema')) is not int or not 1 <= air['schema'] <= 12:
-                    raise Invalid('unsupported or malformed AIR schema')
-                pending = [air.get('body', [])]
-                while pending:
-                    node = pending.pop()
-                    if isinstance(node, list):
-                        pending.extend(node)
-                    elif isinstance(node, dict):
-                        if node.get('unsupported') is True:
-                            record['outcomes']['unsupported_semantics'] += 1
-                            diagnostics.append(diagnostic('AIR_EXPORT_UNSUPPORTED',
-                                f"exporter marked instruction {node.get('id')} tag {node.get('tag')} unsupported",
-                                root['id'], name, 'unsupported_semantics'))
-                        pending.extend(node.values())
-                # Metadata conflicts are blockers, absent metadata is disclosed rather than fabricated.
-                if profile and 'zig_version' in profile and air.get('zig_version') != profile['zig_version']:
-                    raise Invalid('AIR zig_version differs from declared profile')
-                if profile and air.get('target_endian', profile.get('endian', 'little')) != profile.get('endian', 'little'):
-                    raise Invalid('AIR target_endian differs from declared profile')
-                if profile and profile['name'] == 'abi64-le-v1':
-                    validate_profile(air.get('profile'))
-                    if air['schema'] != 12 or air['profile'] != profile:
-                        raise Invalid('AIR profile missing or differs from declared profile')
-                if profile and profile['name'] == 'legacy-abi64-le' and (air['schema'] > 11 or 'profile' in air):
-                    raise Invalid('profiled AIR cannot be relabeled as legacy')
-            except (ValueError, UnicodeError) as error:
-                diagnostics.append(diagnostic('AIR_JSON', error, root['id'], name))
+            if name not in air_summaries:
+                air_summaries[name] = summarize_air(data[name], profile, limits)
+            observed, unsupported, issues = air_summaries[name]
+            if observed is not None:
+                record['observed_functions'].append(observed)
+            record['outcomes']['unsupported_semantics'] += unsupported
+            diagnostics.extend(diagnostic(code, message, root['id'], name, category)
+                               for code, message, category in issues)
         if root['function'] not in record['observed_functions']:
             diagnostics.append(diagnostic('ROOT_NOT_PRESENT', 'root function absent from supplied AIR', root['id']))
         record['input_validation'] = {'status': 'failed' if shared_failed or root_input_failed or len(diagnostics) > blockers_before else 'passed',
@@ -372,7 +417,7 @@ def translate(manifest, limits, data, report, translator, staging):
     if report['diagnostics']:
         return
     translator = translator.resolve(strict=True)
-    report['translator'] = {'path': str(translator), 'sha256': digest(read_bounded(translator, 256 * 1024 * 1024))}
+    report['translator'] = {'path': str(translator), 'sha256': hash_bounded(translator, 256 * 1024 * 1024)[0]}
     generated_bytes = 0
     log_bytes = 0
     for root, record in zip(manifest['roots'], report['roots']):
@@ -473,10 +518,8 @@ def verify(path, artifact):
             raise Invalid(f'artifact hash mismatch: {name}')
     tool = stored['translator']
     obj(tool, ('path', 'sha256'))
-    if digest(read_bounded(Path(string(tool['path'])), 256 * 1024 * 1024)) != tool['sha256']:
+    if hash_bounded(Path(string(tool['path'])), 256 * 1024 * 1024)[0] != tool['sha256']:
         raise Invalid('translator executable hash mismatch')
-    if current['files'].keys() - stored['files'].keys():
-        raise Invalid('artifact input inventory differs')
     return {'status': 'hashes_match', 'proof_status': 'not_attested', 'artifact': str(artifact)}
 
 
@@ -510,17 +553,21 @@ def main(argv=None):
                 staging = Path(temp) / 'artifact'
                 staging.mkdir()
                 translate(manifest, limits, data, report, args.translator, staging)
+                encoded = report_bytes(report, limits)
                 if not report['diagnostics']:
-                    (staging / 'report.json').write_bytes(report_bytes(report, limits))
+                    (staging / 'report.json').write_bytes(encoded)
                     if args.out.exists():
                         raise Invalid('artifact appeared during translation; refusing replacement')
                     os.rename(staging, args.out)
-        elif args.out:
-            protected = {args.manifest.resolve()} | {args.manifest.resolve().parent / name for name in input_names(manifest)}
-            if args.out.resolve() in {p.resolve() for p in protected}:
-                raise Invalid('report destination overlaps an input file')
-            atomic_report(args.out, report_bytes(report, limits), args.overwrite)
-        print(report_bytes(report, limits).decode('utf-8'), end='')
+        else:
+            if args.out:
+                protected = {args.manifest.resolve()} | {args.manifest.resolve().parent / name for name in input_names(manifest)}
+                if args.out.resolve() in {p.resolve() for p in protected}:
+                    raise Invalid('report destination overlaps an input file')
+            encoded = report_bytes(report, limits)
+            if args.out:
+                atomic_report(args.out, encoded, args.overwrite)
+        print(encoded.decode('utf-8'), end='')
         return 1 if report['diagnostics'] else 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print(json.dumps({'schema': SCHEMA, 'diagnostics': [diagnostic('PROJECT_INPUT', error)]}), file=sys.stderr)

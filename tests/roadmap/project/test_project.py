@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
 spec = importlib.util.spec_from_file_location('project', SCRIPT)
@@ -309,6 +312,125 @@ class ProjectTests(unittest.TestCase):
         self.air['profile'] = dict(profile, error_tracing=0)
         (self.base / 'air.json').write_text(json.dumps(self.air))
         self.assertEqual(self.cli().returncode, 1)
+
+    def test_shared_air_summary_preserves_each_root_observations_and_errors(self):
+        self.air.update(zig_version='0.15.2', padding='x' * (7 * 1024 * 1024),
+                        body=[{'id': 1, 'tag': 'first', 'unsupported': True,
+                               'nested': {'id': 3, 'tag': 'nested', 'unsupported': True}},
+                              {'id': 2, 'tag': 'last', 'unsupported': True}])
+        (self.base / 'air.json').write_text(json.dumps(self.air))
+        (self.base / 'bad-schema.json').write_text(json.dumps(
+            dict(self.air, name='schema.root', schema=True, padding='')))
+        (self.base / 'malformed.json').write_text('{')
+        original = self.manifest['roots'][0]
+        self.manifest['roots'] = [dict(original, id=f'root{i}',
+            air=['air.json', 'bad-schema.json', 'malformed.json']) for i in range(256)]
+        self.save()
+        with mock.patch.object(project, 'bounded_json', wraps=project.bounded_json) as parsed:
+            _, _, _, report = project.collect(self.path)
+        self.assertEqual(parsed.call_count, 5)  # manifest, profile, and three AIR inputs
+        expected = ['AIR_EXPORT_UNSUPPORTED'] * 3 + ['AIR_JSON'] * 3
+        for i, record in enumerate(report['roots']):
+            self.assertEqual(record['observed_functions'], ['example.root', 'schema.root'])
+            self.assertEqual(record['outcomes']['unsupported_semantics'], 3)
+            issues = report['diagnostics'][i * 6:(i + 1) * 6]
+            self.assertEqual([d['code'] for d in issues], expected)
+            self.assertEqual([d['root'] for d in issues], [f'root{i}'] * 6)
+            self.assertEqual([d['path'] for d in issues], ['air.json'] * 4 + ['bad-schema.json', 'malformed.json'])
+            self.assertEqual([d['message'].split('instruction ')[1].split(' tag')[0] for d in issues[:3]], ['2', '1', '3'])
+            self.assertEqual(record['input_validation']['status'], 'failed')
+
+    def test_collect_retains_only_air_profile_but_hashes_overlapping_roles(self):
+        self.manifest['source_closure'].append('air.json')
+        self.manifest['components']['runtime'].append('air.json')
+        self.manifest['roots'][0]['contracts'].append('air.json')
+        self.save()
+        _, _, data, report = project.collect(self.path)
+        self.assertEqual(set(data), {'air.json', 'profile.json'})
+        for name in project.input_names(self.manifest):
+            content = (self.base / name).read_bytes()
+            self.assertEqual(report['files']['input/' + name],
+                             {'sha256': project.digest(content), 'bytes': len(content)})
+        self.assertFalse(report['diagnostics'])
+
+    def test_hash_bounded_chunks_limits_and_nonregular_files(self):
+        path = self.base / 'large-executable'
+        content = b'x' * (2 * 1024 * 1024 + 123)
+        path.write_bytes(content)
+        self.assertEqual(project.hash_bounded(path, len(content)),
+                         (project.digest(content), len(content)))
+        with self.assertRaisesRegex(project.Invalid, 'input exceeds byte limit: large-executable'):
+            project.hash_bounded(path, len(content) - 1)
+        fifo = self.base / 'hash-fifo'
+        os.mkfifo(fifo)
+        with self.assertRaisesRegex(project.Invalid, 'not a regular file'):
+            project.hash_bounded(fifo, 1024)
+
+    def test_hash_bounded_detects_growth_past_cap(self):
+        path = self.base / 'growing'
+        path.write_bytes(b'abc')
+        fdopen = os.fdopen
+        sizes = []
+        class Growing:
+            def __init__(self, handle):
+                self.handle = handle
+            def __enter__(self):
+                self.handle.__enter__()
+                return self
+            def __exit__(self, *args):
+                return self.handle.__exit__(*args)
+            def fileno(self):
+                return self.handle.fileno()
+            def read(self, size):
+                sizes.append(size)
+                result = self.handle.read(size)
+                if len(sizes) == 1:
+                    with path.open('ab') as writer:
+                        writer.write(b'def')
+                return result
+        with mock.patch.object(project.os, 'fdopen', side_effect=lambda *a: Growing(fdopen(*a))):
+            with self.assertRaisesRegex(project.Invalid, 'input exceeds byte limit: growing'):
+                project.hash_bounded(path, 4)
+        self.assertEqual(sizes, [5, 2])
+
+    def test_report_encoding_reused_for_publication_and_stdout(self):
+        out = self.base / 'report.json'
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+             mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
+             contextlib.redirect_stderr(stderr):
+            status = project.main(['report', str(self.path), '--out', str(out)])
+        self.assertEqual(status, 0, stderr.getvalue())
+        self.assertEqual(encoded.call_count, 1)
+        self.assertEqual(out.read_bytes(), stdout.getvalue().encode())
+        self.assertTrue(stdout.getvalue().endswith('\n'))
+        self.assertFalse(stdout.getvalue().endswith('\n\n'))
+
+    def test_translate_encoding_reused_after_stage_mutations(self):
+        artifact = self.base / 'artifact'
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+             mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
+             contextlib.redirect_stderr(stderr):
+            status = project.main(['translate', str(self.path), '--translator', str(self.translator), '--out', str(artifact)])
+        self.assertEqual(status, 0, stderr.getvalue())
+        self.assertEqual(encoded.call_count, 1)
+        self.assertEqual((artifact / 'report.json').read_bytes(), stdout.getvalue().encode())
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(report['roots'][0]['stages']['translated']['status'], 'passed')
+        self.assertIn('generated/root/Gen.lean', report['files'])
+
+    def test_publication_failure_emits_no_success_report(self):
+        out = self.base / 'existing.json'
+        out.write_text('unchanged')
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
+             contextlib.redirect_stderr(stderr):
+            status = project.main(['report', str(self.path), '--out', str(out)])
+        self.assertEqual(status, 2)
+        self.assertEqual(stdout.getvalue(), '')
+        self.assertEqual(out.read_text(), 'unchanged')
+        self.assertEqual(json.loads(stderr.getvalue())['diagnostics'][0]['code'], 'PROJECT_INPUT')
 
 
 
