@@ -2,6 +2,7 @@
 """Positive/mutation driver for a root-built translator; never builds or invokes compilers."""
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -69,6 +70,35 @@ def run_sparse(binary):
         assert result.returncode == 1, (result.returncode, result.stderr)
         assert "UTF-8 bytes" in result.stderr, result.stderr
         assert output.read_text() == "sentinel\n", "sparse rejection replaced output"
+    return 1
+
+
+
+def run_file_kind(binary, kind):
+    assert kind in ("fifo", "symlink")
+    with tempfile.TemporaryDirectory(prefix="air2lean-input-validation-kind-") as directory:
+        directory = Path(directory)
+        air = directory / "air"
+        air.mkdir()
+        source = air / "input.json"
+        if kind == "fifo":
+            # No writer: opening this FIFO would block before the byte-limit check.
+            os.mkfifo(source)
+        else:
+            target = directory / "target.json"
+            target.write_text(json.dumps(TARGET))
+            source.symlink_to(target)
+        output = directory / "Gen.lean"
+        output.write_text("sentinel\n")
+        result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
+                                text=True, capture_output=True, check=False, timeout=3)
+        if kind == "fifo":
+            assert result.returncode == 1, (result.returncode, result.stderr)
+            assert "must be a regular file" in result.stderr, result.stderr
+            assert output.read_text() == "sentinel\n", "FIFO rejection replaced output"
+        else:
+            assert result.returncode == 0, result.stderr
+            assert output.read_text().startswith("-- air2lean-profile: ")
     return 1
 
 
@@ -341,6 +371,8 @@ def main():
                        [dict(ty=1, fbits="0x" + "f" * 262144)])]
     checks += run(binary, [mutate], "float type of 1048576 bits is outside the subset")
     checks += run_sparse(binary)
+    checks += run_file_kind(binary, "fifo")
+    checks += run_file_kind(binary, "symlink")
     print(f"{checks} whole-program CLI positive/mutation checks passed")
 
 

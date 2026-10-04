@@ -7,7 +7,8 @@ literal non-BMP character and its UTF-16 surrogate-pair escape. Lean decodes lon
 as U+FFFD; keys that then collide are rejected too. Malformed escapes, trailing tokens and
 commas produce parser diagnostics with byte offsets.
 
-The CLI rejects oversized regular files from metadata and independently reads at most the
+The CLI accepts regular files, including symlinks to regular files, and rejects other file
+kinds before opening them. It rejects oversized files from metadata and independently reads at most the
 per-file limit plus one byte before UTF-8 decoding, covering short reads and file growth.
 The 64 MiB policy applies to each file; it does not cap the sum of retained files.
 Each file is limited to 64 MiB of UTF-8, 128 nested JSON containers, 1,024 characters in a
@@ -70,5 +71,5 @@ Lean evaluation of direct API/parser checks) and `test_cli.py` (positive/negativ
 against a previously built translator). Neither is presented as a kernel proof of parser or
 whole-program validation correctness. The direct API cases include stream-growth limits,
 shared packed-width graphs, and enum integer boundaries; the CLI includes huge sparse-file
-and unsupported-float rejection. The root's serialized compiler queue runs them after
+FIFO/symlink controls, and unsupported-float rejection. The root's serialized compiler queue runs them after
 building the modified translator.
