@@ -43,24 +43,26 @@ successful traversal publishes visited global pairs; failure leaves the caller's
 def compatibleGlobalCached (a b : Func) (x y : Nat)
     (completed : Std.HashSet (Nat × Nat) := {}) : Option (Std.HashSet (Nat × Nat)) := Id.run do
   let mut todo := [DefinitionTask.global x y]
-  let mut seen : Std.HashSet (Nat × Nat) := {}
+  let mut seen := completed
+  let mut typePairs : Std.HashSet (TyId × TyId) := {}
   while !todo.isEmpty do
     let task := todo.head!
     todo := todo.tail!
+    let ty (i j : TyId) : Bool := typePairs.contains (i, j) || compatibleType a b i j
     match task with
     | .global i j =>
-      if completed.contains (i, j) || seen.contains (i, j) then continue
+      if seen.contains (i, j) then continue
       let some g := a.globals[i]? | return none
       let some h := b.globals[j]? | return none
       unless g.name == h.name && g.isConst == h.isConst && g.threadlocal == h.threadlocal &&
-          g.isExtern == h.isExtern && compatibleType a b g.ty h.ty do return none
+          g.isExtern == h.isExtern && ty g.ty h.ty do return none
+      typePairs := typePairs.insert (g.ty, h.ty)
       seen := seen.insert (i, j)
       match g.init, h.init with
       | some v, some w => todo := .value v w :: todo
       | none, none => pure ()
       | _, _ => return none
     | .value v w =>
-      let ty (i j : TyId) := compatibleType a b i j
       match v, w with
       | .int i v, .int j w | .enumTag i v, .enumTag j w =>
         unless v == w && ty i j do return none
@@ -87,7 +89,11 @@ def compatibleGlobalCached (a b : Func) (x y : Nat)
         unless ty i j do return none
         todo := .value p q :: .value n m :: todo
       | _, _ => return none
-  return some (Std.HashSet.fold (fun (cache : Std.HashSet (Nat × Nat)) pair => cache.insert pair) completed seen)
+      -- Every typed constructor above checked `ty`; credit only that complete successful
+      -- comparison, never provisional child pairs. This cache is local to this exact a/b.
+      if let (some i, some j) := (v.constTy?, w.constTy?) then
+        typePairs := typePairs.insert (i, j)
+  return some seen
 
 /-- Same global definition, following initializer pointers through each file's own table.
 Named references retain their identity; unnamed constants compare by their definition. -/

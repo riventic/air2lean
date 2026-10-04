@@ -47,6 +47,62 @@ private def previousUsedTypes (f : Func) : Std.HashSet TyId := Id.run do
     todo := ((f.types[id]?.map childTys).getD #[]).toList ++ todo
   return seen
 
+private inductive PreviousDefinitionTask where
+  | global (a b : Nat)
+  | value (a b : Val)
+  deriving Inhabited
+
+/-- Pre-cleanup comparator snapshot for cache success/failure equivalence tests. -/
+private def previousGlobalCached (a b : Func) (x y : Nat)
+    (completed : Std.HashSet (Nat × Nat) := {}) : Option (Std.HashSet (Nat × Nat)) := Id.run do
+  let mut todo := [PreviousDefinitionTask.global x y]
+  let mut seen : Std.HashSet (Nat × Nat) := {}
+  while !todo.isEmpty do
+    let task := todo.head!
+    todo := todo.tail!
+    match task with
+    | .global i j =>
+      if completed.contains (i, j) || seen.contains (i, j) then continue
+      let some g := a.globals[i]? | return none
+      let some h := b.globals[j]? | return none
+      unless g.name == h.name && g.isConst == h.isConst && g.threadlocal == h.threadlocal &&
+          g.isExtern == h.isExtern && compatibleType a b g.ty h.ty do return none
+      seen := seen.insert (i, j)
+      match g.init, h.init with
+      | some v, some w => todo := .value v w :: todo
+      | none, none => pure ()
+      | _, _ => return none
+    | .value v w =>
+      let ty (i j : TyId) := compatibleType a b i j
+      match v, w with
+      | .int i v, .int j w | .enumTag i v, .enumTag j w =>
+        unless v == w && ty i j do return none
+      | .float i v, .float j w => unless v == w && ty i j do return none
+      | .bool v, .bool w => unless v == w do return none
+      | .void, .void => pure ()
+      | .undef i, .undef j | .optNull i, .optNull j => unless ty i j do return none
+      | .err i v, .err j w | .errUnionErr i v, .errUnionErr j w
+      | .ptrOther i v, .ptrOther j w => unless v == w && ty i j do return none
+      | .func v n s, .func w m t => unless v == w && n == m && s == t do return none
+      | .optSome i v, .optSome j w | .errUnionOk i v, .errUnionOk j w =>
+        unless ty i j do return none
+        todo := .value v w :: todo
+      | .unionVal i k v, .unionVal j l w =>
+        unless k == l && ty i j do return none
+        todo := .value v w :: todo
+      | .agg i vs, .agg j ws =>
+        unless vs.size == ws.size && ty i j do return none
+        todo := (vs.zip ws |>.toList.map fun (v, w) => .value v w) ++ todo
+      | .ptrConst i g off, .ptrConst j h off' =>
+        unless off == off' && ty i j do return none
+        todo := .global g h :: todo
+      | .sliceConst i p n, .sliceConst j q m =>
+        unless ty i j do return none
+        todo := .value p q :: .value n m :: todo
+      | _, _ => return none
+  return some (Std.HashSet.fold (fun (cache : Std.HashSet (Nat × Nat)) pair => cache.insert pair) completed seen)
+
+
 #eval do
   let source := mkFunc "caller" #[.int false 32, .void] #[0] 0 #[
     { id := 0, ty := 0, op := .arg 0 },
@@ -309,4 +365,41 @@ private def previousUsedTypes (f : Func) : Std.HashSet TyId := Id.run do
     require (old.size == new.size && old.toArray.all new.contains) "streamed type closure changed reachable IDs"
   let roots := programUsedTypes nestedRoots
   require (#[99, 77, 88, 55, 66].all roots.contains) "streamed collector discarded unknown or nested type IDs"
+  let headChanged := { graphB with
+    globals := graphB.globals.set! 1 { graphB.globals[1]! with init := some (.ptrConst 0 0 1) }
+  }
+  for right in #[graphB, headChanged] do
+    let some seed := previousGlobalCached graphA right 1 0
+      | throw (IO.userError "known tail comparison did not establish a cache")
+    let before := previousGlobalCached graphA right 0 1 seed
+    let after := compatibleGlobalCached graphA right 0 1 seed
+    require (before.isSome == after.isSome) "global cache cleanup changed success/failure"
+    if let (some old, some new) := (before, after) then
+      require (old.size == new.size && old.toArray.all new.contains) "global cache cleanup changed completed pairs"
+    require (seed.size == 1 && seed.contains (1, 0) && !seed.contains (0, 1))
+      "global comparison mutated the caller's completed cache"
+  let some rejectedSeed := previousGlobalCached graphA headChanged 1 0
+    | throw (IO.userError "unchanged tail comparison failed")
+  require ((compatibleGlobalCached graphA headChanged 0 1 rejectedSeed).isNone)
+    "cached successful type hid a changed pointer offset"
+  let scalarGlobal : Global := {
+    name := some "scalar", ty := 0, isConst := true, threadlocal := false,
+    isExtern := false, init := some (.int 0 7)
+  }
+  let scalarA := mkFunc "scalarA" #[.int false 32, .void] #[] 1 #[] #[scalarGlobal]
+  let scalarB := { scalarA with name := "scalarB" }
+  let scalarChanged := { scalarB with globals := #[{ scalarGlobal with init := some (.int 0 8) }] }
+  let layoutChanged := { scalarB with layouts := #[{ align := some 8 }, {}] }
+  let tupleChanged := { constantFn with
+    globals := #[{ tupleGlobal with init := some (.agg 2 #[.int 1 8]) }]
+  }
+  let compareCases : Array (Func × Func × Bool) := #[
+      (scalarA, scalarB, true), (scalarA, scalarChanged, false),
+      (scalarA, layoutChanged, false), (constantFn, constantFn, true),
+      (constantFn, tupleChanged, false)]
+  for (left, right, shouldAgree) in compareCases do
+    let before := previousGlobalCached left right 0 0
+    let after := compatibleGlobalCached left right 0 0
+    require (before.isSome == shouldAgree && after.isSome == shouldAgree)
+      "local successful type cache changed value/layout equality or leaked between file tables"
   IO.println "whole-program direct API and strict JSON checks passed"

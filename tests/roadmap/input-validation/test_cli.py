@@ -245,6 +245,22 @@ def main():
     mutate = copy.deepcopy(timer)
     mutate["types"][0]["const"] = True
     checks += run(binary, [mutate], "Timer pointer/u64")
+    # Successful header type equality must not suppress initializer value comparisons.
+    error_a = function("errorA", [dict(k="error_set", errors=["Left", "Right"], abi_size=2, abi_align=2),
+        VOID, NORETURN], [], 1, [inst(0, "ret", 2, [dict(ty=1, val="{}")])],
+        [global_("error.state", 0, dict(ty=0, err="Left"), const=True)])
+    error_b = copy.deepcopy(error_a)
+    error_b["name"] = "errorB"
+    checks += run(binary, [error_a, error_b])
+    error_b["globals"][0]["init"]["err"] = "Right"
+    checks += run(binary, [error_a, error_b], "inconsistent shared global 'error.state'")
+    aggregate_a = copy.deepcopy(nested)
+    aggregate_a["globals"][0]["init"]["elems"][0]["val"] = "7"
+    aggregate_b = copy.deepcopy(aggregate_a)
+    aggregate_b["name"] = "nestedB"
+    checks += run(binary, [aggregate_a, aggregate_b])
+    aggregate_b["globals"][0]["init"]["elems"][0]["val"] = "8"
+    checks += run(binary, [aggregate_a, aggregate_b], "inconsistent shared global 'nested.constant'")
     opaque = function("opaque", [dict(k="other", name="anyopaque"),
         dict(pointer, const=True, child=0, ptr_align=1), VOID, NORETURN], [1], 2, [
             inst(0, "arg", 1, param=0), inst(1, "call", 2, [], callee=dict(inst=0)),

@@ -855,6 +855,7 @@ private def checkSharedDefinitions (funcs : Array Func) : Except String (Array O
             | throw s!"{f.name}: shared global '{n}' refers to unknown function table {previousIndex}"
           let key := (fileIndex, previousIndex)
           let completed : Std.HashSet (Nat × Nat) := globalComparisons[key]?.getD {}
+          globalComparisons := globalComparisons.erase key
           let some completed := compatibleGlobalCached f previous k id completed
             | throw s!"{f.name}: inconsistent shared global '{n}' (previous definition in '{previous.name}')"
           globalComparisons := globalComparisons.insert key completed
@@ -1031,6 +1032,10 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
   let mem := memoryFunctions funcs
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
+  let lookupFunction (name : String) : Option (Nat × Func) := do
+    let index ← functionNames[name]?
+    let target ← funcs[index]?
+    pure (index, target)
   let mut signatures : SignaturePairs := {}
   for ((f, index), fileIndex) in (funcs.zip indexes).zipIdx do
     for i in index.insts do
@@ -1039,23 +1044,18 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
         for (typ, callee) in refs do
           if typ == tn then
-            let some targetIndex := functionNames[callee]?
-              | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
-            let some target := funcs[targetIndex]?
+            let some (targetIndex, target) := lookupFunction callee
               | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
             signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
       if let .call (.func callee false spawnFn) args := i.op then
         checkModelSignature f callee args i.ty index
         if (allocFn? callee).isNone && (threadFn? callee).isNone then
-          if let some targetIndex := functionNames[callee]? then
-            if let some target := funcs[targetIndex]? then
-              signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+          if let some (targetIndex, target) := lookupFunction callee then
+            signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
         if let some k := (threadFn? callee).bind (·.spawnArgs?) then
           let some worker := spawnFn
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-          let some targetIndex := functionNames[worker]?
-            | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-          let some target := funcs[targetIndex]?
+          let some (targetIndex, target) := lookupFunction worker
             | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
           let some tuple := args[k]?.bind index.valTy? | throw s!"{f.name}: inst {i.id}: spawn args have no type"
           let some (.tuple fields) := f.types[tuple]? | throw s!"{f.name}: inst {i.id}: spawn args are not a tuple"
