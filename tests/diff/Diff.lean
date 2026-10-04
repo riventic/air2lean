@@ -982,7 +982,7 @@ partial def searchSchedules (run : (Nat → Nat) → Observation × Array Nat) (
     { o with search := some { (o.search.getD {}) with runs := runs, status := status, sawNoResult := bounded } }
   let rec go (pre : Array Nat) (runs : Nat) (first race : Option Observation) (bounded : Bool) : Observation :=
     let (raw, opts) := run fun i => pre.getD i 0
-    let out := { raw with search := some { prefix := pre, options := opts, runs := runs + 1,
+    let out := { raw with search := some { schedulePrefix := pre, options := opts, runs := runs + 1,
       fuel := scheduleFuel, cap := scheduleCap } }
     let bounded := bounded || out.kind == .boundedNoResult
     if out.line == zig then finish out (runs + 1) .witness bounded else

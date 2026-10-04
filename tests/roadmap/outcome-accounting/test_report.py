@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -42,6 +43,15 @@ class Outcomes(unittest.TestCase):
 
     def search(self,status='capped',saw=False):
         return dict(prefix=[0],options=[2],runs=1,fuel=4,cap=1,status=status,saw_no_result=saw)
+
+    def test_package_registers_imported_observation_module(self):
+        package=tomllib.loads((ROOT/'tests/diff/lakefile.toml').read_text())
+        libraries={item['name'] for item in package.get('lean_lib',[])}
+        self.assertIn('Outcome',libraries)
+        self.assertTrue((ROOT/'tests/diff/Outcome.lean').is_file())
+        self.assertIn('import Outcome',(ROOT/'tests/diff/Diff.lean').read_text().splitlines())
+        self.assertIn('import Outcome',(ROOT/'tests/roadmap/outcome-accounting/Check.lean').read_text().splitlines())
+        self.assertNotIn('  prefix :',(ROOT/'tests/diff/Outcome.lean').read_text())
 
     def test_normal_value_and_legacy_leaf(self):
         self.seed({'ok':'7'},{'ok':7})

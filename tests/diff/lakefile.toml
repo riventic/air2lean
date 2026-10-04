@@ -7,6 +7,10 @@ defaultTargets = ["difftest"]
 name = "air2lean"
 path = "../.."
 
+# Register the imported observation module so Lake supplies its build facet.
+[[lean_lib]]
+name = "Outcome"
+
 [[lean_exe]]
 name = "difftest"
 root = "Diff"

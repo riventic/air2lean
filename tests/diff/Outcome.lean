@@ -52,7 +52,7 @@ def SearchStatus.tag : SearchStatus → String
   | .bounded => "bounded"
 
 structure Search where
-  prefix : Array Nat := #[]
+  schedulePrefix : Array Nat := #[]
   options : Array Nat := #[]
   runs : Nat := 0
   fuel : Nat := 0
@@ -71,7 +71,7 @@ def Observation.metadata (o : Observation) : Json :=
   Json.mkObj (fields ++ match o.search with
     | none => []
     | some s => [("search", Json.mkObj [
-        ("prefix", Lean.toJson s.prefix), ("options", Lean.toJson s.options),
+        ("prefix", Lean.toJson s.schedulePrefix), ("options", Lean.toJson s.options),
         ("runs", Lean.toJson s.runs), ("fuel", Lean.toJson s.fuel),
         ("cap", Lean.toJson s.cap), ("status", Json.str s.status.tag),
         ("saw_no_result", Lean.toJson s.sawNoResult)])])
