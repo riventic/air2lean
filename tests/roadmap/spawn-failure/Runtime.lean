@@ -32,6 +32,19 @@ theorem failedSpawnOwnership {own : ThreadId → Heap} {m : Mem} {P : Proto Targ
       (fun result _ m' _ => result = (.error "ThreadQuotaExceeded", ()) ∧ Owned own m') G m depth := by
   exact Proto.WP.spawnFailureFrame (by decide) ho
 
+
+-- The refused second capture stays in the parent's private heap. Joining the
+-- earlier child then merges only that child's disjoint part into the caller.
+-- Both claims hold for arbitrary memory and every failed assignment choice.
+theorem refusedSecondThenJoin {own : ThreadId → Heap} {m m' : Mem} {t first c : ThreadId}
+    {depth : Nat} (hc : c ≠ 0) (ho : Owned own m) (ht : t < m.threads.size)
+    (hne : first ≠ t)
+    (hj : ((Thread.join first).run {m with current := t}).run = some (.ok ((), m'))) :
+    (spawnOutcomeC c Target.worker : CM Target Unit _).run () depth {m with current := t} =
+      CoN.leaf (some (.ok ((.error (spawnErrorAt (c - 1)), ()), {m with current := t}))) ∧
+    Owned (upd (upd own t (own t ∪ own first)) first Heap.empty) m' := by
+  exact ⟨failedSpawnLeaf c hc () _ depth, Owned.join ho ht hne hj⟩
+
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
 
