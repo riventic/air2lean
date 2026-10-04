@@ -119,10 +119,16 @@ def main (args : List String) : IO Unit := do
   require (first.size == 2 && (first["project.identity"]?.map (·.functionIndex)) == some 1) "registered first sites only"
   let deepTypes : Array Ty := ((Array.range 65).map fun i =>
     if i == 0 then Ty.int false 8 else Ty.optional (i - 1)).push .noreturn
-  let deepFunc := {f with params := #[64], ret := 64, types := deepTypes, layouts := #[], body := #[
-    {id := 0, ty := 64, op := .arg 0},
-    {id := 1, ty := 64, op := .call (.func "project.identity" false none) #[.inst 0]},
-    {id := 2, ty := 65, op := .ret (.inst 1)}]}
+  let deepFunc : Func := { f with
+    params := #[64]
+    ret := 64
+    types := deepTypes
+    layouts := #[]
+    body := #[
+      {id := 0, ty := 64, op := .arg 0},
+      {id := 1, ty := 64, op := .call (.func "project.identity" false none) #[.inst 0]},
+      {id := 2, ty := 65, op := .ret (.inst 1)}]
+  }
   let deepTemplate ← get <| ModelRegistry.template raw.profile #[deepFunc]
   let deepEntry := ((deepTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
   let deepEntry := entry.setObjVal! "signature" (deepEntry.getObjValD "signature")
@@ -132,15 +138,25 @@ def main (args : List String) : IO Unit := do
   let deepDocument := document.setObjVal! "models" (.arr #[deepEntry])
   let deepModels ← get <| ModelRegistry.parse deepDocument.compress
   let _ ← get <| ModelRegistry.check deepModels raw.profile #[deepFunc]
-  let collisionFunc := {f with name := "collisionClient", params := #[], ret := 2,
-    types := f.types.push (.struct "p0" "auto" #[("value", 0)]),
-    layouts := f.layouts.push {size := some 1, align := some 1, offsets := #[0]}, body := #[
+  let collisionFunc : Func := { f with
+    name := "collisionClient"
+    params := #[]
+    ret := 2
+    types := f.types.push (.struct "p0" "auto" #[("value", 0)])
+    layouts := f.layouts.push {size := some 1, align := some 1, offsets := #[0]}
+    body := #[
       {id := 0, ty := 2, op := .call (.func "project.identity" false none) #[.undef 2]},
-      {id := 1, ty := 1, op := .ret (.inst 0)}]}
+      {id := 1, ty := 1, op := .ret (.inst 0)}]
+  }
   let (collisionParams, collisionReturn) ← get <| ModelRegistry.signature collisionFunc #[.undef 2] 2
-  let collisionModels := #[{models[0]! with params := collisionParams, ret := collisionReturn,
-    implementation := "RegistryExample.polyIdentity", contract := "RegistryExample.polyContract",
-    proof := some "RegistryExample.polyEvidence"}]
+  let collisionModel : ModelBinding := { models[0]! with
+    params := collisionParams
+    ret := collisionReturn
+    implementation := "RegistryExample.polyIdentity"
+    contract := "RegistryExample.polyContract"
+    proof := some "RegistryExample.polyEvidence"
+  }
+  let collisionModels := #[collisionModel]
   let _ ← get <| check collisionFunc
   let _ ← get <| checkProgram #[collisionFunc] collisionModels (some raw.profile)
   let collisionSource := emit #[collisionFunc] "CollisionClient" "" .ieee collisionModels
