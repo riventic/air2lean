@@ -226,6 +226,17 @@ def normalizer(text):
     return result
 
 
+def runtime_tag_reasons(text):
+    """Source-only rejection policy shared with the translator, not feature support.
+
+    Actual per-version enum membership is supplied by compiler_inventory.
+    """
+    section = text.split('def runtimeTagReason?', 1)[1].split('\nprivate def', 1)[0]
+    arms = re.finditer(r'^  \| ((?:"[^"\n]+"\s*(?:\|\s*)?)+)=> some ("[^"\n]+")$', section, re.M)
+    return {tag: json.loads(match.group(2)) for match in arms
+            for tag in re.findall(r'"([^"\n]+)"', match.group(1))}
+
+
 def source_hits(paths, symbol, cache):
     pattern = re.compile(r'(?<![A-Za-z0-9_])' + re.escape(symbol) + r'(?![A-Za-z0-9_])')
     return [str(p.relative_to(ROOT)) for p in paths if pattern.search(cache.text(p))]
@@ -336,7 +347,9 @@ def generate(version, source, os_name='linux'):
     decode = switch_arms(function_body(exporter, 'writeInst'), ['tag'], 1)
     type_arms = switch_arms(function_body(exporter, 'writeTypeEntry'), ['ty', '.', 'zigTypeTag', '(', 'zcu', ')'])
     ptr_arms = switch_arms(function_body(exporter, 'writePtr'), ['base'])
-    norms = normalizer(cache.text(ROOT/'Air2Lean/Air/Normalize.lean'))
+    normalizer_source = cache.text(ROOT/'Air2Lean/Air/Normalize.lean')
+    norms = normalizer(normalizer_source)
+    rejection_reasons = runtime_tag_reasons(normalizer_source)
     semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
     emit_paths = [ROOT/'Air2Lean/Emit.lean']
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
@@ -370,7 +383,9 @@ def generate(version, source, os_name='linux'):
         else:
             export_status = 'explicit-arm'
             export_reason = 'Explicit source arm found; operand correctness and nested helper conditions are unverified.'
-        if tag.endswith('_optimized'):
+        if tag in rejection_reasons:
+            disposition = 'normalizer-rejected-compiler-state-or-effect'
+        elif tag.endswith('_optimized'):
             disposition = 'normalizer-rejected-fast-math'
         elif tag not in norms and not tag.startswith('call'):
             disposition = 'normalizer-unclassified-or-unknown'
@@ -379,16 +394,17 @@ def generate(version, source, os_name='linux'):
         else:
             disposition = 'source-pipeline-candidate-unqualified'
         ops = norms.get(tag, ['call'] if tag.startswith('call') else [])
+        rejection_reason = rejection_reasons.get(tag)
         tags.append({'tag': tag, 'disposition': disposition,
                      'exporter': {'status': export_status, 'reason': export_reason},
-                     'normalization': {'status': 'explicit-source-branch' if tag in norms else 'call-prefix-branch' if tag.startswith('call') else 'no-explicit-source-branch', 'constructors': ops},
+                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'explicit-source-branch' if tag in norms else 'call-prefix-branch' if tag.startswith('call') else 'no-explicit-source-branch', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
                      'emission': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('emission', op)))},
                      'tests': {'status': 'golden-input-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
-                     'guidance': 'Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification.'})
+                     'guidance': (rejection_reason + '; source-only rejection classification, no compiler fixture or support qualification') if rejection_reason else 'Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification.'})
     type_rows = [{'name': name, 'disposition': 'exporter-arm-conditional-checker-review' if name in type_arms else 'exporter-fallback-unclassified',
                   'qualification': 'Type/layout/value restrictions require Check.lean; an arm is not full type support.'}
                  for name in universe['types']]
