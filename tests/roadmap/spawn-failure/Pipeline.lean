@@ -60,8 +60,12 @@ private def spawner (version callee : String) (cfg : Json := config) : Json :=
       node 3 "call" ret (if group then #[ref 0, ref 1, ref 2] else #[cfg, ref 2])
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "worker")])],
       node 4 "ret" 2 #[ref 3]])
+private def parseChecked (j : Json) : Except String Func := do
+  let f ← normalize (← Raw.parseFunc j)
+  check f
+  pure f
 private def parse (j : Json) : IO Func := do
-  match (do let f ← normalize (← Raw.parseFunc j); check f; pure f : Except String Func) with
+  match parseChecked j with
   | .ok f => pure f
   | .error e => throw (IO.userError e)
 private def hasText (text needle : String) : Bool := (text.splitOn needle).length > 1
@@ -95,7 +99,11 @@ def main (args : List String) : IO Unit := do
       (output ++ "\nexample (a b : BitVec 32) : Synthetic.dispatch (.worker (a, b)) =\n  discard (Zig.ConcM.liftMem (StateT.lift (Synthetic.worker a b))) := by rfl\n")
     reject "nonpositive stack" version (config "0")
     reject "custom allocator" version (config "16777216" false)
-  reject "unaudited version" "0.17.0" config
+  match parseChecked (spawner "0.17.0" "Thread.spawn") with
+  | .ok _ => throw (IO.userError "unaudited version was accepted")
+  | .error message =>
+    require (hasText message "unsupported zig_version '0.17.0'")
+      "unaudited version fixture failed for an unrelated reason"
   for (callee, label, op) in #[("Io.Group.async", "async", "groupAsyncWithPolicyC"),
       ("Io.Group.concurrent", "concurrent", "groupConcurrentWithPolicyC")] do
     let fs ← checked #[spawner "0.16.0" callee, worker "0.16.0"]
@@ -106,5 +114,9 @@ def main (args : List String) : IO Unit := do
       require (hasText output "worker capture0 capture1") "caller fallback lost complete captures"
     IO.FS.writeFile (System.FilePath.mk directory / s!"group-{label}.lean") output
     let old ← checked #[spawner "0.15.2" callee, worker "0.15.2"]
-    require (checkFallibleSpawnCalls old |>.toOption.isNone) "pre-16 group was accepted"
+    match checkFallibleSpawnCalls old with
+    | .ok _ => throw (IO.userError "pre-16 group was accepted")
+    | .error message =>
+      require (hasText message "fallible Io.Group requires Zig 0.16.0")
+        "pre-16 group fixture failed for an unrelated reason"
   IO.println "all-version spawn policy and caller fallback pipeline fixtures passed"
