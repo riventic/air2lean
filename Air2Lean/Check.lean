@@ -255,6 +255,9 @@ structure CheckCtx where
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
   places : Array InstId
+  /-- Internal summaries populated by `check` only after all nested IDs are unique.
+  Bare/public checker contexts default to the uncached path. -/
+  tryErrorExits : Std.HashMap InstId Bool := {}
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -332,6 +335,95 @@ def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String 
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
 
+/-- Reachable error-body outcomes. `valid` excludes falling off a sequence and
+unsupported loop control; `branches` tracks block exits until an enclosing block consumes them. -/
+private structure TryErrorFlow where
+  valid : Bool
+  branches : Std.HashSet InstId := {}
+  deriving Inhabited
+
+private def TryErrorFlow.merge (a b : TryErrorFlow) : TryErrorFlow :=
+  ⟨a.valid && b.valid, a.branches.union b.branches⟩
+
+/-- Separate contracts for pointer-try error bodies and outward-terminal block bodies.
+Both maps are empty if any nested instruction ID is duplicated. -/
+structure ControlFlowSummaries where
+  tryErrorExits : Std.HashMap InstId Bool := {}
+  outwardBlocks : Std.HashMap InstId Bool := {}
+  deriving Inhabited
+
+private structure ControlFlowCache where
+  summaries : ControlFlowSummaries := {}
+  ids : Std.HashSet InstId := {}
+  unique : Bool := true
+  deriving Inhabited
+
+/-- Compute each child flow once, bottom-up, including unreachable child bodies for
+later checking. Only reachable outcomes contribute to the parent flow: the first
+terminator ends its sequence and a block consumes only its own branch. No diagnostics
+are emitted here. The same traversal records every ID, including unreachable children;
+the public helper discards both maps on any duplicate. -/
+private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlowCache) :
+    TryErrorFlow × ControlFlowCache :=
+  -- Array.foldr traverses flat siblings right-to-left without recursive pending
+  -- frames for `rest`; this function recurses only into nested instruction arrays.
+  insts.foldr (init := ((⟨false, {}⟩ : TryErrorFlow), cache)) fun inst (later, cache) =>
+    let cache := { cache with
+      unique := cache.unique && !cache.ids.contains inst.id
+      ids := cache.ids.insert inst.id }
+    match inst.op with
+    | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
+    | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
+    | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
+    | .«repeat» _ | .switchDispatch .. => (⟨false, {}⟩, cache)
+    | .loop body =>
+      let (_, cache) := summarizeTryErrors body cache
+      (⟨false, {}⟩, cache)
+    | .loopSwitchBr _ cases e =>
+      let (_, cache) := summarizeTryErrors e cache
+      let cache := cases.foldl (init := cache) fun cache c =>
+        (summarizeTryErrors c.body cache).2
+      (⟨false, {}⟩, cache)
+    | .condBr _ t e =>
+      let (thenFlow, cache) := summarizeTryErrors t cache
+      let (elseFlow, cache) := summarizeTryErrors e cache
+      (thenFlow.merge elseFlow, cache)
+    | .switchBr _ cases e =>
+      let (elseFlow, cache) := summarizeTryErrors e cache
+      cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
+        let (caseFlow, cache) := summarizeTryErrors c.body cache
+        (flow.merge caseFlow, cache)
+    | .block body =>
+      let (inner, cache) := summarizeTryErrors body cache
+      let summaries := { cache.summaries with
+        outwardBlocks := cache.summaries.outwardBlocks.insert inst.id
+          (inner.valid && !inner.branches.contains inst.id) }
+      let cache := { cache with summaries }
+      let flow := if inner.branches.contains inst.id then
+          (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
+        else inner
+      (flow, cache)
+    | .«try» _ errBody | .tryPtr _ errBody =>
+      let (errorFlow, cache) := summarizeTryErrors errBody cache
+      let summaries := { cache.summaries with
+        tryErrorExits := cache.summaries.tryErrorExits.insert inst.id
+          (errorFlow.valid && errorFlow.branches.isEmpty) }
+      let cache := { cache with summaries }
+      (errorFlow.merge later, cache)
+    | _ => (later, cache)
+
+/-- One bottom-up traversal for both control contracts and ID uniqueness. A block may
+exit to an enclosing block; a pointer-try error body must exit the function instead. -/
+def controlFlowSummaries (body : Array Inst) : ControlFlowSummaries :=
+  let cache := (summarizeTryErrors body {}).2
+  if cache.unique then cache.summaries else {}
+
+/-- Every reachable path must exit the function, with no unconsumed block branch.
+Loops, fallthrough and switches without an explicit else are conservative failures. -/
+def tryErrorBodyExits (body : Array Inst) : Bool :=
+  let flow := (summarizeTryErrors body {}).1
+  flow.valid && flow.branches.isEmpty
+
 /-- Scalar or vector integer shape: lane count, signedness and element width. -/
 def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
   match cx.types[t]? with
@@ -348,9 +440,10 @@ mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
-  checkOp cx line inst.ty inst.op
+  checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
 
-partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except String Nat := do
+partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
+    (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   match op with
   | .arith _ mode _ _ =>
@@ -518,6 +611,40 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       let _ ← checkInsts cx line c.body
     let _ ← checkInsts cx line elseBody
     pure line
+  | .tryPtr p errBody => do
+    let pty ← cx.memPtrTy line p
+    let some (.ptr "one" isConst unionTy) := cx.types[pty]?
+      | cx.fail line "try_ptr requires a single pointer to an error union"
+    let some (.errorUnion _ payload) := cx.types[unionTy]?
+      | cx.fail line "try_ptr requires a pointer to an error union"
+    unless cx.types[ty]? == some (.ptr "one" isConst payload) do
+      cx.fail line "try_ptr result must be a pointer to the same payload with matching constness"
+    for ptrTy in #[pty, ty] do
+      let layout := cx.layouts[ptrTy]?.getD {}
+      if layout.isVolatile then
+        cx.fail line "try_ptr through a volatile pointer is outside the subset"
+      if layout.hostSize != 0 then
+        cx.fail line "try_ptr through a bit-pointer is outside the subset"
+      if layout.ptrAlign.isNone then
+        cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
+    checkMemTy fnName cx.types cx.layouts line unionTy
+    let exits := match cachedTryExit with
+      | some exits => exits
+      | none => tryErrorBodyExits errBody
+    unless exits do
+      cx.fail line "try_ptr error body must exit without fallthrough"
+    let nested := errBody.foldl flattenInst #[]
+    let emptyTargets : Std.HashSet InstId := {}
+    let localTargets := nested.foldl (init := emptyTargets) fun targets i =>
+      match i.op with | .block _ | .loop _ => targets.insert i.id | _ => targets
+    for i in nested do
+      match i.op with
+      | .br target _ | .«repeat» target =>
+        unless localTargets.contains target do
+          cx.fail line "try_ptr error body must exit the function, not branch outside its body"
+      | _ => pure ()
+    let _ ← checkInsts cx line errBody
+    pure line
   | .«try» _ errBody => do
     let _ ← checkInsts cx line errBody
     pure line
@@ -652,7 +779,7 @@ partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
         | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
       unless valTy v == some selectorTy do
         cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
-    | .block b | .loop b | .«try» _ b => recur b
+    | .block b | .loop b | .«try» _ b | .tryPtr _ b => recur b
     | .condBr _ t e => recur t; recur e
     | .switchBr _ cases e =>
       for c in cases do recur c.body
@@ -697,8 +824,13 @@ def check (f : Func) : Except String Unit := do
         if pa > ga then
           throw s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
             outside the subset"
+  -- Public `check` accepts unnormalized input: duplicate IDs disable the cache,
+  -- without introducing a prepass diagnostic or changing subsequent check order.
+  let tryErrorExits := if insts.any (fun i => match i.op with | .tryPtr .. => true | _ => false) then
+      (controlFlowSummaries f.body).tryErrorExits
+    else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-                         instTys := insts.map fun i => (i.id, i.ty), places }
+                         instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()

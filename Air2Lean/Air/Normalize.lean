@@ -302,6 +302,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let v ← arg1 fnName raw
     let errBody ← raw.body.mapM (normalizeInst fnName)
     return .«try» v errBody
+  | "try_ptr" | "try_ptr_cold" =>
+    unless raw.args.size == 1 do
+      throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs exactly 1 arg"
+    let p ← arg1 fnName raw
+    let errBody ← raw.body.mapM (normalizeInst fnName)
+    return .tryPtr p errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
   | "trap" => return .trap

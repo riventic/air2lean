@@ -94,7 +94,7 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `ty` | result type ID. Missing only for `inferred_alloc*`. |
 | `args` | operands, in AIR order |
 | `param` | `arg`: ZIR parameter index |
-| `body` | `block`, `loop`, `dbg_inline_block`, `try`, `try_cold` (the error body) |
+| `body` | `block`, `loop`, `dbg_inline_block`, `try`, `try_cold`, `try_ptr`, `try_ptr_cold` (the error body) |
 | `then`, `else` | `cond_br` (both are bodies) |
 | `cases`, `else` | `switch_br`, `loop_switch_br`: `cases: [{items: [Ref], ranges: [[Ref, Ref]], body}]`, `else: body` |
 | `target` | `br`, `switch_dispatch`: the block `id`; `repeat`: the loop `id` |
@@ -165,4 +165,6 @@ Schema 6. One entry per global that a pointer constant points into, in the order
 | `threadlocal`, `extern` | a named global only |
 | `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
 
-`try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.
+`try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
+`body` for the error branch. The instruction's `ty` is the payload pointer type. On
+success they return that payload's address without reading or copying its bytes.

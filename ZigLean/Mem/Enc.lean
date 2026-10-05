@@ -207,6 +207,14 @@ def errCodeAt (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM ErrName := do
 def errPayloadPtr (α : Type) [Enc α] (p : Ptr) : Ptr :=
   p.add (errUnionOffsets (Enc.size α) (Enc.align α)).2
 
+/-- Pointer-form `try`: read only the error code. Success returns the addressed payload
+in the same allocation. Payload bytes may be undefined until the caller writes them. -/
+def tryPayloadPtr (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM (Except ErrName Ptr) := do
+  let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
+  match ← errOfBytes (← loadBytes (p.add eo) 2 (Nat.min align 2)) with
+  | some e => pure (.error e)
+  | none => pure (.ok (errPayloadPtr α p))
+
 /-- `errunion_payload_ptr_set`: set the error code to 0 (no error), then the payload pointer. -/
 def errSetOk (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
   let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)

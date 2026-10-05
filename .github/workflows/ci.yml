@@ -321,6 +321,31 @@ jobs:
           bash tests/roadmap/thread-tuples/check.sh --check-artifacts
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
 
+      # L04 actual compiler/native qualification is currently specific to 0.16.0.
+      # 0.14/0.15 exporter APIs were source-inspected; their synthetic fixtures are
+      # checked in this gate, without claiming native/export qualification for them.
+      - name: Pointer try ownership, native and fresh source regressions
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Sep.Try ZigLean.Sep.Discard
+          python3 -m unittest discover -s tests/roadmap/try-pointers -v
+          bash tests/roadmap/try-pointers/check.sh --check-artifacts
+          bash tests/roadmap/try-pointers/check.sh --native
+          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-source.XXXXXX")
+          trap 'rm -rf "$fresh"' EXIT
+          bash tests/roadmap/try-pointers/check.sh --export "$fresh/air"
+          python3 tests/roadmap/try-pointers/check-artifacts.py --fresh-air "$fresh/air"
+          "$AIR2LEAN_TRANSLATOR" "$fresh/air" -o "$fresh/Gen.lean" \
+            --namespace TryPointers --prefix try_pointers.
+          python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
+          python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
