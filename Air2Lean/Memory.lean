@@ -31,7 +31,7 @@ partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
   | .block body => body.foldl flattenInst acc
   | .loop body => body.foldl flattenInst acc
   | .condBr _ t e => e.foldl flattenInst (t.foldl flattenInst acc)
-  | .switchBr _ cases e =>
+  | .switchBr _ cases e | .loopSwitchBr _ cases e =>
     let acc := cases.foldl (fun acc c => c.body.foldl flattenInst acc) acc
     e.foldl flattenInst acc
   | .«try» _ errBody => errBody.foldl flattenInst acc
@@ -59,8 +59,8 @@ def valueOperands (op : Op) : Array Val :=
   match op with
   | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
-  | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
-  | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
+  | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
+  | .countBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
   | .floatConv a | .floatFromInt a | .intFromFloat _ a | .isNull a | .isNonNull a
   | .optPayload a | .wrapOptional a | .isErr a | .isNonErr a | .errPayload a | .errCode a
   | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a => #[a]
@@ -88,9 +88,9 @@ def valueOperands (op : Op) : Array Val :=
   | .aggregateInit elems => elems
   | .call callee args => #[callee] ++ args
   | .block _ | .loop _ => #[]
-  | .br _ v | .ret v | .«try» v _ => #[v]
+  | .br _ v | .switchDispatch _ v | .ret v | .«try» v _ => #[v]
   | .condBr c _ _ => #[c]
-  | .switchBr v cases _ =>
+  | .switchBr v cases _ | .loopSwitchBr v cases _ =>
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
@@ -180,6 +180,8 @@ def allocFn? (name : String) : Option AllocFn :=
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
+  | yield | spinLoopHint
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
   /-- `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2). -/
@@ -201,6 +203,8 @@ def threadFn? (name : String) : Option ThreadFn :=
   match (name.splitOn "__anon_").head! with
   | "Thread.spawn" => some .spawn
   | "Thread.join" => some .join
+  | "Thread.yield" => some .yield
+  | "atomic.spinLoopHint" | "Thread.spinLoopHint" => some .spinLoopHint
   | "Io.futexWait" => some .futexWait
   | "Io.futexWaitUncancelable" => some .futexWaitU
   | "Io.futexWake" => some .futexWake
@@ -224,16 +228,20 @@ def rejectedThreadFn? (name : String) : Option String :=
     some "Io.futexWaitTimeout is outside the model: it has no clock"
   else if base == "Thread.detach" then
     some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
-  else if base == "Thread.yield" then
-    some "Thread.yield is outside the model: there is no scheduler to yield to"
-  else if base == "Thread.spinLoopHint" then
-    some "Thread.spinLoopHint is outside the model (a spin-wait on a flag diverges, \
-      `docs/std-models.md` §Thread model)"
   else none
+
+/-- Audited operand-free spin instructions emitted by `std.atomic.spinLoopHint` on
+x86/x86_64 (and RISC-V with Zihintpause) and aarch64. Exact volatile instructions only:
+other assembly keeps its opaque semantics. This is an extra scheduling opportunity, not a
+memory fence or progress premise (`docs/progress-hints.md`). -/
+def Op.isSpinHint : Op → Bool
+  | .asm source true clobbers outputs inputs =>
+    (source == "pause" || source == "isb") && clobbers.isEmpty && outputs.isEmpty && inputs.isEmpty
+  | _ => false
 
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
-  match op with
+  op.isSpinHint || match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
@@ -243,7 +251,7 @@ def memoryOp (op : Op) : Bool :=
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
   match v with
-  | .ptrConst .. | .ptrOther .. | .sliceConst .. => true
+  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .sliceConst .. => true
   | .agg _ elems => elems.any Val.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
@@ -252,6 +260,9 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+      -- Nullable pointer temporaries need address observations even with no pointer
+      -- parameters, no dereference and an integer/bool return.
+      nullablePtrTy f.types f.layouts i.ty ||
       match i.op with
       | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p => p.pointsToMem
       | _ => false
@@ -304,17 +315,17 @@ def Func.callees (f : Func) (refs : Array (String × String)) : Array String :=
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller
 of such a function, up to a fixpoint. -/
-partial def memoryFunctions (funcs : Array Func) : Array String :=
+partial def memoryFunctions (funcs : Array Func) (externalMemory : Array String := #[]) : Array String :=
   let refs := fnRefs funcs
   let rec go (mem : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
       if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
-  go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
+  go (externalMemory ++ funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
 
 /-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
 def Func.syncLocally (f : Func) : Bool :=
-  f.allInsts.any fun i => match i.op with
+  f.allInsts.any fun i => i.op.isSpinHint || match i.op with
     | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => true
     | .call (.func name ..) _ => (threadFn? name).isSome
     | _ => false
