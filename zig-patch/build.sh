@@ -167,6 +167,8 @@ if [ "$llvm" = 1 ]; then
   llvm_flags=(-Denable-llvm=true -Dconfig_h="$src_dir/build/config.h")
 fi
 
+# -Dno-langref: skip the default install dependency that compiles langref examples;
+# -j1 alone does not prevent those documentation tools from launching child compilers.
 # No -Dno-lib: the build installs lib/ into the prefix alongside the binary, so the
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.
 # -Dcpu=baseline: the default is the build machine's CPU, and CI restores a cached build on
@@ -175,6 +177,7 @@ echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
 (cd "$src_dir" && zig build \
   -Doptimize="$optimize" \
   -Dstrip=true \
+  -Dno-langref=true \
   -j1 \
   -Dcpu=baseline \
   -Ddebug-extensions=true \
