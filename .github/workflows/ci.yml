@@ -96,6 +96,11 @@ jobs:
       - name: Shell check regressions
         run: scripts/review-checks.sh
 
+      - name: Build guard offline regressions
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
+
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
       # zig-patch/versions.toml's [ci.host-zig."<version>"] table.
@@ -243,6 +248,14 @@ jobs:
         env:
           LEAN_NUM_THREADS: "1"
         run: tests/roadmap/assurance/check.sh
+
+      - name: Integer bit operations regression and differential gate
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
+          AIR2LEAN_ZIG: zig
+          AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
+        run: tests/roadmap/bitops/check.sh
 
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
