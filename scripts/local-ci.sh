@@ -98,14 +98,14 @@ if [ "${1:-}" = --inside ]; then
 fi
 
 usage() {
-  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix' >&2
+  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | matrix | mutations' >&2
   exit 2
 }
 mode=${1:-full} version=${2:-0.16.0} examples=${3:-}
 case "$mode" in
   targeted) [ "$#" = 3 ] && [ -n "$examples" ] || usage ;;
   full) [ "$#" -le 2 ] || usage ;;
-  matrix) [ "$#" = 1 ] || usage ;;
+  matrix|mutations) [ "$#" = 1 ] || usage ;;
   *) usage ;;
 esac
 case "$version" in 0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
