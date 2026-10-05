@@ -85,6 +85,53 @@ The [single-file workflow](docs/getting-started.md#translate-your-own-file) incl
 
 ### Before a PR
 
+For Linux checks on a Docker host, use the local Ubuntu 24.04 runner (Python 3.12,
+pinned x86_64 Lean/Zig, matching CI's float/export target):
+
+```sh
+scripts/local-ci.sh targeted 0.16.0 "threads atomics" # focused pipeline + proofs
+scripts/local-ci.sh full 0.16.0                      # one complete non-mutation CI row
+scripts/local-ci.sh matrix                          # all three versions + five mutation shards
+```
+
+Run the focused checks while editing, then the matrix locally before using GitHub CI
+as final verification. The 0.14.1 row uses CI's restricted examples and skips the
+differential harness; 0.15.2 also builds the macOS threadsync translation's proofs.
+Full and matrix modes execute the actual shell steps and environments from
+`.github/workflows/ci.yml`, including coverage, budgets, project/flow gates and proof
+receipts. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
+actions and the three equivalent pinned tool setup recipes are replaced locally.
+Matrix rows and mutation shards run sequentially in one container limited to 8 GiB
+memory (including swap), two CPUs and 512 processes. The container always uses
+`linux/amd64`, preserving CI's x86 shell, coreutils, example selection and GNU
+compiler target. On an arm64 Docker engine, only Ubuntu's Python 3.12 and its YAML
+package use native arm64 binaries; Python memory gates then exclude x86 emulator
+overhead. Lean, Zig and other tools remain x86 binaries. The first compiler build
+can be slow. Docker Desktop provides the required binary emulation on Apple
+Silicon; an arm64 Linux engine needs x86 binfmt support.
+
+The runner snapshots current contents of Git-tracked files, including staged additions
+and unstaged edits/deletions. Stage new source files first (`git add`); untracked files,
+Git metadata and host `.lake`/compiler caches are excluded. Tests work on a private
+writable checkout, so generated translations and mutation tests never change host files.
+Zig and elan downloads use the checksums in `zig-patch/versions.toml`; Lean uses
+`lean-toolchain`. Linux toolchains persist in `air2lean-local-linux-toolchains`
+(override with `AIR2LEAN_LOCAL_TOOL_VOLUME`); Lake outputs persist in separate
+`air2lean-linux-amd64-*` volumes, namespaced by the toolchain volume name so
+different toolchain volumes also have separate Lake caches. Concurrent runs sharing these
+caches are rejected. GNU `timeout` (or macOS `gtimeout` from coreutils) bounds each attached
+run to six hours; override with `AIR2LEAN_LOCAL_TIMEOUT`. Without it, stop the runner
+with Ctrl-C. Cleanup removes only its own container and temporary source snapshot.
+Published reports, receipts and the container log are exported to a unique run directory under
+`.lake/local-ci-results`, whose absolute path is printed on success or failure.
+Set `AIR2LEAN_LOCAL_RESULTS` to use another parent directory. Each matrix row has
+its own output directory in the container; export gives files the host caller's
+ownership. Workflow scratch cleanup still runs as written. If export fails, the
+runner reports failure and retains its stopped container for recovery. Results are
+excluded from source snapshots.
+
+The equivalent native commands are:
+
 ```sh
 scripts/check.sh       # goldens, translate, build, differential test
 lake build Proofs      # check the proofs
