@@ -47,6 +47,10 @@ An invalid existing cache entry is reported with its path; remove it before retr
 `AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.
 
 The bootstrap defaults to stripped `Debug` and one build job (`-j1`) to reduce peak memory.
+It also sets `-Dno-langref=true` on all supported versions, omitting the generated
+`doc/langref.html` and its example-compilation dependencies from installation. The compiler
+and its standard library are still installed; `-Dno-lib` is not used. `-j1` alone does not
+prevent documentation tools from launching child compilers.
 Set `AIR2LEAN_OPTIMIZE=ReleaseFast` for a faster compiler when bootstrap memory allows it.
 The exporter flags and LLVM selection stay the same in either mode.
 
