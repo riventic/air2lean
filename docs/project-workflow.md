@@ -1,0 +1,140 @@
+# Project manifests and evidence
+
+`scripts/project.py` adds a stdlib-only project boundary around the built translator. It
+reads explicitly selected inputs, reports independent malformed AIR files and exporter
+`unsupported: true` markers, translates each root and its declared AIR dependencies, and
+records hash-bound evidence. It never downloads or builds tools.
+
+Run from a qualified environment with an existing translator:
+
+```sh
+python3 scripts/project.py report project.json --out coverage.json
+python3 scripts/project.py translate project.json \
+  --translator .lake/build/bin/air2lean --out artifacts/run-001
+python3 scripts/project.py verify project.json --artifact artifacts/run-001
+```
+
+`report` checks bounded JSON syntax, root-name presence and profile metadata. `translate`
+runs the actual translator on each root's AIR set, with no shell, passing namespace, prefix
+and explicit float semantics. Each root needs every AIR dependency required by the
+translator's whole-program check; a standalone function file is not assumed independent.
+Translation errors are collected across roots. A root may still have additional semantic
+blockers beyond the first error emitted by the existing translator. The wrapper does not
+infer instruction support from tag spelling.
+
+Reports and translation artifacts have different publication rules. A report is a JSON
+file, created with an atomic no-clobber link by default; `--overwrite` atomically replaces
+an existing report. Input files cannot be selected as report destinations. An artifact is
+a fresh directory containing `<root-id>/Gen.lean` and `report.json`. An existing artifact
+is never intentionally replaced, and translation has no overwrite option. Failed roots,
+timeouts, SIGINT or SIGTERM leave no new artifact directory. Prior artifacts remain
+available. Publication uses a same-filesystem rename; users must give concurrent runs
+different artifact destinations. A final existence check refuses outputs that appeared
+while translation ran.
+
+`verify` recomputes every recorded input and generated-file SHA-256, as well as the invoked
+translator executable hash. It detects changed manifests, source files, contracts, profile
+files, declared toolchain/runtime/patch inputs and generated Lean. It reports
+`proof_status: not_attested`: hash agreement is not a proof or authenticity signature.
+The stored report is the reference inventory; retain its digest in a trusted release
+record when authenticity matters. Git revision and dirty-state availability are recorded
+separately. Git HEAD alone does not identify dirty input contents; the input hashes do.
+
+## Manifest schema 1
+
+[The example](../example-project.json) uses an existing legacy AIR
+fixture and a declared source closure. All paths resolve relative to the manifest directory,
+remain inside that directory after symlink resolution, and name existing regular files.
+To place a manifest at a repository root, adjust its paths to that root; parent traversal
+and absolute input paths are rejected. Unknown keys, duplicate keys, duplicate list entries,
+nonfinite JSON numbers and incorrect JSON scalar types are rejected.
+
+Required top-level keys:
+
+| Key | Meaning |
+|---|---|
+| `schema` | Integer `1` |
+| `profile` | Path to a strict profile JSON artifact |
+| `float_semantics` | Runtime model selection: `ieee` or `compiler-rt` |
+| `source_closure` | Nonempty declared source-file inventory |
+| `components` | Nonempty file lists for `compiler_patch`, `runtime`, `toolchain` |
+| `allowed_assumptions` | Allowed assumption identifiers |
+| `roots` | Nonempty root records |
+| `limits` | Optional stricter resource limits |
+
+Each root requires `id`, `function`, `air`, `namespace`, `prefix`, `contracts`, `goals`,
+`assumptions` and `exclusions`. AIR paths include the named function and its dependencies.
+IDs are letters followed by letters, digits, underscores or hyphens. Namespaces are
+ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a theorem
+name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
+`total_correctness`, `resource_bound` or `correspondence`. Every root assumption must occur
+in `allowed_assumptions`. These are declarations for review, not discovered theorem
+premises or checked contracts.
+
+The legacy profile artifact has exactly `name: "legacy-abi64-le"` and `zig_version`.
+It preserves explicit missing-target-metadata disclosure. A schema-12 profile artifact is
+the exact exported nested `profile` object: `name`, `target_triple`, `pointer_bits`, `endian`,
+`abi`, `zig_version`, `backend`, `cpu`, `features`, `build_mode`, `float_mode`,
+`error_set_bits`, `error_layout`, `error_tracing` and `export_stage`. The supported explicit
+name is `abi64-le-v1`, with the existing x86_64 Linux or aarch64 macOS, 64-bit, little-endian model ABI,
+16-bit errors, per-instruction float mode and type-table error layout. Every selected
+schema-12 AIR file must match the full profile object. The standalone profile omits the
+outer AIR `schema` field. Legacy profiles cannot relabel profile-bearing AIR.
+
+Limits are positive integers no greater than the defaults:
+
+| Limit | Default maximum |
+|---|---:|
+| `max_file_bytes` | 8 MiB |
+| `max_total_bytes` | 64 MiB, including manifest |
+| `max_json_depth` | 128 |
+| `max_files` | 4096 unique input files |
+| `max_roots` | 256 |
+| `max_total_output_bytes` | 64 MiB each for generated Lean aggregate and report/log aggregate |
+| `timeout_seconds` | 60 per root invocation |
+| `max_output_bytes` | 8 MiB per translator log/output file |
+
+The manifest itself has a hard 8 MiB/128-depth bootstrap cap. POSIX process groups ensure
+cancellation kills child descendants. A wrapper that exits with surviving descendants fails
+the stage and has its remaining process group killed. Then `RLIMIT_FSIZE` bounds translator output files.
+This workflow currently requires POSIX; it is not a hostile-code sandbox. A translator
+that requires larger files should be configured through a reviewed change to the limits,
+not allowed to allocate without a bound.
+
+## What each status means
+
+Every root has separate `analyzed`, `exported`, `translated`, `compiled`, `tested` and
+`proved` entries. Only `translated` can pass through this wrapper today. JSON preflight
+has its own `input_validation` entry, so accepting JSON does not claim Zig semantic
+analysis. Supplied AIR is not evidence that this invocation exported the declared
+sources. Declared goals, a wrapper theorem and sampled tests cannot turn `proved` into
+`passed`. Export, Lean proof checking, differential execution and incremental caches
+remain explicit unavailable capabilities; use separately recorded qualified gates for
+those stages. The full roadmap acceptance criteria for I03/I05-I08 are not complete.
+
+Diagnostics have stable wrapper codes, categories, root/path context and optional source
+and dependency locations. The current AIR format does not reliably supply those
+locations, so `source_span` is null and `dependency_chain` empty; neither is invented.
+`AIR_EXPORT_UNSUPPORTED` is distinct from malformed JSON and opaque
+`TRANSLATION_FAILED` messages. Success in a subprocess is translation evidence only.
+
+Outcome counts separately name exact matches, host differences, undefined/unspecified
+behavior, nondeterministic valid outcomes, unsupported semantics, panic, error returns,
+illegal behavior, deadlock, divergence, search caps, skips and proof exclusions. Zero
+means no recorded observations, not a proved absence. Unsupported counts record explicit
+exporter instruction markers; they are not a count of failed test cases. No differential results are imported
+by this version. Proof exclusions count declared exclusion records rather than functions
+or test cases. Source closure completeness, backend correspondence, translator preservation
+and theorem dependency closure remain trust-boundary obligations printed in every report.
+
+Run the mocked regressions without Zig, Lean or Lake:
+
+```sh
+python3 -m unittest discover -s tests/roadmap/project -v
+```
+
+The full Zig 0.16 CI job runs these offline regressions after building the translator,
+then translates `example-project.json` with that executable and verifies the resulting
+artifact hashes. The artifact and JSON reports stay under `RUNNER_TEMP` and are not
+uploaded by this gate. This checks translation and stale-input detection; it does not
+check the declared Lean proof goals or establish source/export/backend correspondence.

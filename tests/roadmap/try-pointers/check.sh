@@ -48,6 +48,8 @@ fi
 "${lean_cmd[@]}" --run "$work/Synthetic.lean"
 "${lean_cmd[@]}" --run "$work/Synthetic.lean.loads.lean"
 "${lean_cmd[@]}" --run "$work/Synthetic.lean.memory.lean"
+"${lean_cmd[@]}" --run tests/roadmap/try-pointers/CacheContexts.lean "$work/BareLoads.lean"
+"${lean_cmd[@]}" --run "$work/BareLoads.lean"
 # Compile a well-typed offset mutant first; only the same proof's located equality
 # failure counts. Import, syntax, tool, unrelated proof and signal failures do not.
 mutant="$work/offset-mutant"

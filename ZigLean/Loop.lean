@@ -40,4 +40,20 @@ theorem loop_spec {σ ε : Type} (body : M σ ε) (again : ε → Bool)
       obtain ⟨r, hr, hpost⟩ := ih (m s') (h ▸ hlt) s' rfl hinv
       exact ⟨r, by simp [ha, hr], hpost⟩
 
+/-- A target-specific dispatch loop uses the same iterator as an ordinary AIR loop.
+`dispatch` recognizes only this target's exits; the body's selector update belongs to `σ`.
+An invariant and decreasing measure must include that selector whenever needed. -/
+theorem loop_dispatch_spec {σ ε α : Type} (body : M σ ε) (dispatch : ε → Option α)
+    (inv : σ → Prop) (measure : σ → Nat) (post : ε × σ → Prop)
+    (step : ∀ s, inv s → ∃ e s', body.run s = pure (e, s') ∧
+      (match dispatch e with
+       | some _ => inv s' ∧ measure s' < measure s
+       | none => post (e, s'))) :
+    ∀ s, inv s → ∃ r, (loop body (fun e => (dispatch e).isSome)).run s = pure r ∧ post r := by
+  apply loop_spec body (fun e => (dispatch e).isSome) inv measure post
+  intro s hs
+  obtain ⟨e, s', hrun, hstep⟩ := step s hs
+  refine ⟨e, s', hrun, ?_⟩
+  cases h : dispatch e <;> simpa [h] using hstep
+
 end Zig

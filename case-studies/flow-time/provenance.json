@@ -1,0 +1,17 @@
+{
+  "production_repository": "/opt/dev/boxhub",
+  "production_revision": "fb6203c057e43ebcffdbfee9f7aedf642a1de78b",
+  "production_file": "optimizer/engine/src/des/time.zig",
+  "production_sha256": "66342662aa865d35617e83dfbad777de337be1b588aa5de38549c45f84322ed1",
+  "production_function": "addDuration",
+  "module_binding": "flow_time_original",
+  "wrapper": "flow_time.zig",
+  "monomorphizations": ["u32", "u64"],
+  "zig_version": "0.16.0",
+  "air_schema": 11,
+  "air_target": "x86_64-linux",
+  "air_cpu": "baseline",
+  "air_optimize": "ReleaseSafe",
+  "error_tracing": false,
+  "lean_toolchain": "leanprover/lean4:v4.34.0"
+}
