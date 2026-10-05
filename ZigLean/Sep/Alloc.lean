@@ -5,8 +5,9 @@ import ZigLean.Mem.Alloc
 # The allocator
 
 Rules for the allocator model (`ZigLean/Mem/Alloc.lean`). An allocation gives a new block of kind
-`.heap` that nothing else owns, or `error.OutOfMemory` and no bytes: `Mem.failAt` decides, and a
-triple holds for every memory, so a spec covers both. A free needs the whole block, of kind `.heap`.
+`.heap` that nothing else owns, or `error.OutOfMemory` and no bytes: `Mem.failAt` and
+`Mem.allocPolicy` decide. A triple holds for every memory and therefore every cap and
+failure trace, so a spec covers both. A free needs the whole block, of kind `.heap`.
 -/
 
 namespace Zig
@@ -29,7 +30,7 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
   let m₁ : Mem := { m with allocs := m.allocs + 1 }
   have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
   have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
-  by_cases hc : m.failAt = some m.allocs ∨ maxAllocBytes < n
+  by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
   · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
     simp [rawAlloc, hc, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
   · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
@@ -140,5 +141,63 @@ theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Arr
       poisonFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.freeSentinel, show ¬ size = 0 by omega, hr]
+
+/-- A client that reports allocation success and always releases a nonempty successful
+allocation. Failure is a normal result; cleanup is not conditional on a proof of success. -/
+def releaseAttempt (size align : Nat) : MemM Bool := do
+  match ← rawAlloc size align with
+  | none => pure false
+  | some p =>
+    rawFree p size
+    pure true
+
+/-- Total, policy-independent client safety: an actual result exists, with the original
+heap restored on either outcome. No success, resource-budget or default-policy premise.
+`Seq`/positive size/alignment are the existing sequential memory/access premises. -/
+theorem releaseAttempt_run (m : Mem) (size align : Nat) (hs : 0 < size) (ha : 0 < align)
+    (hst : m.Seq) :
+    ∃ ok m', (releaseAttempt size align).run m = pure (ok, m') ∧
+      m'.heap = m.heap ∧ m'.Seq := by
+  have hd : Heap.Disjoint Heap.empty m.heap := (Heap.disjoint_empty m.heap).symm
+  have hm : m.heap = Heap.empty ∪ m.heap := by simp
+  obtain ⟨r, m₁, hr, hst₁, -, hpost⟩ := rawAlloc_run hd hm size align ha hst
+  simp only [StateT.run] at hr
+  cases r with
+  | none =>
+    refine ⟨false, m₁, ?_, by simpa using hpost, hst₁⟩
+    simp [releaseAttempt, zig_unfold, hr]
+  | some p =>
+    obtain ⟨h0, h', hd', hm', -, A, -, hb, -⟩ := hpost
+    simp only [Heap.empty_union] at hd' hm'
+    obtain ⟨m₂, hf, hh, hst₂, -⟩ := rawFree_run hb hm' hd'
+      (by simp) h0 hs hst₁
+    simp only [StateT.run] at hf
+    refine ⟨true, m₂, ?_, by simpa using hh, hst₂⟩
+    simp [releaseAttempt, zig_unfold, hr, hf, ExceptT.bindCont]
+
+/-- Repeated attempts can suffer any number of failures; every successful block is freed. -/
+def releaseAttempts (sizes : List Nat) (align : Nat) : MemM (List Bool) :=
+  match sizes with
+  | [] => pure []
+  | size :: sizes => do
+    let ok ← releaseAttempt size align
+    let oks ← releaseAttempts sizes align
+    pure (ok :: oks)
+
+/-- A finite repeated-allocation client returns exactly one outcome per request and restores
+its original heap under every permitted policy, even if all requests fail. -/
+theorem releaseAttempts_run (sizes : List Nat) (align : Nat) (ha : 0 < align)
+    (hs : ∀ size ∈ sizes, 0 < size) (m : Mem) (hst : m.Seq) :
+    ∃ oks m', (releaseAttempts sizes align).run m = pure (oks, m') ∧
+      oks.length = sizes.length ∧ m'.heap = m.heap ∧ m'.Seq := by
+  induction sizes generalizing m with
+  | nil => exact ⟨[], m, rfl, rfl, rfl, hst⟩
+  | cons size sizes ih =>
+    obtain ⟨ok, m₁, hr, hh, hst₁⟩ := releaseAttempt_run m size align
+      (hs size (by simp)) ha hst
+    obtain ⟨oks, m₂, hrr, hlen, hheap, hst₂⟩ := ih (fun n hn => hs n (by simp [hn])) m₁ hst₁
+    simp only [StateT.run] at hr hrr
+    refine ⟨ok :: oks, m₂, ?_, by simp [hlen], hheap.trans hh, hst₂⟩
+    simp [releaseAttempts, zig_unfold, hr, hrr, ExceptT.bindCont]
 
 end Zig

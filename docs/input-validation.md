@@ -41,8 +41,9 @@ calls require a pointer to a recognized function type and check every address-ta
 target of that type; an `anyopaque` pointee is not callable. Successful signature comparisons
 are cached by ordered function-table and type-ID pairs, while every call retains its arity,
 operand/form checks and diagnostics. Spawn calls
-compare their captured tuple's fields with the worker's parameters; the worker result remains
-discarded by the established thread model.
+compare their captured tuple's fields with the worker's parameters. Supported workers return
+void or noreturn; Thread.spawn also accepts u8. Io.Group workers return void or noreturn.
+The worker result remains discarded by the established thread model.
 
 Allocator create/alloc/alignedAlloc/dupe results must admit the model’s `OutOfMemory` error;
 open error sets are accepted. Recognized allocator/thread calls keep their existing model exemptions, with runtime arity,

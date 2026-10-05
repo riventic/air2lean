@@ -64,23 +64,23 @@ private def number : Parser Json := do
   | .ok n => return .num n
 
 mutual
-private partial def value (depth : Nat) : Parser Json := do
+private partial def value (depthLimit depth : Nat) : Parser Json := do
   let c ← peek!
   let result ←
     if c == '{' then
-      if depth ≥ maxDepth then fail s!"JSON nesting exceeds {maxDepth} containers"
+      if depth ≥ depthLimit then fail s!"JSON nesting exceeds {depthLimit} containers"
       skip; ws
       if (← peek!) == '}' then
         skip
         pure (Json.mkObj [])
-      else object depth {} []
+      else object depthLimit depth {} []
     else if c == '[' then
-      if depth ≥ maxDepth then fail s!"JSON nesting exceeds {maxDepth} containers"
+      if depth ≥ depthLimit then fail s!"JSON nesting exceeds {depthLimit} containers"
       skip; ws
       if (← peek!) == ']' then
         skip
         pure (.arr #[])
-      else array depth #[]
+      else array depthLimit depth #[]
     else if c == '"' then
       skip
       Json.str <$> Lean.Json.Parser.str
@@ -92,33 +92,34 @@ private partial def value (depth : Nat) : Parser Json := do
   ws
   return result
 
-private partial def object (depth : Nat) (seen : Std.HashSet String)
+private partial def object (depthLimit depth : Nat) (seen : Std.HashSet String)
     (fields : List (String × Json)) : Parser Json := do
   skipString "\""
   let key ← Lean.Json.Parser.str
   if seen.contains key then fail s!"duplicate JSON object key {repr key}"
   ws; skipString ":"; ws
-  let v ← value (depth + 1)
+  let v ← value depthLimit (depth + 1)
   let c ← any
   if c == '}' then return Json.mkObj ((key, v) :: fields)
   else if c == ',' then
     ws
-    object depth (seen.insert key) ((key, v) :: fields)
+    object depthLimit depth (seen.insert key) ((key, v) :: fields)
   else fail "expected ',' or '}' in JSON object"
 
-private partial def array (depth : Nat) (items : Array Json) : Parser Json := do
-  let v ← value (depth + 1)
+private partial def array (depthLimit depth : Nat) (items : Array Json) : Parser Json := do
+  let v ← value depthLimit (depth + 1)
   let c ← any
   if c == ']' then return .arr (items.push v)
   else if c == ',' then
     ws
-    array depth (items.push v)
+    array depthLimit depth (items.push v)
   else fail "expected ',' or ']' in JSON array"
 end
 
-/-- Decode without discarding any repeated object key, including escaped spelling aliases. -/
-def parse (contents : String) : Except String Json := do
+/-- Decode without discarding repeated keys, including escaped spelling aliases. AIR uses
+the default depth bound; expanded registry shapes pass their own bounded limit. -/
+def parse (contents : String) (depthLimit : Nat := maxDepth) : Except String Json := do
   if contents.utf8ByteSize > maxBytes then
     throw s!"AIR JSON exceeds {maxBytes} UTF-8 bytes"
-  Parser.run (ws *> value 0 <* eof) contents
+  Parser.run (ws *> value depthLimit 0 <* eof) contents
 end Air2Lean.StrictJson

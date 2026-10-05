@@ -12,6 +12,11 @@ private def rejected (r : Except String Unit) (fragment : String) : Bool :=
   | .error e => (e.splitOn fragment).length > 1
   | .ok _ => false
 
+private def exactError (r : Except String Unit) (expected : String) : Bool :=
+  match r with
+  | .error error => error == expected
+  | .ok _ => false
+
 private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret : TyId)
     (body : Array Inst := #[]) (globals : Array Global := #[]) : Func := {
   zigVersion := "0.16.0"
@@ -171,6 +176,33 @@ private def validationChecks : IO Unit := do
   require (accepted (checkProgram #[indirect, target])) "known indirect function-pointer target rejected"
   require (rejected (checkProgram #[indirect, { target with params := #[], body := #[] }]) "expected 0")
     "indirect signature mutation accepted"
+  -- One bucket contains two ordered targets, with an unrelated missing reference
+  -- between them. The unrelated bucket must not affect this call's diagnostics.
+  let reference (name : String) (ty : TyId) : Global := {
+    name := some name, ty, isConst := true, threadlocal := false, isExtern := false,
+    init := some (.func name false)
+  }
+  let bucketed := { indirect with
+    types := indirect.types.push (.other "fn () void")
+    layouts := indirect.layouts.push {}
+    globals := #[reference "targetSecond" 1, reference "unrelatedMissing" 4,
+      reference "target" 1, reference "targetSecond" 1]
+  }
+  let second := { target with name := "targetSecond" }
+  require (accepted (checkProgram #[bucketed, target, second])) "ordered indirect targets rejected"
+  require (exactError (checkProgram #[bucketed, { target with params := #[], body := #[] },
+      { second with params := #[], body := #[] }])
+    "indirect: inst 2: callee 'targetSecond' has 1 arguments, expected 0")
+    "indirect target bucket changed first signature error"
+  require (exactError (checkProgram #[bucketed, { target with params := #[], body := #[] }, second])
+    "indirect: inst 2: callee 'target' has 1 arguments, expected 0")
+    "indirect target bucket omitted its second target"
+  require (exactError (checkProgram #[bucketed, target])
+    "indirect: inst 2: indirect target 'targetSecond' has no AIR file")
+    "indirect target bucket changed first missing target"
+  require (exactError (checkProgram #[bucketed, second])
+    "indirect: inst 2: indirect target 'target' has no AIR file")
+    "indirect target bucket omitted its second missing target"
   let parseOK (s : String) := (StrictJson.parse s).toOption.isSome
   let duplicate (s : String) : Bool := match StrictJson.parse s with
     | .error e => decide ((e.splitOn "duplicate JSON object key").length > 1)
@@ -186,6 +218,40 @@ private def validationChecks : IO Unit := do
     "depth limit bypassed"
   require (parseOK (String.join (List.replicate 128 "[") ++ "0" ++ String.join (List.replicate 128 "]")))
     "depth boundary rejected"
+  let packed (types : Array Ty) (ty : TyId) (value : String) :=
+    Raw.parsePackedLit "packed" types #[("x", ty)] (".{ .x = " ++ value ++ " }")
+  for (value, encoding) in #[("0", (0 : Int)), ("255", 255)] do
+    require ((packed #[.int false 8] 0 value).toOption == some encoding)
+      "packed u8 boundary changed"
+  for (value, encoding) in #[("-128", (128 : Int)), ("127", 127)] do
+    require ((packed #[.int true 8] 0 value).toOption == some encoding)
+      "packed i8 boundary encoding changed"
+  for (signed, value) in #[(false, "256"), (false, "-1"), (true, "128"), (true, "-129")] do
+    require (exactError ((packed #[.int signed 8] 0 value).map (fun _ => ()))
+      s!"packed: packed field x value {value} does not fit its integer type")
+      "packed integer field wrapped before validation"
+  for (value, encoding) in #[("false", (0 : Int)), ("true", 1)] do
+    require ((packed #[.bool] 0 value).toOption == some encoding) "packed Boolean literal rejected"
+  require (exactError ((packed #[.bool] 0 "1").map (fun _ => ()))
+    "packed: packed field x requires true or false") "packed Boolean accepted an integer form"
+  let enumTypes : Array Ty := #[.int false 2, .enum "E" 0 true #[("zero", 0), ("two", 2)]]
+  require ((packed enumTypes 1 "2").toOption == some 2) "declared packed enum tag rejected"
+  require (exactError ((packed enumTypes 1 "1").map (fun _ => ()))
+    "packed: packed field x value 1 is not a declared enum tag") "undeclared packed enum tag accepted"
+  require (exactError ((packed enumTypes 1 "4").map (fun _ => ()))
+    "packed: packed field x value 4 does not fit its enum tag type") "packed enum tag wrapped"
+  require ((packed (enumTypes.set! 1 (.enum "E" 0 false #[("zero", 0)])) 1 "3").toOption == some 3)
+    "nonexhaustive packed enum rejected an in-range tag"
+  let nestedPacked : Array Ty := #[.int false 8, .struct "Inner" "packed" #[("value", 0)]]
+  require ((packed nestedPacked 1 "255").toOption == some 255) "packed nested backing boundary rejected"
+  for value in #["256", "-1"] do
+    require (exactError ((packed nestedPacked 1 value).map (fun _ => ()))
+      s!"packed: packed field x value {value} does not fit its packed backing type")
+      "nested packed backing wrapped"
+  require (Raw.packedWidth #[.int false 65536] 0 == some 65536) "direct wide scalar width changed"
+  require (Raw.packedWidth #[.bool] 0 == some 1) "Boolean scalar width changed"
+  require (Raw.packedWidth #[.void] 0 == none && Raw.packedWidth #[] 0 == none)
+    "unknown/nonpacked scalar width accepted"
   let mut dag : Array Ty := #[.int false 0]
   for _ in [:21] do
     let child := dag.size - 1
@@ -309,14 +375,16 @@ private def validationChecks : IO Unit := do
   let graphC := { broken with name := "graphC" }
   require (rejected (checkProgram #[graphA, graphB, graphC]) "inconsistent shared global 'tail'")
     "global cache leaked between ordered file-table pairs or changed the first error"
+  let spawnWorker := mkFunc "spawnWorker" #[.void, .int false 32] #[1] 0 #[
+    { id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 0, op := .ret .void }]
   let spawn := mkFunc "spawn" #[.int false 32, .tuple #[0], .struct "Thread.SpawnConfig" "auto" #[],
     .errorSet none, .thread, .errorUnion 3 4, .void] #[] 5 #[
-      { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "target"))
+      { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "spawnWorker"))
           #[.undef 2, .agg 1 #[.int 0 7]] },
       { id := 1, ty := 6, op := .ret (.inst 0) }]
-  require (accepted (checkProgram #[spawn, target])) "indexed spawn arguments rejected"
-  require (rejected (checkProgram #[spawn, { target with params := #[], body := #[] }])
-    "spawned callee 'target' has an incompatible argument count") "spawn argument index changed"
+  require (accepted (checkProgram #[spawn, spawnWorker])) "indexed spawn arguments rejected"
+  require (rejected (checkProgram #[spawn, { spawnWorker with params := #[], body := #[] }])
+    "worker 'spawnWorker' has 0 runtime parameters") "spawn argument index changed"
   let opaqueFn := mkFunc "opaque" #[.other "anyopaque", .ptr "one" true 0, .void] #[1] 2 #[
     { id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 2, op := .call (.inst 0) #[] },
     { id := 2, ty := 2, op := .ret .void }]
@@ -402,6 +470,30 @@ private def validationChecks : IO Unit := do
     let after := compatibleGlobalCached left right 0 0
     require (before.isSome == shouldAgree && after.isSome == shouldAgree)
       "local successful type cache changed value/layout equality or leaked between file tables"
+  let nullable := mkFunc "nullable" #[.int false 8, .ptr "c" false 0, .void] #[] 1 #[
+    { id := 0, ty := 2, op := .ret (.ptrNull 1) }]
+  require (accepted (checkProgram #[nullable])) "typed C-pointer null rejected"
+  let nonnullable := { nullable with types := nullable.types.set! 1 (.ptr "one" false 0) }
+  require (rejected (checkProgram #[nonnullable]) "incompatible type or value form")
+    "typed nonnullable pointer null accepted"
+  let allowzero := { nonnullable with layouts := nonnullable.layouts.set! 1 { allowzero := true } }
+  require (accepted (checkProgram #[allowzero])) "typed allowzero pointer null rejected"
+  let nullGlobal : Global := {
+    name := some "nullValue"
+    ty := 1
+    isConst := true
+    threadlocal := false
+    isExtern := false
+    init := some (.ptrNull 1)
+  }
+  let nullA := mkFunc "nullA" nullable.types #[] 2 #[] #[nullGlobal]
+  let nullB := mkFunc "nullB" #[.void, .int false 8, .ptr "c" false 1] #[] 0 #[] #[
+    { nullGlobal with ty := 2, init := some (.ptrNull 2) }]
+  require (compatibleGlobal nullA nullB 0 0) "cross-table global null identity rejected"
+  let nullChanged := { nullB with types := nullB.types.set! 1 (.int false 16) }
+  require (!compatibleGlobal nullA nullChanged 0 0) "global null pointee mismatch accepted"
+  let otherForm := { nullB with globals := #[{ nullB.globals[0]! with init := some (.undef 2) }] }
+  require (!compatibleGlobal nullA otherForm 0 0) "global null compared equal to an undefined pointer"
   IO.println "whole-program direct API and strict JSON checks passed"
 
 #eval validationChecks

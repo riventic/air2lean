@@ -94,6 +94,45 @@ def run(binary, baseline=None):
         assert len(cap["diagnostics"]) == 1 and cap["truncated"] and not cap["complete"]
         checks += 3
 
+        write(air, {"ok.json": function("ok")})
+        (air / "a-invalid.json").write_bytes(b"\xff")
+        (air / "b-unreadable.json").symlink_to(air / "absent-input")
+        (air / "c-directory.json").mkdir()
+        report = decode(invoke(binary, air), "rejected")
+        reads = [d for d in report["diagnostics"] if d["code"] == "INPUT_READ"]
+        assert [Path(d["file"]).name for d in reads] == ["a-invalid.json", "b-unreadable.json", "c-directory.json"]
+        assert all(d["category"] == "io_failure" and d["first_error_in_unit"] for d in reads)
+        assert any("non UTF-8 AIR input" in d["message"] for d in reads)
+        assert any("AIR input must be a regular file" in d["message"] for d in reads)
+        assert any(f["function"] == "ok" and f["local_check"] == "passed" for f in report["files"])
+        assert all(f["local_check"] == "blocked_or_rejected" and not f["normalized"]
+                   for f in report["files"] if Path(f["file"]).name != "ok.json")
+        assert output.read_text() == "sentinel\n"
+        (air / "c-directory.json").rmdir()
+        checks += 1
+
+        write(air, {"ok.json": function("ok")})
+        # A sparse logical oversize tests pre-open classification without allocating 64 MiB.
+        with (air / "a-oversize.json").open("wb") as oversized:
+            oversized.truncate(64 * 1024 * 1024 + 1)
+        report = decode(invoke(binary, air), "rejected")
+        limits = [d for d in report["diagnostics"] if d["code"] == "INPUT_LIMIT"]
+        assert len(limits) == 1 and Path(limits[0]["file"]).name == "a-oversize.json"
+        assert limits[0]["category"] == "resource_limit" and limits[0]["first_error_in_unit"]
+        assert any(d["code"] == "PREREQUISITE_SKIPPED" and
+                   d["prerequisites"] == ["readable_input_within_aggregate_budget"] for d in report["diagnostics"])
+        assert any(f["function"] == "ok" and f["local_check"] == "passed" for f in report["files"])
+        assert output.read_text() == "sentinel\n"
+        checks += 1
+
+        write(air, {"repeated.json": calls("repeated", "missing", "missing")})
+        report = decode(invoke(binary, air), "rejected")
+        missing = [d for d in report["diagnostics"] if d["code"] == "CALLEE_MISSING"]
+        assert [d["anchor"]["instruction"] for d in missing] == [0, 1]
+        assert all(d["dependency_chain"] == ["repeated", "missing"] for d in missing)
+        assert output.read_text() == "sentinel\n"
+        checks += 1
+
         branch = function("branches", [inst(0, "arg", 3, param=0), inst(7, "dbg_stmt", 1, line=42),
             inst(1, "cond_br", 2, [dict(ty=4, val="true")], **{"then": [
                 inst(10, "atomic_load", 0, [dict(inst=0)], order="unordered")], "else": [

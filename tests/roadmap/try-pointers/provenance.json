@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "tests/roadmap/try-pointers/try_pointers.zig",
+  "source_sha256": "aad39573829fc836459f05ea466e4d296751bd190610a7b0baa77e08e2207347",
+  "exporter": "zig-patch/air-json/json.zig",
+  "exporter_sha256": "7a663aa67fac34813d60f83172fa4a5a2f290bbc39099387ee19c73f6d6eb435",
+  "functions": [
+    "payload8",
+    "payload64",
+    "writeAlias",
+    "cleanup",
+    "coldPayload"
+  ],
+  "profile": {
+    "zig_version": "0.16.0",
+    "air_schema": 11,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "artifacts": {
+    "air/0.16.0/try_pointers.cleanup.json": "a1a1f372a79ebc1dd13af7349f9346cb990bf8005b9aa9c4c4907a2133ead37a",
+    "air/0.16.0/try_pointers.coldPayload.json": "83351578bc9ac67149e6609c1053bbb458a72230510cc802177e0b409127b354",
+    "air/0.16.0/try_pointers.payload64.json": "e97e77c00ade80ce72e47c307eccd058f7a67c6ccea33879cda1d336566a465e",
+    "air/0.16.0/try_pointers.payload8.json": "eeeade09da394e1944ccc372c352673996988a0891a00138b421ae90cf59d13b",
+    "air/0.16.0/try_pointers.writeAlias.json": "4abedd8face4e28e1f12b95967ffef65962b759cd486259243f9e912f2ad73d1",
+    "TryPointers/Gen.lean": "75a1a30ae2d0776e415327877a681d30cf184e494de43aa36f116d708ae733e5"
+  },
+  "qualification": {
+    "source_inspection": [
+      "0.14.1",
+      "0.15.2",
+      "0.16.0"
+    ],
+    "compiler_export": "pending",
+    "native": "pending",
+    "lean": "pending"
+  }
+}

@@ -830,6 +830,13 @@ const W = struct {
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
+            .try_ptr, .try_ptr_cold => {
+                const ty_pl = w.data(inst).ty_pl;
+                const extra = w.air.extraData(Air.TryPtr, ty_pl.payload);
+                try w.writeArgs(&.{extra.data.ptr});
+                try w.field("body");
+                try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
+            },
             .switch_br, .loop_switch_br => {
                 const sw = w.air.unwrapSwitch(inst);
                 try w.writeArgs(&.{sw.operand});
@@ -1216,6 +1223,18 @@ const W = struct {
             .uav => |uav| {
                 try w.field("global");
                 try w.j.write(try w.globalId(.{ .uav = uav }));
+                break;
+            },
+            // Fixed integer addresses have their entire address in byte_offset in all
+            // supported versions. Only zero has a qualified constant representation.
+            .int => {
+                if (off == 0) {
+                    try w.field("null");
+                    try w.j.write(true);
+                } else {
+                    try w.field("unsupported");
+                    try w.j.write("int");
+                }
                 break;
             },
             // A field of the struct or slice that the pointer `f.base` points to.

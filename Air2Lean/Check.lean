@@ -1,7 +1,9 @@
+import Std.Data.HashMap
+import Std.Data.HashSet
 import Air2Lean.Memory
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
-import Std.Data.HashMap
+import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
 import ZigLean.Vec
 
@@ -10,7 +12,7 @@ import ZigLean.Vec
 
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
-`[*c]T`, `allowzero` or bit-pointer, a memory access to a value that the memory model cannot
+an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
 encode (`modelLayout`), a pointer constant without a global, and a global that is `threadlocal`,
 `extern` or has no initial value. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
@@ -39,8 +41,7 @@ def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
   | some k => k < outputs
   | none => false
 
-/-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
-`allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
+/-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
     (id : TyId) (seen : Array TyId := #[]) : Except String Unit := do
@@ -60,8 +61,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
-    if l.allowzero then
-      throw s!"{fnName}: near line {line}: an `allowzero` pointer is outside the subset"
+    if nullablePtrTy types layouts id && l.isVolatile then
+      throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
+    if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
+      throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
     -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
     -- `hostSize` (`Zig.loadBits`).
     if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
@@ -79,26 +82,38 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       if (types[child]?.map isFnTy).getD false || types[child]? == some (.other "anyopaque") then
         pure ()
       else recur child
-    | "many" | "slice" => recur child
-    | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
-  | .array _ child _ => recur child
+    | "many" | "slice" | "c" => recur child
+    | _ => throw s!"{fnName}: near line {line}: pointer size '{size}' is outside the subset"
+  | .array _ child _ =>
+    if nullablePtrTy types layouts child then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    recur child
   | .vector _ child =>
     unless (match types[child]? with
       | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
       throw s!"{fnName}: near line {line}: a vector with lanes other than integers, floats or bool is outside the subset"
     recur child
-  | .optional child => recur child
+  | .optional child =>
+    if nullablePtrTy types layouts child then
+      throw s!"{fnName}: near line {line}: an optional C/allowzero pointer needs a separate null flag and is outside the qualified pointer fragment"
+    recur child
   | .errorUnion set payload => do
+    if nullablePtrTy types layouts payload then
+      throw s!"{fnName}: near line {line}: nullable pointer error-union payloads are outside the qualified pointer fragment"
     recur set
     recur payload
   | .errorSet _ => pure ()
   | .struct name layout fields =>
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
         integer, a `bool`, an enum or a packed struct: outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     match tag with
     | none =>
       -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
@@ -114,7 +129,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
       recur t
     fields.forM fun (_, fty) => recur fty
-  | .tuple fields => fields.forM recur
+  | .tuple fields =>
+    if fields.any (nullablePtrTy types layouts) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
@@ -138,12 +156,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
-  | some (.ptr "slice" ..) => pure (16, 8)
-  | some (.ptr ..) => pure (8, 8)
+  | some (.ptr size ..) =>
+    if nullablePtrTy types layouts id then
+      throw "a C/allowzero pointer stored as a memory value needs qualified null-byte encoding"
+    pure (if size == "slice" then 16 else 8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
   | some .io => pure (16, 8)
   | some (.optional c) =>
+    if nullablePtrTy types layouts c then
+      throw "an optional C/allowzero pointer needs a separate null flag"
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
@@ -234,6 +256,9 @@ structure CheckCtx where
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
   places : Array InstId
+  /-- Internal summaries populated by `check` only after all nested IDs are unique.
+  Bare/public checker contexts default to the uncached path. -/
+  tryErrorExits : Std.HashMap InstId Bool := {}
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -273,6 +298,12 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- Nullable pointer projections/arithmetic are not yet part of the qualified fragment.
+Cast to a nonnullable pointer after a null check before projecting or constructing a slice. -/
+def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
+    cx.fail line "nullable pointer arithmetic, indexing and projections require a nonnull cast first (outside the qualified pointer fragment)"
+
 /-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
 (`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
 def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -288,6 +319,7 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  cx.rejectNullableProjection line ptr
   let pty ← cx.memPtrTy line ptr
   if let some (.ptr "one" _ c) := cx.types[pty]? then
     if let some (.vector _ e) := cx.types[c]? then
@@ -304,13 +336,115 @@ def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String 
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
 
+/-- Reachable error-body outcomes. `valid` excludes falling off a sequence and
+unsupported loop control; `branches` tracks block exits until an enclosing block consumes them. -/
+private structure TryErrorFlow where
+  valid : Bool
+  branches : Std.HashSet InstId := {}
+  deriving Inhabited
+
+private def TryErrorFlow.merge (a b : TryErrorFlow) : TryErrorFlow :=
+  ⟨a.valid && b.valid, a.branches.union b.branches⟩
+
+/-- Separate contracts for pointer-try error bodies and outward-terminal block bodies.
+Both maps are empty if any nested instruction ID is duplicated. -/
+structure ControlFlowSummaries where
+  tryErrorExits : Std.HashMap InstId Bool := {}
+  outwardBlocks : Std.HashMap InstId Bool := {}
+  deriving Inhabited
+
+private structure ControlFlowCache where
+  summaries : ControlFlowSummaries := {}
+  ids : Std.HashSet InstId := {}
+  unique : Bool := true
+  deriving Inhabited
+
+/-- Compute each child flow once, bottom-up, including unreachable child bodies for
+later checking. Only reachable outcomes contribute to the parent flow: the first
+terminator ends its sequence and a block consumes only its own branch. No diagnostics
+are emitted here. The same traversal records every ID, including unreachable children;
+the public helper discards both maps on any duplicate. -/
+private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlowCache) :
+    TryErrorFlow × ControlFlowCache :=
+  -- Array.foldr traverses flat siblings right-to-left without recursive pending
+  -- frames for `rest`; this function recurses only into nested instruction arrays.
+  insts.foldr (init := ((⟨false, {}⟩ : TryErrorFlow), cache)) fun inst (later, cache) =>
+    let cache := { cache with
+      unique := cache.unique && !cache.ids.contains inst.id
+      ids := cache.ids.insert inst.id }
+    match inst.op with
+    | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
+    | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
+    | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
+    | .«repeat» _ | .switchDispatch .. => (⟨false, {}⟩, cache)
+    | .loop body =>
+      let (_, cache) := summarizeTryErrors body cache
+      (⟨false, {}⟩, cache)
+    | .loopSwitchBr _ cases e =>
+      let (_, cache) := summarizeTryErrors e cache
+      let cache := cases.foldl (init := cache) fun cache c =>
+        (summarizeTryErrors c.body cache).2
+      (⟨false, {}⟩, cache)
+    | .condBr _ t e =>
+      let (thenFlow, cache) := summarizeTryErrors t cache
+      let (elseFlow, cache) := summarizeTryErrors e cache
+      (thenFlow.merge elseFlow, cache)
+    | .switchBr _ cases e =>
+      let (elseFlow, cache) := summarizeTryErrors e cache
+      cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
+        let (caseFlow, cache) := summarizeTryErrors c.body cache
+        (flow.merge caseFlow, cache)
+    | .block body =>
+      let (inner, cache) := summarizeTryErrors body cache
+      let summaries := { cache.summaries with
+        outwardBlocks := cache.summaries.outwardBlocks.insert inst.id
+          (inner.valid && !inner.branches.contains inst.id) }
+      let cache := { cache with summaries }
+      let flow := if inner.branches.contains inst.id then
+          (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
+        else inner
+      (flow, cache)
+    | .«try» _ errBody | .tryPtr _ errBody =>
+      let (errorFlow, cache) := summarizeTryErrors errBody cache
+      let summaries := { cache.summaries with
+        tryErrorExits := cache.summaries.tryErrorExits.insert inst.id
+          (errorFlow.valid && errorFlow.branches.isEmpty) }
+      let cache := { cache with summaries }
+      (errorFlow.merge later, cache)
+    | _ => (later, cache)
+
+/-- One bottom-up traversal for both control contracts and ID uniqueness. A block may
+exit to an enclosing block; a pointer-try error body must exit the function instead. -/
+def controlFlowSummaries (body : Array Inst) : ControlFlowSummaries :=
+  let cache := (summarizeTryErrors body {}).2
+  if cache.unique then cache.summaries else {}
+
+/-- Every reachable path must exit the function, with no unconsumed block branch.
+Loops, fallthrough and switches without an explicit else are conservative failures. -/
+def tryErrorBodyExits (body : Array Inst) : Bool :=
+  let flow := (summarizeTryErrors body {}).1
+  flow.valid && flow.branches.isEmpty
+
+/-- Scalar or vector integer shape: lane count, signedness and element width. -/
+def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
+  match cx.types[t]? with
+  | some (.int s n) => some (none, s, n)
+  | some (.vector len c) => match cx.types[c]? with
+    | some (.int s n) => some (some len, s, n)
+    | _ => none
+  | _ => none
+
+/-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
+def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
+
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
-  checkOp cx line inst.ty inst.op
+  checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
 
-partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except String Nat := do
+partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
+    (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   match op with
   | .arith _ mode _ _ =>
@@ -323,6 +457,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         | t => t
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
+    pure line
+  | .countBits _ a =>
+    let some aty := cx.valTy? a | cx.fail line "bit count operand has no known type"
+    let some (alen, _, bits) := cx.intShape? aty
+      | cx.fail line "bit count requires an integer or integer vector operand"
+    let some (rlen, signed, width) := cx.intShape? ty
+      | cx.fail line "bit count result must be an unsigned integer or integer vector"
+    unless alen == rlen && !signed && width == bitCountWidth bits do
+      cx.fail line "bit count result must preserve vector length and have the unsigned count width"
+    pure line
+  | .shlWithOverflow a b =>
+    let some aty := cx.valTy? a | cx.fail line "shift-overflow operand has no known type"
+    let some bty := cx.valTy? b | cx.fail line "shift-overflow count has no known type"
+    let some (alen, _, abits) := cx.intShape? aty
+      | cx.fail line "shift-overflow requires an integer or integer vector operand"
+    let some (blen, bsign, bbits) := cx.intShape? bty
+      | cx.fail line "shift-overflow count must be an unsigned integer or integer vector"
+    unless alen == blen && !bsign && bbits == bitCountWidth (abits - 1) do
+      cx.fail line "shift-overflow count must have the unsigned Log2Int width and preserve vector length"
+    let some (.tuple fields) := cx.types[ty]?
+      | cx.fail line "shift-overflow result must be a pair tuple"
+    unless fields.size == 2 && fields[0]? == some aty do
+      cx.fail line "shift-overflow result must pair the operand type with its overflow bit"
+    let some flagTy := fields[1]? | cx.fail line "shift-overflow result is missing its overflow bit"
+    unless cx.intShape? flagTy == some (alen, false, 1) do
+      cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
   | .bitcast a =>
     let sourceTy := cx.valTy? a
@@ -343,6 +503,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
+      if isOptPtr ty && nullablePtrTy cx.types cx.layouts aty then
+        cx.fail line "casting a C/allowzero pointer to an optional pointer needs explicit null wrapping and is outside the qualified pointer fragment"
       if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
@@ -381,6 +543,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
+    cx.rejectNullableProjection line base
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
@@ -388,6 +551,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
     pure line
   | .fieldParentPtr fieldPtr _ =>
+    cx.rejectNullableProjection line fieldPtr
     -- `@fieldParentPtr` on a place would need to walk back up the place's own field path
     -- (`Emit.lean`'s `FCtx.computePlaces`), which is outside the subset for now (M20); it needs a
     -- real memory pointer, whose parent struct's offsets the model must know.
@@ -401,6 +565,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
+    cx.rejectNullableProjection line p
     -- The result is a pointer to an item: its child is the item type.
     if let some pty := cx.valTy? p then
       if let some (.ptr "one" _ c) := cx.types[pty]? then
@@ -409,11 +574,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     cx.knownSize line (ptrChild cx.types ty).get!
     pure line
   | .memcpy dst src =>
+    cx.rejectNullableProjection line dst
+    cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
     let dty ← cx.memPtrTy line dst
     cx.knownSize line (itemTy cx.types dty).get!
     pure line
+  | .wrapOptional p =>
+    if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
+      cx.fail line "wrapping a C/allowzero pointer as an optional needs explicit null wrapping"
+    pure line
+  | .slice p _ => cx.rejectNullableProjection line p; pure line
   | .arrayToSlice p =>
+    cx.rejectNullableProjection line p
     let _ ← cx.memPtrTy line p
     pure line
   | .call callee _ =>
@@ -434,16 +607,52 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let _ ← checkInsts cx line thenBody
     let _ ← checkInsts cx line elseBody
     pure line
-  | .switchBr _ cases elseBody => do
+  | .switchBr _ cases elseBody | .loopSwitchBr _ cases elseBody => do
     for c in cases do
       let _ ← checkInsts cx line c.body
     let _ ← checkInsts cx line elseBody
+    pure line
+  | .tryPtr p errBody => do
+    let pty ← cx.memPtrTy line p
+    let some (.ptr "one" isConst unionTy) := cx.types[pty]?
+      | cx.fail line "try_ptr requires a single pointer to an error union"
+    let some (.errorUnion _ payload) := cx.types[unionTy]?
+      | cx.fail line "try_ptr requires a pointer to an error union"
+    unless cx.types[ty]? == some (.ptr "one" isConst payload) do
+      cx.fail line "try_ptr result must be a pointer to the same payload with matching constness"
+    for ptrTy in #[pty, ty] do
+      let layout := cx.layouts[ptrTy]?.getD {}
+      if layout.isVolatile then
+        cx.fail line "try_ptr through a volatile pointer is outside the subset"
+      if layout.hostSize != 0 then
+        cx.fail line "try_ptr through a bit-pointer is outside the subset"
+      if layout.ptrAlign.isNone then
+        cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
+    checkMemTy fnName cx.types cx.layouts line unionTy
+    let exits := match cachedTryExit with
+      | some exits => exits
+      | none => tryErrorBodyExits errBody
+    unless exits do
+      cx.fail line "try_ptr error body must exit without fallthrough"
+    let nested := errBody.foldl flattenInst #[]
+    let emptyTargets : Std.HashSet InstId := {}
+    let localTargets := nested.foldl (init := emptyTargets) fun targets i =>
+      match i.op with | .block _ | .loop _ => targets.insert i.id | _ => targets
+    for i in nested do
+      match i.op with
+      | .br target _ | .«repeat» target =>
+        unless localTargets.contains target do
+          cx.fail line "try_ptr error body must exit the function, not branch outside its body"
+      | _ => pure ()
+    let _ ← checkInsts cx line errBody
     pure line
   | .«try» _ errBody => do
     let _ ← checkInsts cx line errBody
     pure line
   | .line n => pure n
   | .asm _ _ clobbers outputs inputs =>
+    if op.isSpinHint && cx.types[ty]? != some .void then
+      throw s!"{fnName}: near line {line}: a spin hint must return void"
     -- Register operands only (M21): every operand value is an integer, so `Emit.lean` can map it
     -- to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
@@ -490,6 +699,20 @@ partial def checkInsts (cx : CheckCtx) (line : Nat) (insts : Array Inst) : Excep
 
 end
 
+/-- Zero constants are permitted only for a nonoptional C/allowzero pointer. -/
+partial def checkNullConstants (fnName : String) (types : Array Ty) (layouts : Array Layout)
+    (v : Val) : Except String Unit := do
+  match v with
+  | .ptrNull ty =>
+    unless nullablePtrTy types layouts ty do
+      throw s!"{fnName}: address-zero constant requires a C/allowzero pointer type"
+  | .agg _ elems => elems.forM (checkNullConstants fnName types layouts)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkNullConstants fnName types layouts v
+  | .sliceConst _ p l =>
+    checkNullConstants fnName types layouts p
+    checkNullConstants fnName types layouts l
+  | _ => pure ()
+
 /-- A pointer constant without a global in `v` (`Val.ptrOther`). -/
 partial def Val.ptrOther? (v : Val) : Option String :=
   match v with
@@ -527,12 +750,54 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   if g.isExtern then throw s!"{f.name}: global {what}: `extern` is outside the subset"
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
+  checkNullConstants f.name f.types f.layouts init
   checkPointerPresence init fun k =>
     s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty
+
+/-- Check loop-switch selector contracts and lexical targets even for direct Core callers. -/
+partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
+    (targets : Array (InstId × Ty) := #[]) : Except String Unit := do
+  let valTy (v : Val) : Option Ty := match v with
+    | .bool _ => some .bool
+    | _ => (cx.valTy? v).bind (cx.types[·]?)
+  for i in body do
+    let recur (b : Array Inst) := checkDispatchScopes cx b targets
+    match i.op with
+    | .loopSwitchBr initial cases elseBody =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: loop_switch_br must have noreturn type"
+      let some selectorTy := valTy initial
+        | cx.fail 0 s!"inst {i.id}: loop-switch selector has no known type"
+      unless (match selectorTy with
+        | .int .. | .bool | .enum .. | .errorSet _ => true | _ => false) do
+        cx.fail 0 s!"inst {i.id}: loop-switch selector type is outside the scalar subset"
+      for c in cases do
+        for v in c.items ++ c.ranges.flatMap (fun (lo, hi) => #[lo, hi]) do
+          unless valTy v == some selectorTy do
+            cx.fail 0 s!"inst {i.id}: loop-switch case type differs from selector"
+        unless c.ranges.isEmpty || (match selectorTy with | .int .. => true | _ => false) do
+          cx.fail 0 s!"inst {i.id}: loop-switch ranges require an integer selector"
+        unless !c.items.isEmpty || !c.ranges.isEmpty do
+          cx.fail 0 s!"inst {i.id}: empty loop-switch case"
+        checkDispatchScopes cx c.body (targets.push (i.id, selectorTy))
+      checkDispatchScopes cx elseBody (targets.push (i.id, selectorTy))
+    | .switchDispatch target v =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: switch_dispatch must have noreturn type"
+      let some (_, selectorTy) := targets.find? (·.1 == target)
+        | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
+      unless valTy v == some selectorTy do
+        cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
+    | .block b | .loop b | .«try» _ b | .tryPtr _ b => recur b
+    | .condBr _ t e => recur t; recur e
+    | .switchBr _ cases e =>
+      for c in cases do recur c.body
+      recur e
+    | _ => pure ()
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
@@ -555,14 +820,26 @@ def check (f : Func) : Except String Unit := do
           checkMemTy f.name f.types f.layouts 0 c
   for g in f.globals do
     checkGlobal f g
+  let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
+      if let some vty := v.constTy? then
+        unless checkedConstTypes.contains vty do
+          checkTy f.name f.types f.layouts 0 vty
+          checkedConstTypes := checkedConstTypes.insert vty
+      checkNullConstants f.name f.types f.layouts v
       checkPointerConstant f v
         (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
         (fun pa ga => s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
           outside the subset")
+  -- Public `check` accepts unnormalized input: duplicate IDs disable the cache,
+  -- without introducing a prepass diagnostic or changing subsequent check order.
+  let tryErrorExits := if insts.any (fun i => match i.op with | .tryPtr .. => true | _ => false) then
+      (controlFlowSummaries f.body).tryErrorExits
+    else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-                         instTys := insts.map fun i => (i.id, i.ty), places }
+                         instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits }
+  checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
 
@@ -577,14 +854,12 @@ structure OperandTypes where
 
 def Func.operandTypes (f : Func) : OperandTypes := Id.run do
   let insts := f.allInsts
-  let mut instructions : Std.HashMap InstId TyId := {}
-  for i in insts do
-    unless instructions.contains i.id do instructions := instructions.insert i.id i.ty
+  let index := ModelRegistry.valueTypeIndex f.types insts
   return {
     insts
-    instructions
-    boolId := f.types.findIdx? (· == .bool)
-    voidId := f.types.findIdx? (· == .void)
+    instructions := index.instructions
+    boolId := index.boolType
+    voidId := index.voidType
   }
 
 /-- A normalized operand's type, using a function's precomputed index. -/
@@ -648,30 +923,6 @@ def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
 
 private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
 
-private structure SpawnMessages where
-  missingTuple : Unit → String
-  notTuple : Unit → String
-  count : Unit → String
-  argument : Nat → String
-
-/-- Validate the worker tuple with one shared policy. Newly successful type pairs
-are returned only after the entire signature succeeds, so callers publish caches
-transactionally. Local duplicate pairs preserve the cached caller's comparison order. -/
-private def checkSpawnSignatureWith (f target : Func) (args : Array Val) (k : Nat)
-    (index : OperandTypes) (sameType : TyId → TyId → Bool) (messages : SpawnMessages) :
-    Except String (Array (TyId × TyId)) := do
-  let some tuple := args[k]?.bind index.valTy? | throw (messages.missingTuple ())
-  let some (.tuple fields) := f.types[tuple]? | throw (messages.notTuple ())
-  unless fields.size == target.params.size do throw (messages.count ())
-  let mut seen : Std.HashSet (TyId × TyId) := {}
-  let mut pairs := #[]
-  for (ty, n) in fields.zipIdx do
-    let pair := (ty, target.params[n]!)
-    unless seen.contains pair || sameType pair.1 pair.2 do throw (messages.argument n)
-    seen := seen.insert pair
-    pairs := pairs.push pair
-  return pairs
-
 /-- Cache structural equality only for an exact ordered function-table/type-ID pair.
 Every call still checks its arity, operand types/forms and diagnostic context; only an
 entirely successful signature check publishes new pairs. Untyped bool/void literals do
@@ -722,6 +973,8 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
     unless integerFits signed bits n do throw s!"{f.name}: enum constant '{name}' does not fit its tag type"
     if exhaustive && !fields.any (·.2 == n) then
       throw s!"{f.name}: enum constant '{name}' has no field with tag {n}"
+  | .ptrNull _, .ptr .. =>
+    unless nullablePtrTy f.types f.layouts expected do fail
   | .bool _, .bool | .void, .void | .optNull _, .optional _
   | .ptrConst .., .ptr "one" .. | .ptrConst .., .ptr "many" ..
   | .ptrConst .., .ptr "c" .. | .ptrOther .., .ptr .. => pure ()
@@ -925,21 +1178,118 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId)
     if l.sentinel && fn == .remap then
       throw s!"{f.name}: a remap of a slice with a sentinel is outside the subset"
 
-/-- A call to `Thread.spawn`: `args[1]` (the `.{...}` args tuple) must have exactly one field.
-`Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),
-so `Emit.lean` needs the callee applied to exactly one Lean term; a 0- or 2+-field args tuple is
-outside the subset (v1, `docs/std-models.md` §Thread model). -/
-def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val)
-    (index : OperandTypes := f.operandTypes) : Except String Unit := do
-  let tyOf := index.valTy?
+/-- Compare argument types across per-function type tables. Pointer values keep their
+identity; the source alignment must satisfy the target and mutable pointers may become
+const. Other implicit `@call` coercions require an explicit source cast before capture. -/
+private abbrev SpawnTyCache := Std.HashMap (TyId × TyId × Bool) Bool
+
+/-- Completed pairs are shared across sibling fields. Cycle assumptions remain
+local to the current recursion path and are never inserted as completed checks. -/
+private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
+    (seen : Array (TyId × TyId × Bool)) (allowPtrCoercion : Bool) :
+    StateM SpawnTyCache Bool := do
+  let key := (a, b, allowPtrCoercion)
+  if seen.contains key then return true
+  if let some result := (← get)[key]? then return result
+  let recur := fun x y => sameSpawnTyCached source target x y (seen.push key) false
+  let fields := fun (xs ys : Array (String × TyId)) => do
+    if xs.size != ys.size then return false
+    for (x, y) in xs.zip ys do
+      if x.1 != y.1 then return false
+      unless ← recur x.2 y.2 do return false
+    return true
+  let result ← match source.types[a]?, target.types[b]? with
+    | some (.ptr sz c x), some (.ptr tz d y) => do
+      let sl := source.layouts[a]?.getD {}
+      let tl := target.layouts[b]?.getD {}
+      if !(sz == tz && (if allowPtrCoercion then !c || d else c == d) &&
+          (if allowPtrCoercion then decide (sl.ptrAlign.getD 1 ≥ tl.ptrAlign.getD 1)
+           else sl.ptrAlign == tl.ptrAlign) &&
+          sl.sentinel == tl.sentinel && sl.isVolatile == tl.isVolatile &&
+          sl.hostSize == tl.hostSize && sl.bitOffset == tl.bitOffset) then return false
+      recur x y
+    | some (.array n x s), some (.array m y t) =>
+      if n == m && s == t then recur x y else pure false
+    | some (.vector n x), some (.vector m y) => if n == m then recur x y else pure false
+    | some (.optional x), some (.optional y) => recur x y
+    | some (.errorUnion sx x), some (.errorUnion sy y) => do
+      unless ← recur sx sy do return false
+      recur x y
+    | some (.struct n l xs), some (.struct m k ys) =>
+      if n == m && l == k then fields xs ys else pure false
+    | some (.enum n x e fs), some (.enum m y d gs) => do
+      if !(n == m && e == d) then return false
+      unless ← recur x y do return false
+      pure (fs == gs)
+    | some (.union n l tx xs), some (.union m k ty ys) => do
+      if !(n == m && l == k) then return false
+      unless ← fields xs ys do return false
+      match tx, ty with
+      | none, none => pure true
+      | some x, some y => recur x y
+      | _, _ => pure false
+    | some (.tuple xs), some (.tuple ys) => do
+      if xs.size != ys.size then return false
+      for (x, y) in xs.zip ys do
+        unless ← recur x y do return false
+      return true
+    | some x, some y => pure (x == y)
+    | _, _ => pure false
+  modify (·.insert key result)
+  return result
+
+partial def sameSpawnTy (source target : Func) (a b : TyId)
+    (seen : Array (TyId × TyId × Bool) := #[]) (allowPtrCoercion : Bool := true) : Bool :=
+  (sameSpawnTyCached source target a b seen allowPtrCoercion).run' {}
+
+/-- Capture exactly the worker's runtime parameters. Zero fields are valid; every field
+is copied as a value, including pointer identity. Ownership remains an explicit proof
+obligation on the captured target, not an automatic exclusive transfer. -/
+def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (args : Array Val)
+    (operandIndex : OperandTypes := f.operandTypes) : Except String Unit := do
+  unless args.size == k + 1 do
+    throw s!"{f.name}: {callee} has {args.size} runtime arguments, expected {k + 1}"
+  let tyOf := operandIndex.valTy?
   let some argsTy := args[k]?.bind tyOf
     | throw s!"{f.name}: a call to {callee} has no args-tuple type"
-  match f.types[argsTy]? with
-  | some (.tuple fields) =>
-    if fields.size != 1 then
-      throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields; only exactly 1 is \
-        in the subset (v1, docs/std-models.md §Thread model)"
-  | _ => throw s!"{f.name}: {callee}'s args argument is not a tuple"
+  let some (.tuple fields) := f.types[argsTy]?
+    | throw s!"{f.name}: {callee}'s args argument is not a tuple"
+  unless fields.size == worker.params.size do
+    throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields, but worker '{worker.name}' has {worker.params.size} runtime parameters"
+  let mut completed : SpawnTyCache := {}
+  for index in [:fields.size] do
+    let (compatible, cache) := (sameSpawnTyCached f worker fields[index]! worker.params[index]! #[] true).run completed
+    completed := cache
+    unless compatible do
+      throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
+  let validRet := match worker.types[worker.ret]? with
+    | some .void | some .noreturn => true
+    | some (.int false 8) => callee == "Thread.spawn"
+    | _ => false
+  unless validRet do
+    throw s!"{f.name}: {callee} worker '{worker.name}' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
+
+/-- Progress model boundaries must preserve the source result shape and error outcome. -/
+def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array Val)
+    (ret : TyId) : Except String Unit := do
+  unless args.isEmpty do
+    throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 0"
+  match fn with
+  | .yield =>
+    let some (.errorUnion errors payload) := f.types[ret]?
+      | throw s!"{f.name}: Thread.yield must return an error union with void payload"
+    unless f.types[payload]? == some .void do
+      throw s!"{f.name}: Thread.yield must return an error union with void payload"
+    match f.types[errors]? with
+    | some (.errorSet none) => pure ()
+    | some (.errorSet (some names)) =>
+      unless names.contains "SystemCannotYield" do
+        throw s!"{f.name}: Thread.yield result must include error.SystemCannotYield"
+    | _ => throw s!"{f.name}: Thread.yield result must have an error set"
+  | .spinLoopHint =>
+    unless f.types[ret]? == some .void do
+      throw s!"{f.name}: '{callee}' must return void"
+  | _ => pure ()
 
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
@@ -1016,13 +1366,12 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 2
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
-      checkThreadSpawn f callee 1 args index
     | .join => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
+    | .yield | .spinLoopHint => checkProgressCall f callee fn args ret
     | .groupAsync | .groupConcurrent =>
       count 3
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
       require (if fn == .groupAsync then unit else errorUnit) "result"
-      checkThreadSpawn f callee 2 args index
     | .groupAwait | .groupCancel =>
       count 2
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
@@ -1054,14 +1403,27 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
         checkFutex 0 1
         require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
+/-- Preserve reference traversal order within each exact function-type bucket. -/
+private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
+  let mut targetLists : Std.HashMap String (List String) := {}
+  for (typ, callee) in refs do
+    targetLists := targetLists.insert typ (callee :: targetLists.getD typ [])
+  return targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
+    ({} : Std.HashMap String (Array String))
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
 function or has a model (`allocFn?`, `threadFn?`). -/
-def checkProgram (funcs : Array Func) : Except String Unit := do
+def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
+    (profile : Option BuildProfile := none) : Except String Unit := do
+  unless models.isEmpty do
+    let some profile := profile | throw "external model bindings require a checked program profile"
+    ModelRegistry.check models profile funcs
+  let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let indexes ← checkSharedDefinitions funcs
-  let refs := fnRefs funcs
-  let mem := memoryFunctions funcs
+  let targets := referenceTargets (fnRefs funcs)
+  let mem := memoryFunctions funcs (models.map (·.symbol))
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
   let lookupFunction (name : String) : Option (Nat × Func) := do
@@ -1074,31 +1436,28 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
       if let .call (.inst p) args := i.op then
         let some tn := index.calleeFnTy? f p
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
-        for (typ, callee) in refs do
-          if typ == tn then
-            let some (targetIndex, target) := lookupFunction callee
-              | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
-            signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+        for callee in targets.getD tn #[] do
+          let some (targetIndex, target) := lookupFunction callee
+            | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
+          signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+      if let .call (.func callee noreturn _) _ := i.op then
+        if let some fn := threadFn? callee then
+          if fn == .yield || fn == .spinLoopHint then
+            if noreturn then throw s!"{f.name}: progress hint '{callee}' cannot be noreturn"
       if let .call (.func callee false spawnFn) args := i.op then
         checkModelSignature f callee args i.ty index
         if (allocFn? callee).isNone && (threadFn? callee).isNone then
           if let some (targetIndex, target) := lookupFunction callee then
             signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
-        if let some k := (threadFn? callee).bind (·.spawnArgs?) then
-          let some worker := spawnFn
-            | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-          let some (targetIndex, target) := lookupFunction worker
-            | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-          let key (x y : TyId) := ((fileIndex, targetIndex), (x, y))
-          let pairs ← checkSpawnSignatureWith f target args k index
-            (fun x y => signatures.contains (key x y) || compatibleType f target x y)
-            {
-              missingTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args have no type"
-              notTuple := fun _ => s!"{f.name}: inst {i.id}: spawn args are not a tuple"
-              count := fun _ => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument count"
-              argument := fun n => s!"{f.name}: inst {i.id}: spawned callee '{worker}' has an incompatible argument {n} type" }
-          for (x, y) in pairs do signatures := signatures.insert (key x y)
-        unless functionNames.contains callee do
+        if let some kind := threadFn? callee then
+          if let some k := kind.spawnArgs? then
+            let some worker := spawnFn
+              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
+            let some (_, target) := lookupFunction worker
+              | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
+            checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
+              k args index
+        unless functionNames.contains callee || modelSymbols.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless (allocFn? callee).isSome || (threadFn? callee).isSome do
@@ -1116,12 +1475,12 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
           | .call (.func callee _ spawnFn) args =>
             if let some k := (threadFn? callee).bind (·.spawnArgs?) then
               if (spawnFn.map mem.contains).getD true then #[] else
-              let child := ((args[k]? : Option Val).bind tyOf).bind fun t =>
+              let fields : Array TyId := (((args[k]? : Option Val).bind tyOf).bind fun t =>
                 match f.types[t]? with
-                | some (.tuple fields) => fields[0]?
-                | _ => none
-              ((child.bind (f.types[·]?)).bind fun t => match t with
-                | .ptr "slice" _ c => some c | _ => none).toArray
+                | some (.tuple fields) => some fields
+                | _ => none).getD #[]
+              fields.filterMap fun (t : TyId) => match f.types[t]? with
+                | some (.ptr "slice" _ c) => some c | _ => none
             else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
@@ -1165,10 +1524,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .condBr _ t e =>
       log := (collectInstChecks file f cx t line log).2
       log := (collectInstChecks file f cx e line log).2
-    | .switchBr _ cases e =>
+    | .switchBr _ cases e | .loopSwitchBr _ cases e =>
       for c in cases do log := (collectInstChecks file f cx c.body line log).2
       log := (collectInstChecks file f cx e line log).2
-    | .«try» _ b => log := (collectInstChecks file f cx b line log).2
+    | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
       if typeCheck.toOption.isSome then
@@ -1216,9 +1575,11 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
-      let result := checkPointerConstant f v
-        (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
-        (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
+      let result := do
+        checkNullConstants f.name f.types f.layouts v
+        checkPointerConstant f v
+          (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
+          (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
       log := log.record (checkDiagnostic file f .constantFailure
         { idSpace := .canonical, instruction := some i.id }) result
   let cx : CheckCtx := {
@@ -1233,26 +1594,19 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
 def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log :=
   (collectFunctionChecksDetailed file f initial).log
 
-private def diagnosticSpawnSignature (f target : Func) (i : Inst) (args : Array Val)
-    (k : Nat) (index : OperandTypes) : Except String Unit := do
-  let _ ← checkSpawnSignatureWith f target args k index (compatibleType f target)
-    {
-      missingTuple := fun _ => "spawn args have no type"
-      notTuple := fun _ => "spawn args are not a tuple"
-      count := fun _ => "spawned callee has an incompatible argument count"
-      argument := fun n => s!"spawned callee has an incompatible argument {n} type (inst {i.id})" }
-  pure ()
-
 structure CallChecksSnapshot where
   references : Array (String × String)
   targets : Std.HashMap String (Option Func)
+  /-- Builder-populated index; bare compatibility snapshots derive it once per collection. -/
+  referenceBuckets : Option (Std.HashMap String (Array String)) := none
 
 /-- Preserve function-reference order and record ambiguity in the safe subset. -/
 def CallChecksSnapshot.build (funcs : Array Func) : CallChecksSnapshot := Id.run do
   let mut targets : Std.HashMap String (Option Func) := {}
   for f in funcs do
     targets := targets.insert f.name (if targets.contains f.name then none else some f)
-  return { references := fnRefs funcs, targets }
+  let references := fnRefs funcs
+  return { references, targets, referenceBuckets := some (referenceTargets references) }
 
 def CallChecksSnapshot.unique (snapshot : CallChecksSnapshot) (name : String) : Option Func :=
   snapshot.targets[name]?.join
@@ -1262,6 +1616,9 @@ shared definitions, indirect targets and memory propagation. -/
 def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (snapshot : CallChecksSnapshot)
     (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
   let mut log := initial
+  let referenceBuckets := match snapshot.referenceBuckets with
+    | some buckets => buckets
+    | none => referenceTargets snapshot.references
   for i in index.insts do
     let diagnostic := { (checkDiagnostic file f .signatureFailure
       { idSpace := .canonical, instruction := some i.id }) with
@@ -1273,17 +1630,18 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
       if (allocFn? callee).isNone && (threadFn? callee).isNone then
         if let some target := snapshot.unique callee then
           log := log.record diagnostic (checkCallSignature f target i args index)
-      if let some k := (threadFn? callee).bind (·.spawnArgs?) then
-        if let some target := worker.bind snapshot.unique then
-          log := log.record diagnostic (diagnosticSpawnSignature f target i args k index)
+      if let some kind := threadFn? callee then
+        if let some k := kind.spawnArgs? then
+          if let some target := worker.bind snapshot.unique then
+            log := log.record diagnostic (checkThreadSpawn f target
+              (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index)
     | .call (.inst p) args =>
       match index.calleeFnTy? f p with
       | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
       | some name =>
-        for (typ, callee) in snapshot.references do
-          if typ == name then
-            if let some target := snapshot.unique callee then
-              log := log.record diagnostic (checkCallSignature f target i args index)
+        for callee in referenceBuckets.getD name #[] do
+          if let some target := snapshot.unique callee then
+            log := log.record diagnostic (checkCallSignature f target i args index)
     | _ => pure ()
   return log
 

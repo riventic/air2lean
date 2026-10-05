@@ -76,10 +76,15 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
                 result := result.push { caller := f.name, callee, instruction := i.id, file := u.file }
   return result
 
-private def adjacency (graph : Array Edge) : Std.HashMap String (Array String) :=
-  let reversed := graph.foldl (init := ({} : Std.HashMap String (List String))) fun index edge =>
-    index.insert edge.caller (edge.callee :: index[edge.caller]?.getD [])
-  reversed.fold (init := ({} : Std.HashMap String (Array String))) fun index caller callees =>
+private def adjacency (graph : Array Edge) : Std.HashMap String (Array String) := Id.run do
+  let mut reversed : Std.HashMap String (List String) := {}
+  let mut seen : Std.HashMap String (Std.HashSet String) := {}
+  for edge in graph do
+    let neighbors := seen.getD edge.caller {}
+    if neighbors.contains edge.callee then continue
+    seen := seen.insert edge.caller (neighbors.insert edge.callee)
+    reversed := reversed.insert edge.caller (edge.callee :: reversed.getD edge.caller [])
+  return reversed.fold (init := ({} : Std.HashMap String (Array String))) fun index caller callees =>
     index.insert caller callees.reverse.toArray
 
 private def pathsFrom (index : Std.HashMap String (Array String)) (start : String)
@@ -228,13 +233,36 @@ def report (units : Array FileResult) (log : Log) : Json := Json.mkObj [
   ("dependency_completeness", Lean.toJson "not_attested; direct normalized calls and explicit spawn workers only"),
   ("source_correspondence", Lean.toJson "not_attested")]
 
-private def readInput (path : System.FilePath) (remaining : Nat) : IO String := do
-  let metadata ← path.metadata
-  unless metadata.type == .file do throw (IO.userError "AIR input must be a regular file")
-  IO.FS.withFile path .read fun handle => do
-    let bytes ← StrictJson.readBounded handle.read remaining
-    let some contents := String.fromUTF8? bytes | throw (IO.userError "non UTF-8 AIR input")
-    return contents
+/-- Charge every returned chunk before decoding or a later I/O failure. The shared counter
+survives rejected files. Readers follow `Handle.read`'s requested-size contract; across
+serial calls only one byte beyond the aggregate budget is read to detect growth. -/
+def readCharged (read : USize → IO ByteArray) (charged : IO.Ref Nat)
+    (budget : Nat := maxInputBytes) : IO String := do
+  let total ← charged.get
+  if total > budget then
+    throw (IO.userError "AIR input exceeds remaining aggregate budget")
+  let bytes ← StrictJson.readBounded (fun request => do
+    let chunk ← read request
+    charged.modify (· + chunk.size)
+    return chunk) (budget - total)
+  let some contents := String.fromUTF8? bytes | throw (IO.userError "non UTF-8 AIR input")
+  return contents
+
+private inductive InputFailure where
+  | limit
+  | read (message : String)
+
+private def readInput (path : System.FilePath) (charged : IO.Ref Nat) : IO (Except InputFailure String) := do
+  try
+    -- One fresh pre-open metadata snapshot; preserve size-before-kind classification.
+    let metadata ← path.metadata
+    let total ← charged.get
+    if total > maxInputBytes || metadata.byteSize.toNat > maxInputBytes - total then
+      return .error .limit
+    unless metadata.type == .file do throw (IO.userError "AIR input must be a regular file")
+    let contents ← IO.FS.withFile path .read fun handle => readCharged handle.read charged
+    return .ok contents
+  catch error => return .error (.read error.toString)
 
 private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let mut log : Log := { limit := a.limit }
@@ -247,28 +275,25 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     log := log.add { (boundary a.directory.toString none .inputLimit .input .resourceLimit
       s!"selected input exceeds {maxFiles} files; only the first sorted files are inspected") with
       firstErrorInUnit := true }
-  let mut total := 0
+  let charged ← IO.mkRef (0 : Nat)
   let mut files : Array String := #[]
   let mut texts : Array String := #[]
   let mut units : Array FileResult := #[]
   for path in paths.extract 0 maxFiles do
-    try
-      let metadata ← path.metadata
-      if metadata.byteSize.toNat > maxInputBytes - total then
-        log := log.add { (boundary path.toString none .inputLimit .input .resourceLimit
-          "AIR input exceeds remaining aggregate 64 MiB budget") with
-          firstErrorInUnit := true }
-        units := units.push { file := path.toString }
-        log := log.add (skipped path.toString none .decode "readable_input_within_aggregate_budget")
-        continue
-      let contents ← readInput path (maxInputBytes - total)
-      total := total + contents.utf8ByteSize
-      files := files.push path.toString
-      texts := texts.push contents
-    catch error =>
-      log := log.add { (boundary path.toString none .inputRead .input .ioFailure error.toString) with firstErrorInUnit := true }
+    match ← readInput path charged with
+    | .error .limit =>
+      log := log.add { (boundary path.toString none .inputLimit .input .resourceLimit
+        "AIR input exceeds remaining aggregate 64 MiB budget") with
+        firstErrorInUnit := true }
+      units := units.push { file := path.toString }
+      log := log.add (skipped path.toString none .decode "readable_input_within_aggregate_budget")
+    | .error (.read message) =>
+      log := log.add { (boundary path.toString none .inputRead .input .ioFailure message) with firstErrorInUnit := true }
       units := units.push { file := path.toString }
       log := log.add (skipped path.toString none .decode "readable_UTF8_input")
+    | .ok contents =>
+      files := files.push path.toString
+      texts := texts.push contents
   let renamed := Anon.renumberAll texts
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do

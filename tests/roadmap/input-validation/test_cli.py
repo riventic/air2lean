@@ -327,6 +327,21 @@ def main():
     checks += run(binary, [raw[:-1] + ',"extra":"\\uZZZZ"}'], "invalid hex character")
     checks += run(binary, [raw[:-1] + ',"extra":01}'], "expected")
     checks += run(binary, [raw[:-1] + ',"extra":' + '9' * 1025 + '}'], "number exceeds")
+    # Check actual packed field domains before their backing-bit encoding.
+    for signed, values, invalid in [
+            (False, ("0", "255"), ("256", "-1")),
+            (True, ("-128", "127"), ("128", "-129"))]:
+        packed = function("packed", [dict(integer(8), signed=signed),
+            dict(k="struct", name="Packed", layout="packed", fields=[dict(name="x", ty=0)],
+                 abi_size=1, abi_align=1), NORETURN], [], 1,
+            [inst(0, "ret", 2, [dict(ty=1, val=".{ .x = 0 }")])])
+        for value in values:
+            packed["body"][0]["args"][0]["val"] = ".{ .x = " + value + " }"
+            checks += run(binary, [packed])
+        for value in invalid:
+            packed["body"][0]["args"][0]["val"] = ".{ .x = " + value + " }"
+            checks += run(binary, [packed],
+                          f"packed: packed field x value {value} does not fit its integer type")
     mutate = copy.deepcopy(TARGET)
     mutate["types"][1]["bits"] = 65536
     checks += run(binary, [mutate], "65535-bit limit")

@@ -148,6 +148,24 @@ def main (args : List String) : IO Unit := do
     [("callee", obj [("func", .str "user.call"), ("noreturn", .bool true)])]]) "user noreturn"
   require (panicErrorFor? "debug.FullPanic((function 'defaultPanic')).outOfBounds" == some ".outOfBounds")
     "known panic handler rejected"
+  require (panicErrorFor? "debug.defaultPanic" == some ".panic")
+    "exact standard default panic handler rejected"
+  let defaultPanic ← accept (file "defaultPanic" #[intTy 8, nrTy] #[] 0
+    #[inst 0 "call" 1 #[]
+      [("callee", obj [("func", .str "debug.defaultPanic"), ("noreturn", .bool true)])]])
+  writeGenerated directory "defaultPanic" defaultPanic
+    "example : Review.defaultPanic = some (.error .panic) := by rfl"
+  for name in #["my.defaultPanic", "debug.defaultPanic__anon_1", "debug.defaultPanic.call"] do
+    require ((panicErrorFor? name).isNone) s!"accepted nearby foreign panic handler: {name}"
+    reject (file "foreignDefaultPanic" #[intTy 8, nrTy] #[] 0
+      #[inst 0 "call" 1 #[]
+        [("callee", obj [("func", .str name), ("noreturn", .bool true)])]])
+      "foreign defaultPanic noreturn handler"
+  let returningDefaultPanic ← accept (file "returningDefaultPanic" #[intTy 8, nrTy] #[] 0
+    #[inst 0 "call" 0 #[] [("callee", obj [("func", .str "debug.defaultPanic")])],
+      inst 1 "ret" 1 #[ref 0]])
+  require ((checkProgram #[returningDefaultPanic]).toOption.isNone)
+    "default panic name bypassed the noreturn-only model boundary"
   let bitPtr := (ptrTy "one" 0).setObjVal! "host_size" (num 1)
   reject (file "missingOffset" #[intTy 4, bitPtr, nrTy] #[1] 0
     #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "load" 0 #[ref 0],
@@ -284,8 +302,11 @@ def main (args : List String) : IO Unit := do
     | .error e =>
       require ((e.splitOn "the spawned callee 'missingWorker' has no AIR file").length > 1)
         s!"wrong missing-worker diagnostic for {callee}: {e}"
-    let workerFile (bits : Nat) := file "missingWorker" #[intTy bits, nrTy] #[0] 0
-      #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]]
+    let workerFile (bits : Nat) := if callee == "Thread.spawn" then
+      file "missingWorker" #[intTy bits, nrTy] #[0] 0
+        #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 1 #[ref 0]]
+      else file "missingWorker" #[intTy bits, voidTy, nrTy] #[0] 1
+        #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "ret" 2 #[lit 1 "{}"]]
     let worker ← accept (workerFile 8)
     match checkProgram #[f, worker] with
     | .ok _ => pure ()
@@ -294,6 +315,6 @@ def main (args : List String) : IO Unit := do
     match checkProgram #[f, incompatible] with
     | .ok _ => throw (IO.userError s!"accepted incompatible worker for {callee}")
     | .error e =>
-      require ((e.splitOn "spawned callee 'missingWorker' has an incompatible argument 0 type").length > 1)
+      require ((e.splitOn s!"{callee} argument 0 does not match worker 'missingWorker' parameter 0").length > 1)
         s!"wrong incompatible-worker diagnostic for {callee}: {e}"
   IO.println "parser regressions passed"

@@ -20,8 +20,13 @@ text and are never scraped for codes, classifications or locations. The bounded 
 copies at most 2048 message characters before retaining a diagnostic and preserves
 an explicit original-message truncation flag. Standalone compatibility rendering
 outside that log retains the original message. Input is bounded to
-256 sorted JSON files and an aggregate 64 MiB of contents. Function names and the
-directory argument are limited to 1024 characters. The diagnostic payload is
+256 sorted JSON files and an aggregate 64 MiB of actual reader bytes, plus at most
+one byte for growth detection across the entire selected input. Every returned chunk
+is charged before UTF-8 decoding; invalid UTF-8 and later partial I/O failures retain
+their byte charges. Once the detection byte is consumed, later files are skipped
+without another read allowance. A fresh metadata check rejects oversized inputs
+before open, then requires a regular file; actual bounded reads also detect growth.
+Function names and the directory argument are limited to 1024 characters. The diagnostic payload is
 bounded to 1 MiB and the requested count; `truncated: true` and `complete: false`
 disclose dropped diagnostics. Rejection survives either cap. Files skipped because
 of input limits are not accepted as checked.
@@ -64,7 +69,8 @@ not a source span. Unavailable anchors stay explicitly unavailable.
 Named direct calls and explicit spawn workers supply dependency edges. Missing,
 blocked and ambiguous selected callees receive separate codes. Deterministic BFS
 records shortest root-to-caller-to-blocker chains, handles cycles, and bounds its
-queue to 257 names. The selected function identities serve as reporting roots;
+queue to 257 names. Its adjacency index keeps each caller's first occurrence of a
+neighbor; full instruction edges and blocker diagnostics remain distinct. The selected function identities serve as reporting roots;
 this is not compiler-discovered closure, and indirect targets do not contribute
 chains. A blocked function can retain its declared identity without any fabricated
 partial function, SSA value or replacement instruction.

@@ -15,12 +15,16 @@ if a subset tag differs, add a version case to `normalizeOp` (`PLAN.md` §Zig ve
 
 namespace Air2Lean
 
-def arg1 (fnName : String) (raw : Raw.RawInst) : Except String Val :=
+def arg1 (fnName : String) (raw : Raw.RawInst) (strict : Bool := false) : Except String Val := do
+  if strict && raw.args.size != 1 then
+    throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs exactly 1 arg"
   match raw.args[0]? with
   | some v => pure v
   | none => throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs 1 arg"
 
-def arg2 (fnName : String) (raw : Raw.RawInst) : Except String (Val × Val) :=
+def arg2 (fnName : String) (raw : Raw.RawInst) (strict : Bool := false) : Except String (Val × Val) := do
+  if strict && raw.args.size != 2 then
+    throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs exactly 2 args"
   match raw.args[0]?, raw.args[1]? with
   | some a, some b => pure (a, b)
   | _, _ => throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs 2 args"
@@ -93,6 +97,10 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "add_with_overflow" => let (a, b) ← arg2 fnName raw; return .withOverflow .add a b
   | "sub_with_overflow" => let (a, b) ← arg2 fnName raw; return .withOverflow .sub a b
   | "mul_with_overflow" => let (a, b) ← arg2 fnName raw; return .withOverflow .mul a b
+  | "shl_with_overflow" => let (a, b) ← arg2 fnName raw true; return .shlWithOverflow a b
+  | "clz" => let a ← arg1 fnName raw true; return .countBits .clz a
+  | "ctz" => let a ← arg1 fnName raw true; return .countBits .ctz a
+  | "popcount" => let a ← arg1 fnName raw true; return .countBits .popcount a
   | "bit_and" => let (a, b) ← arg2 fnName raw; return .bit .and a b
   | "bit_or" => let (a, b) ← arg2 fnName raw; return .bit .or a b
   | "xor" => let (a, b) ← arg2 fnName raw; return .bit .xor a b
@@ -275,15 +283,31 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let thenBody ← raw.thenBody.mapM (normalizeInst fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
     return .condBr c thenBody elseBody
-  | "switch_br" =>
+  | "switch_br" | "loop_switch_br" =>
+    if raw.tag == "loop_switch_br" && raw.args.size != 1 then
+      throw s!"{fnName}: inst {raw.id}: loop_switch_br needs exactly 1 arg"
     let v ← arg1 fnName raw
     let cases ← raw.cases.mapM (normalizeCase fnName)
     let elseBody ← raw.elseBody.mapM (normalizeInst fnName)
-    return .switchBr v cases elseBody
+    return if raw.tag == "loop_switch_br" then .loopSwitchBr v cases elseBody
+      else .switchBr v cases elseBody
+  | "switch_dispatch" =>
+    unless raw.args.size == 1 do
+      throw s!"{fnName}: inst {raw.id}: switch_dispatch needs exactly 1 arg"
+    let some target := raw.target
+      | throw s!"{fnName}: inst {raw.id}: 'switch_dispatch' needs 'target'"
+    let v ← arg1 fnName raw
+    return .switchDispatch target v
   | "try" | "try_cold" =>
     let v ← arg1 fnName raw
     let errBody ← raw.body.mapM (normalizeInst fnName)
     return .«try» v errBody
+  | "try_ptr" | "try_ptr_cold" =>
+    unless raw.args.size == 1 do
+      throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs exactly 1 arg"
+    let p ← arg1 fnName raw
+    let errBody ← raw.body.mapM (normalizeInst fnName)
+    return .tryPtr p errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
   | "trap" => return .trap
