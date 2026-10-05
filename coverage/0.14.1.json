@@ -3002,7 +3002,9 @@
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Union.lean"
+          "ZigLean/Union.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -3327,7 +3329,9 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Loop.lean",
-          "ZigLean/Sep/Total.lean"
+          "ZigLean/Sep/Total.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -3772,7 +3776,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
-          "ZigLean/Simp.lean"
+          "ZigLean/Simp.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -3877,7 +3883,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
-          "ZigLean/Simp.lean"
+          "ZigLean/Simp.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -3945,7 +3953,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
-          "ZigLean/Simp.lean"
+          "ZigLean/Simp.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -4013,7 +4023,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
-          "ZigLean/Simp.lean"
+          "ZigLean/Simp.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -7298,7 +7310,8 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Total.lean",
-          "ZigLean/Sep/Triple.lean"
+          "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Mem.lean"
         ]
       },
       "emission": {
@@ -7421,7 +7434,9 @@
         "paths": [
           "ZigLean/Conc/Own.lean",
           "ZigLean/Sep/Total.lean",
-          "ZigLean/Sep/Triple.lean"
+          "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -7502,7 +7517,9 @@
         "paths": [
           "ZigLean/Conc/Own.lean",
           "ZigLean/Sep/Total.lean",
-          "ZigLean/Sep/Triple.lean"
+          "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -7744,7 +7761,8 @@
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Total.lean",
-          "ZigLean/Sep/Triple.lean"
+          "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Mem.lean"
         ]
       },
       "emission": {
@@ -7838,7 +7856,8 @@
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Total.lean",
-          "ZigLean/Sep/Triple.lean"
+          "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Mem.lean"
         ]
       },
       "emission": {
@@ -8115,7 +8134,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
-          "ZigLean/Lemmas.lean"
+          "ZigLean/Lemmas.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -8191,7 +8211,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
-          "ZigLean/Lemmas.lean"
+          "ZigLean/Lemmas.lean",
+          "ZigLean/VC/Result.lean"
         ]
       },
       "emission": {
@@ -12447,6 +12468,9 @@
       "ZigLean/Simp.lean": "81da902a886787276fe83806ee687f8b5511af9211a0be44297ce25e507a0fb4",
       "ZigLean/SimpAttr.lean": "5ea0f23219da196ee7d29ebdc07358a2ba2f4cdcf1261b40dd6a01635338f1b1",
       "ZigLean/Union.lean": "c86c9f834b81eb16b866faa577c2a9ac29980b51f4fe67d638aebf65191f5060",
+      "ZigLean/VC/Mem.lean": "1e5388f2b14b4cf9f59add62591847702ca99594c5ff6fc07a862551e1f13d27",
+      "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
+      "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
       "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73"
     },
     "proof-sources": {
