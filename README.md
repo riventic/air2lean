@@ -92,12 +92,14 @@ pinned x86_64 Lean/Zig, matching CI's float/export target):
 scripts/local-ci.sh targeted 0.16.0 "threads atomics" # focused pipeline + proofs
 scripts/local-ci.sh full 0.16.0                      # one complete non-mutation CI row
 scripts/local-ci.sh matrix                          # all three versions + five mutation shards
+scripts/local-ci.sh mutations                       # only the five mutation CI rows
 ```
 
 Run the focused checks while editing, then the matrix locally before using GitHub CI
 as final verification. The 0.14.1 row uses CI's restricted examples and skips the
 differential harness; 0.15.2 also builds the macOS threadsync translation's proofs.
-Full and matrix modes execute the actual shell steps and environments from
+If all three full-version rows already passed locally, run `mutations` to finish
+the matrix without repeating them. Full, matrix and mutations modes execute the actual shell steps and environments from
 `.github/workflows/ci.yml`, including coverage, budgets, project/flow gates and proof
 receipts. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
 actions and the three equivalent pinned tool setup recipes are replaced locally.

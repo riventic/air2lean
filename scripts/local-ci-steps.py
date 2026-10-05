@@ -111,6 +111,10 @@ mode, version = sys.argv[1:]
 rows = job['strategy']['matrix']['include']
 if mode == 'full':
     rows = [row for row in rows if row['zig'] == version and not row['mutate']]
+elif mode == 'mutations':
+    rows = [row for row in rows if row['mutate']]
+elif mode != 'matrix':
+    raise ValueError(f'unsupported local CI mode: {mode}')
 if not rows:
     raise ValueError('no matching CI matrix rows')
 
