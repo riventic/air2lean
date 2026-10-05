@@ -267,8 +267,8 @@ private def collectorChecks : IO Unit := do
     op := .loopSwitchBr (.int 0 0) #[{
       items := #[.int 0 0]
       ranges := #[]
-      body := #[{ id := 2, ty := 7, op := .tryPtr (.inst 0)
-          #[{ id := 3, ty := 2, op := .ret .void }] },
+      body := #[{ id := 2, ty := 7, op := (.tryPtr (.inst 0)
+          #[{ id := 3, ty := 2, op := .ret .void }]) },
         { id := 6, ty := 2, op := .ret .void }] }]
       #[{ id := 9, ty := 2, op := .ret .void }] }] }
   require (check cleanNested).toOption.isSome "current loop-switch/try-pointer policy must accept the clean fixture"
