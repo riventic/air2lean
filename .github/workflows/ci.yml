@@ -191,6 +191,22 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      # This checks committed Flow artifacts only: no production checkout, Zig export,
+      # native reproduction, or claim about compiler preservation is part of this CI gate.
+      - name: Flow timestamp artifact-only proofs and provenance guards
+        if: matrix.full && matrix.zig == '0.16.0'
+        env:
+          TMPDIR: ${{ runner.temp }}
+          FLOW_TIME_SOURCE: ${{ runner.temp }}/absent-flow-checkout/time.zig
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/flow-time/test_provenance.py
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y ripgrep
+          fi
+          bash scripts/flow-time.sh --check-artifacts
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
