@@ -77,7 +77,7 @@ private def collectorChecks : IO Unit := do
     { caller := "second", callee := "blocked", instruction := 0, file := "s" }]
   require (shortestChain ties "root" "blocked" == some #["root", "first", "blocked"])
     "reversed adjacency buckets must preserve first-edge BFS ties"
-  let duplicatedTies := #[ties[0]!, ties[0]!, ties[1]!, ties[0]!, ties[2]!, ties[2]!, ties[3]!]
+  let duplicatedTies := #[ties[0]'(by simp [ties]), ties[0]'(by simp [ties]), ties[1]'(by simp [ties]), ties[0]'(by simp [ties]), ties[2]'(by simp [ties]), ties[2]'(by simp [ties]), ties[3]'(by simp [ties])]
   for cap in [0, 1, 2, 3, 4, 257] do
     for goal in ["root", "first", "second", "blocked", "absent"] do
       require (shortestChain duplicatedTies "root" goal cap == shortestChain ties "root" goal cap)
