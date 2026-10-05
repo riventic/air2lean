@@ -2889,7 +2889,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -2963,7 +2964,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -3296,7 +3298,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -14951,8 +14954,9 @@
       "Proofs/Threadsync/WaitGroup.lean": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851",
       "Proofs/Variants/Gen.lean": "74d7b64f5d2d2a821d5cc2ae97bf1c4c353e0239fd44291c11373e280cc79d7a",
       "Proofs/Variants/Proofs.lean": "dcecf6343b9008a2c08fd0339d17e399e524874da36fc42f703304f04a9cb5f8",
+      "Proofs/Vectors/CheckedAdd.lean": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
       "Proofs/Vectors/Gen.lean": "e69585b66b800f87946b2a8457a9851a311fe1a9fd8e1190e1c5bb57aeee2be1",
-      "Proofs/Vectors/Proofs.lean": "eb83678eb7ac8145d49f5e4cd2d6c8e274bb24999d80d1360c58850f6d50f431"
+      "Proofs/Vectors/Proofs.lean": "f3b67f3459c032b6a0a1819e3a5665cc3ef3805c986b3aed852d0fa2ec6748c5"
     },
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",

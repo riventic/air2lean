@@ -32,9 +32,13 @@ They introduce no axioms, native evaluation or source-correspondence premise.
 Kernel checking establishes those Lean statements; correspondence with Zig
 source, compiler lowering and target behavior remains a separate qualification.
 
-The coordinator must check the changed module against the selected generated
-translation with the pinned `leanprover/lean4:v4.34.0` toolchain. This author has
-performed static inspection only; actual checking of this change is pending.
+At revision `55783cc0a9936211b451ed3570cd3a0edf95c677`, root's serialized
+checks with the pinned `leanprover/lean4:v4.34.0` toolchain built both vector
+modules and kernel-checked their symbolic regressions against the unchanged
+checked-in `Gen.lean`. The no-sorry gate and default full assumption audit
+passed: 10,625 theorems across 114 shipped modules, with zero policy violations
+and the existing policy unchanged. This run included no fresh Zig export or
+source/target correspondence check.
 The existing CI proof build includes both the theorem module and
 `Proofs/Vectors/CheckedAdd.lean` through the `Proofs.+` glob. The latter
 checks arbitrary-lane witnesses, exact-threshold overflow, both converses
