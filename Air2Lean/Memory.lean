@@ -315,13 +315,13 @@ def Func.callees (f : Func) (refs : Array (String × String)) : Array String :=
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller
 of such a function, up to a fixpoint. -/
-partial def memoryFunctions (funcs : Array Func) : Array String :=
+partial def memoryFunctions (funcs : Array Func) (externalMemory : Array String := #[]) : Array String :=
   let refs := fnRefs funcs
   let rec go (mem : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
       if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
     if next.isEmpty then mem else go (mem ++ next)
-  go (funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
+  go (externalMemory ++ funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
 
 /-- `f` has a sync op itself: an atomic op, or a call to `Thread.spawn`/`.join`. -/
 def Func.syncLocally (f : Func) : Bool :=

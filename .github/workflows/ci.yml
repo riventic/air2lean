@@ -191,6 +191,16 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      # Registry fixtures are version neutral; check their typed imported evidence and client
+      # once, with generated files/logs isolated from the checkout. No additional upload.
+      - name: External model contracts
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_MODEL_EVIDENCE: ${{ runner.temp }}/model-contracts
+        run: |
+          python3 tests/roadmap/models/test_gate.py
+          scripts/model-contracts.sh
+
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.
       - name: Flow timestamp artifact-only proofs and provenance guards

@@ -1,5 +1,6 @@
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
 import ZigLean.Vec
 
@@ -764,8 +765,13 @@ def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
 function or has a model (`allocFn?`, `threadFn?`). -/
-def checkProgram (funcs : Array Func) : Except String Unit := do
-  let mem := memoryFunctions funcs
+def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
+    (profile : Option BuildProfile := none) : Except String Unit := do
+  unless models.isEmpty do
+    let some profile := profile | throw "external model bindings require a checked program profile"
+    ModelRegistry.check models profile funcs
+  let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
+  let mem := memoryFunctions funcs (models.map (·.symbol))
   let names := funcs.map (·.name)
   for f in funcs do
     for i in f.allInsts do
@@ -780,7 +786,7 @@ def checkProgram (funcs : Array Func) : Except String Unit := do
             | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
           unless names.contains worker do
             throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-        unless names.contains callee do
+        unless names.contains callee || modelSymbols.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           match allocFn? callee with
