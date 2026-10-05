@@ -94,6 +94,9 @@ private def run (args : List String) : IO UInt32 := do
       let texts ← jsonPaths.mapM fun path => do
         try IO.FS.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
+      -- Preserve the historical <full name>.json emission order even when storage
+      -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let emissionKeys := texts.map fun text => Anon.fnName text ++ ".json"
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
@@ -112,11 +115,15 @@ private def run (args : List String) : IO UInt32 := do
         match BuildProfile.checkProgram profiles a.profile with
         | .error e => die e
         | .ok profile =>
+          -- Reads and every validation guard retain their original path order.
+          -- Only successful emission depends on identity rather than storage keys.
+          let emissionFuncs := ((emissionKeys.zip funcs).qsort
+            (fun a b => decide (a.1 < b.1))).map (·.2)
           let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
           let metadata := Lean.Json.mkObj [("profile", profile.toJson),
             ("float_semantics", .str semantics), ("correspondence", .str "model")]
           let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-            emit funcs a.ns a.prefix_ a.floatSemantics
+            emit emissionFuncs a.ns a.prefix_ a.floatSemantics
           try IO.FS.writeFile a.outPath src catch e =>
             throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
           pure 0

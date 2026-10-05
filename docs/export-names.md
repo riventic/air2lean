@@ -3,6 +3,11 @@
 The exporter keeps the complete fully qualified function name in JSON `name`, call
 operands, and `ZIG_AIR_JSON_FILTER` matching. Filenames are storage keys. The
 translator reads JSON identities; changing a storage key does not rename a function.
+After all validation guards succeed, emission uses the historical virtual
+`<original full JSON name>.json` order. The key is cached before anonymous
+renumbering, so hashes and numeric project staging paths cannot reorder definitions
+or change which generic instance receives a preferred declaration name. Reads,
+validation errors and profile receipts continue using the actual storage paths.
 
 A nonempty ASCII name uses its existing `<name>.json` spelling when it begins
 with a letter, digit, or underscore, contains only letters, digits, underscores,
@@ -93,15 +98,19 @@ build in each non-mutation Zig 0.14.1, 0.15.2 and 0.16.0 job. It reuses that job
 guarded patched compiler, requires the explicit collision warning, and checks the
 public translation with a temporary Lean package root. All generated artifacts and
 local/global Zig caches live under a disposable `RUNNER_TEMP` directory; this gate
-adds no uploads and does not update tracked generated files.
+adds no uploads and does not update tracked generated files. Its synthetic importer
+CLI cases also require identical complete generated output for direct, hash, and
+numeric filenames, including two reached anonymous instances whose raw and
+renumbered lexical orders differ, and preserve the first path error and output on
+rejection.
 
 Root qualification on 2026-10-05 passed with a freshly rebuilt AIR-only Zig
 0.15.2 exporter: all ten exact public identities and seven hash filenames,
 translation with `abi64-le-v1`, kernel checking of the generated Lean source,
 same-identity re-export, and explicit distinct-identity collision warning with
 byte preservation and retained siblings. The 14 bounded offline filename tests
-and 21 existing profile/golden mock tests also passed. The exact CI helper then
-passed with the existing Zig 0.15.2 compiler (4.1 seconds, 100 MiB peak), and with
+and 21 existing profile/golden mock tests also passed. The exact CI helper at
+`4bb3080` then passed with the existing Zig 0.15.2 compiler (4.1 seconds, 100 MiB peak), and with
 a freshly rebuilt AIR-only Zig 0.16.0 compiler (10.3 seconds, 541 MiB peak). The
 0.16.0 bootstrap also passed (199.9 seconds, 4,239 MiB peak). Both helper runs cover
 the ten identities, translation and kernel check, re-export, collision warning,
@@ -109,3 +118,10 @@ preservation, and retained siblings using the unchanged exporter source.
 Zig 0.14.1 actual qualification and the full golden/profile/proof pipelines for
 0.15.2 and 0.16.0 remain pending. These results cover the public filename fixture
 rather than a source-to-binary correspondence theorem.
+
+The subsequently attempted full Zig 0.15.2 pipeline passed raw AIR/profile golden
+checks through Lists, then rejected Lists generated-source ordering. Static
+comparison found identical declaration chunks in a different order: hashed generic
+storage names changed the emitter's input traversal. The repair above retains
+historical emission order without changing the golden comparison. Actual importer
+CLI and repaired full 0.15.2/0.16.0 pipeline qualification remain pending.

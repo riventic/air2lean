@@ -243,5 +243,37 @@ class Normalization(unittest.TestCase):
         self.inspect('check-reexport')
 
 
+class OrderFixtures(unittest.TestCase):
+    def test_storage_layouts_and_typed_multiple_instance_fixture(self):
+        cli = runpy.run_path(str(Path(__file__).with_name('test_order_cli.py')))
+        cases = cli['cases']()
+        self.assertEqual(list(cases), ['independent', 'reached', 'unreached'])
+        for case,docs in cases.items():
+            orders = []
+            for storage in ('direct', 'hash', 'numeric'):
+                entries = [(cli['storage_name'](doc,i,storage),doc['name']) for i,doc in enumerate(docs)]
+                self.assertEqual(len(entries), len(set(name for name,_ in entries)))
+                self.assertTrue(all(len(name.encode()) <= 255 and '/' not in name for name,_ in entries))
+                orders.append([identity for _,identity in sorted(entries)])
+            self.assertTrue(any(order != orders[0] for order in orders[1:]), case+' lacks an order perturbation')
+            for doc in docs:
+                self.assertEqual(json.loads(json.dumps(doc)), doc)
+        root = cases['reached'][-1]
+        self.assertEqual(root['types'][2], dict(k='other',name='fn () u8'))
+        self.assertEqual([i['callee']['func'] for i in root['body'][:2]],
+                         ['order.generic__anon_9', 'order.generic__anon_10'])
+        self.assertEqual(root['body'][-1]['args'], [dict(inst=1)])
+
+    def test_order_driver_invocation_is_bounded_and_preserves_profile_flag(self):
+        cli = runpy.run_path(str(Path(__file__).with_name('test_order_cli.py')))
+        binary,air,output = Path('/mock/translator'),Path('/mock/air'),Path('/mock/Gen.lean')
+        with mock.patch.object(cli['subprocess'], 'run') as run:
+            cli['invoke'](binary,air,output)
+        args,kwargs = run.call_args
+        self.assertEqual(args[0], [str(binary),str(air),'-o',str(output),'--namespace','Order',
+                                   '--prefix','order.','--profile','abi64-le-v1'])
+        self.assertEqual(kwargs, dict(capture_output=True,timeout=10,check=False))
+
+
 if __name__ == '__main__':
     unittest.main()
