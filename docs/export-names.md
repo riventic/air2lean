@@ -100,6 +100,12 @@ Root qualification on 2026-10-05 passed with a freshly rebuilt AIR-only Zig
 translation with `abi64-le-v1`, kernel checking of the generated Lean source,
 same-identity re-export, and explicit distinct-identity collision warning with
 byte preservation and retained siblings. The 14 bounded offline filename tests
-and 21 existing profile/golden mock tests also passed. The exact CI helper and
-Zig 0.14.1/0.16.0 qualification remain pending; this evidence covers the public
-filename fixture rather than a source-to-binary correspondence theorem.
+and 21 existing profile/golden mock tests also passed. The exact CI helper then
+passed with the existing Zig 0.15.2 compiler (4.1 seconds, 100 MiB peak), and with
+a freshly rebuilt AIR-only Zig 0.16.0 compiler (10.3 seconds, 541 MiB peak). The
+0.16.0 bootstrap also passed (199.9 seconds, 4,239 MiB peak). Both helper runs cover
+the ten identities, translation and kernel check, re-export, collision warning,
+preservation, and retained siblings using the unchanged exporter source.
+Zig 0.14.1 actual qualification and the full golden/profile/proof pipelines for
+0.15.2 and 0.16.0 remain pending. These results cover the public filename fixture
+rather than a source-to-binary correspondence theorem.
