@@ -599,7 +599,7 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .func .. => .void
   | .undef tid | .optNull tid | .optSome tid _ | .err tid _ | .errUnionErr tid _
   | .errUnionOk tid _ | .enumTag tid _ | .unionVal tid .. | .agg tid _ | .ptrConst tid ..
-  | .ptrOther tid _ | .sliceConst tid .. => fc.tyOfId tid
+  | .ptrNull tid | .ptrOther tid _ | .sliceConst tid .. => fc.tyOfId tid
 
 /-- The type ID of `v`; `none` for a constant without a type. -/
 def FCtx.valTyId? (fc : FCtx) (v : Val) : Option TyId :=
@@ -715,6 +715,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     | .tuple _ => if elems.isEmpty then "()" else s!"({items elems})"
     | _ => "default" -- unreachable: the exporter writes `elems` only for these types
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
+  | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => "(panic! \"air2lean: a pointer constant without a global\")"
   | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : Zig.Slice)"
 
@@ -1026,6 +1027,8 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     s!"Zig.spawnC (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  | .yield => "Zig.threadYieldC"
+  | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
   | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
@@ -1149,7 +1152,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .div _ a b => #[a, b]
   | .divFloat a b => #[a, b]
   | .minMax _ a b => #[a, b]
-  | .withOverflow _ a b => #[a, b]
+  | .withOverflow _ a b | .shlWithOverflow a b => #[a, b]
+  | .countBits _ a => #[a]
   | .bit _ a b => #[a, b]
   | .not a => #[a]
   | .neg a => #[a]
@@ -1359,6 +1363,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut defs : Array AsmDef := #[]
   for f in funcs do
     for i in f.allInsts do
+      if i.op.isSpinHint then continue
       if let .asm source _ _ outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
@@ -1478,6 +1483,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+  | .shlWithOverflow a b =>
+    let sgn := if fc.valSigned a then "true" else "false"
+    let (env, l) := bindLet fc env inst.id s!"Zig.shlWithOverflow {sgn} {rv a} {rv b}"
+    (env, some l)
+  | .countBits op a =>
+    let f := match op with
+      | .clz => "Zig.clz" | .ctz => "Zig.ctz" | .popcount => "Zig.popcount"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {fc.tyBits inst.ty} {rv a})"
+    (env, some l)
   | .splat a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
   | .select pred a b =>
@@ -1577,9 +1591,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .ptr .., .gt => some s!"Zig.ptrLt {rv b} {rv a}"
       | .ptr .., .ge => some s!"Zig.ptrLe {rv b} {rv a}"
       | _, _ => none
-    let expr := match ptrOrder with
-      | some e => s!"{fc.callMName} ({e})"
-      | none => s!"pure ({expr})"
+    let nullableVal (v : Val) := (fc.valTyId? v |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false)
+    let nullable := nullableVal a || nullableVal b
+    let expr := match ptrOrder, op with
+      | some e, _ => s!"{fc.callMName} ({e})"
+      | none, .eq => if nullable then s!"{fc.callMName} (Zig.ptrEqAddr {rv a} {rv b})" else s!"pure ({expr})"
+      | none, .ne => if nullable then s!"{fc.callMName} (do pure (!(← Zig.ptrEqAddr {rv a} {rv b})))" else s!"pure ({expr})"
+      | none, _ => s!"pure ({expr})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
   | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
@@ -1630,8 +1648,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
       -- `@ptrFromInt`.
-      let expr := s!"{fc.callMName} (Zig.ptrFromAddr ({rv a}).toNat)"
+      let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
+      let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if srcPtr && dstPtr &&
+        (fc.valTyId? a |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false) &&
+        !(nullablePtrTy fc.types fc.layouts inst.ty) then
+      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
+      (env, some l)
     else
     let srcFloat := fc.isFloat a
     let dstFloat := fc.isFloatTy inst.ty
@@ -1676,9 +1700,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let safeStr := if safe then "true" else "false"
     let (env, l) := bindLet fc env inst.id s!"Zig.Float.toInt {sgn} {n} {safeStr} {rv a}"
     (env, some l)
-  | .isNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isNone)"; (env, some l)
-  | .isNonNull a => let (env, l) := bindLet fc env inst.id s!"pure (({rv a}).isSome)"; (env, some l)
-  | .optPayload a => let (env, l) := bindLet fc env inst.id s!"Zig.optPayload {rv a}"; (env, some l)
+  | .isNull a =>
+    let expr := if fc.isPtr a then s!"{fc.callMName} (Zig.ptrIsNull {rv a})" else s!"pure (({rv a}).isNone)"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .isNonNull a =>
+    let expr := if fc.isPtr a then s!"{fc.callMName} (do pure (!(← Zig.ptrIsNull {rv a})))" else s!"pure (({rv a}).isSome)"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .optPayload a =>
+    let expr := if fc.isPtr a then s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})" else s!"Zig.optPayload {rv a}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .wrapOptional a => let (env, l) := bindLet fc env inst.id s!"pure (some {rv a})"; (env, some l)
   | .isNullPtr isNull p =>
     -- `?*T`: the payload is the flag (null = address 0). `?T`: a flag byte after the payload.
@@ -1937,6 +1967,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
   | .asm source _ _ outputs inputs =>
+    if inst.op.isSpinHint then
+      let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
+      (env, some l)
+    else
     -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
     -- pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
@@ -1976,6 +2010,8 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .divFloat a b => some (#[a, b], fun v => .divFloat v[0]! v[1]!)
   | .minMax m a b => some (#[a, b], fun v => .minMax m v[0]! v[1]!)
   | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
+  | .shlWithOverflow a b => some (#[a, b], fun v => .shlWithOverflow v[0]! v[1]!)
+  | .countBits o a => some (#[a], fun v => .countBits o v[0]!)
   | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
   | .not a => some (#[a], fun v => .not v[0]!)
   | .neg a => some (#[a], fun v => .neg v[0]!)
