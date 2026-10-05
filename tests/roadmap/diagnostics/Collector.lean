@@ -420,8 +420,8 @@ private def collectorChecks : IO Unit := do
     types := (spawn.types.set! 0 (.ptr "one" false 7)).push (.int false 32)
     layouts := (spawn.layouts.set! 0 { size := some 8, align := some 8, ptrAlign := some 4 }).push
       { size := some 4, align := some 4 }
-    body := #[{ id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
-      #[.undef 2, .agg 1 #[.undef 0]] }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
+    body := #[{ id := 0, ty := 5, op := (.call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.undef 2, .agg 1 #[.undef 0]]) }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
   let pointerWorker := { worker with
     types := worker.types.push (.ptr "one" true 0)
     layouts := (worker.layouts.set! 0 { size := some 4, align := some 4 }).push
@@ -451,8 +451,8 @@ private def collectorChecks : IO Unit := do
     ret := 5
     types := (spawn.types.set! 5 .void) ++ #[.struct "Io.Group" "auto" #[], .ptr "one" false 7, .io]
     layouts := spawn.layouts ++ #[{}, { size := some 8, align := some 8, ptrAlign := some 1 }, {}]
-    body := #[{ id := 0, ty := 5, op := .call (.func "Io.Group.async" false (some "worker"))
-      #[.undef 8, .undef 9, .agg 1 #[.int 0 7]] }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
+    body := #[{ id := 0, ty := 5, op := (.call (.func "Io.Group.async" false (some "worker"))
+      #[.undef 8, .undef 9, .agg 1 #[.int 0 7]]) }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
   workerBoundary group worker
   let groupByteWorker := { worker with
     types := worker.types.push (.int false 8)
@@ -464,8 +464,8 @@ private def collectorChecks : IO Unit := do
     types := group.types.push (.errorUnion 3 5)
     layouts := group.layouts.push {}
     ret := 10
-    body := #[{ id := 0, ty := 10, op := .call (.func "Io.Group.concurrent" false (some "worker"))
-      #[.undef 8, .undef 9, .agg 1 #[.int 0 7]] }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
+    body := #[{ id := 0, ty := 10, op := (.call (.func "Io.Group.concurrent" false (some "worker"))
+      #[.undef 8, .undef 9, .agg 1 #[.int 0 7]]) }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
   workerBoundary concurrent worker
   workerBoundary concurrent groupByteWorker (some ("group: Io.Group.async " ++ resultMessage))
   for flags in [["--diagnostics-json"], ["--diagnostics-json", "x", "-o", "out"],
