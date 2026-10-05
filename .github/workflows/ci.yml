@@ -259,6 +259,10 @@ jobs:
             scripts/progress-hints.sh
           fi
 
+      - name: Finite progress kernel contracts
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: lake env lean tests/roadmap/progress/Total.lean
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'
