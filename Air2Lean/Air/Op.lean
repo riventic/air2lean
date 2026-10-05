@@ -430,6 +430,10 @@ inductive Op where
   | «repeat» (target : InstId)
   | condBr (c : Val) (thenBody elseBody : Array Inst)
   | switchBr (v : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- A switch with a selector replaced by dispatches from its descendant bodies. -/
+  | loopSwitchBr (initial : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- Jump to an enclosing loop-switch, replacing its selector, preserving other state. -/
+  | switchDispatch (target : InstId) (selector : Val)
   /-- `try`/`try_cold`: `v` is an error union; `errBody` runs when it holds an error (it ends in
   an exit, like a `cond_br` branch). Otherwise the `try` instruction's value is the payload. -/
   | «try» (v : Val) (errBody : Array Inst)
