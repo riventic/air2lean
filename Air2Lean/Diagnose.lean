@@ -136,9 +136,12 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
   for i in Raw.flatten raw.body do
     if i.tag.endsWith "_optimized" || i.unsupported then
       marked := true
+      let message := match runtimeTagReason? i.tag with
+        | some reason => s!"{raw.name}: inst {i.id}: tag '{i.tag}': {reason}"
+        | none => s!"instruction tag '{i.tag}' is explicitly unsupported"
       log := log.add { (boundary file name
         (if i.tag.endsWith "_optimized" then .optimizedUnsupported else .exporterUnsupported)
-        .normalize .unsupportedSemantics s!"instruction tag '{i.tag}' is explicitly unsupported") with
+        .normalize .unsupportedSemantics message) with
         anchor := { idSpace := .exported, instruction := some i.id } }
   if marked then return (unit, log.add (skipped file name .check "fully_normalized_function"))
   let rewritten := Raw.canonicalize raw
