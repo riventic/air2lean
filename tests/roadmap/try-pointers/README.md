@@ -23,12 +23,13 @@ bodies, loops and switches with no explicit else are conservatively rejected.
 For a function containing pointer try, error-flow summaries are computed bottom-up once
 when its instruction IDs are unique. Flat siblings use an array reverse fold; recursion
 visits nested bodies, including unreachable child bodies without treating them as reachable
-outcomes. Functions without pointer try skip cache-only ID hashing and summary preparation. Direct
+outcomes. The checker skips cache-only ID hashing and error-flow summary preparation for functions without pointer try. Direct
 public checks with duplicate IDs fall back to uncached validation; diagnostics still come
 from the original ordered checker traversal. Existing flattening and target-scope checks
 are retained, so this is not a claim about whole-checker complexity.
-Block emission propagates an inner body directly when no branch targets that block;
-it emits an own-branch continuation only when its exit constructor exists. Target
+Block emission propagates an inner body directly only when no branch targets that block
+and either its declared type is `noreturn` or its body is certified to exit outward.
+Own-target branches retain the block's continuation. Target
 membership is prepared once per emission context, including bare public contexts.
 Void and nonvoid nested-branch runtime fixtures retain original error names and values.
 Existing layout/encoding
