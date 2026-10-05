@@ -3308,6 +3308,7 @@
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Conc/Progress.lean",
           "ZigLean/Conc/Sched.lean",
           "ZigLean/Conc/Word.lean",
           "ZigLean/Float/CompilerRt.lean",
@@ -14465,6 +14466,18 @@
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
     },
     {
+      "name": "Thread.spinLoopHint",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Thread.yield",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
       "name": "time.Timer.read",
       "recognizer": "threadFn?",
       "disposition": "recognized-model-boundary",
@@ -14487,18 +14500,6 @@
       "recognizer": "rejectedThreadFn?",
       "disposition": "translation-rejected",
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
-    },
-    {
-      "name": "Thread.spinLoopHint",
-      "recognizer": "rejectedThreadFn?",
-      "disposition": "translation-rejected",
-      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
-    },
-    {
-      "name": "Thread.yield",
-      "recognizer": "rejectedThreadFn?",
-      "disposition": "translation-rejected",
-      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
     }
   ],
   "project_source_sha256": {
@@ -14513,10 +14514,10 @@
       "Air2Lean/Air/Normalize.lean": "6367ae12dfc049989d92979868b58ec45e12a1be75999b7d4c5c1a59b2ed3a1c",
       "Air2Lean/Air/Op.lean": "069772d48acc7c027f1991e699e50747290986f0694941b70bfb284c114ae632",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
-      "Air2Lean/Check.lean": "32195e6097a394b30aacf899f6eec5ba0ccf321ed25eee81ee27da1d7931868a",
-      "Air2Lean/Emit.lean": "9d75e769a8032c3161259ad9d4878306b79b47842d881836f4e6bc1d4e238bee",
+      "Air2Lean/Check.lean": "b8b3372307cd4e90273726007c1be107105a9ca13c6e821e25cd01f3de994e44",
+      "Air2Lean/Emit.lean": "5b01712a8d4c15486b30874962c33dfd9d08c3632860ff9c0c96a1f51331f8e6",
       "Air2Lean/Main.lean": "836356e86979ef7eff50dc5e1602b651059bff954a9a8b48e69c2a8f346c4373",
-      "Air2Lean/Memory.lean": "8e8815e24fe52bfb6ae07b3d83e52f8fec4065566e986736b996c5749201acf8",
+      "Air2Lean/Memory.lean": "7109a39e02a018069c1f174b69ee6ecda7d25931d22674369f4a966f49cd6d83",
       "zig-patch/air-json/json.zig": "30d0067ff832f3823e09582b4b12aa77a4bed0f5c28c21dba8a77487bbbd418a"
     },
     "runtime-models": {
@@ -14530,9 +14531,10 @@
       "ZigLean/Conc/LockRules.lean": "e5ff234fe0a0cd0ad79f79f4de7226e294c85226730d628948e2f2cd14fa8929",
       "ZigLean/Conc/Logic.lean": "56ef8ab4effde678f82f58911e4b99b7f69372d08a117d8342822ec68362da12",
       "ZigLean/Conc/Own.lean": "b0774bc5335036983f104a6b2671ab429177e944c5b5cb5d58b8e588b68c32fb",
+      "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
-      "ZigLean/Conc.lean": "b87895f15749b795bab6425ba3267b0a5b5e313507b6766e0ffdc8c358eec526",
+      "ZigLean/Conc.lean": "2331b7b68d48c935d89cf8b7dcafa00e3422a9826b2e19f4606ba5f5f8f2985c",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
@@ -15294,8 +15296,8 @@
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45"
     },
     "model-boundaries": {
-      "Air2Lean/Memory.lean": "8e8815e24fe52bfb6ae07b3d83e52f8fec4065566e986736b996c5749201acf8",
-      "docs/std-models.md": "fab34bf4f2dd014d48d8bd1e3934c7d7bc01033cb0c33a8a7ee6aa8720d0c6ea"
+      "Air2Lean/Memory.lean": "7109a39e02a018069c1f174b69ee6ecda7d25931d22674369f4a966f49cd6d83",
+      "docs/std-models.md": "208dde6145dbd3cf26a3b5b5ac82c41b5bf24a316dee67346bfcdce02f96bf31"
     }
   },
   "summary": {
