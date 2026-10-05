@@ -21,7 +21,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
 
 def help : String :=
@@ -32,6 +32,7 @@ def help : String :=
   "  --namespace <Ns>             Lean namespace, such as My.Program (required).\n" ++
   "  --prefix <p>                 Trim this prefix from emitted function names.\n" ++
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
+  "  --spawn-policy <policy>      available (default) or fallible; see docs/spawn-failure.md.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
@@ -47,42 +48,51 @@ structure Args where
   /-- `--float-semantics` (default `ieee`; `docs/floats.md` §Semantics, `Air2Lean/Emit.lean`'s
   `FloatSemantics`). -/
   floatSemantics : FloatSemantics
+  spawnSemantics : SpawnSemantics := .available
   profile : Option String
   modelRegistry : Option String
   registryTemplate : Bool := false
 
 private partial def parseArgsGo (args : List String)
-    (airDir outPath ns prefix_ floatSemantics profile modelRegistry : Option String)
+    (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
     (registryTemplate : Bool) : Except String Args :=
   match args with
   | [] =>
     match airDir, outPath, ns with
-    | some airDir, some outPath, some ns =>
+    | some airDir, some outPath, some ns => do
+      let spawning ← match spawnPolicy with
+        | none => pure .available
+        | some value => (parseSpawnPolicy value).mapError (fun message => s!"{message}\n{usage}")
       match floatSemantics with
-      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee, profile, modelRegistry, registryTemplate }
-      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt, profile, modelRegistry, registryTemplate }
+      | none | some "ieee" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .ieee, spawnSemantics := spawning, profile, modelRegistry, registryTemplate }
+      | some "compiler-rt" => .ok { airDir, outPath, ns, prefix_ := prefix_.getD "", floatSemantics := .compilerRt, spawnSemantics := spawning, profile, modelRegistry, registryTemplate }
       | some other => .error s!"invalid --float-semantics '{other}' (want 'ieee' or 'compiler-rt')\n{usage}"
     | none, _, _ => .error s!"missing <air-dir>\n{usage}"
     | _, none, _ => .error s!"missing -o <out.lean>\n{usage}"
     | _, _, none => .error s!"missing --namespace <Ns>\n{usage}"
-  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics profile modelRegistry registryTemplate
-  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics profile modelRegistry registryTemplate
-  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics profile modelRegistry registryTemplate
-  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile modelRegistry registryTemplate
-  | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v) modelRegistry registryTemplate
-  | "--model-registry" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile (some v) registryTemplate
-  | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry true
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] =>
+  | "-o" :: v :: rest => parseArgsGo rest airDir (some v) ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+  | "--namespace" :: v :: rest => parseArgsGo rest airDir outPath (some v) prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+  | "--prefix" :: v :: rest => parseArgsGo rest airDir outPath ns (some v) floatSemantics profile modelRegistry spawnPolicy registryTemplate
+  | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile modelRegistry spawnPolicy registryTemplate
+  | "--spawn-policy" :: v :: rest =>
+    if spawnPolicy.isSome then .error s!"duplicate --spawn-policy\n{usage}"
+    else parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry (some v) registryTemplate
+  | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v) modelRegistry spawnPolicy registryTemplate
+  | "--model-registry" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile (some v) spawnPolicy registryTemplate
+  | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
-    else if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics profile modelRegistry registryTemplate
+    else if airDir.isNone then parseArgsGo rest (some v) outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
-  let a ← parseArgsGo args none none none none none none none false
+  let a ← parseArgsGo args none none none none none none none none false
   if a.registryTemplate && a.modelRegistry.isSome then
     throw "--model-registry-template cannot be combined with --model-registry"
+  if a.registryTemplate && a.spawnSemantics == .fallible then
+    throw "--model-registry-template cannot be combined with --spawn-policy fallible"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -128,10 +138,14 @@ private def run (args : List String) : IO UInt32 := do
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
+      -- Preserve the historical <full name>.json emission order even when storage
+      -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let (originalNames, rewrittenTexts) := Anon.renumberAllWithNames texts
+      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
+      for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           match Raw.parseFile contents with
           | .error e => err := some s!"{path}: {e}"
@@ -143,7 +157,12 @@ private def run (args : List String) : IO UInt32 := do
               processRaw raw : Except String Func) with
             | .error e => err := some s!"{path}: {e}"
             | .ok f => funcs := funcs.push f
-      match (match err with | some e => Except.error e | none => if a.registryTemplate then pure () else checkProgram funcs models profiles[0]?) with
+      let checked : Except String Unit := do
+        match err with | some e => throw e | none => pure ()
+        if !a.registryTemplate then
+          checkProgram funcs models profiles[0]?
+          if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
+      match checked with
       | .error e => die e
       | .ok () =>
         match BuildProfile.checkProgram profiles a.profile with
@@ -156,13 +175,17 @@ private def run (args : List String) : IO UInt32 := do
               IO.FS.writeFile a.outPath (template.pretty ++ "\n")
               pure 0
           else
+            -- Reads and every validation guard retain their original path order.
+            -- Only successful emission depends on identity rather than storage keys.
+            let emissionFuncs := ((emissionKeys.zip funcs).qsort
+              (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
             let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
-              emit funcs a.ns a.prefix_ a.floatSemantics models
+              emit emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
             pure 0

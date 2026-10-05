@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "versions": {
+    "0.14.1": {
+      "Thread.zig": {
+        "sha256": "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d",
+        "bytes": 60142
+      }
+    },
+    "0.15.2": {
+      "Thread.zig": {
+        "sha256": "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a",
+        "bytes": 60783
+      }
+    },
+    "0.16.0": {
+      "Thread.zig": {
+        "sha256": "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb",
+        "bytes": 66110
+      },
+      "Io.zig": {
+        "sha256": "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6",
+        "bytes": 135875
+      },
+      "Io/Threaded.zig": {
+        "sha256": "eb7bbb4ddf590ec3d0d2a1ee5c3845ef4984d9e440965a3e7c920cd0c906df94",
+        "bytes": 778302
+      }
+    }
+  }
+}

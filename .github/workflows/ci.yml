@@ -169,6 +169,12 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      - name: Public exporter filename qualification
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+        run: bash scripts/check-export-names.sh
+
       - name: Build optional separation proof tools
         if: ${{ !matrix.mutate }}
         run: |
@@ -349,6 +355,19 @@ jobs:
           bash tests/roadmap/thread-tuples/check.sh --native
           bash tests/roadmap/thread-tuples/check.sh --check-artifacts
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
+
+      - name: Fallible thread assignment and group fallback gate
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          AIR2LEAN_SPAWN_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_SPAWN_ARTIFACT_DIR: ${{ runner.temp }}/spawn-failure
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/spawn-failure/harness-tests.py
+          bash tests/roadmap/spawn-failure/check.sh --full
 
       # L04 actual compiler/native qualification is currently specific to 0.16.0.
       # 0.14/0.15 exporter APIs were source-inspected; their synthetic fixtures are

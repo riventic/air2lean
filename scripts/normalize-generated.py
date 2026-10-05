@@ -79,6 +79,27 @@ def profile_for_air(doc):
     return dict(p, schema=schema)
 
 
+# Audited Zig 0.15.2/0.16.0 x86_64 baseline models, including sse2's sse dependency.
+BASELINE_FEATURES = {"64bit", "cmov", "cx8", "fxsr", "idivq_to_divl", "macrofusion",
+                     "mmx", "nopl", "slow_3ops_lea", "slow_incdec", "sse", "sse2",
+                     "vzeroupper", "x87"}
+
+
+def fresh_linux_profile(doc, expected_version):
+    """Validate one fresh Linux/baseline ReleaseSafe export, with a caller-pinned version."""
+    profile = profile_for_air(doc)
+    if doc.get("schema") != 12 or doc.get("zig_version") != expected_version:
+        raise ValueError("fresh AIR requires current schema 12 and matching version")
+    arch, os_version, _ = profile["target_triple"].split("-")
+    if (doc.get("target_endian") != "little" or arch != "x86_64" or
+            os_version.split(".")[0] != "linux" or profile["abi"] not in {"gnu", "musl"} or
+            profile["backend"] != "stage2_llvm" or profile["cpu"] != "x86_64" or
+            set(profile["features"]) != BASELINE_FEATURES or
+            profile["build_mode"] != "ReleaseSafe" or profile["error_tracing"] is not False):
+        raise ValueError("fresh AIR profile differs from Linux/baseline ReleaseSafe flags")
+    return profile
+
+
 def split_generated(data, required=False):
     first, newline, body = data.partition(b"\n")
     if not first.startswith(PREFIX):

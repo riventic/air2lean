@@ -12,7 +12,20 @@ import re
 import sys
 
 
+HASHED_NAME = re.compile(r"~air2lean-sha256-[0-9a-f]{64}\.json")
+
+
 IDENTITY_MARKER = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
+
+
+def canonical_filename(name):
+    """Portable naming for normalized identities, reserving legacy collision suffix space."""
+    stem = name.split(".", 1)[0].upper()
+    reserved = stem in {"CON", "PRN", "AUX", "NUL"} or re.fullmatch(r"(COM|LPT)[1-9]", stem)
+    if (re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", name) and
+            len(name.encode("utf-8")) + 5 + 13 <= 255 and not reserved):
+        return name + ".json"
+    return "~air2lean-sha256-" + hashlib.sha256(name.encode("utf-8")).hexdigest() + ".json"
 
 
 @cache
@@ -71,14 +84,27 @@ class ValidationContext:
         elif actual:
             raise ValueError("--actual requires a validated --check-report")
 
-    def file(self, path):
+    def file_entry(self, path):
         path = Path(path)
         raw = path.read_bytes()
         if self.actual and self.inputs.get(path.name) != self.helpers["digest"](raw):
             raise ValueError(f"{path}: AIR artifact does not match validated translation report")
         document = self.helpers["parse_json"](raw.decode("utf-8"))
         value = normalize(document, checked_profile=self.profile, actual=self.actual, helpers=self.helpers)
-        return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+        if not isinstance(document, dict) or not isinstance(document.get("name"), str):
+            raise ValueError(f"{path}: AIR filename requires a full JSON name")
+        if path.name.startswith("~air2lean-sha256-"):
+            if not HASHED_NAME.fullmatch(path.name):
+                raise ValueError(f"{path}: malformed reserved AIR filename")
+            expected = "~air2lean-sha256-" + hashlib.sha256(document["name"].encode("utf-8")).hexdigest() + ".json"
+            if path.name != expected:
+                raise ValueError(f"{path}: reserved AIR filename does not match full JSON name")
+        name = canonical_filename(value["name"])
+        data = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+        return name, data
+
+    def file(self, path):
+        return self.file_entry(path)[1]
 
 
 def add_directory(source, destination, context):
@@ -87,8 +113,7 @@ def add_directory(source, destination, context):
     if not source.is_dir():
         raise ValueError(f"not an AIR directory: {source}")
     # Validate every input before removing an earlier overlay or writing any new file.
-    entries = [(re.sub(r"__anon_[0-9]+", "__anon_N", p.name), context.file(p))
-               for p in sorted(source.glob("*.json")) if p.is_file()]
+    entries = [context.file_entry(p) for p in sorted(source.glob("*.json")) if p.is_file()]
     counts = Counter(name for name, _ in entries)
     destination.mkdir(parents=True, exist_ok=True)
     # Inspect existing files once, rather than scanning the directory for each basename.
