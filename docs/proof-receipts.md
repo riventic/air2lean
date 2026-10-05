@@ -150,3 +150,11 @@ Root qualification should additionally run a genuine small proof/audit, a policy
 fixture, a genuine build failure and an interrupted guarded attempt before the complete
 selected shipped audit. Keep all evidence under an uncached run directory such as
 `RUNNER_TEMP`; no upload step is added by this scope.
+
+At local revision `f18e0e6`, the guarded all-shipped audit passed for 10,621 compiled
+Lean theorems and 30,930 declarations. Small-scope receipts and disposable-copy drift,
+restoration and no-clobber checks passed; hidden-sorry and project-axiom fixtures were
+rejected by their intended violations, a type-error fixture failed its build, and
+pre-audit self-interruption produced no receipt. These are historical checks of that
+recorded revision and compiled Lean policy; they do not establish original-source
+correspondence, native adequacy or CI success for later revisions.

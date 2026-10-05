@@ -396,7 +396,10 @@ jobs:
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: tests/roadmap/assurance/check.sh
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_receipt.py
+          tests/roadmap/assurance/check.sh
 
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}
@@ -483,3 +486,23 @@ jobs:
           AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
           AIR2LEAN_MUTATION_SHARDS: "5"
         run: scripts/mutate.sh
+
+      # Keep the selected generated/profile context and final compiled library together.
+      # This owns its sole guard; evidence stays outside cached .lake, with no upload.
+      - name: Revision-bound theorem audit receipt
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate && runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
+          cd "$repo_root"
+          temp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")
+          lean_executable=$(elan which lean)
+          lean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' "$lean_executable")
+          guard="$repo_root/scripts/build-guard.py"
+          guard_sha=$(python3 -c 'import hashlib,sys; from pathlib import Path; print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())' "$guard")
+          receipt_parent=$(mktemp -d "$temp_root/proof-receipt.XXXXXX")
+          export AIR2LEAN_BUILD_LOCK="$temp_root/air2lean-build.lock"
+          export PYTHONDONTWRITEBYTECODE=1
+          bash tests/roadmap/proof-receipts/check.sh \
+            --guard "$guard" --guard-sha256 "$guard_sha" \
+            "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
