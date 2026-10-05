@@ -372,7 +372,7 @@ def generate(version, source, os_name='linux'):
                  for name in universe['intern_keys']]
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
-              'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden'],
+              'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics'],
               'model-boundaries': ['Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():
