@@ -1133,7 +1133,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .div _ a b => #[a, b]
   | .divFloat a b => #[a, b]
   | .minMax _ a b => #[a, b]
-  | .withOverflow _ a b => #[a, b]
+  | .withOverflow _ a b | .shlWithOverflow a b => #[a, b]
+  | .countBits _ a => #[a]
   | .bit _ a b => #[a, b]
   | .not a => #[a]
   | .neg a => #[a]
@@ -1455,6 +1456,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+  | .shlWithOverflow a b =>
+    let sgn := if fc.valSigned a then "true" else "false"
+    let (env, l) := bindLet fc env inst.id s!"Zig.shlWithOverflow {sgn} {rv a} {rv b}"
+    (env, some l)
+  | .countBits op a =>
+    let f := match op with
+      | .clz => "Zig.clz" | .ctz => "Zig.ctz" | .popcount => "Zig.popcount"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {fc.tyBits inst.ty} {rv a})"
+    (env, some l)
   | .splat a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
   | .select pred a b =>
@@ -1957,6 +1967,8 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .divFloat a b => some (#[a, b], fun v => .divFloat v[0]! v[1]!)
   | .minMax m a b => some (#[a, b], fun v => .minMax m v[0]! v[1]!)
   | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
+  | .shlWithOverflow a b => some (#[a, b], fun v => .shlWithOverflow v[0]! v[1]!)
+  | .countBits o a => some (#[a], fun v => .countBits o v[0]!)
   | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
   | .not a => some (#[a], fun v => .not v[0]!)
   | .neg a => some (#[a], fun v => .neg v[0]!)

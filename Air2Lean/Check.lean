@@ -300,6 +300,18 @@ def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String 
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
 
+/-- Scalar or vector integer shape: lane count, signedness and element width. -/
+def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
+  match cx.types[t]? with
+  | some (.int s n) => some (none, s, n)
+  | some (.vector len c) => match cx.types[c]? with
+    | some (.int s n) => some (some len, s, n)
+    | _ => none
+  | _ => none
+
+/-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
+def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
+
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
@@ -319,6 +331,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
         | t => t
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
+    pure line
+  | .countBits _ a =>
+    let some aty := cx.valTy? a | cx.fail line "bit count operand has no known type"
+    let some (alen, _, bits) := cx.intShape? aty
+      | cx.fail line "bit count requires an integer or integer vector operand"
+    let some (rlen, signed, width) := cx.intShape? ty
+      | cx.fail line "bit count result must be an unsigned integer or integer vector"
+    unless alen == rlen && !signed && width == bitCountWidth bits do
+      cx.fail line "bit count result must preserve vector length and have the unsigned count width"
+    pure line
+  | .shlWithOverflow a b =>
+    let some aty := cx.valTy? a | cx.fail line "shift-overflow operand has no known type"
+    let some bty := cx.valTy? b | cx.fail line "shift-overflow count has no known type"
+    let some (alen, _, abits) := cx.intShape? aty
+      | cx.fail line "shift-overflow requires an integer or integer vector operand"
+    let some (blen, bsign, bbits) := cx.intShape? bty
+      | cx.fail line "shift-overflow count must be an unsigned integer or integer vector"
+    unless alen == blen && !bsign && bbits == bitCountWidth (abits - 1) do
+      cx.fail line "shift-overflow count must have the unsigned Log2Int width and preserve vector length"
+    let some (.tuple fields) := cx.types[ty]?
+      | cx.fail line "shift-overflow result must be a pair tuple"
+    unless fields.size == 2 && fields[0]? == some aty do
+      cx.fail line "shift-overflow result must pair the operand type with its overflow bit"
+    let some flagTy := fields[1]? | cx.fail line "shift-overflow result is missing its overflow bit"
+    unless cx.intShape? flagTy == some (alen, false, 1) do
+      cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
   | .bitcast a =>
     let sourceTy := cx.valTy? a
