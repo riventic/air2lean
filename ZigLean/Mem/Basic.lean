@@ -184,6 +184,17 @@ structure ALoc where
   msgs : Array Msg
   deriving Repr, Inhabited
 
+/-- The legacy default request-size cap, in bytes; configurable through `Mem.allocPolicy`. -/
+def maxAllocBytes : Nat := 1 <<< 20
+
+/-- Selected allocator environment: a per-request cap and permitted failure indices.
+The finite list can describe every finite prefix of an arbitrary failure decision trace.
+It is not a claim about a native allocator's available memory or address policy. -/
+structure AllocPolicy where
+  maxBytes : Nat := maxAllocBytes
+  failures : List Nat := []
+  deriving DecidableEq, Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -192,6 +203,8 @@ structure Mem where
   allocs : Nat := 0
   /-- The allocation that fails: allocation number `failAt` (from 0), or none. -/
   failAt : Option Nat := none
+  /-- Additional failures and the request-size bound. Defaults preserve the legacy model. -/
+  allocPolicy : AllocPolicy := {}
   /-- The thread that is running right now. -/
   current : ThreadId := 0
   /-- `clocks[t]`: thread `t`'s own vector clock. Same size as `threads`. -/
