@@ -445,8 +445,8 @@ inductive Op where
   | atomicLoad (ptr : Val) (order : AtomicOrder)
   | atomicStore (ptr v : Val) (order : AtomicOrder)
   | atomicRmw (op : RmwOp) (order : AtomicOrder) (ptr v : Val)
-  /-- `cmpxchg_weak` (`weak = true`) / `cmpxchg_strong`. The model's `cmpxchg_weak` never fails
-  spuriously (`docs/std-models.md`), so the two behave alike. -/
+  /-- `cmpxchg_weak` (`weak = true`) permits spurious read-only failure;
+  `cmpxchg_strong` succeeds whenever the selected value matches. -/
   | cmpxchg (weak : Bool) (ptr expected new : Val) (succ fail : AtomicOrder)
   | sliceLen (s : Val)
   | sliceElemVal (s : Val) (i : Val)

@@ -1,4 +1,6 @@
 import Proofs.Sync.Gen
+import Proofs.Sync.RwLockContract
+import Proofs.Sync.RwLockSnapshotPair
 
 /-!
 # Proofs about `examples/sync/sync.zig`
@@ -56,3 +58,27 @@ theorem wait_other_value :
      | some (.ok _) => true
      | _ => false) = true := by
   decide +kernel
+
+/-! ## Restricted snapshot race boundary
+
+The actual generated-client WP/result/safety candidates are imported above. Finite
+looped client/lifetime/frame assertions execute in `tests/roadmap/rwlock-contracts/Runtime.lean`; the direct
+memory footprint negative below remains a kernel computation.
+-/
+
+/-- Remove the shared-hold/clock-transfer boundary at the client's actual counter offset.
+The child writes with its fork clock; the parent reads without an acquire or join edge. -/
+private def unprotectedSnapshot : MemM (BitVec 32) := do
+  let p ← alloc .stack 64 8
+  store 4 (p.add 56) (0 : BitVec 32)
+  let child ← Thread.fork
+  modify fun m => { m with current := child }
+  store 4 (p.add 56) (1 : BitVec 32)
+  modify fun m => { m with current := 0 }
+  load (BitVec 32) 4 (p.add 56)
+
+/-- The real footprint/race checker rejects a counter read lacking the lock clock edge. -/
+theorem snapshot_without_clock_edge_rejected :
+    (match (unprotectedSnapshot.run mem0).run with
+     | some (.error .illegal) => true
+     | _ => false) = true := by decide +kernel

@@ -1889,9 +1889,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
       else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
-  | .cmpxchg _weak ptr expected new succ fail =>
-    -- `weak`/`strong` behave alike: the model's cmpxchg never fails spuriously.
-    let f := if fc.atomicTyped ptr then "Zig.cmpxchgAsC" else "Zig.cmpxchgC"
+  | .cmpxchg weak ptr expected new succ fail =>
+    let f := if fc.atomicTyped ptr then
+        if weak then "Zig.cmpxchgWeakAsC" else "Zig.cmpxchgAsC"
+      else if weak then "Zig.cmpxchgWeakC" else "Zig.cmpxchgC"
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>

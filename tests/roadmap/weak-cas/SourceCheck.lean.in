@@ -1,0 +1,47 @@
+
+open Zig
+private def sourceAssert (b : Bool) (name : String) : IO Unit :=
+  unless b do throw (IO.userError s!"fresh source outcome: {name}")
+private def initialCell : MemM Ptr := do
+  let p ← alloc .heap 1 1
+  store 1 p (42#8)
+  pure p
+private def inspect (m : Mem) (p : Ptr) : Option (BitVec 8) :=
+  match ((load (BitVec 8) 1 p).run m).run with
+  | some (.ok (v, _)) => some v
+  | _ => none
+
+private def sourceCall {α : Type} (m : Mem) (oracle : Nat → Nat)
+    (action : ConcM WeakCasSource.Tgt α) : Option (Except Error (α × Mem)) :=
+  (Sched.run WeakCasSource.dispatch 100 oracle action m).run
+
+def main : IO Unit := do
+  let some (.ok (p, m)) := (initialCell.run {}).run | throw (IO.userError "initial cell")
+  sourceAssert (match sourceCall m (fun _ => 0) (WeakCasSource.weak p (42#8) (7#8)) with
+    | some (.ok (none, m')) => inspect m' p == some 7#8
+    | _ => false) "weak success writes desired"
+  sourceAssert (match sourceCall m (fun _ => 1) (WeakCasSource.weak p (42#8) (7#8)) with
+    | some (.ok (some old, m')) => old == 42#8 && inspect m' p == some 42#8
+    | _ => false) "matching weak failure leaves cell"
+  sourceAssert (match sourceCall m (fun _ => 1) (WeakCasSource.strong p (42#8) (7#8)) with
+    | some (.ok (none, m')) => inspect m' p == some 7#8
+    | _ => false) "strong cannot fail spuriously"
+  sourceAssert (match sourceCall m (fun _ => 1) (WeakCasSource.weak p (99#8) (7#8)) with
+    | some (.ok (some old, m')) => old == 42#8 && inspect m' p == some 42#8
+    | _ => false) "mismatch read"
+  for mask in List.range 256 do
+    let oracle := fun i => (mask / 2 ^ (i % 8)) % 2
+    sourceAssert (match sourceCall m oracle (WeakCasSource.retry p (42#8) (7#8) (3#8)) with
+      | some (.ok (done, m')) => inspect m' p == some (if done then 7#8 else 42#8)
+      | _ => false) s!"retry allowed outcome {mask}"
+  let boolSetup : MemM Ptr := do
+    let p ← alloc .heap 1 1
+    store 1 p false
+    pure p
+  let some (.ok (bp, bm)) := (boolSetup.run {}).run | throw (IO.userError "initial bool")
+  sourceAssert (match (Sched.run WeakCasSource.dispatch 100 (fun _ => 1)
+      (WeakCasSource.weakBool bp false true) bm).run with
+    | some (.ok (some old, m')) => !old &&
+      (match ((load Bool 1 bp).run m').run with | some (.ok (false, _)) => true | _ => false)
+    | _ => false) "Packed matching failure"
+  IO.println "Fresh source allowed-outcome regressions passed"

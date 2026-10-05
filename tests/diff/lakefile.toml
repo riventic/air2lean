@@ -7,6 +7,9 @@ defaultTargets = ["difftest"]
 name = "air2lean"
 path = "../.."
 
+[[lean_lib]]
+name = "ScheduleSearch"
+
 [[lean_exe]]
 name = "difftest"
 root = "Diff"

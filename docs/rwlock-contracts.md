@@ -15,15 +15,22 @@ Generic Mutex and Semaphore contracts already have independent clients.
 
 `rwLockSnapshotPair` is new public source preparation. It reuses the existing writer,
 holds one shared acquisition across two loads, releases, joins, and returns their decimal
-pair. Expected successful results are 0, 11 or 22. No generated AIR/Gen/golden fixture was
-handwritten or changed. The snapshot result lemma is arithmetic. The new local snapshot fragment also has an
+pair. Expected successful results are 0, 11 or 22. No C14 AIR/Gen/golden fixture was
+handwritten. The accepted Weak CAS prefix supplies its existing generated fixtures and
+primitive proofs unchanged. ROOT has now exported and translated the new source client.
+The checked-in Gen candidate is an unchanged copy of that actual output, including its
+profile header; all preexisting generated bodies and dispatch targets are byte-identical
+to the accepted prefix. The snapshot result lemma is arithmetic. The local fragment has an
 owned two-load WP contract, derived from the existing protected-load proof, plus a generic
-local separation frame theorem. Neither is the generated-program theorem. A generated-program
-WP proof and all-fuel/all-oracle result/safety theorems are still pending ROOT export and
-kernel qualification. Compiler optimization may change the load shape; the proof must use
+local separation frame theorem. The joined-phase adapter derives all-child-joined from
+the existing protocol shape and proves that freeing the live stack allocation preserves
+that obligation. It intentionally does not retain the live-block invariant after free.
+The client module's WP and all-fuel/all-oracle result/strict-safety theorems have passed
+local kernel checking against the actual generated body. Their scope is the restricted
+protocol above; native differential agreement and the complete Sync pipeline are pending. Compiler optimization may change the load shape; the proof must use
 the actual export rather than assume that two source reads survive as two AIR loads.
 
-The remaining client proof must establish the following boundaries:
+The checked client proof retains the following boundaries; broader extensions remain partial:
 
 - Acquisition yields the counter resource and clock transfer through the complete invariant.
   Both observations remain under the same hold; release transfers the resource back through
@@ -35,20 +42,34 @@ The remaining client proof must establish the following boundaries:
 - Keep sole-waiter, permit/no-overflow, wake-witness and fixed-thread premises. No broadcast,
   timeout, cancellation, reuse-generation or arbitrary reader pool behavior follows.
 
-ROOT validation and meaningful negative cases, not yet executed:
+The ordinary `Proofs.Sync.Proofs` umbrella imports the kit and client. The adapter and
+client WP/result/strict-safety theorems have passed ROOT's kernel check. The direct counter
+race negative also passes the kernel. The finite looped client/sentinel/missing-join
+fixtures execute as ordinary runtime assertions after the existing proof build, since
+`Zig.loop`'s `partial_fixpoint` is opaque to definitional kernel reduction. These runtime
+assertions have passed locally: they strictly require complete success or the intended
+lifetime error. Model negatives are not exported source artifacts.
+The existing native/Lean differential Sync roster now includes the new client and 20
+empty-argument inputs; its Linux AIR golden is ROOT's exact unmodified new function dump.
 
-1. Export/translate the new function and compare the existing writer/primitive bodies and
-   target inventory. Build the actual generated definition and original proof module.
-2. Prove both new scheduler theorems for all fuel/oracles. Then check representative reader-
-   first, writer-first and contended schedules with exact expected 0/11/22 results; finite
-   witnesses do not replace the theorem.
-3. Use a protected-frame sentinel and assert its literal value and ownership after release
-   and join. Introduce a read outside the hold and require the protected-load/race boundary
-   to fail, rather than accepting an unrelated parser/build failure.
+Completed local checks and remaining validation:
+
+1. ROOT export/translation, the original proof module, the restricted adapter, new
+   WP/result/safety theorems and umbrella have passed locally. All original generated
+   bodies and dispatch targets remain byte-identical. The normal Sync golden and native
+   differential pipeline remains pending.
+2. Both scheduler theorems cover every fuel/oracle. The finite compiled client witness
+   additionally completes with an allowed 0/11/22 value, joined tasks and a freed Shared
+   allocation. Additional schedule witnesses do not replace these theorems.
+3. The compiled production-client caller preserves sentinel 73 and reclaims both allocations.
+   This is a finite witness; a general all-oracle caller-frame invariant remains separate.
+   The direct counter read without the acquire/join clock edge is kernel-rejected by the
+   actual footprint checker with `.illegal`.
 4. Split the reads with an unlock/relock and exhibit a valid writer interleaving yielding
    unequal observations; this demonstrates why same-snapshot equality requires one hold.
-5. Omit join before reclamation and require the lifetime/last-access obligation to fail.
-   Drop acquire/release clock transfer and require the ownership protocol proof to fail.
+5. The modeled missing-join client, using the actual writer and lock calls, is rejected
+   by the scheduler lifetime guard with `.illegal`. A successful snapshot/unlock is not
+   substituted for the proof's joined-phase reclamation premise.
 
 An arbitrary protected-resource kit requires refactoring `U.parts`, `Car`, `Res`, `wp_n`
 and the shared/exclusive transition lemmas, currently fixed to `NPts` at block 0 + 56.

@@ -10,7 +10,8 @@ resource; it does not replace that resource with an arbitrary heap assertion.
 
 The full protocol invariant and semaphore `E.Spec` remain premises of acquire/release.
 In particular, snapshot facts alone cannot justify unlock, join, or reclamation.
-The new source client has not yet been exported or kernel-qualified.
+ROOT has exported the new source client; kernel qualification of this adapter and client
+proof candidates is still pending.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
@@ -23,7 +24,7 @@ Only projections of `NPts` are admitted; this is not an arbitrary-resource RwLoc
 structure ProtectedFacts (R : Nat → Assn) : Prop where
   project : ∀ k h, NPts k h → R k h
 
-variable {S : Type} [Inhabited S] {E : Sem S}
+variable {S : Type} [Inhabited S] {E : Sync.RwLockRead.Sem S}
 
 /-- The held protocol state exposes the protected counter and any admitted caller facts.
 The invariant is retained by the caller; this theorem does not consume or transfer it. -/
@@ -105,7 +106,7 @@ theorem held_snapshot_wp (hE : E.Spec) {σ : Type} {s : σ} {j : Bool}
         snapshot = (BitVec.ofNat 32 (G 1).2.2.cnt, s) ∧
         m'.current = 0 ∧ ∃ h',
           (proto E).inv (upd G' 0 (gA (.sh j) h' default)) m') G m d := by
-  refine wp_n hE hi hc rfl (.inl rfl) ?_ ?_
+  refine wp_n (r₀ := BitVec.ofNat 32 (G 1).2.2.cnt) hE hi hc rfl (.inl rfl) ?_ ?_
   · simpa only [NPts, upd0_1] using
       (TTriple.load (p := nPtr) (a := 4)
         (v := BitVec.ofNat 32 (G 1).2.2.cnt) (by decide))
@@ -121,20 +122,67 @@ theorem held_pair_wp (hE : E.Spec) {σ : Type} {s : σ} {j : Bool}
     (hi : (proto E).inv (upd G 0 (gA (.sh j) h default)) m)
     (hc : m.current = 0) :
     (proto E).WP 0
-      ((liftM (do let first ← Zig.load (BitVec 32) 4 nPtr
-                 let second ← Zig.load (BitVec 32) 4 nPtr
-                 pure (first, second)) : CM Tgt σ (BitVec 32 × BitVec 32)).run s)
+      ((liftM (do
+          let first ← Zig.load (BitVec 32) 4 nPtr
+          let second ← Zig.load (BitVec 32) 4 nPtr
+          pure (first, second)) : CM Tgt σ (BitVec 32 × BitVec 32)).run s)
       (fun pair G' m' _ =>
         pair = ((BitVec.ofNat 32 (G 1).2.2.cnt,
                  BitVec.ofNat 32 (G 1).2.2.cnt), s) ∧
         m'.current = 0 ∧ ∃ h',
           (proto E).inv (upd G' 0 (gA (.sh j) h' default)) m') G m d := by
-  refine wp_n hE hi hc rfl (.inl rfl) ?_ ?_
+  refine wp_n (r₀ := (BitVec.ofNat 32 (G 1).2.2.cnt,
+    BitVec.ofNat 32 (G 1).2.2.cnt)) hE hi hc rfl (.inl rfl) ?_ ?_
   · simpa only [NPts, upd0_1] using
       (load_pair_owned (p := nPtr) (a := 4)
         (v := BitVec.ofNat 32 (G 1).2.2.cnt) (by decide))
   · intro m' h' hc' _ hi'
     exact ⟨rfl, hc', h', hi'⟩
+
+/-- The existing protocol's join flag entails that every spawned task is joined.
+This includes the `.ls true` state returned by `inv_join`; a second shared acquisition
+is not needed merely to establish the allocation-lifetime boundary. -/
+theorem joined_of_phase {G : ThreadId → Gh S} {m : Mem} {x : Ph}
+    {h : Heap} {sx : S}
+    (hi : (proto E).inv (upd G 0 (gA x h sx)) m) (hjd : x.jd = true) :
+    joinedAll 0 m := by
+  obtain ⟨h0, ⟨_, hp, _⟩ | ⟨hs2, hr, _, _, _⟩⟩ := hi.2.1.shape
+  · change (upd G 0 _ 0).2.2 = .pre at hp
+    rw [upd_self] at hp
+    have hx : x = .pre := hp
+    subst x
+    cases hjd
+  have hj1 : m.threads[1]? = some { spawner := 0, joined := true } := by
+    rcases hr with ⟨_, hd⟩ | ⟨h1, _⟩
+    · change (upd G 0 _ 0).2.2.jd = false at hd
+      rw [upd_self] at hd
+      change x.jd = false at hd
+      rw [hjd] at hd
+      cases hd
+    · exact h1
+  intro r hr _
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+  · rw [Array.getElem?_eq_getElem hi'] at h0
+    rw [Option.some.inj h0]
+  · rw [Array.getElem?_eq_getElem hi'] at hj1
+    rw [Option.some.inj hj1]
+
+/-- Reclaim the original live stack allocation only at a joined protocol phase.
+The successful free preserves the thread roster and the joined obligation. The full
+protocol is deliberately not asserted after reclamation: its `BlkOk` requires a live
+allocation. A generated client must establish this precondition through release/join. -/
+theorem reclaim_joined_wp {G : ThreadId → Gh S} {m : Mem} {d : Nat} {x : Ph}
+    {h : Heap} {sx : S}
+    (hi : (proto E).inv (upd G 0 (gA x h sx)) m) (hjd : x.jd = true) :
+    (proto E).WP 0 (ConcM.liftMem (free bPtr))
+      (fun _ _ m' _ => m'.threads = m.threads ∧ joinedAll 0 m') G m d := by
+  have hj := joined_of_phase hi hjd
+  obtain ⟨blk, hb, hl, _⟩ := hi.2.1.blk
+  refine WP.liftMem (fun e he => (free_noErr hb hl e he).elim) ?_
+  intro _ m' hf
+  obtain ⟨_, _, _, _, rfl⟩ := free_ok hf
+  exact ⟨rfl, rfl, hj⟩
 
 /-- Joining a finished thread transfers its part to the parent through the existing clock
 merge/ownership rule. This does not itself authorize freeing an allocation: the client
