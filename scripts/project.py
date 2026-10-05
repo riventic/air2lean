@@ -115,32 +115,36 @@ def path_under(base, name):
     return path
 
 
-def read_bounded(path, cap):
+def _file_chunks(path, cap, charge):
+    # Unbuffered reads expose each returned chunk before a later read can fail.
     # O_NONBLOCK prevents FIFO/device opens from bypassing subprocess timeouts.
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb') as handle:
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb', 0) as handle:
         if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
             raise Invalid(f'input is not a regular file: {path.name}')
-        data = handle.read(cap + 1)
-    if len(data) > cap:
-        raise Invalid(f'input exceeds byte limit: {path.name}')
-    return data
-
-
-def hash_bounded(path, cap):
-    """Hash a regular file in chunks, detecting cap+1 bytes even if it grows."""
-    hashed = hashlib.sha256()
-    total = 0
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb') as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-            raise Invalid(f'input is not a regular file: {path.name}')
+        total = 0
         while True:
             chunk = handle.read(min(1024 * 1024, cap + 1 - total))
             if not chunk:
-                break
+                return
+            if charge is not None:
+                charge(len(chunk))
             total += len(chunk)
             if total > cap:
                 raise Invalid(f'input exceeds byte limit: {path.name}')
-            hashed.update(chunk)
+            yield chunk
+
+
+def read_bounded(path, cap, *, charge=None):
+    return b''.join(_file_chunks(path, cap, charge))
+
+
+def hash_bounded(path, cap, *, charge=None):
+    """Hash a regular file in chunks, detecting cap+1 bytes even if it grows."""
+    hashed = hashlib.sha256()
+    total = 0
+    for chunk in _file_chunks(path, cap, charge):
+        hashed.update(chunk)
+        total += len(chunk)
     return hashed.hexdigest(), total
 
 
@@ -341,19 +345,21 @@ def collect(path, *, air_boundaries=None):
         raise Invalid('input exceeds max_files')
     if total > limits['max_total_bytes']:
         raise Invalid('manifest exceeds max_total_bytes')
+    def charge(size):
+        nonlocal total
+        total += size
     for name in sorted(names):
         try:
+            if total > limits['max_total_bytes']:
+                raise Invalid('input exceeds max_total_bytes')
             cap = min(limits['max_file_bytes'], limits['max_total_bytes'] - total)
             source = path_under(path.parent, name)
             if name in retained:
-                content = read_bounded(source, cap)
+                content = read_bounded(source, cap, charge=charge)
                 data[name] = content
                 sha256, size = digest(content), len(content)
             else:
-                sha256, size = hash_bounded(source, cap)
-            total += size
-            if total > limits['max_total_bytes']:
-                raise Invalid('input exceeds max_total_bytes')
+                sha256, size = hash_bounded(source, cap, charge=charge)
             files['input/' + name] = {'sha256': sha256, 'bytes': size}
         except (OSError, Invalid) as error:
             diagnostics.append(diagnostic('INPUT_FILE', error, path=name))

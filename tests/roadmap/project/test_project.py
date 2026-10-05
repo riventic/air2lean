@@ -393,6 +393,132 @@ class ProjectTests(unittest.TestCase):
                 project.hash_bounded(path, 4)
         self.assertEqual(sizes, [5, 2])
 
+    @contextlib.contextmanager
+    def tracked_input_reads(self, *, short=None, fail_name=None, fail_after=None):
+        original_open, original_fdopen = os.open, os.fdopen
+        observed = {'opened': [], 'chunks': {}, 'closed': []}
+        names = {}
+        def opened(path, *args, **kwargs):
+            fd = original_open(path, *args, **kwargs)
+            names[fd] = Path(path).name
+            observed['opened'].append(names[fd])
+            return fd
+        class Reader:
+            def __init__(self, handle):
+                self.handle, self.name = handle, names[handle.fileno()]
+            def __enter__(self):
+                self.handle.__enter__()
+                return self
+            def __exit__(self, *args):
+                observed['closed'].append(self.name)
+                return self.handle.__exit__(*args)
+            def fileno(self):
+                return self.handle.fileno()
+            def read(self, size):
+                chunks = observed['chunks'].setdefault(self.name, [])
+                if self.name == fail_name and len(chunks) == fail_after:
+                    raise OSError('injected partial read failure')
+                chunk = self.handle.read(min(size, short) if short else size)
+                chunks.append(len(chunk))
+                return chunk
+        with mock.patch.object(project.os, 'open', side_effect=opened), \
+             mock.patch.object(project.os, 'fdopen', side_effect=lambda *a: Reader(original_fdopen(*a))):
+            yield observed
+
+    def test_shared_readers_preserve_returns_and_charge_short_chunks(self):
+        path = self.base / 'short'
+        path.write_bytes(b'abcdef')
+        for reader, expected in ((project.read_bounded, b'abcdef'),
+                                 (project.hash_bounded, (project.digest(b'abcdef'), 6))):
+            with self.subTest(reader=reader.__name__):
+                self.assertEqual(reader(path, 6), expected)
+                charges = []
+                with self.tracked_input_reads(short=2) as reads:
+                    self.assertEqual(reader(path, 6, charge=charges.append), expected)
+                self.assertEqual(charges, [2, 2, 2])
+                self.assertEqual(reads['chunks']['short'], [2, 2, 2, 0])
+                self.assertEqual(reads['closed'], ['short'])
+
+    def test_shared_readers_charge_before_oversize_and_partial_io_failure(self):
+        path = self.base / 'partial'
+        path.write_bytes(b'abcdef')
+        for reader in (project.read_bounded, project.hash_bounded):
+            with self.subTest(reader=reader.__name__):
+                charges = []
+                with self.tracked_input_reads(short=2):
+                    with self.assertRaisesRegex(project.Invalid, 'input exceeds byte limit: partial'):
+                        reader(path, 3, charge=charges.append)
+                self.assertEqual(charges, [2, 2])  # Includes the detector byte before rejection.
+                charges = []
+                with self.tracked_input_reads(short=2, fail_name='partial', fail_after=2) as reads:
+                    with self.assertRaisesRegex(OSError, 'injected partial read failure'):
+                        reader(path, 8, charge=charges.append)
+                self.assertEqual(charges, [2, 2])
+                self.assertEqual(reads['closed'], ['partial'])
+
+    def budget_inputs(self, sources, air):
+        self.manifest['source_closure'] = sources
+        self.manifest['profile'] = 'z-profile.json'
+        self.manifest['components'] = {key: ['z-profile.json'] for key in self.manifest['components']}
+        self.manifest['roots'][0].update(air=air, contracts=[])
+        (self.base / 'z-profile.json').write_bytes(b'')
+        for name in air:
+            (self.base / name).write_bytes(b'')
+
+    def test_collect_charges_oversized_hash_and_retained_inputs_once(self):
+        self.budget_inputs(['a-hash', 'c-never'], ['b-air', 'd-air'])
+        for name in ('a-hash', 'b-air', 'c-never', 'd-air'):
+            (self.base / name).write_bytes(b'x' * 1025)
+        self.manifest['limits'] = {'max_file_bytes': 1024, 'max_total_bytes': 2048}
+        self.save()
+        with self.tracked_input_reads() as reads, mock.patch.object(project, 'git_state', return_value={}):
+            result = project.collect(self.path, air_boundaries={})
+        self.assertEqual(len(result), 4)
+        _, limits, data, report = result
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), limits['max_total_bytes'] + 1)
+        self.assertEqual(reads['opened'], ['project.json', 'a-hash', 'b-air'])
+        self.assertEqual(data, {})
+        self.assertEqual(set(report['files']), {'manifest'})
+        failures = [d for d in report['diagnostics'] if d['code'] == 'INPUT_FILE']
+        self.assertEqual([d['path'] for d in failures], ['a-hash', 'b-air', 'c-never', 'd-air', 'z-profile.json'])
+        self.assertEqual([d['message'] for d in failures[:3]],
+                         ['input exceeds byte limit: a-hash', 'input exceeds byte limit: b-air',
+                          'input exceeds max_total_bytes'])
+        self.assertEqual(report['roots'][0]['input_validation']['status'], 'failed')
+
+    def test_collect_keeps_partial_io_bytes_charged_and_stops_later_opens(self):
+        self.budget_inputs(['a-partial', 'b-over', 'c-never'], ['z-air.json'])
+        for name in ('a-partial', 'b-over', 'c-never'):
+            (self.base / name).write_bytes(b'xyz')
+        self.manifest['limits'] = {'max_file_bytes': 2048, 'max_total_bytes': 1027}
+        self.path.write_text(json.dumps(self.manifest).ljust(1024))
+        with self.tracked_input_reads(short=2, fail_name='a-partial', fail_after=1) as reads, \
+             mock.patch.object(project, 'git_state', return_value={}):
+            _, _, data, report = project.collect(self.path)
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), 1028)
+        self.assertEqual(reads['opened'], ['project.json', 'a-partial', 'b-over'])
+        failures = [d for d in report['diagnostics'] if d['code'] == 'INPUT_FILE']
+        self.assertEqual(failures[0]['message'], 'injected partial read failure')
+        self.assertEqual(failures[1]['message'], 'input exceeds byte limit: b-over')
+        self.assertEqual(set(report['files']), {'manifest'})
+        self.assertEqual(data, {})
+
+    def test_collect_at_exact_budget_allows_empty_then_one_detector_byte(self):
+        self.budget_inputs(['a-empty', 'b-byte', 'c-never'], ['z-air.json'])
+        (self.base / 'a-empty').write_bytes(b'')
+        (self.base / 'b-byte').write_bytes(b'x')
+        (self.base / 'c-never').write_bytes(b'x')
+        self.manifest['limits'] = {'max_file_bytes': 2048, 'max_total_bytes': 1024}
+        self.path.write_text(json.dumps(self.manifest).ljust(1024))
+        with self.tracked_input_reads() as reads, mock.patch.object(project, 'git_state', return_value={}):
+            _, _, _, report = project.collect(self.path)
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), 1025)
+        self.assertEqual(reads['opened'], ['project.json', 'a-empty', 'b-byte'])
+        self.assertEqual(report['files']['input/a-empty'], {'sha256': project.digest(b''), 'bytes': 0})
+        self.assertNotIn('input/b-byte', report['files'])
+        self.assertEqual([d['path'] for d in report['diagnostics'] if d['code'] == 'INPUT_FILE'],
+                         ['b-byte', 'c-never', 'z-air.json', 'z-profile.json'])
+
     def test_bounded_report_encoding_preserves_exact_legacy_bytes(self):
         vectors = [None, [], {}, {'z': [True, False, None, -3, 1.5], 'a': {'tab': '\t', 'line': '\n'}},
                    {'😀': '€\u0000"\\', 'a': 'plain ASCII'}, {'text': '€' * 65537}]
