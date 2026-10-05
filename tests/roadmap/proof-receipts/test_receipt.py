@@ -562,6 +562,31 @@ class ReceiptTests(unittest.TestCase):
             r.audit_ok(self.plan, audit)
         self.assertIn(str(self.tc / 'lib/lean/Missing.olean'), calls)
 
+    def test_declaration_budget_is_independent_of_file_budget(self):
+        self.assertEqual((r.MAX_FILES, r.MAX_DECLARATIONS), (30000, 65536))
+        audit = r.load(self.attempt / 'audit.json')
+        node = audit['nodes'][0]
+        diagnostic = '^declaration entry must be a JSON object$'
+        audit['nodes'] = [node] * 65537
+        with self.assertRaisesRegex(ValueError, '^invalid declaration graph$'): r.audit_ok(self.plan, audit)
+        for count in (65536, 30930, 30001):
+            del audit['nodes'][count:]  # Reuse one allocation within the 32 MiB offline budget.
+            audit['nodes'][-1] = None
+            with self.assertRaisesRegex(ValueError, diagnostic): r.audit_ok(self.plan, audit)
+            audit['nodes'][-1] = node
+        audit['nodes'][-1] = None
+        with mock.patch.object(r, 'MAX_DECLARATIONS', r.MAX_FILES), self.assertRaises(AssertionError):
+            with self.assertRaisesRegex(ValueError, diagnostic): r.audit_ok(self.plan, audit)
+        audit['nodes'].clear()
+        with self.assertRaisesRegex(ValueError, '^file inventory exceeds bound$'):
+            r.inventory([self.root / 'lean-toolchain'] * 30001)
+        audit = r.load(self.attempt / 'audit.json')
+        audit['nodes'] += [dict(node, name='Example.budget' + str(i), kind='definition') for i in range(2)]
+        auditor = r.helper('assumptions')
+        audit.update(auditor.apply_policy(audit, auditor.load_policy(self.root / 'assurance/policy.json')))
+        with mock.patch.object(r, 'MAX_FILES', 2), mock.patch.object(r, 'MAX_DECLARATIONS', 3):
+            r.audit_ok(self.plan, audit)  # Distinct small graph passes the complete policy/artifact validator.
+
 
 if __name__ == '__main__':
     result = unittest.main(exit=False).result

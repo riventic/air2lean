@@ -18,6 +18,7 @@ import tempfile
 ROOT = Path(__file__).absolute().parents[1]
 MAX_JSON = 64 * 1024 * 1024
 MAX_FILES = 30000
+MAX_DECLARATIONS = 65536
 MAX_FILE = 512 * 1024 * 1024
 MAX_TOTAL = 16 * 1024 * 1024 * 1024
 MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
@@ -310,7 +311,7 @@ def audit_ok(plan, audit):
     for theorem in theorems:
         mapping(theorem, 'theorem entry')
     nodes = audit.get('nodes')
-    demand(isinstance(nodes, list) and len(nodes) <= MAX_FILES, 'invalid declaration graph')
+    demand(isinstance(nodes, list) and len(nodes) <= MAX_DECLARATIONS, 'invalid declaration graph')
     for node in nodes:
         mapping(node, 'declaration entry')
         demand(all(isinstance(node.get(key), str) for key in ('name', 'module', 'kind'))
