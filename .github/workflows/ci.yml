@@ -101,6 +101,9 @@ jobs:
           set -euo pipefail
           python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
 
+      - name: First-use workflow regressions
+        run: python3 tests/usability/workflow.py
+
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
       # zig-patch/versions.toml's [ci.host-zig."<version>"] table.
@@ -190,6 +193,9 @@ jobs:
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
+
+      - name: First-use CLI diagnostics
+        run: python3 tests/usability/cli.py
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
