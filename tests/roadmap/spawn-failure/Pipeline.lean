@@ -53,10 +53,10 @@ private def config (stack : String := "16777216") (nullAllocator : Bool := true)
 private def spawner (version callee : String) (cfg : Json := config) : Json :=
   let group := callee != "Thread.spawn"
   let ret := if !group then 6 else if callee == "Io.Group.async" then 1 else 15
-  let prefix := if group then #[node 0 "arg" 12 #[] [("param", num 0)],
+  let argSetup := if group then #[node 0 "arg" 12 #[] [("param", num 0)],
     node 1 "arg" 13 #[] [("param", num 1)]] else #[]
   file version "launch" (if group then #[12, 13] else #[]) ret
-    (prefix ++ #[node 2 "aggregate_init" 3 #[lit 0 "7", lit 0 "19"],
+    (argSetup ++ #[node 2 "aggregate_init" 3 #[lit 0 "7", lit 0 "19"],
       node 3 "call" ret (if group then #[ref 0, ref 1, ref 2] else #[cfg, ref 2])
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "worker")])],
       node 4 "ret" 2 #[ref 3]])
