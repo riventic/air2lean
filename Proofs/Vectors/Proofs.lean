@@ -296,4 +296,54 @@ theorem checkedAdd_overflow (a b : Zig.Vec (BitVec 32) 4)
     · simp only [h0, h1, h2, ite_true, ite_false, pure_bind]; rfl
     · simp only [h0, h1, h2, hov, ite_true, ite_false, pure_bind]; rfl
 
+/-- Complete result classification for every pair of four-lane unsigned 32-bit vectors.
+The finite lane witness makes the condition decidable without a classical oracle. -/
+theorem checkedAdd_spec (a b : Zig.Vec (BitVec 32) 4) :
+    checkedAdd a b =
+      if ∃ i : Fin 4, 2 ^ 32 ≤ a.lanes[i.val].toNat + b.lanes[i.val].toNat then
+        throw .overflow
+      else pure (Zig.Vec.map2 (· + ·) a b) := by
+  by_cases h : ∃ i : Fin 4, 2 ^ 32 ≤ a.lanes[i.val].toNat + b.lanes[i.val].toNat
+  · rw [if_pos h]
+    obtain ⟨i, hi⟩ := h
+    exact checkedAdd_overflow a b ⟨i.val, i.isLt, hi⟩
+  · rw [if_neg h]
+    apply checkedAdd_ok
+    intro i hi
+    exact Nat.lt_of_not_ge (fun hov => h ⟨⟨i, hi⟩, hov⟩)
+
+/-- Overflow is exactly the existence of an overflowing lane; it is not merely a
+sufficient condition. Earlier lanes may also overflow. -/
+theorem checkedAdd_overflow_iff (a b : Zig.Vec (BitVec 32) 4) :
+    checkedAdd a b = throw .overflow ↔
+      ∃ i : Fin 4, 2 ^ 32 ≤ a.lanes[i.val].toNat + b.lanes[i.val].toNat := by
+  constructor
+  · intro result
+    by_cases h : ∃ i : Fin 4, 2 ^ 32 ≤ a.lanes[i.val].toNat + b.lanes[i.val].toNat
+    · exact h
+    · have ok := checkedAdd_ok a b (fun i hi =>
+        Nat.lt_of_not_ge (fun hov => h ⟨⟨i, hi⟩, hov⟩))
+      rw [ok] at result
+      change (some (.ok (Zig.Vec.map2 (· + ·) a b)) :
+        Option (Except Zig.Error (Zig.Vec (BitVec 32) 4))) = some (.error .overflow) at result
+      cases result
+  · rintro ⟨i, hi⟩
+    exact checkedAdd_overflow a b ⟨i.val, i.isLt, hi⟩
+
+/-- A successful sum is exactly the condition that every lane fits. This equation also
+rules out other errors and nontermination when every lane fits. -/
+theorem checkedAdd_ok_iff (a b : Zig.Vec (BitVec 32) 4) :
+    checkedAdd a b = pure (Zig.Vec.map2 (· + ·) a b) ↔
+      ∀ i (hi : i < 4), (a.lanes[i]'hi).toNat + (b.lanes[i]'hi).toNat < 2 ^ 32 := by
+  constructor
+  · intro result i hi
+    apply Nat.lt_of_not_ge
+    intro hov
+    have overflow := checkedAdd_overflow a b ⟨i, hi, hov⟩
+    rw [result] at overflow
+    change (some (.ok (Zig.Vec.map2 (· + ·) a b)) :
+      Option (Except Zig.Error (Zig.Vec (BitVec 32) 4))) = some (.error .overflow) at overflow
+    cases overflow
+  · exact checkedAdd_ok a b
+
 end Vectors
