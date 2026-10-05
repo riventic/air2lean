@@ -2,6 +2,9 @@
 import copy
 import importlib.util
 import json
+import subprocess
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 import unittest
 
@@ -58,6 +61,25 @@ class ContractTests(unittest.TestCase):
                     text(p) + '\nvalue pointer_load 1234567',
                     text(p).replace('offset record_count 4\n', '')]:
             with self.assertRaises(ValueError): abi.observations(bad, p)
+
+    def test_compile_failure_preserves_bounded_cause_without_running_binary(self):
+        # A fake compiler file and mocked launch exercise the actual failure path;
+        # no compiler/native target executes, on any host operating system.
+        cause = b"probe.zig:29: error: builtin has no member error_return_tracing\n" + b"x" * 10000
+        with tempfile.TemporaryDirectory() as directory:
+            compiler = Path(directory) / 'zig'
+            compiler.write_bytes(b'portable fake compiler')
+            failure = subprocess.CalledProcessError(1, ['zig'], stderr=cause)
+            with patch.object(abi.platform, 'system', return_value='Linux'), \
+                    patch.object(abi.subprocess, 'run', side_effect=failure) as launch:
+                with self.assertRaisesRegex(ValueError, 'builtin has no member error_return_tracing') as caught:
+                    abi.run(compiler, profile())
+            self.assertEqual(launch.call_count, 1)  # no attempt to execute the absent binary
+            self.assertEqual(launch.call_args.kwargs['timeout'], 300)
+            self.assertTrue(launch.call_args.kwargs['check'])
+            self.assertIn('compiler stderr truncated after 4096 bytes', str(caught.exception))
+            self.assertLess(len(str(caught.exception)), 4300)
+            self.assertIs(caught.exception.__cause__, failure)
 
     def test_pair_is_only_an_observation_relation(self):
         left, right = report(abi.TARGETS[0]), report(abi.TARGETS[1])

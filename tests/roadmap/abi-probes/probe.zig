@@ -26,7 +26,9 @@ pub fn main() !void {
     });
     try out.print("meta pointer_bits {d}\n", .{@bitSizeOf(usize)});
     try out.print("meta error_set_bits {d}\nmeta error_tracing {}\n", .{
-        @bitSizeOf(anyerror), builtin.error_return_tracing,
+        // Observe the current trace in main's !void error-return context. Zig 0.16
+        // exposes this builtin, not a builtin.error_return_tracing declaration.
+        @bitSizeOf(anyerror), @errorReturnTrace() != null,
     });
     for (builtin.cpu.arch.allFeaturesList()) |feature| {
         if (builtin.cpu.features.isEnabled(feature.index))

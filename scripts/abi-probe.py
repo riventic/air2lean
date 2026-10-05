@@ -87,7 +87,19 @@ def run(zig, profile):
                    '--dep', 'compat', '-Mroot=' + str(ROOT / SOURCES[0]),
                    '-Mcompat=' + str(ROOT / SOURCES[1])]
         compiler_hash = hashlib.sha256(compiler.read_bytes()).hexdigest()
-        subprocess.run(command, check=True, timeout=300, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            subprocess.run(command, check=True, timeout=300, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as error:
+            # run() drains both pipes with communicate(); report only a bounded
+            # stderr prefix, rather than discarding the compiler's useful cause.
+            stderr = error.stderr or b""
+            if isinstance(stderr, str):
+                stderr = stderr.encode('utf-8', errors='replace')
+            detail = stderr[:4096].decode('utf-8', errors='replace').strip()
+            if len(stderr) > 4096:
+                detail += "\n[compiler stderr truncated after 4096 bytes]"
+            raise ValueError(f"compiler failed with exit code {error.returncode}:\n" +
+                             (detail or "no captured compiler stderr")) from error
         completed = subprocess.run([str(binary)], check=True, timeout=10,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if len(completed.stdout) > 16384:
