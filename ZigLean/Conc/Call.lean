@@ -72,6 +72,17 @@ def cmpxchgAsC {α : Type} {n : Nat} [Packed α n] (succ fail : AtomicOrder) (al
   let c ← pickC (casCount n succ align p (Packed.toBits expected))
   callMC (cmpxchgAs c succ fail align p expected new)
 
+/-- Weak CAS has one scheduler choice covering both message selection and spurious failure. -/
+def cmpxchgWeakC {n : Nat} (succ fail : AtomicOrder) (align : Nat) (p : Ptr)
+    (expected new : BitVec n) : CM Tgt σ (Option (BitVec n)) := do
+  let c ← pickC (weakCasCount n succ align p expected)
+  callMC (cmpxchgWeakAt c succ fail align p expected new)
+
+def cmpxchgWeakAsC {α : Type} {n : Nat} [Packed α n] (succ fail : AtomicOrder) (align : Nat)
+    (p : Ptr) (expected new : α) : CM Tgt σ (Option α) := do
+  let c ← pickC (weakCasCount n succ align p (Packed.toBits expected))
+  callMC (cmpxchgWeakAs c succ fail align p expected new)
+
 /-- `Thread.spawn` of the target `t`: never fails (`docs/std-models.md` §Thread model). -/
 def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do
   let tid ← StateT.lift (ConcM.sync (.spawn t))
