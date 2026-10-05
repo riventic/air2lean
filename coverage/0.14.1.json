@@ -2541,7 +2541,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -2611,7 +2612,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -2936,7 +2938,8 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
-          "Proofs/Sync/RwLock.lean"
+          "Proofs/Sync/RwLock.lean",
+          "Proofs/Vectors/Proofs.lean"
         ]
       },
       "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
@@ -12438,13 +12441,13 @@
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "3c8aa106a3609dbc0da65f1023c7bf41983c7b25ea35db2080b44db65bc9000b",
       "Air2Lean/Air/Normalize.lean": "bceb3be181ff1d956f7428d0a074c7a904c22a984a302dd4147a95fde5c7f983",
-      "Air2Lean/Air/Op.lean": "a5de571398e676f53abb91483213b498bb56992d6c78c19544f784962d91ee5d",
+      "Air2Lean/Air/Op.lean": "826407cbdc66aaa66bd29921a570a7bae016c430be663da4dac7a9818cb0e1c1",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
       "Air2Lean/Check.lean": "9a484048320c03f1c4615521dced5026bb41abf2408f0758f2d53406d304d011",
       "Air2Lean/Diagnose.lean": "7d98cd1286defbe122faf083d0d3b69799b4fe6229397feab3a2035c0d80119b",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "b9d36be9c69e6734437158d50ca077330bf947153aea523d921bf3bb1de806f4",
+      "Air2Lean/Emit.lean": "c20dc80634d4f78148a6775d35a998db87e05c7214a90b4074d74504f436660b",
       "Air2Lean/Main.lean": "7829b0d3e74edd23346ead238f6193455ae85c68cee5e744de0d9adb9515c33f",
       "Air2Lean/Memory.lean": "5a754a95afdda12fd50be29333c61c99e7a194fc1b5479e207517885ec2c0c3c",
       "Air2Lean/ModelRegistry.lean": "ddaf398e7a02af903dbd827b65f3a1230815cf6922ef874c8d2bdfed72a8f387",
@@ -12454,9 +12457,9 @@
       "ZigLean/Basic.lean": "69ff4c6fe140fe6ca14c49aa7f05ed361953fcbc7e1e567cc6e637ff253b6bb7",
       "ZigLean/Bit.lean": "b01d156835b875a81bdb79d827d4955f47e2102719e86baeb158bbc62a46c4d9",
       "ZigLean/Conc/Basic.lean": "0eb0b455238adb1c0e2c8c68248cf3e0e5c91243c60e0c8a75a780ab77083a77",
-      "ZigLean/Conc/Call.lean": "fbb6867b0294c9370bf84b03f37f99d85ec73345fd6f027b6c70951d09874f8c",
+      "ZigLean/Conc/Call.lean": "2f8b17f0263bda1778a3e490ca79fbba207692c884e3ff9b679ad0f3f8f448a7",
       "ZigLean/Conc/Csl.lean": "e96e73fed694439b4fa8dc46926668da1d9b5d3a74927e1b6d0c595d7c1df505",
-      "ZigLean/Conc/Lemmas.lean": "691340d57b187df8849d3d186d205eeef2fb0b8f0f5b25203cec2e3dfee9ddc2",
+      "ZigLean/Conc/Lemmas.lean": "f7e22414bc2443872820d0dc02674580f66727654546acc62efb4d9644c5598d",
       "ZigLean/Conc/Lock.lean": "d472cac76fd785bcce6dd55accc6ed88c4df6d74a0d10546ac00774f1f479044",
       "ZigLean/Conc/LockRules.lean": "e5ff234fe0a0cd0ad79f79f4de7226e294c85226730d628948e2f2cd14fa8929",
       "ZigLean/Conc/Logic.lean": "56ef8ab4effde678f82f58911e4b99b7f69372d08a117d8342822ec68362da12",
@@ -12464,7 +12467,7 @@
       "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
-      "ZigLean/Conc.lean": "2331b7b68d48c935d89cf8b7dcafa00e3422a9826b2e19f4606ba5f5f8f2985c",
+      "ZigLean/Conc.lean": "a00acdf139ab69bb67824a2fc3561677b1ddfd83d0309f3328a70fcdf60a0877",
       "ZigLean/External.lean": "eeb5524df042fe2d016e36b59f7eb59c2b4dec95db7dac21922286f0ec550046",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
@@ -12482,7 +12485,7 @@
       "ZigLean/Mem/Enc.lean": "095deed9dca5240efb8027b3d5b056f1b7d464de5cbc9768ffa3a2eed4e00e3d",
       "ZigLean/Mem/Lemmas.lean": "4e5b9a50ac0d917d9f5a28a50a7d818e1e339de59a5d278b2a345d35c7701315",
       "ZigLean/Mem/Null.lean": "ce3a714180a3adeb4864af0d534f85f871371e2f00fd8624d9f4dbc907fa1e8f",
-      "ZigLean/Mem/Thread.lean": "3c4d7846b6e6d9bf8d25dad04d20220c8f37511887ffa5155bd3b9538e5e32cc",
+      "ZigLean/Mem/Thread.lean": "51109eb1dcfaa89cbfe2dd7c8e4fb2addc1fb332385f8313ccee98c08073be67",
       "ZigLean/Mem.lean": "984464356198c9e326876be51ad994e401290d0fe92decdf93ba24529abbc6ad",
       "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
       "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
@@ -12507,11 +12510,11 @@
     "proof-sources": {
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
       "Proofs/Asm/Proofs.lean": "a61fe3cba03c5af350da81b0b65fdcdb24be1f3a87debe7a924c69f0356ff87d",
-      "Proofs/Atomics/Gen.lean": "80e2e0adebf1a0e104b4d0c57fb2c6e754f47e21fb773af16f6bf15fe2a7b022",
+      "Proofs/Atomics/Gen.lean": "0ef02d7aef29b77fd9c6fe74d1ed04bbbf58c9c412071b5389ea42531ed4146e",
       "Proofs/Atomics/MessagePassing.lean": "932dcd2be646d8da7f2253d327c233c2edf8da86adce96680bb5c1bb9d15b029",
       "Proofs/Atomics/Proofs.lean": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
       "Proofs/Atomics/Relaxed.lean": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
-      "Proofs/Atomics/Stack.lean": "7151dfaf9a69a99950f0cbc5effd6463356df4c249961df47cbcda771f00f457",
+      "Proofs/Atomics/Stack.lean": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
       "Proofs/Basic/Arith.lean": "b6aba4d80fd8fdb7616934e423614a2dcfc206f3af8b2f2f1f4a9ad10eb987ec",
       "Proofs/Basic/Common.lean": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
       "Proofs/Basic/Gen.lean": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99",
@@ -12543,32 +12546,33 @@
       "Proofs/Slices/Gen.lean": "d8ca92d93311be85f639d3fc8c88434a3ad3537d63e189dafc3672509d843271",
       "Proofs/Slices/Proofs.lean": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
       "Proofs/Slices/Sep.lean": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
-      "Proofs/Sync/Gen.lean": "b773e51f6156933686c7270bd9698bbfe973d6ecfa18d19cd45536f9608d5a94",
-      "Proofs/Sync/Handoff.lean": "a280ff4d08220644dec1f7a70ac3b146180ca06c81f076db48443032d507ff2b",
+      "Proofs/Sync/Gen.lean": "87471deae6f5e6ea03747b8bcdc27486f96ca137259500cd7dfccc202fdd1a55",
+      "Proofs/Sync/Handoff.lean": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
       "Proofs/Sync/Lock.lean": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
       "Proofs/Sync/Mutex.lean": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
       "Proofs/Sync/Proofs.lean": "64193f3f8a07ee8227cdf2a20d754d9d955cacee2d3d268c186fc34f904b6af0",
-      "Proofs/Sync/RwLock.lean": "1e822fde71c7adcb6dc0daf147e5c5e5342dc541ae43acca5a3b740963ae2b11",
+      "Proofs/Sync/RwLock.lean": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
       "Proofs/Sync/SemCounter.lean": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-      "Proofs/Sync/Semaphore.lean": "2fb25014d2e6413a55e268068e8a7223438af449cfc67a10c04ea347122bc0c9",
+      "Proofs/Sync/Semaphore.lean": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
       "Proofs/Threads/Counter.lean": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
       "Proofs/Threads/Disjoint.lean": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
       "Proofs/Threads/Gen.lean": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6",
       "Proofs/Threads/Proofs.lean": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c",
       "Proofs/Threadsync/Deadline.lean": "67333b865ca6c1d573c02884b4311f137c959a397daa93436383ac7ffd1074b6",
-      "Proofs/Threadsync/Gen.lean": "81af4720f7e1cd961c862c5817cefd8a09592753f9e5e2d9c620630ac0542e6f",
-      "Proofs/Threadsync/Handoff.lean": "928e32d0f81440afeb2de0b2f25cd3c55d6fc01a0586bf690faa669c6fbe6f16",
+      "Proofs/Threadsync/Gen.lean": "69e4a521fc99d658ba2c4ed657b5e8eb89f2bb367e756a50fbc8def35791a56a",
+      "Proofs/Threadsync/Handoff.lean": "a6364be6dfda3ddd5c0ce611248406ee55c794e7d4af942d58cb5422ea29a653",
       "Proofs/Threadsync/Lock.lean": "198e84d1e8de8e4b9008c66fd38217891331771e85ba91b802a77aa350426166",
       "Proofs/Threadsync/Mutex.lean": "157a7780c83bc057fb4260b6982791d31fb8bf994edc3ddc629e7d31894e5577",
       "Proofs/Threadsync/WaitGroup.lean": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851",
       "Proofs/Variants/Gen.lean": "74d7b64f5d2d2a821d5cc2ae97bf1c4c353e0239fd44291c11373e280cc79d7a",
       "Proofs/Variants/Proofs.lean": "dcecf6343b9008a2c08fd0339d17e399e524874da36fc42f703304f04a9cb5f8",
+      "Proofs/Vectors/CheckedAdd.lean": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
       "Proofs/Vectors/Gen.lean": "e69585b66b800f87946b2a8457a9851a311fe1a9fd8e1190e1c5bb57aeee2be1",
-      "Proofs/Vectors/Proofs.lean": "eb83678eb7ac8145d49f5e4cd2d6c8e274bb24999d80d1360c58850f6d50f431"
+      "Proofs/Vectors/Proofs.lean": "f3b67f3459c032b6a0a1819e3a5665cc3ef3805c986b3aed852d0fa2ec6748c5"
     },
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",
-      "tests/diff/Diff.lean": "3903da2bed2f02316c4e801689a7a71e053e6ff815033dd888eebc82c1e7f6be",
+      "tests/diff/Diff.lean": "71f9f161ece80d2c2776de3014d4f00c184582fd7c433b194ec3070278f84958",
       "tests/diff/asm/asm.zig": "fdc5a705e896f50cb8a2820dbfd8335dab6693d94def1c32690509c09aa2aa5e",
       "tests/diff/asm/harness.zig": "b5ee279223d7103115811f9519f98d0029d6a973d27c75758942ba1268e02a3f",
       "tests/diff/asm/inputs/bswap32.jsonl": "1c05640dbf91022e14d52d7b38e524236d434585d1916c5e7a499d6a61fa8436",
@@ -12632,7 +12636,7 @@
       "tests/diff/iogroup/inputs/groupConcurrent.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/iogroup/inputs/groupCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/lake-manifest.json": "011b335b7ddd5e7c3ef27fac1155c8136a2f93ea05dfd8580329516088212f40",
-      "tests/diff/lakefile.toml": "f8157b8213122bc1372ed19235e620e1ea9ce932dbaf04daf8321728130a2fe4",
+      "tests/diff/lakefile.toml": "f69c46ba7638ca2a4b196b65e9fb88fc25e790132fdff2e7bc9e49a16cc78a8e",
       "tests/diff/layout/harness.zig": "a5d4dc71d20d8f5a931b7f60a681494b0e229c7cf53c7291dac29e3112bf829a",
       "tests/diff/layout/inputs/addrEq.jsonl": "7449c046d34cabc9dfc2dd1f0458e676840a58565820b7f263a3114e3638a36e",
       "tests/diff/layout/inputs/align4.jsonl": "1747250462af1b101d2a9ccce991d7ca371fd134bcb2c691ae4df95faea250e2",
@@ -12820,7 +12824,7 @@
       "tests/golden/0.14.1/variants/Gen.lean": "4f91d838fe441e4acaaec58e8f368f9e6ef079c5d01085f82d5048b0c73f61ab",
       "tests/golden/0.14.1/variants/air/variants.radius.json": "746c9997c19521c4e1759418727584c3a8f24f4611494f339c430130f7fca698",
       "tests/golden/0.14.1/variants/air/variants.scale.json": "522da2ef956589587dcc594da4646d6613bb073c1653d4eb49df601e71f4bfa8",
-      "tests/golden/0.15.2/atomics/Gen.lean": "50f4f4cc33e52648980d4eafd737fd84cdb6ec576b30da2d686a361e29350d00",
+      "tests/golden/0.15.2/atomics/Gen.lean": "2af830feb84051c7002b27f73568ef8ecf13318cba88a29140c275346252be3f",
       "tests/golden/0.15.2/atomics/air/atomics.mpRelAcq.json": "b2a4068aaed4c0f8dcc0664dbc6dd628e19a6eb891e5c461009daf8e2bef1702",
       "tests/golden/0.15.2/atomics/air/atomics.mpRelaxed.json": "bcab2c0f28946e573fe0a0b2c133a057309cd4ed7d519e725318cfc1f1910bbc",
       "tests/golden/0.15.2/atomics/air/atomics.mpWriter.json": "bb09b9d0b2fd43176bef113cae8a0032367655e8c286b9521f64e015de9895bc",
@@ -12891,7 +12895,7 @@
       "tests/golden/0.15.2/threads/air-linux/threads.parallelCounter.json": "489acdc191ad261cd055a43ee6f390e32b0c4b6b94ccc9a5c919cc1abab7927b",
       "tests/golden/0.15.2/threads/air-linux/threads.race.json": "65f6e37ea4c78c310285d6838731c885dfa5884207171fa87365301c0bd88c35",
       "tests/golden/0.15.2/threads/air-linux/threads.xchgRace.json": "bef1b99f7609ae00b87a065a9eed7e192120baad867c2ff28ed7930d90fccd1e",
-      "tests/golden/0.15.2/threadsync/Gen-darwin.lean": "0a70dcd4de0d8c4831cf1eba3fe72b6d969b8a19402cabd3b10d446d20b5ba52",
+      "tests/golden/0.15.2/threadsync/Gen-darwin.lean": "be5f7666af7feaca1523a5d4c7cd50d925fd8d9331209cd444264dd20d6e89ad",
       "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wait.json": "aa4db9b0f3f3b442d29c8dde669c5415adf5cd83d4e4599807fef6c1353b8058",
       "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wake__anon_11357.json": "20ee7b7e1fa15d15cd79d2786b970925a53d46435cba31c7f3b1311a6b929ccf",
       "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.signal.json": "afa41f3ec5ad33d5df422f20c42796747a6919c945720b51f2e4c7bcf7a5c825",
@@ -13236,7 +13240,7 @@
     },
     "model-boundaries": {
       "Air2Lean/Memory.lean": "5a754a95afdda12fd50be29333c61c99e7a194fc1b5479e207517885ec2c0c3c",
-      "docs/std-models.md": "dedf9b19f4efe9d5f6aecd46f38c57d8c6b9365ffc022412722e8696fc926308"
+      "docs/std-models.md": "9906fdb2f2a741130ce9bd821105dfb80fd1b1dd0653ffd756e148396c602b26"
     }
   },
   "summary": {
