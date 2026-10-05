@@ -501,6 +501,15 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
+      - name: Local-place parent pointer regressions
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_LOCAL_PARENT_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_LOCAL_PARENT_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_LOCAL_PARENT_ZIG_STOCK: zig
+        run: bash tests/roadmap/local-parent/check.sh
+
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions
