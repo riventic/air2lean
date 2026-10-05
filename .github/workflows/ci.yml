@@ -169,6 +169,9 @@ jobs:
           path: tests/diff/.lake
           key: lake-diff-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
 
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
       - name: Build runtime library + translator
         run: lake build
 
@@ -203,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Array 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Separation normalization regressions
         if: ${{ !matrix.mutate }}
@@ -216,6 +219,12 @@ jobs:
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
+
+      - name: Explicit array framing regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Array.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Array.log"
 
       - name: Total correctness regressions
         if: ${{ !matrix.mutate }}
