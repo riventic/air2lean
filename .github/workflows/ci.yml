@@ -233,6 +233,14 @@ jobs:
           LEAN_NUM_THREADS: "1"
         run: tests/roadmap/assurance/check.sh
 
+      - name: Integer bit operations regression and differential gate
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
+          AIR2LEAN_ZIG: zig
+          AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
+        run: tests/roadmap/bitops/check.sh
+
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
       - name: Review regressions
