@@ -6,7 +6,6 @@ import re
 import signal
 import subprocess
 import sys
-import tempfile
 from textwrap import dedent
 
 import yaml
@@ -163,18 +162,19 @@ for number, row in enumerate(rows):
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
           '-e', 'host-zig/', '-e', 'zig-air-*/'])
     call(['bash', 'scripts/local-ci.sh', '--prepare', row['zig']])
-    with tempfile.TemporaryDirectory(prefix=f"local-ci-{number}-", dir='/tmp') as temp:
-        context = {f'matrix.{key}': value for key, value in row.items()}
-        context.update({'github.workspace': '/work', 'runner.temp': temp, 'runner.os': 'Linux'})
-        env = dict(os.environ, RUNNER_TEMP=temp, GITHUB_WORKSPACE='/work', RUNNER_OS='Linux')
-        env['PATH'] = f"/work/host-zig:{env['ELAN_HOME']}/bin:" + env['PATH']
-        env.update({key: render(value, context) for key, value in job.get('env', {}).items()})
-        for step in job['steps']:
-            if 'uses' in step or step['name'] in setup:
-                continue
-            if 'if' in step and not expression(step['if'], context):
-                continue
-            code = render(step['run'], context)
-            step_env = env | {key: render(value, context) for key, value in step.get('env', {}).items()}
-            print(f"== CI {row}: {step['name']} ==", flush=True)
-            call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)
+    temp = f"/artifacts/row-{number}-{row['zig']}"
+    Path(temp).mkdir()
+    context = {f'matrix.{key}': value for key, value in row.items()}
+    context.update({'github.workspace': '/work', 'runner.temp': temp, 'runner.os': 'Linux'})
+    env = dict(os.environ, RUNNER_TEMP=temp, GITHUB_WORKSPACE='/work', RUNNER_OS='Linux')
+    env['PATH'] = f"/work/host-zig:{env['ELAN_HOME']}/bin:" + env['PATH']
+    env.update({key: render(value, context) for key, value in job.get('env', {}).items()})
+    for step in job['steps']:
+        if 'uses' in step or step['name'] in setup:
+            continue
+        if 'if' in step and not expression(step['if'], context):
+            continue
+        code = render(step['run'], context)
+        step_env = env | {key: render(value, context) for key, value in step.get('env', {}).items()}
+        print(f"== CI {row}: {step['name']} ==", flush=True)
+        call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)
