@@ -132,7 +132,7 @@ git ls-files -z | while IFS= read -r -d '' path; do
   [ ! -d "$path" ] || { echo "error: tracked directory/submodule unsupported: $path" >&2; exit 1; }
   if [ -e "$path" ] || [ -L "$path" ]; then printf '%s\0' "$path"; fi
 done >"$snapshot/files"
-tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
+COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
 # Build with only this Dockerfile as context: no checkout or private files reach the daemon.
 cp Dockerfile.local-ci "$snapshot/Dockerfile"
 case "$(docker info --format '{{.Architecture}}')" in
