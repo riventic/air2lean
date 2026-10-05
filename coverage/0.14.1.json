@@ -2984,6 +2984,8 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Progress.lean",
           "ZigLean/Conc/Sched.lean",
+          "ZigLean/Conc/WeakCas.lean",
+          "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Format.lean",
@@ -3332,6 +3334,7 @@
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
           "ZigLean/Conc/Sched.lean",
+          "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Loop.lean",
           "ZigLean/Mem/Basic.lean",
@@ -8392,6 +8395,7 @@
           "Proofs/Slices/Gen.lean",
           "Proofs/Slices/Proofs.lean",
           "Proofs/Sync/Gen.lean",
+          "Proofs/Sync/Handoff.lean",
           "Proofs/Sync/RwLock.lean",
           "Proofs/Sync/Semaphore.lean",
           "Proofs/Threadsync/Gen.lean",
@@ -12432,7 +12436,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "51ac0c74f726594652b04640d6e5ffc4cfed24ca655c8596a1c981c0c08d2be9",
+      "scripts/coverage.py": "0e0ccb0531c67f5266d192585172b3ab6bb5ea6c66e87469214f2284653967d9",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -12466,6 +12470,9 @@
       "ZigLean/Conc/Own.lean": "b0774bc5335036983f104a6b2671ab429177e944c5b5cb5d58b8e588b68c32fb",
       "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
+      "ZigLean/Conc/WeakCas.lean": "23b3ff639ccc675f3c3b80f15bd25d1871d955a82445b9cfe7097a38091647de",
+      "ZigLean/Conc/WeakCasLemmas.lean": "30dc9a347ab14fffc953e9e9a15e834ca0f6179e6e5341e5a011ecbf674733ac",
+      "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
       "ZigLean/Conc.lean": "a00acdf139ab69bb67824a2fc3561677b1ddfd83d0309f3328a70fcdf60a0877",
       "ZigLean/External.lean": "eeb5524df042fe2d016e36b59f7eb59c2b4dec95db7dac21922286f0ec550046",
@@ -12573,6 +12580,9 @@
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",
       "tests/diff/Diff.lean": "24f40a99449974920479a8b97e3ccbc975b98f4ae2c884a70995ae2fbfbd1a7c",
+      "tests/diff/Outcome.lean": "cac6309e3373d6fd40b6666ef42d47ea937c8f7e478ca3f7bb7a9528630dc982",
+      "tests/diff/ScheduleSearch.lean": "873e68a09cf9e1186b284ab07013f6991a900d9352a80f090731c1a0aac1357c",
+      "tests/diff/ScheduleSearchTest.lean": "aa14b06fc3ee19578b9bb51e2d6de7e0e8fcf5ef05765f9c7f46c072ce76795b",
       "tests/diff/asm/asm.zig": "fdc5a705e896f50cb8a2820dbfd8335dab6693d94def1c32690509c09aa2aa5e",
       "tests/diff/asm/harness.zig": "b5ee279223d7103115811f9519f98d0029d6a973d27c75758942ba1268e02a3f",
       "tests/diff/asm/inputs/bswap32.jsonl": "1c05640dbf91022e14d52d7b38e524236d434585d1916c5e7a499d6a61fa8436",
