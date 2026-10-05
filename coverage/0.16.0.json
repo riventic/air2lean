@@ -15619,7 +15619,7 @@
       "tests/golden/vectors/air/vectors.vShift.json": "19aa90a260d72f7f341801c5241d280d763732a90b31644567fa08a289ae6b8f",
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
-      "tests/roadmap/diagnostics/Collector.lean": "f9ae6a440f44e710f86e17e33d074453a596dbb88ef18b51d66d4b9aa8a0edae",
+      "tests/roadmap/diagnostics/Collector.lean": "67e849e7a20d84bd7f5fd6b855ef031a84b0128b4c1a59c975d0bbdf51d9a022",
       "tests/roadmap/diagnostics/test_cli.py": "1a06774079059f6c5d8bab6aa05ded58079ba95b94c189aea51b636f3d73fcb5"
     },
     "model-boundaries": {
