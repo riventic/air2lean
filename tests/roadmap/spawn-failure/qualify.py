@@ -63,6 +63,24 @@ def peek_status(proc):
     return None if fields[3] == 0 else fields[5] if fields[2] == 1 else -fields[5]
 
 
+def darwin_exited_anchor_only(proc):
+    # Use only the exported PID-array interface, not private process-info structs.
+    # XNU lists both live and zombie group members under the process-list lock.
+    if sys.platform != "darwin" or peek_status(proc) is None:
+        return False
+    library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    query = library.proc_listpids
+    query.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+    query.restype = ctypes.c_int
+    pids = (ctypes.c_int32 * 128)()
+    ctypes.set_errno(0)
+    size = query(2, proc.pid, pids, ctypes.sizeof(pids))  # PROC_PGRP_ONLY
+    # Zero can mean a query error; a full buffer can mean silent truncation.
+    if ctypes.get_errno() or not 0 < size < ctypes.sizeof(pids) or size % ctypes.sizeof(ctypes.c_int32):
+        return False
+    return size == ctypes.sizeof(ctypes.c_int32) and pids[0] == proc.pid
+
+
 def stop_group(proc):
     # No poll/wait/reap before the last group signal: the leader anchors the PGID
     # even after a successful exit while descendants still hold the output pipe.
@@ -77,6 +95,13 @@ def stop_group(proc):
             errors.append(error)
         if sig == signal.SIGTERM:
             time.sleep(0.1)
+    if (errors and sys.platform == "darwin" and time.monotonic() < deadline and
+            all(error.errno == errno.EPERM for error in errors)):
+        try:
+            if darwin_exited_anchor_only(proc):
+                errors.clear()
+        except (OSError, RuntimeError, AttributeError, ValueError):
+            pass  # Keep the original signal errors when proof is unavailable.
     try:
         code = proc.wait(timeout=max(0, deadline - time.monotonic()))
     except subprocess.TimeoutExpired as error:

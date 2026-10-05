@@ -5,6 +5,7 @@ used: the interpreter can reserve more address space than its resident footprint
 """
 import importlib.util
 import ctypes
+import errno
 import json
 import os
 from pathlib import Path
@@ -191,6 +192,71 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "cleanup"):
                 qualify.stop_group(Process())
         self.assertEqual(events, [signal.SIGTERM, signal.SIGKILL, "reap"])
+
+    def test_darwin_pid_query_requires_exact_terminal_anchor(self):
+        class Query:
+            def __call__(self, kind, group, buffer, capacity):
+                self.arguments = kind, group, capacity
+                for index, pid in enumerate(self.pids):
+                    buffer[index] = pid
+                ctypes.set_errno(self.error)
+                return self.size
+        query = Query()
+        cases = [(4, [12345], 0, True), (0, [], 0, False), (-1, [], errno.EPERM, False),
+                 (512, [12345], 0, False), (3, [12345], 0, False),
+                 (8, [12345, 999], 0, False), (4, [999], 0, False),
+                 (4, [12345], errno.EPERM, False)]
+        with replaced(qualify.sys, "platform", "darwin"), \
+             replaced(qualify, "peek_status", lambda proc: 0), \
+             replaced(qualify.ctypes, "CDLL", lambda *a, **k: SimpleNamespace(proc_listpids=query)):
+            for size, pids, error, expected in cases:
+                with self.subTest(size=size, pids=pids, error=error):
+                    query.size, query.pids, query.error = size, pids, error
+                    self.assertEqual(qualify.darwin_exited_anchor_only(SimpleNamespace(pid=12345)), expected)
+                    self.assertEqual(query.arguments, (2, 12345, 512))
+            query.size, query.pids, query.error, query.arguments = 4, [12345], 0, None
+            with replaced(qualify, "peek_status", lambda proc: None):
+                self.assertFalse(qualify.darwin_exited_anchor_only(SimpleNamespace(pid=12345)))
+                self.assertIsNone(query.arguments)
+
+    def test_darwin_eperm_resolution_precedes_reap(self):
+        events = []
+        class Process:
+            pid = 12345
+            def wait(self, timeout):
+                events.append("reap")
+                return 0
+        def denied(pid, sig):
+            events.append(sig)
+            raise PermissionError(errno.EPERM, "mock zombie group")
+        def proof(proc):
+            events.append("terminal_anchor_only")
+            return True
+        with replaced(qualify.sys, "platform", "darwin"), \
+             replaced(qualify.os, "killpg", denied), \
+             replaced(qualify, "darwin_exited_anchor_only", proof):
+            self.assertEqual(qualify.stop_group(Process()), 0)
+        self.assertEqual(events, [signal.SIGTERM, signal.SIGKILL, "terminal_anchor_only", "reap"])
+
+    def test_eperm_resolution_fails_closed_without_proof(self):
+        class Process:
+            pid = 12345
+            def wait(self, timeout):
+                return 0
+        def denied(pid, sig):
+            raise PermissionError(errno.EPERM, "mock restriction")
+        for platform, proof in [("linux", lambda proc: True), ("darwin", lambda proc: False),
+                                ("darwin", lambda proc: (_ for _ in ()).throw(OSError("query failed")))]:
+            with self.subTest(platform=platform), replaced(qualify.sys, "platform", platform), \
+                 replaced(qualify.os, "killpg", denied), \
+                 replaced(qualify, "darwin_exited_anchor_only", proof):
+                with self.assertRaisesRegex(RuntimeError, "cleanup"):
+                    qualify.stop_group(Process())
+        with replaced(qualify.sys, "platform", "darwin"), \
+             replaced(qualify.os, "killpg", lambda p, s: (_ for _ in ()).throw(OSError(errno.EINVAL, "bad signal"))), \
+             replaced(qualify, "darwin_exited_anchor_only", lambda proc: True):
+            with self.assertRaisesRegex(RuntimeError, "cleanup"):
+                qualify.stop_group(Process())
 
     def test_darwin_native_nonreaping_status(self):
         class NativeWaitid:

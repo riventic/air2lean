@@ -71,3 +71,14 @@ The gate retains raw AIR, generated Lean, logs, source/model/tool digests, and i
 policy/target scope receipt in `AIR2LEAN_SPAWN_ARTIFACT_DIR` (default a new directory
 under `RUNNER_TEMP` or the system temporary directory). Compilation failures are
 qualification failures, not accepted outcome matches or mutation detections.
+
+On Darwin, XNU's [group-signal implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c#L1612-L1621)
+filters zombie members and can return `EPERM` when only the exited leader remains.
+The gate still attempts both TERM and KILL before reaping. It resolves only those
+Darwin errors when a bounded `proc_listpids(PROC_PGRP_ONLY)` query returns exactly
+the same unreaped, terminal leader. The [kernel query](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c#L377-L454)
+includes live and zombie members. Additional members, query errors, malformed or
+full buffers, and unavailable interfaces fail cleanup. This uses the exported
+PID-array signature rather than process-info struct layouts; the SDK marks libproc
+interfaces private, so unavailable or changed interfaces remain a qualification
+failure. Linux cleanup keeps its original strict behavior.
