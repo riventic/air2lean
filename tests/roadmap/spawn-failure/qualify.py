@@ -5,6 +5,7 @@ import errno
 import hashlib
 import json
 import os
+import runpy
 from pathlib import Path
 import selectors
 import signal
@@ -16,6 +17,28 @@ import time
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "tests/roadmap/spawn-failure"
 HEADER = "Thread assignment policy: fallible"
+HELPERS = runpy.run_path(str(ROOT / "scripts/normalize-generated.py"))
+def fresh_profile(records, version, names):
+    if sorted(r["name"] for r in records) != sorted(names) or not records:
+        raise ValueError("fresh AIR function inventory differs")
+    profiles = []
+    for record in records:
+        profile = HELPERS["fresh_linux_profile"](record, version)
+        profiles.append(profile)
+    if any(profile != profiles[0] for profile in profiles):
+        raise ValueError("fresh AIR has mixed profiles")
+    return profiles[0]
+
+
+def generated_receipt(generated, air, receipt):
+    # Keep full raw bytes and input digests; only the validated first-line record is
+    # excluded from semantic-body comparison. These hashes are not an attestation.
+    HELPERS["write_report"](generated, air, receipt)
+    _, _, metadata = HELPERS["checked_generated"](generated, receipt)
+    if metadata["float_semantics"] != "ieee":
+        raise ValueError("generated float semantics differs from the default")
+    return HELPERS["load_report"](receipt)
+
 def source_paths():
     paths = [ROOT / "Air2Lean.lean", ROOT / "ZigLean.lean", ROOT / "lean-toolchain"]
     for name in ("Air2Lean", "ZigLean"):
@@ -220,6 +243,7 @@ def qualify(mode, destination):
     gate = Gate(destination)
     report = {"schema": 1, "status": "failed", "mode": mode, "spawn_policy": "fallible",
               "scope": "finite safety/result contracts; no fairness, native adequacy, cancellation or custom allocator",
+              "normalizer_sha256": digest(ROOT / "scripts/normalize-generated.py"),
               "steps": gate.steps, "sources": {str(p.relative_to(ROOT)): digest(p) for p in source_paths()},
               "legacy_references": {str(p.relative_to(ROOT)): digest(p) for p in
                   sorted((ROOT / "tests/roadmap/thread-tuples/air/0.16.0").glob("*.json")) +
@@ -281,27 +305,30 @@ def qualify(mode, destination):
             gate.run("fresh-export", [str(patched), "build-obj", "-fno-emit-bin", "-OReleaseSafe",
                      "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline",
                      str(FIXTURE / "spawn_failure.zig"), "--cache-dir", str(destination / "zig-cache")], env=export_env)
-            records = [json.loads(p.read_text()) for p in sorted(air.glob("*.json"))]
-            if sorted(r["name"] for r in records) != sorted(names) or any(
-                    r["schema"] != 11 or r["zig_version"] != version or r["target_endian"] != "little" for r in records):
-                raise RuntimeError("fresh AIR inventory/version/schema/endianness differs")
+            records = [HELPERS["parse_json"](p.read_text()) for p in sorted(air.glob("*.json"))]
+            report["fresh_profile"] = fresh_profile(records, version, names)
             default = destination / "Default.lean"
             available = destination / "Available.lean"
             for label, path, policy in [("default-policy", default, []),
                                         ("explicit-available", available, ["--spawn-policy", "available"])]:
                 gate.run(label, [str(translator), str(air), "-o", str(path), "--namespace", "SpawnFailure",
                          "--prefix", "spawn_failure."] + policy)
+                generated_receipt(path, air, destination / (label + "-receipt.json"))
             if default.read_bytes() != available.read_bytes():
                 raise RuntimeError("default and explicit availability policy emission differ")
             gate.run("available-kernel", lean + ["-R", str(destination), str(default)])
             legacy = destination / "TupleDefault.lean"
             gate.run("legacy-default-bytes", [str(translator), str(ROOT / "tests/roadmap/thread-tuples/air/0.16.0"),
                      "-o", str(legacy), "--namespace", "ThreadTuples", "--prefix", "thread_tuples."])
-            if legacy.read_bytes() != (ROOT / "tests/roadmap/thread-tuples/ThreadTuples/Gen.lean").read_bytes():
-                raise RuntimeError("historical default capture/dispatch emission changed")
+            legacy_receipt = destination / "legacy-default-receipt.json"
+            generated_receipt(legacy, ROOT / "tests/roadmap/thread-tuples/air/0.16.0", legacy_receipt)
+            HELPERS["compare"](ROOT / "tests/roadmap/thread-tuples/ThreadTuples/Gen.lean",
+                               legacy, legacy_receipt)
+            gate.run("legacy-full-header-kernel", lean + ["-R", str(destination), str(legacy)])
             raw = destination / "Gen.lean"
             gate.run("translate", [str(translator), str(air), "-o", str(raw), "--namespace", "SpawnFailure",
                      "--prefix", "spawn_failure.", "--spawn-policy", "fallible"])
+            generated_receipt(raw, air, destination / "fallible-generated-receipt.json")
             source = raw.read_text()
             required = [HEADER, "Zig.spawnWithPolicyC .fallible"]
             if version == "0.16.0":
@@ -354,7 +381,7 @@ def main():
         signal.signal(signum, interrupted)
     try:
         qualify(mode, destination)
-    except (RuntimeError, OSError, KeyError) as exc:
+    except (RuntimeError, OSError, KeyError, ValueError, TypeError) as exc:
         raise SystemExit(str(exc)) from exc
     print("spawn failure qualification passed")
 

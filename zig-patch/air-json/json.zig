@@ -1,6 +1,8 @@
 //! air2lean: write the AIR of one function as JSON.
 //! Enabled by the `ZIG_AIR_JSON_DIR` environment variable. One file per function:
-//! `<dir>/<fully qualified name>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
+//! Safe short names use `<dir>/<fully qualified name>.json`; other names use a SHA-256
+//! basename (see docs/export-names.md). JSON retains the full name.
+//! `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output
 //! to functions whose fully qualified name starts with one of the prefixes. Instructions outside
 //! the air2lean subset are written with their tag and `"unsupported": true`, so the reader can
 //! reject them. Types are interned into a `types` table; everywhere a type appears in the
@@ -17,6 +19,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const target_util = @import("../target.zig");
 
 /// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0). The compiler
 /// is built by a host zig of its own version (`zig-patch/build.sh`), so `builtin.zig_version`
@@ -60,7 +63,29 @@ const Compat = struct {
     }
 
     fn createFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
-        return if (v16) dir.createFile(pt.zcu.comp.io, name, .{}) else dir.createFile(name, .{});
+        const options: if (v16) Dir.CreateFileOptions else File.CreateFlags = .{ .read = true, .exclusive = true, .lock = .exclusive, .lock_nonblocking = true };
+        return if (v16) dir.createFile(pt.zcu.comp.io, name, options) else dir.createFile(name, options);
+    }
+
+    fn openExistingFile(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File {
+        const options: if (v16) Dir.OpenFileOptions else File.OpenFlags = .{ .mode = .read_write, .lock = .exclusive, .lock_nonblocking = true };
+        return if (v16) dir.openFile(pt.zcu.comp.io, name, options) else dir.openFile(name, options);
+    }
+
+    fn statPath(pt: Zcu.PerThread, dir: Dir, name: []const u8) !File.Stat {
+        return if (v16) dir.statFile(pt.zcu.comp.io, name, .{}) else dir.statFile(name);
+    }
+
+    fn statFile(pt: Zcu.PerThread, file: File) !File.Stat {
+        return if (v16) file.stat(pt.zcu.comp.io) else file.stat();
+    }
+
+    fn readFile(pt: Zcu.PerThread, file: File, bytes: []u8) !usize {
+        return if (v16) file.readPositionalAll(pt.zcu.comp.io, bytes, 0) else file.preadAll(bytes, 0);
+    }
+
+    fn truncateFile(pt: Zcu.PerThread, file: File) !void {
+        if (v16) try file.setLength(pt.zcu.comp.io, 0) else try file.setEndPos(0);
     }
 
     fn closeFile(pt: Zcu.PerThread, file: File) void {
@@ -373,6 +398,68 @@ fn readAsmNamePair(words: []const u32) struct { constraint: []const u8, name: []
 
 const Error = Compat.WriteError || Zcu.SemaError;
 
+// Reserve '~' for hashes: direct names and fallback names cannot collide. The cap
+// includes .json and is portable to filesystems with a 255-byte component limit.
+const output_name_capacity = @min(255, std.fs.max_name_bytes);
+const hashed_name_prefix = "~air2lean-sha256-";
+
+fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8 {
+    var direct = fqn.len > 0 and fqn.len <= output_name_capacity - ".json".len;
+    for (fqn) |byte| {
+        if (!std.ascii.isAlphanumeric(byte) and byte != '_' and byte != '-' and byte != '.') direct = false;
+    }
+    // Leading dots are hidden by shell globs; leading hyphens are CLI-unsafe.
+    if (fqn.len > 0 and (fqn[0] == '.' or fqn[0] == '-')) direct = false;
+    const stem = fqn[0 .. (std.mem.indexOfScalar(u8, fqn, '.') orelse fqn.len)];
+    if (std.ascii.eqlIgnoreCase(stem, "con") or std.ascii.eqlIgnoreCase(stem, "prn") or
+        std.ascii.eqlIgnoreCase(stem, "aux") or std.ascii.eqlIgnoreCase(stem, "nul")) direct = false;
+    if (stem.len == 4 and stem[3] >= '1' and stem[3] <= '9' and
+        (std.ascii.eqlIgnoreCase(stem[0..3], "com") or std.ascii.eqlIgnoreCase(stem[0..3], "lpt"))) direct = false;
+    if (direct) return std.fmt.bufPrint(buffer, "{s}.json", .{fqn}) catch unreachable;
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(fqn, &digest, .{});
+    @memcpy(buffer[0..hashed_name_prefix.len], hashed_name_prefix);
+    const alphabet = "0123456789abcdef";
+    for (digest, 0..) |byte, i| {
+        buffer[hashed_name_prefix.len + i * 2] = alphabet[byte >> 4];
+        buffer[hashed_name_prefix.len + i * 2 + 1] = alphabet[byte & 15];
+    }
+    const end = hashed_name_prefix.len + digest.len * 2;
+    @memcpy(buffer[end .. end + 5], ".json");
+    return buffer[0 .. end + 5];
+}
+
+// Exclusive creation protects fresh files. Repeated analysis may export the same
+// function again: permit this only after validating its existing full JSON name,
+// without truncating first. The advisory lock coordinates cooperating exporters.
+fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []const u8) !Compat.File {
+    return Compat.createFile(pt, dir, name) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+        // Reject stable nonregular paths before a potentially blocking open.
+        if ((try Compat.statPath(pt, dir, name)).kind != .file) return error.ExistingOutputNotRegular;
+        const file = try Compat.openExistingFile(pt, dir, name);
+        errdefer Compat.closeFile(pt, file);
+        const stat = try Compat.statFile(pt, file);
+        if (stat.kind != .file) return error.ExistingOutputNotRegular;
+        if (stat.size > 64 * 1024 * 1024) return error.ExistingOutputTooLarge;
+        // Validation storage must be released before the writer arena grows.
+        var validation_arena = std.heap.ArenaAllocator.init(pt.zcu.gpa);
+        defer validation_arena.deinit();
+        const allocator = validation_arena.allocator();
+        const bytes = try allocator.alloc(u8, @as(usize, @intCast(stat.size)) + 1);
+        defer allocator.free(bytes);
+        const count = try Compat.readFile(pt, file, bytes);
+        if (count != stat.size) return error.ExistingOutputChanged;
+        const parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes[0..count], .{ .duplicate_field_behavior = .@"error" });
+        defer parsed.deinit();
+        if (parsed.value != .object) return error.OutputIdentityCollision;
+        const identity = parsed.value.object.get("name") orelse return error.OutputIdentityCollision;
+        if (identity != .string or !std.mem.eql(u8, identity.string, fqn)) return error.OutputIdentityCollision;
+        try Compat.truncateFile(pt, file);
+        return file;
+    };
+}
+
 pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
     const zcu = pt.zcu;
@@ -393,25 +480,21 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
         return;
     };
     defer Compat.closeDir(pt, &dir);
-    var name_buf: [std.fs.max_name_bytes]u8 = undefined;
-    const file_name = std.fmt.bufPrint(&name_buf, "{s}.json", .{fqn}) catch {
-        std.log.warn("air2lean: name too long for a file, no JSON for {s}", .{fqn});
-        return;
-    };
-    const file = Compat.createFile(pt, dir, file_name) catch |err| {
-        std.log.warn("air2lean: no JSON for {s}: {s}", .{ fqn, @errorName(err) });
+    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
+    defer arena.deinit();
+    var name_buf: [output_name_capacity]u8 = undefined;
+    const file_name = outputFileName(fqn, &name_buf);
+    const file = openOwnedOutput(pt, dir, file_name, fqn) catch |err| {
+        std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
     };
     defer Compat.closeFile(pt, file);
     var sink: Compat.Sink = undefined;
     sink.init(pt, file);
 
-    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
-    defer arena.deinit();
-
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
     // A partly written file is invalid JSON; say which one, like the open failures above.
-    w.writeFunc(fqn, Type.fromInterned(func.ty)) catch |err| {
+    w.writeFunc(fqn, Type.fromInterned(func.ty), func.owner_nav) catch |err| {
         std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
         return;
     };
@@ -443,16 +526,68 @@ const W = struct {
         uav: InternPool.Key.Ptr.BaseAddr.Uav,
     };
 
-    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type) Error!void {
+    /// The owning module controls build settings. The backend describes this AIR dump's
+    /// compiler configuration, not a qualified correspondence with any shipping binary.
+    fn writeProfile(w: *W, owner_nav: InternPool.Nav.Index) Error!void {
+        const zcu = w.pt.zcu;
+        const file = zcu.navFileScope(owner_nav);
+        const mod = if (Compat.v14) file.mod else file.mod.?;
+        const target = &mod.resolved_target.result;
+        const triple = try target.zigTriple(w.gpa);
+        const backend = if (Compat.v14)
+            target_util.zigBackend(target.*, zcu.comp.config.use_llvm)
+        else
+            target_util.zigBackend(target, zcu.comp.config.use_llvm);
+        try w.j.beginObject();
+        try w.field("name");
+        try w.j.write("abi64-le-v1");
+        try w.field("target_triple");
+        try w.j.write(triple);
+        try w.field("pointer_bits");
+        try w.j.write(target.ptrBitWidth());
+        try w.field("endian");
+        try w.j.write(@tagName(target.cpu.arch.endian()));
+        try w.field("abi");
+        try w.j.write(@tagName(target.abi));
+        try w.field("zig_version");
+        try w.j.write(build_options.version);
+        try w.field("backend");
+        try w.j.write(@tagName(backend));
+        try w.field("cpu");
+        try w.j.write(target.cpu.model.name);
+        try w.field("features");
+        try w.j.beginArray();
+        for (target.cpu.arch.allFeaturesList()) |feature| {
+            if (target.cpu.features.isEnabled(feature.index)) try w.j.write(feature.name);
+        }
+        try w.j.endArray();
+        try w.field("build_mode");
+        try w.j.write(@tagName(mod.optimize_mode));
+        try w.field("float_mode");
+        try w.j.write("per-instruction");
+        try w.field("error_set_bits");
+        try w.j.write(zcu.errorSetBits());
+        try w.field("error_layout");
+        try w.j.write("type-table");
+        try w.field("error_tracing");
+        try w.j.write(mod.error_tracing);
+        try w.field("export_stage");
+        try w.j.write("analyzed-air");
+        try w.j.endObject();
+    }
+
+    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, owner_nav: InternPool.Nav.Index) Error!void {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(11);
+        try w.j.write(12);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        try w.field("profile");
+        try w.writeProfile(owner_nav);
         try w.field("name");
         try w.j.write(fqn);
         try w.field("params");
@@ -774,6 +909,13 @@ const W = struct {
                 const pl_op = w.data(inst).pl_op;
                 const extra = w.air.extraData(Air.Try, pl_op.payload);
                 try w.writeArgs(&.{pl_op.operand});
+                try w.field("body");
+                try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
+            },
+            .try_ptr, .try_ptr_cold => {
+                const ty_pl = w.data(inst).ty_pl;
+                const extra = w.air.extraData(Air.TryPtr, ty_pl.payload);
+                try w.writeArgs(&.{extra.data.ptr});
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
@@ -1163,6 +1305,18 @@ const W = struct {
             .uav => |uav| {
                 try w.field("global");
                 try w.j.write(try w.globalId(.{ .uav = uav }));
+                break;
+            },
+            // Fixed integer addresses have their entire address in byte_offset in all
+            // supported versions. Only zero has a qualified constant representation.
+            .int => {
+                if (off == 0) {
+                    try w.field("null");
+                    try w.j.write(true);
+                } else {
+                    try w.field("unsupported");
+                    try w.j.write("int");
+                }
                 break;
             },
             // A field of the struct or slice that the pointer `f.base` points to.

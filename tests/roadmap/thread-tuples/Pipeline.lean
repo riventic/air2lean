@@ -8,6 +8,9 @@ private def obj := Json.mkObj
 private def num (n : Nat) : Json := toJson n
 private def ref (n : Nat) : Json := obj [("inst", num n)]
 private def lit (ty : Nat) (text : String) : Json := obj [("ty", num ty), ("val", .str text)]
+private def undef (ty : Nat) : Json := obj [("ty", num ty), ("undef", .bool true)]
+private def nominal (name : String) : Json := obj [("k", .str "struct"), ("name", .str name),
+  ("layout", .str "auto"), ("fields", .arr #[]), ("abi_size", num 0), ("abi_align", num 1)]
 private def node (id : Nat) (tag : String) (ty : Nat) (args : Array Json := #[])
     (extra : List (String × Json) := []) : Json :=
   obj ([("id", num id), ("tag", .str tag), ("ty", num ty), ("args", .arr args)] ++ extra)
@@ -36,14 +39,23 @@ private def checkedProgram (files : Array Json) : IO (Array Func) := do
 private def require (test : Bool) (message : String) : IO Unit :=
   unless test do throw (IO.userError message)
 
+private def requireError (result : Except String Unit) (expected : String) : IO Unit := do
+  match result with
+  | .ok _ => throw (IO.userError s!"expected rejection: {expected}")
+  | .error error => require (error == expected) s!"expected {expected}, got {error}"
+
 private def spawner (callee : String) (fields : Array Nat) (values : Array Json) : Json :=
   file "spawn" #[u8, u16, tuple fields, voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[] 3
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    nominal "Thread.SpawnConfig", nominal "Io.Group",
+    obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false), ("child", num 9),
+      ("abi_size", num 8), ("abi_align", num 8), ("ptr_align", num 1)],
+    nominal "Io", obj [("k", .str "error_union"), ("error", num 6), ("payload", num 3)]] #[] 3
     #[node 0 "aggregate_init" 2 values,
-      node 1 "call" (if callee == "Thread.spawn" then 7 else 3)
-        (if callee == "Thread.spawn" then #[lit 3 "{}", ref 0] else #[lit 3 "{}", lit 3 "{}", ref 0])
+      node 1 "call" (if callee == "Thread.spawn" then 7 else if callee == "Io.Group.concurrent" then 12 else 3)
+        (if callee == "Thread.spawn" then #[undef 8, ref 0] else #[undef 10, undef 11, ref 0])
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "worker")])],
       node 2 "ret" 4 #[lit 3 "{}"]]
 
@@ -56,10 +68,10 @@ private def accepted (callee : String) (fields : Array Nat) (values : Array Json
     (params : Array Nat) (retVoid : Bool := false) : IO (Array Func) := do
   checkedProgram #[spawner callee fields values, worker params retVoid]
 
-private def rejected (name callee : String) (fields : Array Nat) (values : Array Json)
-    (params : Array Nat) (retVoid : Bool := false) : IO Unit := do
+private def rejected (_name callee : String) (fields : Array Nat) (values : Array Json)
+    (params : Array Nat) (diagnostic : String) (retVoid : Bool := false) : IO Unit := do
   let fs ← #[spawner callee fields values, worker params retVoid].mapM parse
-  require ((checkProgram fs).toOption.isNone) s!"accepted malformed spawn signature: {name}"
+  requireError (checkProgram fs) diagnostic
 
 private def pureSlices (sourceConst : Bool := true) : IO (Array Func) := do
   let slice := obj [("k", .str "ptr"), ("size", .str "slice"), ("const", .bool true),
@@ -68,10 +80,11 @@ private def pureSlices (sourceConst : Bool := true) : IO (Array Func) := do
   let source := file "slices" #[u8, captureSlice, tuple #[0, 1, 1], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1, 1] 3
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    nominal "Thread.SpawnConfig"] #[1, 1] 3
     #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "arg" 1 #[] [("param", num 1)],
       node 2 "aggregate_init" 2 #[lit 0 "7", ref 0, ref 1],
-      node 3 "call" 7 #[lit 3 "{}", ref 2]
+      node 3 "call" 7 #[undef 8, ref 2]
         [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "sliceWorker")])],
       node 4 "ret" 4 #[lit 3 "{}"]]
   let target := file "sliceWorker" #[u8, slice, nrTy] #[0, 1, 1] 0
@@ -88,9 +101,10 @@ private def alignedSlices : IO (Array Func) := do
   let source := fun name align => file name #[u64, slice align, tuple #[1], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1] 3
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    nominal "Thread.SpawnConfig"] #[1] 3
     #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "aggregate_init" 2 #[ref 0],
-      node 2 "call" 7 #[lit 3 "{}", ref 1]
+      node 2 "call" 7 #[undef 8, ref 1]
         [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "alignedWorker")])],
       node 3 "ret" 4 #[lit 3 "{}"]]
   let target := file "alignedWorker" #[u64, slice 1, voidTy, nrTy] #[1] 2
@@ -105,26 +119,33 @@ private def pointerSignature (sourceConst targetConst : Bool) (sourceAlign targe
   let source := file "pointerCapture" #[u8, ptr 0 sourceConst sourceAlign, tuple #[1], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[1] 3
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    nominal "Thread.SpawnConfig"] #[1] 3
     #[node 0 "arg" 1 #[] [("param", num 0)], node 1 "aggregate_init" 2 #[ref 0],
-      node 2 "call" 7 #[lit 3 "{}", ref 1]
+      node 2 "call" 7 #[undef 8, ref 1]
         [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "worker")])],
       node 3 "ret" 4 #[lit 3 "{}"]]
   -- The same pointee lives at a different local type ID in the worker.
   let target := file "worker" #[u16, voidTy, nrTy, u8, ptr 3 targetConst targetAlign] #[4] 1
     #[node 0 "arg" 4 #[] [("param", num 0)], node 1 "ret" 2 #[lit 1 "{}"]]
   let fs ← #[source, target].mapM parse
-  require ((checkProgram fs).toOption.isSome == expected)
-    s!"pointer capture qualification mismatch: const {sourceConst}/{targetConst}, align {sourceAlign}/{targetAlign}"
+  if expected then
+    match checkProgram fs with
+    | .ok _ => pure ()
+    | .error error => throw (IO.userError s!"valid pointer capture rejected: {error}")
+  else
+    requireError (checkProgram fs)
+      "pointerCapture: Thread.spawn argument 0 does not match worker 'worker' parameter 0; capture the exact runtime parameter type with an explicit cast"
 
 private def nestedTuple : IO (Array Func) := do
   let source := file "nestedTuple" #[u8, u16, tuple #[0, 1], tuple #[2, 0], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 7), ("payload", num 6)]] #[2, 0] 4
+    obj [("k", .str "error_union"), ("error", num 7), ("payload", num 6)],
+    nominal "Thread.SpawnConfig"] #[2, 0] 4
     #[node 0 "arg" 2 #[] [("param", num 0)], node 1 "arg" 0 #[] [("param", num 1)],
       node 2 "aggregate_init" 3 #[ref 0, ref 1],
-      node 3 "call" 8 #[lit 4 "{}", ref 2]
+      node 3 "call" 8 #[undef 9, ref 2]
         [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "worker")])],
       node 4 "ret" 5 #[lit 4 "{}"]]
   let target := file "worker" #[u8, u16, tuple #[0, 1], nrTy] #[2, 0] 0
@@ -149,23 +170,30 @@ def main (args : List String) : IO Unit := do
     let _ ← accepted callee #[] #[] #[] group
     let _ ← accepted callee #[0] #[lit 0 "1"] #[0] group
     let _ ← accepted callee #[0, 1, 0, 1] #[lit 0 "1", lit 1 "2", lit 0 "3", lit 1 "4"] #[0, 1, 0, 1] group
-    rejected "missing parameter" callee #[] #[] #[0] group
-    rejected "extra parameter" callee #[0, 0] #[lit 0 "1", lit 0 "2"] #[0] group
-    rejected "wrong middle field width" callee #[0, 1, 0] #[lit 0 "1", lit 1 "2", lit 0 "3"] #[0, 0, 0] group
+    let diagnosticName := if group then "Io.Group.async" else "Thread.spawn"
+    rejected "missing parameter" callee #[] #[] #[0]
+      s!"spawn: {diagnosticName}'s args tuple has 0 fields, but worker 'worker' has 1 runtime parameters" group
+    rejected "extra parameter" callee #[0, 0] #[lit 0 "1", lit 0 "2"] #[0]
+      s!"spawn: {diagnosticName}'s args tuple has 2 fields, but worker 'worker' has 1 runtime parameters" group
+    rejected "wrong middle field width" callee #[0, 1, 0] #[lit 0 "1", lit 1 "2", lit 0 "3"] #[0, 0, 0]
+      s!"spawn: {diagnosticName} argument 1 does not match worker 'worker' parameter 1; capture the exact runtime parameter type with an explicit cast" group
   let noTuple := file "noTuple" #[u8, u16, tuple #[], voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
-    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)]] #[] 3
-    #[node 0 "call" 7 #[lit 3 "{}", lit 0 "7"]
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 5)],
+    nominal "Thread.SpawnConfig"] #[] 3
+    #[node 0 "call" 7 #[undef 8, lit 0 "7"]
       [("callee", obj [("func", .str "Thread.spawn"), ("comptime_fn", .str "worker")])],
       node 1 "ret" 4 #[lit 3 "{}"]]
   let nonTuple ← #[noTuple, worker #[]].mapM parse
-  require ((checkProgram nonTuple).toOption.isNone) "accepted non-tuple spawn capture"
+  requireError (checkProgram nonTuple) "noTuple: Thread.spawn's args argument is not a tuple"
   let wrongResult := file "worker" #[u8, u16, voidTy, nrTy] #[] 1
     #[node 0 "ret" 3 #[lit 1 "7"]]
   let invalidResult ← #[spawner "Thread.spawn" #[] #[], wrongResult].mapM parse
-  require ((checkProgram invalidResult).toOption.isNone) "accepted unsupported worker result"
+  requireError (checkProgram invalidResult)
+    "spawn: Thread.spawn worker 'worker' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
   rejected "invalid group result" "Io.Group.async" #[0] #[lit 0 "1"] #[0]
+    "spawn: Io.Group.async worker 'worker' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
   nestedPointerSignature
   pointerSignature false false 4 4 true
   pointerSignature false true 4 1 true

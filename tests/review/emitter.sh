@@ -20,7 +20,7 @@ while IFS= read -r source; do
   [ -f "$source" ] || { echo "error: caller fixture removed: $source" >&2; exit 1; }
 done < "$work/caller"
 # Pin every emitted semantic case, including both float modes: a lost generator case fails.
-required='pointerCasts tuples names indirectCapture unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames'
+required='pointerCasts tuples names indirectCapture blockLoopExits unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames'
 for name in $required; do
   [ -f "$generated/$name.lean" ] || { echo "error: missing emitter fixture: $name" >&2; exit 1; }
 done

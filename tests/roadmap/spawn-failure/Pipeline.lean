@@ -83,16 +83,69 @@ private def reject (label version : String) (cfg : Json) : IO Unit := do
       require (hasText message "custom allocators are outside the model")
         "custom allocator fixture failed for an unrelated reason"
 
+private def fallbackChecks : IO Unit := do
+  let first ← parse (spawner "0.16.0" "Thread.spawn")
+  let concurrent ← parse (spawner "0.16.0" "Io.Group.concurrent")
+  let async ← parse (spawner "0.16.0" "Io.Group.async")
+  let task ← parse (worker "0.16.0")
+  let mixed := #[{ first with name := "firstSpawn" },
+    { concurrent with name := "concurrentSpawn" }, { async with name := "lateAsync" },
+    { async with name := "repeatedAsync" }, task]
+  require (checkProgram mixed |>.toOption.isSome) "mixed worker sites are not checked"
+  let targets := spawnTargets mixed
+  require (targets.size == 1 && targets[0]!.2.name == "firstSpawn")
+    "async filtering changed first-use capture description"
+  let descriptions : Array (String × String × Array (String × Option (String × Nat)) × Nat) :=
+    #[("worker", "worker", #[("BitVec 32", none), ("BitVec 32", none)], 0),
+    ("unused", "unused", #[], 0)]
+  let fallbacks := emitSpawnFallbacks mixed descriptions
+  require (fallbacks.size == 1 && fallbacks[0]!.1 == "worker" &&
+    hasText fallbacks[0]!.2 "worker capture0 capture1")
+    "late/repeated async lost or duplicated the original capture fallback"
+  let onlyConcurrent := #[{ concurrent with name := "concurrentOnly" }, task]
+  require (checkProgram onlyConcurrent |>.toOption.isSome) "concurrent-only program is not checked"
+  require ((spawnTargets onlyConcurrent).size == 1 &&
+    (emitSpawnFallbacks onlyConcurrent descriptions).isEmpty)
+    "concurrent-only target rendered an unused fallback"
+  let output := emit mixed "Mixed" "" .ieee #[] .fallible
+  require (hasText output "Zig.spawnWithPolicyC .fallible" &&
+    hasText output "Zig.groupConcurrentWithPolicyC .fallible" &&
+    hasText output "Zig.groupAsyncWithPolicyC .fallible" &&
+    hasText output "worker capture0 capture1") "mixed-site emission lost a call path"
+  let base := mkFCtx task #[] #[("worker", "worker")] .ieee #[] #[]
+  let bare := { base with spawnSemantics := .fallible,
+    spawnFallbacks := #[("worker", "FIRST"), ("worker", "SECOND"), ("late", "LAST")] }
+  let prepared := bare.prepareSpawnFallbacks
+  require (bare.spawnFallback "worker" == "FIRST" && prepared.spawnFallback "worker" == "FIRST" &&
+    bare.spawnFallback "late" == "LAST" && prepared.spawnFallback "late" == "LAST" &&
+    bare.spawnFallback "missing" == "" && prepared.spawnFallback "missing" == "")
+    "prepared lookup changed duplicate-first, late-entry or missing behavior"
+  for workerName in #["worker", "late", "late", "missing"] do
+    let callee := Val.func "Io.Group.async" false (some workerName)
+    require (bare.threadCall #[] .groupAsync callee #[] ==
+      prepared.threadCall #[] .groupAsync callee #[]) "prepared/unprepared async emission differs"
+  let standalone := emitOneFunction async #[] #[("worker", "worker")] .ieee #[] #[] #[]
+    #[async.name] .fallible bare.spawnFallbacks
+  require (hasText standalone.defn "FIRST" && !hasText standalone.defn "SECOND")
+    "standalone function emission did not prepare a first-match fallback map"
+  let changed := { prepared with spawnFallbacks := #[("worker", "NEW"), ("worker", "IGNORED")],
+    spawnFallbackMap := none }
+  require (changed.spawnFallback "worker" == "NEW" && changed.spawnFallback "late" == "" &&
+    changed.prepareSpawnFallbacks.spawnFallback "worker" == "NEW" &&
+    changed.prepareSpawnFallbacks.spawnFallback "late" == "")
+    "explicit cache invalidation did not preserve the new array"
+
 -- The generated code is elaborated separately. The equality fixes capture order in
 -- both the child dispatcher and the independently selected caller fallback.
 def main (args : List String) : IO Unit := do
   let [directory] := args | throw (IO.userError "usage: Pipeline.lean OUTPUT_DIRECTORY")
+  fallbackChecks
   for (version, label) in #[("0.14.1", "14"), ("0.15.2", "15"), ("0.16.0", "16")] do
     let fs ← checked #[spawner version "Thread.spawn", worker version]
     require (checkFallibleSpawnCalls fs |>.toOption.isSome) s!"rejected supported {version}"
-    require (emit fs "Synthetic" "" == emit fs "Synthetic" "" .ieee .available)
+    require (emit fs "Synthetic" "" == emit fs "Synthetic" "" .ieee #[] .available)
       "default emission changed from explicit available policy"
-    let output := emit fs "Synthetic" "" .ieee .fallible
+    let output := emit fs "Synthetic" "" .ieee #[] .fallible
     require (hasText output "Thread assignment policy: fallible") "fallible header lost"
     require (hasText output "Zig.spawnWithPolicyC .fallible") "fallible spawn wrapper lost"
     IO.FS.writeFile (System.FilePath.mk directory / s!"spawn-{label}.lean")
@@ -108,7 +161,7 @@ def main (args : List String) : IO Unit := do
       ("Io.Group.concurrent", "concurrent", "groupConcurrentWithPolicyC")] do
     let fs ← checked #[spawner "0.16.0" callee, worker "0.16.0"]
     require (checkFallibleSpawnCalls fs |>.toOption.isSome) "supported group boundary rejected"
-    let output := emit fs "Synthetic" "" .ieee .fallible
+    let output := emit fs "Synthetic" "" .ieee #[] .fallible
     require (hasText output s!"Zig.{op} .fallible") "wrong group wrapper name"
     if label == "async" then
       require (hasText output "worker capture0 capture1") "caller fallback lost complete captures"

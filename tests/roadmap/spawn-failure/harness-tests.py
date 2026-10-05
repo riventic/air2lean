@@ -5,6 +5,7 @@ used: the interpreter can reserve more address space than its resident footprint
 """
 import importlib.util
 import ctypes
+import copy
 import errno
 import json
 import os
@@ -53,6 +54,76 @@ class HarnessTests(unittest.TestCase):
     def tiny(self, text, code=0):
         program = "import resource,signal,sys; signal.alarm(3); rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss; assert (rss if sys.platform == 'darwin' else rss*1024) <= 32*1024*1024; print(" + repr(text) + "); raise SystemExit(" + str(code) + ")"
         return [sys.executable, "-c", program]
+
+    def current_record(self, version="0.16.0", abi="gnu"):
+        profile = dict(name="abi64-le-v1", target_triple="x86_64-linux.5.10-" + abi,
+                       pointer_bits=64, endian="little", abi=abi, zig_version=version,
+                       backend="stage2_llvm", cpu="x86_64",
+                       features=["64bit", "cmov", "cx8", "fxsr", "idivq_to_divl", "macrofusion",
+                                 "mmx", "nopl", "slow_3ops_lea", "slow_incdec", "sse", "sse2",
+                                 "vzeroupper", "x87"],
+                       build_mode="ReleaseSafe", float_mode="per-instruction", error_set_bits=16,
+                       error_layout="type-table", error_tracing=False, export_stage="analyzed-air")
+        return dict(schema=12, zig_version=version, target_endian="little", name="worker", profile=profile)
+
+    def test_fresh_versioned_linux_gnu_musl_profiles(self):
+        for version in ("0.15.2", "0.16.0"):
+            for abi in ("gnu", "musl"):
+                record = self.current_record(version, abi)
+                self.assertEqual(qualify.fresh_profile([record], version, ["worker"]),
+                                 dict(record["profile"], schema=12))
+
+    def test_fresh_schema_endian_inventory_and_profile_fail_closed(self):
+        record = self.current_record()
+        changes = [("schema", 11), ("zig_version", "0.15.2"), ("target_endian", "big")]
+        for key, value in changes:
+            bad = copy.deepcopy(record); bad[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                qualify.fresh_profile([bad], "0.16.0", ["worker"])
+        for key, value in [("cpu", "haswell"), ("features", []), ("build_mode", "Debug"),
+                           ("error_tracing", True), ("backend", "stage2_c"), ("pointer_bits", 32)]:
+            bad = copy.deepcopy(record); bad["profile"][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                qualify.fresh_profile([bad], "0.16.0", ["worker"])
+        for records in ([], [record, record]):
+            with self.assertRaises(ValueError):
+                qualify.fresh_profile(records, "0.16.0", ["worker"])
+        other = self.current_record(abi="musl"); other["name"] = "other"
+        with self.assertRaisesRegex(ValueError, "mixed profiles"):
+            qualify.fresh_profile([record, other], "0.16.0", ["worker", "other"])
+
+    def test_complete_body_comparison_retains_raw_legacy_receipt(self):
+        air = self.directory / "air"; air.mkdir()
+        record = dict(schema=11, zig_version="0.16.0", target_endian="little", name="worker")
+        (air / "worker.json").write_text(json.dumps(record))
+        baseline = self.directory / "baseline.lean"
+        body = b"import ZigLean\ndef worker := 7\n-- complete tail\n"
+        baseline.write_bytes(body)
+        raw = self.directory / "Gen.lean"
+        metadata = dict(profile=qualify.HELPERS["profile_for_air"](record),
+                        float_semantics="ieee", correspondence="model")
+        header = qualify.HELPERS["PREFIX"] + json.dumps(metadata).encode() + b"\n"
+        raw.write_bytes(header + body)
+        receipt = self.directory / "generated-receipt.json"
+        captured = qualify.generated_receipt(raw, air, receipt)
+        qualify.HELPERS["compare"](baseline, raw, receipt)
+        self.assertEqual(raw.read_bytes(), header + body)
+        self.assertEqual(baseline.read_bytes(), body)
+        self.assertEqual(captured["generated_sha256"], qualify.digest(raw))
+        self.assertEqual(captured["air"], [dict(file="worker.json", sha256=qualify.digest(air / "worker.json"))])
+        baseline.write_bytes(body.replace(b"complete tail", b"lost tail"))
+        with self.assertRaisesRegex(ValueError, "semantics changed"):
+            qualify.HELPERS["compare"](baseline, raw, receipt)
+        raw.write_bytes(header + body + b"-- new tail\n")
+        with self.assertRaisesRegex(ValueError, "validated check report"):
+            qualify.HELPERS["checked_generated"](raw, receipt)
+        raw.write_bytes(body)
+        with self.assertRaisesRegex(ValueError, "first-line profile"):
+            qualify.generated_receipt(raw, air, receipt)
+        metadata["profile"]["zig_version"] = "0.15.2"
+        raw.write_bytes(qualify.HELPERS["PREFIX"] + json.dumps(metadata).encode() + b"\n" + body)
+        with self.assertRaisesRegex(ValueError, "AIR profile differs"):
+            qualify.generated_receipt(raw, air, receipt)
 
     def test_passing_marker(self):
         self.gate.run("pass", self.tiny("PASS"), marker="PASS", timeout=2)

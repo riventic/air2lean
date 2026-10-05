@@ -86,10 +86,11 @@ expect_failure "duplicate float override" "duplicate override key" env AIR2LEAN_
 check="$test_dir/check"
 mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air" \
   "$check/Proofs/Basic" "$check/bin"
-cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py" "$check/scripts/"
+cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" "$check/scripts/"
 cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
 {
-  "zig_version": "legacy",
+  "schema": 11,
+  "zig_version": "0.16.0",
   "name": "basic.foo__anon_1",
   "types": [{"name": "basic.Choice__enum_1", "fields": [{"name": "visible__anon_1"}]}],
   "body": [{
@@ -113,7 +114,7 @@ import os
 from pathlib import Path
 
 data = json.loads(Path("tests/golden/basic/air/basic.foo.json").read_text())
-data["zig_version"] = "current"
+data["zig_version"] = "0.16.0"
 endian = os.environ.get("EXPORTED_ENDIAN", "")
 if endian:
     data["target_endian"] = endian
@@ -138,9 +139,20 @@ EOF
 cat >"$check/bin/lake" <<'EOF'
 #!/usr/bin/env bash
 if [ "$1" = exe ]; then
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = -o ]; then printf '%s\n' "$GENERATED_SOURCE" >"$2"; shift 2; else shift; fi
-  done
+  python3 - "$@" <<'PYFAKE'
+import json
+import os
+from pathlib import Path
+import runpy
+import sys
+helpers = runpy.run_path("scripts/normalize-generated.py")
+args = sys.argv[1:]
+source = sorted(Path(args[2]).glob("*.json"))[0]
+profile = helpers["profile_for_air"](json.loads(source.read_text()))
+metadata = dict(profile=profile, float_semantics="ieee", correspondence="model")
+Path(args[args.index("-o") + 1]).write_text("-- air2lean-profile: " + json.dumps(metadata) + "\n" +
+                                         os.environ["GENERATED_SOURCE"] + "\n")
+PYFAKE
 else
   for arg in "$@"; do
     if [ "$arg" = Proofs.Basic.Gen ] && grep -q invalid Proofs/Basic/Gen.lean; then
@@ -159,7 +171,7 @@ expect_pass "valid generation with diff disabled" env PATH="$check/bin:$PATH" \
 expect_pass "little-endian metadata compatible with legacy goldens" env PATH="$check/bin:$PATH" \
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 \
   AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN=little GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
-expect_failure "big-endian metadata remains visible" "does not match its golden files" env PATH="$check/bin:$PATH" \
+expect_failure "big-endian metadata fails before comparison" "little-endian memory model" env PATH="$check/bin:$PATH" \
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 \
   AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN=big GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
 run_identity_check() {
@@ -184,13 +196,16 @@ touch "$mutate/examples/atomics/atomics.zig" "$mutate/examples/recursion/recursi
 for path in Proofs/Basic/Gen.lean Proofs/Options/Gen.lean Proofs/Variants/Gen.lean \
   Proofs/Layout/Gen.lean Proofs/Slices/Gen.lean ZigLean/Basic.lean ZigLean/Lemmas.lean \
   ZigLean/Float/Round.lean ZigLean/Mem/Basic.lean ZigLean/Mem/Enc.lean ZigLean/Mem/Alloc.lean \
-  tests/diff/asm/asm.zig ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean; do
+  tests/diff/asm/asm.zig ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
+  ZigLean/Conc.lean; do
   mkdir -p "$mutate/$(dirname "$path")"
   cp "$repo_root/$path" "$mutate/$path"
 done
 cp "$mutate/ZigLean/Mem/Thread.lean" "$mutate/original-thread.lean"
+cp "$mutate/ZigLean/Conc.lean" "$mutate/original-conc.lean"
 cat >"$mutate/bin/lake" <<'EOF'
 #!/usr/bin/env bash
+cmp original-conc.lean ZigLean/Conc.lean || exit 1
 if [ "$1" = env ]; then exit 0; fi
 if [ ! -f "$BASELINE_MARKER" ]; then
   touch "$BASELINE_MARKER"
@@ -220,16 +235,22 @@ expect_failure "empty shard/example intersection" "selection ran no mutations" e
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=recursion AIR2LEAN_MUTATION_SHARD=2 \
   AIR2LEAN_MUTATION_SHARDS=2 bash "$mutate/scripts/mutate.sh"
 expect_failure "broken unmutated proof" "broken unmutated proof" run_mutant baseline-error baseline1
+expect_pass "Conc restored after proof baseline failure" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_failure "broken proof tool" "proof build setup failed (exit=127)" run_mutant setup-error baseline2
 expect_pass "source restored after proof setup failure" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
+expect_pass "Conc restored after proof setup failure" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_failure "proof resource failure" "proof build setup failed (exit=1)" run_mutant resource-error baseline3
 expect_pass "source restored after proof resource failure" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
+expect_pass "Conc restored after proof resource failure" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_failure "interrupted mutant proof" "mutation interrupted by TERM" run_mutant signal-error baseline-signal
 expect_pass "source restored after interruption" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
+expect_pass "Conc restored after proof interruption" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_failure "undetected proof mutation fails the run" "NOT detected" run_mutant undetected baseline-undetected
 expect_pass "source restored after undetected mutation" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
+expect_pass "Conc restored after undetected proof mutation" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_pass "genuine mutant proof error" run_mutant mutant-error baseline4
 expect_pass "mutation source restored" cmp "$mutate/original-thread.lean" "$mutate/ZigLean/Mem/Thread.lean"
+expect_pass "Conc restored after detected proof mutation" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 
 # The emitter must elaborate every generated/caller fixture and propagate list failures.
 emitter="$test_dir/emitter"
@@ -241,7 +262,7 @@ set -euo pipefail
 if [ "${3:-}" = --run ]; then
   output=$5
   mkdir -p "$output"
-  for name in pointerCasts tuples names indirectCapture unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames; do
+  for name in pointerCasts tuples names indirectCapture blockLoopExits unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames; do
     [ "${EMITTER_MODE:-}" != missing ] || [ "$name" != tuples ] || continue
     : > "$output/$name.lean"
   done
@@ -268,8 +289,8 @@ run_emitter() {
     bash "$emitter/tests/review/emitter.sh" -fixtures
 }
 for name in parser1 parser2 parser3 parser4 parser5 parser6; do : > "$emitter/-fixtures/$name.lean"; done
-expect_pass "emitter checks 25 fixtures in leading-hyphen directory" run_emitter healthy
-expect_pass "all 25 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 25
+expect_pass "emitter checks 26 fixtures in leading-hyphen directory" run_emitter healthy
+expect_pass "all 26 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 26
 expect_failure "failed emitter find" "find failed" run_emitter find-failure
 expect_failure "failed emitter sort" "sort failed" run_emitter sort-failure
 expect_failure "truncated emitter find" "listing incomplete" run_emitter truncated
@@ -290,6 +311,7 @@ cat > "$mutate/scripts/diff.sh" <<'EOF'
 set -euo pipefail
 if [ ! -f "$DIFF_BASELINE_MARKER" ]; then
   touch "$DIFF_BASELINE_MARKER"
+  cmp original-conc.lean ZigLean/Conc.lean || exit 1
   if [ "$DIFF_MODE" = baseline-error ]; then echo 'TOTAL: mismatch=1'; exit 1; fi
   cmp original-alloc.lean ZigLean/Mem/Alloc.lean || exit 1
   exit 0
@@ -301,6 +323,10 @@ after = Path('ZigLean/Mem/Alloc.lean').read_text()
 old = 'poisonFree s.ptr (size * (s.len.toNat + 1))'
 new = 'poisonFree s.ptr (size * s.len.toNat)'
 assert before.count(old) == 1 and after == before.replace(old, new), 'mutation changed more than sentinel byte count'
+proof_import = 'import ZigLean.Conc.WeakCas\n'
+before_conc = Path('original-conc.lean').read_text()
+assert before_conc.count(proof_import) == 1
+assert Path('ZigLean/Conc.lean').read_text() == before_conc.replace(proof_import, ''), 'wrong proof import window'
 PYTEST
 if [ "$DIFF_MODE" = undetected ]; then echo 'TOTAL: mismatch=0'; exit 0; fi
 echo 'TOTAL: mismatch=1'
@@ -314,9 +340,12 @@ run_sentinel() {
 }
 expect_failure "unmutated differential mismatch cannot detect a mutant" "unmutated differential baseline failed" run_sentinel baseline-error diff-baseline-fail
 expect_pass "baseline failure preserves allocator source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+expect_pass "Conc restored after differential baseline failure" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_pass "sentinel mutation changes only sentinel byte count and is detected" run_sentinel detected diff-baseline-pass
 expect_pass "sentinel mutation restores allocator source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+expect_pass "Conc restored after detected differential mutation" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 expect_failure "undetected sentinel mutation fails" "NOT detected" run_sentinel undetected diff-baseline-undetected
 expect_pass "undetected sentinel mutation restores source" cmp "$mutate/original-alloc.lean" "$mutate/ZigLean/Mem/Alloc.lean"
+expect_pass "Conc restored after undetected differential mutation" cmp "$mutate/original-conc.lean" "$mutate/ZigLean/Conc.lean"
 
 echo "shell review checks: $passed passed"

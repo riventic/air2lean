@@ -1,3 +1,4 @@
+import ZigLean.Conc.WeakWord
 import Proofs.Threadsync.Deadline
 import ZigLean.Conc.Word
 
@@ -610,6 +611,39 @@ theorem wp_cas {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Me
   rcases hcase with ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hne, hj, hv, hfl, hacq, hh⟩
   · rw [hh₁] at hv hh hacq; exact hH.1 hv hU hh hacq
   · rw [hh₁] at hj hv hfl hacq hh; exact hH.2 j old hne hj hv hfl hacq hh
+
+theorem wp_weakCas {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat} {g : Gh}
+    {W : Word 32 4} (hW : Wd W) {succ fail : AtomicOrder} {exp new : BitVec 32}
+    (hi : proto.inv (upd G t g) m)
+    (ht : ∀ G₁ m₁, G₁ t = g → proto.inv G₁ m₁ → t < m₁.threads.size)
+    {Q : Option (BitVec 32) × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m₁ m', G₁ t = g → proto.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
+      L.Inv G₁ m' →
+      ((last (W.hist m₁)).Val exp → W.Holds m' new →
+        W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) new) →
+        (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j b, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
+        Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+        W.hist m' = W.hist m₁ → Q (some b, s) G₁ m' k)) :
+    proto.WP t ((cmpxchgWeakC succ fail 4 W.ptr exp new : CM Tgt σ (Option (BitVec 32))).run s) Q G m n := by
+  unfold cmpxchgWeakC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hic := inv_cur hi₁ t
+  have htl : t < m₁.threads.size := ht G₁ m₁ hg₁ hi₁
+  have hwc := hW.ok hic.2
+  have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
+  refine WP.callMC (fun e he => (hwc.weakCas_noErr (fail := fail) (new := new) htl (hcs_of hic) hcr
+    e he).elim) fun r m' hr => ?_
+  obtain ⟨hw', hop, hcase⟩ := hwc.weakCas rfl htl (hcs_of hic) hr
+  have hH := h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_of_cur hop) (linv_op hW hic hop)
+  refine ⟨by rw [hop.threads], ?_⟩
+  rcases hcase with ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hj, hv, hfl, hacq, hh⟩
+  · rw [hh₁] at hv hh hacq; exact hH.1 hv hU hh hacq
+  · rw [hh₁] at hj hv hfl hacq hh; exact hH.2 j old hj hv hfl hacq hh
+
 
 /-! ## `U` after an op at a shared word -/
 
@@ -1567,9 +1601,9 @@ theorem loop107_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoc
     refine WP.bind (WP.callRC_ok sub2 ?_)
     dsimp only
     rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl]
-    refine WP.bind (WP.bind (WP.bind (wp_cas (.inl rfl) (g := gM hD x) hi (fun _ _ _ hi₁ => main_alive hi₁)
+    refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gM hD x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b hne hj hv hfl hacq hh => ?_⟩)))
+        ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
     · -- success: `main` takes the signal
       have hi₂ := inv_cons hx hcw hvw (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
         (by rw [upd_g hg₁]; exact hL) hv hh
@@ -1585,35 +1619,32 @@ theorem loop107_body (D : Nat) (q : Ptr) (s : Thread_Condition_FutexImpl_waitLoc
         | simp only [StateT.run_pure, Thread_Condition_FutexImpl_wait.again107, Bool.false_eq_true,
             ↓reduceIte])
       done
-    · -- failure: only at `wt`; `main` read write `j`
-      have hwt : x.ph = .wt := by
-        rcases hx with h | h
-        · exact h
-        · exfalso
-          have hx' : x = { ph := .seen, cw := true } := by
-            cases x; simp only at h hcw hvw; subst h hcw hvw; rfl
-          subst hx'
-          exact seen_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hne hj hv hfl
-      have hx' : x = { ph := .wt, cw := true } := by
-        cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
-      subst hx'
+    · -- failure may keep either the waiting or seen phase.
+      have hip : proto.inv (upd G₁ 0 (gM hD x)) m₁ := by rw [upd_g hg₁]; exact hi₁
       have hi₂ := inv_load (.inl rfl) hi₁ hw' hop hL hh
       rw [← upd_g hg₁] at hi₂
-      obtain ⟨hsz, hval⟩ := hi₁.2.sh
-      rw [← upd_g hg₁, upd_self, upd0_1] at hsz hval
-      have hN : sN (gM hD { ph := .wt, cw := true }).2 (G₁ 1).2 ≤ 3 := by
-        simp only [sN, gM, Ph.post]; cases (G₁ 1).2.cw <;> simp
-      have hbj : b = sv j := val_eq hv (hval j (by omega))
+      have hp : x.ph.post = false := by rcases hx with h | h <;> rw [h] <;> rfl
+      obtain ⟨hj2, hbj, hseen⟩ := state_read hip hcw hp hj hv
       refine WP.pure' ?_
       simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
       refine WP.bind (WP.callRC_ok (v := b) rfl ?_)
       repeat (first
-        | exact ⟨⟨by omega, hop.current, hD, hdl, .inl ⟨hxw rfl, hi₂, j, by omega, hbj⟩⟩,
-            .inl (by omega)⟩
         | refine WP.pure' ?_
         | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
             Thread_Condition_FutexImpl_wait.again107, ↓reduceIte])
-      done
+      refine ⟨⟨by omega, hop.current, hD, hdl, ?_⟩, .inl (by omega)⟩
+      rcases hx with hwt | hs
+      · have hx' : x = { ph := .wt, cw := true } := by
+          cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
+        subst hx'
+        exact .inl ⟨hxw rfl, hi₂, j, by omega, hbj⟩
+      · have hx' : x = { ph := .seen, cw := true } := by
+          cases x; simp only at hs hcw hvw; subst hs hcw hvw; rfl
+        subst hx'
+        have hjseen : j = 2 := hseen rfl hfl
+        subst hjseen
+        exact .inr ⟨hxs rfl, hi₂, hbj⟩
+
   · simp only [hg, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
     refine WP.pure' ?_
     simp only [StateT.run_pure]
@@ -2725,9 +2756,9 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
     rw [show (((bPtr.add 4).add 0).add 0).add 0 = WS.ptr from rfl,
       show (((bPtr.add 4).add 0).add 4).add 0 = WE.ptr from rfl,
       show ((bPtr.add 4).add 0).add 4 = WE.ptr from rfl]
-    refine WP.bind (WP.bind (WP.bind (wp_cas (.inl rfl) (g := gP { ph := .sg1 }) hi
+    refine WP.bind (WP.bind (WP.bind (wp_weakCas (.inl rfl) (g := gP { ph := .sg1 }) hi
       (ht1 (by simp [gM])) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
-        ⟨fun hv hU hh hacq => ?_, fun j b hne hj hv hfl hacq hh => ?_⟩)))
+        ⟨fun hv hU hh hacq => ?_, fun j b hj hv hfl hacq hh => ?_⟩)))
     · have hi₂ := inv_sgp (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
         (by rw [upd_g hg₁]; exact hL) hh
       refine WP.pure' ?_
@@ -2748,7 +2779,24 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         | simp only [StateT.run_pure, StateT.run_bind, pure_bind,
             Thread_Condition_FutexImpl_wake__anon_1.again9, Bool.false_eq_true, ↓reduceIte])
       done
-    · exact (sg1_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hne hj hv hfl).elim
+    · have hb : b = sv 1 := by
+        apply Classical.byContradiction
+        intro hne'
+        exact sg1_noFail (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hne' hj hv hfl
+      subst hb
+      have hi₂ := inv_load (.inl rfl) hi₁ hw' hop hL hh
+      rw [← upd_g hg₁] at hi₂
+      refine WP.pure' ?_
+      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
+      refine WP.bind (WP.callRC_ok
+        (x := optPayload (some (sv 1))) (v := sv 1) rfl ?_)
+      repeat (first
+        | exact ⟨⟨hop.current, .inl ⟨rfl, hi₂⟩⟩, .inl (by omega)⟩
+        | refine WP.pure' ?_
+        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
+            Thread_Condition_FutexImpl_wake__anon_1.again9, ↓reduceIte])
+      done
+
   · simp only at hs; subst hs
     unfold Thread_Condition_FutexImpl_wake__anon_1.loop9
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]

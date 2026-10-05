@@ -734,15 +734,15 @@ def casOpts {n : Nat} (m : Mem) (li : Nat) (expected : BitVec n) : Array Nat :=
       | some (.ok v) => v == expected
       | _ => false)
 
-theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} {li : Nat}
+theorem casReadPrep_ok {n align : Nat} {p : Ptr} {m m' : Mem} {li : Nat}
     {opts : Array Nat}
-    (h : ((casPrep n align p expected).run m).run = some (.ok ((li, opts), m'))) :
+    (h : ((casReadPrep n align p).run m).run = some (.ok ((li, opts), m'))) :
     ∃ b blk o, m.accessW p (intSize n) align = pure (b, blk, o) ∧
       NoRace m b o (intSize n) .atomicRead ∧
       ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run =
         some (.ok (li, m')) ∧
-      opts = casOpts m' li expected := by
-  unfold casPrep at h
+      opts = readOpts m' li false := by
+  unfold casReadPrep at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   obtain ⟨⟨b, blk, o⟩, m₂, ha, h₂⟩ := MemM.bind_ok h₁
@@ -754,6 +754,24 @@ theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} 
   obtain ⟨a₅, m₅, hg, h₅⟩ := MemM.bind_ok h₄
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   obtain ⟨he, rfl⟩ := MemM.pure_ok h₅
+  simp only [Prod.mk.injEq] at he
+  obtain ⟨rfl, rfl⟩ := he
+  exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
+
+theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} {li : Nat}
+    {opts : Array Nat}
+    (h : ((casPrep n align p expected).run m).run = some (.ok ((li, opts), m'))) :
+    ∃ b blk o, m.accessW p (intSize n) align = pure (b, blk, o) ∧
+      NoRace m b o (intSize n) .atomicRead ∧
+      ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run =
+        some (.ok (li, m')) ∧
+      opts = casOpts m' li expected := by
+  unfold casPrep at h
+  obtain ⟨⟨li₁, readable⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
+  obtain ⟨b, blk, o, ha, hnr, hl, rfl⟩ := casReadPrep_ok hp
+  obtain ⟨a, m₂, hg, h₂⟩ := MemM.bind_ok h₁
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨he, rfl⟩ := MemM.pure_ok h₂
   simp only [Prod.mk.injEq] at he
   obtain ⟨rfl, rfl⟩ := he
   exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
@@ -1233,7 +1251,7 @@ theorem atomicLoadAt_noErr {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Pt
 
 /-- The number of options of an op is at most 1 if every result of its preparation has at most
 1. -/
-theorem optCount_le_one {x : MemM (Array Nat)} {m : Mem}
+theorem optCount_le_one {α : Type} {x : MemM (Array α)} {m : Mem}
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) → a.size ≤ 1) : optCount x m ≤ 1 := by
   unfold optCount
   split
@@ -1345,21 +1363,21 @@ theorem add_one_noErr {w : Nat} {a : BitVec w} (hlt : a.toNat + 1 < 2 ^ w) (e : 
   · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
 /-- The number of options of an op is the size of the array that its preparation gives. -/
-theorem optCount_eq {x : MemM (Nat × Array Nat)} {m m₁ : Mem} {li : Nat} {opts : Array Nat}
+theorem optCount_eq {α : Type} {x : MemM (Nat × Array α)} {m m₁ : Mem} {li : Nat} {opts : Array α}
     (h : (x.run m).run = some (.ok ((li, opts), m₁))) : optCount ((·.2) <$> x) m = opts.size := by
   unfold optCount
-  have : ((((·.2) <$> x) : MemM (Array Nat)).run m).run = some (.ok (opts, m₁)) := by
+  have : ((((·.2) <$> x) : MemM (Array α)).run m).run = some (.ok (opts, m₁)) := by
     rw [StateT.run_map, ExceptT.run_map, h]; rfl
   rw [this]
 
-theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} {b o : Nat}
+theorem casReadPrep_noErr {n align : Nat} {p : Ptr} {m : Mem} {b o : Nat}
     {blk : Block} (hacc : m.accessW p (intSize n) align = pure (b, blk, o))
     (hnr : NoRace m b o (intSize n) .atomicRead)
     (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run ≠
       some (.error e)) (e : Error) :
-    ((casPrep n align p expected).run m).run ≠ some (.error e) := by
+    ((casReadPrep n align p).run m).run ≠ some (.error e) := by
   intro h
-  unfold casPrep at h
+  unfold casReadPrep at h
   rcases MemM.bind_err h with he1 | ⟨a₁, m₁, hg, h1⟩
   · exact MemM.get_err he1
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
@@ -1376,6 +1394,20 @@ theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} 
   · exact MemM.get_err he5
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   exact MemM.pure_err h5
+
+theorem casPrep_noErr {n align : Nat} {p : Ptr} {expected : BitVec n} {m : Mem} {b o : Nat}
+    {blk : Block} (hacc : m.accessW p (intSize n) align = pure (b, blk, o))
+    (hnr : NoRace m b o (intSize n) .atomicRead)
+    (hloc : ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run ≠
+      some (.error e)) (e : Error) :
+    ((casPrep n align p expected).run m).run ≠ some (.error e) := by
+  intro h
+  unfold casPrep at h
+  rcases MemM.bind_err h with he | ⟨⟨li, readable⟩, m₁, hp, h₁⟩
+  · exact casReadPrep_noErr hacc hnr hloc e he
+  rcases MemM.bind_err h₁ with he | ⟨a, m₂, hg, h₂⟩
+  · exact MemM.get_err he
+  exact MemM.pure_err h₂
 
 theorem casMarkWrite_run {n align : Nat} {p : Ptr} {m : Mem} {b o : Nat} {blk : Block}
     (ha : m.accessW p (intSize n) align = pure (b, blk, o))
