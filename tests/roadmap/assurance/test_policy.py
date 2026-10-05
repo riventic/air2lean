@@ -69,6 +69,38 @@ class PolicyTests(unittest.TestCase):
         handle["name"] = handle["user_name"] = name.replace("2786263690", "2786263691")
         self.assertEqual(audit.apply_policy(self.raw([], [handle]), self.policy)["status"], "fail")
 
+    def test_sep_frame_collector_policy_is_exact(self):
+        name = "_private.ZigLean.Sep.Automation.0.Zig.SepAutomation.atoms.collect"
+        user = "Zig.SepAutomation.atoms.collect"
+        collector = self.node(name, "opaque", module="ZigLean.Sep.Automation",
+                              user_name=user, partial=True)
+        report = audit.apply_policy(self.raw([name], [collector]), self.policy)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["theorems"][0]["opaque_dependencies"], [name])
+        self.assertEqual(report["theorems"][0]["axioms"], [])
+        for changed in [dict(collector, user_name=user + ".other"),
+                        dict(collector, module="Untrusted.Import")]:
+            with self.subTest(changed=changed):
+                result = audit.apply_policy(self.raw([], [changed]), self.policy)
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["violations"][0]["trust_class"], "unexpected-opaque")
+
+    def test_sep_frame_collector_policy_does_not_allow_other_trust_boundaries(self):
+        name = "_private.ZigLean.Sep.Automation.0.Zig.SepAutomation.atoms.collect"
+        collector = self.node(name, "opaque", module="ZigLean.Sep.Automation",
+                              user_name="Zig.SepAutomation.atoms.collect", partial=True)
+        for changed in [dict(collector, kind="axiom"), dict(collector, unsafe=True),
+                        dict(collector, implemented_by="unreviewed.replacement"),
+                        dict(collector, extern=[{
+                            "kind": "standard", "backend": "all", "target": "unreviewed"}])]:
+            with self.subTest(changed=changed):
+                self.assertEqual(audit.apply_policy(self.raw([], [changed]), self.policy)["status"], "fail")
+        collector["dependencies"] = ["sorryAx"]
+        raw = self.raw([name], [collector, self.node("sorryAx", "axiom", module="Init.Prelude")], ["sorryAx"])
+        report = audit.apply_policy(raw, self.policy)
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["theorems"][0]["violations"], ["sorryAx"])
+
     def test_libm_replacement_requires_exact_private_target(self):
         libm = self.node("Zig.Float.libm", "opaque", module="ZigLean.Float.Libm",
                          implemented_by="_private.ZigLean.Float.Libm.0.Zig.Float.libmImpl")

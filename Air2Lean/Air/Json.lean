@@ -313,6 +313,11 @@ private inductive PackedVisit where
 in `Memory.lean`, which this file cannot import). Memoized explicit DFS completes shared
 field types once; cycles/unknown widths return `none` even for direct API calls that did not run `validateTypeGraph`. -/
 def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
+  match types[id]? with
+  | some (.int _ bits) => return some bits
+  | some .bool => return some 1
+  | some (.enum ..) | some (.struct _ "packed" _) => pure ()
+  | _ => return none
   let mut states : Array PackedVisit := Array.replicate types.size .unseen
   let mut tasks : List (TyId × Bool) := [(id, false)]
   while !tasks.isEmpty do
@@ -366,7 +371,30 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
     let v ← match (part.splitOn "=").map (·.trimAscii.toString) with
       | [lhs, rhs] =>
         if lhs != "." ++ name then throw s!"{fnName}: packed constant {s}: field {lhs}, expected .{name}"
-        if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0 else parseIntLit fnName rhs
+        match types[fty]? with
+        | some .bool =>
+          if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0
+          else throw s!"{fnName}: packed field {name} requires true or false"
+        | some (.int signed bits) =>
+          let v ← parseIntLit fnName rhs
+          unless integerFits signed bits v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its integer type"
+          pure v
+        | some (.enum _ tag exhaustive tags) =>
+          let some (.int signed bits) := types[tag]?
+            | throw s!"{fnName}: packed field {name} has a non-integer enum tag"
+          let v ← parseIntLit fnName rhs
+          unless integerFits signed bits v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its enum tag type"
+          if exhaustive && !tags.any (fun (_, value) => value == v) then
+            throw s!"{fnName}: packed field {name} value {v} is not a declared enum tag"
+          pure v
+        | some (.struct _ "packed" _) =>
+          let v ← parseIntLit fnName rhs
+          unless integerFits false w v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its packed backing type"
+          pure v
+        | _ => throw s!"{fnName}: packed field {name} has an unsupported value type"
       | _ => throw s!"{fnName}: packed constant {s}: cannot read {part}"
     acc := acc + (v % (2 ^ w : Nat)).toNat * 2 ^ off
     off := off + w
@@ -469,6 +497,13 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
     else if let some ptrJ := optField j "ptr" then
       unless (match ty with | .ptr "one" .. | .ptr "many" .. | .ptr "c" .. => true | _ => false) do
         throw s!"{fnName}: 'ptr' constant of unexpected type {repr ty}"
+      if let some nullJ := optField ptrJ "null" then
+        unless (← nullJ.getBool?) do throw s!"{fnName}: pointer null marker must be true"
+        if (optField ptrJ "global").isSome || (optField ptrJ "unsupported").isSome then
+          throw s!"{fnName}: ambiguous null pointer constant"
+        unless (← (← ptrJ.getObjVal? "off").getNat?) == 0 do
+          throw s!"{fnName}: null pointer constant has a nonzero offset"
+        return .ptrNull tyId
       if let some k := optField ptrJ "unsupported" then
         return .ptrOther tyId (← k.getStr?)
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)

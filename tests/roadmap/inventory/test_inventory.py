@@ -176,11 +176,22 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(coverage.normalizer(sample), {'add': ['arith'], 'add_safe': ['arith'], 'try': ['try'], 'assembly': ['asm']})
 
     def test_model_recognition_is_not_verification(self):
-        data = (ROOT/'Air2Lean/Memory.lean').read_text()
-        entries = coverage.model_inventory(data)
-        self.assertTrue(any(row['name'] == 'Thread.yield' and row['disposition'] == 'translation-rejected' for row in entries))
-        self.assertTrue(any(row['name'] == 'time.Timer.read' and row['disposition'] == 'recognized-model-boundary' for row in entries))
+        sample = '''def allocFn? (name : String) := none
+/-- Synthetic recognized model section. -/
+def threadFn? (name : String) :=
+  if name == "time.Timer.read" then some .noClock else none
+/-- Synthetic rejected model section. -/
+def rejectedThreadFn? (name : String) :=
+  if name == "Thread.yield" then some "unsupported" else none
+'''
+        entries = coverage.model_inventory(sample)
+        self.assertEqual([(row['name'], row['disposition']) for row in entries], [
+            ('time.Timer.read', 'recognized-model-boundary'),
+            ('Thread.yield', 'translation-rejected')])
         self.assertTrue(all('source-only' in row['qualification'] for row in entries))
+        current = coverage.model_inventory((ROOT/'Air2Lean/Memory.lean').read_text())
+        self.assertTrue(current)
+        self.assertTrue(all('source-only' in row['qualification'] for row in current))
 
 
 if __name__ == '__main__':

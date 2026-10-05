@@ -69,7 +69,8 @@ def compatibleGlobalCached (a b : Func) (x y : Nat)
       | .float i v, .float j w => unless v == w && ty i j do return none
       | .bool v, .bool w => unless v == w do return none
       | .void, .void => pure ()
-      | .undef i, .undef j | .optNull i, .optNull j => unless ty i j do return none
+      | .undef i, .undef j | .optNull i, .optNull j
+      | .ptrNull i, .ptrNull j => unless ty i j do return none
       | .err i v, .err j w | .errUnionErr i v, .errUnionErr j w
       | .ptrOther i v, .ptrOther j w => unless v == w && ty i j do return none
       | .func v n s, .func w m t => unless v == w && n == m && s == t do return none
