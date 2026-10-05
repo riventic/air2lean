@@ -38,7 +38,7 @@ bash -n scripts/check.sh scripts/diff.sh scripts/mutate.sh scripts/example-selec
 git diff --check
 ```
 
-The offline suite executes only Python and bounded shell mocks. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures are recorded as failures; the repaired full producer/report gate remains pending.
+The offline suite executes only Python and bounded shell mocks. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures remain recorded as failures. A later repaired default Zig16 producer/report run passed; its exact scope is recorded below. Cross-host/version matrices and selected semantic mutations remain pending.
 
 After a real `scripts/diff.sh` build, the package checks are:
 
@@ -61,3 +61,23 @@ python3 tests/roadmap/outcome-accounting/test_native.py "$NATIVE_FIXTURE_BINARY"
 ```
 
 The Python wrapper executes only the supplied precompiled binary in a temporary directory with a five-second timeout. It verifies the second metadata record is the malformed-input failure, runs real native renderer evidence through report accounting, requires zero mutation eligibility, and checks the tested function's panic still has the native-panic tag. Offline tests check that this verifier rejects a lost metadata prefix and a renderer failure mislabeled as a panic.
+
+## Recorded local evidence
+
+At source revision `8ab1718303e6b6e3ca507e480d94ac41b43433cf`, the coordinator ran the default Zig 0.16.0 differential selection on Darwin arm64. The full native/model/report gate passed in 175.3 seconds with 665.5 MiB sampled peak memory. Its report is complete, has zero setup failures, no pin violations, zero mismatches and zero mutation eligibility. It continues to record `qualified: false`.
+
+| Typed status | Cases |
+| --- | ---: |
+| `value_match` | 78,159 |
+| `error_return_match` | 890 |
+| `panic_match` | 4,975 |
+| `host_difference` | 760 |
+| `illegal_exclusion` | 497 |
+| `unspecified_exclusion` | 580 |
+| Total observed cases | 85,861 |
+
+The 84,024 exact returned-value/panic matches exclude the 1,837 host/illegal/unspecified cases. Two whole examples were skipped: x86-only `asm` on arm64 and version-ineligible `threadsync` under Zig16. These exclusions and skips do not qualify those semantics or count as mutation detections. Linux reference-host full CI and a full Zig15 differential/report run remain pending.
+
+The source-bound local summary is `/private/tmp/air2lean-outcome-8ab-default16-report.json` (SHA-256 `7ff7e43ca6e3ccd74efe3779dfa1e9187a3fe7e84a290a314b8a4e22dfd925b7`); case evidence is the adjacent `.jsonl` file. The coordinator log is `/opt/dev/air2lean/.lake/review-resume/roadmap/outcome-8ab-default16-typed.log` (SHA-256 `efd86c537930a54e346887d38f899b6ba44653b5173eaf4573da4fce1175c9cf`). These local paths are evidence locations, not portable artifacts or compiler-authentication claims.
+
+At producer revision `1b5cdde53ac95c3addf16abf41c39410c60934a1`, the coordinator separately compiled and ran the deterministic producer regressions with native Zig15 and Zig16. Both passed the valid metadata prefix, malformed-input failure index, renderer-only allocation-failure classification, zero mutation eligibility and tested-source panic checks. Their logs are `outcome-1b5c-native15.log` and `outcome-1b5c-native16.log` under the same coordinator log directory; both have SHA-256 `1efaec9d4128cd6985be80972d91119b5848b8d948d875a423cb1fda2260b415`. This is narrow failure-boundary evidence, separate from the default Zig16 full run and the pending full Linux/version matrix.
