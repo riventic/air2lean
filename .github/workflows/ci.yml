@@ -402,7 +402,7 @@ jobs:
           retention-days: 7
 
       - name: Typed outcomes and bounded schedule regressions
-        if: ${{ !matrix.mutate && matrix.full && (matrix.zig == '0.15.2' || matrix.zig == '0.16.0') }}
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
