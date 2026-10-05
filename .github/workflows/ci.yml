@@ -204,6 +204,16 @@ jobs:
           lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
           python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
 
+      - name: Validate check-only diagnostic collection
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          diagnostics_evidence_dir="$RUNNER_TEMP/diagnostics"
+          mkdir -p "$diagnostics_evidence_dir/tmp"
+          export TMPDIR="$diagnostics_evidence_dir/tmp"
+          lake env lean tests/roadmap/diagnostics/Collector.lean 2>&1 | tee "$diagnostics_evidence_dir/collector.log"
+          python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
+          python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 

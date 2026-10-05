@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
@@ -729,6 +730,18 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
+  if let some k := v.ptrOther? then throw (message k)
+
+/-- One pointer/global alignment policy, with caller-specific display context. -/
+private def checkPointerConstant (f : Func) (v : Val) (missing : String → String)
+    (alignment : Nat → Nat → String) : Except String Unit := do
+  checkPointerPresence v missing
+  if let .ptrConst pty g _ := v then
+    let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
+    let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
+    if pa > ga then throw (alignment pa ga)
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes. An array with a sentinel is encoded with the sentinel. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
@@ -738,8 +751,8 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
   checkNullConstants f.name f.types f.layouts init
-  if let some k := init.ptrOther? then
-    throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
+  checkPointerPresence init fun k =>
+    s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
@@ -815,15 +828,10 @@ def check (f : Func) : Except String Unit := do
           checkTy f.name f.types f.layouts 0 vty
           checkedConstTypes := checkedConstTypes.insert vty
       checkNullConstants f.name f.types f.layouts v
-      if let some k := v.ptrOther? then
-        throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"
-      -- The block of a global has the alignment of its type.
-      if let .ptrConst pty g _ := v then
-        let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
-        let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
-        if pa > ga then
-          throw s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
-            outside the subset"
+      checkPointerConstant f v
+        (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
+        (fun pa ga => s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
+          outside the subset")
   -- Public `check` accepts unnormalized input: duplicate IDs disable the cache,
   -- without introducing a prepass diagnostic or changing subsequent check order.
   let tryErrorExits := if insts.any (fun i => match i.op with | .tryPtr .. => true | _ => false) then
@@ -1395,6 +1403,14 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
         checkFutex 0 1
         require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
+/-- Preserve reference traversal order within each exact function-type bucket. -/
+private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
+  let mut targetLists : Std.HashMap String (List String) := {}
+  for (typ, callee) in refs do
+    targetLists := targetLists.insert typ (callee :: targetLists.getD typ [])
+  return targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
+    ({} : Std.HashMap String (Array String))
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -1406,12 +1422,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
     ModelRegistry.check models profile funcs
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let indexes ← checkSharedDefinitions funcs
-  let refs := fnRefs funcs
-  let mut targetLists : Std.HashMap String (List String) := {}
-  for (typ, callee) in refs do
-    targetLists := targetLists.insert typ (callee :: targetLists.getD typ [])
-  let targets := targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
-    ({} : Std.HashMap String (Array String))
+  let targets := referenceTargets (fnRefs funcs)
   let mem := memoryFunctions funcs (models.map (·.symbol))
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
@@ -1474,5 +1485,169 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
           | _ => #[]
         for c in items do
           checkMemTy f.name f.types f.layouts 0 c
+
+/-! Collection reuses validators without constructing partial IR. Failed units retain
+their first error, but cannot suppress independent siblings. -/
+
+def diagnosticStructure (f : Func) : Except String Unit :=
+  checkFunctionStructure f f.operandTypes
+
+private def checkDiagnostic (file : String) (f : Func) (code : Diagnostics.Code)
+    (anchor : Diagnostics.Anchor := {}) : Diagnostics.Diagnostic :=
+  {
+    code
+    phase := .check
+    category := .validationFailure
+    message := ""
+    file := some file
+    function := some f.name
+    anchor
+    prerequisites := #["normalized_function_structure"] }
+
+private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
+    (body : Array Inst) (line : Nat) (log : Diagnostics.Log) : Nat × Diagnostics.Log := Id.run do
+  let mut log := log
+  let mut line := line
+  for i in body do
+    let anchor : Diagnostics.Anchor := {
+      idSpace := .canonical
+      instruction := some i.id
+      nearestDbgLine := if line == 0 then none else some line }
+    let typeCheck := checkTy f.name f.types f.layouts line i.ty
+    log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
+    if typeCheck.toOption.isNone then
+      log := log.add { (Diagnostics.skipped file (some f.name) .check "instruction_result_type") with anchor }
+    match i.op with
+    | .block b | .loop b =>
+      let result := collectInstChecks file f cx b line log
+      line := result.1; log := result.2
+    | .condBr _ t e =>
+      log := (collectInstChecks file f cx t line log).2
+      log := (collectInstChecks file f cx e line log).2
+    | .switchBr _ cases e | .loopSwitchBr _ cases e =>
+      for c in cases do log := (collectInstChecks file f cx c.body line log).2
+      log := (collectInstChecks file f cx e line log).2
+    | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
+    | .line n => line := n
+    | _ =>
+      if typeCheck.toOption.isSome then
+        log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
+  return (line, log)
+
+structure FunctionChecks where
+  index : OperandTypes
+  structureValid : Bool
+  log : Diagnostics.Log
+
+/-- Return the actual structural result and index alongside collected diagnostics. -/
+def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnostics.Log) : FunctionChecks := Id.run do
+  let index := f.operandTypes
+  let mut log := initial
+  match checkFunctionStructure f index with
+  | .error message =>
+    log := log.add { (checkDiagnostic file f .structureFailure) with
+      category := .malformedInput
+      message
+      firstErrorInUnit := true }
+    return {
+      index
+      structureValid := false
+      log := log.add (Diagnostics.skipped file (some f.name) .check "normalized_function_structure") }
+  | .ok _ => pure ()
+  for p in f.params ++ #[f.ret] do
+    log := log.record (checkDiagnostic file f .typeFailure { idSpace := .canonical, typeId := some p })
+      (checkTy f.name f.types f.layouts 0 p)
+  for (t, id) in f.types.zipIdx do
+    if let .union _ _ none _ := t then
+      log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
+        (checkMemTy f.name f.types f.layouts 0 id)
+  let insts := index.insts
+  let escaping := escapingAllocs f
+  let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p
+  for i in insts do
+    if let .alloc := i.op then
+      if escaping.contains i.id then
+        if let some c := ptrChild f.types i.ty then
+          log := log.record (checkDiagnostic file f .memoryFailure
+            { idSpace := .canonical, instruction := some i.id, typeId := some c })
+            (checkMemTy f.name f.types f.layouts 0 c)
+  for (g, id) in f.globals.zipIdx do
+    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
+  for i in insts do
+    for v in valueOperands i.op ++ ptrOperands i.op do
+      let result := do
+        checkNullConstants f.name f.types f.layouts v
+        checkPointerConstant f v
+          (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
+          (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
+      log := log.record (checkDiagnostic file f .constantFailure
+        { idSpace := .canonical, instruction := some i.id }) result
+  let cx : CheckCtx := {
+    fnName := f.name
+    types := f.types
+    layouts := f.layouts
+    instTys := insts.map fun i => (i.id, i.ty)
+    places }
+  return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
+
+/-- Compatibility wrapper for clients that need only diagnostics. -/
+def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log :=
+  (collectFunctionChecksDetailed file f initial).log
+
+structure CallChecksSnapshot where
+  references : Array (String × String)
+  targets : Std.HashMap String (Option Func)
+  /-- Builder-populated index; bare compatibility snapshots derive it once per collection. -/
+  referenceBuckets : Option (Std.HashMap String (Array String)) := none
+
+/-- Preserve function-reference order and record ambiguity in the safe subset. -/
+def CallChecksSnapshot.build (funcs : Array Func) : CallChecksSnapshot := Id.run do
+  let mut targets : Std.HashMap String (Option Func) := {}
+  for f in funcs do
+    targets := targets.insert f.name (if targets.contains f.name then none else some f)
+  let references := fnRefs funcs
+  return { references, targets, referenceBuckets := some (referenceTargets references) }
+
+def CallChecksSnapshot.unique (snapshot : CallChecksSnapshot) (name : String) : Option Func :=
+  snapshot.targets[name]?.join
+
+/-- Calls are independent units; the original whole-program check additionally covers
+shared definitions, indirect targets and memory propagation. -/
+def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (snapshot : CallChecksSnapshot)
+    (initial : Diagnostics.Log) : Diagnostics.Log := Id.run do
+  let mut log := initial
+  let referenceBuckets := match snapshot.referenceBuckets with
+    | some buckets => buckets
+    | none => referenceTargets snapshot.references
+  for i in index.insts do
+    let diagnostic := { (checkDiagnostic file f .signatureFailure
+      { idSpace := .canonical, instruction := some i.id }) with
+      phase := .program }
+    match i.op with
+    | .call (.func callee false worker) args =>
+      log := log.record { diagnostic with code := .modelFailure }
+        (checkModelSignature f callee args i.ty index)
+      if (allocFn? callee).isNone && (threadFn? callee).isNone then
+        if let some target := snapshot.unique callee then
+          log := log.record diagnostic (checkCallSignature f target i args index)
+      if let some kind := threadFn? callee then
+        if let some k := kind.spawnArgs? then
+          if let some target := worker.bind snapshot.unique then
+            log := log.record diagnostic (checkThreadSpawn f target
+              (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index)
+    | .call (.inst p) args =>
+      match index.calleeFnTy? f p with
+      | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
+      | some name =>
+        for callee in referenceBuckets.getD name #[] do
+          if let some target := snapshot.unique callee then
+            log := log.record diagnostic (checkCallSignature f target i args index)
+    | _ => pure ()
+  return log
+
+/-- Compatibility wrapper; program collection builds and reuses one snapshot. -/
+def collectCallChecks (file : String) (f : Func) (funcs : Array Func)
+    (initial : Diagnostics.Log) : Diagnostics.Log :=
+  collectCallChecksIndexed file f f.operandTypes (CallChecksSnapshot.build funcs) initial
 
 end Air2Lean
