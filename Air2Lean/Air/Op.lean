@@ -117,6 +117,12 @@ structure Layout where
   bitOffset : Nat := 0
   deriving Repr, Inhabited
 
+/-- C and allowzero pointers can carry address zero as a value. -/
+def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
+
 inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type, or a packed struct (its backing integer). -/
@@ -153,6 +159,8 @@ inductive Val where
   | agg (ty : TyId) (elems : Array Val)
   /-- A pointer constant: byte `off` of the global with index `global` in `Func.globals`. -/
   | ptrConst (ty : TyId) (global : Nat) (off : Nat)
+  /-- Address zero of a C/allowzero pointer. No global or allocation is attached. -/
+  | ptrNull (ty : TyId)
   /-- A pointer constant without a global (`@ptrFromInt`, a comptime-only value): `kind` names
   its base. `Check.lean` rejects it. -/
   | ptrOther (ty : TyId) (kind : String)
@@ -165,7 +173,7 @@ field. -/
 def Val.constTy? (v : Val) : Option TyId :=
   match v with
   | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
-  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrOther t _
+  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrNull t | .ptrOther t _
   | .sliceConst t .. => some t
   | _ => none
 
@@ -175,6 +183,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 `expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
+  if calleeName == "debug.defaultPanic" then some ".panic" else
   if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
@@ -234,6 +243,11 @@ inductive BitOp where
   | and | or | xor
   deriving Repr, Inhabited, BEq
 
+/-- Counts bits in the operand representation, including for signed integers. -/
+inductive BitCountOp where
+  | clz | ctz | popcount
+  deriving Repr, Inhabited, BEq
+
 inductive ShiftOp where
   | shl | shlExact | shlSat | shr | shrExact
   deriving Repr, Inhabited, BEq
@@ -274,6 +288,8 @@ inductive Op where
   | divFloat (a b : Val)
   | minMax (isMax : Bool) (a b : Val)
   | withOverflow (op : ArithOp) (a b : Val)
+  | shlWithOverflow (a b : Val)
+  | countBits (op : BitCountOp) (a : Val)
   /-- `splat`: a vector with every lane equal to the scalar `a`. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
@@ -415,6 +431,10 @@ inductive Op where
   | «repeat» (target : InstId)
   | condBr (c : Val) (thenBody elseBody : Array Inst)
   | switchBr (v : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- A switch with a selector replaced by dispatches from its descendant bodies. -/
+  | loopSwitchBr (initial : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- Jump to an enclosing loop-switch, replacing its selector, preserving other state. -/
+  | switchDispatch (target : InstId) (selector : Val)
   /-- `try`/`try_cold`: `v` is an error union; `errBody` runs when it holds an error (it ends in
   an exit, like a `cond_br` branch). Otherwise the `try` instruction's value is the payload. -/
   | «try» (v : Val) (errBody : Array Inst)

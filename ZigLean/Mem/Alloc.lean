@@ -9,8 +9,10 @@ same name here (`Air2Lean/Memory.lean`'s `allocFn?`).
 
 The model is one allocator, with its state in `Mem`:
 
-* Each allocation gets a new heap block. Allocation number `Mem.failAt` (from 0) fails, and so
-  does an allocation of more than `maxAllocBytes` bytes.
+* Each allocation gets a new heap block. Allocation number `Mem.failAt` (from 0), every
+  index in `Mem.allocPolicy.failures`, and requests above `Mem.allocPolicy.maxBytes` fail.
+  The default is the legacy one-failure policy with a 1 MiB request cap. Policies are
+  explicit environment parameters; they do not guarantee native allocation success.
 * `resize` and `remap` always fail. So `realloc` and a growing `ArrayListUnmanaged` always make
   a new block, copy, and free the old block, and the number of allocations does not depend on
   the allocator.
@@ -33,14 +35,11 @@ instance : Enc Allocator where
   encode _ := Array.replicate 16 (.int 0)
   decode _ := pure ⟨⟩
 
-/-- The largest allocation, in bytes. -/
-def maxAllocBytes : Nat := 1 <<< 20
-
 /-- `rawAlloc` of `n > 0` bytes: allocation number `Mem.allocs`. `none`: the allocation fails. -/
 def rawAlloc (n align : Nat) : MemM (Option Ptr) := do
   let m ← get
   set { m with allocs := m.allocs + 1 }
-  if m.failAt = some m.allocs ∨ maxAllocBytes < n then return none
+  if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none
   some <$> alloc .heap n align
 
 /-- The pointer of an allocation of 0 bytes: no block, and the highest address with the

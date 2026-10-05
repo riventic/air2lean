@@ -1,6 +1,6 @@
 //! M22: atomics and fork-join threads (`docs/std-models.md` §Thread model). Fork-join only:
-//! `std.Thread.spawn`/`.join`. No `Mutex`, `Condition`, `Futex`, `.detach`, `.yield`,
-//! `.spinLoopHint` — outside this subset (`Air2Lean.Memory.lean`'s `rejectedThreadFn?`).
+//! `std.Thread.spawn`/`.join`. For current synchronization and progress-hint support, see
+//! `docs/std-models.md` and `docs/progress-hints.md`; this example exercises fork-join atomics.
 
 const std = @import("std");
 const Thread = std.Thread;

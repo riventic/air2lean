@@ -1,4 +1,5 @@
 import ZigLean.Basic
+import ZigLean.Bit
 import ZigLean.Conc
 import ZigLean.Float
 import ZigLean.Float.Libm
@@ -9,3 +10,4 @@ import ZigLean.Packed
 import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.Vec
+import ZigLean.External

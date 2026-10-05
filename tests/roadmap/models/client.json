@@ -1,0 +1,74 @@
+{
+  "schema": 12,
+  "zig_version": "0.16.0",
+  "target_endian": "little",
+  "profile": {
+    "name": "abi64-le-v1",
+    "target_triple": "x86_64-linux-gnu",
+    "pointer_bits": 64,
+    "endian": "little",
+    "abi": "gnu",
+    "zig_version": "0.16.0",
+    "backend": "stage2_llvm",
+    "cpu": "x86_64",
+    "features": [
+      "sse",
+      "sse2"
+    ],
+    "build_mode": "ReleaseSafe",
+    "float_mode": "per-instruction",
+    "error_set_bits": 16,
+    "error_layout": "type-table",
+    "error_tracing": false,
+    "export_stage": "analyzed-air"
+  },
+  "name": "client",
+  "params": [
+    0
+  ],
+  "ret": 0,
+  "types": [
+    {
+      "k": "int",
+      "signed": false,
+      "bits": 8,
+      "abi_size": 1,
+      "abi_align": 1
+    },
+    {
+      "k": "noreturn"
+    }
+  ],
+  "body": [
+    {
+      "id": 0,
+      "tag": "arg",
+      "ty": 0,
+      "param": 0,
+      "args": []
+    },
+    {
+      "id": 1,
+      "tag": "call",
+      "ty": 0,
+      "callee": {
+        "func": "project.identity"
+      },
+      "args": [
+        {
+          "inst": 0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "tag": "ret",
+      "ty": 1,
+      "args": [
+        {
+          "inst": 1
+        }
+      ]
+    }
+  ]
+}

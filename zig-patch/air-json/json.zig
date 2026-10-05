@@ -1218,6 +1218,18 @@ const W = struct {
                 try w.j.write(try w.globalId(.{ .uav = uav }));
                 break;
             },
+            // Fixed integer addresses have their entire address in byte_offset in all
+            // supported versions. Only zero has a qualified constant representation.
+            .int => {
+                if (off == 0) {
+                    try w.field("null");
+                    try w.j.write(true);
+                } else {
+                    try w.field("unsupported");
+                    try w.j.write("int");
+                }
+                break;
+            },
             // A field of the struct or slice that the pointer `f.base` points to.
             .field => |f| {
                 const parent = ip.indexToKey(f.base).ptr;
