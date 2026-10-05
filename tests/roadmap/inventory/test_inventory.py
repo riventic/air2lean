@@ -1,6 +1,7 @@
 """Offline synthetic compiler regression tests; no Zig or Lean process."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import subprocess
@@ -100,6 +101,66 @@ class InventoryTests(unittest.TestCase):
         source = 'const Key = union(enum) { int: Int, @"extern": Extern, nested: struct { a: u8, b: u16 }, };'
         self.assertEqual(coverage.members(source, 'Key', 'union'), ['int', 'extern', 'nested'])
         self.assertEqual(coverage.members('const Tag = enum { a, _, };', 'Tag', 'enum'), ['a'])
+
+    def test_project_fingerprints_ignore_warm_caches_but_keep_source_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sources = ['tests/diff/Main.lean', 'tests/diff/inputs/case.jsonl',
+                       'tests/diff/nested/out/source.json', 'tests/different/out/source.json']
+            for relative in sources:
+                path = root/relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('source bytes\n')
+            with patch.object(coverage, 'ROOT', root):
+                def fingerprints():
+                    return coverage.project_source_hashes(['tests'], coverage.SourceCache())
+                clean = fingerprints()
+                self.assertEqual(set(clean), set(sources))  # No Git checkout is needed.
+                for relative in ['tests/diff/.lake/build/lib/Main.olean',
+                                 'tests/diff/__pycache__/helper.pyc',
+                                 'tests/diff/out/native-result.json',
+                                 'tests/different/.lake/build/trace.json']:
+                    path = root/relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'transient build/test output')
+                self.assertEqual(fingerprints(), clean)
+                changed_source = root/sources[0]
+                changed_source.write_text('edited source bytes\n')
+                changed = fingerprints()
+                self.assertEqual(set(changed), set(clean))
+                self.assertNotEqual(changed[sources[0]], clean[sources[0]])
+                self.assertEqual({key: changed[key] for key in sources[1:]},
+                                 {key: clean[key] for key in sources[1:]})
+                added = root/'tests/diff/new-source.lean'
+                added.write_text('new untracked source bytes\n')
+                self.assertIn('tests/diff/new-source.lean', fingerprints())
+
+    def test_project_fingerprints_never_descend_into_transient_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            caches = [root/'tests/diff/.lake', root/'tests/diff/__pycache__',
+                      root/'tests/diff/out']
+            for cache in caches:
+                cache.mkdir(parents=True)
+                (cache/'entry').write_bytes(b'build/test artifacts')
+            source = root/'tests/diff/Main.lean'
+            source.write_text('source bytes\n')
+            (root/'tests/diff/Alias.lean').symlink_to(source)
+            (root/'tests/diff/Missing.lean').symlink_to(root/'absent.lean')
+            external = root/'external'
+            external.mkdir()
+            (external/'External.lean').write_text('outside the selected roots\n')
+            (root/'tests/diff/linked-directory').symlink_to(external, target_is_directory=True)
+            # Observe filesystem access instead of relying on cache entry counts
+            # or permissions (the test also works for privileged users).
+            scandir = os.scandir
+            def reject_cache_scan(path):
+                self.assertNotIn(Path(path), caches, 'inventory descended into a transient directory')
+                return scandir(path)
+            with patch.object(coverage, 'ROOT', root), patch.object(os, 'scandir', reject_cache_scan):
+                result = coverage.project_source_hashes(['tests'], coverage.SourceCache())
+            self.assertEqual(set(result), {'tests/diff/Main.lean', 'tests/diff/Alias.lean'})
+            self.assertEqual(result['tests/diff/Main.lean'], result['tests/diff/Alias.lean'])
 
     def test_fail_closed(self):
         for source in ('const Tag = enum { a b, };', 'const Tag = enum { a, a, };',

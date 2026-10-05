@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import runpy
+import shutil
 from pathlib import Path
 import selectors
 import signal
@@ -39,6 +40,96 @@ def generated_receipt(generated, air, receipt):
         raise ValueError("generated float semantics differs from the default")
     return HELPERS["load_report"](receipt)
 
+def project_integration(gate, destination, air, profile, translator, direct):
+    """Exercise ordinary project commands on the same fresh, retained AIR bytes."""
+    inputs = destination / "project-inputs"
+    inputs.mkdir()
+    shutil.copytree(air, inputs / "air")
+    files = [FIXTURE / "spawn_failure.zig", FIXTURE / "source-runtime.lean",
+             ROOT / "zig-patch/air-json/json.zig", ROOT / "ZigLean/Conc/Spawn.lean",
+             ROOT / "ZigLean/Conc/SpawnLemmas.lean", ROOT / "lean-toolchain"]
+    if profile["zig_version"] == "0.16.0":
+        files.append(FIXTURE / "source-group.lean")
+    for path in files:
+        shutil.copyfile(path, inputs / path.name)
+    # fresh_linux_profile adds the AIR schema for generated-header comparisons;
+    # the project profile contains exactly the producer's target-profile fields.
+    manifest_profile = {key: value for key, value in profile.items() if key != "schema"}
+    (inputs / "profile.json").write_text(json.dumps(manifest_profile, indent=2) + "\n")
+    manifest = {"schema": 1, "profile": "profile.json", "float_semantics": "ieee",
+                "source_closure": ["spawn_failure.zig"],
+                "components": {"compiler_patch": ["json.zig"],
+                               "runtime": ["Spawn.lean", "SpawnLemmas.lean"],
+                               "toolchain": ["lean-toolchain"]},
+                "allowed_assumptions": [],
+                "roots": [{"id": "snapshot", "function": "spawn_failure.threadPair",
+                           "air": ["air/" + p.name for p in sorted(air.glob("*.json"))],
+                           "namespace": "SpawnFailure", "prefix": "spawn_failure.",
+                           "contracts": [p.name for p in files if p.name.startswith("source-")],
+                           "goals": [],
+                           "assumptions": [], "exclusions": [
+                               "Declared input inventories do not establish dependency completeness.",
+                               "Project receipts do not attest proofs or native correspondence."]}]}
+    generated = {}
+    for label, policy in (("omitted", None), ("available", "available"), ("fallible", "fallible")):
+        effective = policy or "available"
+        selected = dict(manifest)
+        if policy is not None:
+            selected["spawn_policy"] = policy
+        path = inputs / (label + ".json")
+        path.write_text(json.dumps(selected, indent=2) + "\n")
+        prefix = "project-" + label
+        command = [sys.executable, str(ROOT / "scripts/project.py")]
+        preflight = json.loads(gate.run(prefix + "-report", command + ["report", str(path)]))
+        if (preflight["spawn_policy"] != effective or preflight["diagnostics"] or
+                any(root["input_validation"]["status"] != "passed" for root in preflight["roots"]) or
+                any(stage["status"] != "not_run" for root in preflight["roots"]
+                    for stage in root["stages"].values())):
+            raise RuntimeError(prefix + ": project preflight inflated or lost policy")
+        receipt = destination / (prefix + "-diagnostics.json")
+        checks = json.loads(gate.run(prefix + "-diagnostics", [sys.executable,
+            str(ROOT / "scripts/project-diagnostics.py"), "check", str(path),
+            "--translator", str(translator), "--out", str(receipt)]))
+        if (checks != json.loads(receipt.read_text()) or checks["status"] != "checked" or
+                checks["evidence"]["spawn_policy"] != effective or
+                checks["proof_status"] != "not_run" or checks["runtime_outcomes"] != "not_observed" or
+                checks["source_correspondence"] != "not_attested" or
+                any(root["status"] != "checked" or
+                    root["execution"]["argv"][-2:] != ["--spawn-policy", effective]
+                    for root in checks["root_checks"])):
+            raise RuntimeError(prefix + ": diagnostic policy or evidence boundary differs")
+        artifact = destination / (prefix + "-artifact")
+        translated = json.loads(gate.run(prefix + "-translate", command + ["translate", str(path),
+            "--translator", str(translator), "--out", str(artifact)]))
+        stored = json.loads((artifact / "report.json").read_text())
+        argv = stored["roots"][0]["stages"]["translated"]["argv"]
+        if (translated != stored or stored["spawn_policy"] != effective or
+                argv[-2:] != ["--spawn-policy", effective] or
+                stored["roots"][0]["stages"]["proved"]["status"] != "not_run"):
+            raise RuntimeError(prefix + ": stored project translation lost policy")
+        verified = json.loads(gate.run(prefix + "-verify", command + ["verify", str(path),
+            "--artifact", str(artifact)]))
+        if verified["status"] != "hashes_match" or verified["proof_status"] != "not_attested":
+            raise RuntimeError(prefix + ": receipt verification inflated proof evidence")
+        generated[label] = artifact / "snapshot/Gen.lean"
+        if generated[label].read_bytes() != direct[effective].read_bytes():
+            raise RuntimeError(prefix + ": project emission differs from direct translation")
+    # A historical receipt is an available-policy receipt. Removing the policy
+    # field cannot make it valid for an actual fallible project.
+    artifact = generated["fallible"].parents[1]
+    receipt = artifact / "report.json"
+    original = receipt.read_bytes()
+    legacy = json.loads(original)
+    del legacy["spawn_policy"]
+    receipt.write_text(json.dumps(legacy, indent=2) + "\n")
+    try:
+        gate.run("project-fallible-reject-legacy", [sys.executable, str(ROOT / "scripts/project.py"),
+            "verify", str(inputs / "fallible.json"), "--artifact", str(artifact)], expected=2,
+            marker="artifact spawn_policy differs from manifest")
+    finally:
+        receipt.write_bytes(original)
+    return generated["fallible"]
+
 def source_paths():
     paths = [ROOT / "Air2Lean.lean", ROOT / "ZigLean.lean", ROOT / "lean-toolchain"]
     for name in ("Air2Lean", "ZigLean"):
@@ -60,7 +151,7 @@ def artifacts(destination):
         directories[:] = sorted(d for d in directories if d not in {"zig-cache", "native-cache"})
         for name in sorted(files):
             path = Path(base) / name
-            if name != "report.json":
+            if path != destination / "report.json":
                 found[str(path.relative_to(destination))] = {"sha256": digest(path), "bytes": path.stat().st_size}
     return dict(sorted(found.items()))
 
@@ -244,6 +335,8 @@ def qualify(mode, destination):
     report = {"schema": 1, "status": "failed", "mode": mode, "spawn_policy": "fallible",
               "scope": "finite safety/result contracts; no fairness, native adequacy, cancellation or custom allocator",
               "normalizer_sha256": digest(ROOT / "scripts/normalize-generated.py"),
+              "project_tools_sha256": {name: digest(ROOT / "scripts" / name) for name in
+                  ("project.py", "project-diagnostics.py")},
               "steps": gate.steps, "sources": {str(p.relative_to(ROOT)): digest(p) for p in source_paths()},
               "legacy_references": {str(p.relative_to(ROOT)): digest(p) for p in
                   sorted((ROOT / "tests/roadmap/thread-tuples/air/0.16.0").glob("*.json")) +
@@ -338,8 +431,10 @@ def qualify(mode, destination):
             template = (FIXTURE / "source-runtime.lean").read_text()
             if version == "0.16.0":
                 template += (FIXTURE / "source-group.lean").read_text()
+            project_raw = project_integration(gate, destination, air, report["fresh_profile"],
+                                              translator, {"available": available, "fallible": raw})
             combined = destination / "source-allowed-outcomes.lean"
-            combined.write_text(source + template)
+            combined.write_text(project_raw.read_text() + template)
             gate.run("source-kernel-and-execution", lean + ["-R", str(destination), "--run", str(combined)],
                      marker="SOURCE_GROUP_OUTCOMES_OK" if version == "0.16.0" else "SOURCE_THREAD_OUTCOMES_OK")
             for label, before, after in [("no-failure", "spawnWithPolicyC .fallible", "spawnWithPolicyC .available")]:

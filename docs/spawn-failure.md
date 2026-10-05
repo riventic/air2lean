@@ -51,8 +51,11 @@ there is no quantitative stack/quota model or native allocation adequacy theorem
 Custom allocators and runtime configuration are rejected in fallible mode. Group
 tasks retain the existing void/noreturn worker subset; cancellation, detached threads,
 transferred join responsibilities, `Io.Future`, and arbitrary Io vtables remain
-outside this foundation. The project manifest driver currently selects the default
-available policy; its fallible manifest/receipt integration is separate work.
+outside this foundation. Project manifests select `spawn_policy` explicitly when
+fallible behavior is required; omission preserves the historical available default.
+Both ordinary translation and diagnostic checks pass and record the effective policy.
+Receipt verification rejects contradictory policy evidence and historical available
+receipts for fallible projects; hash agreement does not attest proof checking.
 
 The public source fixture is `tests/roadmap/spawn-failure/spawn_failure.zig`.
 Qualification uses fresh AIR from this source for Zig 0.15.2 and 0.16.0, and synthetic
@@ -71,6 +74,12 @@ The gate retains raw AIR, generated Lean, logs, source/model/tool digests, and i
 policy/target scope receipt in `AIR2LEAN_SPAWN_ARTIFACT_DIR` (default a new directory
 under `RUNNER_TEMP` or the system temporary directory). Compilation failures are
 qualification failures, not accepted outcome matches or mutation detections.
+The full gate also exercises real fresh-AIR project preflight, diagnostic checking,
+translation and stored-receipt verification for omitted, available and fallible policies.
+It requires byte agreement with direct translation, rejects a historical receipt for
+the fallible project, and runs the source outcome checks on the project-generated Lean.
+These integration checks are source candidates until ROOT executes the full gate for
+both audited versions; the broader I03 acceptance criteria remain separate.
 
 On Darwin, XNU's [group-signal implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c#L1612-L1621)
 filters zombie members and can return `EPERM` when only the exited leader remains.
