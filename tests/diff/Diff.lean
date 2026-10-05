@@ -1,3 +1,4 @@
+import Concurrent
 import Outcome
 import ScheduleSearch
 import Lean.Data.Json
@@ -994,15 +995,6 @@ def runLists : IO Unit := do
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
 
-/-- One run of a concurrent function as a result line, as `renderOk`. -/
-def renderOut {α : Type} [ReturnedError α] (r : Zig.Sched.Out α) (payload : α → String) : Observation :=
-  match r with
-  | none => DiffOutcome.noResult
-  | some (.error e) => DiffOutcome.failure e
-  | some (.ok (v, _)) => {
-      line := "{\"ok\":" ++ payload v ++ "}"
-      kind := DiffOutcome.valueKind v }
-
 /-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
 def scheduleFuel : Nat := 100000
 
@@ -1015,80 +1007,33 @@ def processConc (ex name : String) (step : Json → String → IO Observation) :
     let i ← k.modifyGet fun i => (i, i + 1)
     step j (zig[i]?.getD "")
 
-/-- One concurrent top-level call under the schedule `o`, from `m0`; `dispatch` runs the
-program's spawn targets. -/
-def runConcWith {Tgt α : Type} [ReturnedError α] (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
-    (main : Zig.ConcM Tgt α) (payload : α → String) (o : Nat → Nat) : Observation × Array Nat :=
-  let (r, opts) := Zig.Sched.runTrace dispatch scheduleFuel o main m0
-  (renderOut r payload, opts)
+/-- Resolve the shared concurrent registry before observed-result matching. -/
+def processConcurrent (ex name : String) : IO Unit :=
+  processConc ex name fun j zig => do
+    let run ← DiffConcurrent.runner ex name j scheduleFuel
+    pure (searchObservations scheduleFuel run zig)
 
-def runConc {α : Type} [ReturnedError α] (m0 : Zig.Mem) (main : Zig.ConcM Threads.Tgt α) (payload : α → String) :=
-  runConcWith Threads.dispatch m0 main payload
-
-def runParallelCounter : IO Unit :=
-  processConc "threads" "parallelCounter" fun j zig => do
-    let items ← getArr j
-    let n ← getInt items[0]!
-    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false)) zig)
-
-def runRace : IO Unit :=
-  processConc "threads" "race" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
-
-def runDisjoint : IO Unit :=
-  processConc "threads" "disjoint" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.disjoint (bv 32 a) (bv 32 b)) (errStr · false)) zig)
-
-def runClaimOnce : IO Unit :=
-  processConc "threads" "claimOnce" fun _ zig => do
-    pure (searchObservations scheduleFuel (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+def runParallelCounter : IO Unit := processConcurrent "threads" "parallelCounter"
+def runRace : IO Unit := processConcurrent "threads" "race"
+def runDisjoint : IO Unit := processConcurrent "threads" "disjoint"
+def runClaimOnce : IO Unit := processConcurrent "threads" "claimOnce"
+def runXchgRace : IO Unit := processConcurrent "threads" "xchgRace"
 
 def runAtomics : IO Unit := do
-  let one (name : String) (f : Zig.ConcM Atomics.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "atomics" name fun _ zig =>
-      pure (searchObservations scheduleFuel (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
-  one "mpRelAcq" Atomics.mpRelAcq
-  one "mpRelaxed" Atomics.mpRelaxed
-  one "sbRelaxed" Atomics.sbRelaxed
-  one "twoPlusTwoW" Atomics.twoPlusTwoW
-  one "stackPush" Atomics.stackPush
+  for name in ["mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush"] do
+    processConcurrent "atomics" name
 
 def runSync : IO Unit := do
-  let one (name : String) (f : Zig.Io → Zig.ConcM Sync.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "sync" name fun _ zig =>
-      pure (searchObservations scheduleFuel (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
-  one "mutexCounter" Sync.mutexCounter
-  one "handoff" Sync.handoff
-  one "semaphoreCounter" Sync.semaphoreCounter
-  one "rwLockRead" Sync.rwLockRead
+  for name in ["mutexCounter", "handoff", "semaphoreCounter", "rwLockRead"] do
+    processConcurrent "sync" name
 
 def runThreadsync : IO Unit := do
-  let one (name : String) (f : Zig.ConcM Threadsync.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "threadsync" name fun _ zig =>
-      pure (searchObservations scheduleFuel (runConcWith Threadsync.dispatch Threadsync.mem0 f (errStr · false)) zig)
-  one "mutexCounter" Threadsync.mutexCounter
-  one "handoff" Threadsync.handoff
-  one "waitGroup" Threadsync.waitGroup
+  for name in ["mutexCounter", "handoff", "waitGroup"] do
+    processConcurrent "threadsync" name
 
 def runIogroup : IO Unit := do
-  let one (name : String) (f : Zig.Io → Zig.ConcM Iogroup.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "iogroup" name fun _ zig =>
-      pure (searchObservations scheduleFuel (runConcWith Iogroup.dispatch Iogroup.mem0 (f {}) (errStr · false)) zig)
-  one "groupCounter" Iogroup.groupCounter
-  one "groupConcurrent" Iogroup.groupConcurrent
-
-def runXchgRace : IO Unit :=
-  processConc "threads" "xchgRace" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+  for name in ["groupCounter", "groupConcurrent"] do
+    processConcurrent "iogroup" name
 
 -- Calls the opaque directly (`Asm.airAsm_*`), not the generated wrapper (`Asm.bswap32` etc.):
 -- the wrapper's own body is compiled once, inside `Proofs/Asm/Gen.lean`, before this file's

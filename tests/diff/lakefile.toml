@@ -22,3 +22,12 @@ root = "Diff"
 # so a rebuild does not by itself relink `difftest` against a changed archive — scripts/diff.sh
 # forces that by deleting the stale binary.
 moreLinkArgs = ["./out/libm/air2lean_libm.a", "./out/asm/air2lean_asm.a"]
+
+[[lean_lib]]
+name = "Concurrent"
+
+[[lean_exe]]
+name = "schedules"
+root = "Schedules"
+# Concurrent Gen modules import ZigLean, including its libm extern declarations.
+moreLinkArgs = ["./out/libm/air2lean_libm.a"]

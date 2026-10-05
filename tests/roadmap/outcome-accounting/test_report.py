@@ -314,17 +314,33 @@ class Outcomes(unittest.TestCase):
         data=json.loads(self.summary.read_text())
         self.assertEqual(code,0)
         self.assertEqual(data['counts'],{'host_difference':1})
+        self.assertEqual(data['exact_matches'],0)
         self.assertEqual(data['mutation_eligible'],0)
 
     def test_skipped_examples_are_separate_from_comparisons(self):
         self.seed({'ok':1},{'ok':1})
         (self.root/'examples/asm').mkdir()
+        skipped=self.root/'tests/diff/asm/inputs';skipped.mkdir(parents=True)
+        (skipped/'first.jsonl').write_text('[]\n');(skipped/'second.jsonl').write_text('[]\n')
         REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary)
         data=json.loads(self.summary.read_text())
         self.assertEqual(data['case_count'],1)
         self.assertEqual(data['skipped_examples'],1)
+        self.assertEqual(data['skipped_functions'],2)
+        self.assertEqual(data['exact_matches'],1)
         rows=[json.loads(line) for line in Path(data['cases_path']).read_text().splitlines()]
         self.assertEqual(rows[0]['reason'],'host_excluded')
+        self.assertEqual(rows[0]['functions'],['first','second'])
+
+    def test_matching_cases_do_not_claim_proof_applicability(self):
+        self.seed({'ok':1},{'ok':1})
+        proofs=self.root/'Proofs/Basic';proofs.mkdir(parents=True)
+        (proofs/'Claim.lean').write_text('example : True := True.intro\n')
+        _,data=self.compare()
+        self.assertEqual(data['exact_matches'],1)
+        self.assertEqual(data['proof_applicability'],'not_evaluated_by_differential_runner')
+        self.assertEqual(data['proof_exclusions'],[dict(example='basic',reason='proof_applicability_not_evaluated',sources=['Proofs/Basic/Claim.lean'])])
+        self.assertFalse(data['qualified'])
 
     def test_stale_or_inconsistent_metadata_rejected(self):
         self.seed({'ok':1},{'ok':1})
@@ -468,7 +484,11 @@ class Outcomes(unittest.TestCase):
         scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)
         (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
         if host:(self.root/'tests/diff/basic/host.txt').write_text('foo\n')
+        original=(ROOT/'ZigLean/Conc.lean').read_bytes()
+        conc=self.root/'ZigLean/Conc.lean';conc.parent.mkdir(exist_ok=True);conc.write_bytes(original)
+        backup=self.root/'Conc.before.lean';backup.write_bytes(original)
         diff='#!/usr/bin/env bash\nset -euo pipefail\n'
+        diff+='if grep -Fqx \'import ZigLean.Conc.WeakCas\' ZigLean/Conc.lean; then echo \'proof isolation missing\' >&2; exit 77; fi\n'
         if legacy:
             diff+='echo "TOTAL: mismatch=1"\nexit 1\n'
         else:
@@ -479,8 +499,10 @@ class Outcomes(unittest.TestCase):
         (scripts/'diff.sh').write_text(diff)
         source=(ROOT/'scripts/mutate.sh').read_text();start=source.index('run_and_report() {');end=source.index('\nall_detected=',start)
         runner=self.root/'mutant.sh'
-        runner.write_text(('AIR2LEAN_MUTATION_REPORT_DIR='+str(self.root/'retained')+'\n' if retain else '')+'set -euo pipefail\ncd "$(dirname "$0")"\nmutations_run=0\n'+source[start:end]+'\nrun_and_report "mutation (x)" basic\necho "RESULT=$detected"\n')
-        return subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        runner.write_text(('AIR2LEAN_MUTATION_REPORT_DIR='+str(self.root/'retained')+'\n' if retain else '')+'set -euo pipefail\ncd "$(dirname "$0")"\nmutations_run=0\nconc_lean=\"$PWD/ZigLean/Conc.lean\"\nconc_backup=\"$PWD/Conc.before.lean\"\n'+source[start:end]+'\nrun_and_report "mutation (x)" basic\necho "RESULT=$detected"\n')
+        result=subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        self.assertEqual(conc.read_bytes(),original,'WeakCas proof import was not restored')
+        return result
 
     def test_mutation_wrapper_can_retain_bounded_typed_evidence(self):
         result=self.mutation_mock({'ok':2},{'ok':1},K.VALUE,K.VALUE,retain=True)

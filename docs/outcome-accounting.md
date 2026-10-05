@@ -26,7 +26,28 @@ Mutation detection requires a failing run with typed semantic mismatch evidence,
 
 `check.sh`, `diff.sh` and `mutate.sh` share default host/version example selection. Explicit `AIR2LEAN_EXAMPLES` selections bypass filtering and may fail setup if unsupported. Mutation selection uses the declared exporter version; callers must align it with the stock native compiler. A host-excluded float mismatch cannot qualify a float mutation on that host.
 
-Reports bound each JSONL record to 8 MiB, combined case count to 100,000 and emitted case evidence to 128 MiB. Summaries contain input/native/model wire hashes, case indices, selected schedule prefix/options, runs/fuel/cap, source fingerprints and actual host/version arguments. Fingerprints cover producer scripts, the runtime, proof/example source files and native test sources; they do not authenticate compiled artifacts, compiler binaries, external libraries or theorem applicability. Schedule data supports investigation, not a new replay command. Run initialization replaces any old completed summary and discards stale case evidence before compiler/version/selection setup. Validated selection then clears its old sidecars. Setup failure cannot reuse old input-failure sidecars or completed comparison evidence. Set `AIR2LEAN_MUTATION_REPORT_DIR` to retain separate report directories for differential mutants; otherwise those temporary reports are removed. Retained evidence has per-run bounds, so its total grows with the selected run count.
+Reports bound each JSONL record to 8 MiB, combined case count to 100,000 and emitted case evidence to 128 MiB. Summaries contain input/native/model wire hashes, case indices, selected schedule prefix/options, runs/fuel/cap, source fingerprints and actual host/version arguments. Fingerprints cover producer scripts, the runtime, proof/example source files and native test sources; they do not authenticate compiled artifacts, compiler binaries, external libraries or theorem applicability. Replay validates this source context and the selected raw input; it does not authenticate a compiled binary or prove native/model correspondence. Run initialization replaces any old completed summary and discards stale case evidence before compiler/version/selection setup. Validated selection then clears its old sidecars. Setup failure cannot reuse old input-failure sidecars or completed comparison evidence. Set `AIR2LEAN_MUTATION_REPORT_DIR` to retain separate report directories for differential mutants; otherwise those temporary reports are removed. Retained evidence has per-run bounds, so its total grows with the selected run count.
+
+## Bounded schedule enumeration and replay
+
+`tests/diff/Concurrent.lean` is the shared registry used by observed-result matching and the `schedules` executable. It covers the existing Threads, Atomics, Sync, Threadsync and Iogroup examples. It uses their current generated dispatchers, initial memory and runtime scheduler; it introduces no alternate model or partial-order reduction. Version eligibility remains the differential selection's responsibility; explicitly selecting a model entry does not qualify it for a native version.
+
+After the normal differential build creates the libm archive, build the schedule executable and explore one input row:
+
+```sh
+(cd tests/diff && lake build schedules)
+python3 scripts/schedules.py enumerate --example atomics --function mpRelAcq \
+  --input-index 1 --fuel 1000 --node-cap 128 --prefix-cap 4096 --output schedules.json
+python3 scripts/schedules.py replay --receipt schedules.json --execution-index 0 --output replay.json
+python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
+  --example threads --function claimOnce --input-index 1 --output witness.json
+```
+
+Input indices start at one; execution indices start at zero. Enumeration follows a deterministic DFS of the model's oracle tree and retains every attempted execution and its distinct typed outcome. Limits are explicit: fuel at most 100,000 scheduler steps per execution, node cap at most 2,000 executions, prefix cap at most 4,096 choices, response at most 64 MiB, and command timeout at most 900 seconds (default 60). Node cap zero is permitted and explores nothing. `truncated`, `node_cap_reached`, `prefix_cap_reached`, `runs`, `choice_count` and `trace_complete` disclose the retained coverage. `exploration_complete` means only that this fuel-bounded oracle tree was traversed without node/prefix truncation. It establishes neither fuel-independent exhaustion, an exhaustive set of program outcomes, native correspondence nor liveness. The historical matching runner still stops at an observed-result witness.
+
+Replay requires the complete recorded choice trace, including zero choices, and checks the returned typed kind, wire result and option counts. Missing, extra or out-of-range choices are rejected. An observed matching witness's shorter stored prefix is extended only by the original oracle's default zero choices, to its recorded option count. Capped/unmatched observations and truncated enumeration traces cannot serve as replay witnesses. The Python CLI binds current raw input bytes and runner/runtime source fingerprints before and after execution; stale inputs, source changes or mismatched replay results fail without publishing a new receipt. Receipts always record `qualified: false`. Rebuild the executable after changing generated modules or archives: these source fingerprints do not attest to its build or compiler.
+
+Summaries publish `exact_matches` separately from host differences, illegal/unspecified exclusions and caps. Selection records list each skipped function and `skipped_functions` counts them outside observed `case_count`. `proof_applicability` is explicitly `not_evaluated_by_differential_runner`; `proof_exclusions` lists each selected example's proof source scope as unevaluated. A source fingerprint, replay or exact differential match cannot establish theorem applicability. The separate kernel proof gates remain necessary.
 
 ## Validation
 
@@ -34,17 +55,20 @@ Offline checks, requiring no compiler:
 
 ```sh
 python3 tests/roadmap/outcome-accounting/test_report.py
+python3 tests/roadmap/outcome-accounting/test_schedules.py
 bash -n scripts/check.sh scripts/diff.sh scripts/mutate.sh scripts/example-selection.sh
 git diff --check
 ```
 
-The offline suite executes only Python and bounded shell mocks. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures remain recorded as failures. A later repaired default Zig16 producer/report run passed; its exact scope is recorded below. Cross-host/version matrices and remaining semantic mutations remain pending; selected b/g checks are recorded below.
+The offline suite executes only Python and bounded shell mocks. The added enumeration/replay core and CLI have not yet been compiled or exercised against the real model executable; their current checks are source regression assertions and portable process mocks. The full Zig15/Zig16 CI jobs now explicitly run these checks, small real enumeration/replay requests, an observed witness replay and the native producer boundary fixture after the differential build. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures remain recorded as failures. A later repaired default Zig16 producer/report run passed; its exact scope is recorded below. Cross-host/version matrices and remaining semantic mutations remain pending; selected b/g checks are recorded below.
 
-After a real `scripts/diff.sh` build, the package checks are:
+After a real `scripts/diff.sh` build, build the new executable before importing its protocol in the package checks:
 
 ```sh
+(cd tests/diff && lake build schedules)
 (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Check.lean)
 (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Search.lean)
+(cd tests/diff && lake env lean ../roadmap/outcome-accounting/Schedule.lean)
 ```
 
 Run the real differential gate with explicit matching `AIR2LEAN_ZIG`, exporter version and eligible example selection. Retain its report outside build caches. Run selected differential mutations with `AIR2LEAN_MUTATION_REPORT_DIR` after reconciling the later accepted mutation repairs; baseline or setup failures are failures of qualification, not mutation detections. Native version matrices and cross-host validation remain necessary before claiming those scopes passed.

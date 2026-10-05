@@ -96,15 +96,18 @@ def read_summary(path):
     if not isinstance(result,dict):raise Invalid('summary must be an object')
     return result
 
-def lines(path):
+def lines(path, *, max_records=None, max_bytes=None):
+    if max_records is None:max_records=MAX_CASES
     with path.open('rb') as stream:
         count = 0
+        total = 0
         while True:
             line = stream.readline(MAX_LINE + 1)
             if not line:
                 break
             count += 1
-            if len(line) > MAX_LINE or count > MAX_CASES:
+            total += len(line)
+            if len(line) > MAX_LINE or count > max_records or (max_bytes is not None and total > max_bytes):
                 raise Invalid('input/report bound exceeded')
             if not line.endswith(b'\n') or not line.strip():
                 raise Invalid('unterminated or empty JSONL record')
@@ -280,11 +283,13 @@ def selection(root, examples, version, host):
         if directory.name=='asm' and not host.endswith('-x86_64'): reason='host_excluded'
         versions=directory/'zig-versions'
         if versions.exists() and version not in versions.read_text().splitlines(): reason='version_excluded'
-        rows.append({'schema':SCHEMA,'status':Status.SKIPPED.value,'example':directory.name,'reason':reason})
+        functions=sorted(p.stem for p in (root/'tests/diff'/directory.name/'inputs').glob('*.jsonl'))
+        if any(not IDENT.fullmatch(fn) for fn in functions):raise Invalid('invalid skipped function name')
+        rows.append({'schema':SCHEMA,'status':Status.SKIPPED.value,'example':directory.name,'reason':reason,'functions':functions})
     return rows
 
 def source_hashes(root):
-    paths=[root/name for name in ('scripts/diff.sh','scripts/diff-report.py','tests/diff/Diff.lean','tests/diff/Outcome.lean','tests/diff/common.zig')]
+    paths=[root/name for name in ('scripts/diff.sh','scripts/diff-report.py','tests/diff/Diff.lean','tests/diff/Outcome.lean','tests/diff/common.zig','tests/diff/ScheduleSearch.lean','tests/diff/Concurrent.lean','tests/diff/Schedules.lean','scripts/schedules.py')]
     paths+=sorted((root/'ZigLean').rglob('*.lean'))
     paths+=sorted((root/'Proofs').rglob('*.lean'))
     paths+=sorted((root/'tests/diff').rglob('*.zig'))
@@ -364,7 +369,11 @@ def compare(root, examples, version, host, summary):
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]
     atomic_json(summary,{'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host},
-                         'case_count':case_count,'skipped_examples':len(skipped),'counts':dict(totals),'legacy_counts':dict(legacy_totals),
+                         'case_count':case_count,'skipped_examples':len(skipped),'skipped_functions':sum(len(row['functions']) for row in skipped),
+                         'exact_matches':sum(totals[s.value] for s in (Status.VALUE_MATCH,Status.ERROR_RETURN_MATCH,Status.PANIC_MATCH)),
+                         'proof_applicability':'not_evaluated_by_differential_runner',
+                         'proof_exclusions':[{'example':ex,'reason':'proof_applicability_not_evaluated','sources':sorted(str(p.relative_to(root)) for p in (root/'Proofs'/(ex[0].upper()+ex[1:])).glob('*.lean'))} for ex in examples],
+                         'counts':dict(totals),'legacy_counts':dict(legacy_totals),
                          'pin_violations':violations,'mutation_eligible':0 if setup_failures else eligible,
                          'setup_failures':setup_failures,'cases_path':str(report_path),'runner_runtime_sources':source_hashes(root)})
     return 1 if setup_failures or totals[Status.MISMATCH.value] or legacy_totals['mismatch'] or violations else 0

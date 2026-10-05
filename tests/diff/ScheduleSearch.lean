@@ -121,4 +121,76 @@ def searchSchedulesWith (cap probeRuns frontierCap prefixCap : Nat)
 def searchSchedules (run : (Nat → Nat) → String × Array Nat) (zig : String) : String :=
   searchSchedulesWith scheduleCap 256 128 4096 run zig
 
+
+/-- One actual execution. A complete trace uses one explicit choice per recorded option,
+including deterministic/zero-option slots, and can be replayed without oracle defaults. -/
+structure ScheduleExecution where
+  prefix : Array Nat
+  options : Array Nat
+  choiceCount : Nat
+  traceComplete : Bool
+  observation : DiffOutcome.Observation
+
+instance : Inhabited ScheduleExecution := ⟨{
+  prefix := #[], options := #[], choiceCount := 0, traceComplete := false,
+  observation := DiffOutcome.noResult }⟩
+
+def ScheduleExecution.metadata (e : ScheduleExecution) : Lean.Json :=
+  Lean.Json.mkObj [
+    ("prefix", Lean.toJson e.prefix), ("options", Lean.toJson e.options),
+    ("choice_count", Lean.toJson e.choiceCount), ("trace_complete", Lean.toJson e.traceComplete),
+    ("observation", e.observation.metadata)]
+
+structure ScheduleEnumeration where
+  executions : Array ScheduleExecution := #[]
+  outcomes : Array DiffOutcome.Observation := #[]
+  nodeCapReached : Bool := false
+  prefixCapReached : Bool := false
+  sawNoResult : Bool := false
+
+instance : Nonempty ScheduleEnumeration := ⟨{}⟩
+
+/-- Full trace replay rejects modularly wrapped choices, missing choices and unused suffixes.
+The runtime still runs under its existing oracle semantics; validity is checked against the
+resulting option trace before any execution is accepted as replay evidence. -/
+def replaySchedule (prefixCap : Nat)
+    (run : (Nat → Nat) → DiffOutcome.Observation × Array Nat)
+    (prefix : Array Nat) : Except String ScheduleExecution := do
+  if prefix.size > prefixCap then throw "replay prefix exceeds prefix_cap"
+  let (out, opts) := run fun i => prefix.getD i 0
+  if opts.size > prefixCap then throw "replay trace exceeds prefix_cap"
+  if opts.size != prefix.size then throw "replay requires exactly one choice per option (missing or unused choices)"
+  for i in [:opts.size] do
+    let n := opts[i]!
+    let c := prefix[i]!
+    if (n == 0 && c != 0) || (n != 0 && c >= n) then
+      throw s!"replay choice {i} is outside its option range"
+  pure { prefix, options := opts, choiceCount := opts.size, traceComplete := true, observation := out }
+
+/-- Deterministic bounded DFS of the existing runTrace oracle tree. Unlike matching search,
+it never stops at an observed result: distinct typed outcomes and every attempted execution
+are retained. Bounds constrain exploration, not a theorem about the program's allowed
+outcomes, liveness, correspondence, or fuel-independent exhaustion. -/
+partial def enumerateSchedules (nodeCap prefixCap : Nat)
+    (run : (Nat → Nat) → DiffOutcome.Observation × Array Nat) : ScheduleEnumeration :=
+  let rec visit (pre : Array Nat) (acc : ScheduleEnumeration) : ScheduleEnumeration :=
+    if acc.executions.size >= nodeCap then { acc with nodeCapReached := true } else
+    let (out, opts) := run fun i => pre.getD i 0
+    let kept := opts.extract 0 prefixCap
+    let trace := (Array.range kept.size).map fun i => pre.getD i 0
+    let entry : ScheduleExecution := {
+      prefix := trace, options := kept, choiceCount := opts.size,
+      traceComplete := opts.size <= prefixCap, observation := out }
+    let outcomes := if acc.outcomes.any (fun old => old.kind == out.kind && old.line == out.line)
+      then acc.outcomes else acc.outcomes.push out
+    let acc := { acc with
+      executions := acc.executions.push entry
+      outcomes := outcomes
+      prefixCapReached := acc.prefixCapReached || opts.size > prefixCap
+      sawNoResult := acc.sawNoResult || out.kind == .boundedNoResult }
+    match nextSchedule pre kept with
+    | none => acc
+    | some next => visit next acc
+  visit #[] {}
+
 end DiffTest
