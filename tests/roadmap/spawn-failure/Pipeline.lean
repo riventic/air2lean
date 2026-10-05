@@ -93,7 +93,10 @@ private def fallbackChecks : IO Unit := do
     { async with name := "repeatedAsync" }, task]
   require (checkProgram mixed |>.toOption.isSome) "mixed worker sites are not checked"
   let targets := spawnTargets mixed
-  require (targets.size == 1 && targets[0]!.2.name == "firstSpawn")
+  let firstUse := match targets[0]? with
+    | some target => target.2.1.name == "firstSpawn"
+    | none => false
+  require (targets.size == 1 && firstUse)
     "async filtering changed first-use capture description"
   let descriptions : Array (String × String × Array (String × Option (String × Nat)) × Nat) :=
     #[("worker", "worker", #[("BitVec 32", none), ("BitVec 32", none)], 0),
@@ -113,8 +116,7 @@ private def fallbackChecks : IO Unit := do
     hasText output "Zig.groupAsyncWithPolicyC .fallible" &&
     hasText output "worker capture0 capture1") "mixed-site emission lost a call path"
   let base := mkFCtx task #[] #[("worker", "worker")] .ieee #[] #[]
-  let bare := { base with spawnSemantics := .fallible,
-    spawnFallbacks := #[("worker", "FIRST"), ("worker", "SECOND"), ("late", "LAST")] }
+  let bare := { base with spawnSemantics := .fallible, spawnFallbacks := #[("worker", "FIRST"), ("worker", "SECOND"), ("late", "LAST")] }
   let prepared := bare.prepareSpawnFallbacks
   require (bare.spawnFallback "worker" == "FIRST" && prepared.spawnFallback "worker" == "FIRST" &&
     bare.spawnFallback "late" == "LAST" && prepared.spawnFallback "late" == "LAST" &&
@@ -128,8 +130,7 @@ private def fallbackChecks : IO Unit := do
     #[async.name] .fallible bare.spawnFallbacks
   require (hasText standalone.defn "FIRST" && !hasText standalone.defn "SECOND")
     "standalone function emission did not prepare a first-match fallback map"
-  let changed := { prepared with spawnFallbacks := #[("worker", "NEW"), ("worker", "IGNORED")],
-    spawnFallbackMap := none }
+  let changed := { prepared with spawnFallbacks := #[("worker", "NEW"), ("worker", "IGNORED")], spawnFallbackMap := none }
   require (changed.spawnFallback "worker" == "NEW" && changed.spawnFallback "late" == "" &&
     changed.prepareSpawnFallbacks.spawnFallback "worker" == "NEW" &&
     changed.prepareSpawnFallbacks.spawnFallback "late" == "")

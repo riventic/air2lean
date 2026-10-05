@@ -351,7 +351,7 @@ def qualify(mode, destination):
         report["lean_sha256"] = digest(lean_binary)
         report["lean_version"] = gate.run("lean-version", lean + ["--version"]).strip()
         report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
-        gate.run("proof-modules", ["lake", "build", "ZigLean.Conc.SpawnLemmas", "ZigLean.Conc.Csl"])
+        gate.run("proof-modules", ["lake", "build", "ZigLean", "ZigLean.Conc.SpawnLemmas", "ZigLean.Conc.Csl"])
         gate.run("resource-boundary", lean + ["--run", str(FIXTURE / "Boundary.lean")],
                  marker="audited spawn resource boundary passed")
         gate.run("kernel-runtime", lean + ["--run", str(FIXTURE / "Runtime.lean")],
