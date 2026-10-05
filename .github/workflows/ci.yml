@@ -399,6 +399,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_receipt.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_check.py
           tests/roadmap/assurance/check.sh
 
       - name: First-proof tutorial
