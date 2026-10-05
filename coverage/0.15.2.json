@@ -14569,10 +14569,11 @@
       "Air2Lean/Check.lean": "9a484048320c03f1c4615521dced5026bb41abf2408f0758f2d53406d304d011",
       "Air2Lean/Diagnose.lean": "7d98cd1286defbe122faf083d0d3b69799b4fe6229397feab3a2035c0d80119b",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "c20dc80634d4f78148a6775d35a998db87e05c7214a90b4074d74504f436660b",
-      "Air2Lean/Main.lean": "5427024c14b61d7cf0345758eb789530967d287c8c267f84b5ad379458780ff9",
+      "Air2Lean/Emit.lean": "a714c3c30c518abd4128a795a5dbbe2f9d8f5d69f9f30b33b2d3cbd4b8e945c1",
+      "Air2Lean/Main.lean": "055d1c7f72170fa491ecaf2528414a219e2aff99795d23d71c8d06e8f5d4fba7",
       "Air2Lean/Memory.lean": "5a754a95afdda12fd50be29333c61c99e7a194fc1b5479e207517885ec2c0c3c",
       "Air2Lean/ModelRegistry.lean": "ddaf398e7a02af903dbd827b65f3a1230815cf6922ef874c8d2bdfed72a8f387",
+      "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
       "zig-patch/air-json/json.zig": "920ecb7beb497a7b162f60063f1cf06682f91a5e9dda11dbd4a8ae5d4b47551e"
     },
     "runtime-models": {
