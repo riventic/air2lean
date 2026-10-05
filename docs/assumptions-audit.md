@@ -58,7 +58,13 @@ libm implementation, plus the `SimpExtension` and `SimprocExtension` handles gen
 by `register_simp_attr zig_unfold` in `ZigLean/SimpAttr.lean`. Lean's
 `Lean.Meta.Tactic.Simp.RegisterCommand` macro creates these checked meta initialization
 handles; neither occurs in a shipped theorem dependency closure in the qualified report.
-Their two exact module/hygienic-name keys allow no other generated opaque. Each private
+Their two exact module/hygienic-name keys allow no other generated opaque. The private
+partial `Zig.SepAutomation.atoms.collect` helper is separately allowed by its exact
+module/user-name key. It computes candidate frame syntax for `sep_frame`; the tactic
+constructs ordinary proof terms using `Zig.Triple.frame`, `Zig.Triple.conseq`, and
+separation equalities that Lean checks. Its opacity is a meta-computation boundary,
+not an additional logical axiom. Dependencies and execution attributes still undergo
+the same audit. Each private
 libm primitive also has an exact extern backend/symbol
 contract; changing a target or adding an ordinary extern-backed definition fails unless
 its exact contract is reviewed. Assembly theorems state the necessary instruction behavior as
