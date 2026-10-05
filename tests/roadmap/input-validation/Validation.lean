@@ -478,8 +478,14 @@ private def validationChecks : IO Unit := do
     "typed nonnullable pointer null accepted"
   let allowzero := { nonnullable with layouts := nonnullable.layouts.set! 1 { allowzero := true } }
   require (accepted (checkProgram #[allowzero])) "typed allowzero pointer null rejected"
-  let nullGlobal : Global := { name := some "nullValue", ty := 1, isConst := true,
-    threadlocal := false, isExtern := false, init := some (.ptrNull 1) }
+  let nullGlobal : Global := {
+    name := some "nullValue"
+    ty := 1
+    isConst := true
+    threadlocal := false
+    isExtern := false
+    init := some (.ptrNull 1)
+  }
   let nullA := mkFunc "nullA" nullable.types #[] 2 #[] #[nullGlobal]
   let nullB := mkFunc "nullB" #[.void, .int false 8, .ptr "c" false 1] #[] 0 #[] #[
     { nullGlobal with ty := 2, init := some (.ptrNull 2) }]
