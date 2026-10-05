@@ -170,7 +170,7 @@ jobs:
         run: lake build
 
       - name: Stable scalar proof API regressions
-        if: ${{ matrix.full && !matrix.mutate && (matrix.zig == '0.15.2' || matrix.zig == '0.16.0') }}
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           proof_api_dir="$RUNNER_TEMP/proof-api"
