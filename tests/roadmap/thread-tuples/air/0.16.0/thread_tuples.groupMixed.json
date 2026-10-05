@@ -1,0 +1,718 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "thread_tuples.groupMixed",
+ "params": [
+  0,
+  1,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 1,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "ty": 1,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    }
+   ],
+   "name": "out"
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 8,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 9,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 8
+    },
+    {
+     "ty": 1,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 8
+    }
+   ],
+   "name": "other"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4
+  },
+  {
+   "id": 12,
+   "tag": "alloc",
+   "ty": 5
+  },
+  {
+   "id": 13,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "ty": 6,
+     "elems": [
+      {
+       "ty": 7,
+       "elems": [
+        {
+         "ty": 8,
+         "null": true
+        }
+       ]
+      },
+      {
+       "ty": 9,
+       "val": "0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 12
+    }
+   ],
+   "name": "group"
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5
+  },
+  {
+   "id": 20,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 10,
+    "func": "Io.Group.async__anon_784",
+    "noreturn": false,
+    "comptime_fn": "thread_tuples.zeroWorker"
+   },
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 0
+    },
+    {
+     "ty": 11,
+     "elems": []
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 6
+  },
+  {
+   "id": 26,
+   "tag": "aggregate_init",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 4
+    },
+    {
+     "inst": 2
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 6
+  },
+  {
+   "id": 29,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 13,
+    "func": "Io.Group.async__anon_838",
+    "noreturn": false,
+    "comptime_fn": "thread_tuples.mixedWorker"
+   },
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 0
+    },
+    {
+     "inst": 26
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 7
+  },
+  {
+   "id": 33,
+   "tag": "call",
+   "ty": 14,
+   "callee": {
+    "ty": 15,
+    "func": "Io.Group.concurrent__anon_847",
+    "noreturn": false,
+    "comptime_fn": "thread_tuples.zeroWorker"
+   },
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 0
+    },
+    {
+     "ty": 11,
+     "elems": []
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "try",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 33
+    }
+   ],
+   "body": [
+    {
+     "id": 34,
+     "tag": "unwrap_errunion_err",
+     "ty": 16,
+     "args": [
+      {
+       "inst": 33
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 7
+    },
+    {
+     "id": 36,
+     "tag": "bitcast",
+     "ty": 17,
+     "args": [
+      {
+       "inst": 34
+      }
+     ]
+    },
+    {
+     "id": 37,
+     "tag": "wrap_errunion_err",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 36
+      }
+     ]
+    },
+    {
+     "id": 38,
+     "tag": "ret_safe",
+     "ty": 18,
+     "args": [
+      {
+       "inst": 37
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 8
+  },
+  {
+   "id": 41,
+   "tag": "call",
+   "ty": 19,
+   "callee": {
+    "ty": 20,
+    "func": "Io.Group.await",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 47,
+   "tag": "try",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 41
+    }
+   ],
+   "body": [
+    {
+     "id": 42,
+     "tag": "unwrap_errunion_err",
+     "ty": 21,
+     "args": [
+      {
+       "inst": 41
+      }
+     ]
+    },
+    {
+     "id": 43,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 8
+    },
+    {
+     "id": 44,
+     "tag": "bitcast",
+     "ty": 17,
+     "args": [
+      {
+       "inst": 42
+      }
+     ]
+    },
+    {
+     "id": 45,
+     "tag": "wrap_errunion_err",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 44
+      }
+     ]
+    },
+    {
+     "id": 46,
+     "tag": "ret_safe",
+     "ty": 18,
+     "args": [
+      {
+       "inst": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 9
+  },
+  {
+   "id": 49,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 50,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "mul_wrap",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 50
+    },
+    {
+     "ty": 1,
+     "val": "7"
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "tag": "add_wrap",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 49
+    },
+    {
+     "inst": 51
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 9
+  },
+  {
+   "id": 54,
+   "tag": "wrap_errunion_payload",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 52
+    }
+   ]
+  },
+  {
+   "id": 55,
+   "tag": "ret_safe",
+   "ty": 18,
+   "args": [
+    {
+     "inst": 54
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "struct",
+   "name": "Io",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "userdata",
+     "ty": 8,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 22,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_union",
+   "error": 17,
+   "payload": 1,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Io.Group",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "token",
+     "ty": 7,
+     "offset": 0
+    },
+    {
+     "name": "state",
+     "ty": 9,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(?*anyopaque)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 23,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*Io.Group, Io, @TypeOf(.{})) void"
+  },
+  {
+   "k": "tuple",
+   "fields": [],
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 1,
+     "offset": 0
+    },
+    {
+     "ty": 4,
+     "offset": 8
+    },
+    {
+     "ty": 1,
+     "offset": 16
+    },
+    {
+     "ty": 4,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*Io.Group, Io, struct { u32, *u32, u32, *u32 }) void"
+  },
+  {
+   "k": "error_union",
+   "error": 16,
+   "payload": 3,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (*Io.Group, Io, @TypeOf(.{})) error{ConcurrencyUnavailable}!void"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "ConcurrencyUnavailable"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Canceled",
+    "ConcurrencyUnavailable"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_union",
+   "error": 21,
+   "payload": 3,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (*Io.Group, Io) error{Canceled}!void"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Canceled"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 24,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 25,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Io.VTable",
+   "layout": "auto",
+   "no_fields": true
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
+  }
+ ]
+}
