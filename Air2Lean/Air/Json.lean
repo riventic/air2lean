@@ -1,4 +1,4 @@
-import Lean.Data.Json
+import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Op
 import Air2Lean.Air.Profile
 
@@ -140,7 +140,8 @@ def checkConstType (fnName : String) (types : Array Ty) (expected : TyId) (v : V
   unless compatible do throw s!"{fnName}: constant does not match type {expected}"
 
 /-- An integer constant as `fmtValue` prints it: optional leading `-`, then decimal digits. -/
-def parseIntLit (fnName : String) (s : String) : Except String Int :=
+def parseIntLit (fnName : String) (s : String) : Except String Int := do
+  if s.length > 32768 then throw s!"{fnName}: integer literal exceeds 32768 characters"
   if s.startsWith "-" then
     match (s.drop 1).toNat? with
     | some n => return (-(n : Int))
@@ -275,6 +276,8 @@ def hexDigitVal (c : Char) : Option Nat :=
 /-- A float's bits as `"0x"` + exactly `bits / 4` hex digits: an `fbits` constant
 (`docs/air-json.md`) or a diff-protocol value (`tests/diff/Diff.lean`). -/
 def parseHexNat (fnName : String) (bits : Nat) (s : String) : Except String Nat := do
+  unless supportedFloatWidth bits do
+    throw s!"{fnName}: unsupported float width {bits} (only 16, 32, 64, 80, 128)"
   if !s.startsWith "0x" then throw s!"{fnName}: not a hex literal: {s}"
   let digits := (s.drop 2).toString.toList
   if digits.length != bits / 4 then
@@ -302,15 +305,53 @@ def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except
     else throw s!"{fnName}: not a void literal: {s}"
   | other => throw s!"{fnName}: constant of unsupported type {repr other}"
 
-/-- The bit width of a packed struct field of type `id`: an integer, a `bool`, an enum (its tag),
-or a packed struct (`Air2Lean/Memory.lean`'s `packedBits`, which this file cannot import). -/
-partial def packedWidth (types : Array Ty) (id : TyId) : Option Nat :=
+private inductive PackedVisit where
+  | unseen | active | done (width : Nat)
+  deriving Inhabited
+
+/-- The bit width of an integer, bool, enum tag, or packed struct (the `packedBits` model
+in `Memory.lean`, which this file cannot import). Memoized explicit DFS completes shared
+field types once; cycles/unknown widths return `none` even for direct API calls that did not run `validateTypeGraph`. -/
+def packedWidth (types : Array Ty) (id : TyId) : Option Nat := Id.run do
   match types[id]? with
-  | some (.int _ bits) => some bits
-  | some .bool => some 1
-  | some (.enum _ tag _ _) => packedWidth types tag
-  | some (.struct _ "packed" fs) => fs.foldlM (init := 0) fun acc (_, t) => (acc + ·) <$> packedWidth types t
-  | _ => none
+  | some (.int _ bits) => return some bits
+  | some .bool => return some 1
+  | some (.enum ..) | some (.struct _ "packed" _) => pure ()
+  | _ => return none
+  let mut states : Array PackedVisit := Array.replicate types.size .unseen
+  let mut tasks : List (TyId × Bool) := [(id, false)]
+  while !tasks.isEmpty do
+    let (current, finish) := tasks.head!
+    tasks := tasks.tail!
+    let some t := types[current]? | return none
+    if finish then
+      let children : Array TyId := match t with
+        | .enum _ tag _ _ => #[tag]
+        | .struct _ "packed" fs => fs.map (fun (field : String × TyId) => field.2)
+        | _ => #[]
+      let mut width : Nat := 0
+      for child in children do
+        let some (PackedVisit.done w) := states[child]? | return none
+        width := width + w
+      states := states.set! current (.done width)
+    else
+      match states[current]? with
+      | some (.done _) => pure ()
+      | some .active | none => return none
+      | some .unseen =>
+        match t with
+        | .int _ bits => states := states.set! current (.done bits)
+        | .bool => states := states.set! current (.done 1)
+        | .enum _ tag _ _ =>
+          states := states.set! current .active
+          tasks := (tag, false) :: (current, true) :: tasks
+        | .struct _ "packed" fs =>
+          states := states.set! current .active
+          tasks := fs.toList.map (fun (field : String × TyId) => (field.2, false)) ++ ((current, true) :: tasks)
+        | _ => return none
+  match states[id]? with
+  | some (.done width) => return some width
+  | _ => return none
 
 /-- A packed struct constant written as `.{ .f = v, … }` (the exporter's `fmtValue` for some
 constants): its backing integer, field 0 in the lowest bits. A field value is an integer or
@@ -326,10 +367,34 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
   for ((name, fty), part) in fields.toList.zip parts do
     let some w := packedWidth types fty
       | throw s!"{fnName}: packed field {name} has no bit width"
+    if off + w > 65535 then throw s!"{fnName}: packed integer width exceeds 65535 bits"
     let v ← match (part.splitOn "=").map (·.trimAscii.toString) with
       | [lhs, rhs] =>
         if lhs != "." ++ name then throw s!"{fnName}: packed constant {s}: field {lhs}, expected .{name}"
-        if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0 else parseIntLit fnName rhs
+        match types[fty]? with
+        | some .bool =>
+          if rhs == "true" then pure (1 : Int) else if rhs == "false" then pure 0
+          else throw s!"{fnName}: packed field {name} requires true or false"
+        | some (.int signed bits) =>
+          let v ← parseIntLit fnName rhs
+          unless integerFits signed bits v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its integer type"
+          pure v
+        | some (.enum _ tag exhaustive tags) =>
+          let some (.int signed bits) := types[tag]?
+            | throw s!"{fnName}: packed field {name} has a non-integer enum tag"
+          let v ← parseIntLit fnName rhs
+          unless integerFits signed bits v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its enum tag type"
+          if exhaustive && !tags.any (fun (_, value) => value == v) then
+            throw s!"{fnName}: packed field {name} value {v} is not a declared enum tag"
+          pure v
+        | some (.struct _ "packed" _) =>
+          let v ← parseIntLit fnName rhs
+          unless integerFits false w v do
+            throw s!"{fnName}: packed field {name} value {v} does not fit its packed backing type"
+          pure v
+        | _ => throw s!"{fnName}: packed field {name} has an unsupported value type"
       | _ => throw s!"{fnName}: packed constant {s}: cannot read {part}"
     acc := acc + (v % (2 ^ w : Nat)).toNat * 2 ^ off
     off := off + w
@@ -635,7 +700,7 @@ def parseFunc (j : Json) : Except String RawFunc := do
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do
-  let j ← Json.parse contents
+  let j ← StrictJson.parse contents
   parseFunc j
 
 end Air2Lean.Raw

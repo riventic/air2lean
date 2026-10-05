@@ -117,7 +117,7 @@ private def run (args : List String) : IO UInt32 := do
         "Check the dump filter and make functions reachable with export fn or comptime references.")
     else
       let texts ← jsonPaths.mapM fun path => do
-        try IO.FS.readFile path catch e =>
+        try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
       let models ← match a.modelRegistry with
         | none => pure #[]

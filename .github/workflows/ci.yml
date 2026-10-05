@@ -194,6 +194,16 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      - name: Validate AIR input and whole-program signatures
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/input-validation"
+          mkdir -p "$evidence_dir/tmp"
+          export TMPDIR="$evidence_dir/tmp"
+          lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
+          python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
+
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
