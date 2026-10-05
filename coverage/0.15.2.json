@@ -3324,6 +3324,7 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Assert.lean",
@@ -3587,6 +3588,7 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/Assert.lean",
@@ -7511,6 +7513,7 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/Assert.lean",
@@ -14329,7 +14332,7 @@
     },
     {
       "name": "int",
-      "disposition": "exporter-fallback-unsupported-marker-review",
+      "disposition": "exporter-explicit-arm-conditional-review",
       "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
@@ -14531,15 +14534,15 @@
     "translation": {
       "Air2Lean/Air/Anon.lean": "f667424fb515230612f87c961e42c5eb0ea969ff976602edc28807c61e6b52e4",
       "Air2Lean/Air/Canon.lean": "a2117292b296e5996b673ab48fb5222d8456882d1f9e7c02be8f66eacbc8524f",
-      "Air2Lean/Air/Json.lean": "8276b49448a3583f0d190867214870f279cf3bfe4ae0c683b00ceddcfa54554b",
+      "Air2Lean/Air/Json.lean": "52b80e3c00bb405da8bea1125f87feede8f09a9950fcc365039861182fdf1ecf",
       "Air2Lean/Air/Normalize.lean": "6367ae12dfc049989d92979868b58ec45e12a1be75999b7d4c5c1a59b2ed3a1c",
-      "Air2Lean/Air/Op.lean": "069772d48acc7c027f1991e699e50747290986f0694941b70bfb284c114ae632",
+      "Air2Lean/Air/Op.lean": "fc5dfc36ec44d305c01387b91fbd8c1ac3fcad2126d14363a8ca1dbcacec1ff0",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
-      "Air2Lean/Check.lean": "b8b3372307cd4e90273726007c1be107105a9ca13c6e821e25cd01f3de994e44",
-      "Air2Lean/Emit.lean": "5b01712a8d4c15486b30874962c33dfd9d08c3632860ff9c0c96a1f51331f8e6",
+      "Air2Lean/Check.lean": "0401ddbcf6ffa3c4aaf97f5b34f742d3e945a8bfda1b1ec491e9ea88742ba1d0",
+      "Air2Lean/Emit.lean": "1a745db41fce8586ef2cbc82197a9a590f017514defb464011c91aa61a880675",
       "Air2Lean/Main.lean": "836356e86979ef7eff50dc5e1602b651059bff954a9a8b48e69c2a8f346c4373",
-      "Air2Lean/Memory.lean": "7109a39e02a018069c1f174b69ee6ecda7d25931d22674369f4a966f49cd6d83",
-      "zig-patch/air-json/json.zig": "30d0067ff832f3823e09582b4b12aa77a4bed0f5c28c21dba8a77487bbbd418a"
+      "Air2Lean/Memory.lean": "d3ec5de78959d46bfe19f066a4f67bf11a719451a99764c4d521c642d4412fd6",
+      "zig-patch/air-json/json.zig": "00be698e9a42b36070efd904cdf2023de3584f8f610d75b4d752599d0592de9e"
     },
     "runtime-models": {
       "ZigLean/Basic.lean": "69ff4c6fe140fe6ca14c49aa7f05ed361953fcbc7e1e567cc6e637ff253b6bb7",
@@ -14571,8 +14574,9 @@
       "ZigLean/Mem/Basic.lean": "66bbf7eec1fe71054fa7c3580f371f4d0cfb33ce6c1e6cc68373eecb16630d28",
       "ZigLean/Mem/Enc.lean": "2adc12e2d88007e9cafc6829d7f687df54177a53de5bed8bdac933360d3c7c28",
       "ZigLean/Mem/Lemmas.lean": "ac7d79ff4ca2c576977bc21e09735dc9b564c230f3d87ae561bfcd912ac20c23",
+      "ZigLean/Mem/Null.lean": "ce3a714180a3adeb4864af0d534f85f871371e2f00fd8624d9f4dbc907fa1e8f",
       "ZigLean/Mem/Thread.lean": "3c4d7846b6e6d9bf8d25dad04d20220c8f37511887ffa5155bd3b9538e5e32cc",
-      "ZigLean/Mem.lean": "0afcc899300059b24cb462e24d9a41199a7dcac1705282a33842fe9dfa932203",
+      "ZigLean/Mem.lean": "984464356198c9e326876be51ad994e401290d0fe92decdf93ba24529abbc6ad",
       "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
       "ZigLean/Sep/Alloc.lean": "e80cbcc4aaf4a4a0fb9bc497bbe51b77b124e514909be9c837af2ae03b337aec",
       "ZigLean/Sep/Assert.lean": "6ec6646b84bea7e51c0c2be4bc7a77c50d9ff494c678697437eee27f4385353b",
@@ -15320,7 +15324,7 @@
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45"
     },
     "model-boundaries": {
-      "Air2Lean/Memory.lean": "7109a39e02a018069c1f174b69ee6ecda7d25931d22674369f4a966f49cd6d83",
+      "Air2Lean/Memory.lean": "d3ec5de78959d46bfe19f066a4f67bf11a719451a99764c4d521c642d4412fd6",
       "docs/std-models.md": "208dde6145dbd3cf26a3b5b5ac82c41b5bf24a316dee67346bfcdce02f96bf31"
     }
   },

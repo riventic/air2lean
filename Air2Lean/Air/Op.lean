@@ -117,6 +117,12 @@ structure Layout where
   bitOffset : Nat := 0
   deriving Repr, Inhabited
 
+/-- C and allowzero pointers can carry address zero as a value. -/
+def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
+
 inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type, or a packed struct (its backing integer). -/
@@ -153,6 +159,8 @@ inductive Val where
   | agg (ty : TyId) (elems : Array Val)
   /-- A pointer constant: byte `off` of the global with index `global` in `Func.globals`. -/
   | ptrConst (ty : TyId) (global : Nat) (off : Nat)
+  /-- Address zero of a C/allowzero pointer. No global or allocation is attached. -/
+  | ptrNull (ty : TyId)
   /-- A pointer constant without a global (`@ptrFromInt`, a comptime-only value): `kind` names
   its base. `Check.lean` rejects it. -/
   | ptrOther (ty : TyId) (kind : String)
@@ -165,7 +173,7 @@ field. -/
 def Val.constTy? (v : Val) : Option TyId :=
   match v with
   | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
-  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrOther t _
+  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrNull t | .ptrOther t _
   | .sliceConst t .. => some t
   | _ => none
 

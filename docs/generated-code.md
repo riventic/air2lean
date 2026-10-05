@@ -140,6 +140,8 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | call of a function that uses memory | — | `Zig.callM` |
 | call of a pure function | `Zig.call` | `Zig.callR`; a `[]const T` argument is `Zig.readSlice T align s` |
 
+Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. Nullable pointer storage, nullable optional payload encodings and nullable projections remain rejected.
+
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
@@ -147,7 +149,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
-| `cmp_eq`, `cmp_neq` on pointers | `==`, `!=` on block and offset |
+| `cmp_eq`, `cmp_neq` on pointers | Ordinary pointers: `==`, `!=` on block/offset. Scalar C/allowzero pointers: address comparison through `Zig.ptrEqAddr`. |
 | `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
