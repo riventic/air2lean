@@ -278,6 +278,7 @@ asm_zig="tests/diff/asm/asm.zig"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
+conc_lean="ZigLean/Conc.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -293,6 +294,7 @@ asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
+conc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-conc.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -308,9 +310,11 @@ cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
 cp "$sched_lean" "$sched_backup"
+cp "$conc_lean" "$conc_backup"
 
 mutate_tmp=""
 air_dir=""
+mutation_outcome_tmp=""
 cleanup() {
   # Capture the exit status that triggered this trap first — cleanup's own commands would
   # otherwise overwrite it, and bash uses whatever $? is left when the script exits.
@@ -330,10 +334,12 @@ cleanup() {
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
   cp "$sched_backup" "$sched_lean"
+  cp "$conc_backup" "$conc_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$conc_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
+  [ -n "$mutation_outcome_tmp" ] && rm -rf "$mutation_outcome_tmp"
   exit "$ec"
 }
 trap cleanup EXIT
@@ -405,17 +411,29 @@ run_and_report() {
     report_dir=$(mktemp -d "$AIR2LEAN_MUTATION_REPORT_DIR/case.XXXXXX")
     printf '%s: typed evidence %s\n' "$label" "$report_dir/summary.json" >&2
   else
-    report_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-outcomes.XXXXXX")
+    mutation_outcome_tmp=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-outcomes.XXXXXX")
+    report_dir=$mutation_outcome_tmp
   fi
+  # Generated runtime code needs Call's weak wrappers, not WeakCas's proof interfaces.
+  # Correct Mem lemmas deliberately fail under differential mutants (e.g. k/n).
+  # Exclude only this new proof import for the differential window; baselines and
+  # proof_report retain it. The EXIT/signal trap also restores it on interrupted runs.
+  [ "$(grep -Fxc 'import ZigLean.Conc.WeakCas' "$conc_lean" || true)" -eq 1 ] || {
+    echo "error: $label: expected exactly one WeakCas proof import" >&2
+    exit 1
+  }
+  sed -i.bak '/^import ZigLean\.Conc\.WeakCas$/d' "$conc_lean"
+  rm -f "$conc_lean.bak"
   AIR2LEAN_DIFF_REPORT="$report_dir/summary.json" AIR2LEAN_EXAMPLES=$ex \
     bash scripts/diff.sh >"$out" 2>&1 || status=$?
+  cp "$conc_backup" "$conc_lean"
   local total_line
   total_line=$(grep '^TOTAL:' "$out" || true)
   if [ -z "$total_line" ]; then
     echo "error: $label: diff.sh produced no TOTAL line (setup broke, not just undetected)" >&2
     cat "$out" >&2
     rm -f "$out"
-    if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
+    if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; mutation_outcome_tmp=""; fi
     exit 1
   fi
   local mismatch counts
@@ -429,12 +447,12 @@ run_and_report() {
       echo "error: $label: typed differential setup/accounting failed" >&2
       cat "$out" >&2
       rm -f "$out"
-      if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
+      if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; mutation_outcome_tmp=""; fi
       exit 1
     }
   fi
   rm -f "$out"
-  if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; fi
+  if [ -z "${AIR2LEAN_MUTATION_REPORT_DIR:-}" ]; then rm -rf "$report_dir"; mutation_outcome_tmp=""; fi
   # Old isolated mocks have no report; real new runs always initialize one.
   if [ "$status" -ne 0 ] && { { [ -n "$eligible" ] && [ "$eligible" -gt 0 ]; } ||
       { [ -z "$eligible" ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; }; }; then
@@ -585,9 +603,9 @@ if ! want_mutation h; then
 elif ! has_example lists; then
   echo "mutation (h): skipped (AIR2LEAN_EXAMPLES excludes lists)"
 else
-  sed -i.bak 's/  if m.failAt = some m.allocs ∨ maxAllocBytes < n then return none/  if maxAllocBytes < n then return none/' "$alloc_lean"
+  sed -i.bak 's/  if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none/  if m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none/' "$alloc_lean"
   rm -f "$alloc_lean.bak"
-  grep -q '  if maxAllocBytes < n then return none' "$alloc_lean" || {
+  grep -q '  if m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none' "$alloc_lean" || {
     echo "error: mutation (h): sed did not change Zig.rawAlloc" >&2
     exit 1
   }
@@ -982,10 +1000,12 @@ if ! want_mutation ad; then
 elif ! has_example atomics; then
   echo "mutation (ad): skipped (AIR2LEAN_EXAMPLES excludes atomics)"
 else
-  sed -i.bak 's/^    !(l.hasRmwAfter pos && match/    !(false \&\& match/' "$thread_lean"
+  # CAS preparation now shares its readable array; mutate the strong-choice filter
+  # that still excludes matching predecessors with an RMW after them.
+  sed -i.bak '/^def casStrongOpts /,/^$/s/!((m.atomics\[li\]!).hasRmwAfter pos \&\&/!(false \&\&/' "$thread_lean"
   rm -f "$thread_lean.bak"
-  grep -q '^    !(false && match' "$thread_lean" || {
-    echo "error: mutation (ad): sed did not change casPrep" >&2
+  grep -q '^    !(false &&$' "$thread_lean" || {
+    echo "error: mutation (ad): sed did not change casStrongOpts" >&2
     exit 1
   }
 

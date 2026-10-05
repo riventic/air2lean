@@ -11,6 +11,9 @@ path = "../.."
 [[lean_lib]]
 name = "Outcome"
 
+[[lean_lib]]
+name = "ScheduleSearch"
+
 [[lean_exe]]
 name = "difftest"
 root = "Diff"

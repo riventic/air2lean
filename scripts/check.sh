@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Full air2lean pipeline for each examples/<ex>/<ex>.zig:
-#   1. dump AIR-JSON with the patched compiler (zig-patch/) and check it against the golden files
-#   2. translate that AIR to Lean (`lake exe air2lean`)
+#   1. dump AIR-JSON and validate/translate its real profiles (`lake exe air2lean`)
+#   2. compare AIR and generated semantics with goldens, retaining profile provenance
 #   3. build the generated Lean
 #   4. differential-test it against the real Zig behaviour (scripts/diff.sh)
 #
@@ -20,6 +20,8 @@
 #                         before the golden check. CI uploads it when a job fails: the golden
 #                         files of another host OS (tests/golden/<version>/<ex>/air-<os>/) come
 #                         from there, and the translator makes that OS's Gen.lean from them.
+#   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
+#                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -51,6 +53,9 @@ else
 fi
 restore_gen=""
 gen_targets=()
+if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
+  python3 scripts/normalize-generated.py proof-status "$examples"
+fi
 
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
@@ -89,9 +94,31 @@ for ex in $examples; do
     cp "$air_dir"/*.json "$AIR2LEAN_OUT_DIR/$ex/"
   fi
 
+  # Profile checks run on the actual, complete program before any metadata-insensitive
+  # comparison. Keep generation temporary until every golden/CI check passes.
+  echo "== $ex: validating profiles and translating to Lean ==" >&2
+  translate_args=""
+  if [ -f "examples/$ex/translate.args" ]; then
+    translate_args=$(cat "examples/$ex/translate.args")
+  fi
+  generated="$cmp_dir/Gen.lean"
+  lake exe air2lean "$air_dir" -o "$generated" --namespace "$Ex" --prefix "$ex." $translate_args
+  report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
+  mkdir -p "$report_dir"
+  report="$report_dir/$ex.json"
+  python3 scripts/normalize-generated.py report "$generated" "$air_dir" "$report"
+  cp "$generated" "$report_dir/$ex.Gen.lean"
+  if [ -n "${AIR2LEAN_OUT_DIR:-}" ]; then
+    mkdir -p "$AIR2LEAN_OUT_DIR/check-reports/$zig_version"
+    if [ ! "$report" -ef "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json" ]; then
+      cp "$report" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json"
+    fi
+    cp "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
+  fi
+
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
-  # Ignore writer-version metadata and explicit little-endian metadata (legacy dumps
-  # predate that field). Keep unsupported endianness visible to the golden comparison.
+  # A validated receipt permits the known schema-12 profile/schema-11 transition.
+  # Target/profile failures are already fatal; observable AIR data remains compared.
   # The number of a generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
   # (`Thread.Completion__enum_1614`, `c.pthread_t__opaque_339`, `Io.Operation.Result__union_2204`,
   # a `__struct_N`) depends on how much std code the
@@ -106,31 +133,20 @@ for ex in $examples; do
   # the comparison matches them by content. A later directory (version, OS) replaces every file of
   # a name in the earlier ones, all instances together.
   mkdir "$cmp_dir/golden" "$cmp_dir/new"
-  norm_name() { printf '%s' "${1##*/}" | sed 's/__anon_[0-9][0-9]*/__anon_N/g'; }
-  norm_body() {
-    python3 scripts/normalize-air.py "$1"
-  }
-  # add_dir <src-dir> <cmp-dir>: the normalized files of <src-dir> into <cmp-dir>.
+  # One process per directory loads/indexes the receipt once. Later overlays remove
+  # every earlier normalized basename variant; collision hashes retain the old format.
   add_dir() {
-    local src=$1 dst=$2 f n b names
-    [ -d "$src" ] || return 0
-    names=$(for f in "$src"/*.json; do [ -f "$f" ] && { norm_name "$f"; echo; }; done)
-    for b in $(echo "$names" | sort -u); do
-      rm -f "$dst/$b" "$dst/${b%.json}".*.json
-    done
-    for f in "$src"/*.json; do
-      [ -f "$f" ] || continue
-      n=$(norm_name "$f")
-      if [ "$(echo "$names" | grep -cx "$n")" -gt 1 ]; then
-        n="${n%.json}.$(norm_body "$f" | shasum | cut -c1-12).json"
-      fi
-      norm_body "$f" >"$dst/$n"
-    done
+    [ -d "$1" ] || return 0
+    if [ "$3" = actual ]; then
+      python3 scripts/normalize-air.py "$1" --output-dir "$2" --check-report "$report" --actual
+    else
+      python3 scripts/normalize-air.py "$1" --output-dir "$2" --check-report "$report"
+    fi
   }
-  add_dir "$golden_dir" "$cmp_dir/golden"
-  add_dir "$version_dir" "$cmp_dir/golden"
-  add_dir "$os_dir" "$cmp_dir/golden"
-  add_dir "$air_dir" "$cmp_dir/new"
+  add_dir "$golden_dir" "$cmp_dir/golden" golden
+  add_dir "$version_dir" "$cmp_dir/golden" golden
+  add_dir "$os_dir" "$cmp_dir/golden" golden
+  add_dir "$air_dir" "$cmp_dir/new" actual
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
     echo "error: AIR output for $ex does not match its golden files" >&2
@@ -140,13 +156,6 @@ for ex in $examples; do
     echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
     exit 1
   fi
-
-  echo "== $ex: translating to Lean ==" >&2
-  translate_args=""
-  if [ -f "examples/$ex/translate.args" ]; then
-    translate_args=$(cat "examples/$ex/translate.args")
-  fi
-  lake exe air2lean "$air_dir" -o "Proofs/$Ex/Gen.lean" --namespace "$Ex" --prefix "$ex." $translate_args
 
   # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version on Linux (the
   # reference host), except a version with its own tests/golden/<version>/<ex>/Gen.lean, and a
@@ -158,19 +167,23 @@ for ex in $examples; do
     # The committed Proofs/<Ex>/Gen.lean is overwritten in either mode: always say so (below).
     restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
   fi
-  if [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -f "$gen_golden" ]; then
-    if ! cmp -s "$gen_golden" "Proofs/$Ex/Gen.lean"; then
-      diff -u "$gen_golden" "Proofs/$Ex/Gen.lean" >&2 || true
-      echo "error: $gen_golden differs from the translator output; commit the new file" >&2
-      exit 1
+  if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
+    # Before replacement, reject any staged, untracked or working-tree proof-body
+    # changes. Only a header matching this checked translation may differ from HEAD.
+    python3 scripts/normalize-generated.py tracked "Proofs/$Ex/Gen.lean" "$generated" "$report"
+    if [ -f "$gen_golden" ]; then
+      python3 scripts/normalize-generated.py compare "$gen_golden" "$generated" "$report"
+    else
+      git show "HEAD:Proofs/$Ex/Gen.lean" > "$cmp_dir/committed.lean"
+      if ! python3 scripts/normalize-generated.py compare "$cmp_dir/committed.lean" "$generated" "$report"; then
+        diff -u "$cmp_dir/committed.lean" "$generated" >&2 || true
+        echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
+        exit 1
+      fi
     fi
-  # `git status` against HEAD: also catches a Gen.lean that is only staged or never added.
-  elif [ "${AIR2LEAN_CI:-0}" = 1 ] && [ -n "$(git status --porcelain -- "Proofs/$Ex/Gen.lean")" ]; then
-    git status --short -- "Proofs/$Ex/Gen.lean" >&2
-    git diff HEAD -- "Proofs/$Ex/Gen.lean" >&2 || true
-    echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
-    exit 1
   fi
+  # Preserve the real validated profile header in the artifact compiled by the proof gate.
+  cp "$generated" "Proofs/$Ex/Gen.lean"
 
   rm -rf "$air_dir" "$cmp_dir"
   trap - EXIT

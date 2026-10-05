@@ -1,4 +1,5 @@
 import Outcome
+import ScheduleSearch
 import Lean.Data.Json
 import Air2Lean.Air.Json
 import Proofs.Basic.Gen
@@ -943,11 +944,36 @@ def runSlices : IO Unit := do
       let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
       return Slices.lenOr s) fun _ v => natStr v true
 
-/-- A function that takes an allocator: `args[0]` is the allocation that fails, `null` or its
-number (`Zig.Mem.failAt`). -/
+/-- JSON policy indices/caps are nonnegative reference-machine integers. -/
+def allocationPolicyNat (j : Json) : IO Nat := do
+  let n ← getInt j
+  if n < 0 ∨ 2 ^ 63 ≤ n then throw (IO.userError "invalid allocator policy integer")
+  return n.toNat
+
+/-- A function that takes an allocator: legacy null/index or an explicit object with
+`fail_at`, `failures` and `max_bytes`. This is the test-model policy, not native malloc. -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
-  let f ← if fa.isNull then pure none else some <$> (Int.toNat <$> getInt fa)
-  return (do modify fun m => { m with failAt := f }; r)
+  let (f, policy) ← match fa with
+    | .null => pure (none, ({} : Zig.AllocPolicy))
+    | .num _ => do
+      let n ← allocationPolicyNat fa
+      pure (some n, ({} : Zig.AllocPolicy))
+    | .obj _ => do
+      let f ← match fa.getObjVal? "fail_at" with
+        | .ok .null => pure none
+        | .ok j => some <$> allocationPolicyNat j
+        | .error _ => pure none
+      let cap ← match fa.getObjVal? "max_bytes" with
+        | .ok j => allocationPolicyNat j
+        | .error _ => pure Zig.maxAllocBytes
+      let failures ← match fa.getObjVal? "failures" with
+        | .ok j => do
+          let items ← getArr j
+          (items.toList.mapM allocationPolicyNat)
+        | .error _ => pure []
+      pure (f, ({ maxBytes := cap, failures } : Zig.AllocPolicy))
+    | _ => throw (IO.userError "invalid allocator policy")
+  return (do modify fun m => { m with failAt := f, allocPolicy := policy }; r)
 
 def runLists : IO Unit := do
   let ex := "lists"
@@ -977,51 +1003,8 @@ def renderOut {α : Type} [ReturnedError α] (r : Zig.Sched.Out α) (payload : �
       line := "{\"ok\":" ++ payload v ++ "}"
       kind := DiffOutcome.valueKind v }
 
-/-- The most runs (schedules) that `searchSchedules` tries for one input. -/
-def scheduleCap : Nat := 2000
-
 /-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
 def scheduleFuel : Nat := 100000
-
-/-- Search comparison uses legacy values; outcome classification uses the runtime enum.
-A search cap or any no-result branch is inconclusive, never a termination result. -/
-partial def searchSchedules (run : (Nat → Nat) → Observation × Array Nat) (zig : String) : Observation :=
-  let finish (o : Observation) (runs : Nat) (status : DiffOutcome.SearchStatus) (bounded : Bool) :=
-    { o with
-      search := some { (o.search.getD {}) with
-        runs := runs
-        status := status
-        sawNoResult := bounded } }
-  let rec go (pre : Array Nat) (runs : Nat) (first race : Option Observation) (bounded : Bool) : Observation :=
-    let (raw, opts) := run fun i => pre.getD i 0
-    let out := { raw with
-      search := some {
-        schedulePrefix := pre
-        options := opts
-        runs := runs + 1
-        fuel := scheduleFuel
-        cap := scheduleCap } }
-    let bounded := bounded || out.kind == .boundedNoResult
-    if out.line == zig then finish out (runs + 1) .witness bounded else
-    let first := first.orElse fun _ => some out
-    let race := race.orElse fun _ => if out.kind == .illegal then some out else none
-    let rec next (i : Nat) : Option (Array Nat) :=
-      if i = 0 then none else
-      let j := i - 1
-      let c := pre.getD j 0
-      if c + 1 < opts[j]! then some (((Array.range j).map fun x => pre.getD x 0).push (c + 1))
-      else next j
-    match next opts.size with
-    | some p =>
-      if runs + 1 ≥ scheduleCap then
-        let capped : Observation := { out with
-          line := "{\"fail\":\"Zig.Error.capped\"}"
-          kind := .searchCap }
-        finish (race.getD capped) (runs + 1) .capped bounded
-      else go p (runs + 1) first race bounded
-    | none => finish (race.getD (first.getD out)) (runs + 1)
-        (if bounded then .bounded else .exhausted) bounded
-  go #[] 0 none none false
 
 /-- `processFile` for a concurrent function: each input line with Zig's line for it
 (`tests/diff/out/zig/<ex>/<name>.jsonl`, written before the Lean side runs). -/
@@ -1046,30 +1029,30 @@ def runParallelCounter : IO Unit :=
   processConc "threads" "parallelCounter" fun j zig => do
     let items ← getArr j
     let n ← getInt items[0]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false)) zig)
+    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false)) zig)
 
 def runRace : IO Unit :=
   processConc "threads" "race" fun j zig => do
     let items ← getArr j
     let a ← getInt items[0]!
     let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
 def runDisjoint : IO Unit :=
   processConc "threads" "disjoint" fun j zig => do
     let items ← getArr j
     let a ← getInt items[0]!
     let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.disjoint (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.disjoint (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
 def runClaimOnce : IO Unit :=
   processConc "threads" "claimOnce" fun _ zig => do
-    pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+    pure (searchObservations scheduleFuel (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
 
 def runAtomics : IO Unit := do
   let one (name : String) (f : Zig.ConcM Atomics.Tgt (Except Zig.ErrName (BitVec 32))) :=
     processConc "atomics" name fun _ zig =>
-      pure (searchSchedules (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
+      pure (searchObservations scheduleFuel (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
   one "mpRelAcq" Atomics.mpRelAcq
   one "mpRelaxed" Atomics.mpRelaxed
   one "sbRelaxed" Atomics.sbRelaxed
@@ -1079,7 +1062,7 @@ def runAtomics : IO Unit := do
 def runSync : IO Unit := do
   let one (name : String) (f : Zig.Io → Zig.ConcM Sync.Tgt (Except Zig.ErrName (BitVec 32))) :=
     processConc "sync" name fun _ zig =>
-      pure (searchSchedules (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
+      pure (searchObservations scheduleFuel (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
   one "mutexCounter" Sync.mutexCounter
   one "handoff" Sync.handoff
   one "semaphoreCounter" Sync.semaphoreCounter
@@ -1088,7 +1071,7 @@ def runSync : IO Unit := do
 def runThreadsync : IO Unit := do
   let one (name : String) (f : Zig.ConcM Threadsync.Tgt (Except Zig.ErrName (BitVec 32))) :=
     processConc "threadsync" name fun _ zig =>
-      pure (searchSchedules (runConcWith Threadsync.dispatch Threadsync.mem0 f (errStr · false)) zig)
+      pure (searchObservations scheduleFuel (runConcWith Threadsync.dispatch Threadsync.mem0 f (errStr · false)) zig)
   one "mutexCounter" Threadsync.mutexCounter
   one "handoff" Threadsync.handoff
   one "waitGroup" Threadsync.waitGroup
@@ -1096,7 +1079,7 @@ def runThreadsync : IO Unit := do
 def runIogroup : IO Unit := do
   let one (name : String) (f : Zig.Io → Zig.ConcM Iogroup.Tgt (Except Zig.ErrName (BitVec 32))) :=
     processConc "iogroup" name fun _ zig =>
-      pure (searchSchedules (runConcWith Iogroup.dispatch Iogroup.mem0 (f {}) (errStr · false)) zig)
+      pure (searchObservations scheduleFuel (runConcWith Iogroup.dispatch Iogroup.mem0 (f {}) (errStr · false)) zig)
   one "groupCounter" Iogroup.groupCounter
   one "groupConcurrent" Iogroup.groupConcurrent
 
@@ -1105,7 +1088,7 @@ def runXchgRace : IO Unit :=
     let items ← getArr j
     let a ← getInt items[0]!
     let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+    pure (searchObservations scheduleFuel (runConc Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false)) zig)
 
 -- Calls the opaque directly (`Asm.airAsm_*`), not the generated wrapper (`Asm.bswap32` etc.):
 -- the wrapper's own body is compiled once, inside `Proofs/Asm/Gen.lean`, before this file's

@@ -65,11 +65,39 @@ var render_bufs: []const Buf = &.{};
 /// a free of memory that is not a live allocation of the same length panics with the kind
 /// `doubleFree`.
 pub const TestAllocator = struct {
-    fail_at: ?usize,
+    fail_at: ?usize = null,
+    failures: []const usize = &.{},
+    request_cap: usize = max_alloc_bytes,
     count: usize = 0,
     live: std.ArrayListUnmanaged([]u8) = .empty,
 
     pub const max_alloc_bytes = 1 << 20;
+
+    /// Decode an explicit reference-model policy. The caller owns `failures` when nonempty.
+    /// Legacy null/integer inputs preserve the original differential corpus.
+    pub fn fromJson(gpa: std.mem.Allocator, value: std.json.Value) !TestAllocator {
+        if (value == .null) return .{};
+        if (value == .integer) return .{ .fail_at = try policyNat(value) };
+        if (value != .object) return error.InvalidAllocatorPolicy;
+        var result: TestAllocator = .{};
+        if (value.object.get("fail_at")) |v| {
+            if (v != .null) result.fail_at = try policyNat(v);
+        }
+        if (value.object.get("max_bytes")) |v| result.request_cap = try policyNat(v);
+        if (value.object.get("failures")) |v| {
+            if (v != .array) return error.InvalidAllocatorPolicy;
+            const failures = try gpa.alloc(usize, v.array.items.len);
+            errdefer gpa.free(failures);
+            for (v.array.items, 0..) |item, i| failures[i] = try policyNat(item);
+            result.failures = failures;
+        }
+        return result;
+    }
+
+    fn policyNat(value: std.json.Value) !usize {
+        if (value != .integer or value.integer < 0) return error.InvalidAllocatorPolicy;
+        return std.math.cast(usize, value.integer) orelse error.InvalidAllocatorPolicy;
+    }
 
     pub fn allocator(self: *TestAllocator) std.mem.Allocator {
         return .{ .ptr = self, .vtable = &.{
@@ -84,7 +112,7 @@ pub const TestAllocator = struct {
         const self: *TestAllocator = @ptrCast(@alignCast(ctx));
         const k = self.count;
         self.count += 1;
-        if (self.fail_at == k or len > max_alloc_bytes) return null;
+        if (self.fail_at == k or len > self.request_cap or std.mem.indexOfScalar(usize, self.failures, k) != null) return null;
         const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportHarnessFailure("harnessOutOfMemory");
         self.live.append(out_gpa, p[0..len]) catch reportHarnessFailure("harnessOutOfMemory");
         return p;

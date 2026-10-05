@@ -1,0 +1,383 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "thread_tuples.atomicWorker",
+ "params": [
+  0,
+  1,
+  2,
+  2
+ ],
+ "ret": 3,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 2,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "arg",
+   "ty": 2,
+   "param": 3
+  },
+  {
+   "id": 4,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "bitcast",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 8,
+   "tag": "add_wrap",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 11,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 13,
+   "tag": "dbg_inline_block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 14,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 11
+      }
+     ],
+     "name": "self"
+    },
+    {
+     "id": 15,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 3
+      }
+     ],
+     "name": "operand"
+    },
+    {
+     "id": 16,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 6,
+       "enum": "5"
+      }
+     ],
+     "name": "order"
+    },
+    {
+     "id": 17,
+     "tag": "alloc",
+     "ty": 4
+    },
+    {
+     "id": 18,
+     "tag": "store_safe",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 17
+      },
+      {
+       "inst": 11
+      }
+     ]
+    },
+    {
+     "id": 19,
+     "tag": "bitcast",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 17
+      }
+     ]
+    },
+    {
+     "id": 20,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 2
+    },
+    {
+     "id": 21,
+     "tag": "load",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 19
+      }
+     ]
+    },
+    {
+     "id": 22,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 21
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "tag": "atomic_rmw",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 22
+      },
+      {
+       "inst": 3
+      }
+     ],
+     "op": "Add",
+     "order": "seq_cst"
+    },
+    {
+     "id": 24,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 2
+    },
+    {
+     "id": 25,
+     "tag": "br",
+     "ty": 7,
+     "target": 13,
+     "args": [
+      {
+       "inst": 23
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "tag": "ret_safe",
+   "ty": 7,
+   "args": [
+    {
+     "ty": 3,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "enum",
+   "name": "builtin.AtomicOrder",
+   "tag": 9,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "unordered",
+     "value": "0"
+    },
+    {
+     "name": "monotonic",
+     "value": "1"
+    },
+    {
+     "name": "acquire",
+     "value": "2"
+    },
+    {
+     "name": "release",
+     "value": "3"
+    },
+    {
+     "name": "acq_rel",
+     "value": "4"
+    },
+    {
+     "name": "seq_cst",
+     "value": "5"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 2,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 3,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}
