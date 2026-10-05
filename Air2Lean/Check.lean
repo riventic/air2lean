@@ -1275,10 +1275,10 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let indexes ← checkSharedDefinitions funcs
   let refs := fnRefs funcs
-  let mut targets : Std.HashMap String (List String) := {}
+  let mut targetLists : Std.HashMap String (List String) := {}
   for (typ, callee) in refs do
-    targets := targets.insert typ (callee :: targets.getD typ [])
-  let targets := targets.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
+    targetLists := targetLists.insert typ (callee :: targetLists.getD typ [])
+  let targets := targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
     ({} : Std.HashMap String (Array String))
   let mem := memoryFunctions funcs (models.map (·.symbol))
   let mut functionNames : Std.HashMap String Nat := {}
