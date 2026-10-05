@@ -223,6 +223,22 @@ jobs:
             scripts/progress-hints.sh
           fi
 
+      # Translation and input/output hash checks; declared proof goals remain unverified.
+      - name: Project manifest regressions and example translation
+        if: matrix.full && matrix.zig == '0.16.0'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/roadmap/project -v
+          work="$(mktemp -d "${RUNNER_TEMP}/air2lean-project.XXXXXX")"
+          python3 scripts/project.py translate example-project.json \
+            --translator .lake/build/bin/air2lean --out "$work/artifact" \
+            > "$work/translation.json"
+          python3 scripts/project.py verify example-project.json \
+            --artifact "$work/artifact" > "$work/verification.json"
+          cat "$work/verification.json"
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
