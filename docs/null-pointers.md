@@ -99,3 +99,18 @@ fresh/cache-keyed patched exporter and separately pinned shipping host compiler.
 Linux CI and 0.14.1/0.15.2 execution results are pending. Full L05 remains open
 for nullable storage, nested representations and the other deliberately rejected
 operations above; eight finite observations are not a preservation theorem.
+
+The nullable mutation gate requires normal Lean exit 1 and exactly the three
+located `native_decide` evaluation refutations for `cNull` at 0, 1 and the maximum
+u64 value. The classifier binds the inverted predicate source to the unmodified
+baseline, checks the assertion line and column and displayed proposition, and
+rejects extra diagnostics, abnormal exits and incomplete output. Its standalone
+interface is `python3 tests/roadmap/null-pointers/classify_mutant.py EXIT LOG
+MUTANT BASELINE`; each input is bounded to 64 KiB. The caller must first check the
+baseline. Classification of these evaluation refutations does not establish
+kernel proof adequacy or compiler preservation. Mock-only classifier regressions
+run with `python3 -B tests/roadmap/null-pointers/test_classify_mutant.py`. Root
+calibration with pinned Lean 4.34.0 passed all nine generated synthetic baseline
+modules and classified exactly three intended refutations with normal exit 1.
+The resource-guarded run took 36.747 seconds with 841.2 MiB peak sampled RSS.
+This synthetic run does not establish fresh exporter or source correspondence.
