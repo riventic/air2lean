@@ -415,7 +415,12 @@ jobs:
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: tests/roadmap/assurance/check.sh
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_receipt.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_check.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_ci_stash.py
+          tests/roadmap/assurance/check.sh
 
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}
@@ -502,3 +507,72 @@ jobs:
           AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
           AIR2LEAN_MUTATION_SHARDS: "5"
         run: scripts/mutate.sh
+
+      # Keep the selected generated/profile context and final compiled library together.
+      # This owns its sole guard; evidence stays outside cached .lake, with no upload.
+      - name: Revision-bound theorem audit receipt
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate && runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
+          cd "$repo_root"
+          temp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")
+          lean_executable=$(elan which lean)
+          lean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' "$lean_executable")
+          guard="$repo_root/scripts/build-guard.py"
+          guard_sha=$(python3 -c 'import hashlib,sys; from pathlib import Path; print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())' "$guard")
+          receipt_parent=$(mktemp -d "$temp_root/proof-receipt.XXXXXX")
+          export AIR2LEAN_BUILD_LOCK="$temp_root/air2lean-build.lock"
+          export PYTHONDONTWRITEBYTECODE=1
+          # BEGIN proof receipt compiler stash
+          compiler_stash=$(mktemp -d "$temp_root/proof-receipt-compilers.XXXXXX")
+          restore_receipt_compilers() {
+            original_status=$?
+            trap - EXIT
+            restore_failed=0
+            for compiler in host-zig zig-air-0.16.0; do
+              if [ -e "$compiler_stash/$compiler" ] || [ -L "$compiler_stash/$compiler" ]; then
+                if [ -e "$repo_root/$compiler" ] || [ -L "$repo_root/$compiler" ]; then
+                  echo "proof receipt compiler restore collision: $repo_root/$compiler; retained $compiler_stash/$compiler" >&2
+                  restore_failed=1
+                elif ! mv -T --no-clobber -- "$compiler_stash/$compiler" "$repo_root/$compiler"; then
+                  echo "proof receipt compiler restore failed: $compiler_stash/$compiler" >&2
+                  restore_failed=1
+                elif [ -e "$compiler_stash/$compiler" ] || [ -L "$compiler_stash/$compiler" ]; then
+                  echo "proof receipt compiler restore skipped; retained $compiler_stash/$compiler" >&2
+                  restore_failed=1
+                fi
+              fi
+            done
+            if [ "$original_status" -eq 0 ] && [ "$restore_failed" -ne 0 ]; then original_status=2; fi
+            exit "$original_status"
+          }
+          # Install before validation or either move; a partial setup also restores owned roots.
+          trap restore_receipt_compilers EXIT
+          python3 - "$repo_root" "$compiler_stash" <<'PYSTASH'
+          from pathlib import Path
+          import subprocess, sys
+          root, stash = map(Path, sys.argv[1:])
+          if root.resolve(strict=True) != root or stash.resolve(strict=True) != stash or stash.is_relative_to(root):
+              raise SystemExit('proof receipt compiler stash requires physical paths outside the checkout')
+          names = ('host-zig', 'zig-air-0.16.0')
+          tracked = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--', *names],
+                                   check=True, stdout=subprocess.PIPE, timeout=5).stdout
+          if tracked:
+              raise SystemExit('proof receipt compiler roots contain tracked files')
+          for name in names:
+              path = root / name
+              if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
+                  raise SystemExit('proof receipt compiler root must be a physical directory: ' + str(path))
+          PYSTASH
+          for compiler in host-zig zig-air-0.16.0; do
+            mv -T --no-clobber -- "$repo_root/$compiler" "$compiler_stash/$compiler"
+            if [ -e "$repo_root/$compiler" ] || [ -L "$repo_root/$compiler" ]; then
+              echo "proof receipt compiler stash move incomplete: $repo_root/$compiler" >&2
+              exit 2
+            fi
+          done
+          # END proof receipt compiler stash
+          bash tests/roadmap/proof-receipts/check.sh \
+            --guard "$guard" --guard-sha256 "$guard_sha" \
+            "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
