@@ -255,6 +255,10 @@ jobs:
             --artifact "$work/artifact" > "$work/verification.json"
           cat "$work/verification.json"
 
+      - name: Nullable mutation classifier regressions
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        run: python3 -B tests/roadmap/null-pointers/test_classify_mutant.py
+
       # The scalar C/allowzero fragment is qualified on 0.16.0. Use this job's
       # patched exporter and separately installed matching shipping compiler.
       - name: Scalar nullable pointer source and semantic gate
