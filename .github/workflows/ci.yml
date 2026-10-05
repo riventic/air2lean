@@ -267,6 +267,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests/roadmap/project -v
+          # Consumer mocks need no diagnostic producer; actual integration requires PR 78.
+          python3 -m unittest discover -s tests/roadmap/project-diagnostics -v
           work="$(mktemp -d "${RUNNER_TEMP}/air2lean-project.XXXXXX")"
           python3 scripts/project.py translate example-project.json \
             --translator .lake/build/bin/air2lean --out "$work/artifact" \
@@ -274,6 +276,23 @@ jobs:
           python3 scripts/project.py verify example-project.json \
             --artifact "$work/artifact" > "$work/verification.json"
           cat "$work/verification.json"
+          python3 scripts/project-diagnostics.py check example-project.json \
+            --translator .lake/build/bin/air2lean --out "$work/diagnostics.json" \
+            > "$work/diagnostics-stdout.json"
+          cmp "$work/diagnostics.json" "$work/diagnostics-stdout.json"
+          python3 - "$work/diagnostics.json" <<'PY_CHECK'
+          import json, sys
+          with open(sys.argv[1], encoding='utf-8') as stream:
+              report = json.load(stream)
+          assert report['schema'] == 1 and report['kind'] == 'air2lean-project-diagnostics'
+          assert report['status'] == 'checked' and report['complete'] and not report['truncated']
+          assert report['proof_status'] == 'not_run' and report['runtime_outcomes'] == 'not_observed'
+          assert report['source_correspondence'] == 'not_attested'
+          assert report['producer_protocol']['qualification'] == 'not_attested_by_adapter'
+          assert report['root_checks'] and all(
+              root['status'] == 'checked' and root['producer']['status'] == 'checked'
+              for root in report['root_checks'])
+          PY_CHECK
 
       - name: Nullable mutation classifier regressions
         if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
