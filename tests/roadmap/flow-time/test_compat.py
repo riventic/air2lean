@@ -79,6 +79,17 @@ class Compatibility(unittest.TestCase):
         self.write(self.air / name, changed)
         with self.assertRaises(ValueError): CHECK["compare"](self.old, self.air, validate_fresh=True)
         self.publish()
+        # GNU is a valid general ABI profile, but outside this observed musl contract.
+        gnu = dict(CHECK["PROFILE"], abi="gnu", target_triple="x86_64-linux.5.10...6.19-gnu.2.31")
+        for doc in self.docs.values():
+            doc["profile"] = gnu
+            self.assertEqual(HELPER["profile_for_air"](doc)["abi"], "gnu")
+        self.publish(metadata=dict(profile=dict(gnu, schema=12), float_semantics="ieee", correspondence="model"))
+        with self.assertRaisesRegex(ValueError, "unqualified profile"):
+            CHECK["compare"](self.old, self.air, validate_fresh=True)
+        with self.assertRaisesRegex(ValueError, "unqualified profile"): self.check()
+        for doc in self.docs.values(): doc["profile"] = copy.deepcopy(CHECK["PROFILE"])
+        self.publish()
         (self.air / name).unlink()
         with self.assertRaisesRegex(ValueError, "exactly both"):
             CHECK["compare"](self.old, self.air, self.gen, self.report)

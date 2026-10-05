@@ -45,7 +45,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-flow-time.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/air" "$work/FlowTime"
 env ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER=flow_time. "$AIR2LEAN_ZIG_AIR" \
-  build-obj -fno-emit-bin -fllvm -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline \
+  build-obj -fno-emit-bin -fllvm -OReleaseSafe -fno-error-tracing -target x86_64-linux-musl -mcpu=baseline \
   --dep flow_time_original -Mroot=case-studies/flow-time/flow_time.zig \
   "-Mflow_time_original=$source"
 python3 case-studies/flow-time/check-source.py "$source"

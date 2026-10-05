@@ -43,7 +43,7 @@ AIR2LEAN_TRANSLATOR=/path/to/air2lean \
 
 Run this command from the air2lean repository with the pinned Lean toolchain
 available. It checks the production hash, exports AIR with the explicit
-`x86_64-linux` / `baseline` / `ReleaseSafe` profile, compares both complete JSON
+`x86_64-linux-musl` / `baseline` / `ReleaseSafe` profile, compares both complete JSON
 exports and the complete generated Lean body with committed artifacts, tests the wrapper's
 native boundary cases, builds `ZigLean`, and kernel-checks the generated module
 and proofs. The native compiler version is checked before export. Only the stock-compiler
@@ -52,7 +52,7 @@ and original source. The script creates temporary compiler and Lean outputs and
 removes them on exit. It never updates the checked artifacts silently.
 
 The retained AIR is the historical schema 11 export. Fresh reproduction requires
-schema 12 with the exact Zig 0.16.0 LLVM, Linux x86_64 baseline, ReleaseSafe,
+schema 12 with the exact Zig 0.16.0 LLVM, Linux x86_64 musl baseline, ReleaseSafe,
 64-bit little-endian, 16-bit error-set, and disabled error-tracing profile checked
 by `tests/roadmap/flow-time/compare-air.py`. Its resolved target triple and complete
 CPU feature list are explicit in that guard. Both fresh entry points must have
@@ -74,7 +74,7 @@ The essential original-source binding is:
 mkdir -p out FlowTime
 ZIG_AIR_JSON_DIR="$PWD/out" ZIG_AIR_JSON_FILTER=flow_time. "$AIR2LEAN_ZIG_AIR" \
   build-obj -fno-emit-bin -fllvm -OReleaseSafe -fno-error-tracing \
-  -target x86_64-linux -mcpu=baseline \
+  -target x86_64-linux-musl -mcpu=baseline \
   --dep flow_time_original -Mroot=case-studies/flow-time/flow_time.zig \
   -Mflow_time_original="$FLOW_TIME_SOURCE"
 "$AIR2LEAN_TRANSLATOR" out -o FlowTime/Gen.lean \

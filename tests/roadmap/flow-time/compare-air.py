@@ -10,8 +10,8 @@ NAMES = {"flow_time.timestamp32.json", "flow_time.timestamp64.json"}
 MAX_BYTES = 4 * 1024 * 1024
 # Zig 0.16.0 Target.Cpu.Model.baseline(x86_64, linux), with feature dependencies.
 PROFILE = {
-    "name": "abi64-le-v1", "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
-    "pointer_bits": 64, "endian": "little", "abi": "gnu", "zig_version": "0.16.0",
+    "name": "abi64-le-v1", "target_triple": "x86_64-linux.5.10...6.19-musl",
+    "pointer_bits": 64, "endian": "little", "abi": "musl", "zig_version": "0.16.0",
     "backend": "stage2_llvm", "cpu": "x86_64",
     "features": ["64bit", "cmov", "cx8", "fxsr", "idivq_to_divl", "macrofusion", "mmx",
                  "nopl", "slow_3ops_lea", "slow_incdec", "sse", "sse2", "vzeroupper", "x87"],
