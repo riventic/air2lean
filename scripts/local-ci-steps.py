@@ -4,11 +4,119 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 from textwrap import dedent
+import tomllib
 
-import yaml
+
+
+def prune_stale_modules(root, tracked, owners):
+    """Remove only absent-source module facets from this package's physical build roots."""
+    root = Path(root).absolute()
+    if root.resolve(strict=True) != root:
+        raise ValueError('cache pruning requires a physical checkout path')
+    if any(not re.fullmatch(r'[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*', owner, re.ASCII) for owner in owners):
+        raise ValueError('invalid owned module root')
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+
+    def open_dir(parent, parts):
+        fd = os.dup(parent)
+        try:
+            for part in parts:
+                child = os.open(part, flags, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+
+    # Lake v4.34.0 Config/Module.lean output paths and Build/Common.lean sidecars.
+    facets = {
+        'lib/lean': ('olean', 'olean.server', 'olean.private', 'ilean', 'ir', 'ir.sig'),
+        'ir': ('c', 'c.o.export', 'c.o.noexport', 'bc', 'bc.o', 'ltar', 'setup.json'),
+    }
+    removed = []
+    anchor = os.open('/', flags)
+    try:
+        root_fd = open_dir(anchor, root.parts[1:])
+    finally:
+        os.close(anchor)
+    try:
+        for directory, outputs in facets.items():
+            suffixes = sorted({'.' + ext + tail for ext in outputs for tail in ('', '.hash', '.trace')} |
+                              ({'.trace'} if directory == 'lib/lean' else set()), key=len, reverse=True)
+            try:
+                cache_fd = open_dir(root_fd, ('.lake', 'build', *directory.split('/')))
+            except FileNotFoundError:
+                continue
+            try:
+                pending = []
+                for parent, dirs, files, parent_fd in os.fwalk('.', dir_fd=cache_fd, follow_symlinks=False):
+                    relative = Path(parent)
+                    dirs[:] = [name for name in dirs if any(
+                        str(relative / name) == owner or str(relative / name).startswith(owner + '/') or
+                        owner.startswith(str(relative / name) + '/') for owner in owners)]
+                    for name in dirs:
+                        if not stat.S_ISDIR(os.stat(name, dir_fd=parent_fd, follow_symlinks=False).st_mode):
+                            raise ValueError('unsafe module cache directory')
+                    for name in files:
+                        suffix = next((ext for ext in suffixes if name.endswith(ext)), None)
+                        if suffix is None:
+                            continue
+                        module = str(relative / name[:-len(suffix)])
+                        if not any(module == owner or module.startswith(owner + '/') for owner in owners):
+                            continue
+                        if module + '.lean' in tracked:
+                            continue
+                        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+                        if not stat.S_ISREG(info.st_mode):
+                            raise ValueError('unsafe module cache artifact')
+                        pending.append((relative / name, info))
+                # Validate the whole tree before changing it; reopen parents without following links.
+                for relative, expected in pending:
+                    parent_fd = open_dir(cache_fd, relative.parts[:-1])
+                    try:
+                        current = os.stat(relative.name, dir_fd=parent_fd, follow_symlinks=False)
+                        if (current.st_dev, current.st_ino, current.st_mode, current.st_size, current.st_mtime_ns) != \
+                                (expected.st_dev, expected.st_ino, expected.st_mode, expected.st_size, expected.st_mtime_ns):
+                            raise ValueError('module cache artifact changed during pruning')
+                        os.unlink(relative.name, dir_fd=parent_fd)
+                        removed.append(str(Path('.lake/build') / directory / relative))
+                    finally:
+                        os.close(parent_fd)
+            finally:
+                os.close(cache_fd)
+    finally:
+        os.close(root_fd)
+    return removed
+
+
+def prune_current_cache(root):
+    root = Path(root)
+    if (root / 'lean-toolchain').read_text().strip() != 'leanprover/lean4:v4.34.0':
+        raise ValueError('review Lake cache suffixes before changing the pinned toolchain')
+    config = tomllib.loads((root / 'lakefile.toml').read_text())
+    if any(key in config for key in ('buildDir', 'leanLibDir', 'irDir', 'srcDir')) or (root / 'lakefile.lean').exists():
+        raise ValueError('unsupported custom Lake cache/source layout')
+    owners = set()
+    for item in config.get('lean_lib', []) + config.get('lean_exe', []):
+        if 'srcDir' in item:
+            raise ValueError('unsupported custom Lean source directory')
+        names = item.get('roots', [item.get('root', item['name'])])
+        owners.update(name.replace('.', '/') for name in names)
+    tracked = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], check=True,
+                             stdout=subprocess.PIPE, timeout=5).stdout
+    removed = prune_stale_modules(root, set(os.fsdecode(tracked).split('\0')[:-1]), owners)
+    print(f'Pruned {len(removed)} absent-source module artifacts from the local Lake cache', flush=True)
+    return removed
+
+
+if sys.argv[1:] == ['--prune-cache']:
+    prune_current_cache(Path.cwd())
+    raise SystemExit(0)
 
 
 def expression(source, values):
@@ -98,6 +206,8 @@ def call(command, **kwargs):
         raise subprocess.CalledProcessError(status, command)
 
 
+import yaml
+
 workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
 if set(workflow['jobs']) != {'test'}:
     raise ValueError('local CI supports only the test job; qualify new jobs explicitly')
@@ -165,6 +275,7 @@ for number, row in enumerate(rows):
     call(['git', 'restore', '.'])
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
           '-e', 'host-zig/', '-e', 'zig-air-*/'])
+    prune_current_cache(Path.cwd())
     call(['bash', 'scripts/local-ci.sh', '--prepare', row['zig']])
     temp = f"/artifacts/row-{number}-{row['zig']}"
     Path(temp).mkdir()
