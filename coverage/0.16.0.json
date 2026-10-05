@@ -15379,7 +15379,7 @@
       "tests/golden/0.16.0/slices/air/slices.sumZ.json": "278561d021cb6355f4d9cc8bffee568859447d13e667764a049993c159d80b67",
       "tests/golden/0.16.0/sync/air-linux/sync.handoff.json": "8437112e35773b38b4790103fbe5bf42404ddb78371d59fd07201120fa5d2582",
       "tests/golden/0.16.0/sync/air-linux/sync.mutexCounter.json": "fa31145994cbefeb749133e1d13ca94d298a00d145674a096a8087b78f58e4f8",
-      "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "99a5bb13b22e4e904764316709b83ac1b8ce242533ce7b6431e88f280eb8c6e1",
+      "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "ea3ddd9840a12738de5f094cc6e9d457cd3b2fefe8a5ec448e778f0dbee6e326",
       "tests/golden/0.16.0/sync/air-linux/sync.rwLockSnapshotPair.json": "a23773a4675cd0166c6611672a33ff572406f6d67383053f2bcbfd8dbb5aeedd",
       "tests/golden/0.16.0/sync/air-linux/sync.semaphoreCounter.json": "f6aa5519de698d7c1019cee426e40c8559c618de94cbd675d5dab44c03898420",
       "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json": "c3cf299e9df8907c2b5d21f5da8c39509b22f42413c1cd35356bb965750fefd1",
