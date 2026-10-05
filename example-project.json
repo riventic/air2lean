@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "profile": "tests/roadmap/project/legacy-profile.json",
+  "float_semantics": "ieee",
+  "source_closure": ["examples/basic/basic.zig"],
+  "components": {
+    "compiler_patch": ["zig-patch/air-json/json.zig"],
+    "runtime": ["ZigLean.lean", "ZigLean/Basic.lean"],
+    "toolchain": ["lean-toolchain", "lakefile.toml", "lake-manifest.json"]
+  },
+  "allowed_assumptions": ["legacy-reference-abi", "trusted-air-translation"],
+  "roots": [{
+    "id": "tardiness",
+    "function": "basic.tardiness",
+    "air": ["tests/golden/basic/air/basic.tardiness.json"],
+    "namespace": "Basic",
+    "prefix": "basic.",
+    "contracts": ["Proofs/Basic/Proofs.lean"],
+    "goals": [{"theorem": "tardiness_spec", "strength": "total_correctness", "domain": "all pairs of unsigned 32-bit inputs"}],
+    "assumptions": ["legacy-reference-abi", "trusted-air-translation"],
+    "exclusions": ["source closure completeness and tool/runtime inventories are illustrative", "compiler export, theorem dependency checking and shipping backend correspondence not executed"]
+  }]
+}

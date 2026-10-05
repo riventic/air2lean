@@ -242,6 +242,11 @@ inductive BitOp where
   | and | or | xor
   deriving Repr, Inhabited, BEq
 
+/-- Counts bits in the operand representation, including for signed integers. -/
+inductive BitCountOp where
+  | clz | ctz | popcount
+  deriving Repr, Inhabited, BEq
+
 inductive ShiftOp where
   | shl | shlExact | shlSat | shr | shrExact
   deriving Repr, Inhabited, BEq
@@ -282,6 +287,8 @@ inductive Op where
   | divFloat (a b : Val)
   | minMax (isMax : Bool) (a b : Val)
   | withOverflow (op : ArithOp) (a b : Val)
+  | shlWithOverflow (a b : Val)
+  | countBits (op : BitCountOp) (a : Val)
   /-- `splat`: a vector with every lane equal to the scalar `a`. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
