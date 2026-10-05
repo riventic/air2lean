@@ -349,6 +349,10 @@ jobs:
           LEAN_NUM_THREADS: "1"
         run: tests/roadmap/assurance/check.sh
 
+      - name: First-proof tutorial
+        if: ${{ !matrix.mutate }}
+        run: lake env lean tutorials/first-proof/Main.lean
+
       - name: Integer bit operations regression and differential gate
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
