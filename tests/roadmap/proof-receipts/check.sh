@@ -42,6 +42,19 @@ PATH="$toolchain/bin:$PATH" "$python" "$guard" \
   -- "$python" "$helper" worker "$attempt" || status=$?
 if [ "$status" -ne 0 ]; then
   echo "proof receipt incomplete: guarded audit exited $status; retaining $attempt" >&2
+  # Best-effort diagnostics cannot change the failed guard status or seal the attempt.
+  "$python" - "$attempt/guard.log" <<'PYLOG' || true
+import os, stat, sys
+try:
+    fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if stat.S_ISREG(info.st_mode):
+            stream.seek(max(0, info.st_size - 8192))
+            sys.stderr.buffer.write(stream.read(8192))
+except OSError:
+    pass
+PYLOG
   exit "$status"
 fi
 "$python" "$helper" seal "$attempt"

@@ -588,6 +588,83 @@ class ReceiptTests(unittest.TestCase):
             r.audit_ok(self.plan, audit)  # Distinct small graph passes the complete policy/artifact validator.
 
 
+class CheckFailureTests(unittest.TestCase):
+    """Exercise a copied wrapper with tiny stubs; no real guard/helper/tool runs."""
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.base = Path(self.temporary.name).resolve()
+        self.root = self.base / 'repo'
+        self.check = self.root / 'tests/roadmap/proof-receipts/check.sh'
+        self.check.parent.mkdir(parents=True)
+        self.check.write_bytes((ROOT / 'tests/roadmap/proof-receipts/check.sh').read_bytes())
+        scripts = self.root / 'scripts'
+        scripts.mkdir()
+        (scripts / 'proof-receipt.py').write_text("""
+import sys
+from pathlib import Path
+root = Path(__file__).parent.parent
+with (root / 'calls').open('a') as out: print(sys.argv[1], file=out)
+if sys.argv[1] == 'prepare': Path(sys.argv[2]).mkdir()
+else: raise SystemExit('unexpected seal/verify/worker call')
+""")
+        (scripts / 'build-guard.py').write_text("""
+import os, sys
+from pathlib import Path
+log = Path(sys.argv[sys.argv.index('--log') + 1])
+kind = os.environ['STUB_LOG_KIND']
+if kind == 'regular': log.write_bytes(b'prefix-excluded' * 701 + bytes(range(256)) * 32)
+elif kind == 'symlink':
+    target = log.parent / 'secret'
+    target.write_bytes(b'not diagnostic log')
+    log.symlink_to(target)
+elif kind == 'fifo': os.mkfifo(log)
+elif kind == 'directory': log.mkdir()
+log.parent.joinpath('retained').write_bytes(b'prior evidence')
+raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
+""")
+        self.tail = bytes(range(256)) * 32
+
+    def tearDown(self):
+        self.temporary.cleanup()
+        gc.collect()
+
+    def run_stub(self, kind, status):
+        attempt = self.base / ('attempt-' + kind + str(status))
+        environment = dict(os.environ, STUB_LOG_KIND=kind, STUB_GUARD_STATUS=str(status),
+                           PATH=str(Path(sys.executable).parent) + os.pathsep + os.defpath,
+                           AIR2LEAN_BUILD_LOCK=str(self.base / 'mock-lock'), PYTHONDONTWRITEBYTECODE='1')
+        result = subprocess.run(['/bin/bash', str(self.check), '--guard', str(self.root / 'scripts/build-guard.py'),
+                                 '--guard-sha256', '0' * 64, str(attempt), str(self.base / 'mock-toolchain'),
+                                 'mock-failed-audit', 'Proofs.One'], env=environment, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=5)
+        notice = ('proof receipt incomplete: guarded audit exited ' + str(status) +
+                  '; retaining ' + str(attempt) + '\n').encode()
+        self.assertEqual(result.returncode, status, result.stderr.decode(errors='replace'))
+        self.assertEqual(result.stdout, b'')
+        self.assertEqual((self.root / 'calls').read_text().splitlines(), ['prepare'])
+        self.assertFalse((attempt / 'receipt.json').exists())
+        self.assertEqual((attempt / 'retained').read_bytes(), b'prior evidence')
+        (self.root / 'calls').unlink()
+        return attempt, result.stderr, notice
+
+    def test_failed_wrapper_bounded_log_tail_and_exact_status(self):
+        for status in (2, 37, 130):
+            with self.subTest(status=status):
+                attempt, stderr, notice = self.run_stub('regular', status)
+                self.assertEqual(stderr, notice + self.tail)
+                self.assertEqual(len(stderr) - len(notice), 8192)
+                self.assertEqual((attempt / 'guard.log').read_bytes(), b'prefix-excluded' * 701 + self.tail)
+
+    def test_failed_wrapper_skips_absent_and_nonregular_logs(self):
+        for kind in ('absent', 'symlink', 'fifo', 'directory'):
+            with self.subTest(kind=kind):
+                attempt, stderr, notice = self.run_stub(kind, 37)
+                self.assertEqual(stderr, notice)
+                if kind == 'symlink':
+                    self.assertTrue((attempt / 'guard.log').is_symlink())
+                    self.assertEqual((attempt / 'secret').read_bytes(), b'not diagnostic log')
+
+
 if __name__ == '__main__':
     result = unittest.main(exit=False).result
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
