@@ -207,6 +207,22 @@ jobs:
           fi
           bash scripts/flow-time.sh --check-artifacts
 
+      # The portable gate checks all supported synthetic signatures without invoking Zig.
+      # Full 0.16 qualification also exports baseline Linux AIR and executes finite native calls.
+      # Detailed evidence stays in RUNNER_TEMP, outside the cached .lake tree; no upload step.
+      - name: Progress hint qualification
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_PROGRESS_ARTIFACT_DIR: ${{ runner.temp }}/progress-qualification
+        run: |
+          if [ '${{ matrix.zig }}' = '0.16.0' ]; then
+            scripts/progress-hints.sh full
+          else
+            scripts/progress-hints.sh
+          fi
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
