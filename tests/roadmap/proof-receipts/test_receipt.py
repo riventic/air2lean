@@ -599,12 +599,15 @@ class CheckFailureTests(unittest.TestCase):
         self.check.write_bytes((ROOT / 'tests/roadmap/proof-receipts/check.sh').read_bytes())
         scripts = self.root / 'scripts'
         scripts.mkdir()
+        self.invocations = 0
         (scripts / 'proof-receipt.py').write_text("""
-import sys
+import json, sys
 from pathlib import Path
 root = Path(__file__).parent.parent
 with (root / 'calls').open('a') as out: print(sys.argv[1], file=out)
-if sys.argv[1] == 'prepare': Path(sys.argv[2]).mkdir()
+if sys.argv[1] == 'prepare':
+    Path(sys.argv[2]).mkdir()
+    root.joinpath('prepare-argv.json').write_text(json.dumps(sys.argv[1:]))
 else: raise SystemExit('unexpected seal/verify/worker call')
 """)
         (scripts / 'build-guard.py').write_text("""
@@ -622,26 +625,36 @@ elif kind == 'directory': log.mkdir()
 log.parent.joinpath('retained').write_bytes(b'prior evidence')
 raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
 """)
+        self.external_guard = self.base / 'reviewed-guard.py'
+        self.external_guard.write_bytes((scripts / 'build-guard.py').read_bytes())
         self.tail = bytes(range(256)) * 32
 
     def tearDown(self):
         self.temporary.cleanup()
         gc.collect()
 
-    def run_stub(self, kind, status):
-        attempt = self.base / ('attempt-' + kind + str(status))
+    def run_stub(self, kind, status, shell='/bin/bash', modules=('Proofs.One',), external=True):
+        self.invocations += 1
+        attempt = self.base / ('attempt-' + str(self.invocations))
+        guard = self.external_guard if external else self.root / 'scripts/build-guard.py'
+        options = ['--guard', str(guard), '--guard-sha256', '0' * 64] if external else []
         environment = dict(os.environ, STUB_LOG_KIND=kind, STUB_GUARD_STATUS=str(status),
                            PATH=str(Path(sys.executable).parent) + os.pathsep + os.defpath,
                            AIR2LEAN_BUILD_LOCK=str(self.base / 'mock-lock'), PYTHONDONTWRITEBYTECODE='1')
-        result = subprocess.run(['/bin/bash', str(self.check), '--guard', str(self.root / 'scripts/build-guard.py'),
-                                 '--guard-sha256', '0' * 64, str(attempt), str(self.base / 'mock-toolchain'),
-                                 'mock-failed-audit', 'Proofs.One'], env=environment, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, timeout=5)
+        result = subprocess.run([shell, str(self.check), *options, str(attempt),
+                                 str(self.base / 'mock-toolchain'), 'mock-failed-audit', *modules],
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
         notice = ('proof receipt incomplete: guarded audit exited ' + str(status) +
                   '; retaining ' + str(attempt) + '\n').encode()
         self.assertEqual(result.returncode, status, result.stderr.decode(errors='replace'))
         self.assertEqual(result.stdout, b'')
         self.assertEqual((self.root / 'calls').read_text().splitlines(), ['prepare'])
+        expected = ['prepare', str(attempt), '--toolchain', str(self.base / 'mock-toolchain'),
+                    '--profile', 'mock-failed-audit', '--lock', str(self.base / 'mock-lock')]
+        for module in modules: expected += ['--module', module]
+        expected += ['--guard', str(guard)]
+        if external: expected += ['--guard-sha256', '0' * 64]
+        self.assertEqual(json.loads((self.root / 'prepare-argv.json').read_text()), expected)
         self.assertFalse((attempt / 'receipt.json').exists())
         self.assertEqual((attempt / 'retained').read_bytes(), b'prior evidence')
         (self.root / 'calls').unlink()
@@ -663,6 +676,19 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
                 if kind == 'symlink':
                     self.assertTrue((attempt / 'guard.log').is_symlink())
                     self.assertEqual((attempt / 'secret').read_bytes(), b'not diagnostic log')
+
+
+    def test_wrapper_empty_arrays_and_quoted_arguments_across_bash(self):
+        shells = ['/bin/bash']
+        preferred = r.shutil.which('bash')
+        if preferred and Path(preferred).resolve() != Path('/bin/bash').resolve():
+            shells.append(preferred)
+        for shell in shells:
+            for external, modules, status in [(False, (), 2), (True, (), 37),
+                    (False, ('Proofs.One', 'Proofs.Two'), 130), (True, ('Proofs.One', 'Proofs.Two'), 37)]:
+                with self.subTest(shell=shell, external=external, modules=modules):
+                    _, stderr, notice = self.run_stub('regular', status, shell, modules, external)
+                    self.assertEqual(stderr, notice + self.tail)
 
 
 if __name__ == '__main__':

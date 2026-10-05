@@ -22,7 +22,7 @@ helper="$repo_root/scripts/proof-receipt.py"
 lock=${AIR2LEAN_BUILD_LOCK:-"$HOME/.cache/air2lean/build.lock"}
 modules=()
 for module in "$@"; do modules+=(--module "$module"); done
-"$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" "${modules[@]}" --guard "$guard" "${guard_pin[@]}"
+"$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" ${modules[@]+"${modules[@]}"} --guard "$guard" ${guard_pin[@]+"${guard_pin[@]}"}
 # Preparation has no compiler commands. Guarded worker snapshots again after locking.
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
 inputs=(--input "$attempt/plan.json")
