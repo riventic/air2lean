@@ -1022,6 +1022,8 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     s!"Zig.spawnC (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  | .yield => "Zig.threadYieldC"
+  | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
   | .futexWait => s!"Zig.futexWaitCancelableC {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => s!"Zig.futexWaitC {String.intercalate " " (args.toList.map rv)}"
@@ -1131,7 +1133,8 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .div _ a b => #[a, b]
   | .divFloat a b => #[a, b]
   | .minMax _ a b => #[a, b]
-  | .withOverflow _ a b => #[a, b]
+  | .withOverflow _ a b | .shlWithOverflow a b => #[a, b]
+  | .countBits _ a => #[a]
   | .bit _ a b => #[a, b]
   | .not a => #[a]
   | .neg a => #[a]
@@ -1333,6 +1336,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut defs : Array AsmDef := #[]
   for f in funcs do
     for i in f.allInsts do
+      if i.op.isSpinHint then continue
       if let .asm source _ _ outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
@@ -1452,6 +1456,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let f := match op with
       | .add => "Zig.addWithOverflow" | .sub => "Zig.subWithOverflow" | .mul => "Zig.mulWithOverflow"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {sgn} {rv a} {rv b})"; (env, some l)
+  | .shlWithOverflow a b =>
+    let sgn := if fc.valSigned a then "true" else "false"
+    let (env, l) := bindLet fc env inst.id s!"Zig.shlWithOverflow {sgn} {rv a} {rv b}"
+    (env, some l)
+  | .countBits op a =>
+    let f := match op with
+      | .clz => "Zig.clz" | .ctz => "Zig.ctz" | .popcount => "Zig.popcount"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {fc.tyBits inst.ty} {rv a})"
+    (env, some l)
   | .splat a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
   | .select pred a b =>
@@ -1911,6 +1924,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
   | .asm source _ _ outputs inputs =>
+    if inst.op.isSpinHint then
+      let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
+      (env, some l)
+    else
     -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
     -- pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
@@ -1950,6 +1967,8 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .divFloat a b => some (#[a, b], fun v => .divFloat v[0]! v[1]!)
   | .minMax m a b => some (#[a, b], fun v => .minMax m v[0]! v[1]!)
   | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
+  | .shlWithOverflow a b => some (#[a, b], fun v => .shlWithOverflow v[0]! v[1]!)
+  | .countBits o a => some (#[a], fun v => .countBits o v[0]!)
   | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
   | .not a => some (#[a], fun v => .not v[0]!)
   | .neg a => some (#[a], fun v => .neg v[0]!)

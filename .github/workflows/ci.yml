@@ -191,6 +191,38 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      # This checks committed Flow artifacts only: no production checkout, Zig export,
+      # native reproduction, or claim about compiler preservation is part of this CI gate.
+      - name: Flow timestamp artifact-only proofs and provenance guards
+        if: matrix.full && matrix.zig == '0.16.0'
+        env:
+          TMPDIR: ${{ runner.temp }}
+          FLOW_TIME_SOURCE: ${{ runner.temp }}/absent-flow-checkout/time.zig
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/flow-time/test_provenance.py
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y ripgrep
+          fi
+          bash scripts/flow-time.sh --check-artifacts
+
+      # The portable gate checks all supported synthetic signatures without invoking Zig.
+      # Full 0.16 qualification also exports baseline Linux AIR and executes finite native calls.
+      # Detailed evidence stays in RUNNER_TEMP, outside the cached .lake tree; no upload step.
+      - name: Progress hint qualification
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_PROGRESS_ARTIFACT_DIR: ${{ runner.temp }}/progress-qualification
+        run: |
+          if [ '${{ matrix.zig }}' = '0.16.0' ]; then
+            scripts/progress-hints.sh full
+          else
+            scripts/progress-hints.sh
+          fi
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'
@@ -248,6 +280,40 @@ jobs:
         env:
           LEAN_NUM_THREADS: "1"
         run: tests/roadmap/assurance/check.sh
+
+      - name: Integer bit operations regression and differential gate
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
+          AIR2LEAN_ZIG: zig
+          AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
+        run: tests/roadmap/bitops/check.sh
+
+      # Check source-linked VCs against the pointer translation selected by check.sh.
+      - name: Build optional verification conditions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vcs"
+          lake build ZigLean.VC Proofs.Pointers.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
+
+      - name: Result verification condition regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
+
+      - name: Memory verification condition regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
+
+      - name: Verification condition client regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
 
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.
