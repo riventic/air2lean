@@ -302,6 +302,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let v ← arg1 fnName raw
     let errBody ← raw.body.mapM (normalizeInst fnName)
     return .«try» v errBody
+  | "try_ptr" | "try_ptr_cold" =>
+    unless raw.args.size == 1 do
+      throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' needs exactly 1 arg"
+    let p ← arg1 fnName raw
+    let errBody ← raw.body.mapM (normalizeInst fnName)
+    return .tryPtr p errBody
   | "ret" | "ret_safe" => let v ← arg1 fnName raw; return .ret v
   | "unreach" => return .unreach
   | "trap" => return .trap
@@ -340,14 +346,18 @@ end
 
 def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 
-/-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
-def normalize (raw : Raw.RawFunc) : Except String Func := do
-  let raw ← Raw.canonicalize raw
+/-- Tag interpretation after successful canonicalization. Shared by the ordinary
+translator and diagnostic path so the rewrites are applied exactly once. -/
+def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   unless supportedVersions.contains raw.zigVersion do
     throw s!"{raw.name}: unsupported zig_version '{raw.zigVersion}' (supported: \
       {String.intercalate ", " supportedVersions})"
   let body ← raw.body.mapM (normalizeInst raw.name)
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts := raw.layouts, globals := raw.globals }
+
+/-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
+def normalize (raw : Raw.RawFunc) : Except String Func := do
+  normalizeCanonical (← Raw.canonicalize raw)
 
 end Air2Lean

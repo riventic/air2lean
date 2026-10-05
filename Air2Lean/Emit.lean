@@ -539,6 +539,15 @@ structure FCtx where
   brT : Array InstId
   /-- Ordinary repeat targets in first-use order; dispatch exits remain separate. -/
   repT : Array InstId
+  /-- Actual emitted value uses across the entire function, including nested bodies.
+  `none` preserves the scan fallback for bare public expression-emission contexts. -/
+  instUses : Option (Std.HashSet InstId) := none
+  /-- Membership of actual `br` targets, prepared once for normal and bare contexts.
+  `none` lets a public bare `emitStmts` call prepare it before recursive emission. -/
+  branchTargetSet : Option (Std.HashSet InstId) := none
+  /-- Outward-terminal block certificates from one uniqueness-guarded body traversal.
+  Bare contexts default to no certificate; recursive emission does not rescan bodies. -/
+  outwardBlocks : Std.HashMap InstId Bool := {}
   retTy : TyId
   /-- This function's own generated (mangled) name, for naming its extracted loop-body defs
   (`<fnName>.loop<k>`, see `emitLoopDef`). -/
@@ -1115,6 +1124,16 @@ def blockLoopTys (allInsts : Array Inst) : Array (InstId × TyId) :=
 def brTargets (allInsts : Array Inst) : Array InstId :=
   dedupIds (allInsts.filterMap fun i => match i.op with | .br t _ => some t | _ => none)
 
+/-- Prepare target membership once; recursive block emission reuses this context. -/
+def FCtx.prepareBranchTargets (fc : FCtx) : FCtx :=
+  match fc.branchTargetSet with
+  | some _ => fc
+  | none =>
+    let empty : Std.HashSet InstId := {}
+    let targets := fc.allInsts.foldl (init := empty) fun targets i =>
+      match i.op with | .br target _ => targets.insert target | _ => targets
+    { fc with branchTargetSet := some targets }
+
 def repTargets (allInsts : Array Inst) : Array InstId :=
   dedupIds (allInsts.filterMap fun i => match i.op with | .«repeat» t => some t | _ => none)
 
@@ -1223,7 +1242,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
     #[v] ++ cases.foldl (fun acc c =>
       let acc := c.items.foldl Array.push acc
       c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
-  | .«try» v _ => #[v]
+  | .«try» v _ | .tryPtr v _ => #[v]
   | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
   | .unreach => #[]
   | .trap => #[]
@@ -1244,9 +1263,26 @@ def FCtx.freeVarIds (fc : FCtx) (body : Array Inst) : Array InstId :=
     #[])
   used.filter (fun id => !defined.contains id)
 
-/-- Some instruction of the function reads `id`. -/
+/-- Cache direct value uses from every instruction in the flattened function. Constant
+aggregate SSA refs are rejected by Canon; debug-only refs do not read runtime values. -/
+def FCtx.computeInstUses (fc : FCtx) : Std.HashSet InstId :=
+  let empty : Std.HashSet InstId := {}
+  fc.allInsts.foldl (init := empty) fun used i =>
+    (fc.directVals i.op).foldl (init := used) fun used v =>
+      match v with | .inst id => used.insert id | _ => used
+
+/-- Prepare runtime-use membership once at the public statement-emission boundary. -/
+def FCtx.prepareInstUses (fc : FCtx) : FCtx :=
+  match fc.instUses with
+  | some _ => fc
+  | none => { fc with instUses := some fc.computeInstUses }
+
+/-- Some instruction of the function reads `id`. Direct public scalar emission on a
+bare context retains the original scan; statement emission prepares a shared cache. -/
 def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
-  fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
+  match fc.instUses with
+  | some uses => uses.contains id
+  | none => fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
 
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
@@ -1806,7 +1842,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
   | .load ptr =>
     if fc.isMemPtr ptr then
-      let (env, l) := bindLet fc env inst.id (fc.loadMem ptr (rv ptr)); (env, some l)
+      if !fc.isReferenced inst.id then
+        -- Keep the full access/read record, but do not decode a value with no runtime use.
+        -- A bit-pointer reads its complete host, rather than only the field's byte width.
+        let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+        let child := ((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0
+        let size := if host != 0 then host else fc.sizeOf child
+        (env, some s!"Zig.loadDiscardBytes {size} {fc.ptrAlign ptr} {rv ptr}")
+      else
+        let (env, l) := bindLet fc env inst.id (fc.loadMem ptr (rv ptr)); (env, some l)
     else
       let (env, l) := bindLet fc env inst.id s!"pure ({fc.loadPlace ptr})"; (env, some l)
   | .store ptr v =>
@@ -2080,6 +2124,7 @@ without the surrounding `do`). The last effective instruction (per `isTerminatin
 tail expression; anything the exporter placed after it (a defensive `unreach`) is dead and
 dropped. -/
 partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
+  let fc := fc.prepareInstUses.prepareBranchTargets
   match insts with
   | [] => "pure default"
   | inst :: rest =>
@@ -2088,12 +2133,13 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
     else
       match inst.op with
       | .block body =>
-        -- AIR declares these blocks noreturn: without an own-target branch, the body
-        -- exits outward and code after the block is unreachable (Air.zig block contract).
-        if fc.targetTy inst.id == .noreturn && !fc.brT.contains inst.id then
-          emitStmts fc env body.toList
+        let inner := fc.ascribedDo (emitStmts fc env body.toList)
+        -- Only discard a block's continuation when no branch targets it and either
+        -- AIR declares it noreturn or every reachable body path exits outward.
+        if !(fc.branchTargetSet.getD {}).contains inst.id &&
+            (fc.targetTy inst.id == .noreturn || fc.outwardBlocks[inst.id]?.getD false) then
+          inner
         else
-          let inner := fc.ascribedDo (emitStmts fc env body.toList)
           match fc.targetTy inst.id with
           | .void =>
             let restStr := emitStmts fc env rest
@@ -2126,6 +2172,16 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
         let restStr := emitStmts fc (env.push (inst.id, vname)) rest
         s!"match {fc.resolveVal env v} with\n\
+          | .error _ => {doBlock errStr}\n\
+          | .ok {vname} => {doBlock restStr}"
+      | .tryPtr p errBody =>
+        let payload := match fc.pointeeOf p with
+          | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+          | _ => "(panic! \"air2lean: try_ptr of a non-error-union pointer\")"
+        let errStr := emitStmts fc env errBody.toList
+        let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
+        let restStr := emitStmts fc (env.push (inst.id, vname)) rest
+        s!"match ← Zig.tryPayloadPtr ({payload}) {fc.ptrAlign p} {fc.resolveVal env p} with\n\
           | .error _ => {doBlock errStr}\n\
           | .ok {vname} => {doBlock restStr}"
       | _ =>
@@ -2302,8 +2358,8 @@ structure FuncParts where
   loops : List String
   defn : String
 
-/-- The static context of `f`. `globalIds`: the block of each global of `f.globals`. -/
-def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
+/-- The static context without block-emission membership, for global encoding. -/
+private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
     (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
     (concFuncs : Array String := #[]) : FCtx :=
   let allInsts := f.allInsts
@@ -2322,16 +2378,30 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
       escaping := escapingAllocs f, globalIds }
   { fc with places := fc.computePlaces }
 
+/-- The static context of `f`, prepared for block emission. `globalIds`: the block of
+ each global of `f.globals`. Bare contexts are also prepared by `emitStmts`. -/
+def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
+    (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
+    (concFuncs : Array String := #[]) : FCtx :=
+  let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
+  { fc with outwardBlocks := (controlFlowSummaries f.body).outwardBlocks
+  }.prepareInstUses.prepareBranchTargets
+
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) : FuncParts :=
-  let fc := { mkFCtx f structNames funcNames floatSemantics memFuncs globalIds concFuncs with fnBlocks }
+  let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
+  let fc := { fc with fnBlocks, outwardBlocks := (controlFlowSummaries f.body).outwardBlocks
+    }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
   let blTys := fc.blockTys
   let brT := fc.brT
+  -- Reuse the ordered constructor inventory for block-emission membership.
+  let empty : Std.HashSet InstId := {}
+  let fc := { fc with branchTargetSet := some (brT.foldl (fun targets id => targets.insert id) empty) }
   let repT := fc.repT
   let localsName := fc.localsName
   let exitName := fc.exitName
@@ -2744,7 +2814,7 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     match modelCalls[model.symbol]? with
     | some site => emitModel model index site structNames
     | none => "").toList
-  let mkFc (f : Func) (ids : Array Nat) := mkFCtx f structNames funcNames floatSemantics memFuncs ids
+  let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
   let (globals, ids) := collectGlobals funcs mkFc
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
