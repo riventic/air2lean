@@ -50,6 +50,7 @@ fi
 if [ "${1:-}" = --inside ]; then
   shift
   mode=$1 version=$2 examples=$3
+  mkdir -p /artifacts
   # Serialize users of the shared Linux caches; never reuse host native artifacts.
   exec 9>/cache/local-ci.lock
   flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
@@ -75,6 +76,9 @@ if [ "${1:-}" = --inside ]; then
   if [ "$mode" != targeted ]; then
     exec python3 scripts/local-ci-steps.py "$mode" "$version"
   fi
+  export RUNNER_TEMP=/artifacts/targeted TMPDIR=/artifacts/targeted
+  export AIR2LEAN_OUT_DIR=/artifacts/targeted/air-out
+  mkdir -p "$RUNNER_TEMP"
   scripts/review-checks.sh
   prepare "$version"
   export PATH="/work/host-zig:$ELAN_HOME/bin:$PATH"
@@ -109,20 +113,35 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-ci.XXXXXX")
 container=
+artifacts=
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
   if [ -n "$container" ]; then
     docker stop --time 30 "$container" >/dev/null 2>&1 || true
-    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker logs "$container" >"$artifacts/container.log" 2>&1 || true
+    # Copy without -a: exported files belong to the host caller, including private
+    # receipt directories. Overlay-local scratch also permits atomic compiler stashes.
+    if docker cp "$container:/artifacts/." "$artifacts"; then
+      docker rm -f "$container" >/dev/null 2>&1 || true
+    else
+      echo "warning: artifact export failed; retained container $container for recovery" >&2
+      [ "$status" -ne 0 ] || status=1
+    fi
   fi
   rm -rf "$snapshot"
+  [ -z "$artifacts" ] || printf 'Local CI results: %s\n' "$artifacts" >&2
   exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+artifact_parent=${AIR2LEAN_LOCAL_RESULTS:-"$repo/.lake/local-ci-results"}
+mkdir -p "$artifact_parent"
+artifact_parent=$(cd -- "$artifact_parent" && pwd -P)
+artifacts=$(mktemp -d "$artifact_parent/run.XXXXXX")
+printf 'Local CI results: %s\n' "$artifacts" >&2
 # Index paths include staged additions; copy their current working-tree content. Deleted
 # paths are omitted. Never copy untracked files, Git metadata or host build/cache directories.
 git ls-files -z | while IFS= read -r -d '' path; do

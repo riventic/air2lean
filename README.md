@@ -122,6 +122,13 @@ different toolchain volumes also have separate Lake caches. Concurrent runs shar
 caches are rejected. GNU `timeout` (or macOS `gtimeout` from coreutils) bounds each attached
 run to six hours; override with `AIR2LEAN_LOCAL_TIMEOUT`. Without it, stop the runner
 with Ctrl-C. Cleanup removes only its own container and temporary source snapshot.
+Published reports, receipts and the container log are exported to a unique run directory under
+`.lake/local-ci-results`, whose absolute path is printed on success or failure.
+Set `AIR2LEAN_LOCAL_RESULTS` to use another parent directory. Each matrix row has
+its own output directory in the container; export gives files the host caller's
+ownership. Workflow scratch cleanup still runs as written. If export fails, the
+runner reports failure and retains its stopped container for recovery. Results are
+excluded from source snapshots.
 
 The equivalent native commands are:
 
