@@ -1,0 +1,26 @@
+{
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-linux-gnu",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "generic",
+  "features": [
+    "enable_select_opt",
+    "ete",
+    "fp_armv8",
+    "fuse_adrp_add",
+    "fuse_aes",
+    "neon",
+    "trbe",
+    "use_postra_scheduler"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+}

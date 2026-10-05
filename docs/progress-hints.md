@@ -60,6 +60,20 @@ permitted. Depth zero and exhausted scheduler fuel give `none`; an idle loop
 can continue indefinitely or starve a worker. Eventual completion needs a
 separate fairness/environment contract and proof.
 
+`ZigLean/Conc/Total.lean` separates guaranteed return with a postcondition through
+`EventuallyReturns`: for every oracle there is a bound above which every fuel
+budget produces a successful result. Its first client, `countdown_total`, covers
+every finite hint count `n` and every oracle, with the uniform bound `n`. This
+client starts from the default memory `{}` and has exactly one ready task, no
+children, retries, blocking operations or memory accesses. Its remaining hint
+count decreases at each scheduler turn; the singleton ready set requires no
+fairness assumption. This proves completion of the model fragment, not a source
+export or native program. General fork/join completion and retry-loop termination,
+including scheduler fairness and weak-CAS success assumptions, remain open.
+`tests/roadmap/progress/Total.lean` checks the positive theorem families and a
+symbolic counterexample showing that readiness alone does not imply fair task
+selection. CI kernel-checks it with plain `lake env lean` in full non-mutation rows.
+
 `tests/roadmap/progress/progress.zig` covers actual source hints, a yield error
 handler and an atomic idle loop. `Runtime.lean` exercises both yield returns,
 same-thread continuation, another-thread interference, unbounded idle-loop
