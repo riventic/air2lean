@@ -212,6 +212,7 @@ jobs:
           mkdir -p "$diagnostics_evidence_dir/tmp"
           export TMPDIR="$diagnostics_evidence_dir/tmp"
           lake env lean tests/roadmap/diagnostics/Collector.lean 2>&1 | tee "$diagnostics_evidence_dir/collector.log"
+          lake env lean --run tests/roadmap/diagnostics/RuntimeTags.lean 2>&1 | tee "$diagnostics_evidence_dir/runtime-tags.log"
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
       - name: First-use CLI diagnostics
@@ -258,6 +259,10 @@ jobs:
           else
             scripts/progress-hints.sh
           fi
+
+      - name: Finite progress kernel contracts
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: lake env lean tests/roadmap/progress/Total.lean
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
