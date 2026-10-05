@@ -38,7 +38,7 @@ bash -n scripts/check.sh scripts/diff.sh scripts/mutate.sh scripts/example-selec
 git diff --check
 ```
 
-The offline suite executes only Python and bounded shell mocks. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures remain recorded as failures. A later repaired default Zig16 producer/report run passed; its exact scope is recorded below. Cross-host/version matrices and selected semantic mutations remain pending.
+The offline suite executes only Python and bounded shell mocks. Lean/Zig producer compilation, real native differential checks, preservation of real pinned counts, selected semantic mutations and Linux reference-host checks require the normal bounded toolchain queue. No such checks have been run by this implementation agent. Coordinator attempts compiled the selected native harnesses and the new Outcome module, then exposed package-registration, constructor and record-layout build failures. Those failures remain recorded as failures. A later repaired default Zig16 producer/report run passed; its exact scope is recorded below. Cross-host/version matrices and remaining semantic mutations remain pending; selected b/g checks are recorded below.
 
 After a real `scripts/diff.sh` build, the package checks are:
 
@@ -81,3 +81,17 @@ The 84,024 exact returned-value/panic matches exclude the 1,837 host/illegal/uns
 The source-bound local summary is `/private/tmp/air2lean-outcome-8ab-default16-report.json` (SHA-256 `7ff7e43ca6e3ccd74efe3779dfa1e9187a3fe7e84a290a314b8a4e22dfd925b7`); case evidence is the adjacent `.jsonl` file. The coordinator log is `/opt/dev/air2lean/.lake/review-resume/roadmap/outcome-8ab-default16-typed.log` (SHA-256 `efd86c537930a54e346887d38f899b6ba44653b5173eaf4573da4fce1175c9cf`). These local paths are evidence locations, not portable artifacts or compiler-authentication claims.
 
 At producer revision `1b5cdde53ac95c3addf16abf41c39410c60934a1`, the coordinator separately compiled and ran the deterministic producer regressions with native Zig15 and Zig16. Both passed the valid metadata prefix, malformed-input failure index, renderer-only allocation-failure classification, zero mutation eligibility and tested-source panic checks. Their logs are `outcome-1b5c-native15.log` and `outcome-1b5c-native16.log` under the same coordinator log directory; both have SHA-256 `1efaec9d4128cd6985be80972d91119b5848b8d948d875a423cb1fda2260b415`. This is narrow failure-boundary evidence, separate from the default Zig16 full run and the pending full Linux/version matrix.
+
+## Selected mutation evidence
+
+At source revision `347bfd5fd4f6fe598763c87777a9e976b342c0c3`, the coordinator ran only differential mutants b and g on Darwin arm64 with stock/legacy Zig16 and the explicit `basic slices` selection. The isolated validation passed in 215.5 seconds with 791.8 MiB sampled peak memory; the restored healthy selection also passed.
+
+| Run | Cases | Value matches | Panic matches | Mismatches | Mutation eligible |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| b | 2,400 | 1,663 | 571 | 166 | 166 |
+| g | 6,003 | 4,787 | 1,028 | 188 | 188 |
+| Restored healthy | 8,403 | 6,638 | 1,765 | 0 | 0 |
+
+All three reports record `complete: true`, `qualified: false`, zero setup failures and no pin violations. Exactly b/g were detected. Before/exit snapshots agree on source hashes, Git modes, filesystem modes and tracked symlink identity; the coordinator independently rehashed all 40/105/145 retained file entries and all three summary hashes.
+
+Evidence is local at `/private/tmp/air2lean-outcome-347-selected-mutants-v2`. The frozen validation script SHA-256 is `47154532bd6e0f68e3166dffdee64d9e689ad9ec622a1cf5190b5fccc9c83bb3`; b/g/healthy summary hashes are respectively `0382181de019044006ff514b6a4155afdf13cf43384f059f5cdbd24bbbd7589f`, `88e55f629c3a760a55cf045acfa10bcf3493385c73a96688731508ddeba86b6d` and `f97d9e058cbf69a872ae04e9243cd0bd3114e2fe7d9b2661bfaec3453f92b11e`. The earlier pre-toolchain snapshot failure remains separate evidence. Full Linux CI, the full Zig15 differential matrix, remaining mutants and final stacked FIFO compatibility remain pending; these selected checks establish no universal correspondence claim.
