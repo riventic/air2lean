@@ -221,7 +221,8 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 | `atomic_load` | `Zig.atomicLoadC (n := N) ord align p` |
 | `atomic_store_monotonic`/`release`/`seq_cst` | `Zig.atomicStoreC ord align p v` |
 | `atomic_rmw` | `Zig.atomicRmwC op signed ord align p v` (`op`: `Zig.RmwOp`) |
-| `cmpxchg_weak`, `cmpxchg_strong` | `Zig.cmpxchgC succ fail align p expected new` (both compile to the same call: the model never fails a `cmpxchg_weak` spuriously) |
+| `cmpxchg_strong` | `Zig.cmpxchgC succ fail align p expected new` (typed Packed: `cmpxchgAsC`) |
+| `cmpxchg_weak` | `Zig.cmpxchgWeakC succ fail align p expected new` (typed Packed: `cmpxchgWeakAsC`); matching-value failure is an additional read-only choice |
 | an atomic op on an enum, a `bool` or a packed struct | the same with `Zig.atomicLoadAsC (T)`, `atomicStoreAsC`, `atomicRmwAsC`, `cmpxchgAsC`: the op on the value's `Zig.Packed` bits |
 
 `ord` is a `Zig.AtomicOrder` (`monotonic` is `.relaxed`; `unordered` is rejected). Each `*C` op is a `Zig.pickC` (the oracle picks the message to read or the place of the write, RC11, std-models.md §Thread model), then the op in `MemM` (`Zig.atomicLoadAt c …`).

@@ -486,6 +486,14 @@ jobs:
           AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
         run: scripts/review.sh
 
+      - name: Weak CAS safety qualification
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_WEAK_CAS_ARTIFACT_DIR: ${{ runner.temp }}/weak-cas-qualification
+        run: scripts/weak-cas.sh full
+
       - name: Check for sorry/admit/native_decide
         if: matrix.full
         run: scripts/no-sorry.sh

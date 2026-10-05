@@ -571,7 +571,7 @@ def Thread_Condition_FutexImpl_wait.loop107 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.
           let i119 ← pure ((← get).state)
           match ← ((do
             let i121 ← pure (i118.add 0)
-            let i122 ← Zig.cmpxchgC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i121 i119 i116
+            let i122 ← Zig.cmpxchgWeakC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i121 i119 i116
             pure (.br120 i122)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
           | .br120 v120 => (do
             let i124 ← pure ((v120).isSome)
@@ -610,7 +610,7 @@ def Thread_Condition_FutexImpl_wait.loop45 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.C
           let i57 ← pure ((← get).state)
           match ← ((do
             let i59 ← pure (i56.add 0)
-            let i60 ← Zig.cmpxchgC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i59 i57 i54
+            let i60 ← Zig.cmpxchgWeakC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i59 i57 i54
             pure (.br58 i60)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
           | .br58 v58 => (do
             let i62 ← pure ((v58).isSome)
@@ -646,7 +646,7 @@ def Thread_Condition_FutexImpl_wait.loop42 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : 
         let i77 ← pure ((← get).state)
         match ← ((do
           let i79 ← pure (i76.add 0)
-          let i80 ← Zig.cmpxchgC Zig.AtomicOrder.relaxed Zig.AtomicOrder.relaxed 4 i79 i77 i74
+          let i80 ← Zig.cmpxchgWeakC Zig.AtomicOrder.relaxed Zig.AtomicOrder.relaxed 4 i79 i77 i74
           pure (.br78 i80)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
         | .br78 v78 => (do
           let i82 ← pure ((v78).isSome)
@@ -786,7 +786,7 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
         let i27 ← pure ((← get).state)
         match ← ((do
           let i29 ← pure (i26.add 0)
-          let i30 ← Zig.cmpxchgC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i27 i24
+          let i30 ← Zig.cmpxchgWeakC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i27 i24
           pure (.br28 i30)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
         | .br28 v28 => (do
           let i32 ← pure ((v28).isSome)
