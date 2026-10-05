@@ -5,6 +5,7 @@ from collections import Counter
 import hashlib
 from functools import lru_cache
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -303,6 +304,31 @@ def pointer_dispositions(names, arms):
             for name in names]
 
 
+def project_source_hashes(roots, cache):
+    """Fingerprint source bytes independently of local build/test cache state."""
+    def transient(path):
+        parts = path.relative_to(ROOT).parts
+        return '.lake' in parts or '__pycache__' in parts or parts[:3] == ('tests', 'diff', 'out')
+
+    entries = {}
+    for relative in roots:
+        p = ROOT/relative
+        if transient(p):
+            continue
+        paths = []
+        if p.is_dir():
+            for directory, dirs, files in os.walk(p, topdown=True, followlinks=False):
+                parent = Path(directory)
+                dirs[:] = [name for name in dirs if not transient(parent/name)]
+                paths.extend(parent/name for name in files if not transient(parent/name))
+        else:
+            paths = [p]
+        for item in sorted(paths):
+            if item.is_file():
+                entries[str(item.relative_to(ROOT))] = cache.digest(item)
+    return entries
+
+
 def generate(version, source, os_name='linux'):
     cache = SourceCache()
     universe, fingerprints = compiler_inventory(source, cache)
@@ -376,13 +402,7 @@ def generate(version, source, os_name='linux'):
               'model-boundaries': ['Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():
-        entries = {}
-        for relative in roots:
-            p = ROOT/relative
-            paths = sorted(p.rglob('*')) if p.is_dir() else [p]
-            for item in paths:
-                if item.is_file(): entries[str(item.relative_to(ROOT))] = cache.digest(item)
-        project_hashes[scope] = entries
+        project_hashes[scope] = project_source_hashes(roots, cache)
     return {'format': FORMAT, 'zig_version': version, 'golden_os': os_name,
             'evidence_level': 'source-inventory; no compiler execution, proof checking or support qualification',
             'compiler_source_sha256': fingerprints, 'universe': universe,
