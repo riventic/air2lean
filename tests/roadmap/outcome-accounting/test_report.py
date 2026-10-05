@@ -429,17 +429,23 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout,'asm sync')
 
+    def _run_comparison_tail(self, optional_transform=None):
+        scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)
+        for name in ('diff-report.py','panic-policy.tsv'):
+            (scripts/name).write_text((ROOT/'scripts'/name).read_text())
+        source=(ROOT/'scripts/diff.sh').read_text()
+        start=source.index('functions_of()')
+        functions=source[start:source.index('\n}',start)+2]
+        tail=source[source.index('# Classifies one JSONL'):]
+        if optional_transform is not None:tail=optional_transform(tail)
+        runner=self.root/'compare.sh'
+        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+functions+'\n'+tail)
+        return subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+
     def test_actual_comparison_tail_keeps_total_and_reports_native_setup_failure(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
         (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
-        scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)
-        (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
-        source=(ROOT/'scripts/diff.sh').read_text()
-        functions=source[source.index('functions_of()'):source.index('\n}',source.index('functions_of()'))+2]
-        tail=source[source.index('# Classifies one JSONL'):]
-        runner=self.root/'compare.sh'
-        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+functions+'\n'+tail)
-        result=subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        result=self._run_comparison_tail()
         self.assertEqual(result.returncode,1,result.stderr)
         self.assertIn('TOTAL: ok=0 fail_match=0 unspecified=1 capped=0 mismatch=0',result.stdout,result.stderr)
         report=json.loads(self.summary.read_text())
@@ -448,16 +454,10 @@ class Outcomes(unittest.TestCase):
 
     def test_actual_successful_comparison_skips_panic_policy_lookup(self):
         self.seed({'ok':1},{'ok':1})
-        scripts=self.root/'scripts'
-        (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
-        source=(ROOT/'scripts/diff.sh').read_text()
-        functions=source[source.index('functions_of()'):source.index('\n}',source.index('functions_of()'))+2]
-        tail=source[source.index('# Classifies one JSONL'):]
-        anchor='# The pin of function'
-        tail=tail.replace(anchor,'expected_ctor_for_zig_kind() { echo "UNEXPECTED_PANIC_LOOKUP" >&2; return 99; }\n\n'+anchor,1)
-        runner=self.root/'compare.sh'
-        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+functions+'\n'+tail)
-        result=subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        def reject_lookup(tail):
+            anchor='# The pin of function'
+            return tail.replace(anchor,'expected_ctor_for_zig_kind() { echo "UNEXPECTED_PANIC_LOOKUP" >&2; return 99; }\n\n'+anchor,1)
+        result=self._run_comparison_tail(reject_lookup)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertNotIn('UNEXPECTED_PANIC_LOOKUP',result.stderr)
         self.assertIn('TOTAL: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=0',result.stdout)
