@@ -49,7 +49,7 @@ private def worker (version : String) : Json := file version "worker" #[0, 0] 1
 private def config (stack : String := "16777216") (nullAllocator : Bool := true) : Json :=
   obj [("ty", num 10), ("elems", .arr #[lit 7 stack,
     if nullAllocator then obj [("ty", num 9), ("null", .bool true)] else
-      obj [("ty", num 9), ("val", .str "undefined")]])]
+      obj [("ty", num 9), ("undef", .bool true)]])]
 private def spawner (version callee : String) (cfg : Json := config) : Json :=
   let group := callee != "Thread.spawn"
   let ret := if !group then 6 else if callee == "Io.Group.async" then 1 else 15
@@ -72,7 +72,12 @@ private def checked (files : Array Json) : IO (Array Func) := do
   match checkProgram fs with | .ok _ => pure fs | .error e => throw (IO.userError e)
 private def reject (label version : String) (cfg : Json) : IO Unit := do
   let fs ← checked #[spawner version "Thread.spawn" cfg, worker version]
-  require (checkFallibleSpawnCalls fs |>.toOption.isNone) s!"accepted {label}"
+  match checkFallibleSpawnCalls fs with
+  | .ok _ => throw (IO.userError s!"accepted {label}")
+  | .error message =>
+    if label == "custom allocator" then
+      require (hasText message "custom allocators are outside the model")
+        "custom allocator fixture failed for an unrelated reason"
 
 -- The generated code is elaborated separately. The equality fixes capture order in
 -- both the child dispatcher and the independently selected caller fallback.
