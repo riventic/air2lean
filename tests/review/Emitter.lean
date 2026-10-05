@@ -131,6 +131,35 @@ private def target : Json :=
     #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "add" 0 #[ref 0, lit 0 "1"],
       inst 2 "ret" 1 #[ref 1]]
 
+/-- The conservative flow summary does not certify loops. Untargeted blocks still
+must propagate the loop's exit without matching a nonexistent block constructor. -/
+private def blockLoopVoid : Json :=
+  file "blockLoopVoid" #[voidTy, nrTy] #[] 0
+    #[inst 0 "block" 0 #[] [("body", .arr #[inst 1 "loop" 1 #[]
+      [("body", .arr #[inst 2 "ret" 1 #[lit 0 "{}"]])]])],
+      inst 3 "ret" 1 #[lit 0 "{}"]]
+
+private def blockLoopValue : Json :=
+  file "blockLoopValue" #[intTy 8, voidTy, nrTy] #[] 0
+    #[inst 0 "block" 0 #[] [("body", .arr #[inst 1 "loop" 2 #[]
+      [("body", .arr #[inst 2 "ret" 2 #[lit 0 "17"]])]])],
+      inst 3 "ret" 2 #[lit 0 "99"]]
+
+/-- The inner void block owns no branch, but the outer value block consumes its exit. -/
+private def blockLoopOuter : Json :=
+  file "blockLoopOuter" #[intTy 8, voidTy, nrTy] #[] 0
+    #[inst 0 "block" 0 #[] [("body", .arr #[inst 1 "block" 1 #[]
+      [("body", .arr #[inst 2 "loop" 2 #[] [("body", .arr
+        #[inst 3 "br" 2 #[lit 0 "38"] [("target", num 0)]])]])], inst 4 "trap" 2])],
+      inst 5 "ret" 2 #[ref 0]]
+
+/-- A real own-target branch must still resume the block's continuation. -/
+private def blockLoopResume : Json :=
+  file "blockLoopResume" #[intTy 8, voidTy, nrTy] #[] 0
+    #[inst 0 "block" 1 #[] [("body", .arr #[inst 1 "loop" 2 #[]
+      [("body", .arr #[inst 2 "br" 2 #[lit 1 "{}"] [("target", num 0)]])]])],
+      inst 3 "ret" 2 #[lit 0 "23"]]
+
 private def tagLoop : Json :=
   file "tagLoop" #[intTy 32, intTy 8, enumTy "ET" 1 #["a", "b"],
     obj [("k", .str "union"), ("name", .str "UT"), ("layout", .str "auto"), ("tag", num 2),
@@ -297,6 +326,17 @@ def main (args : List String) : IO Unit := do
     "example : successful ((Review.enumHelpers Review.E.toBits).map BitVec.toNat) = some 0 := by native_decide\nexample : successful ((Review.enumHelpers Review.E.rec_air2lean1).map BitVec.toNat) = some 5 := by native_decide\nexample : successful ((Review.structMembers { mk_air2lean1 := 1, rec_air2lean1 := 2, «a-b» := 3 }).map BitVec.toNat) = some 3 := by native_decide\nexample : successful ((Review.localNames 3).map BitVec.toNat) = some 10 := by native_decide"
   writeCase directory "indirectCapture" #[indirectLoop, target]
     "example : successful (((Review.indirectLoop 4).run Review.mem0).map fun (v, _) => v.toNat) = some 5 := by native_decide"
+  for j in #[blockLoopVoid, blockLoopValue] do
+    let f ← accept j
+    require ((brTargets f.allInsts).isEmpty &&
+      !(controlFlowSummaries f.body).outwardBlocks[0]?.getD false)
+      "untargeted loop fixture lost its conservative-summary boundary"
+    let cached := mkFCtx f #[] #[] .ieee #[] #[]
+    let bare := { cached with branchTargetSet := none, outwardBlocks := {} }
+    require (emitStmts bare #[] f.body.toList == emitStmts cached #[] f.body.toList)
+      "untargeted loop exit depends on a prepared branch or summary cache"
+  writeCase directory "blockLoopExits" #[blockLoopVoid, blockLoopValue, blockLoopOuter, blockLoopResume]
+    "example : successful Review.blockLoopVoid = some () := by native_decide\nexample : successful (Review.blockLoopValue.map BitVec.toNat) = some 17 := by native_decide\nexample : successful (Review.blockLoopOuter.map BitVec.toNat) = some 38 := by native_decide\nexample : successful (Review.blockLoopResume.map BitVec.toNat) = some 23 := by native_decide"
   writeCase directory "unionTagCapture" #[tagLoop]
     "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .a _ => 0 | .b n => n.toNat) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
