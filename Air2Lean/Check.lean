@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Air2Lean.Memory
 import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
@@ -8,7 +9,7 @@ import ZigLean.Vec
 
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
-`[*c]T`, `allowzero` or bit-pointer, a memory access to a value that the memory model cannot
+an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
 encode (`modelLayout`), a pointer constant without a global, and a global that is `threadlocal`,
 `extern` or has no initial value. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
@@ -37,8 +38,7 @@ def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
   | some k => k < outputs
   | none => false
 
-/-- Reject `other` types, an out-of-subset float width, and a pointer that is `[*c]T`,
-`allowzero` or a bit-pointer, recursively through struct fields, array/optional children, and
+/-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
     (id : TyId) (seen : Array TyId := #[]) : Except String Unit := do
@@ -57,8 +57,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
-    if l.allowzero then
-      throw s!"{fnName}: near line {line}: an `allowzero` pointer is outside the subset"
+    if nullablePtrTy types layouts id && l.isVolatile then
+      throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
+    if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
+      throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
     -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
     -- `hostSize` (`Zig.loadBits`).
     if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
@@ -76,26 +78,38 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       if (types[child]?.map isFnTy).getD false || types[child]? == some (.other "anyopaque") then
         pure ()
       else recur child
-    | "many" | "slice" => recur child
-    | _ => throw s!"{fnName}: near line {line}: a C pointer `[*c]T` is outside the subset"
-  | .array _ child _ => recur child
+    | "many" | "slice" | "c" => recur child
+    | _ => throw s!"{fnName}: near line {line}: pointer size '{size}' is outside the subset"
+  | .array _ child _ =>
+    if nullablePtrTy types layouts child then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    recur child
   | .vector _ child =>
     unless (match types[child]? with
       | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
       throw s!"{fnName}: near line {line}: a vector with lanes other than integers, floats or bool is outside the subset"
     recur child
-  | .optional child => recur child
+  | .optional child =>
+    if nullablePtrTy types layouts child then
+      throw s!"{fnName}: near line {line}: an optional C/allowzero pointer needs a separate null flag and is outside the qualified pointer fragment"
+    recur child
   | .errorUnion set payload => do
+    if nullablePtrTy types layouts payload then
+      throw s!"{fnName}: near line {line}: nullable pointer error-union payloads are outside the qualified pointer fragment"
     recur set
     recur payload
   | .errorSet _ => pure ()
   | .struct name layout fields =>
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
         integer, a `bool`, an enum or a packed struct: outside the subset"
     fields.forM fun (_, fty) => recur fty
   | .enum _ tag _ _ => recur tag
   | .union name layout tag fields =>
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     match tag with
     | none =>
       -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
@@ -111,7 +125,10 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         throw s!"{fnName}: near line {line}: union '{name}': tag type {t} is not an enum"
       recur t
     fields.forM fun (_, fty) => recur fty
-  | .tuple fields => fields.forM recur
+  | .tuple fields =>
+    if fields.any (nullablePtrTy types layouts) then
+      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
@@ -135,12 +152,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
-  | some (.ptr "slice" ..) => pure (16, 8)
-  | some (.ptr ..) => pure (8, 8)
+  | some (.ptr size ..) =>
+    if nullablePtrTy types layouts id then
+      throw "a C/allowzero pointer stored as a memory value needs qualified null-byte encoding"
+    pure (if size == "slice" then 16 else 8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
   | some .io => pure (16, 8)
   | some (.optional c) =>
+    if nullablePtrTy types layouts c then
+      throw "an optional C/allowzero pointer needs a separate null flag"
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
@@ -270,6 +291,12 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- Nullable pointer projections/arithmetic are not yet part of the qualified fragment.
+Cast to a nonnullable pointer after a null check before projecting or constructing a slice. -/
+def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
+    cx.fail line "nullable pointer arithmetic, indexing and projections require a nonnull cast first (outside the qualified pointer fragment)"
+
 /-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
 (`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
 def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -285,6 +312,7 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  cx.rejectNullableProjection line ptr
   let pty ← cx.memPtrTy line ptr
   if let some (.ptr "one" _ c) := cx.types[pty]? then
     if let some (.vector _ e) := cx.types[c]? then
@@ -300,6 +328,18 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
   if (cx.layouts[id]?.bind (·.size)).isSome then pure ()
   else cx.fail line s!"type {id} has no size in the AIR file"
+
+/-- Scalar or vector integer shape: lane count, signedness and element width. -/
+def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
+  match cx.types[t]? with
+  | some (.int s n) => some (none, s, n)
+  | some (.vector len c) => match cx.types[c]? with
+    | some (.int s n) => some (some len, s, n)
+    | _ => none
+  | _ => none
+
+/-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
+def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
 mutual
 
@@ -321,6 +361,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .countBits _ a =>
+    let some aty := cx.valTy? a | cx.fail line "bit count operand has no known type"
+    let some (alen, _, bits) := cx.intShape? aty
+      | cx.fail line "bit count requires an integer or integer vector operand"
+    let some (rlen, signed, width) := cx.intShape? ty
+      | cx.fail line "bit count result must be an unsigned integer or integer vector"
+    unless alen == rlen && !signed && width == bitCountWidth bits do
+      cx.fail line "bit count result must preserve vector length and have the unsigned count width"
+    pure line
+  | .shlWithOverflow a b =>
+    let some aty := cx.valTy? a | cx.fail line "shift-overflow operand has no known type"
+    let some bty := cx.valTy? b | cx.fail line "shift-overflow count has no known type"
+    let some (alen, _, abits) := cx.intShape? aty
+      | cx.fail line "shift-overflow requires an integer or integer vector operand"
+    let some (blen, bsign, bbits) := cx.intShape? bty
+      | cx.fail line "shift-overflow count must be an unsigned integer or integer vector"
+    unless alen == blen && !bsign && bbits == bitCountWidth (abits - 1) do
+      cx.fail line "shift-overflow count must have the unsigned Log2Int width and preserve vector length"
+    let some (.tuple fields) := cx.types[ty]?
+      | cx.fail line "shift-overflow result must be a pair tuple"
+    unless fields.size == 2 && fields[0]? == some aty do
+      cx.fail line "shift-overflow result must pair the operand type with its overflow bit"
+    let some flagTy := fields[1]? | cx.fail line "shift-overflow result is missing its overflow bit"
+    unless cx.intShape? flagTy == some (alen, false, 1) do
+      cx.fail line "shift-overflow flag must be u1 with the operand vector length"
+    pure line
   | .bitcast a =>
     let sourceTy := cx.valTy? a
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
@@ -340,6 +406,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
+      if isOptPtr ty && nullablePtrTy cx.types cx.layouts aty then
+        cx.fail line "casting a C/allowzero pointer to an optional pointer needs explicit null wrapping and is outside the qualified pointer fragment"
       if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
@@ -378,6 +446,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
+    cx.rejectNullableProjection line base
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
@@ -385,6 +454,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
     pure line
   | .fieldParentPtr fieldPtr _ =>
+    cx.rejectNullableProjection line fieldPtr
     -- `@fieldParentPtr` on a place would need to walk back up the place's own field path
     -- (`Emit.lean`'s `FCtx.computePlaces`), which is outside the subset for now (M20); it needs a
     -- real memory pointer, whose parent struct's offsets the model must know.
@@ -398,6 +468,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
+    cx.rejectNullableProjection line p
     -- The result is a pointer to an item: its child is the item type.
     if let some pty := cx.valTy? p then
       if let some (.ptr "one" _ c) := cx.types[pty]? then
@@ -406,11 +477,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     cx.knownSize line (ptrChild cx.types ty).get!
     pure line
   | .memcpy dst src =>
+    cx.rejectNullableProjection line dst
+    cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
     let dty ← cx.memPtrTy line dst
     cx.knownSize line (itemTy cx.types dty).get!
     pure line
+  | .wrapOptional p =>
+    if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
+      cx.fail line "wrapping a C/allowzero pointer as an optional needs explicit null wrapping"
+    pure line
+  | .slice p _ => cx.rejectNullableProjection line p; pure line
   | .arrayToSlice p =>
+    cx.rejectNullableProjection line p
     let _ ← cx.memPtrTy line p
     pure line
   | .call callee _ =>
@@ -431,7 +510,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     let _ ← checkInsts cx line thenBody
     let _ ← checkInsts cx line elseBody
     pure line
-  | .switchBr _ cases elseBody => do
+  | .switchBr _ cases elseBody | .loopSwitchBr _ cases elseBody => do
     for c in cases do
       let _ ← checkInsts cx line c.body
     let _ ← checkInsts cx line elseBody
@@ -441,6 +520,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) : Except 
     pure line
   | .line n => pure n
   | .asm _ _ clobbers outputs inputs =>
+    if op.isSpinHint && cx.types[ty]? != some .void then
+      throw s!"{fnName}: near line {line}: a spin hint must return void"
     -- Register operands only (M21): every operand value is an integer, so `Emit.lean` can map it
     -- to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
@@ -487,6 +568,20 @@ partial def checkInsts (cx : CheckCtx) (line : Nat) (insts : Array Inst) : Excep
 
 end
 
+/-- Zero constants are permitted only for a nonoptional C/allowzero pointer. -/
+partial def checkNullConstants (fnName : String) (types : Array Ty) (layouts : Array Layout)
+    (v : Val) : Except String Unit := do
+  match v with
+  | .ptrNull ty =>
+    unless nullablePtrTy types layouts ty do
+      throw s!"{fnName}: address-zero constant requires a C/allowzero pointer type"
+  | .agg _ elems => elems.forM (checkNullConstants fnName types layouts)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkNullConstants fnName types layouts v
+  | .sliceConst _ p l =>
+    checkNullConstants fnName types layouts p
+    checkNullConstants fnName types layouts l
+  | _ => pure ()
+
 /-- A pointer constant without a global in `v` (`Val.ptrOther`). -/
 partial def Val.ptrOther? (v : Val) : Option String :=
   match v with
@@ -512,12 +607,54 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   if g.isExtern then throw s!"{f.name}: global {what}: `extern` is outside the subset"
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
+  checkNullConstants f.name f.types f.layouts init
   if let some k := init.ptrOther? then
     throw s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty
+
+/-- Check loop-switch selector contracts and lexical targets even for direct Core callers. -/
+partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
+    (targets : Array (InstId × Ty) := #[]) : Except String Unit := do
+  let valTy (v : Val) : Option Ty := match v with
+    | .bool _ => some .bool
+    | _ => (cx.valTy? v).bind (cx.types[·]?)
+  for i in body do
+    let recur (b : Array Inst) := checkDispatchScopes cx b targets
+    match i.op with
+    | .loopSwitchBr initial cases elseBody =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: loop_switch_br must have noreturn type"
+      let some selectorTy := valTy initial
+        | cx.fail 0 s!"inst {i.id}: loop-switch selector has no known type"
+      unless (match selectorTy with
+        | .int .. | .bool | .enum .. | .errorSet _ => true | _ => false) do
+        cx.fail 0 s!"inst {i.id}: loop-switch selector type is outside the scalar subset"
+      for c in cases do
+        for v in c.items ++ c.ranges.flatMap (fun (lo, hi) => #[lo, hi]) do
+          unless valTy v == some selectorTy do
+            cx.fail 0 s!"inst {i.id}: loop-switch case type differs from selector"
+        unless c.ranges.isEmpty || (match selectorTy with | .int .. => true | _ => false) do
+          cx.fail 0 s!"inst {i.id}: loop-switch ranges require an integer selector"
+        unless !c.items.isEmpty || !c.ranges.isEmpty do
+          cx.fail 0 s!"inst {i.id}: empty loop-switch case"
+        checkDispatchScopes cx c.body (targets.push (i.id, selectorTy))
+      checkDispatchScopes cx elseBody (targets.push (i.id, selectorTy))
+    | .switchDispatch target v =>
+      unless cx.types[i.ty]? == some .noreturn do
+        cx.fail 0 s!"inst {i.id}: switch_dispatch must have noreturn type"
+      let some (_, selectorTy) := targets.find? (·.1 == target)
+        | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
+      unless valTy v == some selectorTy do
+        cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
+    | .block b | .loop b | .«try» _ b => recur b
+    | .condBr _ t e => recur t; recur e
+    | .switchBr _ cases e =>
+      for c in cases do recur c.body
+      recur e
+    | _ => pure ()
 
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
@@ -540,8 +677,14 @@ def check (f : Func) : Except String Unit := do
           checkMemTy f.name f.types f.layouts 0 c
   for g in f.globals do
     checkGlobal f g
+  let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     for v in valueOperands i.op ++ ptrOperands i.op do
+      if let some vty := v.constTy? then
+        unless checkedConstTypes.contains vty do
+          checkTy f.name f.types f.layouts 0 vty
+          checkedConstTypes := checkedConstTypes.insert vty
+      checkNullConstants f.name f.types f.layouts v
       if let some k := v.ptrOther? then
         throw s!"{f.name}: a pointer constant without a global ({k}) is outside the subset"
       -- The block of a global has the alignment of its type.
@@ -553,6 +696,7 @@ def check (f : Func) : Except String Unit := do
             outside the subset"
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places }
+  checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
 
@@ -595,6 +739,28 @@ def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val) :
         in the subset (v1, docs/std-models.md §Thread model)"
   | _ => throw s!"{f.name}: {callee}'s args argument is not a tuple"
 
+/-- Progress model boundaries must preserve the source result shape and error outcome. -/
+def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array Val)
+    (ret : TyId) : Except String Unit := do
+  unless args.isEmpty do
+    throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 0"
+  match fn with
+  | .yield =>
+    let some (.errorUnion errors payload) := f.types[ret]?
+      | throw s!"{f.name}: Thread.yield must return an error union with void payload"
+    unless f.types[payload]? == some .void do
+      throw s!"{f.name}: Thread.yield must return an error union with void payload"
+    match f.types[errors]? with
+    | some (.errorSet none) => pure ()
+    | some (.errorSet (some names)) =>
+      unless names.contains "SystemCannotYield" do
+        throw s!"{f.name}: Thread.yield result must include error.SystemCannotYield"
+    | _ => throw s!"{f.name}: Thread.yield result must have an error set"
+  | .spinLoopHint =>
+    unless f.types[ret]? == some .void do
+      throw s!"{f.name}: '{callee}' must return void"
+  | _ => pure ()
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -609,6 +775,11 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let names := funcs.map (·.name)
   for f in funcs do
     for i in f.allInsts do
+      if let .call (.func callee noreturn _) args := i.op then
+        if let some fn := threadFn? callee then
+          if fn == .yield || fn == .spinLoopHint then
+            if noreturn then throw s!"{f.name}: progress hint '{callee}' cannot be noreturn"
+            checkProgressCall f callee fn args i.ty
       if let .call (.func callee false spawnFn) args := i.op then
         if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
           let some worker := spawnFn
@@ -627,7 +798,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             | some .groupAwait | some .groupCancel =>
               unless args.size == 2 do
                 throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 2"
-            | some .join => pure ()
+            | some .join | some .yield | some .spinLoopHint => pure ()
             | some .futexWait | some .futexWaitU | some .futexWake =>
               -- `(io, ptr, value)`: a `u32`-sized value (Zig asserts it), an enum or integer.
               unless args.size == 3 do
