@@ -2139,6 +2139,10 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         if !(fc.branchTargetSet.getD {}).contains inst.id &&
             (fc.targetTy inst.id == .noreturn || fc.outwardBlocks[inst.id]?.getD false) then
           inner
+        else if !(fc.branchTargetSet.getD {}).contains inst.id then
+          -- A nested loop can exit outward without a summary certificate. With no
+          -- own-target branch there is no `br<id>` constructor or continuation to consume.
+          inner
         else
           match fc.targetTy inst.id with
           | .void =>
@@ -2392,7 +2396,7 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) : FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
-  let fc := { fc with fnBlocks, outwardBlocks := (controlFlowSummaries f.body).outwardBlocks
+  let fc := { fc with fnBlocks
     }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
