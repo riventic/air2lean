@@ -349,20 +349,20 @@ def ThreadFn.spawnArgs? : ThreadFn → Option Nat
   | _ => none
 
 /-- The spawn targets of `funcs`: each function that a `Thread.spawn` or an `Io.Group.async` runs,
-with the type of its one argument (the args tuple's field), in first-use order. -/
-def spawnTargets (funcs : Array Func) : Array (String × Func × TyId) :=
+with all captured argument types in source order, in first-use order. -/
+def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
   funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
     match i.op with
     | .call (.func name _ (some sf)) args =>
       if let some k := (threadFn? name).bind (·.spawnArgs?) then
         if acc.any (·.1 == sf) then acc else
-        let argTy := ((args[k]? : Option Val).bind fun v => match v with
+        let argTys := ((args[k]? : Option Val).bind fun v => match v with
           | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
           | v => v.constTy?).bind fun t => match f.types[t]? with
-            | some (.tuple fs) => fs[0]?
+            | some (.tuple fs) => some fs
             | _ => none
-        match argTy with
-        | some a => acc.push (sf, f, a)
+        match argTys with
+        | some fields => acc.push (sf, f, fields)
         | none => acc
       else acc
     | _ => acc

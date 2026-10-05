@@ -274,6 +274,33 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
+      # C01's checked source/export/proof fragment is qualified on 0.16.0.
+      # Fresh exports use the pinned patched compiler; native tests use stock Zig.
+      - name: Thread tuple source and ownership gate
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.Csl ZigLean.Sep
+          python3 tests/roadmap/thread-tuples/guard-tests.py
+          python3 tests/roadmap/thread-tuples/mutation-tests.py
+          [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
+          [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
+          work=$(mktemp -d "$RUNNER_TEMP/thread-tuples.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
+          bash tests/roadmap/thread-tuples/check.sh --export "$work/air"
+          "$AIR2LEAN_TRANSLATOR" "$work/air" -o "$work/Gen.lean" --namespace ThreadTuples --prefix thread_tuples.
+          python3 scripts/normalize-generated.py report "$work/Gen.lean" "$work/air" "$work/generated-report.json"
+          python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean "$work/Gen.lean" "$work/generated-report.json"
+          lake env lean -R "$work" "$work/Gen.lean"
+          bash tests/roadmap/thread-tuples/check.sh --native
+          bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

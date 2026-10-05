@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
 import Air2Lean.ModelRegistry
@@ -721,23 +722,98 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId) : E
     if l.sentinel && fn == .remap then
       throw s!"{f.name}: a remap of a slice with a sentinel is outside the subset"
 
-/-- A call to `Thread.spawn`: `args[1]` (the `.{...}` args tuple) must have exactly one field.
-`Zig.Thread.spawn` runs the already-applied call `f args` directly (`ZigLean/Mem/Thread.lean`),
-so `Emit.lean` needs the callee applied to exactly one Lean term; a 0- or 2+-field args tuple is
-outside the subset (v1, `docs/std-models.md` §Thread model). -/
-def checkThreadSpawn (f : Func) (callee : String) (k : Nat) (args : Array Val) :
+/-- Compare argument types across per-function type tables. Pointer values keep their
+identity; the source alignment must satisfy the target and mutable pointers may become
+const. Other implicit `@call` coercions require an explicit source cast before capture. -/
+private abbrev SpawnTyCache := Std.HashMap (TyId × TyId × Bool) Bool
+
+/-- Completed pairs are shared across sibling fields. Cycle assumptions remain
+local to the current recursion path and are never inserted as completed checks. -/
+private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
+    (seen : Array (TyId × TyId × Bool)) (allowPtrCoercion : Bool) :
+    StateM SpawnTyCache Bool := do
+  let key := (a, b, allowPtrCoercion)
+  if seen.contains key then return true
+  if let some result := (← get)[key]? then return result
+  let recur := fun x y => sameSpawnTyCached source target x y (seen.push key) false
+  let fields := fun (xs ys : Array (String × TyId)) => do
+    if xs.size != ys.size then return false
+    for (x, y) in xs.zip ys do
+      if x.1 != y.1 then return false
+      unless ← recur x.2 y.2 do return false
+    return true
+  let result ← match source.types[a]?, target.types[b]? with
+    | some (.ptr sz c x), some (.ptr tz d y) => do
+      let sl := source.layouts[a]?.getD {}
+      let tl := target.layouts[b]?.getD {}
+      if !(sz == tz && (if allowPtrCoercion then !c || d else c == d) &&
+          (if allowPtrCoercion then decide (sl.ptrAlign.getD 1 ≥ tl.ptrAlign.getD 1)
+           else sl.ptrAlign == tl.ptrAlign) &&
+          sl.sentinel == tl.sentinel && sl.isVolatile == tl.isVolatile &&
+          sl.hostSize == tl.hostSize && sl.bitOffset == tl.bitOffset) then return false
+      recur x y
+    | some (.array n x s), some (.array m y t) =>
+      if n == m && s == t then recur x y else pure false
+    | some (.vector n x), some (.vector m y) => if n == m then recur x y else pure false
+    | some (.optional x), some (.optional y) => recur x y
+    | some (.errorUnion sx x), some (.errorUnion sy y) => do
+      unless ← recur sx sy do return false
+      recur x y
+    | some (.struct n l xs), some (.struct m k ys) =>
+      if n == m && l == k then fields xs ys else pure false
+    | some (.enum n x e fs), some (.enum m y d gs) => do
+      if !(n == m && e == d) then return false
+      unless ← recur x y do return false
+      pure (fs == gs)
+    | some (.union n l tx xs), some (.union m k ty ys) => do
+      if !(n == m && l == k) then return false
+      unless ← fields xs ys do return false
+      match tx, ty with
+      | none, none => pure true
+      | some x, some y => recur x y
+      | _, _ => pure false
+    | some (.tuple xs), some (.tuple ys) => do
+      if xs.size != ys.size then return false
+      for (x, y) in xs.zip ys do
+        unless ← recur x y do return false
+      return true
+    | some x, some y => pure (x == y)
+    | _, _ => pure false
+  modify (·.insert key result)
+  return result
+
+partial def sameSpawnTy (source target : Func) (a b : TyId)
+    (seen : Array (TyId × TyId × Bool) := #[]) (allowPtrCoercion : Bool := true) : Bool :=
+  (sameSpawnTyCached source target a b seen allowPtrCoercion).run' {}
+
+/-- Capture exactly the worker's runtime parameters. Zero fields are valid; every field
+is copied as a value, including pointer identity. Ownership remains an explicit proof
+obligation on the captured target, not an automatic exclusive transfer. -/
+def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (args : Array Val) :
     Except String Unit := do
+  unless args.size == k + 1 do
+    throw s!"{f.name}: {callee} has {args.size} runtime arguments, expected {k + 1}"
   let tyOf (v : Val) : Option TyId := match v with
     | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
     | v => v.constTy?
   let some argsTy := args[k]?.bind tyOf
     | throw s!"{f.name}: a call to {callee} has no args-tuple type"
-  match f.types[argsTy]? with
-  | some (.tuple fields) =>
-    if fields.size != 1 then
-      throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields; only exactly 1 is \
-        in the subset (v1, docs/std-models.md §Thread model)"
-  | _ => throw s!"{f.name}: {callee}'s args argument is not a tuple"
+  let some (.tuple fields) := f.types[argsTy]?
+    | throw s!"{f.name}: {callee}'s args argument is not a tuple"
+  unless fields.size == worker.params.size do
+    throw s!"{f.name}: {callee}'s args tuple has {fields.size} fields, but worker '{worker.name}' has {worker.params.size} runtime parameters"
+  let mut completed : SpawnTyCache := {}
+  for index in [:fields.size] do
+    let (compatible, cache) := (sameSpawnTyCached f worker fields[index]! worker.params[index]! #[] true).run completed
+    completed := cache
+    unless compatible do
+      throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
+  let validRet := match worker.types[worker.ret]? with
+    | some .void | some .noreturn => true
+    | some (.int false 8) => callee == "Thread.spawn"
+    | _ => false
+  unless validRet do
+    throw s!"{f.name}: {callee} worker '{worker.name}' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
 
 /-- Progress model boundaries must preserve the source result shape and error outcome. -/
 def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array Val)
@@ -781,11 +857,14 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             if noreturn then throw s!"{f.name}: progress hint '{callee}' cannot be noreturn"
             checkProgressCall f callee fn args i.ty
       if let .call (.func callee false spawnFn) args := i.op then
-        if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
-          let some worker := spawnFn
-            | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-          unless names.contains worker do
-            throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
+        if let some kind := threadFn? callee then
+          if let some index := kind.spawnArgs? then
+            let some worker := spawnFn
+              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
+            let some target := funcs.find? (·.name == worker)
+              | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
+            checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
+              index args
         unless names.contains callee || modelSymbols.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
@@ -793,8 +872,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
           | some fn => checkAllocCall f fn args i.ty
           | none =>
             match threadFn? callee with
-            | some .spawn => checkThreadSpawn f "Thread.spawn" 1 args
-            | some .groupAsync | some .groupConcurrent => checkThreadSpawn f "Io.Group.async" 2 args
+            | some .spawn | some .groupAsync | some .groupConcurrent => pure ()
             | some .groupAwait | some .groupCancel =>
               unless args.size == 2 do
                 throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 2"
@@ -829,12 +907,12 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
           | .call (.func callee _ spawnFn) args =>
             if let some k := (threadFn? callee).bind (·.spawnArgs?) then
               if (spawnFn.map mem.contains).getD true then #[] else
-              let child := ((args[k]? : Option Val).bind tyOf).bind fun t =>
+              let fields : Array TyId := (((args[k]? : Option Val).bind tyOf).bind fun t =>
                 match f.types[t]? with
-                | some (.tuple fields) => fields[0]?
-                | _ => none
-              ((child.bind (f.types[·]?)).bind fun t => match t with
-                | .ptr "slice" _ c => some c | _ => none).toArray
+                | some (.tuple fields) => some fields
+                | _ => none).getD #[]
+              fields.filterMap fun (t : TyId) => match f.types[t]? with
+                | some (.ptr "slice" _ c) => some c | _ => none
             else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
