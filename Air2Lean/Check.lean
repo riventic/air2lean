@@ -1411,6 +1411,14 @@ private def referenceTargets (refs : Array (String × String)) : Std.HashMap Str
   return targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
     ({} : Std.HashMap String (Array String))
 
+/-- Shared CLI/project policy spelling. The policy selects a supported model, not
+an assertion that the host can create a thread. -/
+def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
+  match value with
+  | "available" => .ok .available
+  | "fallible" => .ok .fallible
+  | _ => .error "invalid --spawn-policy (expected available or fallible)"
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated

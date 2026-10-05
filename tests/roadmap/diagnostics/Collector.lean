@@ -468,6 +468,83 @@ private def collectorChecks : IO Unit := do
       #[.undef 8, .undef 9, .agg 1 #[.int 0 7]]) }, { id := 1, ty := 6, op := .ret (.inst 0) }] }
   workerBoundary concurrent worker
   workerBoundary concurrent groupByteWorker (some ("group: Io.Group.async " ++ resultMessage))
+  -- Program-level policy uses the exact translation boundary, after the ordinary
+  -- worker/model checks. These synthetic units exercise collector composition;
+  -- raw AIR parser/normalizer parity is covered by the CLI fixture separately.
+  let policyUnit (f : Func) : FileResult := {
+    file := f.name ++ ".json"
+    function := some f.name
+    normalized := some f
+    structureValid := true
+    localPassed := true }
+  let audited := { spawn with
+    types := (spawn.types.set! 2 (.struct "Thread.SpawnConfig" "auto"
+      #[("stack_size", 7), ("allocator", 9)])) ++
+      #[.int false 64, .struct "mem.Allocator" "auto" #[], .optional 8]
+    layouts := (spawn.layouts.set! 2 { size := some 32, align := some 8 }) ++
+      #[{ size := some 8, align := some 8 }, { size := some 16, align := some 8 },
+        { size := some 24, align := some 8 }]
+    body := #[{ id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 16777216, .optNull 9], .agg 1 #[.int 0 7]] },
+      { id := 1, ty := 6, op := .ret (.inst 0) }] }
+  let auditedUnits := #[policyUnit audited, policyUnit worker]
+  require (checkProgram #[audited, worker]).toOption.isSome "audited spawn must pass the ordinary program prerequisite"
+  require (checkFallibleSpawnCalls #[audited, worker]).toOption.isSome "audited null allocator boundary rejected"
+  require (collectProgram auditedUnits {} .fallible).items.isEmpty "eligible fallible program rejected"
+  require ((report auditedUnits (collectProgram auditedUnits {})).compress ==
+    (report auditedUnits (collectProgram auditedUnits {} .available)).compress)
+    "omitted and explicit available policies must preserve producer bytes"
+  let policyBoundary (source : Func) (marker : String) : IO Unit := do
+    require (checkProgram #[source, worker]).toOption.isSome "negative policy fixture failed ordinary prerequisite"
+    let expected := checkFallibleSpawnCalls #[source, worker]
+    let collected := collectProgram #[policyUnit source, policyUnit worker] {} .fallible
+    match expected with
+    | .ok _ => throw (IO.userError "negative policy fixture accepted")
+    | .error message =>
+      require ((message.splitOn marker).length > 1) "negative fixture reached the wrong policy rejection"
+      require (collected.failed && !collected.complete && collected.items.size == 1 &&
+        collected.items.all (fun d => d.code == .modelFailure && d.phase == .program &&
+          d.category == .unsupportedSemantics && d.message == message &&
+          d.prerequisites == #["validated_selected_program"] && d.firstErrorInUnit))
+        "collector must retain exact shared policy rejection and typed prerequisite"
+  policyBoundary spawn "constant SpawnConfig"
+  policyBoundary { audited with body := #[
+    { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 0, .optNull 9], .agg 1 #[.int 0 7]] },
+    { id := 1, ty := 6, op := .ret (.inst 0) }] } "audited 1 MiB or default 16 MiB"
+  policyBoundary { audited with body := #[
+    { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 16777216, .undef 9], .agg 1 #[.int 0 7]] },
+    { id := 1, ty := 6, op := .ret (.inst 0) }] } "custom allocators"
+  policyBoundary { group with zigVersion := "0.15.2" } "requires Zig 0.16.0"
+  let blockedPolicy := collectProgram #[policyUnit audited, policyUnit wrongWorker] {} .fallible
+  require (blockedPolicy.failed && !blockedPolicy.complete &&
+    blockedPolicy.items.any (fun d => d.code == .prerequisiteSkipped &&
+      d.prerequisites == #["validated_selected_program"]) &&
+    !blockedPolicy.items.any (·.code == .modelFailure))
+    "policy must not run when the selected program prerequisite fails"
+  let excluded := collectProgram #[{ (policyUnit spawn) with structureValid := false }] {} .fallible
+  require excluded.items.isEmpty "structurally invalid functions must not reach the policy checker"
+  let cappedPolicy := collectProgram #[policyUnit spawn, policyUnit worker] { limit := 0 } .fallible
+  require (cappedPolicy.failed && cappedPolicy.truncated && !cappedPolicy.complete &&
+    cappedPolicy.observed == 1 && cappedPolicy.items.isEmpty) "policy rejection must survive diagnostic caps"
+  for policy in ["available", "fallible"] do
+    let flags := ["--diagnostics-json", "x", "--spawn-policy", policy, "--diagnostic-limit", "17"]
+    match parseCheckArgs flags, parseSpawnPolicy policy with
+    | .ok parsed, .ok expected =>
+      require (parsed.spawnPolicy == expected && parsed.limit == 17) "valid policy parsing/propagation"
+    | _, _ => throw (IO.userError "valid spawn policy rejected")
+  require ((parseCheckArgs ["--diagnostics-json", "x"]).toOption.map (·.spawnPolicy) == some .available)
+    "omitted policy must default to available"
+  for (flags, expected) in [
+      (["--spawn-policy"], "missing value for --spawn-policy"),
+      (["--spawn-policy", "unknown"], "invalid --spawn-policy (expected available or fallible)"),
+      (["--spawn-policy", "available", "--spawn-policy", "fallible"], "duplicate --spawn-policy"),
+      (["--spawn-policy", "fallible", "--profile", BuildProfile.legacyName,
+        "--spawn-policy", "fallible"], "duplicate --spawn-policy")] do
+    require (match parseCheckArgs (["--diagnostics-json", "x"] ++ flags) with
+      | .error message => message == expected
+      | .ok _ => false) "policy CLI boundary must reject with the intended diagnostic"
   for flags in [["--diagnostics-json"], ["--diagnostics-json", "x", "-o", "out"],
       ["--diagnostics-json", "x", "--namespace", "N"],
       ["--diagnostics-json", "x", "--diagnostic-limit", "0"]] do
