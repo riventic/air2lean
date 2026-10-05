@@ -17,6 +17,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const target_util = @import("../target.zig");
 
 /// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0). The compiler
 /// is built by a host zig of its own version (`zig-patch/build.sh`), so `builtin.zig_version`
@@ -411,7 +412,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
 
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
     // A partly written file is invalid JSON; say which one, like the open failures above.
-    w.writeFunc(fqn, Type.fromInterned(func.ty)) catch |err| {
+    w.writeFunc(fqn, Type.fromInterned(func.ty), func.owner_nav) catch |err| {
         std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
         return;
     };
@@ -443,16 +444,68 @@ const W = struct {
         uav: InternPool.Key.Ptr.BaseAddr.Uav,
     };
 
-    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type) Error!void {
+    /// The owning module controls build settings. The backend describes this AIR dump's
+    /// compiler configuration, not a qualified correspondence with any shipping binary.
+    fn writeProfile(w: *W, owner_nav: InternPool.Nav.Index) Error!void {
+        const zcu = w.pt.zcu;
+        const file = zcu.navFileScope(owner_nav);
+        const mod = if (Compat.v14) file.mod else file.mod.?;
+        const target = &mod.resolved_target.result;
+        const triple = try target.zigTriple(w.gpa);
+        const backend = if (Compat.v14)
+            target_util.zigBackend(target.*, zcu.comp.config.use_llvm)
+        else
+            target_util.zigBackend(target, zcu.comp.config.use_llvm);
+        try w.j.beginObject();
+        try w.field("name");
+        try w.j.write("abi64-le-v1");
+        try w.field("target_triple");
+        try w.j.write(triple);
+        try w.field("pointer_bits");
+        try w.j.write(target.ptrBitWidth());
+        try w.field("endian");
+        try w.j.write(@tagName(target.cpu.arch.endian()));
+        try w.field("abi");
+        try w.j.write(@tagName(target.abi));
+        try w.field("zig_version");
+        try w.j.write(build_options.version);
+        try w.field("backend");
+        try w.j.write(@tagName(backend));
+        try w.field("cpu");
+        try w.j.write(target.cpu.model.name);
+        try w.field("features");
+        try w.j.beginArray();
+        for (target.cpu.arch.allFeaturesList()) |feature| {
+            if (target.cpu.features.isEnabled(feature.index)) try w.j.write(feature.name);
+        }
+        try w.j.endArray();
+        try w.field("build_mode");
+        try w.j.write(@tagName(mod.optimize_mode));
+        try w.field("float_mode");
+        try w.j.write("per-instruction");
+        try w.field("error_set_bits");
+        try w.j.write(zcu.errorSetBits());
+        try w.field("error_layout");
+        try w.j.write("type-table");
+        try w.field("error_tracing");
+        try w.j.write(mod.error_tracing);
+        try w.field("export_stage");
+        try w.j.write("analyzed-air");
+        try w.j.endObject();
+    }
+
+    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, owner_nav: InternPool.Nav.Index) Error!void {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
         try w.field("schema");
-        try w.j.write(11);
+        try w.j.write(12);
         try w.field("zig_version");
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        try w.field("profile");
+        try w.writeProfile(owner_nav);
         try w.field("name");
         try w.j.write(fqn);
         try w.field("params");
@@ -774,6 +827,13 @@ const W = struct {
                 const pl_op = w.data(inst).pl_op;
                 const extra = w.air.extraData(Air.Try, pl_op.payload);
                 try w.writeArgs(&.{pl_op.operand});
+                try w.field("body");
+                try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
+            },
+            .try_ptr, .try_ptr_cold => {
+                const ty_pl = w.data(inst).ty_pl;
+                const extra = w.air.extraData(Air.TryPtr, ty_pl.payload);
+                try w.writeArgs(&.{extra.data.ptr});
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
@@ -1163,6 +1223,18 @@ const W = struct {
             .uav => |uav| {
                 try w.field("global");
                 try w.j.write(try w.globalId(.{ .uav = uav }));
+                break;
+            },
+            // Fixed integer addresses have their entire address in byte_offset in all
+            // supported versions. Only zero has a qualified constant representation.
+            .int => {
+                if (off == 0) {
+                    try w.field("null");
+                    try w.j.write(true);
+                } else {
+                    try w.field("unsupported");
+                    try w.j.write("int");
+                }
                 break;
             },
             // A field of the struct or slice that the pointer `f.base` points to.

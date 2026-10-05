@@ -62,8 +62,10 @@ Its own report encoding remains separate. It validates strict UTF-8/JSON, schema
 source/proof disclosures and exit/status agreement. Invalid receipts become `error`,
 never successful validation evidence. Diagnostics follow manifest-root order and producer
 order. Paths and known staging-directory references in display messages are normalized;
-raw stdout/stderr SHA-256 and byte counts describe the actual streams before rewriting.
-Producer counters also describe the original receipt before path mapping, as marked by
+raw stdout/stderr SHA-256 and byte counts describe retained stream bytes before rewriting.
+Resource or execution failures can retain bounded prefixes; successful producer receipts
+still pass complete receipt validation. Producer counters describe the original receipt
+before path mapping, as marked by
 `producer_counters_basis`; they are not recomputed for the rewritten display paths.
 Raw receipt hashes may differ across temporary directories even when normalized diagnostics
 match. The report does not independently authenticate the producer or its receipts.
@@ -96,8 +98,11 @@ and ordinary example translation followed by hash verification. This records obs
 checks; the adapter continues to report `not_attested_by_adapter` and does not attest
 native-program behavior or proofs.
 
-The existing full Zig 0.16.0 project CI step also runs the 30 offline consumer tests.
-This separate consumer branch retains the PR 68 base, whose translator does not yet
-provide the diagnostic producer. Actual consumer CI qualification requires integration
-with PR 78; it is not claimed by the offline gate. No producer implementation is copied
-into this branch, and the consumer gate adds no artifact upload.
+The integrated full Zig 0.16.0 project CI step runs the 30 offline consumer tests and
+checks the example manifest with the diagnostic-capable translator built by that job.
+It publishes to a fresh temporary path, compares stdout with the published receipt,
+and requires checked status while preserving the explicit proof, runtime, source and
+adapter-qualification disclosures above. The existing example translation and artifact
+verification still run in the same step. This gate adds no artifact upload. Its actual
+execution and result remain separate from the historical local qualification recorded
+above; offline tests alone do not qualify the integrated executable.

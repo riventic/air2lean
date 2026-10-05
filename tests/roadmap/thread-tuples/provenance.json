@@ -1,0 +1,51 @@
+{
+  "source_sha256": "1e41b455969d69d9079cb8a6098a14b52a7df5faa7e05f205352d80ac67b5efc",
+  "air": {
+    "zig_version": "0.16.0",
+    "schema": 11,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "std_thread_sha256": {
+    "0.14.1": "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d",
+    "0.15.2": "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a",
+    "0.16.0": "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"
+  },
+  "qualification": {
+    "0.14.1": "stdlib source inspected; live export/native pending",
+    "0.15.2": "stdlib source inspected; live export/native pending",
+    "0.16.0": "source revision 61c7ced: live schema-11 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (2 tests); schema-11 target profile remains unverified; Linux CI pending"
+  },
+  "functions": [
+    "atomicShared",
+    "atomicWorker",
+    "copied",
+    "copyWorker",
+    "empty",
+    "groupMixed",
+    "mixed",
+    "mixedWorker",
+    "zeroWorker",
+    "genericEmpty",
+    "ZeroWorker(u8).run"
+  ],
+  "air_sha256": {
+    "atomic.Value(u32).init.json": "6f79df035939d65b587a248e20d477f2037a2fea7037c9e3b0d085fdc3cf4325",
+    "thread_tuples.ZeroWorker(u8).run.json": "95885ea5a3709803690e3224c8ececf25d74768bcafa7f70b7fb570eaeebe56d",
+    "thread_tuples.atomicShared.json": "861cda679083db577c3c8b090ef03570d36cba3424d50a38fb6cfaca404b1933",
+    "thread_tuples.atomicWorker.json": "5ef6448dbd2b70b7a8a26dba764ebf456405ef56af6ca1f2d8ffbef79a676aae",
+    "thread_tuples.copied.json": "3c66dd2c5a15fd870cfe23003a188669f9247efeb2b81b39beee6ce7faf5623b",
+    "thread_tuples.copyWorker.json": "307f0f8303a687a728a985bea105cd0e34566564acabcb2f0350c590371110b1",
+    "thread_tuples.empty.json": "29e9d3a0eeb20fb1795d0a3244a3475c8c5a9d829ef6c923879ec1f45447c556",
+    "thread_tuples.genericEmpty.json": "a36ed576cc48d2268287d373fd6a10f125abe46944d1a878b261630691d8e8ea",
+    "thread_tuples.groupMixed.json": "ce84484af9de597ce617b5ad65818b1fedee440a834fbb52ae12cde5ed64007d",
+    "thread_tuples.mixed.json": "36e28b9f9f28d2b49180ea223f153f4788bcfa5b4710893a570cc15e8c877e3d",
+    "thread_tuples.mixedWorker.json": "dfc45bb7a91c7e6e070fb1d044ee05ad8710f7f1af7425466557de8a6de0e46f",
+    "thread_tuples.zeroWorker.json": "96bb708a5d780e91387700ce16f5b51674c31832377966ec79cb7b009ea89e17"
+  },
+  "stdlib_functions": [
+    "atomic.Value(u32).init"
+  ]
+}

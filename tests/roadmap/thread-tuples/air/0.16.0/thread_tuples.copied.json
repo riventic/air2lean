@@ -1,0 +1,838 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "thread_tuples.copied",
+ "params": [
+  0,
+  0,
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 5,
+   "tag": "store",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 4
+    }
+   ],
+   "name": "snapshot"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 9,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 10,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "ty": 0,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 9
+    }
+   ],
+   "name": "out"
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4
+  },
+  {
+   "id": 14,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "aggregate_init",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "inst": 14
+    },
+    {
+     "inst": 1
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4
+  },
+  {
+   "id": 18,
+   "tag": "call",
+   "ty": 5,
+   "callee": {
+    "ty": 6,
+    "func": "Thread.spawn__anon_26274",
+    "noreturn": false,
+    "comptime_fn": "thread_tuples.copyWorker"
+   },
+   "args": [
+    {
+     "ty": 7,
+     "elems": [
+      {
+       "ty": 8,
+       "val": "16777216"
+      },
+      {
+       "ty": 9,
+       "null": true
+      }
+     ]
+    },
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "try",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 18
+    }
+   ],
+   "body": [
+    {
+     "id": 19,
+     "tag": "unwrap_errunion_err",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 18
+      }
+     ]
+    },
+    {
+     "id": 20,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 4
+    },
+    {
+     "id": 21,
+     "tag": "bitcast",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 19
+      }
+     ]
+    },
+    {
+     "id": 22,
+     "tag": "wrap_errunion_err",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 21
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "tag": "ret_safe",
+     "ty": 13,
+     "args": [
+      {
+       "inst": 22
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "alloc",
+   "ty": 14
+  },
+  {
+   "id": 26,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 25
+    },
+    {
+     "inst": 24
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "tag": "bitcast",
+   "ty": 15,
+   "args": [
+    {
+     "inst": 25
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 24
+    }
+   ],
+   "name": "handle"
+  },
+  {
+   "id": 29,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 30,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "ty": 0,
+     "val": "99"
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 32,
+   "tag": "load",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 27
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 6
+  },
+  {
+   "id": 34,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 16,
+    "func": "Thread.join",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 32
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 7
+  },
+  {
+   "id": 36,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 9
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 36
+    },
+    {
+     "inst": 37
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 7
+  },
+  {
+   "id": 40,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 38
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "ret_safe",
+   "ty": 13,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_union",
+   "error": 12,
+   "payload": 0,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 3,
+     "offset": 0
+    },
+    {
+     "ty": 0,
+     "offset": 8
+    },
+    {
+     "ty": 0,
+     "offset": 12
+    },
+    {
+     "ty": 0,
+     "offset": 16
+    }
+   ],
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 11,
+   "payload": 10,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread.SpawnConfig, struct { *u32, u32, u32, u32 }) error{LockedMemoryLimitExceeded,OutOfMemory,SystemResources,ThreadQuotaExceeded,Unexpected}!Thread"
+  },
+  {
+   "k": "struct",
+   "name": "Thread.SpawnConfig",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "stack_size",
+     "ty": 8,
+     "offset": 0
+    },
+    {
+     "name": "allocator",
+     "ty": 9,
+     "offset": 8
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 17,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "impl",
+     "ty": 18,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "LockedMemoryLimitExceeded",
+    "OutOfMemory",
+    "SystemResources",
+    "ThreadQuotaExceeded",
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 10,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (Thread) void"
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "ptr",
+     "ty": 19,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 20,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "thread",
+     "ty": 21,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 22,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 23,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 24,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator.VTable",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 25,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 26,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 27,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 28,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "completion",
+     "ty": 29,
+     "offset": 24
+    },
+    {
+     "name": "child_tid",
+     "ty": 30,
+     "offset": 16
+    },
+    {
+     "name": "parent_tid",
+     "ty": 31,
+     "offset": 20
+    },
+    {
+     "name": "mapped",
+     "ty": 32,
+     "offset": 0
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 33,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 34,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 35,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 36,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Thread.Completion__enum_1875)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 37,
+     "offset": 0
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(i32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 31,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 38,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  },
+  {
+   "k": "enum",
+   "name": "Thread.Completion__enum_1875",
+   "tag": 38,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "running",
+     "value": "0"
+    },
+    {
+     "name": "detached",
+     "value": "1"
+    },
+    {
+     "name": "completed",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

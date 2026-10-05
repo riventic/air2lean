@@ -531,10 +531,22 @@ def translate(manifest, limits, data, report, translator, staging):
 
 
 def report_bytes(report, limits):
-    encoded = canonical(report)
-    if len(encoded) > limits['max_total_output_bytes']:
+    encoder = json.JSONEncoder(sort_keys=True, indent=2, ensure_ascii=False)
+    maximum = limits['max_total_output_bytes']
+    encoded = bytearray()
+    for chunk in encoder.iterencode(report):
+        if len(chunk) > maximum - len(encoded):
+            raise Invalid('report exceeds max_total_output_bytes')
+        # A single string can be a large encoder chunk; bound each UTF-8 copy too.
+        for offset in range(0, len(chunk), 65536):
+            part = chunk[offset:offset + 65536].encode('utf-8')
+            if len(part) > maximum - len(encoded):
+                raise Invalid('report exceeds max_total_output_bytes')
+            encoded.extend(part)
+    if len(encoded) >= maximum:
         raise Invalid('report exceeds max_total_output_bytes')
-    return encoded
+    encoded.append(10)
+    return bytes(encoded)
 
 
 def atomic_report(path, encoded, overwrite):

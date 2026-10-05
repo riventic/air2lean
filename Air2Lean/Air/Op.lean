@@ -1,3 +1,5 @@
+import Std.Data.HashSet
+
 /-!
 # Internal IR
 
@@ -55,6 +57,20 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
+/-- Float widths supported by parsing and the checked model. -/
+def supportedFloatWidth (bits : Nat) : Bool :=
+  bits == 16 || bits == 32 || bits == 64 || bits == 80 || bits == 128
+
+private def integerDomain (signed : Bool) (bits : Nat) : Int → Bool :=
+  if bits == 0 then fun v => v == 0 else
+  let bound : Int := 2 ^ (if signed then bits - 1 else bits)
+  if signed then fun v => decide (-bound ≤ v ∧ v < bound)
+  else fun v => decide (0 ≤ v ∧ v < bound)
+
+/-- Constants must fit the declared Zig integer width; validation never inserts a wrap. -/
+def integerFits (signed : Bool) (bits : Nat) (v : Int) : Bool :=
+  integerDomain signed bits v
+
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
@@ -66,27 +82,65 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- Children traversed through values; a pointer ends a value-type path. -/
+def valueChildTys (ty : Ty) : Array TyId :=
+  match ty with
+  | .ptr .. => #[]
+  | _ => childTys ty
+
 private inductive TypeVisit where
-  | unseen | active | done
+  | unseen | active | done (height : Nat)
   deriving Inhabited
 
 /-- Reject cycles through values before width/layout traversal. Pointer edges break a
 value cycle, so ordinary linked structures remain valid. All child IDs are range checked. -/
 partial def validateTypeGraph (fnName : String) (types : Array Ty) : Except String Unit := do
   for t in types do
+    if let .int _ bits := t then
+      if bits > 65535 then throw s!"{fnName}: integer width {bits} exceeds Zig's 65535-bit limit"
+    if let .float bits := t then
+      unless supportedFloatWidth bits do
+        throw s!"{fnName}: float type of {bits} bits is outside the subset (only 16, 32, 64, 80, 128)"
     for c in childTys t do
       unless c < types.size do throw s!"{fnName}: unknown type id {c}"
-  let rec visit (id : TyId) (states : Array TypeVisit) : Except String (Array TypeVisit) := do
+    let fields : Array String := match t with
+      | .struct _ _ fs | .union _ _ _ fs => fs.map (fun (field : String × TyId) => field.1)
+      | .enum _ _ _ fs => fs.map (fun (field : String × Int) => field.1)
+      | _ => #[]
+    let mut names : Std.HashSet String := {}
+    for name in fields do
+      if names.contains name then throw s!"{fnName}: duplicate type field name '{name}'"
+      names := names.insert name
+    match t with
+    | .errorUnion set _ =>
+      unless (match types[set]? with | some (.errorSet _) => true | _ => false) do
+        throw s!"{fnName}: error union set type {set} is not an error set"
+    | .enum name tag _ fs =>
+      let some (.int signed bits) := types[tag]?
+        | throw s!"{fnName}: enum '{name}' tag type {tag} is not an integer"
+      if bits > 65535 then throw s!"{fnName}: enum '{name}' tag width exceeds 65535 bits"
+      let fits := integerDomain signed bits
+      let mut values : Std.HashSet Int := {}
+      for (_, v) in fs do
+        unless fits v do throw s!"{fnName}: enum '{name}' tag {v} does not fit its integer type"
+        if values.contains v then throw s!"{fnName}: enum '{name}' has duplicate tag {v}"
+        values := values.insert v
+    | _ => pure ()
+  let rec visit (id : TyId) (states : Array TypeVisit) (depth : Nat := 0) : Except String (Array TypeVisit) := do
+    if depth ≥ 256 then throw s!"{fnName}: value type traversal exceeds 256 levels"
     match states[id]? with
-    | some .done => return states
+    | some (.done _) => return states
     | some .active => throw s!"{fnName}: cyclic value type at type {id}"
     | none => throw s!"{fnName}: unknown type id {id}"
     | some .unseen =>
       let some t := types[id]? | throw s!"{fnName}: unknown type id {id}"
       let mut states := states.set! id .active
-      unless (match t with | .ptr .. => true | _ => false) do
-        for c in childTys t do states ← visit c states
-      pure (states.set! id .done)
+      let children := valueChildTys t
+      for c in children do states ← visit c states (depth + 1)
+      let height : Nat := 1 + children.foldl (fun n c => match states[c]? with
+          | some (.done h) => max n h | _ => n) (0 : Nat)
+      if height > 256 then throw s!"{fnName}: value type traversal exceeds 256 levels"
+      pure (states.set! id (.done height))
   let mut states : Array TypeVisit := Array.replicate types.size .unseen
   for id in Array.range types.size do states ← visit id states
 
@@ -115,7 +169,13 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, BEq
+
+/-- C and allowzero pointers can carry address zero as a value. -/
+def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
 
 inductive Val where
   | inst (id : InstId)
@@ -153,6 +213,8 @@ inductive Val where
   | agg (ty : TyId) (elems : Array Val)
   /-- A pointer constant: byte `off` of the global with index `global` in `Func.globals`. -/
   | ptrConst (ty : TyId) (global : Nat) (off : Nat)
+  /-- Address zero of a C/allowzero pointer. No global or allocation is attached. -/
+  | ptrNull (ty : TyId)
   /-- A pointer constant without a global (`@ptrFromInt`, a comptime-only value): `kind` names
   its base. `Check.lean` rejects it. -/
   | ptrOther (ty : TyId) (kind : String)
@@ -165,7 +227,7 @@ field. -/
 def Val.constTy? (v : Val) : Option TyId :=
   match v with
   | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
-  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrOther t _
+  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrNull t | .ptrOther t _
   | .sliceConst t .. => some t
   | _ => none
 
@@ -175,6 +237,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 `expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
+  if calleeName == "debug.defaultPanic" then some ".panic" else
   if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
@@ -234,6 +297,11 @@ inductive BitOp where
   | and | or | xor
   deriving Repr, Inhabited, BEq
 
+/-- Counts bits in the operand representation, including for signed integers. -/
+inductive BitCountOp where
+  | clz | ctz | popcount
+  deriving Repr, Inhabited, BEq
+
 inductive ShiftOp where
   | shl | shlExact | shlSat | shr | shrExact
   deriving Repr, Inhabited, BEq
@@ -274,6 +342,8 @@ inductive Op where
   | divFloat (a b : Val)
   | minMax (isMax : Bool) (a b : Val)
   | withOverflow (op : ArithOp) (a b : Val)
+  | shlWithOverflow (a b : Val)
+  | countBits (op : BitCountOp) (a : Val)
   /-- `splat`: a vector with every lane equal to the scalar `a`. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
@@ -415,9 +485,16 @@ inductive Op where
   | «repeat» (target : InstId)
   | condBr (c : Val) (thenBody elseBody : Array Inst)
   | switchBr (v : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- A switch with a selector replaced by dispatches from its descendant bodies. -/
+  | loopSwitchBr (initial : Val) (cases : Array SwitchCase) (elseBody : Array Inst)
+  /-- Jump to an enclosing loop-switch, replacing its selector, preserving other state. -/
+  | switchDispatch (target : InstId) (selector : Val)
   /-- `try`/`try_cold`: `v` is an error union; `errBody` runs when it holds an error (it ends in
   an exit, like a `cond_br` branch). Otherwise the `try` instruction's value is the payload. -/
   | «try» (v : Val) (errBody : Array Inst)
+  /-- Pointer-form `try`: test the addressed error tag, run `errBody` on error, otherwise
+  return the payload's address in the same allocation without reading or copying it. -/
+  | tryPtr (p : Val) (errBody : Array Inst)
   | ret (v : Val)
   | unreach
   | trap

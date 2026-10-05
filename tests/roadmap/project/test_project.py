@@ -393,10 +393,45 @@ class ProjectTests(unittest.TestCase):
                 project.hash_bounded(path, 4)
         self.assertEqual(sizes, [5, 2])
 
+    def test_bounded_report_encoding_preserves_exact_legacy_bytes(self):
+        vectors = [None, [], {}, {'z': [True, False, None, -3, 1.5], 'a': {'tab': '\t', 'line': '\n'}},
+                   {'😀': '€\u0000"\\', 'a': 'plain ASCII'}, {'text': '€' * 65537}]
+        literal = {'z': '😀', 'a': [1, None]}
+        expected_literal = '{\n  "a": [\n    1,\n    null\n  ],\n  "z": "😀"\n}\n'.encode('utf-8')
+        self.assertEqual(project.report_bytes(literal, project.LIMITS), expected_literal)
+        for value in vectors:
+            expected = (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
+            self.assertEqual(project.report_bytes(value, project.LIMITS), expected)
+
+    def test_report_capacity_counts_utf8_and_final_newline(self):
+        for value in ['ASCII', '€😀', {'text': '\t\n\u0000'}, {'text': '€' * 65537}]:
+            expected = (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
+            with self.subTest(value=str(value)[:30]):
+                exact = dict(project.LIMITS, max_total_output_bytes=len(expected))
+                self.assertEqual(project.report_bytes(value, exact), expected)
+                for cap in (len(expected) - 1, len(expected) - 2, 0):
+                    with self.assertRaisesRegex(project.Invalid, 'report exceeds max_total_output_bytes'):
+                        project.report_bytes(value, dict(exact, max_total_output_bytes=cap))
+
+    def test_report_encoder_stops_before_requesting_tail_after_budget_failure(self):
+        visited = []
+        def chunks(value):
+            visited.append('prefix')
+            yield '['
+            visited.append('oversized')
+            yield '"😀",'
+            self.fail('encoder requested a later chunk after its UTF-8 byte budget was exhausted')
+        with mock.patch.object(project.json, 'JSONEncoder') as encoder:
+            encoder.return_value.iterencode.side_effect = chunks
+            with self.assertRaisesRegex(project.Invalid, 'report exceeds max_total_output_bytes'):
+                project.report_bytes({}, dict(project.LIMITS, max_total_output_bytes=7))
+            encoder.assert_called_once_with(sort_keys=True, indent=2, ensure_ascii=False)
+        self.assertEqual(visited, ['prefix', 'oversized'])
+
     def test_report_encoding_reused_for_publication_and_stdout(self):
         out = self.base / 'report.json'
         stdout, stderr = io.StringIO(), io.StringIO()
-        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+        with mock.patch.object(project, 'report_bytes', wraps=project.report_bytes) as encoded, \
              mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
              contextlib.redirect_stderr(stderr):
             status = project.main(['report', str(self.path), '--out', str(out)])
@@ -409,7 +444,7 @@ class ProjectTests(unittest.TestCase):
     def test_translate_encoding_reused_after_stage_mutations(self):
         artifact = self.base / 'artifact'
         stdout, stderr = io.StringIO(), io.StringIO()
-        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+        with mock.patch.object(project, 'report_bytes', wraps=project.report_bytes) as encoded, \
              mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
              contextlib.redirect_stderr(stderr):
             status = project.main(['translate', str(self.path), '--translator', str(self.translator), '--out', str(artifact)])
