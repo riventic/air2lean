@@ -1,0 +1,22 @@
+FROM ubuntu:24.04
+
+ARG PYTHON_ARCH=amd64
+# Keep the shell, coreutils and compiler environment x86_64 like CI. Only Python
+# runs natively on arm64 so memory gates exclude x86 emulator overhead.
+RUN if [ "$PYTHON_ARCH" = arm64 ]; then \
+      dpkg --add-architecture arm64; \
+      sed -i '/^Components:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources; \
+      printf '%s\n' \
+        'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe' \
+        'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe' \
+        'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe' \
+        > /etc/apt/sources.list.d/arm64.list; \
+    elif [ "$PYTHON_ARCH" != amd64 ]; then exit 1; fi \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    bash build-essential ca-certificates curl git patch \
+    "python3:$PYTHON_ARCH" "python3-yaml:$PYTHON_ARCH" ripgrep procps \
+    libgmp-dev libssl-dev perl util-linux xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /work/tests/diff /cache
+WORKDIR /work

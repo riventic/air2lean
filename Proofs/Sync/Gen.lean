@@ -256,7 +256,7 @@ def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Cond
         let i27 ← pure { waiters := i23, signals := i26 : Io_Condition_State }
         match ← ((do
           let i29 ← pure (i20.add 0)
-          let i30 ← Zig.cmpxchgAsC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i21 i27
+          let i30 ← Zig.cmpxchgWeakAsC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i21 i27
           pure (.br28 i30)) : Zig.CM Tgt Io_Condition_signalLocals Io_Condition_signalExit) with
         | .br28 v28 => (do
           let i32 ← pure ((v28).isSome)
@@ -490,7 +490,7 @@ def Io_Condition_waitInner.loop56 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : 
         let i71 ← pure { waiters := i67, signals := i70 : Io_Condition_State }
         match ← ((do
           let i73 ← pure (i63.add 0)
-          let i74 ← Zig.cmpxchgAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i73 i64 i71
+          let i74 ← Zig.cmpxchgWeakAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i73 i64 i71
           pure (.br72 i74)) : Zig.CM Tgt Io_Condition_waitInnerLocals Io_Condition_waitInnerExit) with
         | .br72 v72 => (do
           let i76 ← pure ((v72).isSome)
@@ -883,7 +883,7 @@ def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock
         let i17 ← pure ((← get).state)
         let i18 ← pure ((← get).state)
         let i19 ← Zig.add false i18 (4294967296 : BitVec 64)
-        let i20 ← Zig.cmpxchgC Zig.AtomicOrder.seqCst Zig.AtomicOrder.seqCst 8 i16 i17 i19
+        let i20 ← Zig.cmpxchgWeakC Zig.AtomicOrder.seqCst Zig.AtomicOrder.seqCst 8 i16 i17 i19
         let i21 ← pure ((i20).isSome)
         if i21 then (do
           let i23 ← Zig.optPayload i20

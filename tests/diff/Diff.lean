@@ -1,3 +1,4 @@
+import ScheduleSearch
 import Lean.Data.Json
 import Air2Lean.Air.Json
 import Proofs.Basic.Gen
@@ -980,42 +981,8 @@ def renderOut {α : Type} (r : Zig.Sched.Out α) (payload : α → String) : Str
   | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
   | some (.ok (v, _)) => "{\"ok\":" ++ payload v ++ "}"
 
-/-- The most runs (schedules) that `searchSchedules` tries for one input. -/
-def scheduleCap : Nat := 2000
-
 /-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
 def scheduleFuel : Nat := 100000
-
-/-- The line of a concurrent function for one input, from the schedules: a depth-first search
-over the oracle's choices (`Zig.Sched.runTrace` gives the options of each choice).
-
-1. A schedule whose line equals Zig's line `zig`: that line.
-2. Else a schedule with a data race (`.illegal`): the program is undefined, so it matches any Zig
-   line (`diff.sh`'s `unspecified` class, pinned per function).
-3. Else, if the search stopped at `scheduleCap`: `Zig.Error.capped` (`diff.sh`'s `capped`
-   class, pinned per function).
-4. Else the line of the first schedule: `diff.sh` shows the mismatch.
-
-A search that misses a schedule can only give a false mismatch, never hide one. -/
-partial def searchSchedules (run : (Nat → Nat) → String × Array Nat) (zig : String) : String :=
-  let rec go (pre : Array Nat) (runs : Nat) (first race : Option String) : String :=
-    let (line, opts) := run fun i => pre.getD i 0
-    if line == zig then line else
-    let first := first.orElse fun _ => some line
-    let race := race.orElse fun _ =>
-      if line == "{\"fail\":\"Zig.Error.illegal\"}" then some line else none
-    -- The next schedule: increase the last choice that has an option left.
-    let rec next (i : Nat) : Option (Array Nat) :=
-      if i = 0 then none else
-      let j := i - 1
-      let c := pre.getD j 0
-      if c + 1 < opts[j]! then some (((Array.range j).map fun x => pre.getD x 0).push (c + 1))
-      else next j
-    match next opts.size with
-    | some p => if runs + 1 ≥ scheduleCap then race.getD "{\"fail\":\"Zig.Error.capped\"}"
-                else go p (runs + 1) first race
-    | none => race.getD (first.getD line)
-  go #[] 0 none none
 
 /-- `processFile` for a concurrent function: each input line with Zig's line for it
 (`tests/diff/out/zig/<ex>/<name>.jsonl`, written before the Lean side runs). -/

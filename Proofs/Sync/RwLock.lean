@@ -1,3 +1,4 @@
+import ZigLean.Conc.WeakWord
 import Proofs.Sync.Semaphore
 import ZigLean.Conc.Word
 
@@ -188,6 +189,35 @@ theorem wp_cas {succ fail : AtomicOrder} {exp new : BitVec n}
   · rw [hist_cur] at hj hv hfl hacq hh
     exact ⟨by rw [hop.threads],
       (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_cur hop)).2 j old hne hj hv hfl hacq hh⟩
+
+theorem wp_weakCas {succ fail : AtomicOrder} {exp new : BitVec n}
+    (hi : P.inv (upd G t g) m) (hW : WAt P W t g)
+    {Q : Option (BitVec n) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, d = k + 1 → ∀ G₁ m₁ m', G₁ t = g → P.inv G₁ m₁ → W.Ok m' → W.Op t m₁ m' →
+      ((last (W.hist m₁)).Val exp → W.Holds m' new →
+        W.hist m' = (W.hist m₁).push (Word.rmwEnt m' t succ (last (W.hist m₁)) new) →
+        (succ.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
+        Q (none, s) G₁ m' k) ∧
+      (∀ j old, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val old →
+        Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
+        (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
+        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k)) :
+    P.WP t ((cmpxchgWeakC succ fail nb W.ptr exp new : CM Tgt σ (Option (BitVec n))).run s) Q G m d := by
+  unfold cmpxchgWeakC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
+  have hwc := ok_cur hw t
+  refine WP.callMC (fun e he => (hwc.weakCas_noErr (fail := fail) (new := new) htl hcs hcr e he).elim)
+    fun r m' hr => ?_
+  obtain ⟨hw', hop, ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hj, hv, hfl, hacq, hh⟩⟩ :=
+    hwc.weakCas rfl htl hcs hr
+  · rw [hist_cur] at hv hh hacq
+    exact ⟨by rw [hop.threads], (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_cur hop)).1 hv hU hh hacq⟩
+  · rw [hist_cur] at hj hv hfl hacq hh
+    exact ⟨by rw [hop.threads],
+      (h k hk G₁ m₁ m' hg₁ hi₁ hw' (op_cur hop)).2 j old hj hv hfl hacq hh⟩
+
 
 /-- An RMW at a 32-bit word, with a decode (`atomicRmwAsC`), by thread `t`. -/
 theorem wp_rmwAs {α : Type} [Packed α 32] {W : Word 32 4} {op : RmwOp} {ord : AtomicOrder} {v : α}
@@ -3035,8 +3065,8 @@ theorem ls_body (hE : E.Spec) (j : Bool) (D : Nat) (s : Io_RwLock_lockSharedUnca
     refine WP.bind (WP.callRC_ok (sVals_addR hvS) ?_)
     rw [StateT.run_bind]
     rw [wsptr]
-    refine WP.bind (wp_cas (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
-      fun k₁ hk₁ G₁ m₁ m' hg₁ hi₁ hw' hop => ⟨fun hv hU hh hacq => ?_, fun jx old hne hj hv hfl hacq hh => ?_⟩)
+    refine WP.bind (wp_weakCas (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
+      fun k₁ hk₁ G₁ m₁ m' hg₁ hi₁ hw' hop => ⟨fun hv hU hh hacq => ?_, fun jx old hj hv hfl hacq hh => ?_⟩)
     · -- the `cmpxchg` succeeds: `main` takes `n` from the state word
       have hu₁ := hi₁.2.1
       have hg0 : (G₁ 0).2.2 = .ls j := by rw [hg₁]; rfl
