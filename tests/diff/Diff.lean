@@ -924,11 +924,36 @@ def runSlices : IO Unit := do
       let s ← if a[0]!.isNull then pure none else some <$> sliceOf g a[0]!
       return Slices.lenOr s) fun _ v => natStr v true
 
-/-- A function that takes an allocator: `args[0]` is the allocation that fails, `null` or its
-number (`Zig.Mem.failAt`). -/
+/-- JSON policy indices/caps are nonnegative reference-machine integers. -/
+def allocationPolicyNat (j : Json) : IO Nat := do
+  let n ← getInt j
+  if n < 0 ∨ 2 ^ 63 ≤ n then throw (IO.userError "invalid allocator policy integer")
+  return n.toNat
+
+/-- A function that takes an allocator: legacy null/index or an explicit object with
+`fail_at`, `failures` and `max_bytes`. This is the test-model policy, not native malloc. -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
-  let f ← if fa.isNull then pure none else some <$> (Int.toNat <$> getInt fa)
-  return (do modify fun m => { m with failAt := f }; r)
+  let (f, policy) ← match fa with
+    | .null => pure (none, ({} : Zig.AllocPolicy))
+    | .num _ => do
+      let n ← allocationPolicyNat fa
+      pure (some n, ({} : Zig.AllocPolicy))
+    | .obj _ => do
+      let f ← match fa.getObjVal? "fail_at" with
+        | .ok .null => pure none
+        | .ok j => some <$> allocationPolicyNat j
+        | .error _ => pure none
+      let cap ← match fa.getObjVal? "max_bytes" with
+        | .ok j => allocationPolicyNat j
+        | .error _ => pure Zig.maxAllocBytes
+      let failures ← match fa.getObjVal? "failures" with
+        | .ok j => do
+          let items ← getArr j
+          (items.toList.mapM allocationPolicyNat)
+        | .error _ => pure []
+      pure (f, ({ maxBytes := cap, failures } : Zig.AllocPolicy))
+    | _ => throw (IO.userError "invalid allocator policy")
+  return (do modify fun m => { m with failAt := f, allocPolicy := policy }; r)
 
 def runLists : IO Unit := do
   let ex := "lists"

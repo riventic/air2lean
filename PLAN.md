@@ -149,7 +149,7 @@ Support matrix:
 | checked, wrapping, saturating arithmetic | |
 | `if`, `switch`, `while`, `for` | |
 | local `var`, also one whose address escapes; a result built in `ret_ptr` | |
-| read-only slices `[]const T` in a pure function; atomics on an integer, enum, `bool` or packed struct pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) that take turns at sync ops, with a data-race check; futex waits and wakes; the std sync primitives translated from their std code (`Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock` in 0.16.0; `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup` in 0.15.2); `Io.Group` (a model: a task is a thread) | `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
+| read-only slices `[]const T` in a pure function; atomics on an integer, enum, `bool` or packed struct pointee (`atomic_load`, `atomic_store_*`, `atomic_rmw`, `cmpxchg_weak`/`cmpxchg_strong`); fork-join threads (`Thread.spawn`/`.join`) that take turns at sync ops, with a data-race check; futex waits and wakes; the std sync primitives translated from their std code (`Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock` in 0.16.0; `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup` in 0.15.2); `Io.Group` (a model: a task is a thread); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Thread.detach`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
 | structs by value | `async` |
 | calls, recursion; function pointers (an indirect call) | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, translated std code (`ArrayListUnmanaged`) | a std function that is not translated and has no model |
@@ -158,6 +158,7 @@ Support matrix:
 | optionals `?T`, error unions `E!T`, `try`, `catch`, `orelse` | |
 | enums (also non-exhaustive), tagged unions `union(enum)` | |
 | single pointers `*T`, `?*T`, aliasing; loads and stores of ints, `bool`, floats, pointers, optionals, enums and structs | `threadlocal` and `extern` globals |
+| scalar nonoptional C/allowzero pointer null tests, casts and direct accesses; [scoped L05 gate](docs/null-pointers.md) | nullable-pointer storage, aggregates, optionals and projections remain outside the fragment; 0.16.0 macOS scoped gate passed; Linux CI rerun and other-version qualification pending |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays in memory; `@memset`, `@memcpy`, `@memmove`; an array with a sentinel `[N:s]T` as one value (`N+1` items) | |
 | globals (`var`, `const`; a write to a `const` global throws `.illegal`), string literals, `@tagName`, `@errorName` | |
 | `@intFromPtr`, `@ptrFromInt`, `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast`, `@fieldParentPtr`; `packed` structs (also bit-pointers) and `extern` structs; tagged, bare, `extern` and `packed` unions and error unions in memory | a packed struct field other than an integer, `bool`, enum or packed struct; a `packed` union in a packed struct (a union value can have undefined bits, and a packed struct value is a `BitVec` without undefined bits) |

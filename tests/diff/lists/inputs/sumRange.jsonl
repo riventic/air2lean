@@ -298,3 +298,6 @@
 {"bufs":[],"args":[null,40]}
 {"bufs":[],"args":[0,34]}
 {"bufs":[],"args":[1,262145]}
+{"bufs":[],"args":[{"fail_at":null,"failures":[0,2],"max_bytes":2097152},4]}
+{"bufs":[],"args":[{"failures":[],"max_bytes":16},4]}
+{"bufs":[],"args":[{"failures":[],"max_bytes":15},4]}

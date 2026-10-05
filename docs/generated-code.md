@@ -140,6 +140,8 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | call of a function that uses memory | — | `Zig.callM` |
 | call of a pure function | `Zig.call` | `Zig.callR`; a `[]const T` argument is `Zig.readSlice T align s` |
 
+Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. Nullable pointer storage, nullable optional payload encodings and nullable projections remain rejected.
+
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
@@ -147,7 +149,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
-| `cmp_eq`, `cmp_neq` on pointers | `==`, `!=` on block and offset |
+| `cmp_eq`, `cmp_neq` on pointers | Ordinary pointers: `==`, `!=` on block/offset. Scalar C/allowzero pointers: address comparison through `Zig.ptrEqAddr`. |
 | `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
@@ -228,7 +230,7 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 | `call` of `Thread.join(handle)` | `Zig.joinC handle` |
 | `call` of `Io.futexWaitUncancelable(T, ptr, expected)` / `Io.futexWait` / `Io.futexWake(T, ptr, n)` (0.16.0) | `Zig.futexWaitC io ptr expected` / `Zig.futexWaitCancelableC …` / `Zig.futexWakeC io ptr n` |
 
-A program with a concurrent function gets the type `Tgt`, one constructor per spawned function with its one argument, and `dispatch : Tgt → Zig.ConcM Tgt Unit`, which runs a target (a memory function through `Zig.ConcM.liftMem`):
+A program with a concurrent function gets the type `Tgt`, one constructor per spawned function with its complete captured argument tuple, and `dispatch : Tgt → Zig.ConcM Tgt Unit`, which runs a target (a memory function through `Zig.ConcM.liftMem`):
 
 ```lean
 inductive Tgt where
@@ -240,7 +242,9 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
 ```
 
-Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.detach`, `Thread.yield`, `Thread.spinLoopHint` and `Io.futexWaitTimeout` are rejected at translation time (`rejectedThreadFn?`), each with its own reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
+An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture.
+
+Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.yield` emits `Zig.threadYieldC`, preserving both success and `error.SystemCannotYield`. Audited inline `std.atomic.spinLoopHint` instructions emit `Zig.spinLoopHintC`; both expose scheduling opportunities with no fairness guarantee ([progress-hints.md](progress-hints.md)). `Thread.detach` and `Io.futexWaitTimeout` are rejected at translation time (`rejectedThreadFn?`), each with its own reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
 
 An escaping `alloc` gets a stack block at function entry. Its `Locals` field holds the pointer, and the block is freed when the function returns:
 
@@ -303,6 +307,8 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 | `reachedUnreachable` | `.unreachable` |
 | `outOfBounds`, `startGreaterThanEnd` | `.outOfBounds` |
 | `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch`, `memcpyAlias`, `call` (`@panic`) | `.panic` |
+
+The exact noreturn callee `debug.defaultPanic` maps to `.panic` as well. Pinned std sources for 0.14.1, 0.15.2 and 0.16.0 define this standard panic handler as noreturn; fresh 0.16.0 adapter-fixture AIR calls it directly. This is an exact-name compatibility rule: foreign names and suffix variants remain rejected, and a returning call with this name has no external-call model. The existing `FullPanic` table is unchanged.
 
 A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>`; the suffix is not part of the segment.
 

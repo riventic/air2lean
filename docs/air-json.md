@@ -1,4 +1,4 @@
-# AIR JSON format (schema 11)
+# AIR JSON format (schema 12)
 
 The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json`. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
@@ -6,9 +6,26 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 ```json
 {
-  "schema": 11,
+  "schema": 12,
   "zig_version": "0.15.2",
   "target_endian": "little",
+  "profile": {
+    "name": "abi64-le-v1",
+    "target_triple": "x86_64-linux.4.19...6.1-gnu.2.28",
+    "pointer_bits": 64,
+    "endian": "little",
+    "abi": "gnu",
+    "zig_version": "0.15.2",
+    "backend": "stage2_llvm",
+    "cpu": "x86_64",
+    "features": ["sse", "sse2"],
+    "build_mode": "ReleaseSafe",
+    "float_mode": "per-instruction",
+    "error_set_bits": 16,
+    "error_layout": "type-table",
+    "error_tracing": false,
+    "export_stage": "analyzed-air"
+  },
   "name": "basic.scale",
   "params": [0, 1],
   "ret": 3,
@@ -20,7 +37,9 @@ The patched compiler writes one file per function: `$ZIG_AIR_JSON_DIR/<fqn>.json
 
 | Field | Meaning |
 |---|---|
-| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy files without this field are accepted under the little-endian reference-target assumption; their target has not been verified. |
+| `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
+| `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
+| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -75,7 +94,7 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `ty` | result type ID. Missing only for `inferred_alloc*`. |
 | `args` | operands, in AIR order |
 | `param` | `arg`: ZIR parameter index |
-| `body` | `block`, `loop`, `dbg_inline_block`, `try`, `try_cold` (the error body) |
+| `body` | `block`, `loop`, `dbg_inline_block`, `try`, `try_cold`, `try_ptr`, `try_ptr_cold` (the error body) |
 | `then`, `else` | `cond_br` (both are bodies) |
 | `cases`, `else` | `switch_br`, `loop_switch_br`: `cases: [{items: [Ref], ranges: [[Ref, Ref]], body}]`, `else: body` |
 | `target` | `br`, `switch_dispatch`: the block `id`; `repeat`: the loop `id` |
@@ -125,7 +144,8 @@ One of:
 | `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
 | `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
 | `{"ty": 8, "elems": [Ref, ...]}` | array, vector, struct or tuple constant: its constant items or fields (recursively nested constants only). An array with a sentinel has the sentinel as the last item (schema 6). A vector has no sentinel (schema 9). |
-| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice is the global and the total offset. A pointer without a global has `{"unsupported": "<base>", "off": n}` instead: `int` (`@ptrFromInt`), `comptime_alloc`, `comptime_field`, `eu_payload`, `opt_payload`, `arr_elem`, or `field` of a packed struct (schema 6). |
+| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice is the global and the total offset. A pointer without a global has `{"unsupported": "<base>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `eu_payload`, `opt_payload`, `arr_elem`, or `field` of a packed struct (schema 6). |
+| `{"ty": 9, "ptr": {"null": true, "off": 0}}` | address-zero scalar C/allowzero pointer constant. `null` must be true, the offset zero, and `global`/`unsupported` absent; the checker validates nullability. This additive schema-11 form needs the updated exporter. |
 | `{"ty": 10, "slice_ptr": Ref, "slice_len": Ref}` | slice constant (schema 6). |
 
 The translator accepts `{"inst": n}` as a top-level SSA operand. Inside a constant, every
@@ -145,4 +165,6 @@ Schema 6. One entry per global that a pointer constant points into, in the order
 | `threadlocal`, `extern` | a named global only |
 | `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
 
-`try_ptr` and `try_ptr_cold` (the pointer form of `try`) are always `"unsupported": true` — not decoded.
+`try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
+`body` for the error branch. The instruction's `ty` is the payload pointer type. On
+success they return that payload's address without reading or copying its bytes.

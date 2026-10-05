@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Lean.Data.Json
+import Air2Lean.Air.StrictJson
 
 /-!
 # Stable names of generic instances
@@ -62,7 +63,7 @@ def rename (map : Std.HashMap Inst Nat) (s : String) (marker : String := "__anon
 
 /-- The function name (the top-level `name`) of a JSON text; `""` if it has none. -/
 def fnName (text : String) : String :=
-  ((Lean.Json.parse text).toOption.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
+  ((StrictJson.parse text).toOption.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
 
 /-- Only compiler identities are renamed. Field/error names and asm/string data can contain
 the same markers, but their spelling is observable (for example through `@tagName`). -/
@@ -141,12 +142,12 @@ def compressParsed (texts : Array String) (parsed : Array (Option Lean.Json)) : 
   (texts.zip parsed).map fun (text, j) => (j.map (·.compress)).getD text
 
 def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array String :=
-  let parsed := texts.map fun text => (Lean.Json.parse text).toOption
+  let parsed := texts.map fun text => (StrictJson.parse text).toOption
   compressParsed texts (renumberParsed texts parsed marker)
 
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
 def renumberAll (texts : Array String) : Array String := Id.run do
-  let mut parsed := texts.map fun text => (Lean.Json.parse text).toOption
+  let mut parsed := texts.map fun text => (StrictJson.parse text).toOption
   let mut current := texts
   for marker in ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"] do
     parsed := renumberParsed current parsed marker

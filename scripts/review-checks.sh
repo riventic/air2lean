@@ -86,10 +86,11 @@ expect_failure "duplicate float override" "duplicate override key" env AIR2LEAN_
 check="$test_dir/check"
 mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air" \
   "$check/Proofs/Basic" "$check/bin"
-cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py" "$check/scripts/"
+cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" "$check/scripts/"
 cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
 {
-  "zig_version": "legacy",
+  "schema": 11,
+  "zig_version": "0.16.0",
   "name": "basic.foo__anon_1",
   "types": [{"name": "basic.Choice__enum_1", "fields": [{"name": "visible__anon_1"}]}],
   "body": [{
@@ -113,7 +114,7 @@ import os
 from pathlib import Path
 
 data = json.loads(Path("tests/golden/basic/air/basic.foo.json").read_text())
-data["zig_version"] = "current"
+data["zig_version"] = "0.16.0"
 endian = os.environ.get("EXPORTED_ENDIAN", "")
 if endian:
     data["target_endian"] = endian
@@ -138,9 +139,20 @@ EOF
 cat >"$check/bin/lake" <<'EOF'
 #!/usr/bin/env bash
 if [ "$1" = exe ]; then
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = -o ]; then printf '%s\n' "$GENERATED_SOURCE" >"$2"; shift 2; else shift; fi
-  done
+  python3 - "$@" <<'PYFAKE'
+import json
+import os
+from pathlib import Path
+import runpy
+import sys
+helpers = runpy.run_path("scripts/normalize-generated.py")
+args = sys.argv[1:]
+source = sorted(Path(args[2]).glob("*.json"))[0]
+profile = helpers["profile_for_air"](json.loads(source.read_text()))
+metadata = dict(profile=profile, float_semantics="ieee", correspondence="model")
+Path(args[args.index("-o") + 1]).write_text("-- air2lean-profile: " + json.dumps(metadata) + "\n" +
+                                         os.environ["GENERATED_SOURCE"] + "\n")
+PYFAKE
 else
   for arg in "$@"; do
     if [ "$arg" = Proofs.Basic.Gen ] && grep -q invalid Proofs/Basic/Gen.lean; then
@@ -159,7 +171,7 @@ expect_pass "valid generation with diff disabled" env PATH="$check/bin:$PATH" \
 expect_pass "little-endian metadata compatible with legacy goldens" env PATH="$check/bin:$PATH" \
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 \
   AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN=little GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
-expect_failure "big-endian metadata remains visible" "does not match its golden files" env PATH="$check/bin:$PATH" \
+expect_failure "big-endian metadata fails before comparison" "little-endian memory model" env PATH="$check/bin:$PATH" \
   AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 \
   AIR2LEAN_OUT_DIR= EXPORTED_ENDIAN=big GENERATED_SOURCE='def valid := 1' bash "$check/scripts/check.sh"
 run_identity_check() {
