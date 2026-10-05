@@ -393,10 +393,171 @@ class ProjectTests(unittest.TestCase):
                 project.hash_bounded(path, 4)
         self.assertEqual(sizes, [5, 2])
 
+    @contextlib.contextmanager
+    def tracked_input_reads(self, *, short=None, fail_name=None, fail_after=None):
+        original_open, original_fdopen = os.open, os.fdopen
+        observed = {'opened': [], 'chunks': {}, 'closed': []}
+        names = {}
+        def opened(path, *args, **kwargs):
+            fd = original_open(path, *args, **kwargs)
+            names[fd] = Path(path).name
+            observed['opened'].append(names[fd])
+            return fd
+        class Reader:
+            def __init__(self, handle):
+                self.handle, self.name = handle, names[handle.fileno()]
+            def __enter__(self):
+                self.handle.__enter__()
+                return self
+            def __exit__(self, *args):
+                observed['closed'].append(self.name)
+                return self.handle.__exit__(*args)
+            def fileno(self):
+                return self.handle.fileno()
+            def read(self, size):
+                chunks = observed['chunks'].setdefault(self.name, [])
+                if self.name == fail_name and len(chunks) == fail_after:
+                    raise OSError('injected partial read failure')
+                chunk = self.handle.read(min(size, short) if short else size)
+                chunks.append(len(chunk))
+                return chunk
+        with mock.patch.object(project.os, 'open', side_effect=opened), \
+             mock.patch.object(project.os, 'fdopen', side_effect=lambda *a: Reader(original_fdopen(*a))):
+            yield observed
+
+    def test_shared_readers_preserve_returns_and_charge_short_chunks(self):
+        path = self.base / 'short'
+        path.write_bytes(b'abcdef')
+        for reader, expected in ((project.read_bounded, b'abcdef'),
+                                 (project.hash_bounded, (project.digest(b'abcdef'), 6))):
+            with self.subTest(reader=reader.__name__):
+                self.assertEqual(reader(path, 6), expected)
+                charges = []
+                with self.tracked_input_reads(short=2) as reads:
+                    self.assertEqual(reader(path, 6, charge=charges.append), expected)
+                self.assertEqual(charges, [2, 2, 2])
+                self.assertEqual(reads['chunks']['short'], [2, 2, 2, 0])
+                self.assertEqual(reads['closed'], ['short'])
+
+    def test_shared_readers_charge_before_oversize_and_partial_io_failure(self):
+        path = self.base / 'partial'
+        path.write_bytes(b'abcdef')
+        for reader in (project.read_bounded, project.hash_bounded):
+            with self.subTest(reader=reader.__name__):
+                charges = []
+                with self.tracked_input_reads(short=2):
+                    with self.assertRaisesRegex(project.Invalid, 'input exceeds byte limit: partial'):
+                        reader(path, 3, charge=charges.append)
+                self.assertEqual(charges, [2, 2])  # Includes the detector byte before rejection.
+                charges = []
+                with self.tracked_input_reads(short=2, fail_name='partial', fail_after=2) as reads:
+                    with self.assertRaisesRegex(OSError, 'injected partial read failure'):
+                        reader(path, 8, charge=charges.append)
+                self.assertEqual(charges, [2, 2])
+                self.assertEqual(reads['closed'], ['partial'])
+
+    def budget_inputs(self, sources, air):
+        self.manifest['source_closure'] = sources
+        self.manifest['profile'] = 'z-profile.json'
+        self.manifest['components'] = {key: ['z-profile.json'] for key in self.manifest['components']}
+        self.manifest['roots'][0].update(air=air, contracts=[])
+        (self.base / 'z-profile.json').write_bytes(b'')
+        for name in air:
+            (self.base / name).write_bytes(b'')
+
+    def test_collect_charges_oversized_hash_and_retained_inputs_once(self):
+        self.budget_inputs(['a-hash', 'c-never'], ['b-air', 'd-air'])
+        for name in ('a-hash', 'b-air', 'c-never', 'd-air'):
+            (self.base / name).write_bytes(b'x' * 1025)
+        self.manifest['limits'] = {'max_file_bytes': 1024, 'max_total_bytes': 2048}
+        self.save()
+        with self.tracked_input_reads() as reads, mock.patch.object(project, 'git_state', return_value={}):
+            result = project.collect(self.path, air_boundaries={})
+        self.assertEqual(len(result), 4)
+        _, limits, data, report = result
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), limits['max_total_bytes'] + 1)
+        self.assertEqual(reads['opened'], ['project.json', 'a-hash', 'b-air'])
+        self.assertEqual(data, {})
+        self.assertEqual(set(report['files']), {'manifest'})
+        failures = [d for d in report['diagnostics'] if d['code'] == 'INPUT_FILE']
+        self.assertEqual([d['path'] for d in failures], ['a-hash', 'b-air', 'c-never', 'd-air', 'z-profile.json'])
+        self.assertEqual([d['message'] for d in failures[:3]],
+                         ['input exceeds byte limit: a-hash', 'input exceeds byte limit: b-air',
+                          'input exceeds max_total_bytes'])
+        self.assertEqual(report['roots'][0]['input_validation']['status'], 'failed')
+
+    def test_collect_keeps_partial_io_bytes_charged_and_stops_later_opens(self):
+        self.budget_inputs(['a-partial', 'b-over', 'c-never'], ['z-air.json'])
+        for name in ('a-partial', 'b-over', 'c-never'):
+            (self.base / name).write_bytes(b'xyz')
+        self.manifest['limits'] = {'max_file_bytes': 2048, 'max_total_bytes': 1027}
+        self.path.write_text(json.dumps(self.manifest).ljust(1024))
+        with self.tracked_input_reads(short=2, fail_name='a-partial', fail_after=1) as reads, \
+             mock.patch.object(project, 'git_state', return_value={}):
+            _, _, data, report = project.collect(self.path)
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), 1028)
+        self.assertEqual(reads['opened'], ['project.json', 'a-partial', 'b-over'])
+        failures = [d for d in report['diagnostics'] if d['code'] == 'INPUT_FILE']
+        self.assertEqual(failures[0]['message'], 'injected partial read failure')
+        self.assertEqual(failures[1]['message'], 'input exceeds byte limit: b-over')
+        self.assertEqual(set(report['files']), {'manifest'})
+        self.assertEqual(data, {})
+
+    def test_collect_at_exact_budget_allows_empty_then_one_detector_byte(self):
+        self.budget_inputs(['a-empty', 'b-byte', 'c-never'], ['z-air.json'])
+        (self.base / 'a-empty').write_bytes(b'')
+        (self.base / 'b-byte').write_bytes(b'x')
+        (self.base / 'c-never').write_bytes(b'x')
+        self.manifest['limits'] = {'max_file_bytes': 2048, 'max_total_bytes': 1024}
+        self.path.write_text(json.dumps(self.manifest).ljust(1024))
+        with self.tracked_input_reads() as reads, mock.patch.object(project, 'git_state', return_value={}):
+            _, _, _, report = project.collect(self.path)
+        self.assertEqual(sum(sum(chunks) for chunks in reads['chunks'].values()), 1025)
+        self.assertEqual(reads['opened'], ['project.json', 'a-empty', 'b-byte'])
+        self.assertEqual(report['files']['input/a-empty'], {'sha256': project.digest(b''), 'bytes': 0})
+        self.assertNotIn('input/b-byte', report['files'])
+        self.assertEqual([d['path'] for d in report['diagnostics'] if d['code'] == 'INPUT_FILE'],
+                         ['b-byte', 'c-never', 'z-air.json', 'z-profile.json'])
+
+    def test_bounded_report_encoding_preserves_exact_legacy_bytes(self):
+        vectors = [None, [], {}, {'z': [True, False, None, -3, 1.5], 'a': {'tab': '\t', 'line': '\n'}},
+                   {'😀': '€\u0000"\\', 'a': 'plain ASCII'}, {'text': '€' * 65537}]
+        literal = {'z': '😀', 'a': [1, None]}
+        expected_literal = '{\n  "a": [\n    1,\n    null\n  ],\n  "z": "😀"\n}\n'.encode('utf-8')
+        self.assertEqual(project.report_bytes(literal, project.LIMITS), expected_literal)
+        for value in vectors:
+            expected = (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
+            self.assertEqual(project.report_bytes(value, project.LIMITS), expected)
+
+    def test_report_capacity_counts_utf8_and_final_newline(self):
+        for value in ['ASCII', '€😀', {'text': '\t\n\u0000'}, {'text': '€' * 65537}]:
+            expected = (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
+            with self.subTest(value=str(value)[:30]):
+                exact = dict(project.LIMITS, max_total_output_bytes=len(expected))
+                self.assertEqual(project.report_bytes(value, exact), expected)
+                for cap in (len(expected) - 1, len(expected) - 2, 0):
+                    with self.assertRaisesRegex(project.Invalid, 'report exceeds max_total_output_bytes'):
+                        project.report_bytes(value, dict(exact, max_total_output_bytes=cap))
+
+    def test_report_encoder_stops_before_requesting_tail_after_budget_failure(self):
+        visited = []
+        def chunks(value):
+            visited.append('prefix')
+            yield '['
+            visited.append('oversized')
+            yield '"😀",'
+            self.fail('encoder requested a later chunk after its UTF-8 byte budget was exhausted')
+        with mock.patch.object(project.json, 'JSONEncoder') as encoder:
+            encoder.return_value.iterencode.side_effect = chunks
+            with self.assertRaisesRegex(project.Invalid, 'report exceeds max_total_output_bytes'):
+                project.report_bytes({}, dict(project.LIMITS, max_total_output_bytes=7))
+            encoder.assert_called_once_with(sort_keys=True, indent=2, ensure_ascii=False)
+        self.assertEqual(visited, ['prefix', 'oversized'])
+
     def test_report_encoding_reused_for_publication_and_stdout(self):
         out = self.base / 'report.json'
         stdout, stderr = io.StringIO(), io.StringIO()
-        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+        with mock.patch.object(project, 'report_bytes', wraps=project.report_bytes) as encoded, \
              mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
              contextlib.redirect_stderr(stderr):
             status = project.main(['report', str(self.path), '--out', str(out)])
@@ -409,7 +570,7 @@ class ProjectTests(unittest.TestCase):
     def test_translate_encoding_reused_after_stage_mutations(self):
         artifact = self.base / 'artifact'
         stdout, stderr = io.StringIO(), io.StringIO()
-        with mock.patch.object(project, 'canonical', wraps=project.canonical) as encoded, \
+        with mock.patch.object(project, 'report_bytes', wraps=project.report_bytes) as encoded, \
              mock.patch.object(project.signal, 'signal'), contextlib.redirect_stdout(stdout), \
              contextlib.redirect_stderr(stderr):
             status = project.main(['translate', str(self.path), '--translator', str(self.translator), '--out', str(artifact)])
@@ -431,6 +592,26 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), '')
         self.assertEqual(out.read_text(), 'unchanged')
         self.assertEqual(json.loads(stderr.getvalue())['diagnostics'][0]['code'], 'PROJECT_INPUT')
+
+    def test_optional_air_boundaries_preserve_four_tuple_and_report(self):
+        self.manifest['roots'].append(dict(self.manifest['roots'][0], id='second'))
+        self.air.update(schema=12, zig_version='0.15.2', profile=None,
+                        body=[{'id': 1, 'tag': 'timer', 'unsupported': True}])
+        (self.base / 'air.json').write_text(json.dumps(self.air))
+        self.save()
+        with mock.patch.object(project, 'git_state', return_value={}):
+            default = project.collect(self.path)
+            boundaries = {}
+            with mock.patch.object(project, 'bounded_json', wraps=project.bounded_json) as parsed:
+                observed = project.collect(self.path, air_boundaries=boundaries)
+        self.assertEqual(len(observed), 4)
+        self.assertEqual(observed, default)
+        self.assertEqual(sum(call.args[0] == (self.base / 'air.json').read_bytes()
+                             for call in parsed.call_args_list), 1)
+        self.assertEqual(boundaries, {'air.json': project.AIRBoundary(None, True, True,
+            'profiled AIR cannot use a legacy manifest profile')})
+        self.assertEqual([d['code'] for d in observed[3]['diagnostics']],
+                         ['AIR_EXPORT_UNSUPPORTED', 'AIR_JSON'] * 2)
 
 
 
