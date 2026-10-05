@@ -24,22 +24,16 @@ done
 # Invert the emitted null predicate; the fresh baseline must detect a false proposition.
 python3 - "$work/generated/cNull.lean" "$work/mutant.lean" <<'PY'
 from pathlib import Path
+import runpy
 import sys
-source = Path(sys.argv[1]).read_text()
-assert 'Zig.ptrIsNull' in source, 'null-predicate mutation did not target emitted code'
-source = source.replace('Zig.ptrIsNull', 'nullableMutation')
-source = source.replace('import ZigLean', 'import ZigLean\nprivate def nullableMutation (p : Zig.Ptr) : Zig.MemM Bool := do pure (!(← Zig.ptrIsNull p))', 1)
-Path(sys.argv[2]).write_text(source)
+helpers = runpy.run_path('tests/roadmap/null-pointers/classify_mutant.py')
+source = helpers['read_bounded'](Path(sys.argv[1]))
+Path(sys.argv[2]).write_text(helpers['make_mutant'](source))
 PY
-if lake env lean "$work/mutant.lean" >"$work/mutation.log" 2>&1; then
-  echo 'null-predicate mutant survived' >&2; exit 1
-fi
-python3 - "$work/mutation.log" <<'PY'
-from pathlib import Path
-import sys
-message = Path(sys.argv[1]).read_text()
-assert 'false' in message and 'decide' in message, 'mutation failed without the intended semantic assertion failure: '+message
-PY
+mutation_status=0
+lake env lean "$work/mutant.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
+python3 tests/roadmap/null-pointers/classify_mutant.py "$mutation_status" \
+  "$work/mutation.log" "$work/mutant.lean" "$work/generated/cNull.lean"
 cp tests/roadmap/null-pointers/nullpointers.zig "$work/nullpointers.zig"
 mkdir "$work/air"
 ZIG_AIR_JSON_DIR="$work/air" \
