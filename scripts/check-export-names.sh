@@ -25,6 +25,7 @@ python3 "$inspector" "$work/air"
   --prefix export_names. --profile abi64-le-v1
 # A temporary package root permits checking a generated file outside the checkout.
 lake env lean -R "$work" "$work/Gen.lean"
+lake env lean tests/roadmap/export-names/Order.lean
 python3 tests/roadmap/export-names/test_order_cli.py "$translator"
 python3 "$inspector" "$work/air" --mode seed-reexport
 dump 2

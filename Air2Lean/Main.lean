@@ -96,11 +96,12 @@ private def run (args : List String) : IO UInt32 := do
           throw (IO.userError s!"reading AIR file {path}: {e}")
       -- Preserve the historical <full name>.json emission order even when storage
       -- uses hashes or project staging names. Cache before anonymous renumbering.
-      let emissionKeys := texts.map fun text => Anon.fnName text ++ ".json"
+      let (originalNames, rewrittenTexts) := Anon.renumberAllWithNames texts
+      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
+      for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           match Raw.parseFile contents with
           | .error e => err := some s!"{path}: {e}"

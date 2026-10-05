@@ -258,6 +258,10 @@ class OrderFixtures(unittest.TestCase):
             self.assertTrue(any(order != orders[0] for order in orders[1:]), case+' lacks an order perturbation')
             for doc in docs:
                 self.assertEqual(json.loads(json.dumps(doc)), doc)
+        independent = [doc['name'] for doc in cases['independent']]
+        self.assertIn('order.key', independent)
+        self.assertIn('order.key.a', independent)
+        self.assertLess('order.key.a.json', 'order.key.json')
         root = cases['reached'][-1]
         self.assertEqual(root['types'][2], dict(k='other',name='fn () u8'))
         self.assertEqual([i['callee']['func'] for i in root['body'][:2]],

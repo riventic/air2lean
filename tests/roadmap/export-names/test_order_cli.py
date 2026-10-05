@@ -22,7 +22,7 @@ def constant(name, value):
 
 def cases():
     independent = [constant(name, i+1) for i,name in enumerate(
-        ('order.a', 'order.a.a', 'order.generic(u8).left', 'order.z'))]
+        ('order.key', 'order.key.a', 'order.generic(u8).left', 'order.z'))]
     # The root encounters 9 before 10: they become anon_1 and anon_2. Historical
     # raw filename order is 10 before 9, which emission must preserve after renaming.
     reached = [constant('order.generic__anon_9', 9), constant('order.generic__anon_10', 10)]
@@ -74,7 +74,7 @@ def check(binary):
                 assert metadata['correspondence'] == 'model'
                 outputs.append(generated)
                 if case == 'independent':
-                    assert body.index(b'def a_a ') < body.index(b'def a '), 'virtual .json suffix order lost'
+                    assert body.index(b'def key_a ') < body.index(b'def key '), 'virtual .json suffix order lost'
                 if case == 'reached':
                     assert body.index(b'def generic__anon_2 ') < body.index(b'def generic__anon_1 '), 'raw instance ordering lost'
                     first = body.split(b'def generic__anon_1 ',1)[1].split(b'\n\n',1)[0]
