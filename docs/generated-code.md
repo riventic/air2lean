@@ -404,3 +404,69 @@ match {v} with
 ```
 
 `catch` does not use `try`: it lowers to `is_err`/`is_non_err` plus a `cond_br`, so it becomes a plain `if`/`else` on `Zig.isNonErr`/`Zig.isErr`, unwrapping with `Zig.unwrapPayload`/`Zig.unwrapErr` (`ZigLean/Basic.lean`) in each arm.
+
+
+## Stable scalar proof interface (opt-in)
+
+`--proof-api` adds a bounded P07 interface for named, checked, straight-line scalar
+functions. This initial slice covers integer arguments/constants, checked/wrapping/
+saturating add/subtract/multiply, bit and/or/xor, not/negation, integer casts,
+truncation/bitcasts and return. Calls, control flow, memory, globals, floats and
+anonymous functions receive no interface or partial semantic fingerprint. Their
+ordinary definitions continue to emit normally. Default generation is unchanged.
+
+Each selected full source name receives an injective UTF-8 byte encoding:
+`air2lean_api_<byte>_<byte>..._model` and the corresponding `_unfold` theorem.
+The model is an abbreviation of the actual emitted function. The theorem unfolds
+that abbreviation to the function's actual emitted body, with explicit arguments,
+and is proved by `rfl`; it introduces neither an axiom nor a replacement semantics.
+These names are reserved before ordinary declaration allocation. A source function
+that would collide is renamed by the existing declaration allocator. Unrelated
+anonymous instantiations therefore do not rename the public scalar interface.
+
+Use the `model` and `unfold` fields of the generated `air2lean-proof-api` JSON
+record to find these names, rather than depending on temporary instruction/local
+names. A client can use `rw [Namespace.<unfold>]` to enter the generated model.
+The unfolded expression remains implementation detail: this slice stabilizes the
+entry boundary, not every intermediate expression or a general step-rule calculus.
+
+The existing `scripts/normalize-generated.py report Gen.lean AIR_DIR report.json`
+indexes these records under `proof_api.interfaces`. `semantic_sha256` hashes
+canonical JSON of normalized scalar IR facts plus checked profile/float assumptions.
+It records structured operation/mode, typed constants, structural scalar types and
+layouts, parameter order and canonical instruction references. It hashes neither
+emitted stdout nor pretty-print whitespace. Raw AIR and generated artifact hashes
+remain separate. Source-line/debug maps also remain separate; exporter line numbers
+are retained as supplied and are not claimed to be absolute source-file locations.
+
+The report checks record outer fields, identity names and format versions, and
+rejects duplicate source identities and interface name collisions. It hashes the
+translator-emitted nested facts without validating their meaning; imported reports
+are not semantic certificates. Semantics, checked mode, scalar layouts or profile changes affect
+the fingerprint. Harmless instruction renumbering and unrelated instantiations do
+not. This fingerprint is a change detector for this bounded normalized model, not
+a semantic-equivalence, compiler-correspondence or shipping-binary certificate.
+A changed fingerprint requires reviewing and rebuilding affected client proofs.
+
+Portable report tests do not invoke a translator or compiler:
+
+```sh
+python3 -B tests/roadmap/proof-api/test_report.py
+```
+
+ROOT validation uses the built translator and retains its actual generated output
+and a downstream arithmetic proof candidate, then kernel checks that candidate:
+
+```sh
+python3 tests/roadmap/proof-api/test_cli.py .lake/build/bin/air2lean \
+  --retain /tmp/Generated.lean
+lake env lean /tmp/Generated.client.lean
+lake env lean /tmp/Generated.renumbered.client.lean
+lake env lean /tmp/Generated.unrelated.client.lean
+# This identical client contract must fail after add is changed to subtract:
+if lake env lean /tmp/Generated.changed.client.lean; then exit 1; fi
+```
+
+The CLI driver checks renumbered AIR and an unrelated generic instance, then a
+semantic mutation. Neither this driver nor synthetic report tests are qualification
+evidence until the actual translator and kernel checks have completed.
