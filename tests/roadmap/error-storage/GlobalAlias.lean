@@ -79,7 +79,7 @@ def main : IO Unit := do
   reject hostView "overlaps symbolic error bytes"
   accept {loadAt "bitHostGuard" structGlobal 8 0 with layouts := layouts.set! 8 {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 2, bitOffset := 0}}
   let mixedItems := {base "mixedSymbolicItems" afterGlobal with ret := 0, body := #[ {id := 0, ty := 0, op := .ptrElemVal (.ptrConst 13 0 0) (.int 17 1)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}
-  reject mixedItems "many/C/slice alias"
+  reject mixedItems "escaping, arithmetic"
   reject {base "aggregateCall" structGlobal with body := #[ {id := 0, ty := 1, op := .call (.func "unresolved" false none) #[.ptrConst 9 0 0]}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
   let typedSlice := {base "localTypedSlice" arrayGlobal with ret := 0, body := #[ {id := 0, ty := 20, op := .slice (.ptrConst 13 0 0) (.int 17 2)}, {id := 1, ty := 0, op := .sliceElemVal (.inst 0) (.int 17 1)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
   accept typedSlice
