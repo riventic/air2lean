@@ -83,7 +83,7 @@ def cmpxchgWeakAsC {α : Type} {n : Nat} [Packed α n] (succ fail : AtomicOrder)
   let c ← pickC (weakCasCount n succ align p (Packed.toBits expected))
   callMC (cmpxchgWeakAs c succ fail align p expected new)
 
-/-- `Thread.spawn` of the target `t`: never fails (`docs/std-models.md` §Thread model). -/
+/-- `Thread.spawn` with environment permission that assignment is available (`docs/std-models.md` §Thread model). -/
 def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do
   let tid ← StateT.lift (ConcM.sync (.spawn t))
   pure (.ok tid)
@@ -124,7 +124,7 @@ def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
 /-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model)
 
 A task of a group is a thread: `Group.async` is a spawn that the group records (`Mem.groups`),
-`Group.await` a join of each task of the group. The model never fails a spawn and never cancels,
+`Group.await` a join of each task of the group. The available policy assumes assignment succeeds and never cancels,
 so `Group.concurrent` is `async`, and `Group.cancel` is `await`. -/
 
 /-- `Io.Group.async(g, io, function, args)`: the task `t` runs as a thread of the group. -/
