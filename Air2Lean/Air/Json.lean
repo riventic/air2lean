@@ -258,10 +258,18 @@ def parseLayout (j : Json) : Except String Layout := do
     | _ => pure #[]
   let hostSize := (← nat? "host_size").getD 0
   let bitOffset ← nat? "bit_offset"
+  let sentinelByte ← match optField j "sentinel_byte" with
+    | none => pure none
+    | some v => do
+      let text ← v.getStr?
+      let some n := text.toNat? | throw "sentinel_byte must be decimal byte text"
+      unless n < 256 do throw "sentinel_byte must be in 0..255"
+      unless (← bool "sentinel") do throw "sentinel_byte requires sentinel=true"
+      pure (some n)
   if hostSize != 0 && bitOffset.isNone then
     throw "a bit-pointer needs 'bit_offset' (schema ≥ 11)"
   return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
-           ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel",
+           ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel", sentinelByte,
            isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize,
            bitOffset := bitOffset.getD 0 }

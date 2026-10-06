@@ -1174,7 +1174,7 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId)
     (index : OperandTypes := f.operandTypes) : Except String Unit := do
   let tyOf := index.valTy?
   -- `args[1]` is a pointer or slice, except the item count of `alloc`.
-  let argPtr := if fn == .alloc || fn == .alignedAlloc then #[] else (args.extract 1 2).filterMap tyOf
+  let argPtr := if fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel then #[] else (args.extract 1 2).filterMap tyOf
   let ptrs := (match f.types[ret]? with
     | some (.errorUnion _ p) | some (.optional p) => #[p]
     | _ => #[]) ++ argPtr
@@ -1214,7 +1214,8 @@ private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
       if !(sz == tz && (if allowPtrCoercion then !c || d else c == d) &&
           (if allowPtrCoercion then decide (sl.ptrAlign.getD 1 ≥ tl.ptrAlign.getD 1)
            else sl.ptrAlign == tl.ptrAlign) &&
-          sl.sentinel == tl.sentinel && sl.isVolatile == tl.isVolatile &&
+          sl.sentinel == tl.sentinel && sl.sameKnownSentinel tl &&
+          sl.isVolatile == tl.isVolatile &&
           sl.hostSize == tl.hostSize && sl.bitOffset == tl.bitOffset) then return false
       recur x y
     | some (.array n x s), some (.array m y t) =>
@@ -1341,7 +1342,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
   if let some fn := allocFn? callee then
     count (if fn == .create then 1 else if fn == .remap then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
-    if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .dupe then
+    if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel || fn == .dupe then
       let hasOutOfMemory := match result with
         | some (.errorUnion set _) => match f.types[set]? with
           | some (.errorSet none) => true
@@ -1351,7 +1352,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       require hasOutOfMemory "error set admitting OutOfMemory"
     match fn with
     | .create => require (isPtr "one" errorPayload) "error-union pointer result"
-    | .alloc | .alignedAlloc =>
+    | .alloc | .alignedAlloc | .allocSentinel =>
       require (isSize (argTy 1)) "item-count argument"
       require (isPtr "slice" errorPayload) "error-union slice result"
     | .dupe =>
@@ -1368,6 +1369,17 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       let payload := match result with | some (.errorUnion _ p) | some (.optional p) => some p | _ => none
       let some dstChild := payload.bind (ptrChild f.types) | fail "slice result"
       require (compatibleType f f srcChild dstChild) "slice item type"
+    if fn == .allocSentinel then
+      require (f.zigVersion == "0.16.0") "allocSentinel qualified Zig 0.16.0"
+      let some (.errorUnion _ p) := result | fail "error-union slice result"
+      let some (.ptr "slice" false child) := f.types[p]?
+        | fail "mutable byte sentinel slice result"
+      require (f.types[child]? == some (.int false 8)) "allocSentinel supports only u8"
+      let l := f.layouts[p]?.getD {}
+      require (l.sentinel && l.ptrAlign == some 1) "byte sentinel slice with alignment 1"
+      require (l.hostSize == 0 && l.bitOffset == 0) "ordinary byte sentinel pointer without packed metadata"
+      let some sentinel := l.sentinelByte | fail "explicit exported sentinel_byte"
+      require (decide (sentinel < 256)) "sentinel_byte in 0..255"
     checkAllocCall f fn args ret index
   else if let some fn := threadFn? callee then
     match fn with

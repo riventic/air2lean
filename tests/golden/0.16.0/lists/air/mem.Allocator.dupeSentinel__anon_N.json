@@ -1,7 +1,40 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
- "name": "mem.Allocator.dupeSentinel__anon_17790",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "mem.Allocator.dupeSentinel__anon_11280",
  "params": [
   0,
   1
@@ -150,7 +183,7 @@
    "ty": 10,
    "callee": {
     "ty": 11,
-    "func": "mem.Allocator.alloc__anon_7639",
+    "func": "mem.Allocator.alloc__anon_8758",
     "noreturn": false
    },
    "args": [
@@ -1046,7 +1079,7 @@
        "ty": 14,
        "callee": {
         "ty": 25,
-        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_5817",
+        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_9229",
         "noreturn": true
        },
        "args": [
@@ -1341,6 +1374,7 @@
    "volatile": false,
    "allowzero": false,
    "sentinel": true,
+   "sentinel_byte": "0",
    "host_size": 0,
    "abi_size": 16,
    "abi_align": 8
