@@ -147,3 +147,28 @@ checked receipts, all 15 diagnostics CLI checks including V05 emission-byte comp
 the input-validation API and 78 CLI checks, and exact CI replay with 14 diagnostics
 CLI checks. CI replay explicitly excludes the historical baseline comparison.
 These test changes do not alter the producer.
+
+Compiler-state and runtime-effect tags remain rejected with specific guidance. Temporary
+`inferred_alloc`/`inferred_alloc_comptime` instructions are not ordinary allocations;
+the exporter omits their type, and the normalizer gives the inference-stage reason
+before its missing-type check. Other missing-type and malformed-input checks are unchanged.
+Zig 0.16's `legalize_vec_store_elem`, `legalize_vec_elem_val` and
+`legalize_compiler_rt_call` belong to later code generation, beyond the accepted
+`analyzed-air` export stage. `runtime_nav_ptr` (0.15/0.16) requires TLS or external
+runtime pointer identity and lifetime semantics. Error-return-trace tags in all three
+versions require mutable trace semantics; a recorded tracing setting supplies no such model.
+The structured collector retains its existing codes and exported instruction anchors,
+while using the same reasons for explicit exporter markers.
+
+The inventory selects these classifications only for tags present in each compiler's enum.
+Its `normalizer-rejected-compiler-state-or-effect` disposition is source-only rejection
+policy, with no admitted semantics, proof or compiler-generated fixture qualification.
+Synthetic regressions cover diagnostic routing; compiler fixture qualification remains
+pending. The older `vector_store_elem` tag (0.14/0.15) is rejected as a vector-memory
+write requiring lane bounds and memory semantics, separately from Zig 0.16 legalization.
+`cmp_lt_errors_len` (0.14/0.15) and `cmp_lte_errors_len` (0.16) depend on the
+compiler's finalized error universe; the analyzed-AIR export cannot substitute a
+currently known count. Their version-dependent comparison also precludes treating
+the rename as identical semantics. Nested synthetic CLI fixtures retain exported IDs
+and rejection reasons for every actual version/tag member, including untyped
+inferred allocations. No source feature is newly accepted by these classifications.

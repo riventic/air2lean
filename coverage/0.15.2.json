@@ -2577,13 +2577,13 @@
     },
     {
       "tag": "inferred_alloc",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -2615,17 +2615,17 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "inferred_alloc_comptime",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -2657,7 +2657,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "ret_ptr",
@@ -3315,6 +3315,7 @@
           "ZigLean/Conc/Sched.lean",
           "ZigLean/Conc/Spawn.lean",
           "ZigLean/Conc/SpawnLemmas.lean",
+          "ZigLean/Conc/Total.lean",
           "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
@@ -3808,6 +3809,7 @@
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
           "ZigLean/Conc/Sched.lean",
+          "ZigLean/Conc/Total.lean",
           "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Loop.lean",
@@ -9148,6 +9150,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
+          "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
@@ -9260,6 +9263,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
+          "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
@@ -11074,6 +11078,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Basic.lean",
+          "ZigLean/Conc/Total.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean"
@@ -13422,13 +13427,13 @@
     },
     {
       "tag": "cmp_lt_errors_len",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13460,17 +13465,17 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "err_return_trace",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13502,17 +13507,17 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "set_err_return_trace",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13544,7 +13549,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "addrspace_cast",
@@ -13590,13 +13595,13 @@
     },
     {
       "tag": "save_err_return_trace_index",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13628,17 +13633,17 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "vector_store_elem",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13670,17 +13675,17 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "runtime_nav_ptr",
-      "disposition": "normalizer-unclassified-or-unknown",
+      "disposition": "normalizer-rejected-compiler-state-or-effect",
       "exporter": {
         "status": "fallback-unclassified",
         "reason": "No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding."
       },
       "normalization": {
-        "status": "no-explicit-source-branch",
+        "status": "explicit-source-rejection",
         "constructors": []
       },
       "parser": {
@@ -13712,7 +13717,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "guidance": "Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification."
+      "guidance": "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute; source-only rejection classification, no compiler fixture or support qualification"
     },
     {
       "tag": "c_va_arg",
@@ -14556,7 +14561,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "0e0ccb0531c67f5266d192585172b3ab6bb5ea6c66e87469214f2284653967d9",
+      "scripts/coverage.py": "06f1335c15fca6b45d418934b75200160a4d51c1f2a18f742f9e0d4203d67d01",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -14564,17 +14569,18 @@
       "Air2Lean/Air/Canon.lean": "62da68668d098d2092457059a145b9f0aa9423014502007dfaecc683b019a9a2",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "3c8aa106a3609dbc0da65f1023c7bf41983c7b25ea35db2080b44db65bc9000b",
-      "Air2Lean/Air/Normalize.lean": "bceb3be181ff1d956f7428d0a074c7a904c22a984a302dd4147a95fde5c7f983",
+      "Air2Lean/Air/Normalize.lean": "f5bad5e272704602562a7a9e264255ff51fe088dc22ac58191d19399d8d85e03",
       "Air2Lean/Air/Op.lean": "826407cbdc66aaa66bd29921a570a7bae016c430be663da4dac7a9818cb0e1c1",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "6d3dc54b74b4c566a2664c3f3c3a9c888a74a1bbc7796417e644dd082da11e7c",
-      "Air2Lean/Diagnose.lean": "855a546db807b39800f1aae09eaea038ccb39be8b184760b679dddb18f1f6110",
+      "Air2Lean/Check.lean": "a730767f84381f39ceca50761dfd85067b19b225d8bd64494ebaec75cce7008a",
+      "Air2Lean/Diagnose.lean": "bdb6f7f3744a604e0b03a3300f30983131b2375db3f02848d7e5f532860145f5",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "a382219ade4703769e55a082f9da6e380e81f1ac882ff258fb050402bcb1b176",
-      "Air2Lean/Main.lean": "5bf1a8a7b20d67540e2034f53e781118c69c40a3aa9374fa94f3615e1d86529d",
-      "Air2Lean/Memory.lean": "5a754a95afdda12fd50be29333c61c99e7a194fc1b5479e207517885ec2c0c3c",
+      "Air2Lean/Emit.lean": "def5d5d7788d29a4a2b761a4fd6ca7b325d48460e9be3dc1fbfdf2366182f5f8",
+      "Air2Lean/Main.lean": "265a6c184bb561e2db0af77fe96d34135bd8a9deb91cb41e5e1eefa8fea61f57",
+      "Air2Lean/Memory.lean": "8ff3c406627864dfdc41fc4f7d03b0ace72e1dd3dc9ae268a04671dfe40d954f",
       "Air2Lean/ModelRegistry.lean": "ddaf398e7a02af903dbd827b65f3a1230815cf6922ef874c8d2bdfed72a8f387",
+      "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
       "zig-patch/air-json/json.zig": "920ecb7beb497a7b162f60063f1cf06682f91a5e9dda11dbd4a8ae5d4b47551e"
     },
     "runtime-models": {
@@ -14592,11 +14598,12 @@
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
       "ZigLean/Conc/Spawn.lean": "0ee436d25744f54faa2551cb3a8486540d1b4a0c3eb0e3304c95e7866de80336",
       "ZigLean/Conc/SpawnLemmas.lean": "0f8f24fd090b100771ed959dbe38ac143fb2acac38ef03981c84c82afdddb1f7",
+      "ZigLean/Conc/Total.lean": "2d073f7443bd34c619890ee19b4680a6d31436066a574d7ed604e21c9678f0b0",
       "ZigLean/Conc/WeakCas.lean": "23b3ff639ccc675f3c3b80f15bd25d1871d955a82445b9cfe7097a38091647de",
       "ZigLean/Conc/WeakCasLemmas.lean": "30dc9a347ab14fffc953e9e9a15e834ca0f6179e6e5341e5a011ecbf674733ac",
       "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
-      "ZigLean/Conc.lean": "14c4d03cfe54835b97df50dfc266698ce7e6c52eaaed147c9659bddf9f4336e1",
+      "ZigLean/Conc.lean": "ed1c36f3fe531da0375bbcc01bdd2ab11e7a54c24dd8ca2da259e1083c27cc39",
       "ZigLean/External.lean": "eeb5524df042fe2d016e36b59f7eb59c2b4dec95db7dac21922286f0ec550046",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
@@ -14618,6 +14625,7 @@
       "ZigLean/Mem.lean": "984464356198c9e326876be51ad994e401290d0fe92decdf93ba24529abbc6ad",
       "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
       "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+      "ZigLean/Sep/Array.lean": "b8fd8b72407b1486e8bbe841591c03a6decd258e0de3ac7b2ddd0d2967e936fd",
       "ZigLean/Sep/Assert.lean": "6ec6646b84bea7e51c0c2be4bc7a77c50d9ff494c678697437eee27f4385353b",
       "ZigLean/Sep/Automation.lean": "ff228307070154c1771636dc7e961ef060a46a55ca66065d38d4f789e2c29d0e",
       "ZigLean/Sep/Block.lean": "a29b916e3566d4bd3e3e3f9b7405dae6d2fad50913f1a35003279df5d159eebf",
@@ -15367,17 +15375,19 @@
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
       "tests/roadmap/diagnostics/Collector.lean": "f1c1137b84126dd9084e6726b6214d35661477a1aa8770d608f580dfc483c882",
-      "tests/roadmap/diagnostics/test_cli.py": "46dcfff34c10ba1a56e6be39c740fd34227419166bf78f7f596e2776a5b050c7"
+      "tests/roadmap/diagnostics/RuntimeTags.lean": "de6d2ff152e0308d363146f61fedec97c4a98b092b22ee183f471b2f138d8820",
+      "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730"
     },
     "model-boundaries": {
-      "Air2Lean/Memory.lean": "5a754a95afdda12fd50be29333c61c99e7a194fc1b5479e207517885ec2c0c3c",
+      "Air2Lean/Memory.lean": "8ff3c406627864dfdc41fc4f7d03b0ace72e1dd3dc9ae268a04671dfe40d954f",
       "docs/std-models.md": "96a71e4466ec4f9efbe8d0f1df8895964e5762b9625b38530c4356d482d877ff"
     }
   },
   "summary": {
     "source-pipeline-candidate-unqualified": 162,
     "normalizer-rejected-fast-math": 19,
-    "normalizer-unclassified-or-unknown": 26,
-    "conditional-pipeline-review-required": 5
+    "normalizer-rejected-compiler-state-or-effect": 8,
+    "conditional-pipeline-review-required": 5,
+    "normalizer-unclassified-or-unknown": 18
   }
 }

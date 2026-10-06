@@ -101,7 +101,10 @@ differential harness; 0.15.2 also builds the macOS threadsync translation's proo
 If all three full-version rows already passed locally, run `mutations` to finish
 the matrix without repeating them. Full, matrix and mutations modes execute the actual shell steps and environments from
 `.github/workflows/ci.yml`, including coverage, budgets, project/flow gates and proof
-receipts. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
+receipts. Before builds and between matrix rows, the local runner prunes recognized
+Lake v4.34.0 module artifacts whose declared repository module has no tracked current
+`.lean` source. It preserves current modules and never clears package/toolchain caches;
+unsafe symlink paths fail explicitly. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
 actions and the three equivalent pinned tool setup recipes are replaced locally.
 Matrix rows and mutation shards run sequentially in one container limited to 8 GiB
 memory (including swap), two CPUs and 512 processes. The container always uses

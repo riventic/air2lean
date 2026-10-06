@@ -142,10 +142,50 @@ def checked_generated(path, report_path):
     return data, body, metadata
 
 
+def proof_api_records(body, metadata, sources):
+    """Index opt-in normalized scalar IR facts; raw source/artifact hashes stay separate."""
+    interfaces = []
+    names = set()
+    for line in body.splitlines():
+        prefix = b"-- air2lean-proof-api: "
+        if not line.startswith(prefix):
+            continue
+        record = parse_json(line[len(prefix):].decode("utf-8"))
+        fields = {"format", "source", "definition", "model", "unfold", "facts", "source_map"}
+        if (not isinstance(record, dict) or set(record) != fields or
+                record["format"] != "air2lean-proof-api-v1" or
+                any(not isinstance(record[key], str) or not record[key]
+                    for key in ("source", "definition", "model", "unfold"))):
+            raise ValueError("malformed proof interface record")
+        source = record["source"]
+        expected = "air2lean_api" + "".join("_" + str(byte) for byte in source.encode("utf-8"))
+        if record["model"] != expected + "_model" or record["unfold"] != expected + "_unfold":
+            raise ValueError("proof interface identity differs from source encoding")
+        if source not in sources or source in names:
+            raise ValueError("proof interface has missing or duplicate source identity")
+        names.add(source)
+        facts = record["facts"]
+        if (not isinstance(facts, dict) or
+                set(facts) != {"format", "source", "parameters", "return", "instructions"} or
+                facts["format"] != "air2lean-scalar-ir-v1" or facts["source"] != source or
+                not isinstance(facts["parameters"], list) or not isinstance(facts["instructions"], list) or
+                not isinstance(record["source_map"], list)):
+            raise ValueError("malformed normalized scalar facts")
+        # Canonical JSON of structural IR facts and checked profile assumptions. Neither
+        # generated whitespace nor source/debug locations participate in this digest.
+        semantic = dict(facts=facts, metadata=metadata)
+        encoded = json.dumps(semantic, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False).encode("utf-8")
+        interfaces.append(dict(record, semantic_sha256=digest(encoded),
+                               raw_air=dict(sources[source])))
+    return sorted(interfaces, key=lambda item: item["source"])
+
+
 def write_report(generated, air_dir, output):
     data = Path(generated).read_bytes()
     metadata, body = split_generated(data, required=True)
     inputs = []
+    sources = {}
     paths = sorted(Path(air_dir).glob("*.json"))
     if not paths:
         raise ValueError("no AIR files to bind to generated profile")
@@ -154,9 +194,18 @@ def write_report(generated, air_dir, output):
         doc = parse_json(raw.decode("utf-8"))
         if profile_for_air(doc) != metadata["profile"]:
             raise ValueError(f"{path}: AIR profile differs from generated profile")
-        inputs.append(dict(file=path.name, sha256=digest(raw)))
+        entry = dict(file=path.name, sha256=digest(raw))
+        inputs.append(entry)
+        name = doc.get("name")
+        if not isinstance(name, str) or not name or name in sources:
+            raise ValueError("AIR report requires unique full function identities")
+        sources[name] = entry
     report = dict(format="air2lean-check-report-v1", profile_validation="translator-and-input-match",
                   metadata=metadata, generated_sha256=digest(data), body_sha256=digest(body), air=inputs)
+    interfaces = proof_api_records(body, metadata, sources)
+    if interfaces:
+        report["proof_api"] = dict(format="air2lean-proof-api-index-v1", interfaces=interfaces,
+                                   qualification="normalized-model-unfolding; no compiler preservation claim")
     Path(output).write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 

@@ -24,6 +24,30 @@ def function(name, body=None):
                     inst(0, "ret", 1, [dict(ty=0, val="{}")])], globals=[])
 
 
+
+def runtime_tag_cases():
+    """Actual enum membership; synthetic rejection cases, not compiler fixtures."""
+    common = {"inferred_alloc": "unresolved inferred allocation",
+              "inferred_alloc_comptime": "unresolved inferred allocation",
+              "err_return_trace": "mutable error-return-trace",
+              "set_err_return_trace": "mutable error-return-trace",
+              "save_err_return_trace_index": "mutable error-return-trace"}
+    cases = []
+    for version in ("0.14.1", "0.15.2", "0.16.0"):
+        reasons = dict(common)
+        if version != "0.14.1":
+            reasons["runtime_nav_ptr"] = "identity and lifetime"
+        if version == "0.16.0":
+            reasons.update({tag: "compiler legalization" for tag in (
+                "legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call")})
+            reasons["cmp_lte_errors_len"] = "finalized compiler error universe"
+        else:
+            reasons["vector_store_elem"] = "vector-element memory writes"
+            reasons["cmp_lt_errors_len"] = "finalized compiler error universe"
+        cases.extend((version, tag, reason) for tag, reason in reasons.items())
+    return cases
+
+
 def calls(name, *targets):
     return function(name, [inst(i, "call", 0, callee=dict(func=target, noreturn=False))
                            for i, target in enumerate(targets)] + [
@@ -139,6 +163,25 @@ def run(binary, baseline=None):
         cap = decode(invoke(binary, air, "--diagnostic-limit", "1"), "rejected")
         assert len(cap["diagnostics"]) == 1 and cap["truncated"] and not cap["complete"]
         checks += 3
+
+        # Each known compiler/runtime family remains rejected, including nested
+        # exported markers whose inferred allocations deliberately omit ty.
+        for version, tag, reason in runtime_tag_cases():
+            child = inst(42, tag, 0, unsupported=True)
+            if tag.startswith("inferred_alloc"):
+                child.pop("ty")
+            document = function("runtime_tag", [inst(7, "block", 0, body=[child])])
+            document["zig_version"] = version
+            write(air, {"runtime-tag.json": document})
+            report = decode(invoke(binary, air), "rejected")
+            found = [d for d in report["diagnostics"] if d["code"] == "EXPORTER_UNSUPPORTED"]
+            assert len(found) == 1 and found[0]["anchor"]["instruction"] == 42
+            assert found[0]["anchor"]["id_space"] == "exported"
+            assert found[0]["category"] == "unsupported_semantics"
+            assert tag in found[0]["message"] and reason in found[0]["message"]
+            assert "runtime_tag: inst 42:" in found[0]["message"]
+            assert output.read_text() == "sentinel\n"
+            checks += 1
 
         write(air, {"ok.json": function("ok")})
         (air / "a-invalid.json").write_bytes(b"\xff")
