@@ -46,5 +46,7 @@ test, a fresh AIR export and all sixteen emitted observations of that source. Th
 uses ReleaseSafe with no explicit target or CPU flags; no more specific target/CPU claim is
 inferred from this run. This is emulated Linux qualification. Native-machine ABI/backend
 attestation, other Zig versions and a general translation-preservation theorem remain
-unqualified. ROOT retained the successful attempt's artifacts for inspection; subsequent
-integration with the current P07 base must preserve the qualified source before publication.
+unqualified. ROOT retained the successful attempt's artifacts for inspection. The same full
+local-parent recipe subsequently passed against the composed P07 source, including the
+current Names, cache hygiene and array-framing changes. Full CI for that composed source
+remains pending.

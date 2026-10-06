@@ -79,6 +79,7 @@ if [ "${1:-}" = --inside ]; then
   export RUNNER_TEMP=/artifacts/targeted TMPDIR=/artifacts/targeted
   export AIR2LEAN_OUT_DIR=/artifacts/targeted/air-out
   mkdir -p "$RUNNER_TEMP"
+  python3 scripts/local-ci-steps.py --prune-cache
   scripts/review-checks.sh
   prepare "$version"
   export PATH="/work/host-zig:$ELAN_HOME/bin:$PATH"
