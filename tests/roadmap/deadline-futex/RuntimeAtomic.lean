@@ -19,9 +19,7 @@ private def memory : Mem :=
                 { bytes := #[.int 73], align := 1, kind := .constGlobal, live := true, addr := 4104 }],
     clocks := #[#[0, 0], #[0, 1]],
     threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }],
-    atomics := #[{ block := 0, off := 0, len := 4,
-      msgs := #[{ id := 40, bytes := bytes 7, clock := #[0, 1], relClock := #[0, 1] },
-                { id := 41, bytes := bytes 0, clock := #[0, 1], relClock := #[0, 1] }] }],
+    atomics := #[{ block := 0, off := 0, len := 4, msgs := #[{ id := 40, bytes := bytes 7, clock := #[0, 1], relClock := #[0, 1] }, { id := 41, bytes := bytes 0, clock := #[0, 1], relClock := #[0, 1] }] }],
     nextMsg := 42 }
 private def input (choice : Nat := 0) : Inputs :=
   { environment := .awake equalClock noCancellation, readChoice := fun _ => choice }
@@ -87,8 +85,7 @@ def main : IO Unit := do
   check "comparison creates the source atomic location" created.state.kernel.mem.atomics.size 1
   check "location creation records its fresh message id" created.state.kernel.mem.seen #[(0, 0, 50)]
   check "location creation advances next message id" created.state.kernel.mem.nextMsg 51
-  let narrower := { memory with atomics := #[{ block := 0, off := 0, len := 1,
-    msgs := #[{ id := 9, bytes := #[.int 0], clock := #[], relClock := #[] }] }] }
+  let narrower := { memory with atomics := #[{ block := 0, off := 0, len := 1, msgs := #[{ id := 9, bytes := #[.int 0], clock := #[], relClock := #[] }] }] }
   check "source location width mismatch stays unspecified"
     (result (run (input 0) 3 (fun _ => 0) (wait) narrower)) (some (.error .unspecified))
   IO.println "C04 v5 single atomic compare regressions passed"
