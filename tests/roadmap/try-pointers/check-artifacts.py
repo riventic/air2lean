@@ -10,10 +10,7 @@ import runpy
 REPO = Path(__file__).resolve().parents[3]
 CASE = Path(__file__).resolve().parent
 HELPERS = runpy.run_path(str(REPO / 'scripts/normalize-generated.py'))
-# Zig 0.16.0 Target.x86.cpu.x86_64, with the sse2 -> sse dependency.
-BASELINE_FEATURES = {'64bit', 'cmov', 'cx8', 'fxsr', 'idivq_to_divl', 'macrofusion',
-                     'mmx', 'nopl', 'slow_3ops_lea', 'slow_incdec', 'sse', 'sse2',
-                     'vzeroupper', 'x87'}
+BASELINE_FEATURES = HELPERS['BASELINE_FEATURES']
 
 
 def exporter_digest(case, manifest, record):
@@ -43,15 +40,7 @@ def exporter_digest(case, manifest, record):
 def fresh_profile(item):
     if item.get('schema') != 12 or item.get('zig_version') != '0.16.0':
         raise ValueError('fresh AIR profile differs: schema 12 / Zig 0.16.0 required')
-    profile = HELPERS['profile_for_air'](item)
-    arch, os_version, _ = profile['target_triple'].split('-')
-    if (item.get('target_endian') != 'little' or arch != 'x86_64' or
-            os_version.split('.')[0] != 'linux' or profile['abi'] not in {'gnu', 'musl'} or
-            profile['backend'] != 'stage2_llvm' or profile['cpu'] != 'x86_64' or
-            set(profile['features']) != BASELINE_FEATURES or
-            profile['build_mode'] != 'ReleaseSafe' or profile['error_tracing'] is not False):
-        raise ValueError('fresh AIR profile differs from Linux/baseline ReleaseSafe flags')
-    return profile
+    return HELPERS['fresh_linux_profile'](item, '0.16.0')
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()

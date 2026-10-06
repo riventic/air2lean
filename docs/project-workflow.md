@@ -15,8 +15,8 @@ python3 scripts/project.py verify project.json --artifact artifacts/run-001
 ```
 
 `report` checks bounded JSON syntax, root-name presence and profile metadata. `translate`
-runs the actual translator on each root's AIR set, with no shell, passing namespace, prefix
-and explicit float semantics. Each root needs every AIR dependency required by the
+runs the actual translator on each root's AIR set, with no shell, passing namespace, prefix,
+explicit float semantics and the effective spawn policy. Each root needs every AIR dependency required by the
 translator's whole-program check; a standalone function file is not assumed independent.
 Translation errors are collected across roots. A root may still have additional semantic
 blockers beyond the first error emitted by the existing translator. The wrapper does not
@@ -61,6 +61,21 @@ Required top-level keys:
 | `allowed_assumptions` | Allowed assumption identifiers |
 | `roots` | Nonempty root records |
 | `limits` | Optional stricter resource limits |
+| `spawn_policy` | Optional `available` (default) or `fallible` spawn model |
+
+`spawn_policy` selects the translator's spawn model for every root. Both omitted and
+explicit `available` manifests pass `--spawn-policy available`; `fallible` passes
+`--spawn-policy fallible`. The `report` preflight records the effective selection but
+cannot establish that the AIR is supported by that model. Translation retains the
+whole-program checker, including its rejection of unsupported fallible concurrent
+clients. Selecting a policy does not prove a property, observe a runtime outcome, or
+attest source correspondence. The fallible semantics require the composed Spawn
+implementation in the selected translator.
+
+New translation receipts record the effective policy and each translation's argv.
+`verify` requires both to match the manifest. Historical receipts without a
+`spawn_policy` field remain compatible only with the `available` default; they cannot
+verify a fallible project. Verification still checks hashes and does not run proofs.
 
 Each root requires `id`, `function`, `air`, `namespace`, `prefix`, `contracts`, `goals`,
 `assumptions` and `exclusions`. AIR paths include the named function and its dependencies.
