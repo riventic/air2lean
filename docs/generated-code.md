@@ -196,9 +196,19 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 | `@intFromPtr(p)` | `bitcast` pointer → integer | `Zig.ptrAddr p` (the block's address plus the offset) |
 | `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
-| `@fieldParentPtr("f", p)` | `field_parent_ptr` | `p.add (-offset)` |
+| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
+
+A local-place `@fieldParentPtr` recovers the original local allocation and its enclosing
+path by removing exactly the matching terminal field of an ordinary (`auto` or `extern`)
+struct. The field index, container and child types must match the recorded projection.
+Same-pointee qualifier casts preserve the path, and a mutation through the recovered parent
+updates the original local. A later escaping use still lowers that allocation to stack
+memory. Packed/union parents, bit-pointers, slice-field recovery, nullable or nonsingle
+pointers and pointee reinterpretation are outside this local fragment. Recovery preserves
+const and volatile qualifiers. The source and synthetic qualification recipe is in
+[`tests/roadmap/local-parent/README.md`](../tests/roadmap/local-parent/README.md).
 
 A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool`, an enum (its tag integer; each enum has a `Zig.Packed` instance) or a packed struct; other fields are outside the subset. A packed struct constant is its backing integer (`Zig.Packed.ofBits`); the exporter writes some as `.{ .f = v, … }`, which `Json.lean`'s `parsePackedLit` reads. `valid` is `false` for bits with a tag value without a name of an exhaustive enum, in any field: where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed` union read), `Zig.Packed.ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
 

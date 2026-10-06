@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Air2Lean.Air.Op
 
 /-!
@@ -6,10 +7,11 @@ import Air2Lean.Air.Op
 Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
 
 * A **place** is an `alloc` (a `var`, or `ret_ptr`), a field pointer of a place (a struct
-  field, or the length or item pointer of a slice), or a pointer `bitcast` with the same
+  field, or the length or item pointer of a slice), a validated local `field_parent_ptr`,
+  or a pointer `bitcast` with the same
   child type. A place whose `alloc` does not escape stays a `Locals` field.
 * An `alloc` **escapes** if one of its places is used other than as the pointer operand of
-  `load`, `store`, `struct_field_ptr`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr`, `bitcast`,
+  `load`, `store`, `struct_field_ptr`, `field_parent_ptr`, `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr`, `bitcast`,
   `set_union_tag`, `ret_load`, an atomic op, or in `dbg`. An escaping `alloc` is a stack block in
   memory. A cast to a different pointee also escapes: its loads and stores reinterpret bytes.
   A place passed to `Thread.spawn` escapes (it is not in this list), so a variable shared
@@ -48,9 +50,69 @@ def placeRoots (insts : Array Inst) : Array (InstId × InstId) :=
       | _ => none
     match i.op with
     | .alloc => acc.push (i.id, i.id)
-    | .fieldPtr b _ | .bitcast b | .sliceFieldPtr _ b => match root? b with
+    | .fieldPtr b _ | .fieldParentPtr b _ | .bitcast b | .sliceFieldPtr _ b => match root? b with
       | some r => acc.push (i.id, r)
       | none => acc
+    | _ => acc
+
+/-- Typed provenance for a local projection. Slice fields cannot be undone by
+`field_parent_ptr`; a struct step remembers its actual container and pointer type. -/
+inductive LocalPathStep where
+  | field (parent : TyId) (index : Nat) (pointer : TyId)
+  | slice
+  deriving Inhabited
+
+/-- Recover exactly the proven terminal ordinary-struct field. This is a place identity,
+not address arithmetic: the root and all preceding steps remain unchanged. -/
+def localParentPath? (types : Array Ty) (layouts : Array Layout) (source result : TyId)
+    (index : Nat) (path : Array LocalPathStep) : Option (Array LocalPathStep) := do
+  let some (.field parent actualIndex projected) := path.back? | none
+  let some (.ptr "one" sourceConst child) := types[source]? | none
+  let some (.ptr "one" resultConst container) := types[result]? | none
+  let some (.ptr "one" _ projectedChild) := types[projected]? | none
+  let some (.struct _ layout fields) := types[parent]? | none
+  let (_, field) ← fields[index]?
+  if (layout != "auto" && layout != "extern") || parent != container || index != actualIndex ||
+      child != field || projectedChild != field || (sourceConst && !resultConst) then none
+  else if nullablePtrTy types layouts source || nullablePtrTy types layouts result ||
+      #[source, result, projected].any (fun t => (layouts[t]?.map (·.hostSize)).getD 0 != 0) then none
+  else if (layouts[source]?.map (·.isVolatile)).getD false &&
+      !(layouts[result]?.map (·.isVolatile)).getD false then none
+  else some (path.pop)
+
+/-- Local paths before escape lowering. Invalid parent recovery has no path, but its root
+still propagates through `placeRoots` so it cannot evade the checker by escaping. -/
+def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array Inst) :
+    Array (InstId × Array LocalPathStep) :=
+  if !insts.any (fun i => match i.op with | .fieldParentPtr .. => true | _ => false) then #[] else
+  -- Preserve `find?`'s first-occurrence semantics, including bare duplicate-ID callers.
+  let instructionTypes := insts.foldl (init := ({} : Std.HashMap InstId TyId)) fun acc i =>
+    if acc.contains i.id then acc else acc.insert i.id i.ty
+  let type? (b : InstId) := instructionTypes[b]?
+  insts.foldl (init := #[]) fun acc i =>
+    let path? (b : InstId) := (acc.find? (·.1 == b)).map (·.2)
+    match i.op with
+    | .alloc => acc.push (i.id, #[])
+    | .fieldPtr (.inst b) idx =>
+      match path? b, (type? b).bind (fun t => match types[t]? with
+          | some (.ptr _ _ c) => some c | _ => none) with
+      | some path, some parent => acc.push (i.id, path.push (.field parent idx i.ty))
+      | _, _ => acc
+    | .sliceFieldPtr _ (.inst b) =>
+      match path? b with
+      | some path => acc.push (i.id, path.push .slice)
+      | none => acc
+    | .bitcast (.inst b) =>
+      match path? b, type? b with
+      | some path, some ty => if samePointee types ty i.ty then acc.push (i.id, path) else acc
+      | _, _ => acc
+    | .fieldParentPtr (.inst b) idx =>
+      match path? b, type? b with
+      | some path, some ty =>
+        match localParentPath? types layouts ty i.ty idx path with
+        | some parent => acc.push (i.id, parent)
+        | none => acc
+      | _, _ => acc
     | _ => acc
 
 /-- The operands of `op` that are read as values: every operand except the pointer operand of

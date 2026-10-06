@@ -812,7 +812,8 @@ def FCtx.pointeeOf (fc : FCtx) (v : Val) : Ty :=
   | _ => .void
 
 /-- Every place of the function (`Check.lean`): an `alloc` with the empty path, a field pointer
-of a place with one more step, a `bitcast` of a place with the same path. -/
+of a place with one more step, a validated parent pointer with the terminal step removed,
+a `bitcast` of a place with the same path. -/
 def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) :=
   fc.allInsts.foldl (init := #[]) fun acc i =>
     match i.op with
@@ -830,6 +831,11 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
         acc.push (i.id, root, path.push step)
+      | none => acc
+    | .fieldParentPtr (.inst b) _ =>
+      -- The checker proved the exact terminal struct field and result pointee type.
+      match acc.find? (·.1 == b) with
+      | some (_, root, path) => acc.push (i.id, root, path.pop)
       | none => acc
     | .sliceFieldPtr len (.inst b) =>
       match acc.find? (·.1 == b) with
