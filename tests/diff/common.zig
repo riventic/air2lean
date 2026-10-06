@@ -34,15 +34,21 @@ const compat = @import("compat.zig");
 
 /// The child's output text: the rendered ok-payload or the panic kind. Any length (a result
 /// with the input buffers can be long); `writeResult` frees it.
+pub const OutcomeKind = enum { value, error_return, native_panic, native_signal, native_harness_failure, input_failure };
+var metadata_writer: ?*std.Io.Writer = null;
+
 pub const Outcome = union(enum) {
-    ok: []u8,
-    fail: []u8,
+    ok: struct { payload: []u8, kind: OutcomeKind },
+    fail: struct { name: []u8, kind: OutcomeKind },
 };
 
 const out_gpa = std.heap.page_allocator;
 
-fn failOutcome(kind: []const u8) Outcome {
-    return .{ .fail = out_gpa.dupe(u8, kind) catch @panic("out of memory") };
+fn harnessFailure() Outcome {
+    return .{ .fail = .{
+        .name = out_gpa.dupe(u8, "unknown") catch @panic("out of memory"),
+        .kind = .native_harness_failure,
+    } };
 }
 
 /// The input buffers of a function that uses memory (docs/generated-code.md §Differential test):
@@ -107,8 +113,8 @@ pub const TestAllocator = struct {
         const k = self.count;
         self.count += 1;
         if (self.fail_at == k or len > self.request_cap or std.mem.indexOfScalar(usize, self.failures, k) != null) return null;
-        const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportPanic("harnessOutOfMemory");
-        self.live.append(out_gpa, p[0..len]) catch reportPanic("harnessOutOfMemory");
+        const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportHarnessFailure("harnessOutOfMemory");
+        self.live.append(out_gpa, p[0..len]) catch reportHarnessFailure("harnessOutOfMemory");
         return p;
     }
 
@@ -151,13 +157,22 @@ var panic_fd: std.posix.fd_t = -1;
 /// status instead of a signal. Best-effort write — a failed write is no worse than the
 /// zero-bytes case the parent already treats as `unknown`.
 fn reportPanic(kind: []const u8) noreturn {
+    reportChildFailure(kind, 'P');
+}
+
+fn reportHarnessFailure(kind: []const u8) noreturn {
+    reportChildFailure(kind, 'H');
+}
+
+fn reportChildFailure(kind: []const u8, tag: u8) noreturn {
     // The parent (not a forked child) panicked: a harness bug, not a tested outcome. Say so.
     // Not `std.debug.panic`: that calls this override again.
     if (panic_fd < 0) {
         std.debug.print("harness panic outside a child: {s}\n", .{kind});
         compat.abort();
     }
-    _ = compat.write(panic_fd, kind) catch {};
+    writeAll(panic_fd, &.{tag});
+    writeAll(panic_fd, kind);
     compat.exit(1);
 }
 
@@ -255,6 +270,15 @@ pub const panic = struct {
 /// a union and a struct (below), and a JSON array (lane 0 first) for a `@Vector(n, T)`.
 /// Recurses on `T`'s shape, so `?T`/`E!T` nesting composes without new cases (no example needs
 /// it today).
+/// Inspect the returned value, rather than infer source errors from rendered text.
+fn returnedError(comptime T: type, value: T) bool {
+    return switch (@typeInfo(T)) {
+        .error_union => if (value) |v| returnedError(@TypeOf(v), v) else |_| true,
+        .optional => if (value) |v| returnedError(@TypeOf(v), v) else false,
+        else => false,
+    };
+}
+
 fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !void {
     switch (@typeInfo(T)) {
         .optional => {
@@ -389,6 +413,48 @@ pub fn forkCallBufs(
     quote_wide: bool,
     bufs: ?[]const Buf,
 ) !Outcome {
+    return forkCallBufsWithRenderingAllocator(Args, args, func, quote_wide, bufs, out_gpa);
+}
+
+/// Render only after the tested call returns. Keep the writer alive until its
+/// complete byte sequence has been sent; any rendering error is a harness failure.
+fn renderResult(
+    raw: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+    rendering_allocator: std.mem.Allocator,
+    fd: std.posix.fd_t,
+) !void {
+    var aw: std.Io.Writer.Allocating = .init(rendering_allocator);
+    defer aw.deinit();
+    // One typed byte on the private pipe; it is removed from the legacy JSON payload.
+    try aw.writer.writeByte(if (returnedError(@TypeOf(raw), raw)) 'E' else 'V');
+    render_bufs = bufs orelse &.{};
+    try renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw);
+    if (bufs) |bs| {
+        try aw.writer.writeAll(",\"bufs\":[");
+        for (bs, 0..) |b, i| {
+            if (i > 0) try aw.writer.writeAll(",");
+            try aw.writer.writeAll("\"");
+            for (b) |byte| try aw.writer.print("{x:0>2}", .{byte});
+            try aw.writer.writeAll("\"");
+        }
+        try aw.writer.writeAll("]");
+    }
+    if (test_alloc) |ta| try aw.writer.print(",\"live\":{d}", .{ta.live.items.len});
+    writeAll(fd, aw.written());
+}
+
+/// Test-runner injection point for the post-call renderer only. The tested function,
+/// its allocator arguments and the parent's result storage are unchanged.
+pub fn forkCallBufsWithRenderingAllocator(
+    comptime Args: type,
+    args: Args,
+    comptime func: anytype,
+    quote_wide: bool,
+    bufs: ?[]const Buf,
+    rendering_allocator: std.mem.Allocator,
+) !Outcome {
     const fds = try compat.pipe();
     const pid = try compat.fork();
     if (pid == 0) {
@@ -399,56 +465,102 @@ pub fn forkCallBufs(
         compat.close(fds[0]);
         panic_fd = fds[1];
         compat.silenceStderr();
+        // ReleaseSafe's inherited crash handler changes FPE/ILL/SEGV/BUS into ABRT.
+        // Keep the original fault signal observable; the parent uses C/R for its phase.
+        const crash_defaults = std.posix.Sigaction{
+            .handler = .{ .handler = std.posix.SIG.DFL },
+            .mask = std.posix.sigemptyset(),
+            .flags = 0,
+        };
+        std.debug.updateSegfaultHandler(&crash_defaults);
 
+        // Checked phase bytes distinguish a tested-call trap from renderer/protocol failure.
+        if ((compat.write(fds[1], "C") catch reportHarnessFailure("harnessPhaseFailure")) != 1)
+            reportHarnessFailure("harnessPhaseFailure");
         const raw = @call(.auto, func, args);
-        var aw: std.Io.Writer.Allocating = .init(out_gpa);
-        render_bufs = bufs orelse &.{};
-        renderPayload(@TypeOf(raw), &aw.writer, quote_wide, raw) catch unreachable;
-        if (bufs) |bs| {
-            aw.writer.writeAll(",\"bufs\":[") catch unreachable;
-            for (bs, 0..) |b, i| {
-                if (i > 0) aw.writer.writeAll(",") catch unreachable;
-                aw.writer.writeAll("\"") catch unreachable;
-                for (b) |byte| aw.writer.print("{x:0>2}", .{byte}) catch unreachable;
-                aw.writer.writeAll("\"") catch unreachable;
-            }
-            aw.writer.writeAll("]") catch unreachable;
-        }
-        if (test_alloc) |ta| aw.writer.print(",\"live\":{d}", .{ta.live.items.len}) catch unreachable;
-        writeAll(fds[1], aw.written());
+        if ((compat.write(fds[1], "R") catch reportHarnessFailure("harnessPhaseFailure")) != 1)
+            reportHarnessFailure("harnessPhaseFailure");
+        renderResult(raw, quote_wide, bufs, rendering_allocator, fds[1]) catch
+            reportHarnessFailure("harnessRenderFailure");
         compat.exit(0);
     }
 
     // Parent.
     compat.close(fds[1]);
-    defer compat.close(fds[0]);
+    var read_open = true;
+    defer if (read_open) compat.close(fds[0]);
+    var child_reaped = false;
+    errdefer if (!child_reaped) {
+        // Allocation errors must not leave a blocked tested call alive or unreaped.
+        if (read_open) {
+            compat.close(fds[0]);
+            read_open = false;
+        }
+        std.posix.kill(pid, std.posix.SIG.KILL) catch {};
+        _ = compat.waitpid(pid, 0);
+    };
     var text: std.ArrayListUnmanaged(u8) = .empty;
+    defer text.deinit(out_gpa);
     var chunk: [4096]u8 = undefined;
+    var read_failed = false;
     while (true) {
-        const n = std.posix.read(fds[0], &chunk) catch break;
+        const n = std.posix.read(fds[0], &chunk) catch {
+            read_failed = true;
+            // A writer must not remain blocked on an undrained pipe while we wait.
+            compat.close(fds[0]);
+            read_open = false;
+            break;
+        };
         if (n == 0) break;
         try text.appendSlice(out_gpa, chunk[0..n]);
     }
     const wr = compat.waitpid(pid, 0);
+    child_reaped = true;
+    if (read_failed) return harnessFailure();
+    // Only synchronous fault signals during the tested call are semantic observations.
+    // Resource kills, cancellation and renderer-stage signals remain harness failures.
+    if (std.posix.W.IFSIGNALED(wr.status) and std.mem.eql(u8, text.items, "C")) {
+        const sig = std.posix.W.TERMSIG(wr.status);
+        if (sig == std.posix.SIG.ILL or sig == std.posix.SIG.FPE or
+            sig == std.posix.SIG.SEGV or sig == std.posix.SIG.BUS)
+            return .{ .fail = .{ .name = try out_gpa.dupe(u8, "unknown"), .kind = .native_signal } };
+    }
+    if (text.items.len < 2 or text.items[0] != 'C') return harnessFailure();
+    const returned = text.items[1] == 'R';
+    const payload_start: usize = if (returned) 2 else 1;
+    const payload = text.items[payload_start..];
     const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
     const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
-    if (text.items.len > 0 and (exited_ok or exited_fail)) {
-        const s = try text.toOwnedSlice(out_gpa);
-        return if (exited_ok) .{ .ok = s } else .{ .fail = s };
+    if (exited_fail and payload.len > 1 and (payload[0] == 'P' or payload[0] == 'H')) {
+        const kind: OutcomeKind = if (!returned and payload[0] == 'P') .native_panic else .native_harness_failure;
+        return .{ .fail = .{ .name = try out_gpa.dupe(u8, payload[1..]), .kind = kind } };
     }
-    text.deinit(out_gpa);
-    return failOutcome("unknown");
+    if (exited_ok and returned and payload.len > 1 and (payload[0] == 'V' or payload[0] == 'E')) {
+        const kind: OutcomeKind = if (payload[0] == 'E') .error_return else .value;
+        // Keep V/E for writeResult's existing payload[1..] protocol, without a second allocation.
+        std.mem.copyForwards(u8, text.items, payload);
+        text.items.len = payload.len;
+        return .{ .ok = .{ .payload = try text.toOwnedSlice(out_gpa), .kind = kind } };
+    }
+    return harnessFailure();
 }
 
 pub fn writeResult(writer: anytype, outcome: Outcome) !void {
     switch (outcome) {
         .ok => |o| {
-            try writer.print("{{\"ok\":{s}}}\n", .{o});
-            out_gpa.free(o);
+            defer out_gpa.free(o.payload);
+            const payload = o.payload[1..];
+            try writer.print("{{\"ok\":{s}}}\n", .{payload});
+            if (metadata_writer) |meta| try meta.print(
+                "{{\"schema\":1,\"kind\":\"{s}\",\"legacy\":{{\"ok\":{s}}}}}\n",
+                .{ @tagName(o.kind), payload });
         },
         .fail => |f| {
-            try writer.print("{{\"fail\":\"{s}\"}}\n", .{f});
-            out_gpa.free(f);
+            defer out_gpa.free(f.name);
+            try writer.print("{{\"fail\":\"{s}\"}}\n", .{f.name});
+            if (metadata_writer) |meta| try meta.print(
+                "{{\"schema\":1,\"kind\":\"{s}\",\"legacy\":{{\"fail\":\"{s}\"}}}}\n",
+                .{ @tagName(f.kind), f.name });
         },
     }
 }
@@ -488,11 +600,19 @@ fn forEachValue(
     var out_file = try compat.OutFile.open(out_path);
     defer out_file.close();
     const writer = out_file.writer();
+    var metadata_file = try compat.OutFile.open(out_path ++ ".outcomes");
+    defer metadata_file.close();
+    const metadata = metadata_file.writer();
+    metadata_writer = metadata;
+    defer metadata_writer = null;
 
     var lines = std.mem.splitScalar(u8, content, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
-        var parsed = try std.json.parseFromSlice(std.json.Value, gpa, line, .{});
+        var parsed = std.json.parseFromSlice(std.json.Value, gpa, line, .{}) catch |err| {
+            try metadata.writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
+            return err;
+        };
         defer parsed.deinit();
         try perValue(gpa, parsed.value, writer);
     }

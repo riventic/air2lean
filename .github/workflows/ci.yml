@@ -468,6 +468,29 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Typed outcomes and bounded schedule regressions
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        run: |
+          python3 -I -B tests/roadmap/outcome-accounting/test_report.py
+          python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
+          # Relink against this version's archive produced by the differential gate.
+          rm -f tests/diff/.lake/build/bin/schedules
+          (cd tests/diff && lake build schedules)
+          (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Check.lean)
+          (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Search.lean)
+          (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Schedule.lean)
+          python3 scripts/schedules.py enumerate --example atomics --function mpRelAcq \
+            --fuel 1000 --node-cap 4 --prefix-cap 128 --output "$RUNNER_TEMP/schedules.json"
+          python3 scripts/schedules.py replay --receipt "$RUNNER_TEMP/schedules.json" \
+            --output "$RUNNER_TEMP/schedule-replay.json"
+          python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
+            --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
+          zig build-exe -OReleaseSafe -lc --dep common \
+            -Mroot=tests/roadmap/outcome-accounting/Native.zig \
+            -Mcommon=tests/diff/common.zig -femit-bin="$RUNNER_TEMP/outcome-native"
+          python3 tests/roadmap/outcome-accounting/test_native.py "$RUNNER_TEMP/outcome-native"
+          python3 tests/roadmap/outcome-accounting/test_parent_oom.py "$(command -v zig)"
+
       # After check.sh, Proofs/<Ex>/Gen.lean holds this version's translation: the proofs must
       # hold for it too (0.14.1 has its own `layout`, `variants` and `floatops` translations).
       - name: Build proofs
