@@ -27,6 +27,12 @@ private def equalOffset : Nat := 8 + 32
 private def unchangedExcept (name : String) (memory : Mem) (start count : Nat) : IO Unit := do
   check (name ++ ":block-count") memory.blocks.size GlobalPayload.mem0.blocks.size
   check (name ++ ":allocations") memory.allocs GlobalPayload.mem0.allocs
+  check (name ++ ":next-address") memory.nextAddr GlobalPayload.mem0.nextAddr
+  for (before, index) in GlobalPayload.mem0.blocks.zipIdx do
+    let some after := memory.blocks[index]? | throw (IO.userError "missing framed block")
+    check (name ++ s!":block-metadata-{index}")
+      (after.align, after.kind, after.live, after.addr, after.bytes.size)
+      (before.align, before.kind, before.live, before.addr, before.bytes.size)
   check (name ++ ":frozen-frame") (← bytes memory 0) (← bytes GlobalPayload.mem0 0)
   let before ← bytes GlobalPayload.mem0 1
   let after ← bytes memory 1
