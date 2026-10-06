@@ -461,6 +461,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .permuteBits op a =>
+    let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"
+    let some (_, _, bits) := cx.intShape? aty
+      | cx.fail line "bit permutation requires an integer or integer vector operand"
+    unless aty == ty do
+      cx.fail line "bit permutation result must preserve the operand type"
+    if op == .byteSwap && bits % 8 != 0 then
+      cx.fail line "byte swap requires an integer width evenly divisible by 8"
+    pure line
   | .countBits _ a =>
     let some aty := cx.valTy? a | cx.fail line "bit count operand has no known type"
     let some (alen, _, bits) := cx.intShape? aty

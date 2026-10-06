@@ -769,6 +769,8 @@ const W = struct {
             .clz,
             .ctz,
             .popcount,
+            .byte_swap,
+            .bit_reverse,
             .abs,
             .optional_payload,
             .wrap_optional,
