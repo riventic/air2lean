@@ -26,13 +26,15 @@ case "${1:-}" in
     ;;
   --native)
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}"
-    "$AIR2LEAN_ZIG_NATIVE" test tests/roadmap/global-payload-pointers/global_payloads.zig -OReleaseSafe
+    "$AIR2LEAN_ZIG_NATIVE" test tests/roadmap/global-payload-pointers/global_payloads.zig -OReleaseSafe \
+      -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline
     ;;
   --export|--export-reject)
     [ "$#" -eq 2 ] || { echo 'usage: check.sh --export EMPTY_OUTPUT_DIR|--export-reject EMPTY_OUTPUT_DIR' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_AIR:?set a freshly patched compiler with this exporter}"
     : "${AIR2LEAN_ZIG_VERSION:?set the exact patched compiler version}"
     : "${AIR2LEAN_ZIG_BACKEND:?set the exact expected stage2 backend}"
+    [ "$AIR2LEAN_ZIG_BACKEND" = stage2_x86_64 ] || { echo 'payload qualification requires stage2_x86_64' >&2; exit 2; }
     mkdir -p "$2"
     [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'output must be empty' >&2; exit 1; }
     air_output=$(cd -- "$2" && pwd)

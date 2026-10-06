@@ -1,0 +1,23 @@
+{
+  "controls": "optional/wide/equal offsets correct ROOT report",
+  "limits": "Original offset oracle preserved; only tested profile boundary, full fresh generated qualification pending",
+  "llvm": {
+    "constantSmallOffset": 36,
+    "runtimeSmallOffset": 38
+  },
+  "probe_manifest_sha256": "c01e67bdd4ba24c1bf56f551fce7a94d98dc941e89350e0d4428d00dbed0006a",
+  "profile": "x86_64-linux-musl baseline ReleaseSafe",
+  "reads": "19 all cases ROOT report",
+  "retained_logs": "/artifacts/global-native-offset-probe-q1/VERSION/native-{llvm,stage2_x86}.log",
+  "root_session": 61466,
+  "stage2_x86_64": {
+    "constantSmallOffset": 38,
+    "runtimeSmallOffset": 38
+  },
+  "status": "ROOT-reported diagnostic observations, not feature qualification",
+  "versions": [
+    "0.14.1",
+    "0.15.2",
+    "0.16.0"
+  ]
+}

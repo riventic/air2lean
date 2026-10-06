@@ -9,12 +9,14 @@ HELPERS = runpy.run_path(str(HERE.parents[2]/'scripts/normalize-generated.py'))
 BASELINE_FEATURES = HELPERS['BASELINE_FEATURES']
 
 def profile(document, version, backend):
+    if backend != 'stage2_x86_64':
+        raise ValueError('payload qualification requires stage2_x86_64')
     result = HELPERS['profile_for_air'](document)
     if document.get('schema') != 12 or document.get('zig_version') != version:
         raise ValueError('fresh AIR schema/version mismatch')
     arch, os_version, _ = result['target_triple'].split('-')
     if (document.get('target_endian') != 'little' or arch != 'x86_64' or
-        os_version.split('.')[0] != 'linux' or result['abi'] not in {'gnu', 'musl'} or
+        os_version.split('.')[0] != 'linux' or result['abi'] != 'musl' or
         result['backend'] != backend or result['cpu'] != 'x86_64' or
         set(result['features']) != BASELINE_FEATURES or result['build_mode'] != 'ReleaseSafe' or
         result['error_tracing'] is not False):
@@ -95,7 +97,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--version', required=True, choices=('0.14.1', '0.15.2', '0.16.0'))
-    parser.add_argument('--backend', required=True, choices=('stage2_llvm', 'stage2_x86_64'))
+    parser.add_argument('--backend', required=True, choices=('stage2_x86_64',))
     parser.add_argument('--reject', action='store_true')
     args = parser.parse_args()
     check(args.directory, args.version, args.backend, args.reject)

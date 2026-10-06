@@ -42,3 +42,18 @@ All compiler and Lean execution belongs to the root's single validation lane:
 
 No compiler output, generated Lean, native acceptance or checked proof is claimed by this
 source packet. Source inventories retain unqualified review labels.
+
+Qualification profile boundary: native source checks explicitly use `-fno-llvm -fno-lld
+-target x86_64-linux -mcpu=baseline -OReleaseSafe`, matching the patched producer's
+`stage2_x86_64`, Linux musl baseline profile. The fresh AIR gate rejects LLVM, missing
+or mixed profiles and GNU ABI for this qualification. General translator acceptance
+is separate from this profile-specific source/native correspondence claim.
+
+ROOT's bounded address probe on stock 0.14.1, 0.15.2 and 0.16.0 observed the small
+error payload constant at offset 36 with LLVM, while its runtime projection was at
+38. With stage2_x86_64 both addresses were 38. The original offset oracle remains
+unchanged. Optional, wide and equal-alignment controls agreed across both backends;
+all observed reads were 19. This establishes only the tested fixture/backend/target
+boundary, not a general compiler backend theorem. LLVM constant small error payload
+pointer correspondence remains unqualified. See `native-abi-boundary.json` for ROOT's
+reported diagnostic provenance; full fresh exporter/generated alias gates remain pending.
