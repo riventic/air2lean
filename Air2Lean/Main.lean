@@ -128,10 +128,14 @@ private def run (args : List String) : IO UInt32 := do
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
+      -- Preserve the historical <full name>.json emission order even when storage
+      -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let (originalNames, rewrittenTexts) := Anon.renumberAllWithNames texts
+      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
+      for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           match Raw.parseFile contents with
           | .error e => err := some s!"{path}: {e}"
@@ -156,13 +160,17 @@ private def run (args : List String) : IO UInt32 := do
               IO.FS.writeFile a.outPath (template.pretty ++ "\n")
               pure 0
           else
+            -- Reads and every validation guard retain their original path order.
+            -- Only successful emission depends on identity rather than storage keys.
+            let emissionFuncs := ((emissionKeys.zip funcs).qsort
+              (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
             let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
-              emit funcs a.ns a.prefix_ a.floatSemantics models
+              emit emissionFuncs a.ns a.prefix_ a.floatSemantics models
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
             pure 0
