@@ -423,6 +423,19 @@ jobs:
           python3 tests/roadmap/spawn-failure/harness-tests.py
           bash tests/roadmap/spawn-failure/check.sh --full
 
+      - name: Finite symbolic error-storage model and checker controls
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          storage_evidence_dir="$RUNNER_TEMP/error-storage-controls"
+          mkdir -p "$storage_evidence_dir"
+          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Try ZigLean.Sep.Discard
+          lake env lean --run tests/roadmap/error-storage/Qualifier.lean
+          lake env lean --run tests/roadmap/error-storage/GlobalAlias.lean
+          lake env lean --run tests/roadmap/error-storage/Runtime.lean
+          lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
+          lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
+
       # L04 actual compiler/native qualification is currently specific to 0.16.0.
       # 0.14/0.15 exporter APIs were source-inspected; their synthetic fixtures are
       # checked in this gate, without claiming native/export qualification for them.
