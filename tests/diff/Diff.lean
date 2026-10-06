@@ -1,3 +1,5 @@
+import Concurrent
+import Outcome
 import ScheduleSearch
 import Lean.Data.Json
 import Air2Lean.Air.Json
@@ -28,7 +30,7 @@ Companion to `tests/diff/<ex>/harness.zig` (docs/generated-code.md names the fun
 example). Reads the same `tests/diff/<ex>/inputs/<fn>.jsonl` files
 (tests/diff/gen_inputs.zig), calls the generated `<Ex>.<fn>`, and writes
 `tests/diff/out/lean/<ex>/<fn>.jsonl`: one line per input, one of `{"ok": v}` /
-`{"fail": "<error>"}` / `{"diverge": true}` (the `none` case of `Zig.Result` — non-termination).
+`{"fail": "<error>"}` / `{"diverge": true}` (the legacy `none` wire shape; the typed sidecar reports bounded no-result).
 
 A `u64`/`usize` `ok` value (`sum`, `totalWeightedTardiness`, the options functions) is quoted
 as a decimal string for JS-safety, matching common.zig's `renderPayload`. `isEven`/`isOdd`
@@ -48,6 +50,7 @@ Run: `lake exe difftest` from `tests/diff/` (its own Lake package, see lakefile.
 -/
 
 open Lean (Json)
+open DiffOutcome (Observation ReturnedError)
 
 /-! ## Asm's diff-test-only implementation
 
@@ -154,26 +157,28 @@ def jobOf (j : Json) : IO Basic.Job := do
 
 /-- Render a `Zig.Result` outcome as one JSONL line; `payload` renders the `ok` value as
 common.zig's `renderPayload` writes it. -/
-def renderOk {α : Type} (r : Zig.Result α) (payload : α → String) : String :=
+def renderOk {α : Type} [ReturnedError α] (r : Zig.Result α) (payload : α → String) : Observation :=
   match r.run with
-  | none => "{\"diverge\":true}"
-  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
-  | some (.ok v) => "{\"ok\":" ++ payload v ++ "}"
+  | none => DiffOutcome.noResult
+  | some (.error e) => DiffOutcome.failure e
+  | some (.ok v) => {
+      line := "{\"ok\":" ++ payload v ++ "}"
+      kind := DiffOutcome.valueKind v }
 
 /-- An integer value; `wide`: quoted (u64 results). -/
 def natStr {n : Nat} (v : BitVec n) (wide : Bool) : String :=
   if wide then "\"" ++ toString v.toNat ++ "\"" else toString v.toNat
 
-def render {n : Nat} (r : Zig.Result (BitVec n)) (wide : Bool) : String :=
+def render {n : Nat} (r : Zig.Result (BitVec n)) (wide : Bool) : Observation :=
   renderOk r (natStr · wide)
 
 /-- A signed integer value (a Zig `iN` result, e.g. `toI32`'s `i32`): two's-complement decoding
 of the `BitVec`, matching `renderPayload`'s `{d}` on a signed Zig int. -/
-def renderSigned {n : Nat} (r : Zig.Result (BitVec n)) : String :=
+def renderSigned {n : Nat} (r : Zig.Result (BitVec n)) : Observation :=
   renderOk r fun v => toString v.toInt
 
 /-- A `bool` as `0`/`1`. -/
-def renderBool (r : Zig.Result Bool) : String :=
+def renderBool (r : Zig.Result Bool) : Observation :=
   renderOk r fun v => if v then "1" else "0"
 
 def optStr {n : Nat} (v : Option (BitVec n)) (wide : Bool) : String :=
@@ -199,16 +204,30 @@ def optFloatStr {fmt : Zig.FloatFmt} (v : Option (Zig.Float fmt)) : String :=
 
 /-- Read `tests/diff/<ex>/inputs/<name>.jsonl`, write `tests/diff/out/lean/<ex>/<name>.jsonl`:
 `step` runs once per non-empty input line and returns the already-rendered output line. -/
-def processFile (ex name : String) (step : Json → IO String) : IO Unit := do
+def processFile (ex name : String) (step : Json → IO Observation) : IO Unit := do
   let inPath := "tests/diff/" ++ ex ++ "/inputs/" ++ name ++ ".jsonl"
   let outPath := "tests/diff/out/lean/" ++ ex ++ "/" ++ name ++ ".jsonl"
   let raw ← IO.FS.lines inPath
-  IO.FS.withFile outPath .write fun h => do
-    for line in raw do
-      if line.trimAscii.isEmpty then continue
-      let j ← orFail (Json.parse line) s!"{ex}.{name}: parse {line}"
-      let out ← step j
-      h.putStrLn out
+  IO.FS.withFile outPath .write fun h =>
+    IO.FS.withFile (outPath ++ ".outcomes") .write fun metadata => do
+      for line in raw do
+        if line.trimAscii.isEmpty then continue
+        let recordFailure : IO Unit := metadata.putStrLn
+          (({
+              line := "{}"
+              kind := .inputFailure } : Observation).metadata.compress)
+        let j ← match Json.parse line with
+          | .ok j => pure j
+          | .error e => do
+            recordFailure
+            throw (IO.userError s!"{ex}.{name}: parse {e}")
+        let out ← try
+          step j
+        catch e =>
+          recordFailure
+          throw e
+        h.putStrLn out.line
+        metadata.putStrLn out.metadata.compress
 
 def runScale : IO Unit :=
   processFile "basic" "scale" fun j => do
@@ -487,15 +506,15 @@ def floatVecOf (fmt : Zig.FloatFmt) (j : Json) : IO (Zig.Vec (Zig.Float fmt) 4) 
 def vecStr {n : Nat} (v : Zig.Vec (BitVec n) 4) : String :=
   "[" ++ ",".intercalate (v.lanes.toArray.toList.map (natStr · false)) ++ "]"
 
-def renderVec {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
+def renderVec {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : Observation :=
   renderOk r vecStr
 
 /-- A `@Vector(4, iN)` result: signed lanes. -/
-def renderVecS {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : String :=
+def renderVecS {n : Nat} (r : Zig.Result (Zig.Vec (BitVec n) 4)) : Observation :=
   renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map (toString ·.toInt)) ++ "]"
 
 /-- A `@Vector(4, fN)` result: float-hex lanes. -/
-def renderVecF {fmt : Zig.FloatFmt} (r : Zig.Result (Zig.Vec (Zig.Float fmt) 4)) : String :=
+def renderVecF {fmt : Zig.FloatFmt} (r : Zig.Result (Zig.Vec (Zig.Float fmt) 4)) : Observation :=
   renderOk r fun v => "[" ++ ",".intercalate (v.lanes.toArray.toList.map floatStr) ++ "]"
 
 def runFDot : IO Unit :=
@@ -732,22 +751,24 @@ def sliceStr (g : Nat) (m : Zig.Mem) (size : Nat) (s : Zig.Slice) : String :=
 /-- `renderOk` for a function that uses memory: the result, then the bytes of the `n` input
 buffers after the call (blocks `g` to `g + n - 1`). `heap`: then the number of live blocks of the
 allocator, `,"live":<n>`. -/
-def renderMem {α : Type} (g n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : Zig.Mem → α → String)
-    (heap : Bool := false) : String :=
+def renderMem {α : Type} [ReturnedError α] (g n : Nat) (r : Zig.Result (α × Zig.Mem)) (payload : Zig.Mem → α → String)
+    (heap : Bool := false) : Observation :=
   match r.run with
-  | none => "{\"diverge\":true}"
-  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
+  | none => DiffOutcome.noResult
+  | some (.error e) => DiffOutcome.failure e
   | some (.ok (v, m)) =>
     let bufs := (m.blocks.extract g (g + n)).toList.map fun blk =>
       "\"" ++ String.join (blk.bytes.toList.map byteStr) ++ "\""
     let live := if heap then s!",\"live\":{(m.blocks.filter fun b => b.kind == .heap && b.live).size}"
       else ""
-    "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}"
+    {
+      line := "{\"ok\":" ++ payload m v ++ ",\"bufs\":[" ++ ",".intercalate bufs ++ "]" ++ live ++ "}"
+      kind := DiffOutcome.valueKind v }
 
 /-- Run `call` on each line of `tests/diff/<ex>/inputs/<name>.jsonl` of a function that uses
 memory, from the memory `m0` of the example. `call` gets the number of globals. `heap`: the
 function takes an allocator (`renderMem`). -/
-def processMem {α : Type} (ex : String) (m0 : Zig.Mem) (name : String)
+def processMem {α : Type} [ReturnedError α] (ex : String) (m0 : Zig.Mem) (name : String)
     (call : Nat → Array Json → IO (Zig.MemM α)) (payload : Zig.Mem → α → String)
     (heap : Bool := false) : IO Unit :=
   processFile ex name fun j => do
@@ -974,99 +995,45 @@ def runLists : IO Unit := do
   processMem ex m0 "listSum" (fun g x => do withFailAt x[0]! (Lists.listSum a (← sliceOf g x[1]!)))
     wide (heap := true)
 
-/-- One run of a concurrent function as a result line, as `renderOk`. -/
-def renderOut {α : Type} (r : Zig.Sched.Out α) (payload : α → String) : String :=
-  match r with
-  | none => "{\"diverge\":true}"
-  | some (.error e) => "{\"fail\":\"" ++ reprStr e ++ "\"}"
-  | some (.ok (v, _)) => "{\"ok\":" ++ payload v ++ "}"
-
 /-- The turns of one run (`Zig.Sched.run`'s `fuel`). -/
 def scheduleFuel : Nat := 100000
 
 /-- `processFile` for a concurrent function: each input line with Zig's line for it
 (`tests/diff/out/zig/<ex>/<name>.jsonl`, written before the Lean side runs). -/
-def processConc (ex name : String) (step : Json → String → IO String) : IO Unit := do
+def processConc (ex name : String) (step : Json → String → IO Observation) : IO Unit := do
   let zig ← IO.FS.lines ("tests/diff/out/zig/" ++ ex ++ "/" ++ name ++ ".jsonl")
   let k ← IO.mkRef 0
   processFile ex name fun j => do
     let i ← k.modifyGet fun i => (i, i + 1)
     step j (zig[i]?.getD "")
 
-/-- One concurrent top-level call under the schedule `o`, from `m0`; `dispatch` runs the
-program's spawn targets. -/
-def runConcWith {Tgt α : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m0 : Zig.Mem)
-    (main : Zig.ConcM Tgt α) (payload : α → String) (o : Nat → Nat) : String × Array Nat :=
-  let (r, opts) := Zig.Sched.runTrace dispatch scheduleFuel o main m0
-  (renderOut r payload, opts)
+/-- Resolve the shared concurrent registry before observed-result matching. -/
+def processConcurrent (ex name : String) : IO Unit :=
+  processConc ex name fun j zig => do
+    let run ← DiffConcurrent.runner ex name j scheduleFuel
+    pure (searchObservations scheduleFuel run zig)
 
-def runConc {α : Type} (m0 : Zig.Mem) (main : Zig.ConcM Threads.Tgt α) (payload : α → String) :=
-  runConcWith Threads.dispatch m0 main payload
-
-def runParallelCounter : IO Unit :=
-  processConc "threads" "parallelCounter" fun j zig => do
-    let items ← getArr j
-    let n ← getInt items[0]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.parallelCounter (bv 32 n)) (errStr · false)) zig)
-
-def runRace : IO Unit :=
-  processConc "threads" "race" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.race (bv 32 a) (bv 32 b)) (errStr · false)) zig)
-
-def runDisjoint : IO Unit :=
-  processConc "threads" "disjoint" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.disjoint (bv 32 a) (bv 32 b)) (errStr · false)) zig)
-
-def runClaimOnce : IO Unit :=
-  processConc "threads" "claimOnce" fun _ zig => do
-    pure (searchSchedules (runConc Threads.mem0 Threads.claimOnce (errStr · false)) zig)
+def runParallelCounter : IO Unit := processConcurrent "threads" "parallelCounter"
+def runRace : IO Unit := processConcurrent "threads" "race"
+def runDisjoint : IO Unit := processConcurrent "threads" "disjoint"
+def runClaimOnce : IO Unit := processConcurrent "threads" "claimOnce"
+def runXchgRace : IO Unit := processConcurrent "threads" "xchgRace"
 
 def runAtomics : IO Unit := do
-  let one (name : String) (f : Zig.ConcM Atomics.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "atomics" name fun _ zig =>
-      pure (searchSchedules (runConcWith Atomics.dispatch Atomics.mem0 f (errStr · false)) zig)
-  one "mpRelAcq" Atomics.mpRelAcq
-  one "mpRelaxed" Atomics.mpRelaxed
-  one "sbRelaxed" Atomics.sbRelaxed
-  one "twoPlusTwoW" Atomics.twoPlusTwoW
-  one "stackPush" Atomics.stackPush
+  for name in ["mpRelAcq", "mpRelaxed", "sbRelaxed", "twoPlusTwoW", "stackPush"] do
+    processConcurrent "atomics" name
 
 def runSync : IO Unit := do
-  let one (name : String) (f : Zig.Io → Zig.ConcM Sync.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "sync" name fun _ zig =>
-      pure (searchSchedules (runConcWith Sync.dispatch Sync.mem0 (f {}) (errStr · false)) zig)
-  one "mutexCounter" Sync.mutexCounter
-  one "handoff" Sync.handoff
-  one "semaphoreCounter" Sync.semaphoreCounter
-  one "rwLockRead" Sync.rwLockRead
+  for name in ["mutexCounter", "handoff", "semaphoreCounter", "rwLockRead"] do
+    processConcurrent "sync" name
 
 def runThreadsync : IO Unit := do
-  let one (name : String) (f : Zig.ConcM Threadsync.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "threadsync" name fun _ zig =>
-      pure (searchSchedules (runConcWith Threadsync.dispatch Threadsync.mem0 f (errStr · false)) zig)
-  one "mutexCounter" Threadsync.mutexCounter
-  one "handoff" Threadsync.handoff
-  one "waitGroup" Threadsync.waitGroup
+  for name in ["mutexCounter", "handoff", "waitGroup"] do
+    processConcurrent "threadsync" name
 
 def runIogroup : IO Unit := do
-  let one (name : String) (f : Zig.Io → Zig.ConcM Iogroup.Tgt (Except Zig.ErrName (BitVec 32))) :=
-    processConc "iogroup" name fun _ zig =>
-      pure (searchSchedules (runConcWith Iogroup.dispatch Iogroup.mem0 (f {}) (errStr · false)) zig)
-  one "groupCounter" Iogroup.groupCounter
-  one "groupConcurrent" Iogroup.groupConcurrent
-
-def runXchgRace : IO Unit :=
-  processConc "threads" "xchgRace" fun j zig => do
-    let items ← getArr j
-    let a ← getInt items[0]!
-    let b ← getInt items[1]!
-    pure (searchSchedules (runConc Threads.mem0 (Threads.xchgRace (bv 32 a) (bv 32 b)) (errStr · false)) zig)
+  for name in ["groupCounter", "groupConcurrent"] do
+    processConcurrent "iogroup" name
 
 -- Calls the opaque directly (`Asm.airAsm_*`), not the generated wrapper (`Asm.bswap32` etc.):
 -- the wrapper's own body is compiled once, inside `Proofs/Asm/Gen.lean`, before this file's
