@@ -578,16 +578,36 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         match cx.types[id]? with
         | some (.optional child) => ptrChild cx.types child
         | _ => ptrChild cx.types id
+      -- Changing only const qualification preserves the decoder and pointer
+      -- representation even when the unchanged pointee graph is recursive.
+      let qualifierPointer (id : TyId) : Option (Bool × TyId × String × Bool × TyId) := do
+        let (optional, pid) ← match cx.types[id]? with
+          | some (.optional pid) => some (true, pid)
+          | some (.ptr ..) => some (false, id)
+          | _ => none
+        let .ptr kind isConst child ← cx.types[pid]? | none
+        return (optional, pid, kind, isConst, child)
+      let qualifierOnly := ((do
+        let (aopt, apid, akind, aconst, achild) ← qualifierPointer aty
+        let (bopt, bpid, bkind, bconst, bchild) ← qualifierPointer ty
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        let ap ← cx.layouts[apid]?
+        let bp ← cx.layouts[bpid]?
+        return aopt == bopt && akind == bkind && aconst != bconst && achild == bchild &&
+          a.size.isSome && a.align.isSome && ap.size.isSome && ap.align.isSome &&
+          ap.ptrAlign.isSome && a == b && ap == bp : Option Bool)).getD false
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
-        let some sourceCap := hasErrorCapability cx.types source
-          | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
-        let some targetCap := hasErrorCapability cx.types target
-          | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
-        if sourceCap != targetCap ||
-            hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
-            ((sourceCap || targetCap) && source != target) then
-          cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
+        unless qualifierOnly do
+          let some sourceCap := hasErrorCapability cx.types source
+            | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+          let some targetCap := hasErrorCapability cx.types target
+            | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+          if sourceCap != targetCap ||
+              hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
+              ((sourceCap || targetCap) && source != target) then
+            cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
       | none, some target =>
         unless hasErrorCapability cx.types target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
