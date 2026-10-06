@@ -17,7 +17,23 @@ def main : IO Unit := do
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/golden/0.15.2/lists/air/lists.listSum.json")
   require (raw.body.any fun i => i.id == 66 && i.tag == "bitcast" &&
     i.ty == some 21 && i.args == #[.inst 65]) "retained raw list inst66 qualifier cast drift"
+  require (raw.body.any fun i => i.id == 33 && i.tag == "bitcast" &&
+    i.ty == some 5 && i.args == #[.inst 32]) "retained raw list inst33 optional wrap drift"
   let f : Func ← get <| normalize raw
+  require (f.types[5]? == some (.optional 14)) "retained exact pointer wrapper shape drift"
+  -- Isolate the wrapper from inst66 so failures cannot be masked by another cast.
+  let wrapCx : CheckCtx := { fnName := f.name, types := f.types,
+    layouts := f.layouts, instTys := #[(32, 14)], places := #[] }
+  discard (get <| checkOp wrapCx 4 5 (.bitcast (.inst 32)))
+  let rejectWrap (cx : CheckCtx) : IO Unit := do
+    match checkOp cx 4 5 (.bitcast (.inst 32)) with
+    | .ok _ => throw (IO.userError "accepted a representation-changing optional wrap")
+    | .error _ => pure ()
+  let wrapLayout := f.layouts[5]!
+  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with ptrAlign := some 4}}
+  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with sentinel := true}}
+  rejectWrap {wrapCx with types := f.types.set! 5 (.optional 26)}
+  rejectWrap {wrapCx with types := f.types.set! 14 (.ptr "many" false 25)}
   let sourceType : Option Ty := f.types[5]?
   let some (Ty.optional sourcePointer) := sourceType
     | throw (IO.userError "retained list source optional shape drift")

@@ -597,9 +597,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return aopt == bopt && akind == bkind && aconst != bconst && achild == bchild &&
           a.size.isSome && a.align.isSome && ap.size.isSome && ap.align.isSome &&
           ap.ptrAlign.isSome && a == b && ap == bp : Option Bool)).getD false
+      -- Wrapping an exact non-null single pointer in its own optional type
+      -- emits only the existing Ptr-to-Option coercion. No pointee/decoder changes.
+      let optionalWrapOnly := ((do
+        let .ptr "one" _ _ ← cx.types[aty]? | none
+        let .optional pid ← cx.types[ty]? | none
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        return pid == aty && a.size.isSome && a.align.isSome &&
+          a.ptrAlign.isSome && a == b : Option Bool)).getD false
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
-        unless qualifierOnly do
+        unless qualifierOnly || optionalWrapOnly do
           let some sourceCap := hasErrorCapability cx.types source
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           let some targetCap := hasErrorCapability cx.types target
