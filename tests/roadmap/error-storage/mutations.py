@@ -16,7 +16,7 @@ mutants = {
     "collapse_names": "{ errorEnc d with encode := fun _ => errBytes (some \"Alpha\") }",
     "standalone_accepts_zero": "{ errorEnc d with decode := fun bs => if bs == errBytes none then pure \"Alpha\" else (errorEnc d).decode bs }",
     "swap_indices": "{ errorEnc d with encode := fun e => #[.errFrag e 1, .errFrag e 0] }",
-    "foreign_domain": "{ errorEnc d with decode := fun bs => do let some e ← errOfBytes bs | throw .unspecified; pure e }",
+    "foreign_domain": "{ errorEnc d with decode := fun bs => errOfBytes bs >>= fun found => match found with | some e => pure e | none => throw .unspecified }",
 }
 # Every mutant changes an actual product dictionary via record override; its oracle combines
 # two distinct identities, zero exclusion, partial/mixed fragments, and finite membership.
