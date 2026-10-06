@@ -29,11 +29,11 @@ private def semanticOracle : Bool :=
   ((enc.decode #[.errFrag "Alpha" 0, .errFrag "Beta" 1]).run == some (.error .unspecified))
 '''
 for name, expression in mutants.items():
-    defs = prefix + f"private def enc : Enc ErrName := {expression}\n" + oracle
+    defs = prefix + f"private abbrev enc : Enc ErrName := {expression}\n" + oracle
     (out / f"{name}.defs.lean").write_text(defs)
     (out / f"{name}.lean").write_text(defs + "theorem semantic_oracle : semanticOracle = true := by native_decide\n")
 optional = prefix + r'''
-private def enc : Enc (Option ErrName) := Enc.optionWith (errorEnc d)
+private abbrev enc : Enc (Option ErrName) := Enc.optionWith (errorEnc d)
 private def semanticOracle : Bool :=
   enc.size == 2 && (enc.encode none == errBytes none) &&
   ((enc.decode (errBytes none)).run == some (.ok none))
