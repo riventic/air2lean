@@ -1,6 +1,10 @@
 import Schedules
 open DiffOutcome DiffTest
 
+-- `panic!` in the zero-budget callback needs a fallback type inhabitant;
+-- the callback must remain unreachable, as checked by the empty execution list.
+private instance : Inhabited Observation := ⟨noResult⟩
+
 private def require (b : Bool) (message : String) : IO Unit :=
   unless b do throw (IO.userError message)
 
@@ -44,9 +48,9 @@ def checkScheduleProtocol : IO Unit := do
   let all := enumerateSchedules 3 1 finite
   require (all.executions.size == 3 && all.outcomes.size == 3 &&
     !all.nodeCapReached && !all.prefixCapReached) "enumeration stopped at an observed outcome or falsely capped"
-  require (all.executions.map (·.prefix) == #[#[0], #[1], #[2]]) "enumeration order differs"
+  require (all.executions.map (·.«prefix») == #[#[0], #[1], #[2]]) "enumeration order differs"
   for e in all.executions do
-    match replaySchedule 1 finite e.prefix with
+    match replaySchedule 1 finite e.«prefix» with
     | .error err => throw (IO.userError err)
     | .ok replay => require (replay.observation.line == e.observation.line &&
         replay.options == e.options && replay.traceComplete) "enumerated execution did not replay"
@@ -57,7 +61,7 @@ def checkScheduleProtocol : IO Unit := do
   let narrow := enumerateSchedules 20 0 finite
   require (narrow.executions.size == 1 && narrow.prefixCapReached &&
     !narrow.executions[0]!.traceComplete && narrow.executions[0]!.choiceCount == 1 &&
-    narrow.executions[0]!.prefix.isEmpty) "zero prefix cap hid truncation"
+    narrow.executions[0]!.«prefix».isEmpty) "zero prefix cap hid truncation"
   let bounded := enumerateSchedules 4 1 (fun o =>
     (if o 0 == 0 then value 0 else noResult, #[2]))
   require (bounded.executions.size == 2 && bounded.sawNoResult && bounded.outcomes.size == 2 &&
@@ -75,7 +79,7 @@ def checkScheduleProtocol : IO Unit := do
   -- Variable-depth branches require a full trace, even where zeros were implicit during DFS.
   let tree := fun o => if o 0 == 0 then (value 0, #[2]) else (value (1 + o 1 % 2), #[2, 2])
   let varied := enumerateSchedules 10 2 tree
-  require (varied.executions.map (·.prefix) == #[#[0], #[1, 0], #[1, 1]]) "variable-depth DFS trace differs"
+  require (varied.executions.map (·.«prefix») == #[#[0], #[1, 0], #[1, 1]]) "variable-depth DFS trace differs"
   require (rejects (replaySchedule 2 tree #[1])) "missing default-zero suffix accepted as strict replay"
   -- The public CLI rejects malformed binding requests before emitting replay success.
   require (← rejectsIO (ScheduleCLI.execute (request "enumerate" [("surprise", .null)]))) "unknown CLI field accepted"

@@ -71,8 +71,8 @@ def execute (request : Json) : IO Json := do
     ("node_cap", Lean.toJson nodeCap), ("prefix_cap", Lean.toJson prefixCap)]
   if mode == "replay" then
     if nodeCap == 0 then throw (IO.userError "replay requires node_cap >= 1")
-    let prefix ← prefixOf (← field request "prefix")
-    let e ← parse (DiffTest.replaySchedule prefixCap run prefix)
+    let «prefix» ← prefixOf (← field request "prefix")
+    let e ← parse (DiffTest.replaySchedule prefixCap run «prefix»)
     if let .ok expected := request.getObjVal? "expected" then expectedCheck expected e
     pure (Json.mkObj (common ++ [
       ("runs", Lean.toJson (1 : Nat)), ("truncated", Lean.toJson false),
