@@ -16,7 +16,7 @@ cp "$clients/GeneratedRuntime.lean" "$out/baseline/GeneratedRuntime.lean"
 LEAN_PATH="$out/baseline:$lean_path" lake env lean -R "$out/baseline" "$out/baseline/GeneratedProofs.lean" > "$out/proofs.log" 2>&1
 LEAN_PATH="$out/baseline:$lean_path" lake env lean -R "$out/baseline" --run "$out/baseline/GeneratedRuntime.lean" > "$out/runtime.log" 2>&1
 python3 "$clients/generated-mutations.py" "$out/baseline/Gen.lean" "$out/mutants"
-for name in control wrong_global missing_small_payload_offset write_small_at_discriminator; do
+for name in control wrong_global missing_small_payload_offset forget_parent; do
  work=$out/mutants/$name
  lake env lean -R "$work" -o "$work/Gen.olean" "$work/Gen.lean" > "$work/definitions.log" 2>&1
  LEAN_PATH="$work:$lean_path" lake env lean -R "$work" "$work/Oracle.defs.lean" > "$work/oracle-definitions.log" 2>&1

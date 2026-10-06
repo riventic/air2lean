@@ -10,7 +10,7 @@ private def value (program : MemM α) : Option (Except Error α) :=
 private def semanticOracle : Bool :=
   decide (value GlobalPayload.optionalPtr = some (.ok (⟨some 0, 8 + 16 + 4⟩ : Ptr))) &&
   decide (value GlobalPayload.smallPtr = some (.ok (⟨some 0, 8 + 28 + 2⟩ : Ptr))) &&
-  decide (value (GlobalPayload.writeSmall 31) = some (.ok (31 : BitVec 8)))
+  decide (value GlobalPayload.widePtr = some (.ok (⟨some 0, 8 + 0⟩ : Ptr)))
 '''
 
 def alter_function(source: str, name: str, before: str, after: str) -> str:
@@ -32,7 +32,7 @@ def create(source: Path, output: Path) -> None:
         'control': text,
         'wrong_global': alter_function(text, 'optionalPtr', '⟨some 0, 28⟩', '⟨some 1, 28⟩'),
         'missing_small_payload_offset': alter_function(text, 'smallPtr', '⟨some 0, 38⟩', '⟨some 0, 36⟩'),
-        'write_small_at_discriminator': alter_function(text, 'writeSmall', 'Zig.errPayloadPtr (BitVec 8) (⟨some 1, 36⟩ : Zig.Ptr)', '(⟨some 1, 36⟩ : Zig.Ptr)'),
+        'forget_parent': alter_function(text, 'widePtr', '⟨some 0, 8⟩', '⟨some 0, 0⟩'),
     }
     output.mkdir()
     for name, body in variants.items():
