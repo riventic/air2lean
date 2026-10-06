@@ -1024,7 +1024,7 @@ def runAtomics : IO Unit := do
     processConcurrent "atomics" name
 
 def runSync : IO Unit := do
-  for name in ["mutexCounter", "handoff", "semaphoreCounter", "rwLockRead"] do
+  for name in ["mutexCounter", "handoff", "semaphoreCounter", "rwLockRead", "rwLockSnapshotPair"] do
     processConcurrent "sync" name
 
 def runThreadsync : IO Unit := do
