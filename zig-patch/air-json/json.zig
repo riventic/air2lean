@@ -769,6 +769,8 @@ const W = struct {
             .clz,
             .ctz,
             .popcount,
+            .byte_swap,
+            .bit_reverse,
             .abs,
             .optional_payload,
             .wrap_optional,
@@ -1454,6 +1456,12 @@ const W = struct {
                 try w.j.write(info.flags.is_allowzero);
                 try w.field("sentinel");
                 try w.j.write(info.sentinel != .none);
+                // allocSentinel(u8, n, s): the result pointer type contains the exact
+                // comptime argument s. Export it explicitly; presence alone cannot model it.
+                if (Compat.v16 and info.sentinel != .none and ty.childType(zcu).toIntern() == .u8_type) {
+                    try w.field("sentinel_byte");
+                    try Compat.writeInt(w, Value.fromInterned(info.sentinel));
+                }
                 // A bit-pointer (`&packed_struct.field`): the size of its host integer in bytes.
                 try w.field("host_size");
                 try w.j.write(info.packed_offset.host_size);
