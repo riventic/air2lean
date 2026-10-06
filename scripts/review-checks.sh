@@ -30,11 +30,16 @@ expect_failure() {
 compare="$test_dir/compare"
 mkdir -p "$compare/tests/diff/basic/inputs" "$compare/tests/diff/out/zig/basic" \
   "$compare/tests/diff/out/lean/basic" "$compare/bin"
+mkdir -p "$compare/scripts"
+cp "$repo_root/scripts/panic-policy.tsv" "$compare/scripts/"
 cat >"$compare/run.sh" <<'EOF'
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 examples=basic
 build_dir=$PWD
+repo_root=$PWD
+# This isolated fixture tests the legacy comparison loop, with no typed producers.
+unset AIR2LEAN_DIFF_REPORT
 EOF
 sed -n '/^functions_of()/,/^}/p' "$repo_root/scripts/diff.sh" >>"$compare/run.sh"
 sed -n '/^# Classifies one JSONL/,$p' "$repo_root/scripts/diff.sh" >>"$compare/run.sh"
