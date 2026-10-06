@@ -20,6 +20,7 @@ const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
 const target_util = @import("../target.zig");
+const PtrOffset = @import("pointer-offset.zig");
 
 /// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0). The compiler
 /// is built by a host zig of its own version (`zig-patch/build.sh`), so `builtin.zig_version`
@@ -1288,65 +1289,159 @@ const W = struct {
         try w.j.write(try w.typeId(ty));
     }
 
-    /// A pointer constant: the global it points into and the byte offset, or the kind of base
-    /// that the model has no block for (`int`: `@ptrFromInt`; a comptime-only base).
-    fn writePtr(w: *W, p: InternPool.Key.Ptr) Error!void {
+    const ResolvedPtr = union(enum) {
+        global: struct { base: Global, off: u64, payload_base: bool },
+        null,
+        unsupported: []const u8,
+    };
+
+    fn sizedLayout(zcu: *Zcu, ty: Type) bool {
+        if (!Compat.hasLayout(zcu, ty) or ty.comptimeOnly(zcu)) return false;
+        return ty.abiSize(zcu) != 0;
+    }
+
+    /// Resolve addresses only; this does not read or initialize an optional/error payload.
+    /// Canonical parent pointers are const/volatile/allowzero align(1) in InternPool in
+    /// every supported version. Their volatile bit is address metadata, not an access.
+    /// Only the actual leaf pointer may authorize a memory access, and it is checked below.
+    fn resolvePtr(w: *W, p: InternPool.Key.Ptr) ResolvedPtr {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         var base = p.base_addr;
-        var off: u64 = p.byte_offset;
-        try w.j.beginObject();
+        var walk: PtrOffset.Walk = .{ .off = p.byte_offset };
+        var payload = false;
+        // Each projection consumes one interned parent. The bound rejects both cycles and
+        // excessively nested acyclic constants, without allocating during error reporting.
         while (true) switch (base) {
-            .nav => |nav| {
-                try w.field("global");
-                try w.j.write(try w.globalId(.{ .nav = nav }));
-                break;
-            },
-            .uav => |uav| {
-                try w.field("global");
-                try w.j.write(try w.globalId(.{ .uav = uav }));
-                break;
-            },
-            // Fixed integer addresses have their entire address in byte_offset in all
-            // supported versions. Only zero has a qualified constant representation.
-            .int => {
-                if (off == 0) {
-                    try w.field("null");
-                    try w.j.write(true);
-                } else {
-                    try w.field("unsupported");
-                    try w.j.write("int");
+            .nav, .uav => {
+                const g: Global = switch (base) {
+                    .nav => |nav| .{ .nav = nav },
+                    .uav => |uav| .{ .uav = uav },
+                    else => unreachable,
+                };
+                if (payload) {
+                    const leaf_ty = Type.fromInterned(p.ty);
+                    if (leaf_ty.zigTypeTag(zcu) != .pointer) return .{ .unsupported = "payload_pointer_type" };
+                    const leaf = leaf_ty.ptrInfo(zcu);
+                    if (leaf.flags.is_volatile) return .{ .unsupported = "payload_volatile" };
+                    if (leaf.packed_offset.host_size != 0 or leaf.packed_offset.bit_offset != 0 or
+                        leaf.flags.vector_index != .none) return .{ .unsupported = "payload_packed" };
+                    if (leaf.flags.address_space != .generic) return .{ .unsupported = "payload_address_space" };
+                    const child = leaf_ty.childType(zcu);
+                    if (!sizedLayout(zcu, child)) return .{ .unsupported = "payload_layout" };
+                    const root_ty = switch (g) {
+                        .nav => |nav| blk: {
+                            const info = Compat.navInfo(zcu, nav);
+                            if (info.init == null or info.is_extern or info.is_threadlocal)
+                                return .{ .unsupported = "payload_unbacked" };
+                            break :blk Type.fromInterned(info.ty);
+                        },
+                        .uav => |uav| Value.fromInterned(uav.val).typeOf(zcu),
+                    };
+                    if (!sizedLayout(zcu, root_ty)) return .{ .unsupported = "payload_global_layout" };
+                    const end = PtrOffset.Walk.add(walk.off, child.abiSize(zcu)) catch
+                        return .{ .unsupported = "payload_overflow" };
+                    if (end > root_ty.abiSize(zcu)) return .{ .unsupported = "payload_bounds" };
                 }
-                break;
+                return .{ .global = .{ .base = g, .off = walk.off, .payload_base = payload } };
             },
-            // A field of the struct or slice that the pointer `f.base` points to.
-            .field => |f| {
-                const parent = ip.indexToKey(f.base).ptr;
-                const agg = Type.fromInterned(parent.ty).childType(zcu);
-                switch (agg.zigTypeTag(zcu)) {
-                    .pointer => off += f.index * 8, // a slice: `ptr`, then `len`
-                    .@"struct" => if (agg.containerLayout(zcu) != .@"packed" and Compat.hasLayout(zcu, agg)) {
-                        off += agg.structFieldOffset(@intCast(f.index), zcu);
-                    } else {
-                        try w.field("unsupported");
-                        try w.j.write("field");
-                        break;
+            .int => return if (!payload and walk.off == 0) .null else .{ .unsupported = "int" },
+            .field, .eu_payload, .opt_payload => {
+                const parent_index = switch (base) {
+                    .field => |f| f.base,
+                    .eu_payload, .opt_payload => |idx| idx,
+                    else => unreachable,
+                };
+                const key = ip.indexToKey(parent_index);
+                if (key != .ptr) return .{ .unsupported = "projection_parent" };
+                const parent = key.ptr;
+                const parent_ty = Type.fromInterned(parent.ty);
+                if (parent_ty.zigTypeTag(zcu) != .pointer) return .{ .unsupported = "projection_parent_type" };
+                const info = parent_ty.ptrInfo(zcu);
+                if (info.packed_offset.host_size != 0 or info.packed_offset.bit_offset != 0 or
+                    info.flags.vector_index != .none) return .{ .unsupported = "projection_packed" };
+                if (info.flags.address_space != .generic) return .{ .unsupported = "projection_address_space" };
+                const agg = parent_ty.childType(zcu);
+                const delta: u64 = switch (base) {
+                    .field => |f| switch (agg.zigTypeTag(zcu)) {
+                        .pointer => if (agg.ptrSize(zcu) == .slice and f.index < 2) f.index * 8 else
+                            return .{ .unsupported = "field" },
+                        .@"struct" => blk: {
+                            if (agg.containerLayout(zcu) == .@"packed" or !Compat.hasLayout(zcu, agg))
+                                return .{ .unsupported = "field" };
+                            if (f.index >= agg.structFieldCount(zcu) or agg.structFieldIsComptime(f.index, zcu))
+                                return .{ .unsupported = "field" };
+                            break :blk agg.structFieldOffset(@intCast(f.index), zcu);
+                        },
+                        else => return .{ .unsupported = "field" },
                     },
-                    else => {
-                        try w.field("unsupported");
-                        try w.j.write("field");
-                        break;
+                    .opt_payload => blk: {
+                        payload = true;
+                        if (agg.zigTypeTag(zcu) != .optional or !sizedLayout(zcu, agg) or
+                            agg.optionalReprIsPayload(zcu)) return .{ .unsupported = "optional_payload_layout" };
+                        if (!sizedLayout(zcu, agg.optionalChild(zcu))) return .{ .unsupported = "optional_payload_layout" };
+                        // Type.abiSizeInnerOptional (14/15) and abiSize (16): child first,
+                        // presence byte second, with trailing padding to child alignment.
+                        break :blk 0;
                     },
-                }
-                off += parent.byte_offset;
+                    .eu_payload => blk: {
+                        payload = true;
+                        if (agg.zigTypeTag(zcu) != .error_union or !sizedLayout(zcu, agg))
+                            return .{ .unsupported = "error_payload_layout" };
+                        const child = agg.errorUnionPayload(zcu);
+                        if (!sizedLayout(zcu, child)) return .{ .unsupported = "error_payload_layout" };
+                        const ca = child.abiAlignment(zcu);
+                        const ea = Type.anyerror.abiAlignment(zcu);
+                        const es = Type.anyerror.abiSize(zcu);
+                        // Use the same exact layout helper as the compiler's lowerPtr.
+                        const compiler_off = @import("../codegen.zig").errUnionPayloadOffset(child, zcu);
+                        const align = ca.toByteUnits() orelse return .{ .unsupported = "error_payload_layout" };
+                        const model_off = if (align > 2) 0 else ca.forward(2);
+                        // The current model assumes a two-byte error and differs at equal
+                        // alignment. Do not accept that layout until its Enc laws are fixed.
+                        if (es != 2 or ea.toByteUnits() != 2 or compiler_off != model_off)
+                            return .{ .unsupported = "error_payload_model_layout" };
+                        break :blk compiler_off;
+                    },
+                    else => unreachable,
+                };
+                walk.project(delta, parent.byte_offset) catch |err| return .{ .unsupported = switch (err) {
+                    error.Overflow => "projection_overflow",
+                    error.Depth => "projection_depth",
+                } };
                 base = parent.base_addr;
             },
-            else => {
-                try w.field("unsupported");
-                try w.j.write(@tagName(base));
-                break;
-            },
+            // InternPool explicitly defines arr_elem as COMPTIME-ONLY in 14/15/16.
+            // Runtime array addressing uses the ordinary base plus byte_offset instead.
+            .arr_elem => return .{ .unsupported = "arr_elem" },
+            else => return .{ .unsupported = @tagName(base) },
         };
+    }
+
+    /// A pointer constant preserves one existing global identity and its checked offset.
+    /// Failed resolution never calls globalId and therefore cannot invent a block.
+    fn writePtr(w: *W, p: InternPool.Key.Ptr) Error!void {
+        try w.j.beginObject();
+        var off: u64 = p.byte_offset;
+        switch (w.resolvePtr(p)) {
+            .global => |resolved| {
+                try w.field("global");
+                try w.j.write(try w.globalId(resolved.base));
+                off = resolved.off;
+                if (resolved.payload_base) {
+                    try w.field("payload_base");
+                    try w.j.write(true);
+                }
+            },
+            .null => {
+                try w.field("null");
+                try w.j.write(true);
+            },
+            .unsupported => |reason| {
+                try w.field("unsupported");
+                try w.j.write(reason);
+            },
+        }
         try w.field("off");
         try w.j.write(off);
         try w.j.endObject();

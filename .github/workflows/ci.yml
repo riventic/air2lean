@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: zig-air-${{ matrix.zig }}/
-          key: zig-air-${{ matrix.zig }}-${{ hashFiles('zig-patch/air-json/json.zig', format('zig-patch/{0}/hook.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+          key: zig-air-${{ matrix.zig }}-${{ hashFiles('zig-patch/air-json/*.zig', format('zig-patch/{0}/hook.patch', matrix.zig), 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
 
       # One retry: the compile step can go over the memory bound that build.zig declares
       # ("memory usage peaked at …"); the peak varies from run to run.

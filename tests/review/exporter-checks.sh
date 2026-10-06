@@ -32,7 +32,7 @@ done
 # Synthetic pinned source exercises the real download/verify/patch/build code without network.
 mkdir -p "$work/build/air-json" "$work/build/hooks" "$work/source/zig/src/Air" "$work/mocks"
 cp "$repo_root/zig-patch/build.sh" "$repo_root/zig-patch/toml-get.sh" "$repo_root/zig-patch/lock.sh" "$work/build/"
-cp "$repo_root/zig-patch/air-json/json.zig" "$work/build/air-json/"
+cp "$repo_root/zig-patch/air-json/json.zig" "$repo_root/zig-patch/air-json/pointer-offset.zig" "$work/build/air-json/"
 : > "$work/source/zig/src/Air/.keep"
 : > "$work/build/hooks/hook.patch"
 tar -cJf "$work/source.tar.xz" -C "$work/source" zig

@@ -139,6 +139,7 @@ tar -xJf "$tarball" -C "$src_dir" --strip-components=1
 # The exporter is one source for every version (its `Compat` section holds the differences);
 # only the one-line hook that calls it differs per version.
 cp "$exporter" "$src_dir/src/Air/json.zig"
+cp "$script_dir/air-json/pointer-offset.zig" "$src_dir/src/Air/pointer-offset.zig"
 echo "applying $hook_file" >&2
 (cd "$src_dir" && patch -p1 < "$hook_file")
 

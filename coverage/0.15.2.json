@@ -14368,12 +14368,12 @@
     },
     {
       "name": "eu_payload",
-      "disposition": "exporter-fallback-unsupported-marker-review",
+      "disposition": "exporter-explicit-arm-conditional-review",
       "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
       "name": "opt_payload",
-      "disposition": "exporter-fallback-unsupported-marker-review",
+      "disposition": "exporter-explicit-arm-conditional-review",
       "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     },
     {
@@ -14383,7 +14383,7 @@
     },
     {
       "name": "arr_elem",
-      "disposition": "exporter-fallback-unsupported-marker-review",
+      "disposition": "exporter-explicit-arm-conditional-review",
       "qualification": "Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review."
     }
   ],
@@ -14559,7 +14559,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "06f1335c15fca6b45d418934b75200160a4d51c1f2a18f742f9e0d4203d67d01",
+      "scripts/coverage.py": "fe1b07f1243d915946720cdcb86daf720a7defbfc844e8a255923b00ff38fe49",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -14579,7 +14579,8 @@
       "Air2Lean/Memory.lean": "8ff3c406627864dfdc41fc4f7d03b0ace72e1dd3dc9ae268a04671dfe40d954f",
       "Air2Lean/ModelRegistry.lean": "ddaf398e7a02af903dbd827b65f3a1230815cf6922ef874c8d2bdfed72a8f387",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
-      "zig-patch/air-json/json.zig": "920ecb7beb497a7b162f60063f1cf06682f91a5e9dda11dbd4a8ae5d4b47551e"
+      "zig-patch/air-json/json.zig": "6e43b997ea7f617c1daea97d78b3cca12fddd3519636a8aa9494e6e342796530",
+      "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
       "ZigLean/Basic.lean": "69ff4c6fe140fe6ca14c49aa7f05ed361953fcbc7e1e567cc6e637ff253b6bb7",
