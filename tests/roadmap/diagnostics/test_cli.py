@@ -24,10 +24,80 @@ def function(name, body=None):
                     inst(0, "ret", 1, [dict(ty=0, val="{}")])], globals=[])
 
 
+
+def runtime_tag_cases():
+    """Actual enum membership; synthetic rejection cases, not compiler fixtures."""
+    common = {"inferred_alloc": "unresolved inferred allocation",
+              "inferred_alloc_comptime": "unresolved inferred allocation",
+              "err_return_trace": "mutable error-return-trace",
+              "set_err_return_trace": "mutable error-return-trace",
+              "save_err_return_trace_index": "mutable error-return-trace"}
+    cases = []
+    for version in ("0.14.1", "0.15.2", "0.16.0"):
+        reasons = dict(common)
+        if version != "0.14.1":
+            reasons["runtime_nav_ptr"] = "identity and lifetime"
+        if version == "0.16.0":
+            reasons.update({tag: "compiler legalization" for tag in (
+                "legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call")})
+            reasons["cmp_lte_errors_len"] = "finalized compiler error universe"
+        else:
+            reasons["vector_store_elem"] = "vector-element memory writes"
+            reasons["cmp_lt_errors_len"] = "finalized compiler error universe"
+        cases.extend((version, tag, reason) for tag, reason in reasons.items())
+    return cases
+
+
 def calls(name, *targets):
     return function(name, [inst(i, "call", 0, callee=dict(func=target, noreturn=False))
                            for i, target in enumerate(targets)] + [
                                inst(len(targets), "ret", 1, [dict(ty=0, val="{}")])])
+
+
+def spawn_documents(version="0.16.0", callee="Thread.spawn", stack="16777216", allocator="null", runtime=False):
+    """Public synthetic schema-11 boundary, matching the C06 pipeline's layout."""
+    def named(name, fields=(), size=0):
+        return dict(k="struct", name=name, layout="auto", fields=list(fields), abi_size=size, abi_align=8)
+    types = [INT, VOID, NORETURN, dict(k="tuple", fields=[dict(ty=0), dict(ty=0)]), named("Thread"),
+             dict(k="error_set", abi_size=2, abi_align=2, errors=["ThreadQuotaExceeded", "SystemResources",
+                  "OutOfMemory", "LockedMemoryLimitExceeded", "Unexpected"]),
+             dict(k="error_union", error=5, payload=4),
+             dict(k="int", signed=False, bits=64, abi_size=8, abi_align=8), named("mem.Allocator", size=16),
+             dict(k="optional", child=8, abi_size=24, abi_align=8),
+             named("Thread.SpawnConfig", [dict(name="stack_size", ty=7, offset=0),
+                                         dict(name="allocator", ty=9, offset=8)], 32),
+             named("Io.Group", size=16),
+             dict(k="ptr", size="one", const=False, child=11, ptr_align=8, abi_size=8, abi_align=8),
+             named("Io", size=16), dict(k="error_set", abi_size=2, abi_align=2, errors=["ConcurrencyUnavailable"]),
+             dict(k="error_union", error=14, payload=1)]
+    def file(name, params, ret, body):
+        return dict(schema=11, zig_version=version, target_endian="little", name=name, types=types,
+                    params=params, ret=ret, body=body, globals=[])
+    worker = file("worker", [0, 0], 1, [inst(0, "arg", 0, param=0), inst(1, "arg", 0, param=1),
+                                      inst(2, "ret", 2, [dict(ty=1, val="{}")])])
+    group = callee != "Thread.spawn"
+    ret = 1 if callee == "Io.Group.async" else 15 if group else 6
+    setup = [inst(0, "arg", 12, param=0), inst(1, "arg", 13, param=1)] if group else []
+    if runtime:
+        setup = [inst(0, "arg", 10, param=0)]
+    config = dict(inst=0) if runtime else dict(ty=10, elems=[dict(ty=7, val=stack), dict(ty=9, **{allocator: True})])
+    args = [dict(inst=0), dict(inst=1), dict(inst=2)] if group else [config, dict(inst=2)]
+    launch = file("launch", [12, 13] if group else [10] if runtime else [], ret,
+                  setup + [inst(2, "aggregate_init", 3, [dict(ty=0, val="7"), dict(ty=0, val="19")]),
+                           inst(3, "call", ret, args, callee=dict(func=callee, comptime_fn="worker")),
+                           inst(4, "ret", 2, [dict(inst=3)])])
+    return {"launch.json": launch, "worker.json": worker}
+
+
+def assert_policy_rejection(report, marker):
+    assert report["status"] == "rejected" and report["complete"] is False
+    assert all(f["local_check"] == "passed" for f in report["files"]), report
+    failures = report["diagnostics"]
+    assert len(failures) == 1, report
+    d = failures[0]
+    assert (d["code"], d["phase"], d["category"]) == ("MODEL_FAILURE", "program", "unsupported_semantics"), d
+    assert d["prerequisites"] == ["validated_selected_program"] and d["first_error_in_unit"] is True
+    assert marker in d["message"], d
 
 
 def decode(result, expected_status=None):
@@ -93,6 +163,25 @@ def run(binary, baseline=None):
         cap = decode(invoke(binary, air, "--diagnostic-limit", "1"), "rejected")
         assert len(cap["diagnostics"]) == 1 and cap["truncated"] and not cap["complete"]
         checks += 3
+
+        # Each known compiler/runtime family remains rejected, including nested
+        # exported markers whose inferred allocations deliberately omit ty.
+        for version, tag, reason in runtime_tag_cases():
+            child = inst(42, tag, 0, unsupported=True)
+            if tag.startswith("inferred_alloc"):
+                child.pop("ty")
+            document = function("runtime_tag", [inst(7, "block", 0, body=[child])])
+            document["zig_version"] = version
+            write(air, {"runtime-tag.json": document})
+            report = decode(invoke(binary, air), "rejected")
+            found = [d for d in report["diagnostics"] if d["code"] == "EXPORTER_UNSUPPORTED"]
+            assert len(found) == 1 and found[0]["anchor"]["instruction"] == 42
+            assert found[0]["anchor"]["id_space"] == "exported"
+            assert found[0]["category"] == "unsupported_semantics"
+            assert tag in found[0]["message"] and reason in found[0]["message"]
+            assert "runtime_tag: inst 42:" in found[0]["message"]
+            assert output.read_text() == "sentinel\n"
+            checks += 1
 
         write(air, {"ok.json": function("ok")})
         (air / "a-invalid.json").write_bytes(b"\xff")
@@ -188,6 +277,49 @@ def run(binary, baseline=None):
             assert rejected["diagnostics"][0]["code"] == "CLI_ARGUMENTS"
             assert output.read_text() == "sentinel\n"
         checks += 6
+        for flags, marker in ((("--spawn-policy",), "missing value"),
+                              (("--spawn-policy", "unknown"), "invalid --spawn-policy"),
+                              (("--spawn-policy", "available", "--spawn-policy", "fallible"), "duplicate --spawn-policy")):
+            rejected = decode(invoke(binary, air, *flags), "rejected")
+            assert rejected["diagnostics"][0]["code"] == "CLI_ARGUMENTS"
+            assert marker in rejected["diagnostics"][0]["message"]
+            checks += 1
+        for version in ("0.14.1", "0.15.2", "0.16.0"):
+            for stack in ("1048576", "16777216"):
+                write(air, spawn_documents(version, stack=stack))
+                omitted = invoke(binary, air)
+                decode(omitted, "checked")
+                explicit = invoke(binary, air, "--spawn-policy", "available")
+                decode(explicit, "checked")
+                assert omitted.stdout == explicit.stdout, "default producer policy changed bytes"
+                decode(invoke(binary, air, "--spawn-policy", "fallible"), "checked")
+                checks += 3
+        for documents, marker in ((spawn_documents(stack="0"), "audited 1 MiB or default 16 MiB"),
+                                  (spawn_documents(allocator="undef"), "custom allocators"),
+                                  (spawn_documents(runtime=True), "constant SpawnConfig"),
+                                  (spawn_documents("0.15.2", "Io.Group.async"), "requires Zig 0.16.0")):
+            write(air, documents)
+            decode(invoke(binary, air, "--spawn-policy", "available"), "checked")
+            rejected = decode(invoke(binary, air, "--spawn-policy", "fallible"), "rejected")
+            assert_policy_rejection(rejected, marker)
+            output.write_text("sentinel\n")
+            emitted = subprocess.run([str(binary), str(air), "--spawn-policy", "fallible", "-o", str(output),
+                                      "--namespace", "Diagnostics"],
+                                     text=True, capture_output=True, timeout=15)
+            assert emitted.returncode == 1 and marker in emitted.stderr and output.read_text() == "sentinel\n"
+            checks += 3
+        for callee in ("Io.Group.async", "Io.Group.concurrent"):
+            write(air, spawn_documents(callee=callee))
+            decode(invoke(binary, air, "--spawn-policy", "fallible"), "checked")
+            checks += 1
+        write(air, {"launch.json": spawn_documents()["launch.json"]})
+        missing = decode(invoke(binary, air, "--spawn-policy", "fallible"), "rejected")
+        assert any(d["code"] == "CALLEE_MISSING" for d in missing["diagnostics"])
+        assert not any(d["code"] == "MODEL_FAILURE" for d in missing["diagnostics"])
+        assert any(d["code"] == "PREREQUISITE_SKIPPED" and d["prerequisites"] == ["validated_selected_program"]
+                   for d in missing["diagnostics"])
+        checks += 1
+        write(air, {"ok.json": function("ok")})
         if baseline is not None:
             reference = directory / "Reference.lean"
             for executable, destination in ((baseline, reference), (binary, output)):
@@ -241,6 +373,33 @@ class HarnessTests(unittest.TestCase):
             decode(self.result(report))
         with self.assertRaises(AssertionError):
             decode(self.result(self.valid()), "rejected")
+
+    def test_policy_fixture_encodes_exact_boundary(self):
+        positive = spawn_documents()["launch.json"]
+        config = positive["body"][1]["args"][0]
+        self.assertEqual(config, dict(ty=10, elems=[dict(ty=7, val="16777216"), dict(ty=9, null=True)]))
+        self.assertEqual(positive["types"][10]["fields"], [dict(name="stack_size", ty=7, offset=0),
+                                                         dict(name="allocator", ty=9, offset=8)])
+        self.assertEqual(spawn_documents(allocator="undef")["launch.json"]["body"][1]["args"][0]["elems"][1],
+                         dict(ty=9, undef=True))
+        self.assertEqual(spawn_documents(runtime=True)["launch.json"]["body"][2]["args"][0], dict(inst=0))
+        for callee in ("Io.Group.async", "Io.Group.concurrent"):
+            group = spawn_documents(callee=callee)["launch.json"]
+            self.assertEqual(group["params"], [12, 13])
+            self.assertEqual(group["body"][3]["callee"], dict(func=callee, comptime_fn="worker"))
+
+    def test_policy_oracle_rejects_wrong_boundary(self):
+        report = self.valid()
+        report.update(status="rejected", complete=False, files=[dict(local_check="passed")], diagnostics=[
+            dict(code="MODEL_FAILURE", phase="program", category="unsupported_semantics",
+                 prerequisites=["validated_selected_program"], first_error_in_unit=True, message="custom allocators")])
+        assert_policy_rejection(report, "custom allocators")
+        for key, value in (("code", "PROGRAM_FAILURE"), ("phase", "check"), ("category", "validation_failure"),
+                           ("prerequisites", []), ("first_error_in_unit", False), ("message", "unrelated rejection")):
+            changed = json.loads(json.dumps(report))
+            changed["diagnostics"][0][key] = value
+            with self.assertRaises(AssertionError):
+                assert_policy_rejection(changed, "custom allocators")
 
     def test_synthetic_dependency_and_branch_inputs(self):
         document = calls("root", "mid", "missing")

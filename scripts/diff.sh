@@ -12,12 +12,12 @@
 # value) — classify_line() below folds all three into one comparable $val, so the match check
 # itself doesn't need to know which shape it's looking at. Anything else — a value mismatch, a
 # kind mismatch, a Zig kind with no table entry (including "unknown" — the child died without
-# reporting a kind), one side ok and the other fail, or a Lean "diverge" (none of basic's or
-# recursion's functions should ever not terminate) — is a mismatch: printed immediately, and
+# reporting a kind), one side ok and the other fail, or the legacy Lean "diverge" wire shape (a model no-result; bounded scheduler
+# evaluation does not establish divergence) — is a mismatch: printed immediately, and
 # makes the whole run exit 1.
 #
 # A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics)
-# matches any Zig line and is counted as "unspecified". The count per function must equal the
+# is projected into the legacy "unspecified" counter, distinct from an exact match in the typed report. The count per function must equal the
 # one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
 # expects 0), so a model that throws `unspecified` too often fails the test. "<fn> <min>-<max>"
 # pins a range: for a function whose count depends on the timing of the compiled threads (a race
@@ -26,7 +26,7 @@
 # A concurrent function's Lean line comes from a search over schedules (tests/diff/Diff.lean's
 # `searchSchedules`): the schedule that gives Zig's line, if the search finds one. A Lean
 # `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
-# match, counted separately against tests/diff/<ex>/capped.txt.
+# legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
 # The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
 # other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
@@ -45,19 +45,47 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+# Invalidate old completed evidence before compiler/version/selection setup.
+export AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
+examples=""
+build_dir=""
+diff_phase=setup
+finish_diff() {
+  local status=$? evidence_examples=""
+  if [ "$diff_phase" != setup ]; then evidence_examples=$examples; fi
+  if [ "$status" -ne 0 ]; then
+    if ! python3 scripts/diff-report.py failure --summary "$AIR2LEAN_DIFF_REPORT" \
+      --root "$repo_root" --examples "$evidence_examples" --phase "$diff_phase"; then
+      echo "error: could not record differential failure evidence" >&2
+    fi
+  fi
+  if [ -n "$build_dir" ]; then rm -rf "$build_dir"; fi
+  return "$status"
+}
+trap finish_diff EXIT
+python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root"
+
 zig_bin=${AIR2LEAN_ZIG:-zig}
 zig_version=$("$zig_bin" version)
-examples=${AIR2LEAN_EXAMPLES:-$(cd examples && for d in */; do
-  if [ "${d%/}" = asm ] && [ "$(uname -m)" != x86_64 ]; then continue; fi
-  if [ -f "${d}zig-versions" ] && ! grep -qx "$zig_version" "${d}zig-versions"; then continue; fi
-  printf '%s ' "${d%/}"
-done)}
+if [ -n "${AIR2LEAN_EXAMPLES:-}" ]; then
+  examples=$AIR2LEAN_EXAMPLES
+else
+  source "$repo_root/scripts/example-selection.sh"
+  examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
+fi
 example_count=0
 for ex in $examples; do
+  case "$ex" in *[!a-zA-Z0-9_-]* | "")
+    echo "error: invalid example: $ex" >&2; exit 1 ;;
+  esac
   [ -f "tests/diff/$ex/harness.zig" ] || { echo "error: unknown example: $ex" >&2; exit 1; }
   example_count=$((example_count + 1))
 done
 [ "$example_count" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
+
+# Clear this selection's old sidecars only after setup has validated it.
+python3 scripts/diff-report.py init --summary "$AIR2LEAN_DIFF_REPORT" --root "$repo_root" --examples "$examples"
+diff_phase=build_native
 
 # The names of an example's functions are the names of its input files (layout convention).
 functions_of() {
@@ -66,7 +94,6 @@ functions_of() {
 
 echo "== building zig harnesses ==" >&2
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
-trap 'rm -rf "$build_dir"' EXIT
 for ex in $examples; do
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
   "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$build_dir/$ex" \
@@ -75,6 +102,7 @@ for ex in $examples; do
   "$build_dir/$ex"
 done
 
+diff_phase=build_libm
 echo "== building libm ==" >&2
 # tests/diff/libm/libm.zig re-exports 8 compiler_rt transcendental functions per float width
 # (see its doc comment for the ABI). It calls compiler_rt by Zig name through a `crt` module we
@@ -153,6 +181,7 @@ mkdir -p tests/diff/out/asm
 "$zig_bin" build-lib -static -fPIC -OReleaseFast -mcpu=baseline --name air2lean_asm \
   -femit-bin=tests/diff/out/asm/air2lean_asm.a -Mroot=tests/diff/asm/asm.zig
 
+diff_phase=run_model
 echo "== building + running lean side ==" >&2
 # Lake does not track tests/diff/out/libm/air2lean_libm.a (linked in via lakefile.toml's
 # moreLinkArgs) as a build input, so a changed archive alone would not trigger a relink.
@@ -226,26 +255,24 @@ classify_line() {
   esac
 }
 
-# Maps a Zig panic kind (a member name of common.zig's `panic`) to the `Zig.Error` constructor
-# (bare name, no "Zig.Error." prefix) the Lean side is expected to throw for the same check.
-# Echoes nothing for a kind with no expected constructor — including "unknown" — which the
-# caller then treats as a mismatch: v0's scope (README.md) never reaches an unlisted kind, so
-# seeing one at all is itself a bug. bash 3.2 has no associative arrays, hence the `case`.
+# Load the shared native-panic/model-constructor policy once. Bash 3.2 indexed
+# arrays avoid associative-array dependencies; each lookup uses only shell builtins.
+panic_kinds=()
+panic_ctors=()
+while IFS=$'\t' read -r panic_kind panic_ctor; do
+  [ -n "$panic_kind" ] || continue
+  panic_kinds+=("$panic_kind")
+  panic_ctors+=("$panic_ctor")
+done <"$repo_root/scripts/panic-policy.tsv"
 expected_ctor_for_zig_kind() {
-  case "$1" in
-    integerOverflow | shlOverflow | shrOverflow | integerOutOfBounds | integerPartOutOfBounds)
-      echo overflow ;;
-    outOfBounds | startGreaterThanEnd) echo outOfBounds ;;
-    divideByZero) echo divByZero ;;
-    # common.zig's TestAllocator: a free of memory that it did not allocate. The Lean `.illegal`
-    # matches any Zig line (below), so this entry only names the pair.
-    doubleFree) echo illegal ;;
-    reachedUnreachable) echo unreachable ;;
-    exactDivisionRemainder | unwrapNull | unwrapError | forLenMismatch | invalidEnumValue \
-      | inactiveUnionField | corruptSwitch | sentinelMismatch | copyLenMismatch | memcpyAlias \
-      | castToNull | incorrectAlignment | panic) echo panic ;;
-    *) echo "" ;;
-  esac
+  local i
+  expected_ctor=""
+  for ((i=0; i<${#panic_kinds[@]}; i++)); do
+    if [ "${panic_kinds[$i]}" = "$1" ]; then
+      expected_ctor=${panic_ctors[$i]}
+      return 0
+    fi
+  done
 }
 
 # The pin of function `$1` in the pin file `$2`: "<count>" or "<min>-<max>"; not listed: 0.
@@ -342,8 +369,9 @@ for ex in $examples; do
       elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
         fn_capped=$((fn_capped + 1))
       elif [ "$zkind" = fail ] && [ "$lkind" = fail ] &&
-        [ -n "$(expected_ctor_for_zig_kind "$zval")" ] &&
-        [ "$(expected_ctor_for_zig_kind "$zval")" = "${lval#'Zig.Error.'}" ]; then
+        expected_ctor_for_zig_kind "$zval" &&
+        [ -n "$expected_ctor" ] &&
+        [ "$expected_ctor" = "${lval#'Zig.Error.'}" ]; then
         fn_fail_match=$((fn_fail_match + 1))
       elif [ "$host_dependent" -eq 1 ]; then
         fn_host=$((fn_host + 1))
@@ -403,5 +431,11 @@ echo "TOTAL: ok=$total_ok fail_match=$total_fail_match unspecified=$total_unspec
 if [ "$total_host" -gt 0 ]; then
   echo "note: $total_host host-dependent float results differ from the x86_64-linux model" \
     "(tests/diff/<ex>/host.txt); CI checks them" >&2
+fi
+if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
+  diff_phase=compare
+  python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
+    --root "$repo_root" --examples "$examples" --version "$zig_version" \
+    --host "$(uname -s)-$(uname -m)" || mismatch_found=1
 fi
 [ "$mismatch_found" -eq 0 ]

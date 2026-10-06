@@ -18,6 +18,8 @@ Translate a subset of Zig into Lean 4, then prove properties of the code in Lean
 
 Threaded examples have partial-correctness and safety proofs over all schedules in the model: completed runs return the stated result, and no schedule gives a data race, deadlock or another error. These proofs allow no result (including out-of-fuel runs); they do not prove termination or fairness. See the [proved examples and concurrency logic](docs/proofs.md#proved-examples).
 
+Optional [separation proof tools](docs/proof-tools.md) split scalar-array ownership, apply an element update, and reassemble the whole array while retaining neighboring values and an independent frame. Kernel-checked contracts cover the existing generated `Slices.at` and `Slices.bumpAt` bodies; this bounded model-library interface adds no source/exporter correspondence qualification.
+
 ## Start here: check a proof
 
 Install [elan](https://github.com/leanprover/elan#installation), Lean's toolchain manager, then run these commands from the repository root:
@@ -101,7 +103,10 @@ differential harness; 0.15.2 also builds the macOS threadsync translation's proo
 If all three full-version rows already passed locally, run `mutations` to finish
 the matrix without repeating them. Full, matrix and mutations modes execute the actual shell steps and environments from
 `.github/workflows/ci.yml`, including coverage, budgets, project/flow gates and proof
-receipts. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
+receipts. Before builds and between matrix rows, the local runner prunes recognized
+Lake v4.34.0 module artifacts whose declared repository module has no tracked current
+`.lean` source. It preserves current modules and never clears package/toolchain caches;
+unsafe symlink paths fail explicitly. Unsupported workflow syntax fails explicitly. Only checkout/cache/upload
 actions and the three equivalent pinned tool setup recipes are replaced locally.
 Matrix rows and mutation shards run sequentially in one container limited to 8 GiB
 memory (including swap), two CPUs and 512 processes. The container always uses

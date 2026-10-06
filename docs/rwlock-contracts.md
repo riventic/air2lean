@@ -6,14 +6,14 @@ These are partial correctness and strict safety statements, not fairness or term
 The roadmap's former missing-proof assessment is stale. C14 remains partial because its
 broader reusable RwLock/Condition/Event/WaitGroup contract bundle is not complete.
 
-`RwLockContract.lean` is an unqualified source adapter to the existing shared-lock proofs.
+`RwLockContract.lean` is a locally kernel-checked adapter to the existing shared-lock proofs.
 It retains reader 0, writer 1, the fixed Zig 0.16 `std.Io` layout, count at most 2, concrete
 `Sync.Tgt`, and the full semaphore/protocol premises. `ProtectedFacts` parameterizes facts
 entailed by the owned counter assertion. It does not generalize the protected heap or prove
 multiple readers/writers. Release aliases the original proof; no primitive proof is copied.
 Generic Mutex and Semaphore contracts already have independent clients.
 
-`rwLockSnapshotPair` is new public source preparation. It reuses the existing writer,
+`rwLockSnapshotPair` is a restricted source client. It reuses the existing writer,
 holds one shared acquisition across two loads, releases, joins, and returns their decimal
 pair. Expected successful results are 0, 11 or 22. No C14 AIR/Gen/golden fixture was
 handwritten. The accepted Weak CAS prefix supplies its existing generated fixtures and
@@ -27,7 +27,12 @@ the existing protocol shape and proves that freeing the live stack allocation pr
 that obligation. It intentionally does not retain the live-block invariant after free.
 The client module's WP and all-fuel/all-oracle result/strict-safety theorems have passed
 local kernel checking against the actual generated body. Their scope is the restricted
-protocol above; native differential agreement and the complete Sync pipeline are pending. Compiler optimization may change the load shape; the proof must use
+protocol above. The retained targeted Linux Zig 0.16.0 Sync pipeline passed fresh
+AIR/golden and translation checks, 20 snapshot native/model matches (100 Sync matches
+total), and the complete `Proofs` umbrella, with no fail matches, exclusions, caps or
+mismatches. This is bounded evidence on the earlier feature prefix; the current
+Outcome/public composition and final CI remain pending. Compiler optimization may
+change the load shape; the proof must use
 the actual export rather than assume that two source reads survive as two AIR loads.
 
 The checked client proof retains the following boundaries; broader extensions remain partial:
@@ -56,8 +61,9 @@ Completed local checks and remaining validation:
 
 1. ROOT export/translation, the original proof module, the restricted adapter, new
    WP/result/safety theorems and umbrella have passed locally. All original generated
-   bodies and dispatch targets remain byte-identical. The normal Sync golden and native
-   differential pipeline remains pending.
+   bodies and dispatch targets remain byte-identical on that retained feature prefix.
+   The targeted Linux Zig 0.16.0 Sync golden/native/model pipeline passed as recorded
+   above; the current composed-source gate and final CI remain pending.
 2. Both scheduler theorems cover every fuel/oracle. The finite compiled client witness
    additionally completes with an allowed 0/11/22 value, joined tasks and a freed Shared
    allocation. Additional schedule witnesses do not replace these theorems.

@@ -9,9 +9,21 @@ air2lean --diagnostics-json ./air --diagnostic-limit 256
 
 It prints one JSON object to stdout and exits 0 for `checked` or 1 for `rejected`,
 including argument and directory errors. The leading `--diagnostics-json` selects
-this mode. It accepts `--profile` and `--diagnostic-limit` (1–4096); `-o`,
+this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096), and
+`--spawn-policy available|fallible`; `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary
 emission mode keeps its fail-fast interfaces and generated source format.
+
+The spawn policy defaults to `available`, an explicit availability assumption in
+the scheduling model. `fallible` applies the translation checker's additional
+spawn boundary after the ordinary selected-program check passes. It supports the
+audited default/1 MiB stack requests with a null allocator, and Zig 0.16 Io.Group
+calls. Unsupported configurations produce `MODEL_FAILURE` in phase `program`,
+category `unsupported_semantics`; a failed ordinary program prerequisite produces
+a skipped policy check. Missing, invalid, or duplicate policy flags are CLI errors.
+The project manifest's effective `spawn_policy` is passed explicitly to both
+translation and diagnostics. This does not add a producer-schema field or turn
+check-only validation into a proof, a host availability test, or a liveness claim.
 
 Schema 1 (`kind: air2lean-check-diagnostics`) gives each diagnostic an enum-backed
 stable `code`, `phase`, `category`, file/function identity, anchor, dependency chain,
@@ -135,3 +147,28 @@ checked receipts, all 15 diagnostics CLI checks including V05 emission-byte comp
 the input-validation API and 78 CLI checks, and exact CI replay with 14 diagnostics
 CLI checks. CI replay explicitly excludes the historical baseline comparison.
 These test changes do not alter the producer.
+
+Compiler-state and runtime-effect tags remain rejected with specific guidance. Temporary
+`inferred_alloc`/`inferred_alloc_comptime` instructions are not ordinary allocations;
+the exporter omits their type, and the normalizer gives the inference-stage reason
+before its missing-type check. Other missing-type and malformed-input checks are unchanged.
+Zig 0.16's `legalize_vec_store_elem`, `legalize_vec_elem_val` and
+`legalize_compiler_rt_call` belong to later code generation, beyond the accepted
+`analyzed-air` export stage. `runtime_nav_ptr` (0.15/0.16) requires TLS or external
+runtime pointer identity and lifetime semantics. Error-return-trace tags in all three
+versions require mutable trace semantics; a recorded tracing setting supplies no such model.
+The structured collector retains its existing codes and exported instruction anchors,
+while using the same reasons for explicit exporter markers.
+
+The inventory selects these classifications only for tags present in each compiler's enum.
+Its `normalizer-rejected-compiler-state-or-effect` disposition is source-only rejection
+policy, with no admitted semantics, proof or compiler-generated fixture qualification.
+Synthetic regressions cover diagnostic routing; compiler fixture qualification remains
+pending. The older `vector_store_elem` tag (0.14/0.15) is rejected as a vector-memory
+write requiring lane bounds and memory semantics, separately from Zig 0.16 legalization.
+`cmp_lt_errors_len` (0.14/0.15) and `cmp_lte_errors_len` (0.16) depend on the
+compiler's finalized error universe; the analyzed-AIR export cannot substitute a
+currently known count. Their version-dependent comparison also precludes treating
+the rename as identical semantics. Nested synthetic CLI fixtures retain exported IDs
+and rejection reasons for every actual version/tag member, including untyped
+inferred allocations. No source feature is newly accepted by these classifications.

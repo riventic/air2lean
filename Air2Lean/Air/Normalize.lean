@@ -60,6 +60,22 @@ def parseRmwOp (fnName : String) (raw : Raw.RawInst) (s : String) : Except Strin
   | "Min" => pure .min
   | _ => throw s!"{fnName}: inst {raw.id}: unknown 'op' value '{s}'"
 
+/-- Known compiler-state/effect tags that remain rejected. This classifies reasons,
+not support or compiler-version membership; the inventory selects actual enum members. -/
+def runtimeTagReason? (tag : String) : Option String :=
+  match tag with
+  | "inferred_alloc" | "inferred_alloc_comptime" => some "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"
+  | "legalize_vec_store_elem" | "legalize_vec_elem_val" | "legalize_compiler_rt_call" => some "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"
+  | "vector_store_elem" => some "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"
+  | "cmp_lt_errors_len" | "cmp_lte_errors_len" => some "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"
+  | "runtime_nav_ptr" => some "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"
+  | "err_return_trace" | "set_err_return_trace" | "save_err_return_trace_index" => some "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"
+  | _ => none
+
+private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
+  if let some reason := runtimeTagReason? raw.tag then
+    throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
+
 mutual
 
 /-- The AIR tag table, shared by every supported version. -/
@@ -70,6 +86,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   -- fast-math permits reassociation the model does not claim to match.
   if raw.tag.endsWith "_optimized" then
     throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag})"
+  rejectRuntimeTag fnName raw
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter"
   match raw.tag with
@@ -332,6 +349,10 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
       throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
 
 partial def normalizeInst (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
+  -- The exporter deliberately omits ty for temporary inferred allocations. Preserve
+  -- every other missing-ty error while giving these two tags their semantic reason.
+  if raw.ty.isNone && (raw.tag == "inferred_alloc" || raw.tag == "inferred_alloc_comptime") then
+    rejectRuntimeTag fnName raw
   let some ty := raw.ty
     | throw s!"{fnName}: inst {raw.id}: missing 'ty'"
   let op ← normalizeOp fnName raw
