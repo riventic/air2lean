@@ -41,6 +41,27 @@ def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
   | some k => k < outputs
   | none => false
 
+/-- Validate immutable declared error names in linear expected time, without repeatedly
+running quadratic list deduplication for each instruction that references a domain. -/
+def validErrorDomainNames (names : Array String) : Bool := Id.run do
+  if names.size > 65535 then return false
+  let mut seen : Std.HashSet String := {}
+  for name in names do
+    if name.isEmpty || seen.contains name then return false
+    seen := seen.insert name
+  return true
+
+/-- A value's storage can contain symbolic error fragments. Pointer pointees are checked
+separately: the representation of the pointer itself does not encode its child's bytes. -/
+partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
+  if seen.contains id then false
+  else if seen.size ≥ 256 then true
+  else match types[id]? with
+    | some (.errorSet _) | some (.errorUnion ..) => true
+    | some (.ptr ..) => false
+    | some ty => (childTys ty).any fun child => hasErrorStorage types child (seen.push id)
+    | none => false
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -102,7 +123,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointer error-union payloads are outside the qualified pointer fragment"
     recur set
     recur payload
-  | .errorSet _ => pure ()
+  | .errorSet none => pure ()
+  | .errorSet (some names) =>
+    if !validErrorDomainNames names then
+      throw s!"{fnName}: near line {line}: an error encoding domain must have at most 65535 distinct nonempty names"
+    pure ()
   | .struct name layout fields =>
     if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
@@ -169,6 +194,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
+    | some (.errorSet _) => modelLayout types layouts c
     | _ =>
       let (s, a) ← modelLayout types layouts c
       pure (Zig.alignUp (s + 1) a, a)
@@ -202,9 +228,22 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     -- `Zig.errUnionOffsets`: the error code is 2 bytes.
     unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
       throw "an error set that is not 2 bytes (`--error-limit`)"
+    if let some (.errorSet (some names)) := types[set]? then
+      -- An empty discriminator has no standalone value, but its union's success arm does.
+      unless names.isEmpty do
+        let _ ← modelLayout types layouts set
     let (s, a) ← modelLayout types layouts payload
     pure (Zig.errUnionSize s a, Nat.max a 2)
-  | some (.errorSet _) => throw "an error set value (not in an error union)"
+  | some (.errorSet none) =>
+    throw "standalone anyerror or unresolved error storage has no finite declared encoding domain"
+  | some (.errorSet (some names)) =>
+    if names.isEmpty then throw "an empty standalone error domain has no runtime value"
+    if names.size > 65535 then throw "an error encoding domain exceeds the 16-bit nonzero code capacity"
+    if !validErrorDomainNames names then
+      throw "an error encoding domain must have distinct nonempty names"
+    unless (layouts[id]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
+      throw "an error set storage layout must be 2 bytes aligned to 2 (16-bit error codes)"
+    pure (2, 2)
   | some (.union _ _ (some tag) fields) =>
     let (ts, ta) ← modelLayout types layouts tag
     let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
@@ -487,8 +526,28 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.intShape? flagTy == some (alen, false, 1) do
       cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
+  | .intCast a =>
+    if ((cx.valTy? a).map (fun id => hasErrorStorage cx.types id)).getD false || hasErrorStorage cx.types ty then
+      cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
+    pure line
   | .bitcast a =>
     let sourceTy := cx.valTy? a
+    let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
+    if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
+      cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
+    if let some aty := sourceTy then
+      let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
+      if aty != ty && !bothErrors && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
+        cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
+      let pointerChild (id : TyId) : Option TyId :=
+        match cx.types[id]? with
+        | some (.optional child) => ptrChild cx.types child
+        | _ => ptrChild cx.types id
+      match pointerChild aty, pointerChild ty with
+      | some source, some target =>
+        if hasErrorStorage cx.types source != hasErrorStorage cx.types target then
+          cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
+      | _, _ => pure ()
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
