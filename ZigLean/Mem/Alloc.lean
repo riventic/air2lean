@@ -82,6 +82,18 @@ def Allocator.alloc (_ : Allocator) (size align : Nat) (n : BitVec 64) :
   | .ok p => pure (.ok ⟨p, n⟩)
   | .error e => pure (.error e)
 
+/-- Bounded `allocSentinel(u8, n, s)`: one extra byte, a checked store at offset n,
+then the payload slice of length n. ReleaseSafe overflow panics before consuming an
+allocation-policy decision; even n=0 needs one byte and can fail. -/
+def Allocator.allocSentinel (a : Allocator) (n : BitVec 64) (sentinel : BitVec 8) :
+    MemM (Except ErrName Slice) := do
+  if 2 ^ 64 ≤ n.toNat + 1 then throw .panic
+  match ← a.create (n.toNat + 1) 1 with
+  | .error e => pure (.error e)
+  | .ok p =>
+    store 1 (p.add n.toNat) sentinel
+    pure (.ok ⟨p, n⟩)
+
 /-- `free(s)`, for items of `size` bytes. Zig first sets the bytes to `undefined`; the block is
 dead after the free. The poison write participates in the race check. -/
 def Allocator.free (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=

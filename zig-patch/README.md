@@ -15,6 +15,12 @@ New dumps include `target_endian` (`little` or `big`) in schema 11. The translat
 explicitly non-little-endian dumps; older dumps without this optional field assume little
 endian. Memory layout checks also enforce the model's 64-bit ABI.
 
+Zig 0.16.0 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
+from the exact comptime sentinel in the result pointer type. `allocSentinel(u8, n, s)`
+requires this field; sentinel presence alone cannot supply the stored byte. Initial
+source/native qualification is restricted to Zig 0.16.0. Existing 0.14.1/0.15.2
+exports retain their prior sentinel-presence metadata.
+
 ## Env vars
 - `ZIG_AIR_JSON_DIR` — output directory. Unset disables the exporter.
 - `ZIG_AIR_JSON_FILTER=<prefix>` — dump only functions whose fqn starts with it.

@@ -1042,6 +1042,9 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   match fn with
   | .create => s!"Zig.Allocator.create {a} {size} {align}"
   | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+  | .allocSentinel =>
+    let sentinel := (fc.layouts[p]?.bind (·.sentinelByte)).getD 0
+    s!"Zig.Allocator.allocSentinel {a} {rv (arg 1)} ({sentinel}#8)"
   | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
   | .free =>

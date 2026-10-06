@@ -223,7 +223,7 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
 
 /-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
 inductive AllocFn where
-  | create | destroy | alloc | alignedAlloc | free | dupe | remap
+  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap
   deriving BEq, Repr
 
 /-- The allocator function that the function `name` is an instance of
@@ -234,6 +234,7 @@ def allocFn? (name : String) : Option AllocFn :=
   | "mem.Allocator.destroy" => some .destroy
   | "mem.Allocator.alloc" => some .alloc
   | "mem.Allocator.alignedAlloc" => some .alignedAlloc
+  | "mem.Allocator.allocSentinel" => some .allocSentinel
   | "mem.Allocator.free" => some .free
   | "mem.Allocator.dupe" => some .dupe
   | "mem.Allocator.remap" => some .remap

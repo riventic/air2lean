@@ -163,6 +163,9 @@ structure Layout where
   ptrAlign : Option Nat := none
   /-- An array `[N:s]T`, or a pointer `[*:s]T` or `[:s]T`, with a sentinel. -/
   sentinel : Bool := false
+  /-- Exact comptime sentinel for a byte pointer, explicitly exported as decimal text.
+  Missing in older exports; allocSentinel must not guess zero. -/
+  sentinelByte : Option Nat := none
   isVolatile : Bool := false
   allowzero : Bool := false
   /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
@@ -170,6 +173,12 @@ structure Layout where
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
   deriving Repr, Inhabited, BEq
+
+/-- Both legacy exports may omit the byte value, preserving the presence-only
+comparison. Explicit values must agree; known and missing metadata cannot establish
+the same sentinel contract. Callers separately compare presence and the child type. -/
+def Layout.sameKnownSentinel (a b : Layout) : Bool :=
+  a.sentinelByte == b.sentinelByte
 
 /-- C and allowzero pointers can carry address zero as a value. -/
 def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
