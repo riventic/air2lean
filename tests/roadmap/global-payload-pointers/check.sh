@@ -43,7 +43,7 @@ case "${1:-}" in
     if [ "$1" = --export-reject ]; then fixture=reject; check_args=(--reject); fi
     ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER="$fixture." \
       "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline "tests/roadmap/global-payload-pointers/$fixture.zig"
+      -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline "tests/roadmap/global-payload-pointers/$fixture.zig"
     python3 tests/roadmap/global-payload-pointers/check-export.py "$air_output" \
       --version "$AIR2LEAN_ZIG_VERSION" --backend "$AIR2LEAN_ZIG_BACKEND" "${check_args[@]}"
     ;;
