@@ -22,7 +22,7 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 |---|---|
 | Blocks | Each allocation is a new block of kind `.heap`, with undefined bytes. |
 | Failure | Allocation number `Mem.failAt` (from 0, counted in `Mem.allocs`), indices in `Mem.allocPolicy.failures`, and requests above `Mem.allocPolicy.maxBytes` fail. The default is the legacy 1 MiB cap (`Zig.maxAllocBytes`) with no additional failure indices. The function returns `error.OutOfMemory`. An allocation of 0 bytes is no allocation: its pointer has no block (`Zig.zeroAllocPtr`). |
-| `resize`, `remap` | Growth of nonzero-size items fails, so a growing `ArrayListUnmanaged` allocates, copies and frees in the model. `remap` to length 0 frees the slice and succeeds; a nonempty slice of zero-size items can change length without allocating. |
+| `remap` | The default byte-remap policy fails for nonzero-size items. Explicit `Mem.allocPolicy.byteRemap` policies select in-place or moved success for a nonempty whole alignment-1 byte buffer within the request cap. In-place growth additionally requires the latest block and every historical block to end before its address. Retained byte representations are exact; grown bytes are undefined. Moved success frees the old block. Length 0 frees the slice; nonempty zero-size items can change length without allocating. `resize` is outside the recognized allocator boundary. |
 | Free | For a nonzero byte count, the pointer must be the start of a live `.heap` block and the length must cover the entire block. Anything else (a double free, a free of a global or of a stack block) throws `.illegal`. `free` records the std slice poison write before freeing, including sentinel bytes, so it races with an unjoined concurrent read. `destroy` uses raw free without that poison write. Zero-byte frees do nothing. |
 
 | Zig (`mem.Allocator.<fn>__anon_<n>`) | Lean |
@@ -44,7 +44,7 @@ fail. An attempt advances `allocs` even when its size exceeds the cap. Duplicate
 indices have no extra effect; indices beyond a finite run are unused. Every finite prefix
 of an arbitrary failure trace can be selected, including several or all attempts failing.
 Zero-byte allocation does not consume a decision. The model's fresh-address policy,
-allocator identity, and unsuccessful resize/remap behavior are unchanged. Raising this cap
+allocator identity, and default failure-only remap behavior are unchanged. Raising this cap
 does not establish that native malloc has resources or the same address behavior.
 
 `rawAlloc_run`, `create_run` and separation triples quantify over arbitrary `Mem`, including
@@ -61,6 +61,20 @@ The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`),
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
 part of the differential evidence; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
+
+The selected byte-remap policy is a bounded environment model, independent of native
+allocator identity or address reuse. The Linux 0.16.0 gate in
+`tests/roadmap/resize-remap` passed fresh export and translation, three exact
+native/model observations (101 in-place, 201 moved, 301 failed), the ownership
+module's kernel check and representation, lifetime, request-cap and frame
+regressions. The initialized prefix and caller frame were preserved, and the
+client released all live allocations. These results cover that bounded client
+and the lemmas' explicit premises. Five targeted semantic mutations
+also passed: fresh runtime builds and plain fixture elaboration succeeded, then
+each execution failed at its expected assertion for length, byte representation,
+old-block lifetime, failure-state preservation or address overlap. There is no
+general allocator correspondence or successful `resize`/`realloc` claim; other
+profiles and final composed CI remain unqualified.
 
 ## Thread model
 
