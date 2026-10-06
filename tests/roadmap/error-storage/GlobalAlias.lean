@@ -38,6 +38,24 @@ private def reject (f : Func) (message : String) : IO Unit := do
       throw (IO.userError s!"wrong rejection for {f.name}: {e}")
 
 def main : IO Unit := do
+  -- Exact input-validation regression: a self-referential pointer global is error-free.
+  let recursiveTypes : Array Ty := #[.void, .ptr "one" false 1]
+  let recursiveGlobal : Global := { name := some "recursive_plain", ty := 1, isConst := false, threadlocal := false, isExtern := false, init := some (.ptrConst 1 0 0) }
+  let recursivePlain := { base "recursivePlainGlobal" recursiveGlobal with types := recursiveTypes, layouts := #[scalar 0 1, pointer 8], ret := 0 }
+  accept recursivePlain
+  -- Direct global API isolates the alias decision before unrelated type-table checks.
+  let recursiveCase (name : String) (extra : Array Ty) : Func :=
+    { recursivePlain with name := "folded_alias." ++ name, types := #[.void, .ptr "one" false 2, .struct "RecursiveAlias" "auto" #[("next", 1), ("value", 3)]] ++ extra, layouts := #[scalar 0 1, pointer 8, {size := some 16, align := some 8, offsets := #[0,8]}] ++ (extra.map fun _ => scalar 2 2) }
+  let recursiveError := recursiveCase "recursiveReachableError" #[.errorSet (some #["Alpha"])]
+  let recursiveOpaque := recursiveCase "recursiveOpaque" #[.other "unresolved"]
+  let recursiveInferred := recursiveCase "recursiveInferredError" #[.errorSet none]
+  let recursiveUnknown := { recursiveCase "recursiveUnknown" #[.int false 16] with types := #[.void, .ptr "one" false 2, .struct "RecursiveAlias" "auto" #[("next", 1), ("missing", 99)], .int false 16] }
+  let recursiveBudget := { recursiveCase "recursiveBudget" #[.int false 16] with types := #[.void, .ptr "one" false 2, .struct "RecursiveBudget" "auto" (#[("next", 1)] ++ ((Array.range 1024).map fun k => (s!"v{k}", 3))), .int false 16] }
+  for control in #[recursiveError, recursiveOpaque, recursiveInferred, recursiveUnknown, recursiveBudget] do
+    match checkGlobal control control.globals[0]! with
+    | .ok _ => throw (IO.userError s!"accepted recursive alias negative {control.name}")
+    | .error e => unless (e.splitOn "global alias has unresolved or cyclic symbolic storage provenance").length > 1 do
+        throw (IO.userError s!"wrong recursive alias rejection {control.name}: {e}")
   reject (loadAt "rawStandalone" errorGlobal 8 0) "overlaps symbolic error bytes"
   reject (loadAt "rawField" structGlobal 8 2) "overlaps symbolic error bytes"
   reject ({loadAt "partialByte" errorGlobal 21 1 with ret := 2, body := #[{id := 0, ty := 2, op := .load (.ptrConst 21 0 1)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}) "overlaps symbolic error bytes"
