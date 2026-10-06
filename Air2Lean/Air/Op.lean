@@ -163,6 +163,9 @@ structure Layout where
   ptrAlign : Option Nat := none
   /-- An array `[N:s]T`, or a pointer `[*:s]T` or `[:s]T`, with a sentinel. -/
   sentinel : Bool := false
+  /-- Exact comptime sentinel for a byte pointer, explicitly exported as decimal text.
+  Missing in older exports; allocSentinel must not guess zero. -/
+  sentinelByte : Option Nat := none
   isVolatile : Bool := false
   allowzero : Bool := false
   /-- A bit-pointer (`&packed_struct.field`): its host integer's size in bytes; else 0. -/
@@ -170,6 +173,12 @@ structure Layout where
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
   deriving Repr, Inhabited, BEq
+
+/-- Both legacy exports may omit the byte value, preserving the presence-only
+comparison. Explicit values must agree; known and missing metadata cannot establish
+the same sentinel contract. Callers separately compare presence and the child type. -/
+def Layout.sameKnownSentinel (a b : Layout) : Bool :=
+  a.sentinelByte == b.sentinelByte
 
 /-- C and allowzero pointers can carry address zero as a value. -/
 def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
@@ -302,6 +311,11 @@ inductive BitCountOp where
   | clz | ctz | popcount
   deriving Repr, Inhabited, BEq
 
+/-- Permutes each integer representation; preserves signedness, width and vector lanes. -/
+inductive BitPermuteOp where
+  | byteSwap | bitReverse
+  deriving Repr, Inhabited, BEq
+
 inductive ShiftOp where
   | shl | shlExact | shlSat | shr | shrExact
   deriving Repr, Inhabited, BEq
@@ -344,6 +358,7 @@ inductive Op where
   | withOverflow (op : ArithOp) (a b : Val)
   | shlWithOverflow (a b : Val)
   | countBits (op : BitCountOp) (a : Val)
+  | permuteBits (op : BitPermuteOp) (a : Val)
   /-- `splat`: a vector with every lane equal to the scalar `a`. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)

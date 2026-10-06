@@ -3,5 +3,5 @@
   "status": "inputs-only-not-compilation-attestation",
   "origin_provenance_sha256": "34d4a018f7dfe2f459f5b61c678e4d0d422a5841977e253a3b958c39d9f0e637",
   "origin_exporter_sha256": "7a663aa67fac34813d60f83172fa4a5a2f290bbc39099387ee19c73f6d6eb435",
-  "current_exporter_sha256": "920ecb7beb497a7b162f60063f1cf06682f91a5e9dda11dbd4a8ae5d4b47551e"
+  "current_exporter_sha256": "5aea10c824beedf80b5c56efd3884f7ef7c03a96f941eb0d6b73e0bcdb0e2e3c"
 }

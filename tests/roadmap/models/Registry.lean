@@ -38,6 +38,38 @@ def main (args : List String) : IO Unit := do
   let models ← get <| ModelRegistry.parse document.compress
   let _ ← get <| ModelRegistry.check models raw.profile #[f]
   let _ ← get <| checkProgram #[f] models (some raw.profile)
+  -- Changing only the known sentinel byte must invalidate the binding. Both the
+  -- parameter and return shapes include it, while legacy None keeps its old shape.
+  let sentinelTypes : Array Ty := #[.int false 8, .noreturn, .ptr "slice" false 0]
+  let sentinelLayouts : Array Layout := #[{size := some 1, align := some 1}, {},
+    {size := some 16, align := some 8, ptrAlign := some 1, sentinel := true, sentinelByte := some 0}]
+  let sentinelFunc : Func := { f with
+    name := "sentinelClient"
+    params := #[2]
+    ret := 2
+    types := sentinelTypes
+    layouts := sentinelLayouts
+    body := #[{id := 0, ty := 2, op := .arg 0},
+      {id := 1, ty := 2, op := .call (.func "project.identity" false none) #[.inst 0]},
+      {id := 2, ty := 1, op := .ret (.inst 1)}]
+  }
+  let sentinelTemplate ← get <| ModelRegistry.template raw.profile #[sentinelFunc]
+  let sentinelEntry := ((sentinelTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
+  let sentinelEntry ← get <| provedEntry sentinelEntry "RegistryExample.polyIdentity" "RegistryExample.polyContract" "RegistryExample.polyEvidence"
+  let sentinelDocument := document.setObjVal! "models" (.arr #[sentinelEntry])
+  let sentinelModels ← get <| ModelRegistry.parse sentinelDocument.compress
+  let _ ← get <| checkProgram #[sentinelFunc] sentinelModels (some raw.profile)
+  let byte42 := { sentinelFunc with layouts := sentinelLayouts.set! 2 {sentinelLayouts[2]! with sentinelByte := some 42} }
+  let missingByte := { sentinelFunc with layouts := sentinelLayouts.set! 2 {sentinelLayouts[2]! with sentinelByte := none} }
+  expectError (ModelRegistry.check sentinelModels raw.profile #[byte42]) "incompatible signature/layout"
+  expectError (ModelRegistry.check sentinelModels raw.profile #[missingByte]) "incompatible signature/layout"
+  let (zeroParams, zeroReturn) ← get <| ModelRegistry.signature sentinelFunc #[.inst 0] 2
+  let (byteParams, byteReturn) ← get <| ModelRegistry.signature byte42 #[.inst 0] 2
+  let (legacyParams, legacyReturn) ← get <| ModelRegistry.signature missingByte #[.inst 0] 2
+  require (zeroParams != byteParams && zeroReturn != byteReturn &&
+    zeroParams != legacyParams && zeroReturn != legacyReturn) "sentinel signature mutation erased exact or missing byte"
+  require (((legacyReturn.getObjValD "layout").getObjVal? "sentinel_byte").toOption.isNone)
+    "legacy missing-byte signature shape changed"
   require (checkProgram #[f] models).toOption.isNone "binding without checked profile"
   require (checkProgram #[f]).toOption.isNone "unregistered external call"
   require ((memoryFunctions #[f] (models.map (·.symbol))).contains "client") "external memory propagation"
