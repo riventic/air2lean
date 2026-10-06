@@ -605,7 +605,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         let a ← cx.layouts[aty]?
         let b ← cx.layouts[ty]?
         return pid == aty && a.size.isSome && a.align.isSome &&
-          a.ptrAlign.isSome && a == b : Option Bool)).getD false
+          a.ptrAlign.isSome && b.ptrAlign.isNone &&
+          a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
