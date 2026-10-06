@@ -22,8 +22,7 @@ def main : IO Unit := do
   let f : Func ← get <| normalize raw
   require (f.types[5]? == some (.optional 14)) "retained exact pointer wrapper shape drift"
   -- Isolate the wrapper from inst66 so failures cannot be masked by another cast.
-  let wrapCx : CheckCtx := { fnName := f.name, types := f.types,
-    layouts := f.layouts, instTys := #[(32, 14)], places := #[] }
+  let wrapCx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts, instTys := #[(32, 14)], places := #[] }
   discard (get <| checkOp wrapCx 4 5 (.bitcast (.inst 32)))
   let rejectWrap (cx : CheckCtx) : IO Unit := do
     match checkOp cx 4 5 (.bitcast (.inst 32)) with
