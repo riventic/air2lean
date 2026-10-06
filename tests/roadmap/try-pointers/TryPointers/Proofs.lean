@@ -7,6 +7,12 @@ open scoped Zig
 
 namespace TryPointersProofs
 
+/-- The finite domain declared by every retained source AIR function. -/
+def domain : ErrorDomain := ⟨#["Bad", "Other"], by decide, by decide⟩
+
+def admittedError (e : Option ErrName) : Prop :=
+  ∀ name, e = some name → domain.names.contains name = true
+
 -- The tag-only helper rule has no initialized-payload precondition. Generated functions
 -- also perform an unused whole-object read, requiring readableBytes for that full range.
 -- Payload and cleanup ownership is retained through framing; use Triple.bind afterwards.
@@ -37,8 +43,8 @@ theorem wide_payload_address (p : Ptr) : errPayloadPtr (BitVec 64) p = p := by
 def payloadProgram (α : Type) [Enc α] (n a : Nat) (p : Ptr) :
     MemM (Except ErrName Ptr) := do
   loadDiscardBytes n a p
-  match ← tryPayloadPtr α a p with
-  | .error _ => pure (.error (← errCodeAt α a p))
+  match ← finiteTryPayloadPtr domain α a p with
+  | .error _ => pure (.error (← finiteErrCodeAt domain α a p))
   | .ok q => pure (.ok q)
 
 -- MUTANT_BRIDGE_BEGIN: payload8_program
@@ -49,26 +55,26 @@ theorem payload8_program (p : Ptr) :
   -- The generated MM wrapper carries a local-state pair through each effect. Split
   -- the actual effect outcomes before reducing those pairs and the return wrapper.
   cases hread : loadDiscardBytes 4 2 p m with
-  | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread]
+  | none => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread]
   | some read =>
     cases read with
-    | error failure => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread]
+    | error failure => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread]
     | ok read =>
       rcases read with ⟨u, m₁⟩
-      cases htag : tryPayloadPtr (BitVec 8) 2 p m₁ with
-      | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+      cases htag : finiteTryPayloadPtr domain (BitVec 8) 2 p m₁ with
+      | none => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread, htag]
       | some tag =>
         cases tag with
-        | error failure => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+        | error failure => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread, htag]
         | ok tag =>
           rcases tag with ⟨result, m₂⟩
           cases result with
-          | ok q => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag]
+          | ok q => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread, htag]
           | error name =>
-            cases hcode : errCodeAt (BitVec 8) 2 p m₂ with
-            | none => simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag, hcode]
+            cases hcode : finiteErrCodeAt domain (BitVec 8) 2 p m₂ with
+            | none => simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread, htag, hcode]
             | some code =>
-              cases code <;> simp [TryPointers.payload8, payloadProgram, zig_unfold, hread, htag, hcode]
+              cases code <;> simp [TryPointers.payload8, payloadProgram, domain, zig_unfold, hread, htag, hcode]
 -- MUTANT_BRIDGE_END: payload8_program
 
 theorem payload64_program (p : Ptr) :
@@ -77,26 +83,26 @@ theorem payload64_program (p : Ptr) :
   -- The generated MM wrapper carries a local-state pair through each effect. Split
   -- the actual effect outcomes before reducing those pairs and the return wrapper.
   cases hread : loadDiscardBytes 16 8 p m with
-  | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread]
+  | none => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread]
   | some read =>
     cases read with
-    | error failure => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread]
+    | error failure => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread]
     | ok read =>
       rcases read with ⟨u, m₁⟩
-      cases htag : tryPayloadPtr (BitVec 64) 8 p m₁ with
-      | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+      cases htag : finiteTryPayloadPtr domain (BitVec 64) 8 p m₁ with
+      | none => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread, htag]
       | some tag =>
         cases tag with
-        | error failure => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+        | error failure => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread, htag]
         | ok tag =>
           rcases tag with ⟨result, m₂⟩
           cases result with
-          | ok q => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag]
+          | ok q => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread, htag]
           | error name =>
-            cases hcode : errCodeAt (BitVec 64) 8 p m₂ with
-            | none => simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag, hcode]
+            cases hcode : finiteErrCodeAt domain (BitVec 64) 8 p m₂ with
+            | none => simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread, htag, hcode]
             | some code =>
-              cases code <;> simp [TryPointers.payload64, payloadProgram, zig_unfold, hread, htag, hcode]
+              cases code <;> simp [TryPointers.payload64, payloadProgram, domain, zig_unfold, hread, htag, hcode]
 
 /-- One assertion owns the entire object. Only its two tag bytes must decode;
 all payload/padding bytes may be undefined. Separate tag ownership is not assumed. -/
@@ -111,10 +117,10 @@ def readableUnion (α : Type) [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName
 
 private theorem readableUnion_tag_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
     {e : Option ErrName} {m : Mem} {h hF : Heap}
-    (hp : readableUnion α p n a e h) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
-    ∃ m', (tryPayloadPtr α a p).run m =
+    (hp : readableUnion α p n a e h) (hdom : admittedError e) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
+    ∃ m', (finiteTryPayloadPtr domain α a p).run m =
       pure ((match e with | none => .ok (errPayloadPtr α p) | some name => .error name), m') ∧
-      (∀ name, e = some name → (errCodeAt α a p).run m = pure (name, m')) ∧
+      (∀ name, e = some name → (finiteErrCodeAt domain α a p).run m = pure (name, m')) ∧
       m'.heap = h ∪ hF ∧ m'.Seq := by
   obtain ⟨A, S, K, bs, -, -, -, hbnd, ha, he, hb⟩ := hp
   let eo := (errUnionOffsets (Enc.size α) (Enc.align α)).1
@@ -126,18 +132,23 @@ private theorem readableUnion_tag_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
   rw [hx] at hl
   refine ⟨m.recordAt block (p.off.toNat + eo) 2 .read, ?_, ?_, ?_, hs.recordAt _ _ _ _⟩
   · simp only [StateT.run] at hl
-    cases e <;> simp [tryPayloadPtr, zig_unfold, hl, he, eo]
+    cases e with
+    | none => simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo]
+    | some name =>
+      have hd := hdom name rfl
+      simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo, hd]
   · intro name hn
     subst e
     simp only [StateT.run] at hl
-    simp [errCodeAt, zig_unfold, hl, he, eo]
+    have hd := hdom name rfl
+    simp [finiteErrCodeAt, errCodeAt, requireError, zig_unfold, hl, he, eo, hd]
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
 /-- Both actual generated layouts preserve the whole owned object and arbitrary frame.
 The first read covers every object byte. On error the generated error-code read is retained. -/
 theorem payloadProgram_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
     {e : Option ErrName} {m : Mem} {h hF : Heap}
-    (hp : readableUnion α p n a e h) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
+    (hp : readableUnion α p n a e h) (hdom : admittedError e) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
     ∃ m', (payloadProgram α n a p).run m =
       pure ((match e with | none => .ok (errPayloadPtr α p) | some name => .error name), m') ∧
       m'.heap = h ∪ hF ∧ m'.Seq := by
@@ -146,7 +157,7 @@ theorem payloadProgram_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
   have hw : readableBytes p n a h := ⟨A, S, K, bs, ha, hn, hb⟩
   obtain ⟨m₁, hread, hm₁, hs₁⟩ := readableBytes_discard_run hw hm hpos hs
   obtain ⟨m₂, htag, -, hm₂, hs₂⟩ := readableUnion_tag_run
-    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m₁) (h := h) (hF := hF) hp hm₁ hs₁
+    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m₁) (h := h) (hF := hF) hp hdom hm₁ hs₁
   cases e with
   | none =>
     refine ⟨m₂, ?_, hm₂, hs₂⟩
@@ -155,13 +166,14 @@ theorem payloadProgram_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
   | some name =>
     obtain ⟨m₃, -, hcode', hm₃, hs₃⟩ := readableUnion_tag_run
       (α := α) (p := p) (n := n) (a := a) (e := some name) (m := m₂)
-      (h := h) (hF := hF) hp hm₂ hs₂
+      (h := h) (hF := hF) hp hdom hm₂ hs₂
     have herr := hcode' name rfl
     refine ⟨m₃, ?_, hm₃, hs₃⟩
     simp only [StateT.run] at hread htag herr
     simp [payloadProgram, zig_unfold, hread, htag, herr]
 
-theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName) :
+theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName)
+    (hdom : admittedError e) :
     Triple (readableUnion α p n a e) (payloadProgram α n a p)
       (fun result => ⌜result = (match e with
         | none => .ok (errPayloadPtr α p) | some name => .error name)⌝ ∗
@@ -169,23 +181,23 @@ theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Opt
   apply Triple.of_run
   intro m h hF hd hm hp hs
   obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run
-    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m) (h := h) (hF := hF) hp hm hs
+    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m) (h := h) (hF := hF) hp hdom hm hs
   exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨by cases e <;> rfl, hp⟩, hs'⟩
 
-theorem payload8_owned (p : Ptr) (e : Option ErrName) (R : Assn) :
+theorem payload8_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : Assn) :
     Triple (readableUnion (BitVec 8) p 4 2 e ∗ R) (TryPointers.payload8 p)
       (fun result => (⌜result = (match e with
         | none => .ok (errPayloadPtr (BitVec 8) p) | some name => .error name)⌝ ∗
         readableUnion (BitVec 8) p 4 2 e) ∗ R) := by
   rw [payload8_program]
-  exact (payloadProgram_owned p 4 2 e).frame
+  exact (payloadProgram_owned p 4 2 e hdom).frame
 
-theorem payload64_owned (p : Ptr) (e : Option ErrName) (R : Assn) :
+theorem payload64_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : Assn) :
     Triple (readableUnion (BitVec 64) p 16 8 e ∗ R) (TryPointers.payload64 p)
       (fun result => (⌜result = (match e with
         | none => .ok (errPayloadPtr (BitVec 64) p) | some name => .error name)⌝ ∗
         readableUnion (BitVec 64) p 16 8 e) ∗ R) := by
   rw [payload64_program]
-  exact (payloadProgram_owned p 16 8 e).frame
+  exact (payloadProgram_owned p 16 8 e hdom).frame
 
 end TryPointersProofs
