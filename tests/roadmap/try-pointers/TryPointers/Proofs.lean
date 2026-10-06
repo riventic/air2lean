@@ -8,7 +8,7 @@ open scoped Zig
 namespace TryPointersProofs
 
 /-- The finite domain declared by every retained source AIR function. -/
-def domain : ErrorDomain := ⟨#["Bad", "Other"], by decide, by decide⟩
+abbrev domain : ErrorDomain := ⟨#["Bad", "Other"], by decide, by decide⟩
 
 def admittedError (e : Option ErrName) : Prop :=
   ∀ name, e = some name → domain.names.contains name = true
@@ -136,12 +136,16 @@ private theorem readableUnion_tag_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
     | none => simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo]
     | some name =>
       have hd := hdom name rfl
-      simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo, hd]
+      have hdMem : name ∈ domain.names := by simpa using hd
+      have hdAllowed : name = "Bad" ∨ name = "Other" := by simpa [domain] using hdMem
+      simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo, hdAllowed]
   · intro name hn
     subst e
     simp only [StateT.run] at hl
     have hd := hdom name rfl
-    simp [finiteErrCodeAt, errCodeAt, requireError, zig_unfold, hl, he, eo, hd]
+    have hdMem : name ∈ domain.names := by simpa using hd
+    have hdAllowed : name = "Bad" ∨ name = "Other" := by simpa [domain] using hdMem
+    simp [finiteErrCodeAt, errCodeAt, requireError, zig_unfold, hl, he, eo, hdAllowed]
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
 /-- Both actual generated layouts preserve the whole owned object and arbitrary frame.
