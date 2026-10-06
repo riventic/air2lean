@@ -217,4 +217,35 @@ def main : IO Unit := do
     let child := deep
     deep := {id := k, ty := 21, op := .block #[child, {id := 1000 + k, ty := 4, op := .br k (.inst child.id)}]}
   reject {branchBase with name := "folded_alias.singleBranchBudget", body := #[deep, {id := 2001, ty := 3, op := .store (.inst 0) (.int 2 31)}, {id := 2002, ty := 2, op := .load (.inst 0)}, {id := 2003, ty := 4, op := .ret (.inst 2002)}]} "escaping, arithmetic"
+  -- Code identity is not arbitrary opaque memory: exact named immutable function only.
+  let codeTy := types.size
+  let codePtr := codeTy + 1
+  let otherCode := codeTy + 2
+  let wrongCodePtr := codeTy + 3
+  let opaqueTy := codeTy + 4
+  let opaquePtr := codeTy + 5
+  let codeTypes := types ++ #[.other "fn (u16) u16", .ptr "one" true codeTy,
+    .other "fn (u8) u8", .ptr "one" true otherCode, .other "opaque", .ptr "one" true opaqueTy]
+  let codeLayouts := layouts ++ #[{}, pointer 1, {}, pointer 1, {}, pointer 1]
+  let codeGlobal : Global := { name := some "folded_alias.codeTarget", ty := codeTy, isConst := true, threadlocal := false, isExtern := false, init := some (.func "folded_alias.codeTarget" false none) }
+  let codeAddress : Func := { base "codeAddress" codeGlobal with types := codeTypes, layouts := codeLayouts, ret := codePtr, body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 0 0)}] }
+  let codeTarget : Func := { base "codeTarget" codeGlobal with types := codeTypes, layouts := codeLayouts, globals := #[], params := #[1], ret := 1, body := #[{id := 0, ty := 1, op := .arg 0}, {id := 1, ty := 4, op := .ret (.inst 0)}] }
+  match check codeAddress >>= fun _ => checkProgram #[codeAddress, codeTarget] with
+  | .ok _ => pure ()
+  | .error e => throw (IO.userError s!"rejected exact named code address: {e}")
+  reject { codeAddress with name := "folded_alias.codeOffset", body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 0 1)}] }
+    "unresolved or cyclic symbolic storage provenance"
+  reject { codeAddress with name := "folded_alias.codeReinterpret", ret := wrongCodePtr, body := #[{id := 0, ty := 4, op := .ret (.ptrConst wrongCodePtr 0 0)}] }
+    "unresolved or cyclic symbolic storage provenance"
+  reject { codeAddress with name := "folded_alias.opaqueBacking", ret := opaquePtr, globals := #[{ codeGlobal with ty := opaqueTy, init := some (.undef opaqueTy) }], body := #[{id := 0, ty := 4, op := .ret (.ptrConst opaquePtr 0 0)}] }
+    "type 'opaque' is outside the subset"
+  reject { codeAddress with name := "folded_alias.codeBitPointer", layouts := codeLayouts.set! codePtr { pointer 1 with hostSize := 1 } }
+    "unresolved or cyclic symbolic storage provenance"
+  reject { codeAddress with name := "folded_alias.codeWrongGlobal", body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 99 0)}] }
+    "unknown global id 99"
+  reject { codeAddress with name := "folded_alias.codeWrongName", globals := #[{codeGlobal with name := some "folded_alias.otherTarget"}] }
+    "unresolved or cyclic symbolic storage provenance"
+  for (label, restricted) in #[("sentinel", { pointer 1 with sentinel := true }), ("volatile", { pointer 1 with isVolatile := true }), ("allowzero", { pointer 1 with allowzero := true })] do
+    reject { codeAddress with name := "folded_alias.codeFlag." ++ label, layouts := codeLayouts.set! codePtr restricted }
+      "unresolved or cyclic symbolic storage provenance"
   IO.println "finite global alias controls passed"

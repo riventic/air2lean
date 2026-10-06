@@ -1061,6 +1061,18 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
   let some global := f.globals[g]? | throw s!"{f.name}: pointer has unknown global id {g}"
   let some (kind, child) := globalAliasPointer? f pty
     | throw s!"{f.name}: global alias has no pointer type"
+  -- A named function block stores code identity (one undefined byte in Emit),
+  -- not encoded pointee storage. Admit only its exact immutable zero-offset address.
+  if let some (.func name ..) := global.init then
+    let pointerLayout := f.layouts[pty]?.getD {}
+    if off == 0 && kind == "one" && global.ty == child &&
+        f.types[pty]? == some (.ptr "one" true child) &&
+        (f.types[child]?.map isFnTy).getD false && global.name == some name &&
+        global.isConst && !global.threadlocal && !global.isExtern &&
+        pointerLayout.size.isSome && pointerLayout.align.isSome &&
+        !pointerLayout.sentinel && pointerLayout.sentinelByte.isNone &&
+        !pointerLayout.isVolatile && !pointerLayout.allowzero &&
+        pointerLayout.hostSize == 0 && pointerLayout.bitOffset == 0 then return
   let some capability := hasErrorCapability f.types child
     | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   if !hasErrorStorage f.types global.ty && !capability then return
