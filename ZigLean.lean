@@ -1,5 +1,6 @@
 import ZigLean.Basic
 import ZigLean.Bit
+import ZigLean.Permutation
 import ZigLean.Conc
 import ZigLean.Float
 import ZigLean.Float.Libm

@@ -1179,7 +1179,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .divFloat a b => #[a, b]
   | .minMax _ a b => #[a, b]
   | .withOverflow _ a b | .shlWithOverflow a b => #[a, b]
-  | .countBits _ a => #[a]
+  | .countBits _ a | .permuteBits _ a => #[a]
   | .bit _ a b => #[a, b]
   | .not a => #[a]
   | .neg a => #[a]
@@ -1529,6 +1529,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .shlWithOverflow a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     let (env, l) := bindLet fc env inst.id s!"Zig.shlWithOverflow {sgn} {rv a} {rv b}"
+    (env, some l)
+  | .permuteBits op a =>
+    let f := match op with
+      | .byteSwap => "Zig.byteSwap" | .bitReverse => "Zig.bitReverse"
+    let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"
     (env, some l)
   | .countBits op a =>
     let f := match op with
@@ -2064,6 +2069,7 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .withOverflow o a b => some (#[a, b], fun v => .withOverflow o v[0]! v[1]!)
   | .shlWithOverflow a b => some (#[a, b], fun v => .shlWithOverflow v[0]! v[1]!)
   | .countBits o a => some (#[a], fun v => .countBits o v[0]!)
+  | .permuteBits o a => some (#[a], fun v => .permuteBits o v[0]!)
   | .bit o a b => some (#[a, b], fun v => .bit o v[0]! v[1]!)
   | .not a => some (#[a], fun v => .not v[0]!)
   | .neg a => some (#[a], fun v => .neg v[0]!)

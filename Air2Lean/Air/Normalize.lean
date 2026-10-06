@@ -118,6 +118,8 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "clz" => let a ← arg1 fnName raw true; return .countBits .clz a
   | "ctz" => let a ← arg1 fnName raw true; return .countBits .ctz a
   | "popcount" => let a ← arg1 fnName raw true; return .countBits .popcount a
+  | "byte_swap" => let a ← arg1 fnName raw true; return .permuteBits .byteSwap a
+  | "bit_reverse" => let a ← arg1 fnName raw true; return .permuteBits .bitReverse a
   | "bit_and" => let (a, b) ← arg2 fnName raw; return .bit .and a b
   | "bit_or" => let (a, b) ← arg2 fnName raw; return .bit .or a b
   | "xor" => let (a, b) ← arg2 fnName raw; return .bit .xor a b
