@@ -675,8 +675,10 @@ theorem errUnion_bounds (s a : Nat) :
       (errUnionOffsets s a).2 + s ≤ (errUnionOffsets s a).1 := by
     unfold errUnionOffsets
     split
-    · right; simpa using le_alignUp s 2
-    · left; simpa using le_alignUp 2 a
+    · right; simp_all
+    · split
+      · right; simpa using le_alignUp s 2
+      · left; simpa using le_alignUp 2 a
   have hsz : errUnionSize s a =
       alignUp (Max.max ((errUnionOffsets s a).1 + 2) ((errUnionOffsets s a).2 + s)) (Nat.max a 2) := by
     unfold errUnionSize
