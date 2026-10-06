@@ -112,9 +112,23 @@ pub fn rwLockRead(io: Io) !u32 {
     return 10 * first + readShared(&sh);
 }
 
+/// A second shared-lock client: both observations occur during one shared hold.
+/// The writer still runs twice; successful results are 0, 11 or 22.
+pub fn rwLockSnapshotPair(io: Io) !u32 {
+    var sh: Shared = .{ .io = io };
+    const t = try std.Thread.spawn(.{}, writer, .{&sh});
+    sh.l.lockSharedUncancelable(io);
+    const first = sh.n;
+    const second = sh.n;
+    sh.l.unlockShared(io);
+    t.join();
+    return 10 * first + second;
+}
+
 comptime {
     _ = &mutexCounter;
     _ = &handoff;
     _ = &semaphoreCounter;
     _ = &rwLockRead;
+    _ = &rwLockSnapshotPair;
 }
