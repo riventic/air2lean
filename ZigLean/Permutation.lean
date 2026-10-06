@@ -33,6 +33,7 @@ theorem byteSwap_bit {n : Nat} (a : BitVec n) (i : Nat) (hi : i < n) :
   unfold byteSwap
   rw [BitVec.getLsbD_cast, BitVec.getLsbD_ofBoolListLE,
     List.getD_eq_getElem?_getD, List.getElem?_ofFn, dif_pos hi]
+  rfl
 
 theorem byteSwapIndex_lt {n i : Nat} (hn : n % 8 = 0) (hi : i < n) :
     byteSwapIndex n i < n := by
