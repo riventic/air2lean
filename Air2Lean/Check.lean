@@ -1470,14 +1470,15 @@ memory, and a call to a pure function copies each `[]const T` argument from memo
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
 function or has a model (`allocFn?`, `threadFn?`). -/
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
-    (profile : Option BuildProfile := none) : Except String Unit := do
+    (profile : Option BuildProfile := none)
+    (selectedCallees : Array String := #[]) : Except String Unit := do
   unless models.isEmpty do
     let some profile := profile | throw "external model bindings require a checked program profile"
     ModelRegistry.check models profile funcs
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let indexes ← checkSharedDefinitions funcs
   let targets := referenceTargets (fnRefs funcs)
-  let mem := memoryFunctions funcs (models.map (·.symbol))
+  let mem := memoryFunctions funcs (models.map (·.symbol) ++ selectedCallees)
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
   let lookupFunction (name : String) : Option (Nat × Func) := do
@@ -1511,7 +1512,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
               | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
             checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
               k args index
-        unless functionNames.contains callee || modelSymbols.contains callee do
+        unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless (allocFn? callee).isSome || (threadFn? callee).isSome do

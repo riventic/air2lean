@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "scope": "C04 opt-in single-caller timed scheduler model foundation",
+  "status": "passed",
+  "date": "2026-10-06",
+  "execution_owner": "ROOT serialized Linux Docker lane",
+  "frozen_input_archive": "/private/tmp/air2lean-C04-timed-runtime-freeze-v4.tar.gz",
+  "frozen_input_archive_sha256": "c64750e9cdf2b5a9dd55f3cbfa498aacf62f6b2f76e9d0daa6a21f62427033f5",
+  "frozen_input_hashes": {
+    "ZigLean/Basic.lean": "69ff4c6fe140fe6ca14c49aa7f05ed361953fcbc7e1e567cc6e637ff253b6bb7",
+    "ZigLean/Conc/TimedSched.lean": "128b9a6a434fef53b88483a900e57d6b4a51c59c85a4fc9fe41cd6d49633fad6",
+    "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
+    "ZigLean/Float/Value.lean": "5fe060b996d257f191c9c323a9a97118c1696df08169a2834d082438e4e19a53",
+    "ZigLean/Mem/Basic.lean": "f51684e11a3a4c87ed37ada3619a77695ece9801b1253e8ba2440b594fc64c8a",
+    "ZigLean/Mem/Enc.lean": "095deed9dca5240efb8027b3d5b056f1b7d464de5cbc9768ffa3a2eed4e00e3d",
+    "ZigLean/Mem/Thread.lean": "51109eb1dcfaa89cbfe2dd7c8e4fb2addc1fb332385f8313ccee98c08073be67",
+    "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
+    "ZigLean/Time.lean": "dde394fe1482a009839be9b5a874597890358075df8c6feaf17a86a50e5aab96",
+    "docs/deadline-runtime.md": "be78822df8498c3c64ab89d82d70ff855c8c56566511b99a1b0aca39dd15bac4",
+    "lake-manifest.json": "8597d11e822141447a698f4bd14406865e69a4ed7f6500384b08ef136da13099",
+    "lakefile.toml": "a20438d276d2f329272ea3c14042bcaba76658b8429e90cfd8f6376e035b2cca",
+    "lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+    "tests/roadmap/deadline-futex/Kernel.lean": "182f5b45ced68afebe0badc6146601b1c36e776b25894c31d8698b1d364fd91f",
+    "tests/roadmap/deadline-futex/Runtime.lean": "4b0d66430d941f4ed1e7a61b5b4e1b238e34a45636da3217318bb0c2ffa81468",
+    "tests/roadmap/deadline-futex/root-runtime.py": "093f271c6d14337640fa493d2b80c778d21a3011025dd5d3f86caffba1a42ef5",
+    "tests/roadmap/deadline-futex/test_runtime_recipe.py": "2cf841a4cd4df8cff612b5d31084b492a0fdb5a35efe447a11b7086a62cfda24"
+  },
+  "steps": [
+    {
+      "name": "build-time",
+      "target": "ZigLean.Time",
+      "status": "passed"
+    },
+    {
+      "name": "build-timed-scheduler",
+      "target": "ZigLean.Conc.TimedSched",
+      "status": "passed"
+    },
+    {
+      "name": "kernel",
+      "target": "tests/roadmap/deadline-futex/Kernel.lean",
+      "status": "passed",
+      "theorem_count": 11
+    },
+    {
+      "name": "runtime",
+      "target": "tests/roadmap/deadline-futex/Runtime.lean",
+      "status": "passed"
+    }
+  ],
+  "evidence": {
+    "container_report": "/artifacts/c04-runtime-q1/deadline-runtime-vjpo61a0/report.json",
+    "host_runner_log": "/private/tmp/air2lean-C04-runtime-v4-local.log",
+    "verification": "ROOT reports all four stages passed; host log read confirms aggregate passed receipt; raw container report not independently read by child"
+  },
+  "premises": [
+    "bounded nonnegative signed-i96 timestamps",
+    "nondecreasing awake observations; equal observations permitted",
+    "explicit NoCancellation witness",
+    "single caller with explicit environment wake events",
+    "ordinary checked MemM operations"
+  ],
+  "claims_excluded": [
+    "translated public-source API support",
+    "source atomic message/view correspondence",
+    "native or OS correspondence",
+    "cancellation behavior",
+    "fairness",
+    "liveness or eventual completion",
+    "notifier or task completion"
+  ],
+  "documentation_change_after_qualification": "Only docs/deadline-runtime.md and this receipt were updated to record the result; runtime, proofs, recipe and dependencies retain frozen v4 hashes",
+  "separate_source_adapter": "separate owner, review and qualification; not covered by this receipt"
+}
