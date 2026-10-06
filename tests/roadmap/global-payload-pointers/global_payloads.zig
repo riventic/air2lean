@@ -43,7 +43,7 @@ test "constant payload pointers alias exact nested offsets and retain shared ide
     try std.testing.expectEqual(base + inner + @offsetOf(storage.Inner, "equal"), @intFromPtr(equalPtr()));
     try std.testing.expectEqual(@as(u16, 23), equalPtr().*);
     try std.testing.expect(optionalPtr() == sameOptionalPtr());
-    try std.testing.expect(optionalSlice().ptr == optionalPtr());
+    try std.testing.expect(@intFromPtr(optionalSlice().ptr) == @intFromPtr(optionalPtr()));
     try std.testing.expectEqual(@as(u8, 7), optionalRead());
     try std.testing.expectEqual(@as(u8, 19), smallRead());
     try std.testing.expectEqual(@as(u64, 41), wideRead());
