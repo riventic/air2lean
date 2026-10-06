@@ -1035,6 +1035,9 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   match fn with
   | .create => s!"Zig.Allocator.create {a} {size} {align}"
   | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+  | .allocSentinel =>
+    let sentinel := (fc.layouts[p]?.bind (·.sentinelByte)).getD 0
+    s!"Zig.Allocator.allocSentinel {a} {rv (arg 1)} ({sentinel}#8)"
   | .dupe => s!"Zig.Allocator.dupe {a} {size} {align} {fc.ptrAlign (arg 1)} {rv (arg 1)}"
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
   | .free =>
@@ -2428,8 +2431,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) : FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
-  let fc := { fc with fnBlocks, spawnSemantics, spawnFallbacks,
-      spawnFallbackMap := some spawnFallbackMap }.prepareInstUses
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))

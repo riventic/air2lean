@@ -58,6 +58,12 @@ model, with its unavailable target facts still unverified. No wildcard names, ve
 layouts or profiles exist. Duplicate/unused bindings, missing fields, invalid Lean identifiers,
 unknown policy values and incompatible same-name signatures are rejected before writing output.
 
+A known byte sentinel is part of the exact signature layout (`sentinel_byte` as a JSON
+number). A binding for `[:0]u8` cannot be reused for `[:42]u8` or missing byte metadata.
+Legacy signatures with no byte value retain their old serialized shape; newly exported
+known values require a fresh checked template. Runtime pointer/slice representations remain
+shared, so imported contracts still supply the actual memory and sentinel invariants.
+
 Models receive a right-associated tuple of arguments (one argument stays its own type;
 zero arguments use `Unit`) and return `Zig.MemM Result`. The imported contract has type
 `Zig.External.Contract Args Result`. Generated aliases check those types; generated evidence

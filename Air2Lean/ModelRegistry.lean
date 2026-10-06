@@ -92,11 +92,12 @@ private def shapeHead (t : Ty) : Ty := match t with
 
 private def shapeJson (t : Ty) (l : Layout) (children : Array Json) : Json :=
   Json.mkObj [("type", .str (reprStr (shapeHead t))), ("children", .arr children),
-    ("layout", Json.mkObj [("size", Lean.toJson l.size), ("align", Lean.toJson l.align),
+    ("layout", Json.mkObj ([("size", Lean.toJson l.size), ("align", Lean.toJson l.align),
       ("offsets", Lean.toJson l.offsets), ("pointer_align", Lean.toJson l.ptrAlign),
       ("sentinel", .bool l.sentinel), ("volatile", .bool l.isVolatile),
       ("allowzero", .bool l.allowzero), ("host_size", Lean.toJson l.hostSize),
-      ("bit_offset", Lean.toJson l.bitOffset)])]
+      ("bit_offset", Lean.toJson l.bitOffset)] ++
+      l.sentinelByte.toList.map (fun byte => ("sentinel_byte", Lean.toJson byte))))]
 
 private partial def shapeGo (types : Array Ty) (layouts : Array Layout) (id : TyId) :
     StateT ShapeState (Except String) Shape := do
