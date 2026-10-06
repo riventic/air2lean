@@ -151,7 +151,7 @@ def hash_bounded(path, cap, *, charge=None):
 def load_manifest(path):
     raw = read_bounded(path, LIMITS['max_file_bytes'])
     manifest = bounded_json(raw, LIMITS)
-    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits',))
+    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits', 'spawn_policy'))
     if type(manifest['schema']) is not int or manifest['schema'] != SCHEMA:
         raise Invalid('unsupported manifest schema')
     limits = dict(LIMITS)
@@ -163,6 +163,7 @@ def load_manifest(path):
         limits[key] = value
     if manifest['float_semantics'] not in ('ieee', 'compiler-rt'):
         raise Invalid('float_semantics must be ieee or compiler-rt')
+    spawn_policy(manifest)
     strings(manifest['source_closure'], True)
     strings(manifest['allowed_assumptions'])
     obj(manifest['components'], ('compiler_patch', 'runtime', 'toolchain'))
@@ -199,6 +200,13 @@ def load_manifest(path):
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
                 raise Invalid('invalid theorem strength')
     return manifest, raw, limits
+
+
+def spawn_policy(manifest):
+    policy = manifest.get('spawn_policy', 'available')
+    if not isinstance(policy, str) or policy not in ('available', 'fallible'):
+        raise Invalid('spawn_policy must be available or fallible')
+    return policy
 
 
 def validate_profile(profile):
@@ -408,7 +416,7 @@ def collect(path, *, air_boundaries=None):
         record['outcomes']['proof_exclusion'] = len(root['exclusions'])
         roots.append(record)
     report = {'schema': SCHEMA, 'kind': 'air2lean-project-evidence', 'manifest_sha256': digest(raw),
-              'float_semantics': manifest['float_semantics'], 'profile': profile, 'files': files, 'git': git_state(path.parent), 'roots': roots,
+              'float_semantics': manifest['float_semantics'], 'spawn_policy': spawn_policy(manifest), 'profile': profile, 'files': files, 'git': git_state(path.parent), 'roots': roots,
               'diagnostics': diagnostics, 'trust_scope': [
                   'Declared source closure is hashed; completeness is not established by compiler dependencies.',
                   'Input AIR does not attest source export or shipping backend correspondence.',
@@ -512,7 +520,7 @@ def translate(manifest, limits, data, report, translator, staging):
         for index, name in enumerate(root['air']):
             (air_dir / f'{index:06d}.json').write_bytes(data[name])
         output = rootdir / 'Gen.lean'
-        argv = [str(translator), str(air_dir), '-o', str(output), '--namespace', root['namespace'], '--prefix', root['prefix'], '--float-semantics', manifest['float_semantics']]
+        argv = [str(translator), str(air_dir), '-o', str(output), '--namespace', root['namespace'], '--prefix', root['prefix'], '--float-semantics', manifest['float_semantics'], '--spawn-policy', spawn_policy(manifest)]
         child_limits = dict(limits, max_output_bytes=min(limits['max_output_bytes'],
                             limits['max_total_output_bytes'] - generated_bytes,
                             limits['max_total_output_bytes'] - log_bytes))
@@ -575,16 +583,59 @@ def atomic_report(path, encoded, overwrite):
         temp.unlink(missing_ok=True)
 
 
+def verify_spawn_policy(manifest, stored):
+    effective = spawn_policy(manifest)
+    historical = 'spawn_policy' not in stored
+    if spawn_policy(stored) != effective:
+        raise Invalid('artifact spawn_policy differs from manifest')
+    # A pre-policy receipt can only describe the historical available default.
+    # New receipts also bind each actual translation invocation to that selection.
+    roots = stored.get('roots', [])
+    if not isinstance(roots, list):
+        raise Invalid('invalid artifact roots')
+    if not historical and ([r.get('id') if isinstance(r, dict) else None for r in roots]
+                           != [r['id'] for r in manifest['roots']]):
+        raise Invalid('artifact policy evidence requires complete root inventory')
+    for root in roots:
+        if not isinstance(root, dict):
+            raise Invalid('invalid artifact root')
+        stages = root.get('stages', {})
+        if not isinstance(stages, dict):
+            raise Invalid('invalid artifact stages')
+        translated = stages.get('translated', {})
+        if not isinstance(translated, dict):
+            raise Invalid('invalid artifact translation evidence')
+        argv = translated.get('argv', [])
+        if not isinstance(argv, list) or any(not isinstance(a, str) for a in argv):
+            raise Invalid('invalid artifact translation argv')
+        # The wrapper emits two positional arguments followed by option/value pairs.
+        # Values (notably --prefix) may themselves look like option names.
+        positions = []
+        i = 2
+        while i < len(argv):
+            if argv[i] not in ('-o', '--namespace', '--prefix', '--float-semantics', '--spawn-policy') or i + 1 >= len(argv):
+                raise Invalid('invalid artifact translation argv')
+            if argv[i] == '--spawn-policy':
+                positions.append(i)
+            i += 2
+        if not positions and historical:
+            continue
+        if (translated.get('status') != 'passed' or len(positions) != 1
+                or positions[0] + 1 >= len(argv) or argv[positions[0] + 1] != effective):
+            raise Invalid('artifact translation argv does not match spawn_policy')
+
+
 def verify(path, artifact):
     manifest, limits, data, current = collect(path)
     stored = bounded_json(read_bounded(path_under(artifact, 'report.json'), LIMITS['max_total_bytes']),
                           dict(LIMITS, max_file_bytes=LIMITS['max_total_bytes']))
     obj(stored, ('schema', 'kind', 'files', 'manifest_sha256', 'translator'),
-        ('float_semantics', 'profile', 'git', 'roots', 'diagnostics', 'trust_scope', 'outcome_note', 'capabilities'))
+        ('float_semantics', 'spawn_policy', 'profile', 'git', 'roots', 'diagnostics', 'trust_scope', 'outcome_note', 'capabilities'))
     if current['diagnostics'] or current['manifest_sha256'] != stored.get('manifest_sha256'):
         raise Invalid('manifest or inputs invalid/stale')
     if type(stored.get('schema')) is not int or stored.get('schema') != SCHEMA or stored.get('kind') != 'air2lean-project-evidence' or not isinstance(stored.get('files'), dict):
         raise Invalid('invalid artifact report')
+    verify_spawn_policy(manifest, stored)
     expected_names = set(current['files']) | {f'generated/{root["id"]}/Gen.lean' for root in manifest['roots']}
     if set(stored['files']) != expected_names:
         raise Invalid('artifact inventory differs from complete project output')
