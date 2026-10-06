@@ -7,7 +7,7 @@ cd "$repo_root"
 # This suite spans the review PR stack. A missing dependency is a failure, not a skipped test.
 for required in scripts/review-checks.sh tests/review/AllProofs.lean \
     tests/review/Concurrency.lean tests/review/Emitter.lean tests/review/Floats.lean tests/review/Memory.lean \
-    tests/review/Parser.lean tests/review/inputs.py tests/review/emitter.sh \
+    tests/review/Parser.lean tests/review/ErrorUnionAlignment.lean tests/review/ErrorUnionLayoutCheck.lean tests/review/inputs.py tests/review/emitter.sh \
     tests/review/exporter-checks.sh tests/review/exporter.zig; do
   if [ ! -f "$required" ]; then
     echo "review regressions: required file missing: $required" >&2
@@ -17,11 +17,11 @@ done
 
 bash scripts/review-checks.sh
 lake build Proofs air2lean
-for source in tests/review/AllProofs.lean tests/review/Floats.lean; do
+for source in tests/review/AllProofs.lean tests/review/Floats.lean tests/review/ErrorUnionAlignment.lean; do
   echo "== $source ==" >&2
   lake env lean "$source"
 done
-for source in tests/review/Concurrency.lean tests/review/Memory.lean; do
+for source in tests/review/Concurrency.lean tests/review/Memory.lean tests/review/ErrorUnionLayoutCheck.lean; do
   echo "== $source ==" >&2
   lake env lean --run "$source"
 done

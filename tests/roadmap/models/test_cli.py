@@ -152,6 +152,31 @@ def main(executable):
         write(tuple_data)
         invoke(["--model-registry", str(registry)])
         assert "Contract ((BitVec 8 × BitVec 8) × (BitVec 8))" in out.read_text()
+        # A source AIR mutation of only the byte qualifier must reject the old binding.
+        sentinel = json.loads(fixture.read_text())
+        sentinel["types"].append({"k": "ptr", "size": "slice", "const": False,
+            "child": 0, "abi_size": 16, "abi_align": 8, "ptr_align": 1,
+            "sentinel": True, "sentinel_byte": "0"})
+        sentinel["params"], sentinel["ret"] = [2], 2
+        sentinel["body"][0]["ty"] = sentinel["body"][1]["ty"] = 2
+        (air / "client.json").write_text(json.dumps(sentinel))
+        invoke(["--model-registry-template"])
+        sentinel_data = json.loads(out.read_text())
+        sentinel_model = sentinel_data["models"][0]
+        assert sentinel_model["signature"]["params"][0]["layout"]["sentinel_byte"] == 0
+        assert sentinel_model["signature"]["return"]["layout"]["sentinel_byte"] == 0
+        sentinel_model.update(proved_fields("polyIdentity", "polyContract", "polyEvidence"))
+        write(sentinel_data)
+        invoke(["--model-registry", str(registry)])
+        assert '\"sentinel_byte\":0' in out.read_text()
+        for value in ("42", None):
+            mutated = copy.deepcopy(sentinel)
+            if value is None:
+                del mutated["types"][2]["sentinel_byte"]
+            else:
+                mutated["types"][2]["sentinel_byte"] = value
+            (air / "client.json").write_text(json.dumps(mutated))
+            fail(sentinel_data, "incompatible signature/layout")
 
     print("external model CLI regressions passed")
 
