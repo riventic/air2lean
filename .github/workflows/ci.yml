@@ -175,6 +175,26 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      - name: Stable scalar proof API regressions
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          proof_api_dir="$RUNNER_TEMP/proof-api"
+          mkdir -p "$proof_api_dir/tmp"
+          export TMPDIR="$proof_api_dir/tmp"
+          python3 -I -B tests/roadmap/proof-api/test_report.py 2>&1 | tee "$proof_api_dir/report.log"
+          python3 -I -B tests/roadmap/proof-api/test_cli.py "$PWD/.lake/build/bin/air2lean" \
+            --retain "$proof_api_dir/Generated.lean" 2>&1 | tee "$proof_api_dir/cli.log"
+          for client in Generated.client Generated.renumbered.client Generated.unrelated.client; do
+            lake env lean "$proof_api_dir/$client.lean" 2>&1 | tee "$proof_api_dir/$client.log"
+          done
+          mutation_status=0
+          lake env lean "$proof_api_dir/Generated.changed.client.lean" \
+            > "$proof_api_dir/mutation.log" 2>&1 || mutation_status=$?
+          cat "$proof_api_dir/mutation.log"
+          test "$mutation_status" -eq 1
+          grep -Fq 'not definitionally equal' "$proof_api_dir/mutation.log"
+
       - name: Public exporter filename qualification
         if: ${{ !matrix.mutate }}
         env:
@@ -519,6 +539,15 @@ jobs:
           else
             tests/roadmap/dispatch/check.sh --native-only
           fi
+
+      - name: Local-place parent pointer regressions
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_LOCAL_PARENT_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_LOCAL_PARENT_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_LOCAL_PARENT_ZIG_STOCK: zig
+        run: bash tests/roadmap/local-parent/check.sh
 
       # The complete review stack is required. Version-neutral parser/runtime regressions
       # and aggregate proofs use the modules selected above; exporter fidelity uses this Zig.

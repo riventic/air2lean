@@ -196,9 +196,19 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 | `@intFromPtr(p)` | `bitcast` pointer → integer | `Zig.ptrAddr p` (the block's address plus the offset) |
 | `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
-| `@fieldParentPtr("f", p)` | `field_parent_ptr` | `p.add (-offset)` |
+| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
+
+A local-place `@fieldParentPtr` recovers the original local allocation and its enclosing
+path by removing exactly the matching terminal field of an ordinary (`auto` or `extern`)
+struct. The field index, container and child types must match the recorded projection.
+Same-pointee qualifier casts preserve the path, and a mutation through the recovered parent
+updates the original local. A later escaping use still lowers that allocation to stack
+memory. Packed/union parents, bit-pointers, slice-field recovery, nullable or nonsingle
+pointers and pointee reinterpretation are outside this local fragment. Recovery preserves
+const and volatile qualifiers. The source and synthetic qualification recipe is in
+[`tests/roadmap/local-parent/README.md`](../tests/roadmap/local-parent/README.md).
 
 A **packed struct** is a Lean `structure` with a generated `Zig.Packed S n` instance (`ZigLean/Packed.lean`): `toBits` puts field 0 in the lowest bits, `ofBits` reads the fields back. A field is an integer, a `bool`, an enum (its tag integer; each enum has a `Zig.Packed` instance) or a packed struct; other fields are outside the subset. A packed struct constant is its backing integer (`Zig.Packed.ofBits`); the exporter writes some as `.{ .f = v, … }`, which `Json.lean`'s `parsePackedLit` reads. `valid` is `false` for bits with a tag value without a name of an exhaustive enum, in any field: where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed` union read), `Zig.Packed.ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. In memory, a packed struct is its backing integer. A **bit-pointer** (`&p.f` of a packed struct field, `*align(a:o:h) T`) points to the host integer: `Zig.loadBits T h align o p` and `Zig.storeBits` read and write the `n` bits at bit `o` of the `h`-byte host integer. `storeBits` reads the host integer first, so it throws `.unspecified` if a byte of the host integer is `undef`. The undefined padding bits in the last byte of a packed struct whose backing integer is not `8h` bits (`Byte.part`) read as 0 (`Zig.loadHost`), and `storeBits` keeps them undefined. A field bit in the undefined part throws `.unspecified`. A store of `undefined` to a packed field is outside the subset. The host integer must be `h` bytes as a `u(8h)` in the model: 1, 2, 4, 8 or a multiple of 16 bytes.
 
@@ -406,3 +416,69 @@ match {v} with
 ```
 
 `catch` does not use `try`: it lowers to `is_err`/`is_non_err` plus a `cond_br`, so it becomes a plain `if`/`else` on `Zig.isNonErr`/`Zig.isErr`, unwrapping with `Zig.unwrapPayload`/`Zig.unwrapErr` (`ZigLean/Basic.lean`) in each arm.
+
+
+## Stable scalar proof interface (opt-in)
+
+`--proof-api` adds a bounded P07 interface for named, checked, straight-line scalar
+functions. This initial slice covers integer arguments/constants, checked/wrapping/
+saturating add/subtract/multiply, bit and/or/xor, not/negation, integer casts,
+truncation/bitcasts and return. Calls, control flow, memory, globals, floats and
+anonymous functions receive no interface or partial semantic fingerprint. Their
+ordinary definitions continue to emit normally. Default generation is unchanged.
+
+Each selected full source name receives an injective UTF-8 byte encoding:
+`air2lean_api_<byte>_<byte>..._model` and the corresponding `_unfold` theorem.
+The model is an abbreviation of the actual emitted function. The theorem unfolds
+that abbreviation to the function's actual emitted body, with explicit arguments,
+and is proved by `rfl`; it introduces neither an axiom nor a replacement semantics.
+These names are reserved before ordinary declaration allocation. A source function
+that would collide is renamed by the existing declaration allocator. Unrelated
+anonymous instantiations therefore do not rename the public scalar interface.
+
+Use the `model` and `unfold` fields of the generated `air2lean-proof-api` JSON
+record to find these names, rather than depending on temporary instruction/local
+names. A client can use `rw [Namespace.<unfold>]` to enter the generated model.
+The unfolded expression remains implementation detail: this slice stabilizes the
+entry boundary, not every intermediate expression or a general step-rule calculus.
+
+The existing `scripts/normalize-generated.py report Gen.lean AIR_DIR report.json`
+indexes these records under `proof_api.interfaces`. `semantic_sha256` hashes
+canonical JSON of normalized scalar IR facts plus checked profile/float assumptions.
+It records structured operation/mode, typed constants, structural scalar types and
+layouts, parameter order and canonical instruction references. It hashes neither
+emitted stdout nor pretty-print whitespace. Raw AIR and generated artifact hashes
+remain separate. Source-line/debug maps also remain separate; exporter line numbers
+are retained as supplied and are not claimed to be absolute source-file locations.
+
+The report checks record outer fields, identity names and format versions, and
+rejects duplicate source identities and interface name collisions. It hashes the
+translator-emitted nested facts without validating their meaning; imported reports
+are not semantic certificates. Semantics, checked mode, scalar layouts or profile changes affect
+the fingerprint. Harmless instruction renumbering and unrelated instantiations do
+not. This fingerprint is a change detector for this bounded normalized model, not
+a semantic-equivalence, compiler-correspondence or shipping-binary certificate.
+A changed fingerprint requires reviewing and rebuilding affected client proofs.
+
+Portable report tests do not invoke a translator or compiler:
+
+```sh
+python3 -B tests/roadmap/proof-api/test_report.py
+```
+
+ROOT validation uses the built translator and retains its actual generated output
+and a downstream arithmetic proof candidate, then kernel checks that candidate:
+
+```sh
+python3 tests/roadmap/proof-api/test_cli.py .lake/build/bin/air2lean \
+  --retain /tmp/Generated.lean
+lake env lean /tmp/Generated.client.lean
+lake env lean /tmp/Generated.renumbered.client.lean
+lake env lean /tmp/Generated.unrelated.client.lean
+# This identical client contract must fail after add is changed to subtract:
+if lake env lean /tmp/Generated.changed.client.lean; then exit 1; fi
+```
+
+The CLI driver checks renumbered AIR and an unrelated generic instance, then a
+semantic mutation. Neither this driver nor synthetic report tests are qualification
+evidence until the actual translator and kernel checks have completed.

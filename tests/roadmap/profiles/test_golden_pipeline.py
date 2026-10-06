@@ -132,7 +132,7 @@ class ReceiptTests(unittest.TestCase):
 
     def test_directory_bad_hash_leaves_existing_overlay_untouched(self):
         second = self.air / "two.json"
-        second.write_text(json.dumps(CURRENT))
+        second.write_text(json.dumps(dict(CURRENT, name="profile.second")))
         HELPER["write_report"](self.output, self.air, self.report)
         second.write_text(json.dumps(dict(CURRENT, name="changedAfterReceipt")))
         destination = self.directory / "normalized"
@@ -173,7 +173,7 @@ class ReceiptTests(unittest.TestCase):
 
     def test_directory_helpers_and_receipt_load_once_each_file_normalizes_once(self):
         second = self.air / "two.json"
-        second.write_text(json.dumps(CURRENT))
+        second.write_text(json.dumps(dict(CURRENT, name="profile.second")))
         HELPER["write_report"](self.output, self.air, self.report)
         NORMALIZER["load_helpers"].cache_clear()
         with mock.patch.object(runpy, "run_path", wraps=runpy.run_path) as load:
