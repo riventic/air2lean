@@ -140,6 +140,8 @@ def main : IO Unit := do
   for name in ["Bad", "Other"] do
     check s!"propagate {name} and preserve union" (value (errorPreserved name))
       (some (.ok (.error name, .error name)))
+  check "foreign error name fails the finite source domain" (value (errorPreserved "Foreign"))
+    (some (.error .unspecified))
   check "success runs defer only" (value (cleanupResult (.ok 9))) (some (.ok (.ok 9, 1, 0)))
   check "error runs defer and errdefer" (value (cleanupResult (.error "Bad")))
     (some (.ok (.error "Bad", 1, 1)))

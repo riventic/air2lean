@@ -1,4 +1,3 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"unverified","backend":"unverified","build_mode":"unverified","cpu":"unverified","endian":"little","error_layout":"reference-model","error_set_bits":16,"error_tracing":null,"export_stage":"unverified","features":[],"float_mode":"unverified","name":"legacy-abi64-le","pointer_bits":64,"schema":11,"target_triple":"unverified","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -16,9 +15,9 @@ inductive cleanupExit where
 def cleanup (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (BitVec 8)) := do
   let e ← ((do
     Zig.loadDiscardBytes 4 2 p0
-    match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0 with
+    match ← Zig.tryPayloadPtr (BitVec 8) 2 p0 with
     | .error _ => (do
-      let i5 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
+      let i5 ← Zig.errCodeAt (BitVec 8) 2 p0
       let i6 ← Zig.load (BitVec 32) 4 p2
       let i7 ← Zig.add false i6 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 p2 i7
@@ -46,9 +45,9 @@ inductive coldPayloadExit where
 def coldPayload (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     Zig.loadDiscardBytes 4 2 p0
-    match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0 with
+    match ← Zig.tryPayloadPtr (BitVec 8) 2 p0 with
     | .error _ => (do
-      let i4 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
+      let i4 ← Zig.errCodeAt (BitVec 8) 2 p0
       let i5 ← Zig.load (BitVec 32) 4 p1
       let i6 ← Zig.add false i5 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 p1 i6
@@ -69,9 +68,9 @@ inductive payload64Exit where
 def payload64 (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     Zig.loadDiscardBytes 16 8 p0
-    match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 64) 8 p0 with
+    match ← Zig.tryPayloadPtr (BitVec 64) 8 p0 with
     | .error _ => (do
-      let i3 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 64) 8 p0
+      let i3 ← Zig.errCodeAt (BitVec 64) 8 p0
       let i4 ← pure ((.error i3) : Except Zig.ErrName (Zig.Ptr))
       pure (.ret i4))
     | .ok v2 => (do
@@ -89,9 +88,9 @@ inductive payload8Exit where
 def payload8 (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     Zig.loadDiscardBytes 4 2 p0
-    match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0 with
+    match ← Zig.tryPayloadPtr (BitVec 8) 2 p0 with
     | .error _ => (do
-      let i3 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
+      let i3 ← Zig.errCodeAt (BitVec 8) 2 p0
       let i4 ← pure ((.error i3) : Except Zig.ErrName (Zig.Ptr))
       pure (.ret i4))
     | .ok v2 => (do
@@ -109,16 +108,16 @@ inductive writeAliasExit where
 def writeAlias (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Except Zig.ErrName (BitVec 8)) := do
   let e ← ((do
     Zig.loadDiscardBytes 4 2 p0
-    match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0 with
+    match ← Zig.tryPayloadPtr (BitVec 8) 2 p0 with
     | .error _ => (do
-      let i4 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
+      let i4 ← Zig.errCodeAt (BitVec 8) 2 p0
       let i5 ← pure ((.error i4) : Except Zig.ErrName (BitVec 8))
       pure (.ret i5))
     | .ok v3 => (do
       Zig.loadDiscardBytes 4 2 p0
-      match ← Zig.finiteTryPayloadPtr (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0 with
+      match ← Zig.tryPayloadPtr (BitVec 8) 2 p0 with
       | .error _ => (do
-        let i9 ← Zig.finiteErrCodeAt (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
+        let i9 ← Zig.errCodeAt (BitVec 8) 2 p0
         let i10 ← pure ((.error i9) : Except Zig.ErrName (BitVec 8))
         pure (.ret i10))
       | .ok v8 => (do

@@ -42,8 +42,8 @@ private def nestedErrorBody : Nat → Array Json
       node (first + 1) "wrap_errunion_err" 5 #[ref first],
       node (first + 2) "ret" 6 #[ref (first + 1)]]
 
--- A scalar-only signature whose pointer try is the explicit reason it uses MemM.
-private def scalarTryFile : Json :=
+-- Retained unsafe address recovery: now an explicit provenance-rejection control.
+private def unsafeScalarTryFile : Json :=
   let usize := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
     ("abi_size", num 8), ("abi_align", num 8)]
   let unit := obj [("ty", num 7), ("val", .str "{}")]
@@ -52,6 +52,21 @@ private def scalarTryFile : Json :=
     ("params", toJson (#[8] : Array Nat)), ("ret", num 7),
     ("body", .arr #[node 0 "arg" 8 #[] [("param", num 0)], node 1 "bitcast" 3 #[ref 0],
       node 2 "try_ptr" 4 #[ref 1] [("body", .arr #[node 3 "trap" 6])],
+      node 4 "ret" 6 #[unit]])]
+
+-- A typed null is valid as an allowzero pointer value. Dereferencing it via
+-- try_ptr still fails illegal at runtime; try_ptr alone classifies this scalar signature.
+private def scalarTryFile : Json :=
+  let usize := obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64),
+    ("abi_size", num 8), ("abi_align", num 8)]
+  let unit := obj [("ty", num 7), ("val", .str "{}")]
+  let ts := (types.set! 3 ((pointer 2 2).setObjVal! "allowzero" (.bool true))).push usize
+  let nullPtr := obj [("ty", num 3), ("ptr", obj [("null", .bool true), ("off", num 0)])]
+  obj [("schema", num 11), ("zig_version", .str "0.16.0"), ("target_endian", .str "little"),
+    ("name", .str "scalar"), ("types", .arr ts),
+    ("params", toJson (#[8] : Array Nat)), ("ret", num 7),
+    ("body", .arr #[node 0 "arg" 8 #[] [("param", num 0)],
+      node 2 "try_ptr" 4 #[nullPtr] [("body", .arr #[node 3 "trap" 6])],
       node 4 "ret" 6 #[unit]])]
 
 private def process (j : Json) : Except String Func := do
@@ -192,6 +207,8 @@ def main (args : List String) : IO Unit := do
       match checkOp bare 0 i.ty (.tryPtr p #[]) with
       | .ok _ => throw (IO.userError "bare checkOp skipped uncached fallthrough validation")
       | .error e => require ((e.splitOn "must exit").length > 1) s!"bare checker diagnostic changed: {e}"
+  reject unsafeScalarTryFile "integer recovery into symbolic error storage"
+    "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
   let scalar ← accept scalarTryFile
   require scalar.usesMemoryLocally "pointer try did not classify a scalar-signature function as memory"
   require (!scalar.syncLocally) "pointer try alone must not classify as a synchronization op"
@@ -228,7 +245,7 @@ def main (args : List String) : IO Unit := do
     require (emitStmts bare #[] f.body.toList == emitStmts cached #[] f.body.toList)
       "bare block context did not prepare target membership safely"
   let generated := emit #[hot, cold, constPointer, resumes, nestedResumes, nestedValue, nestedErrors] "SyntheticTry" "" .ieee
-  require ((generated.splitOn "Zig.tryPayloadPtr").length == 11) "pointer try did not use the tag-only runtime helper"
+  require ((generated.splitOn "Zig.finiteTryPayloadPtr").length == 11) "pointer try did not use the finite tag-only runtime helper"
   IO.FS.writeFile output (generated ++ "\n" ++
 "open Zig\nderiving instance DecidableEq for Except\nprivate def observe (f : Ptr → MemM (Except ErrName Ptr)) (err : Option ErrName) : MemM (Bool × Except ErrName (BitVec 8)) := do\n  let p ← alloc .heap 4 2\n  match err with\n  | some e => store 2 p (Except.error e : Except ErrName (BitVec 8))\n  | none => let _ ← errSetOk (BitVec 8) 2 p; pure ()\n  match ← f p with\n  | .error e => pure (err == some e, ← load (Except ErrName (BitVec 8)) 2 p)\n  | .ok q =>\n    store 1 q (99#8)\n    pure (q == errPayloadPtr (BitVec 8) p, ← load (Except ErrName (BitVec 8)) 2 p)\nprivate def value (c : MemM α) := (c.run {}).run.map (·.map Prod.fst)\ndef main : IO Unit := do\n  for f in [SyntheticTry.hot, SyntheticTry.cold, SyntheticTry.resumes, SyntheticTry.nestedResumes, SyntheticTry.nestedValue, SyntheticTry.nestedErrors] do\n    unless value (observe f none) = some (.ok (true, .ok 99)) do throw (IO.userError \"alias/undefined-payload regression\")\n    for e in [\"Bad\", \"Other\"] do\n      unless value (observe f (some e)) = some (.ok (true, .error e)) do throw (IO.userError \"error preservation regression\")\n  IO.println \"synthetic pointer-try semantic regressions passed\"\n")
   writeLoadCases output

@@ -120,3 +120,17 @@ Compiler-free provenance regressions:
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/try-pointers -v
 ```
+
+Current finite-error storage integration keeps every retained AIR file and
+`provenance.json` unchanged. The historical generated file is retained at
+`origin/TryPointers/Gen.lean`; `emitter-integration.json` binds that identity, the
+current emitter, and the exact current generated file as inputs only. The gate
+cannot rewrite the historical receipt in this mode. Both retained and fresh output
+comparisons still compare the full body with current `TryPointers/Gen.lean`.
+Current generated pointer operations enforce the AIR domain `Bad`/`Other`.
+The generated-program ownership contracts therefore require any present error to
+belong to that domain; payload addresses, full-object/tag reads, frame ownership,
+and cleanup results retain the same guarantees. Generic tag-only helper rules
+remain unrestricted. Runtime controls retain every previous oracle and separately
+check that a foreign symbolic error fails with `unspecified`. Compilation and
+runtime qualification of this caller update remain ROOT's responsibility.

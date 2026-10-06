@@ -165,6 +165,68 @@ def errOfBytes (bs : Array Byte) : Result (Option ErrName) :=
   | some (.errFrag e _), _ => if bs.extract 0 2 == errBytes (some e) then pure (some e) else throw .unspecified
   | _, _ => throw .unspecified
 
+/-- A declared finite error domain. Its ordinals are witnesses of a bounded domain,
+not the compiler's numeric error codes: names retain compilation-independent identity. -/
+structure ErrorDomain where
+  names : Array ErrName
+  unique : names.toList.Nodup
+  bounded : names.size ≤ 65535
+
+/-- The finite semantic values on which the storage dictionary is lawful. -/
+abbrev FiniteError (d : ErrorDomain) := { e : ErrName // d.names.contains e = true }
+
+/-- An explicit dictionary, never a global `Enc String` instance. A foreign name cannot be
+stored as a valid error. Zero and malformed/mixed name fragments cannot decode as `E`. -/
+def errorEnc (d : ErrorDomain) : Enc ErrName where
+  size := 2
+  align := 2
+  encode e := if d.names.contains e then errBytes (some e) else #[.undef, .undef]
+  decode bs := do
+    match ← errOfBytes bs with
+    | some e => if d.names.contains e then pure e else throw .unspecified
+    | none => throw .unspecified
+
+/-- `?E` shares `E`'s two-byte representation. Its only null value is the zero code. -/
+def optionalErrorEnc (d : ErrorDomain) : Enc (Option ErrName) where
+  size := 2
+  align := 2
+  encode
+    | none => errBytes none
+    | some e => (errorEnc d).encode e
+  decode bs := do
+    match ← errOfBytes bs with
+    | none => pure none
+    | some e => if d.names.contains e then pure (some e) else throw .unspecified
+
+instance (d : ErrorDomain) : Enc (FiniteError d) where
+  size := 2
+  align := 2
+  encode e := errBytes (some e.val)
+  decode bs := do
+    match ← errOfBytes bs with
+    | some e => if h : d.names.contains e = true then pure ⟨e, h⟩ else throw .unspecified
+    | none => throw .unspecified
+
+instance (priority := high) (d : ErrorDomain) : Enc (Option (FiniteError d)) where
+  size := 2
+  align := 2
+  encode
+    | none => errBytes none
+    | some e => errBytes (some e.val)
+  decode bs := do
+    match ← errOfBytes bs with
+    | none => pure none
+    | some e => if h : d.names.contains e = true then pure (some ⟨e, h⟩) else throw .unspecified
+
+/-- Select a payload dictionary without making its semantic Lean type globally encodable. -/
+def Enc.optionWith {α : Type} (enc : Enc α) : Enc (Option α) :=
+  letI : Enc α := enc
+  inferInstance
+
+def Enc.vectorWith {α : Type} (n : Nat) (enc : Enc α) : Enc (Vector α n) :=
+  letI : Enc α := enc
+  inferInstance
+
 /-- The offsets of the error code and the payload in `E!T`, from the size and alignment of
 `T` (the compiler's rule): a zero-sized payload has offset 0; otherwise the payload
 comes first when its alignment is at least the error code's alignment (2). -/
@@ -191,6 +253,38 @@ instance {α : Type} [Enc α] : Enc (Except ErrName α) where
     match ← errOfBytes (bs.extract eo (eo + 2)) with
     | none => .ok <$> Enc.decode (bs.extract po (po + Enc.size α))
     | some e => pure (.error e)
+
+/-- Explicit payload selection for legacy symbolic error unions. -/
+def Enc.errorUnionWith {α : Type} (enc : Enc α) : Enc (Except ErrName α) :=
+  letI : Enc α := enc
+  inferInstance
+
+/-- A declared finite error union additionally checks its error-domain contract on load.
+The code/payload offsets and existing `Except ErrName` API remain unchanged. -/
+def errorUnionEnc {α : Type} (d : ErrorDomain) (payload : Enc α) : Enc (Except ErrName α) :=
+  let base := Enc.errorUnionWith payload
+  { base with
+    encode := fun v => match v with
+      | .ok _ => base.encode v
+      | .error e => if d.names.contains e then base.encode v else Array.replicate base.size .undef
+    decode := fun bs => do
+      let v ← base.decode bs
+      match v with
+      | .ok _ => pure v
+      | .error e => if d.names.contains e then pure v else throw .unspecified }
+
+/-- Query `?E` through its shared error code, using the pointer's declared alignment. -/
+def optionalErrorIsSome (d : ErrorDomain) (align : Nat) (p : Ptr) : MemM Bool := do
+  pure (← (optionalErrorEnc d).decode (← loadBytes p 2 align)).isSome
+
+/-- A finite-domain contract for values read by pointer-form error-union operations. -/
+def requireError (d : ErrorDomain) (e : ErrName) : Result ErrName :=
+  if d.names.contains e then pure e else throw .unspecified
+
+def requireErrorUnion {α : Type} (d : ErrorDomain) (v : Except ErrName α) : Result (Except ErrName α) :=
+  match v with
+  | .ok _ => pure v
+  | .error e => if d.names.contains e then pure v else throw .unspecified
 
 /-- `is_err_ptr`: does the error union `E!α` at `p` (alignment `align`) hold an error? -/
 def errIsErrAt (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Bool := do
@@ -222,6 +316,16 @@ def errSetOk (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
   let (eo, po) := errUnionOffsets (Enc.size α) (Enc.align α)
   storeBytes (p.add eo) (Nat.min align 2) (errBytes none)
   pure (p.add po)
+
+def finiteErrIsErrAt (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Bool := do
+  let (eo, _) := errUnionOffsets (Enc.size α) (Enc.align α)
+  pure (← (optionalErrorEnc d).decode (← loadBytes (p.add eo) 2 (Nat.min align 2))).isSome
+
+def finiteErrCodeAt (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM ErrName := do
+  requireError d (← errCodeAt α align p)
+
+def finiteTryPayloadPtr (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM (Except ErrName Ptr) := do
+  requireErrorUnion d (← tryPayloadPtr α align p)
 
 /-! ## Structs: helpers for the generated instances -/
 

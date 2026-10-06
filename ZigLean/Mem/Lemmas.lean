@@ -594,6 +594,89 @@ instance : LawfulEnc Ptr where
     have hr : Array.finRange 8 = #[0, 1, 2, 3, 4, 5, 6, 7] := by decide
     simp [Enc.encode, Enc.decode, hr, pure, ExceptT.pure, ExceptT.mk]
 
+/-! ## Finite error storage -/
+
+@[simp] theorem errOfBytes_errBytes (e : Option ErrName) :
+    errOfBytes (errBytes e) = pure e := by
+  cases e <;> simp [errOfBytes, errBytes, pure, ExceptT.pure, ExceptT.mk]
+
+theorem errorEnc_size_encode (d : ErrorDomain) (e : ErrName) :
+    ((errorEnc d).encode e).size = 2 := by
+  change (if d.names.contains e then errBytes (some e) else #[.undef, .undef]).size = 2
+  split <;> rfl
+
+/-- The string API is lawful only on the declared finite domain. -/
+theorem errorEnc_roundtrip (d : ErrorDomain) (e : ErrName) (h : d.names.contains e = true) :
+    (errorEnc d).decode ((errorEnc d).encode e) = pure e := by
+  change (errOfBytes (if d.names.contains e then errBytes (some e) else #[.undef, .undef]) >>= fun code =>
+    match code with
+    | some name => if d.names.contains name then pure name else throw .unspecified
+    | none => throw .unspecified) = pure e
+  have hm : e ∈ d.names := Array.contains_iff_mem.mp h
+  simp [h, hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure,
+    ExceptT.mk, ExceptT.bindCont]
+
+theorem optionalErrorEnc_roundtrip (d : ErrorDomain) (e : Option ErrName)
+    (h : ∀ x, e = some x → d.names.contains x = true) :
+    (optionalErrorEnc d).decode ((optionalErrorEnc d).encode e) = pure e := by
+  cases e with
+  | none =>
+    change (errOfBytes (errBytes none) >>= fun code =>
+      match code with
+      | none => pure none
+      | some name => if d.names.contains name then pure (some name) else throw .unspecified) = pure none
+    simp [errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure,
+      ExceptT.mk, ExceptT.bindCont]
+  | some x =>
+    change (errOfBytes (if d.names.contains x then errBytes (some x) else #[.undef, .undef]) >>= fun code =>
+      match code with
+      | none => pure none
+      | some name => if d.names.contains name then pure (some name) else throw .unspecified) = pure (some x)
+    have hm : x ∈ d.names := Array.contains_iff_mem.mp (h x rfl)
+    simp [h x rfl, hm, errOfBytes_errBytes, bind,
+      pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+instance (d : ErrorDomain) : LawfulEnc (FiniteError d) where
+  size_encode _ := rfl
+  decode_encode e := by
+    have hm : e.val ∈ d.names := Array.contains_iff_mem.mp e.property
+    simp [Enc.encode, Enc.decode, errOfBytes_errBytes, e.property, hm, bind, pure,
+      ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+instance (d : ErrorDomain) : LawfulEnc (Option (FiniteError d)) where
+  size_encode e := by cases e <;> rfl
+  decode_encode e := by
+    cases e with
+    | none => simp [Enc.encode, Enc.decode, errOfBytes_errBytes, bind, pure,
+        ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    | some x =>
+      have hm : x.val ∈ d.names := Array.contains_iff_mem.mp x.property
+      simp [Enc.encode, Enc.decode, errOfBytes_errBytes, x.property, hm,
+        bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+theorem finiteError_encode_injective (d : ErrorDomain) :
+    Function.Injective (Enc.encode : FiniteError d → Array Byte) := by
+  intro x y h
+  have := congrArg (Enc.decode : Array Byte → Result (FiniteError d)) h
+  simp only [LawfulEnc.decode_encode] at this
+  exact Except.ok.inj (Option.some.inj this)
+
+theorem optionalFiniteError_encode_injective (d : ErrorDomain) :
+    Function.Injective (Enc.encode : Option (FiniteError d) → Array Byte) := by
+  intro x y h
+  have := congrArg (Enc.decode : Array Byte → Result (Option (FiniteError d))) h
+  simp only [LawfulEnc.decode_encode] at this
+  exact Except.ok.inj (Option.some.inj this)
+
+@[simp] theorem errorEnc_reject_zero (d : ErrorDomain) :
+    (errorEnc d).decode #[.int 0, .int 0] = throw .unspecified := by
+  change (errOfBytes #[.int 0, .int 0] >>= fun code =>
+    match code with
+    | some name => if d.names.contains name then pure name else throw .unspecified
+    | none => throw .unspecified) = throw .unspecified
+  simp [errOfBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont, throw, throwThe, MonadExceptOf.throw]
+
 /-! ## Error unions -/
 
 theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by

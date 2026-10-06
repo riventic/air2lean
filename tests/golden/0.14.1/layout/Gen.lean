@@ -1,3 +1,4 @@
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"gnu","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"westmere","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","aes","avx","avx2","bmi","bmi2","cmov","crc32","cx16","cx8","f16c","fma","fxsr","idivq_to_divl","lzcnt","macrofusion","mmx","movbe","no_bypass_delay_mov","nopl","pclmul","popcnt","rdrnd","sahf","sse","sse2","sse3","sse4_1","sse4_2","ssse3","vzeroupper","x87","xsave"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.7.0.14...7.0.14-gnu.2.39","zig_version":"0.14.1"}}
 import ZigLean
 
 
@@ -584,7 +585,7 @@ inductive bumpExit where
 def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   let e ← ((do
     match ← ((do
-      let i2 ← Zig.load (Except Zig.ErrName (BitVec 8)) 2 p0
+      let i2 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 8)) := Zig.errorUnionEnc (⟨#["Empty", "TooBig"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 8))); Zig.load (Except Zig.ErrName (BitVec 8)) 2 p0)
       let i3 ← pure (Zig.isNonErr i2)
       if i3 then (do
         let i5 ← pure (Zig.errPayloadPtr (BitVec 8) p0)
@@ -593,7 +594,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
         Zig.store (α := BitVec 8) 1 i5 i7
         pure .br1)
       else (do
-        let _i10 ← Zig.errCodeAt (BitVec 8) 2 p0
+        let _i10 ← Zig.finiteErrCodeAt (⟨#["Empty", "TooBig"], by decide, by decide⟩ : Zig.ErrorDomain) (BitVec 8) 2 p0
         pure .br1)) : Zig.MM bumpLocals bumpExit) with
     | .br1 => (do
       pure .ret)
@@ -647,9 +648,9 @@ def bumpDigit (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
   let e ← ((do
     let i1 ← pure (← get).r
     let i2 ← Zig.callR (digit p0)
-    Zig.store (α := Except Zig.ErrName (BitVec 8)) 2 i1 i2
+    (letI : Zig.Enc (Except Zig.ErrName (BitVec 8)) := Zig.errorUnionEnc (⟨#["Empty", "TooBig"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 8))); Zig.store (α := Except Zig.ErrName (BitVec 8)) 2 i1 i2)
     let _i4 ← Zig.callM (bump i1)
-    let i5 ← Zig.load (Except Zig.ErrName (BitVec 8)) 2 i1
+    let i5 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 8)) := Zig.errorUnionEnc (⟨#["Empty", "TooBig"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 8))); Zig.load (Except Zig.ErrName (BitVec 8)) 2 i1)
     let i6 ← pure (Zig.isNonErr i5)
     match ← ((do
       if i6 then (do

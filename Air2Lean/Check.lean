@@ -41,6 +41,81 @@ def isMatchingConstraint (outputs : Nat) (c : String) : Bool :=
   | some k => k < outputs
   | none => false
 
+/-- Validate immutable declared error names in linear expected time, without repeatedly
+running quadratic list deduplication for each instruction that references a domain. -/
+def validErrorDomainNames (names : Array String) : Bool := Id.run do
+  if names.size > 65535 then return false
+  let mut seen : Std.HashSet String := {}
+  for name in names do
+    if name.isEmpty || seen.contains name then return false
+    seen := seen.insert name
+  return true
+
+/-- A value's storage can contain symbolic error fragments. Pointer pointees are checked
+separately: the representation of the pointer itself does not encode its child's bytes. -/
+partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId := #[]) : Bool :=
+  if seen.contains id then false
+  else if seen.size ≥ 256 then true
+  else match types[id]? with
+    | some (.errorSet _) | some (.errorUnion ..) => true
+    | some (.ptr ..) => false
+    | some ty => (childTys ty).any fun child => hasErrorStorage types child (seen.push id)
+    | none => false
+
+/-- Unlike byte-storage classification, capability classification follows pointer
+edges. Unknown, cyclic and exhausted type traversals cannot prove a safe view. -/
+private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
+    (seen : Array TyId := #[]) : Option (Nat × Bool) := do
+  if fuel == 0 || seen.contains id then none
+  let ty ← types[id]?
+  let count ← match ty with
+    | .other _ | .errorSet none => none
+    | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .errorUnion .. => some 2
+    | .struct _ _ fields => some fields.size
+    | .union _ _ tag fields => some (tag.toArray.size + fields.size)
+    | .tuple children => some children.size
+    | _ => some 0
+  let mut remaining := fuel - 1
+  if count > remaining then none
+  let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
+  for child in childTys ty do
+    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
+    remaining := next
+    symbolic := symbolic || childCap
+  return (remaining, symbolic)
+
+private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
+  (errorCapabilityScan types id 1024).map (·.2)
+
+/-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
+is used only for global aliases whose strict capability traversal could not finish;
+casts and parent recovery retain the strict cycle-rejecting traversal. -/
+private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : Bool := Id.run do
+  let mut pending : List TyId := [root, child]
+  let mut visited : Std.HashSet TyId := {}
+  for step in [:1024] do
+    match pending with
+    | [] => return true
+    | id :: rest =>
+      pending := rest
+      if visited.contains id then continue
+      let some ty := types[id]? | return false
+      match ty with
+      | .other _ | .errorSet _ | .errorUnion .. => return false
+      | _ => pure ()
+      let count := match ty with
+        | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
+        | .struct _ _ fields => fields.size
+        | .union _ _ tag fields => tag.toArray.size + fields.size
+        | .tuple children => children.size
+        | _ => 0
+      let remaining := 1023 - step
+      if count > remaining || rest.length + count > remaining then return false
+      visited := visited.insert id
+      pending := (childTys ty).toList ++ rest
+  return pending.isEmpty
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -102,7 +177,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointer error-union payloads are outside the qualified pointer fragment"
     recur set
     recur payload
-  | .errorSet _ => pure ()
+  | .errorSet none => pure ()
+  | .errorSet (some names) =>
+    if !validErrorDomainNames names then
+      throw s!"{fnName}: near line {line}: an error encoding domain must have at most 65535 distinct nonempty names"
+    pure ()
   | .struct name layout fields =>
     if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
@@ -169,6 +248,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
+    | some (.errorSet _) => modelLayout types layouts c
     | _ =>
       let (s, a) ← modelLayout types layouts c
       pure (Zig.alignUp (s + 1) a, a)
@@ -202,9 +282,22 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     -- `Zig.errUnionOffsets`: the error code is 2 bytes.
     unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
       throw "an error set that is not 2 bytes (`--error-limit`)"
+    if let some (.errorSet (some names)) := types[set]? then
+      -- An empty discriminator has no standalone value, but its union's success arm does.
+      unless names.isEmpty do
+        let _ ← modelLayout types layouts set
     let (s, a) ← modelLayout types layouts payload
     pure (Zig.errUnionSize s a, Nat.max a 2)
-  | some (.errorSet _) => throw "an error set value (not in an error union)"
+  | some (.errorSet none) =>
+    throw "standalone anyerror or unresolved error storage has no finite declared encoding domain"
+  | some (.errorSet (some names)) =>
+    if names.isEmpty then throw "an empty standalone error domain has no runtime value"
+    if names.size > 65535 then throw "an error encoding domain exceeds the 16-bit nonzero code capacity"
+    if !validErrorDomainNames names then
+      throw "an error encoding domain must have distinct nonempty names"
+    unless (layouts[id]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
+      throw "an error set storage layout must be 2 bytes aligned to 2 (16-bit error codes)"
+    pure (2, 2)
   | some (.union _ _ (some tag) fields) =>
     let (ts, ta) ← modelLayout types layouts tag
     let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
@@ -496,8 +589,83 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.intShape? flagTy == some (alen, false, 1) do
       cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
+  | .intCast a =>
+    if ((cx.valTy? a).map (fun id => hasErrorStorage cx.types id)).getD false || hasErrorStorage cx.types ty then
+      cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
+    pure line
   | .bitcast a =>
     let sourceTy := cx.valTy? a
+    let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
+    if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
+      cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
+    if let some aty := sourceTy then
+      let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
+      -- Duplicate finite error-union IDs preserve the same symbolic decoder only
+      -- when ordered declared names, payload identity and all representation metadata agree.
+      let sameFiniteErrorUnion := ((do
+        let .errorUnion aset apayload ← cx.types[aty]? | none
+        let .errorUnion bset bpayload ← cx.types[ty]? | none
+        let .errorSet (some anames) ← cx.types[aset]? | none
+        let .errorSet (some bnames) ← cx.types[bset]? | none
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        let ae ← cx.layouts[aset]?
+        let be ← cx.layouts[bset]?
+        let _ ← cx.types[apayload]?
+        let payload ← cx.layouts[apayload]?
+        return apayload == bpayload && anames == bnames && validErrorDomainNames anames &&
+          a.size.isSome && a.align.isSome && ae.size.isSome && ae.align.isSome &&
+          payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
+      if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
+        cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
+      let pointerChild (id : TyId) : Option TyId :=
+        match cx.types[id]? with
+        | some (.optional child) => ptrChild cx.types child
+        | _ => ptrChild cx.types id
+      -- Changing only const qualification preserves the decoder and pointer
+      -- representation even when the unchanged pointee graph is recursive.
+      let qualifierPointer (id : TyId) : Option (Bool × TyId × String × Bool × TyId) := do
+        let (optional, pid) ← match cx.types[id]? with
+          | some (.optional pid) => some (true, pid)
+          | some (.ptr ..) => some (false, id)
+          | _ => none
+        let .ptr kind isConst child ← cx.types[pid]? | none
+        return (optional, pid, kind, isConst, child)
+      let qualifierOnly := ((do
+        let (aopt, apid, akind, aconst, achild) ← qualifierPointer aty
+        let (bopt, bpid, bkind, bconst, bchild) ← qualifierPointer ty
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        let ap ← cx.layouts[apid]?
+        let bp ← cx.layouts[bpid]?
+        return aopt == bopt && akind == bkind && aconst != bconst && achild == bchild &&
+          a.size.isSome && a.align.isSome && ap.size.isSome && ap.align.isSome &&
+          ap.ptrAlign.isSome && a == b && ap == bp : Option Bool)).getD false
+      -- Wrapping an exact non-null single pointer in its own optional type
+      -- emits only the existing Ptr-to-Option coercion. No pointee/decoder changes.
+      let optionalWrapOnly := ((do
+        let .ptr "one" _ _ ← cx.types[aty]? | none
+        let .optional pid ← cx.types[ty]? | none
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        return pid == aty && a.size.isSome && a.align.isSome &&
+          a.ptrAlign.isSome && b.ptrAlign.isNone &&
+          a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
+      match pointerChild aty, pointerChild ty with
+      | some source, some target =>
+        unless qualifierOnly || optionalWrapOnly do
+          let some sourceCap := hasErrorCapability cx.types source
+            | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+          let some targetCap := hasErrorCapability cx.types target
+            | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+          if sourceCap != targetCap ||
+              hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
+              ((sourceCap || targetCap) && source != target) then
+            cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
+      | none, some target =>
+        unless hasErrorCapability cx.types target == some false do
+          cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
+      | _, _ => pure ()
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
@@ -746,6 +914,394 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+/-- A shared budget proves absence of embedded pointer capabilities, including
+inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
+private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
+  if fuel == 0 then none
+  let ty ← f.types[root]?
+  let count ← match ty with
+    | .int .. | .float .. | .bool | .void | .errorSet (some _) => some 0
+    | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .errorUnion .. => some 2
+    | .struct _ _ fields => some fields.size
+    | .tuple children => some children.size
+    | _ => none
+  let mut remaining := fuel - 1
+  if count > remaining then none
+  let children := childTys ty
+  for child in children do
+    remaining ← pointerFreeInitializerType f child remaining
+  return remaining
+
+/-- Complete constructor values whose typed encoding contains no `errFrag`.
+Success error-union tags and null optional-error tags encode literal zero bytes.
+Undefined/unknown values, error names/arms, pointers and opaque unions fail closed. -/
+private partial def ordinaryInitializer (f : Func) (root : TyId) (v : Val) (fuel : Nat) :
+    Option Nat := do
+  if fuel == 0 then none
+  let ty ← f.types[root]?
+  if let some actual := v.constTy? then
+    if actual != root then none
+  let mut remaining := fuel - 1
+  let items (children : Array TyId) (values : Array Val) : Option Nat := do
+    if children.size != values.size || values.size > remaining then none
+    let mut rest := remaining
+    for (child, value) in children.zip values do
+      rest ← ordinaryInitializer f child value rest
+    return rest
+  match ty, v with
+  | .int .., .int .. | .float .., .float .. | .enum .., .enumTag ..
+  | .bool, .bool _ | .void, .void => return remaining
+  | .optional _, .optNull _ => return remaining
+  | .optional child, .optSome _ value => ordinaryInitializer f child value remaining
+  | .errorUnion set payload, .errUnionOk _ value =>
+    let .errorSet (some _) ← f.types[set]? | none
+    ordinaryInitializer f payload value remaining
+  | .array count child sentinel, .agg _ values =>
+    let count := count + if sentinel then 1 else 0
+    if values.size != count || count > remaining then none
+    for value in values do
+      remaining ← ordinaryInitializer f child value remaining
+    return remaining
+  | .vector count child, .agg _ values =>
+    if values.size != count || count > remaining then none
+    for value in values do
+      remaining ← ordinaryInitializer f child value remaining
+    return remaining
+  | .struct _ _ fields, .agg _ values =>
+    if fields.size != values.size || fields.size > remaining then none
+    items (fields.map (·.2)) values
+  | .tuple children, .agg _ values => items children values
+  | _, _ => none
+
+/-- No mutable or unresolved backing qualifies. Both traversals consume one shared
+1024-node budget. Encoding padding may be undefined; constructor values may not be. -/
+private def immutableOrdinaryGlobal (f : Func) (g : Global) : Bool :=
+  if !g.isConst || g.isExtern || g.threadlocal then false else
+  ((do
+    let value ← g.init
+    let remaining ← pointerFreeInitializerType f g.ty 1024
+    ordinaryInitializer f g.ty value remaining : Option Nat)).isSome
+
+/-- Clipped overlap queries use a shared work budget. `none` means that the
+layout or budget cannot establish absence of symbolic bytes, so callers fail closed. -/
+private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  let (size, _) ← (modelLayout f.types f.layouts root).toOption
+  if off > size || width > size - off then return (remaining, false)
+  if width == 0 || !hasErrorStorage f.types root then return (remaining, true)
+  let recur (child base : Nat) : Option (Nat × Bool) := do
+    let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+    let lo := Nat.max off base
+    let hi := Nat.min (off + width) (base + childSize)
+    if hi ≤ lo then return (remaining, true)
+    errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+  match ← f.types[root]? with
+  | .errorSet _ => return (remaining, false)
+  | .optional child => recur child 0
+  | .errorUnion _ payload =>
+    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+    let (code, base) := Zig.errUnionOffsets size align
+    if off < code + 2 && code < off + width then return (remaining, false)
+    recur payload base
+  | .array len child sentinel =>
+    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    if stride == 0 then return (remaining, true)
+    let first := off / stride
+    let last := (off + width - 1) / stride
+    if last ≥ len + (if sentinel then 1 else 0) || last - first + 1 > remaining then none
+    for k in List.range (last - first + 1) do
+      let (next, safe) ← errorFreeGlobalRange f child
+        (Nat.max off ((first + k) * stride) - (first + k) * stride)
+        (Nat.min (off + width) ((first + k + 1) * stride) - Nat.max off ((first + k) * stride)) remaining
+      remaining := next
+      if !safe then return (remaining, false)
+    return (remaining, true)
+  | .struct _ _ fields =>
+    let offsets := (f.layouts[root]?.getD {}).offsets
+    if offsets.size != fields.size || fields.size > remaining then none
+    for ((_, child), k) in fields.zipIdx do
+      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let base := offsets[k]!
+      let lo := Nat.max off base
+      let hi := Nat.min (off + width) (base + childSize)
+      if lo < hi then
+        let (next, safe) ← errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+        remaining := next
+        if !safe then return (remaining, false)
+    return (remaining, true)
+  -- A union's active-member proof and other opaque aggregate projections are not
+  -- reconstructed from a folded address. An identical typed root still works below.
+  | _ => return (remaining, false)
+
+/-- A symbolic alias must name a complete, structurally matching subobject. This
+keeps typed E/aggregate roots and numeric error-union payloads distinct from raw codes. -/
+private partial def matchingGlobalSubobject (f : Func) (root off target fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  if off == 0 && compatibleType f f root target then return (remaining, true)
+  match ← f.types[root]? with
+  | .optional child => matchingGlobalSubobject f child off target remaining
+  | .errorUnion set payload =>
+    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+    let (code, base) := Zig.errUnionOffsets size align
+    if off == code && compatibleType f f set target then return (remaining, true)
+    if off < base then return (remaining, false)
+    matchingGlobalSubobject f payload (off - base) target remaining
+  | .array len child sentinel =>
+    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    if stride == 0 || off / stride ≥ len + (if sentinel then 1 else 0) then return (remaining, false)
+    matchingGlobalSubobject f child (off % stride) target remaining
+  | .struct _ _ fields =>
+    let offsets := (f.layouts[root]?.getD {}).offsets
+    if offsets.size != fields.size || fields.size > remaining then none
+    for ((_, child), k) in fields.zipIdx do
+      let base := offsets[k]!
+      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      if base ≤ off && off < base + childSize then
+        let (next, matched) ← matchingGlobalSubobject f child (off - base) target remaining
+        remaining := next
+        if matched then return (remaining, true)
+    return (remaining, false)
+  | _ => return (remaining, false)
+
+private def globalAliasPointer? (f : Func) (id : TyId) : Option (String × TyId) :=
+  match f.types[id]? with
+  | some (.ptr kind _ child) => some (kind, child)
+  | some (.optional p) => match f.types[p]? with
+    | some (.ptr kind _ child) => some (kind, child)
+    | _ => none
+  | _ => none
+
+/-- Ordinary backing permits numeric views only. Symbolic decoders still require
+matching typed subobjects and cannot escape through this exception. -/
+private def immutableOrdinaryNumericAlias (f : Func) (g : Global) (pty : TyId) : Bool :=
+  match globalAliasPointer? f pty with
+  | some (_, child) => hasErrorCapability f.types child == some false &&
+      (pointerFreeInitializerType f child 1024).isSome && immutableOrdinaryGlobal f g
+  | none => false
+
+private def globalAliasPointerLayout (f : Func) (id : TyId) : Layout :=
+  match f.types[id]? with
+  | some (.optional p) => f.layouts[p]?.getD {}
+  | _ => f.layouts[id]?.getD {}
+
+/-- A multiple-item capability needs matching storage throughout its backing block,
+not just a matching first field. Scalar/aggregate roots and homogeneous arrays qualify. -/
+private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
+  if off == 0 && compatibleType f f root target then true
+  else match f.types[root]? with
+  | some (.array len child sentinel) =>
+    match (modelLayout f.types f.layouts child).toOption with
+    | some (stride, _) => stride != 0 && off % stride == 0 &&
+        off / stride < len + (if sentinel then 1 else 0) && compatibleType f f child target
+    | none => false
+  | _ => false
+
+private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit := do
+  let some global := f.globals[g]? | throw s!"{f.name}: pointer has unknown global id {g}"
+  let some (kind, child) := globalAliasPointer? f pty
+    | throw s!"{f.name}: global alias has no pointer type"
+  -- A named function block stores code identity (one undefined byte in Emit),
+  -- not encoded pointee storage. Admit only its exact immutable zero-offset address.
+  if let some (.func name ..) := global.init then
+    let pointerLayout := f.layouts[pty]?.getD {}
+    if off == 0 && kind == "one" && global.ty == child &&
+        f.types[pty]? == some (.ptr "one" true child) &&
+        (f.types[child]?.map isFnTy).getD false && global.name == some name &&
+        global.isConst && !global.threadlocal && !global.isExtern &&
+        pointerLayout.size.isSome && pointerLayout.align.isSome &&
+        !pointerLayout.sentinel && pointerLayout.sentinelByte.isNone &&
+        !pointerLayout.isVolatile && !pointerLayout.allowzero &&
+        pointerLayout.hostSize == 0 && pointerLayout.bitOffset == 0 then return
+  let scanned := hasErrorCapability f.types child
+  if scanned.isNone && !hasErrorStorage f.types global.ty &&
+      closedErrorFreeAliasGraph f.types global.ty child then return
+  let some capability := scanned
+    | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
+  if !hasErrorStorage f.types global.ty && !capability then return
+  checkMemTy f.name f.types f.layouts 0 global.ty
+  checkMemTy f.name f.types f.layouts 0 child
+  let (size, _) ← (modelLayout f.types f.layouts child).mapError fun e => s!"{f.name}: {e}"
+  let pointerLayout := globalAliasPointerLayout f pty
+  let width := if pointerLayout.hostSize == 0 then size else pointerLayout.hostSize
+  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty).mapError fun e => s!"{f.name}: {e}"
+  if off > globalSize || width > globalSize - off then
+    throw s!"{f.name}: global alias subobject exceeds its backing storage"
+  if immutableOrdinaryNumericAlias f global pty then return
+  -- Moving either way must preserve element storage throughout the block.
+  if kind != "one" && !homogeneousGlobalItems f global.ty child off then
+    throw s!"{f.name}: a many/C/slice alias into mixed error-bearing storage is outside the finite error-storage fragment"
+  if capability && pointerLayout.hostSize != 0 then
+    throw s!"{f.name}: a bit-pointer view of symbolic error storage is outside the finite error-storage fragment"
+  let allowed := if capability then
+      (matchingGlobalSubobject f global.ty off child 1024).map (·.2)
+    else (errorFreeGlobalRange f global.ty off width 1024).map (·.2)
+  unless allowed == some true do
+    throw s!"{f.name}: global pointer alias overlaps symbolic error bytes or has an unresolved subobject/layout; finalized error ordinals are outside the finite error-storage fragment"
+
+private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat := 256) : Except String Unit := do
+  if fuel == 0 then throw s!"{f.name}: global alias constant traversal exceeds 256 levels"
+  match v with
+  | .ptrConst pty g off => checkGlobalAliasAt f pty g off
+  | .agg _ vs => vs.forM fun v => checkGlobalAliasConstants f v (fuel - 1)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkGlobalAliasConstants f v (fuel - 1)
+  | .sliceConst _ p n => checkGlobalAliasConstants f p (fuel - 1); checkGlobalAliasConstants f n (fuel - 1)
+  | _ => pure ()
+
+private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
+  match v with
+  | .inst id => (insts.find? (·.id == id)).map (·.ty)
+  | _ => v.constTy?
+
+private partial def carriesPointer (f : Func) (ty : TyId) (fuel : Nat := 256) : Bool :=
+  if fuel == 0 then true else
+  match f.types[ty]? with
+  | some (.ptr ..) => true
+  | some ty => (childTys ty).any fun child => carriesPointer f child (fuel - 1)
+  | none => true
+
+/-- Bounded local expression dependencies, including block result branches and pointer
+initializers. This is not an interprocedural/general pointer provenance analysis. -/
+private partial def errorGlobalDependency (f : Func) (insts : Array Inst) (v : Val) (fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  let mut deps : Array Val := #[]
+  match v with
+  | .ptrConst _ g _ =>
+    let global ← f.globals[g]?
+    if hasErrorStorage f.types global.ty then return (remaining, true)
+    deps := global.init.toArray
+  | .inst id =>
+    let i ← insts.find? (·.id == id)
+    -- Scalar data can select a pointer or name string without aliasing its storage.
+    if !carriesPointer f i.ty then return (remaining, false)
+    deps := match i.op with
+      | .block _ => insts.filterMap fun j => match j.op with
+        | .br target value => if target == id then some value else none
+        | _ => none
+      | _ => valueOperands i.op ++ ptrOperands i.op
+  | .agg _ vs => deps := vs
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => deps := #[v]
+  | .sliceConst _ p n => deps := #[p, n]
+  | _ => return (remaining, false)
+  if deps.size > remaining then none
+  for dep in deps do
+    let (next, rooted) ← errorGlobalDependency f insts dep remaining
+    remaining := next
+    if rooted then return (remaining, true)
+  return (remaining, false)
+
+private def dependsOnErrorGlobal (f : Func) (insts : Array Inst) (v : Val) : Bool :=
+  ((errorGlobalDependency f insts v 1024).map (·.2)).getD true
+
+/-- Track only transparent local pointer constructors with fixed byte offsets.
+Unknown arithmetic, block joins, loaded pointers and calls intentionally have no origin. -/
+private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val) (fuel : Nat := 256) : Option (Nat × Nat) := do
+  if fuel == 0 then none
+  match v with
+  | .ptrConst _ g off => some (g, off)
+  | .optSome _ p => fixedGlobalOrigin? f insts p (fuel - 1)
+  | .sliceConst _ p _ => fixedGlobalOrigin? f insts p (fuel - 1)
+  | .inst id =>
+    let i ← insts.find? (·.id == id)
+    let sourceTy (p : Val) : Option TyId := do
+      let pty ← aliasValueTy? insts p
+      (globalAliasPointer? f pty).map (·.2)
+    match i.op with
+    | .bitcast p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
+      fixedGlobalOrigin? f insts p (fuel - 1)
+    | .fieldPtr p field =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let child ← sourceTy p
+      let base ← if (globalAliasPointerLayout f i.ty).hostSize != 0 then some 0
+        else (f.layouts[child]?.getD {}).offsets[field]?
+      some (g, off + base)
+    | .fieldParentPtr p field =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let (_, parent) ← globalAliasPointer? f i.ty
+      let pty ← aliasValueTy? insts p
+      let base ← if (globalAliasPointerLayout f pty).hostSize != 0 then some 0
+        else (f.layouts[parent]?.getD {}).offsets[field]?
+      if off < base then none else some (g, off - base)
+    | .errCodePtr p | .errPayloadPtr _ p | .tryPtr p _ =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let child ← sourceTy p
+      let .errorUnion _ payload ← f.types[child]? | none
+      let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+      let (code, base) := Zig.errUnionOffsets size align
+      let delta := match i.op with | .errCodePtr _ => code | _ => base
+      some (g, off + delta)
+    | .ptrAdd sub p n =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let .int _ k := n | none
+      if k < 0 then none else
+      let (_, child) ← globalAliasPointer? f i.ty
+      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let delta := k.toNat * size
+      if sub then if off < delta then none else some (g, off - delta)
+      else some (g, off + delta)
+    | .elemPtr p n =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let .int _ k := n | none
+      if k < 0 then none else
+      let (_, child) ← globalAliasPointer? f i.ty
+      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      some (g, off + k.toNat * size)
+    | _ => none
+  | _ => none
+
+/-- Exempt only the final fixed numeric capability; never discard its backing
+provenance while traversing a derived pointer or a block/slice dependency. -/
+private def immutableOrdinaryNumericValue (f : Func) (insts : Array Inst) (v : Val) : Bool :=
+  ((do
+    let pty ← aliasValueTy? insts v
+    let (g, _) ← fixedGlobalOrigin? f insts v
+    let global ← f.globals[g]?
+    return immutableOrdinaryNumericAlias f global pty : Option Bool)).getD false
+
+private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
+  let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
+  -- A numeric getter does not carry an interprocedural proof for recovering a
+  -- symbolic parent. Enforce this also in callees with no local global table.
+  if let .fieldParentPtr p _ := i.op then
+    if let some (_, parent) := globalAliasPointer? f i.ty then
+      let some parentCap := hasErrorCapability f.types parent
+        | throw s!"{f.name}: inst {i.id}: parent recovery has unresolved or cyclic symbolic storage provenance"
+      if parentCap then
+        let source := ((aliasValueTy? insts p).bind (globalAliasPointer? f)).map (·.2)
+        unless (source.bind (hasErrorCapability f.types)) == some true do
+          throw s!"{f.name}: inst {i.id}: recovering an error-bearing parent from a numeric pointer needs unsupported interprocedural provenance"
+  if !enabled then return
+  if (globalAliasPointer? f i.ty).isSome && dependsOnErrorGlobal f insts (.inst i.id) then
+    let some (g, off) := fixedGlobalOrigin? f insts (.inst i.id) | reject
+    checkGlobalAliasAt f i.ty g off
+  match i.op with
+  | .bitcast p =>
+    if (globalAliasPointer? f i.ty).isNone && ((aliasValueTy? insts p).bind (globalAliasPointer? f)).isSome && dependsOnErrorGlobal f insts p then reject
+  | .ret v | .store _ v =>
+    if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
+  | .call _ args =>
+    for v in args do
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
+  | .memcpy dst src =>
+    for v in #[dst, src] do
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
+  | .memset p _ =>
+    if dependsOnErrorGlobal f insts p then reject
+  | .ptrElemVal p _ | .sliceElemVal p _ =>
+    if dependsOnErrorGlobal f insts p && !immutableOrdinaryNumericValue f insts p then
+      let some pty := aliasValueTy? insts p | reject
+      let some item := itemTy f.types pty | reject
+      let some (g, off) := fixedGlobalOrigin? f insts p | reject
+      let some global := f.globals[g]? | reject
+      unless hasErrorStorage f.types item && homogeneousGlobalItems f global.ty item off do reject
+  | _ => pure ()
+
 private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
   if let some k := v.ptrOther? then throw (message k)
 
@@ -753,6 +1309,7 @@ private def checkPointerPresence (v : Val) (message : String → String) : Excep
 private def checkPointerConstant (f : Func) (v : Val) (missing : String → String)
     (alignment : Nat → Nat → String) : Except String Unit := do
   checkPointerPresence v missing
+  checkGlobalAliasConstants f v
   if let .ptrConst pty g _ := v then
     let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
@@ -767,6 +1324,11 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
   checkNullConstants f.name f.types f.layouts init
+  checkGlobalAliasConstants f init
+  if f.globals.any (fun g => hasErrorStorage f.types g.ty) &&
+      ((init.constTy?).map (fun t => carriesPointer f t)).getD false &&
+      dependsOnErrorGlobal f f.allInsts init then
+    throw s!"{f.name}: a global initializer cannot retain a pointer into an error-bearing global"
   checkPointerPresence init fun k =>
     s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
@@ -826,6 +1388,7 @@ def check (f : Func) : Except String Unit := do
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id
   let insts := f.allInsts
+  let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
@@ -839,6 +1402,7 @@ def check (f : Func) : Except String Unit := do
     checkGlobal f g
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
+    checkErrorGlobalInstruction errorGlobals f insts i
     for v in valueOperands i.op ++ ptrOperands i.op do
       if let some vty := v.constTy? then
         unless checkedConstTypes.contains vty do
@@ -993,9 +1557,10 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
       throw s!"{f.name}: enum constant '{name}' has no field with tag {n}"
   | .ptrNull _, .ptr .. =>
     unless nullablePtrTy f.types f.layouts expected do fail
-  | .bool _, .bool | .void, .void | .optNull _, .optional _
+  | .bool _, .bool | .void, .void | .optNull _, .optional _ => pure ()
   | .ptrConst .., .ptr "one" .. | .ptrConst .., .ptr "many" ..
-  | .ptrConst .., .ptr "c" .. | .ptrOther .., .ptr .. => pure ()
+  | .ptrConst .., .ptr "c" .. => checkGlobalAliasConstants f v
+  | .ptrOther .., .ptr .. => pure ()
   | .optSome _ payload, .optional child => recur child payload
   | .errUnionOk _ payload, .errorUnion _ child => recur child payload
   | .unionVal _ field payload, .union _ _ _ fields =>
@@ -1638,6 +2203,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id)
   let insts := index.insts
+  let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
@@ -1651,6 +2217,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
+    log := log.record (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
     for v in valueOperands i.op ++ ptrOperands i.op do
       let result := do
         checkNullConstants f.name f.types f.layouts v
