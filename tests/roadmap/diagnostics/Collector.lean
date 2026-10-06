@@ -484,8 +484,8 @@ private def collectorChecks : IO Unit := do
     layouts := (spawn.layouts.set! 2 { size := some 32, align := some 8 }) ++
       #[{ size := some 8, align := some 8 }, { size := some 16, align := some 8 },
         { size := some 24, align := some 8 }]
-    body := #[{ id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
-      #[.agg 2 #[.int 7 16777216, .optNull 9], .agg 1 #[.int 0 7]] },
+    body := #[{ id := 0, ty := 5, op := (.call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 16777216, .optNull 9], .agg 1 #[.int 0 7]]) },
       { id := 1, ty := 6, op := .ret (.inst 0) }] }
   let auditedUnits := #[policyUnit audited, policyUnit worker]
   require (checkProgram #[audited, worker]).toOption.isSome "audited spawn must pass the ordinary program prerequisite"
@@ -509,12 +509,12 @@ private def collectorChecks : IO Unit := do
         "collector must retain exact shared policy rejection and typed prerequisite"
   policyBoundary spawn "constant SpawnConfig"
   policyBoundary { audited with body := #[
-    { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
-      #[.agg 2 #[.int 7 0, .optNull 9], .agg 1 #[.int 0 7]] },
+    { id := 0, ty := 5, op := (.call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 0, .optNull 9], .agg 1 #[.int 0 7]]) },
     { id := 1, ty := 6, op := .ret (.inst 0) }] } "audited 1 MiB or default 16 MiB"
   policyBoundary { audited with body := #[
-    { id := 0, ty := 5, op := .call (.func "Thread.spawn__anon_1" false (some "worker"))
-      #[.agg 2 #[.int 7 16777216, .undef 9], .agg 1 #[.int 0 7]] },
+    { id := 0, ty := 5, op := (.call (.func "Thread.spawn__anon_1" false (some "worker"))
+      #[.agg 2 #[.int 7 16777216, .undef 9], .agg 1 #[.int 0 7]]) },
     { id := 1, ty := 6, op := .ret (.inst 0) }] } "custom allocators"
   policyBoundary { group with zigVersion := "0.15.2" } "requires Zig 0.16.0"
   let blockedPolicy := collectProgram #[policyUnit audited, policyUnit wrongWorker] {} .fallible

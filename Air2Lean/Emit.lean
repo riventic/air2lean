@@ -1,5 +1,6 @@
 import Std.Data.HashSet
 import Air2Lean.Check
+import Air2Lean.ProofApi
 
 /-!
 # Emitter
@@ -831,7 +832,8 @@ def FCtx.pointeeOf (fc : FCtx) (v : Val) : Ty :=
   | _ => .void
 
 /-- Every place of the function (`Check.lean`): an `alloc` with the empty path, a field pointer
-of a place with one more step, a `bitcast` of a place with the same path. -/
+of a place with one more step, a validated parent pointer with the terminal step removed,
+a `bitcast` of a place with the same path. -/
 def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) :=
   fc.allInsts.foldl (init := #[]) fun acc i =>
     match i.op with
@@ -849,6 +851,11 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
         acc.push (i.id, root, path.push step)
+      | none => acc
+    | .fieldParentPtr (.inst b) _ =>
+      -- The checker proved the exact terminal struct field and result pointee type.
+      match acc.find? (·.1 == b) with
+      | some (_, root, path) => acc.push (i.id, root, path.pop)
       | none => acc
     | .sliceFieldPtr len (.inst b) =>
       match acc.find? (·.1 == b) with
@@ -2354,11 +2361,9 @@ def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
     let l := fc.layouts[child]?.getD {}
     (aid, field, l.size.getD 0, l.align.getD 1)
 
-def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
+/-- Shared body text for a definition and its opt-in unfolding theorem. -/
+def emitFunctionBody (fc : FCtx) (localsName exitName : String)
     (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
-  let paramsStr := String.intercalate " "
-    ((paramTys.mapIdx fun i pt => s!"(p{i} : {fc.emitTyOf pt})").toList)
-  let retStr := fc.emitTyOf retTy
   let bodyStr := emitStmts fc #[] body.toList
   -- The `M`-do-block's `σ`/`ε` never appear as a literal type anywhere inside it (`(← get)`,
   -- `.br<k>`, …), so without this ascription nothing pins them down for the elaborator.
@@ -2380,11 +2385,23 @@ def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTy
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
-  let resultTy := if fc.conc then "Zig.ConcM Tgt" else if fc.mem then "Zig.MemM" else "Zig.Result"
   String.intercalate "\n"
-    ([s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := do"] ++ allocLines ++
+    (["do"] ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
      ["  match e with"] ++ matchLines)
+
+def emitFunctionHeader (fc : FCtx) (leanName : String) (paramTys : Array TyId)
+    (retTy : TyId) : String :=
+  let paramsStr := String.intercalate " "
+    ((paramTys.mapIdx fun i pt => s!"(p{i} : {fc.emitTyOf pt})").toList)
+  let retStr := fc.emitTyOf retTy
+  let resultTy := if fc.conc then "Zig.ConcM Tgt" else if fc.mem then "Zig.MemM" else "Zig.Result"
+  s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := "
+
+def emitFunctionDef (fc : FCtx) (leanName localsName exitName : String) (paramTys : Array TyId)
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
+  emitFunctionHeader fc leanName paramTys retTy ++
+    emitFunctionBody fc localsName exitName retTy body hasNonRetExit
 
 /-- One function's output in four parts: the `Locals`/`Exit` types, the `again<k>` defs, the
 `loop<k>` defs (inner loop first), and the function def. `emit` joins them, and puts a
@@ -2394,6 +2411,7 @@ structure FuncParts where
   agains : List String
   loops : List String
   defn : String
+  body : String
 
 /-- The static context without block-emission membership, for global encoding. -/
 private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
@@ -2452,10 +2470,31 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   -- the outer one" needs (`docs/generated-code.md` §Loops).
   let loops := (allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false).reverse
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty || !fc.dispatchTys.isEmpty
+  let functionBody := emitFunctionBody fc localsName exitName f.ret f.body hasNonRetExit
   { types := [localsStr, exitStr]
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList
-    defn := emitFunctionDef fc leanName localsName exitName f.params f.ret f.body hasNonRetExit }
+    defn := emitFunctionHeader fc leanName f.params f.ret ++ functionBody
+    body := functionBody }
+
+/-- Optional stable scalar unfolding boundary. The equality exposes the actual emitted
+body and is kernel checked with `rfl`; no replacement model or axiom is introduced. -/
+def emitProofApi (f : Func) (mkFc : Unit → FCtx) (rhs : String) : Option String :=
+  match proofApiFacts f with
+  | none => none
+  | some facts =>
+    let fc := mkFc ()
+    let base := proofApiName f.name
+    let params := String.intercalate " " ((f.params.mapIdx fun i ty =>
+      s!"(p{i} : {fc.emitTyOf ty})").toList)
+    let arguments := String.intercalate " " ((Array.range f.params.size).map (fun i => s!"p{i}")).toList
+    let record := Lean.Json.mkObj [("format", .str "air2lean-proof-api-v1"),
+      ("source", .str f.name), ("definition", .str fc.fnName),
+      ("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold")),
+      ("facts", facts), ("source_map", proofApiSourceMap f)]
+    some ("-- air2lean-proof-api: " ++ record.compress ++ "\n" ++
+      s!"abbrev {base}_model := {fc.fnName}\n\n" ++
+      s!"theorem {base}_unfold {params} : {base}_model {arguments} = ({rhs}) := rfl")
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
 emission shares one prepared map across all functions. -/
@@ -2864,7 +2903,7 @@ stripped from every Zig name (function or struct) before mangling. `floatSemanti
 `--float-semantics` (default `ieee`). -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
-    (spawnSemantics : SpawnSemantics := .available) : String :=
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) : String :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
@@ -2876,7 +2915,9 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let modelBinders := (Array.range maxModelArgs).map fun i => s!"p{i}"
   let modelNames := (Array.range models.size).flatMap fun i =>
     #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"]
-  let fixed := runtimeNames ++ modelNames ++ modelBinders ++
+  let apiNames := if proofApi then funcs.flatMap (fun f =>
+    if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
+  let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
     (if memFuncs.isEmpty then #[] else #["mem0"]) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit"] else #[]) ++
@@ -2941,7 +2982,11 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
       String.intercalate "\n\n"
         (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
     else
-      String.intercalate "\n\n" (parts.flatMap fun p => p.types ++ p.agains ++ p.loops ++ [p.defn])
+      String.intercalate "\n\n" ((members.toList.zip parts).flatMap fun (f, p) =>
+        p.types ++ p.agains ++ p.loops ++ [p.defn] ++
+          (if proofApi then
+            (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs) p.body).toList
+          else []))
   String.intercalate "\n\n"
     (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++

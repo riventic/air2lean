@@ -256,6 +256,9 @@ structure CheckCtx where
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
   places : Array InstId
+  /-- Provenance before escape lowering, for bounded local parent recovery. -/
+  localRoots : Array (InstId × InstId) := #[]
+  localPaths : Array (InstId × Array LocalPathStep) := #[]
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
@@ -550,14 +553,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let pty ← cx.memPtrTy line base
     checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
     pure line
-  | .fieldParentPtr fieldPtr _ =>
+  | .fieldParentPtr fieldPtr idx =>
     cx.rejectNullableProjection line fieldPtr
-    -- `@fieldParentPtr` on a place would need to walk back up the place's own field path
-    -- (`Emit.lean`'s `FCtx.computePlaces`), which is outside the subset for now (M20); it needs a
-    -- real memory pointer, whose parent struct's offsets the model must know.
     if let .inst b := fieldPtr then
-      if cx.places.contains b then
-        cx.fail line "`@fieldParentPtr` from a local's own place is outside the subset (M20)"
+      if cx.localRoots.any (·.1 == b) || cx.places.contains b then
+        let some (_, path) := cx.localPaths.find? (·.1 == b)
+          | cx.fail line "local `@fieldParentPtr` needs a proven terminal struct field"
+        let some source := cx.valTy? fieldPtr
+          | cx.fail line "local `@fieldParentPtr` operand has no known type"
+        unless (localParentPath? cx.types cx.layouts source ty idx path).isSome do
+          cx.fail line "local `@fieldParentPtr` requires the matching terminal ordinary struct field and pointer types (packed, union and bit-pointer recovery are outside the subset)"
+        -- An escaped local still uses the existing memory offset lowering below.
+        if cx.places.contains b then return line
     let _ ← cx.memPtrTy line fieldPtr
     let some (.ptr _ _ parent) := cx.types[ty]?
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
@@ -811,7 +818,8 @@ def check (f : Func) : Except String Unit := do
       checkMemTy f.name f.types f.layouts 0 id
   let insts := f.allInsts
   let escaping := escapingAllocs f
-  let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p
+  let localRoots := placeRoots insts
+  let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
   -- An escaping local is a stack block: its type must be one the model encodes.
   for i in insts do
     if let .alloc := i.op then
@@ -838,7 +846,8 @@ def check (f : Func) : Except String Unit := do
       (controlFlowSummaries f.body).tryErrorExits
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-                         instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits }
+                         instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
+                         localRoots, localPaths := localPlacePaths f.types f.layouts insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -1620,7 +1629,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
         (checkMemTy f.name f.types f.layouts 0 id)
   let insts := index.insts
   let escaping := escapingAllocs f
-  let places := (placeRoots insts).filterMap fun (p, r) => if escaping.contains r then none else some p
+  let localRoots := placeRoots insts
+  let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
   for i in insts do
     if let .alloc := i.op then
       if escaping.contains i.id then
@@ -1644,7 +1654,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     types := f.types
     layouts := f.layouts
     instTys := insts.map fun i => (i.id, i.ty)
-    places }
+    places
+    localRoots
+    localPaths := localPlacePaths f.types f.layouts insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

@@ -141,3 +141,44 @@ replace all earlier variants of the same normalized basename. Generic-instance
 collisions retain the SHA-1 first-12-digit suffix of the exact pretty JSON plus
 its final newline. The existing single-file `normalize-air.py INPUT.json` command
 is unchanged; `--output-dir DIRECTORY` selects the batch overlay operation.
+
+
+## Bounded Linux native ABI observations
+
+`scripts/abi-probe.py` builds and executes the stock Zig 0.16.0 LLVM probe under
+`tests/roadmap/abi-probes/`. Its four profile inputs select baseline x86_64-linux-gnu
+or aarch64-linux-gnu, each in ReleaseSafe or ReleaseFast. Run on the selected Linux
+CPU, or under an explicitly recorded execution emulator; foreign compilation alone
+cannot produce a report. The runtime rejects discrepancies in target, endian,
+pointer width, backend, CPU/features, mode, error-set width and tracing.
+
+```sh
+python3 scripts/abi-probe.py observe --zig /absolute/path/to/stock/zig \
+  --profile tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json \
+  --output x86-safe.json
+# On the aarch64 Linux execution environment, run the matching aarch64 profile.
+python3 scripts/abi-probe.py compare x86-safe.json arm-safe.json
+python3 -B tests/roadmap/abi-probes/test_probe.py
+```
+
+The explicit bounded contract records u9/u24/u40/u128 ABI size/alignment, pointer
+size/alignment, a packed u32 backing layout, a four-lane u32 vector, and offsets
+in an extern record. Volatile-backed native operations observe u24 wrapping,
+packed bit encoding, vector addition and a pointer load. Only these listed layouts,
+offsets and integer outputs form the exact paired observation relation. Each run
+binds probe/compat source bytes, the stock compiler executable, generated binary,
+command and source profile. No expected native report is committed: actual outputs
+must be collected by the serialized Linux validation workflow.
+
+Imported reports are evidence inputs, not execution attestations. The comparison
+checks current source hashes and all expected observations; synthetic Python test
+records are strictly parser/contract tests. A successful pair does not prove a
+compiler preservation theorem, ABI completeness, synchronization, float ABI or
+WASM correspondence. f80/f128 operations and numerical tolerances remain outside
+this fragment, and the existing float probe remains a separate reference gate.
+ReleaseFast is a separate observation profile, not inferred from ReleaseSafe.
+
+This tool does not change the translator's accepted target profiles. In particular,
+aarch64-linux translation remains guarded, and wasm32 pointer parameterization
+remains absent. The native probe records a bounded candidate for T04/T05/T06;
+profile-bound generated proofs and broader target qualification remain pending.
