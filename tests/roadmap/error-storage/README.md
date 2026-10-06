@@ -70,3 +70,16 @@ Safety lowering also uses cmp_lt_errors_len on14/15 and cmp_lte_errors_len on16,
 unsupported. These source forms are rejected rather than mapped through name-table positions.
 Comptime-folded integer literals come directly from the compiler's actual result; the symbolic
 error-storage model does not infer an ordinal map from those literals.
+
+
+The finite-global alias fragment checks folded addresses against the addressed subobject,
+including a bit-pointer's complete host read. Numeric one-pointer local loads of ordinary
+guard fields and successful `E!u16` payloads remain allowed, as do typed `E` reads and
+ordinary error-name observations. Aliases overlapping symbolic error bytes are rejected.
+Multiple-item pointer capabilities require a matching complete root or homogeneous array
+backing; matching only the first field of mixed error/numeric storage does not suffice.
+Unresolved pointer-valued local results, bulk and mixed-backing indexed operations, pointer escape
+through returns/calls/stores, and pointer-to-integer views rooted in these globals fail
+closed. This bounded local check is not general interprocedural pointer provenance.
+`GlobalAlias.lean` supplies focused checker controls. ROOT must rebuild and run the retained
+stock-compiler/real-AIR folded-cast packet before production qualification is claimed.

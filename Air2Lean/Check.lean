@@ -796,6 +796,281 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+/-- Clipped overlap queries use a shared work budget. `none` means that the
+layout or budget cannot establish absence of symbolic bytes, so callers fail closed. -/
+private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  let (size, _) ← (modelLayout f.types f.layouts root).toOption
+  if off > size || width > size - off then return (remaining, false)
+  if width == 0 || !hasErrorStorage f.types root then return (remaining, true)
+  let recur (child base : Nat) : Option (Nat × Bool) := do
+    let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+    let lo := Nat.max off base
+    let hi := Nat.min (off + width) (base + childSize)
+    if hi ≤ lo then return (remaining, true)
+    errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+  match ← f.types[root]? with
+  | .errorSet _ => return (remaining, false)
+  | .optional child => recur child 0
+  | .errorUnion _ payload =>
+    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+    let (code, base) := Zig.errUnionOffsets size align
+    if off < code + 2 && code < off + width then return (remaining, false)
+    recur payload base
+  | .array len child sentinel =>
+    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    if stride == 0 then return (remaining, true)
+    let first := off / stride
+    let last := (off + width - 1) / stride
+    if last ≥ len + (if sentinel then 1 else 0) || last - first + 1 > remaining then none
+    for k in List.range (last - first + 1) do
+      let (next, safe) ← errorFreeGlobalRange f child
+        (Nat.max off ((first + k) * stride) - (first + k) * stride)
+        (Nat.min (off + width) ((first + k + 1) * stride) - Nat.max off ((first + k) * stride)) remaining
+      remaining := next
+      if !safe then return (remaining, false)
+    return (remaining, true)
+  | .struct _ _ fields =>
+    let offsets := (f.layouts[root]?.getD {}).offsets
+    if offsets.size != fields.size || fields.size > remaining then none
+    for ((_, child), k) in fields.zipIdx do
+      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let base := offsets[k]!
+      let lo := Nat.max off base
+      let hi := Nat.min (off + width) (base + childSize)
+      if lo < hi then
+        let (next, safe) ← errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+        remaining := next
+        if !safe then return (remaining, false)
+    return (remaining, true)
+  -- A union's active-member proof and other opaque aggregate projections are not
+  -- reconstructed from a folded address. An identical typed root still works below.
+  | _ => return (remaining, false)
+
+/-- A symbolic alias must name a complete, structurally matching subobject. This
+keeps typed E/aggregate roots and numeric error-union payloads distinct from raw codes. -/
+private partial def matchingGlobalSubobject (f : Func) (root off target fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  if off == 0 && compatibleType f f root target then return (remaining, true)
+  match ← f.types[root]? with
+  | .optional child => matchingGlobalSubobject f child off target remaining
+  | .errorUnion set payload =>
+    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+    let (code, base) := Zig.errUnionOffsets size align
+    if off == code && compatibleType f f set target then return (remaining, true)
+    if off < base then return (remaining, false)
+    matchingGlobalSubobject f payload (off - base) target remaining
+  | .array len child sentinel =>
+    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    if stride == 0 || off / stride ≥ len + (if sentinel then 1 else 0) then return (remaining, false)
+    matchingGlobalSubobject f child (off % stride) target remaining
+  | .struct _ _ fields =>
+    let offsets := (f.layouts[root]?.getD {}).offsets
+    if offsets.size != fields.size || fields.size > remaining then none
+    for ((_, child), k) in fields.zipIdx do
+      let base := offsets[k]!
+      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      if base ≤ off && off < base + childSize then
+        let (next, matched) ← matchingGlobalSubobject f child (off - base) target remaining
+        remaining := next
+        if matched then return (remaining, true)
+    return (remaining, false)
+  | _ => return (remaining, false)
+
+private def globalAliasPointer? (f : Func) (id : TyId) : Option (String × TyId) :=
+  match f.types[id]? with
+  | some (.ptr kind _ child) => some (kind, child)
+  | some (.optional p) => match f.types[p]? with
+    | some (.ptr kind _ child) => some (kind, child)
+    | _ => none
+  | _ => none
+
+private def globalAliasPointerLayout (f : Func) (id : TyId) : Layout :=
+  match f.types[id]? with
+  | some (.optional p) => f.layouts[p]?.getD {}
+  | _ => f.layouts[id]?.getD {}
+
+/-- A multiple-item capability needs matching storage throughout its backing block,
+not just a matching first field. Scalar/aggregate roots and homogeneous arrays qualify. -/
+private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
+  if off == 0 && compatibleType f f root target then true
+  else match f.types[root]? with
+  | some (.array len child sentinel) =>
+    match (modelLayout f.types f.layouts child).toOption with
+    | some (stride, _) => stride != 0 && off % stride == 0 &&
+        off / stride < len + (if sentinel then 1 else 0) && compatibleType f f child target
+    | none => false
+  | _ => false
+
+private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit := do
+  let some global := f.globals[g]? | throw s!"{f.name}: pointer has unknown global id {g}"
+  if !hasErrorStorage f.types global.ty then return
+  let some (kind, child) := globalAliasPointer? f pty
+    | throw s!"{f.name}: global alias has no pointer type"
+  checkMemTy f.name f.types f.layouts 0 global.ty
+  checkMemTy f.name f.types f.layouts 0 child
+  let (size, _) ← (modelLayout f.types f.layouts child).mapError fun e => s!"{f.name}: {e}"
+  let pointerLayout := globalAliasPointerLayout f pty
+  let width := if pointerLayout.hostSize == 0 then size else pointerLayout.hostSize
+  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty).mapError fun e => s!"{f.name}: {e}"
+  if off > globalSize || width > globalSize - off then
+    throw s!"{f.name}: global alias subobject exceeds its backing storage"
+  let symbolic := hasErrorStorage f.types child
+  -- Moving either way must preserve element storage throughout the block.
+  if kind != "one" && !homogeneousGlobalItems f global.ty child off then
+    throw s!"{f.name}: a many/C/slice alias into mixed error-bearing storage is outside the finite error-storage fragment"
+  if symbolic && pointerLayout.hostSize != 0 then
+    throw s!"{f.name}: a bit-pointer view of symbolic error storage is outside the finite error-storage fragment"
+  let allowed := if symbolic then
+      (matchingGlobalSubobject f global.ty off child 1024).map (·.2)
+    else (errorFreeGlobalRange f global.ty off width 1024).map (·.2)
+  unless allowed == some true do
+    throw s!"{f.name}: global pointer alias overlaps symbolic error bytes or has an unresolved subobject/layout; finalized error ordinals are outside the finite error-storage fragment"
+
+private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat := 256) : Except String Unit := do
+  if fuel == 0 then throw s!"{f.name}: global alias constant traversal exceeds 256 levels"
+  match v with
+  | .ptrConst pty g off => checkGlobalAliasAt f pty g off
+  | .agg _ vs => vs.forM fun v => checkGlobalAliasConstants f v (fuel - 1)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkGlobalAliasConstants f v (fuel - 1)
+  | .sliceConst _ p n => checkGlobalAliasConstants f p (fuel - 1); checkGlobalAliasConstants f n (fuel - 1)
+  | _ => pure ()
+
+private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
+  match v with
+  | .inst id => (insts.find? (·.id == id)).map (·.ty)
+  | _ => v.constTy?
+
+private partial def carriesPointer (f : Func) (ty : TyId) (fuel : Nat := 256) : Bool :=
+  if fuel == 0 then true else
+  match f.types[ty]? with
+  | some (.ptr ..) => true
+  | some ty => (childTys ty).any fun child => carriesPointer f child (fuel - 1)
+  | none => true
+
+/-- Bounded local expression dependencies, including block result branches and pointer
+initializers. This is not an interprocedural/general pointer provenance analysis. -/
+private partial def errorGlobalDependency (f : Func) (insts : Array Inst) (v : Val) (fuel : Nat) :
+    Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  let mut deps : Array Val := #[]
+  match v with
+  | .ptrConst _ g _ =>
+    let global ← f.globals[g]?
+    if hasErrorStorage f.types global.ty then return (remaining, true)
+    deps := global.init.toArray
+  | .inst id =>
+    let i ← insts.find? (·.id == id)
+    -- Scalar data can select a pointer or name string without aliasing its storage.
+    if !carriesPointer f i.ty then return (remaining, false)
+    deps := match i.op with
+      | .block _ => insts.filterMap fun j => match j.op with
+        | .br target value => if target == id then some value else none
+        | _ => none
+      | _ => valueOperands i.op ++ ptrOperands i.op
+  | .agg _ vs => deps := vs
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => deps := #[v]
+  | .sliceConst _ p n => deps := #[p, n]
+  | _ => return (remaining, false)
+  if deps.size > remaining then none
+  for dep in deps do
+    let (next, rooted) ← errorGlobalDependency f insts dep remaining
+    remaining := next
+    if rooted then return (remaining, true)
+  return (remaining, false)
+
+private def dependsOnErrorGlobal (f : Func) (insts : Array Inst) (v : Val) : Bool :=
+  ((errorGlobalDependency f insts v 1024).map (·.2)).getD true
+
+/-- Track only transparent local pointer constructors with fixed byte offsets.
+Unknown arithmetic, block joins, loaded pointers and calls intentionally have no origin. -/
+private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val) (fuel : Nat := 256) : Option (Nat × Nat) := do
+  if fuel == 0 then none
+  match v with
+  | .ptrConst _ g off => some (g, off)
+  | .optSome _ p => fixedGlobalOrigin? f insts p (fuel - 1)
+  | .sliceConst _ p _ => fixedGlobalOrigin? f insts p (fuel - 1)
+  | .inst id =>
+    let i ← insts.find? (·.id == id)
+    let sourceTy (p : Val) : Option TyId := do
+      let pty ← aliasValueTy? insts p
+      (globalAliasPointer? f pty).map (·.2)
+    match i.op with
+    | .bitcast p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
+      fixedGlobalOrigin? f insts p (fuel - 1)
+    | .fieldPtr p field =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let child ← sourceTy p
+      let base ← if (globalAliasPointerLayout f i.ty).hostSize != 0 then some 0
+        else (f.layouts[child]?.getD {}).offsets[field]?
+      some (g, off + base)
+    | .fieldParentPtr p field =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let (_, parent) ← globalAliasPointer? f i.ty
+      let pty ← aliasValueTy? insts p
+      let base ← if (globalAliasPointerLayout f pty).hostSize != 0 then some 0
+        else (f.layouts[parent]?.getD {}).offsets[field]?
+      if off < base then none else some (g, off - base)
+    | .errCodePtr p | .errPayloadPtr _ p | .tryPtr p _ =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let child ← sourceTy p
+      let .errorUnion _ payload ← f.types[child]? | none
+      let (size, align) ← (modelLayout f.types f.layouts payload).toOption
+      let (code, base) := Zig.errUnionOffsets size align
+      let delta := match i.op with | .errCodePtr _ => code | _ => base
+      some (g, off + delta)
+    | .ptrAdd sub p n =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let .int _ k := n | none
+      if k < 0 then none else
+      let (_, child) ← globalAliasPointer? f i.ty
+      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let delta := k.toNat * size
+      if sub then if off < delta then none else some (g, off - delta)
+      else some (g, off + delta)
+    | .elemPtr p n =>
+      let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      let .int _ k := n | none
+      if k < 0 then none else
+      let (_, child) ← globalAliasPointer? f i.ty
+      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      some (g, off + k.toNat * size)
+    | _ => none
+  | _ => none
+
+private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
+  if !enabled then return
+  let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
+  if (globalAliasPointer? f i.ty).isSome && dependsOnErrorGlobal f insts (.inst i.id) then
+    let some (g, off) := fixedGlobalOrigin? f insts (.inst i.id) | reject
+    checkGlobalAliasAt f i.ty g off
+  match i.op with
+  | .bitcast p =>
+    if (globalAliasPointer? f i.ty).isNone && ((aliasValueTy? insts p).bind (globalAliasPointer? f)).isSome && dependsOnErrorGlobal f insts p then reject
+  | .ret v | .store _ v =>
+    if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+  | .call _ args =>
+    for v in args do
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+  | .memcpy dst src =>
+    for v in #[dst, src] do
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+  | .memset p _ =>
+    if dependsOnErrorGlobal f insts p then reject
+  | .ptrElemVal p _ | .sliceElemVal p _ =>
+    if dependsOnErrorGlobal f insts p then
+      let some pty := aliasValueTy? insts p | reject
+      let some item := itemTy f.types pty | reject
+      let some (g, off) := fixedGlobalOrigin? f insts p | reject
+      let some global := f.globals[g]? | reject
+      unless hasErrorStorage f.types item && homogeneousGlobalItems f global.ty item off do reject
+  | _ => pure ()
+
 private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
   if let some k := v.ptrOther? then throw (message k)
 
@@ -803,6 +1078,7 @@ private def checkPointerPresence (v : Val) (message : String → String) : Excep
 private def checkPointerConstant (f : Func) (v : Val) (missing : String → String)
     (alignment : Nat → Nat → String) : Except String Unit := do
   checkPointerPresence v missing
+  checkGlobalAliasConstants f v
   if let .ptrConst pty g _ := v then
     let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
@@ -817,6 +1093,11 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
   checkNullConstants f.name f.types f.layouts init
+  checkGlobalAliasConstants f init
+  if f.globals.any (fun g => hasErrorStorage f.types g.ty) &&
+      ((init.constTy?).map (fun t => carriesPointer f t)).getD false &&
+      dependsOnErrorGlobal f f.allInsts init then
+    throw s!"{f.name}: a global initializer cannot retain a pointer into an error-bearing global"
   checkPointerPresence init fun k =>
     s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
@@ -876,6 +1157,7 @@ def check (f : Func) : Except String Unit := do
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id
   let insts := f.allInsts
+  let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
@@ -889,6 +1171,7 @@ def check (f : Func) : Except String Unit := do
     checkGlobal f g
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
+    checkErrorGlobalInstruction errorGlobals f insts i
     for v in valueOperands i.op ++ ptrOperands i.op do
       if let some vty := v.constTy? then
         unless checkedConstTypes.contains vty do
@@ -1043,9 +1326,10 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
       throw s!"{f.name}: enum constant '{name}' has no field with tag {n}"
   | .ptrNull _, .ptr .. =>
     unless nullablePtrTy f.types f.layouts expected do fail
-  | .bool _, .bool | .void, .void | .optNull _, .optional _
+  | .bool _, .bool | .void, .void | .optNull _, .optional _ => pure ()
   | .ptrConst .., .ptr "one" .. | .ptrConst .., .ptr "many" ..
-  | .ptrConst .., .ptr "c" .. | .ptrOther .., .ptr .. => pure ()
+  | .ptrConst .., .ptr "c" .. => checkGlobalAliasConstants f v
+  | .ptrOther .., .ptr .. => pure ()
   | .optSome _ payload, .optional child => recur child payload
   | .errUnionOk _ payload, .errorUnion _ child => recur child payload
   | .unionVal _ field payload, .union _ _ _ fields =>
@@ -1675,6 +1959,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id)
   let insts := index.insts
+  let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
@@ -1688,6 +1973,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
+    log := log.record (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
     for v in valueOperands i.op ++ ptrOperands i.op do
       let result := do
         checkNullConstants f.name f.types f.layouts v
