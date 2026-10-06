@@ -17,12 +17,12 @@ theorem provenance (root : Ptr) (parent payload leaf : Nat) :
 
 theorem optional_alias (root : Ptr) (parent leaf : Nat) :
     resolved root parent 0 leaf = (root.add parent).add leaf := by
-  simp [resolved, Ptr.add, Nat.cast_add, Int.add_assoc]
+  simp [resolved, Ptr.add, Int.natCast_add, Int.add_assoc]
 
 theorem small_alias (root : Ptr) (parent : Nat) :
     resolved root parent 2 0 = errPayloadPtr (BitVec 8) (root.add parent) := by
   change root.add ((parent + 2 + 0 : Nat) : Int) = (root.add parent).add (2 : Int)
-  simp [Ptr.add, Nat.cast_add, Int.add_assoc]
+  simp [Ptr.add, Int.natCast_add, Int.add_assoc]
 
 theorem wide_alias (root : Ptr) (parent : Nat) :
     resolved root parent 0 0 = errPayloadPtr (BitVec 64) (root.add parent) := by
