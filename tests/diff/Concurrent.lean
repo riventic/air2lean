@@ -71,6 +71,7 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
       | "handoff" => pure (Sync.handoff {})
       | "semaphoreCounter" => pure (Sync.semaphoreCounter {})
       | "rwLockRead" => pure (Sync.rwLockRead {})
+      | "rwLockSnapshotPair" => pure (Sync.rwLockSnapshotPair {})
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
     pure (runWith fuel Sync.dispatch Sync.mem0 main payload)
   | "threadsync" =>

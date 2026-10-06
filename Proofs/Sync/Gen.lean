@@ -1,3 +1,4 @@
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -1397,6 +1398,49 @@ def rwLockRead (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) :=
       let i19 ← Zig.add false i17 i18
       let i20 ← pure ((.ok i19) : Except Zig.ErrName (BitVec 32))
       pure (.ret i20))) : Zig.CM Tgt rwLockReadLocals rwLockReadExit).run' { (default : rwLockReadLocals) with sh := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+
+structure rwLockSnapshotPairLocals where
+  sh : Zig.Ptr
+  deriving Inhabited
+
+inductive rwLockSnapshotPairExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+
+def rwLockSnapshotPair (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s1 ← Zig.allocStack 64 8
+  let e ← ((do
+    let i1 ← pure (← get).sh
+    let i2 ← pure (i1.add 0)
+    Zig.store (α := Zig.Io) 8 i2 p0
+    let i4 ← pure (i1.add 16)
+    Zig.store (α := Io_RwLock) 8 i4 ({ state := (0 : BitVec 64), mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), semaphore := ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (0 : BitVec 64) } : Io_Semaphore) } : Io_RwLock)
+    let i6 ← pure (i1.add 56)
+    Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
+    let i8 ← pure (i1)
+    let i9 ← Zig.spawnC (Tgt.writer i8)
+    match i9 with
+    | .error _ => (do
+      let i11 ← Zig.callRC (Zig.unwrapErr i9)
+      let i12 ← pure (i11)
+      let i13 ← pure ((.error i12) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i13))
+    | .ok v10 => (do
+      let i15 ← pure (i1.add 16)
+      let _i16 ← Zig.callC (Io_RwLock_lockSharedUncancelable i15 p0)
+      let i17 ← pure (i1.add 56)
+      let i18 ← Zig.load (BitVec 32) 4 i17
+      let i19 ← pure (i1.add 56)
+      let i20 ← Zig.load (BitVec 32) 4 i19
+      let i21 ← pure (i1.add 16)
+      let _i22 ← Zig.callC (Io_RwLock_unlockShared i21 p0)
+      let _i23 ← Zig.joinC v10
+      let i24 ← Zig.mul false (10 : BitVec 32) i18
+      let i25 ← Zig.add false i24 i20
+      let i26 ← pure ((.ok i25) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i26))) : Zig.CM Tgt rwLockSnapshotPairLocals rwLockSnapshotPairExit).run' { (default : rwLockSnapshotPairLocals) with sh := s1 }
   Zig.free s1
   match e with
   | .ret v => pure v

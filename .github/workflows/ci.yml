@@ -495,7 +495,11 @@ jobs:
       # hold for it too (0.14.1 has its own `layout`, `variants` and `floatops` translations).
       - name: Build proofs
         if: ${{ !matrix.mutate }}
-        run: lake build Proofs
+        run: |
+          lake build Proofs
+          if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
+            lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
+          fi
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
       # assembly/libm policy is reviewed for this profile and the pinned Lean release.
