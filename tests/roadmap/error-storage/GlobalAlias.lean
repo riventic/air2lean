@@ -99,7 +99,8 @@ def main : IO Unit := do
   accept (ptrReturn "constSuccessfulPayload" constUnion 8 0)
   accept {base "constNumericPayloadProjection" constUnion with ret := 8, body := #[{id := 0, ty := 8, op := .errPayloadPtr false (.ptrConst 10 0 0)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}
   reject (loadAt "constSymbolicPayloadView" constUnion 7 0) "overlaps symbolic error bytes"
-  reject (ptrReturn "constSymbolicPayloadEscape" constUnion 7 0) "overlaps symbolic error bytes"
+  -- Returning the symbolic pointer is rejected at inst0 before byte-overlap validation.
+  reject (ptrReturn "constSymbolicPayloadEscape" constUnion 7 0) "inst 0: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
   reject (ptrReturn "constSymbolicWholeEscape" constUnion 10 0) "escaping, arithmetic"
   accept {base "constTypedUnionLoad" constUnion with ret := 6, body := #[{id := 0, ty := 6, op := .load (.ptrConst 10 0 0)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}
   reject {base "constMixedSymbolicMany" constUnion with ret := 0, body := #[{id := 0, ty := 0, op := .ptrElemVal (.ptrConst 13 0 0) (.int 17 1)}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
