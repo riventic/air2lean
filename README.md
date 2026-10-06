@@ -18,6 +18,8 @@ Translate a subset of Zig into Lean 4, then prove properties of the code in Lean
 
 Threaded examples have partial-correctness and safety proofs over all schedules in the model: completed runs return the stated result, and no schedule gives a data race, deadlock or another error. These proofs allow no result (including out-of-fuel runs); they do not prove termination or fairness. See the [proved examples and concurrency logic](docs/proofs.md#proved-examples).
 
+Optional [separation proof tools](docs/proof-tools.md) split scalar-array ownership, apply an element update, and reassemble the whole array while retaining neighboring values and an independent frame. Kernel-checked contracts cover the existing generated `Slices.at` and `Slices.bumpAt` bodies; this bounded model-library interface adds no source/exporter correspondence qualification.
+
 ## Start here: check a proof
 
 Install [elan](https://github.com/leanprover/elan#installation), Lean's toolchain manager, then run these commands from the repository root:
