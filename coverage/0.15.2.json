@@ -15381,7 +15381,7 @@
       "tests/golden/vectors/air/vectors.vShift.json": "19aa90a260d72f7f341801c5241d280d763732a90b31644567fa08a289ae6b8f",
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
-      "tests/roadmap/diagnostics/Collector.lean": "f1c1137b84126dd9084e6726b6214d35661477a1aa8770d608f580dfc483c882",
+      "tests/roadmap/diagnostics/Collector.lean": "2ee51db19697067cf114efca6196a79d9149ef7908300b22489a009eaa87dc53",
       "tests/roadmap/diagnostics/RuntimeTags.lean": "de6d2ff152e0308d363146f61fedec97c4a98b092b22ee183f471b2f138d8820",
       "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730"
     },
