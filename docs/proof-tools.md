@@ -60,11 +60,32 @@ example (p : Ptr) (x y z w : BitVec 32) (R : Assn) :
     (by simp only [List.length_cons, List.length_nil]; decide) w
 ```
 
-Array selection and arithmetic remain explicit. The helper exposes a split
-postcondition; it does not automatically reassemble a whole array or infer which
-array an arbitrary command accesses. `sep_frame` continues treating arrays as
-opaque atoms. General array/range search, reassembly, and loop invariants remain
-outside this bounded P01 contribution.
+Import `ZigLean.Sep.Array.Reassemble` to recover whole-array ownership explicitly.
+`arr_append_of_heap hn hp hm` joins contiguous typed ranges; `arr_reassemble hn hk
+hp hm` joins a prefix, an updated element at full ABI alignment, and the original
+suffix into `arr p (xs.set k w)`. Both require positive element size and actual
+memory backing (`m.heap = h ∪ hF`). That premise matters: disjoint assertions alone
+can describe different addresses or block kinds for two ranges in the same block.
+The join proof reads consistent metadata from the actual memory. Empty boundaries
+and empty concatenations are supported; no byte copying or new allocation occurs.
+
+`Triple.arr_update hn hk hs rule` obtains backing from the returned memory of a
+supplied full-alignment element rule and reassembles the array while retaining
+`R`. `Triple.arr_store_reassemble hn hs hi w` specializes this contract to a scalar
+store, and `Triple.arr_read hn hs hi` returns a selected value with unchanged
+array ownership. The interface supports a second update or read without exposing
+byte-level representation in the client proof. `ArrayClients.lean` reuses it for
+the existing generated `Slices.at` and `Slices.bumpAt` bodies from the public
+slice example, then composes the clients on independent arrays. The update is
+modulo 256 and the returned byte is the updated array's element 3; a capacity
+of four and an in-bounds selected index remain explicit premises.
+
+Array selection and arithmetic remain explicit. `sep_frame` continues treating
+arrays as opaque atoms. General array/range search, inferred loop invariants,
+zero-size element reassembly, and production container invariants remain outside
+this bounded P01/P04 contribution. These are contracts about existing generated
+model bodies; this slice adds no source/exporter qualification or general compiler
+correspondence claim.
 
 `TotalTriple P c Q` requires an explicit `c.run m = pure (v, m')` witness for
 every admissible sequential input and disjoint frame, along with ownership of
@@ -88,6 +109,13 @@ partial and total correctness. `Array.lean` checks prefix/element/suffix ownersh
 endpoint and singleton boundaries, a store preserving neighboring elements and an
 independent heap allocation, and rejection of out-of-bounds access, overlap,
 dropped frames, and incorrect postconditions. Build the optional modules with
-`lake build ZigLean.Sep.Automation ZigLean.Sep.Array ZigLean.Sep.Total`, then run
+`lake build ZigLean.Sep.Automation ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble
+ZigLean.Sep.Total Proofs.Slices.Gen`, then run
 each with `lake env lean tests/roadmap/proof-tools/<name>.lean` (`Normalize`,
-`Clients`, `Array`, and `Total`). CI retains the build and fixture logs.
+`Clients`, `Array`, `Reassemble`, `ArrayClients`, and `Total`). Reassembly fixtures
+include endpoint/singleton/empty boundaries, missing memory backing, inconsistent
+metadata, duplicated ownership, lost frames, stale values, and changed neighbors.
+CI retains the build and fixture logs.
+The optional-module build and all six proof-tool fixtures have passed kernel
+checking with the pinned Lean toolchain. These checks establish the stated model
+contracts and rejected proof attempts; they add no native/export qualification.
