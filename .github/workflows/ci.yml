@@ -76,6 +76,9 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      - name: Local Lake cache hygiene regressions
+        run: python3 tests/roadmap/local-ci/test_cache.py
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
@@ -166,6 +169,9 @@ jobs:
           path: tests/diff/.lake
           key: lake-diff-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
 
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
       - name: Build runtime library + translator
         run: lake build
 
@@ -180,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Array 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Separation normalization regressions
         if: ${{ !matrix.mutate }}
@@ -193,6 +199,12 @@ jobs:
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
+
+      - name: Explicit array framing regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Array.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Array.log"
 
       - name: Total correctness regressions
         if: ${{ !matrix.mutate }}
@@ -218,6 +230,7 @@ jobs:
           mkdir -p "$diagnostics_evidence_dir/tmp"
           export TMPDIR="$diagnostics_evidence_dir/tmp"
           lake env lean tests/roadmap/diagnostics/Collector.lean 2>&1 | tee "$diagnostics_evidence_dir/collector.log"
+          lake env lean --run tests/roadmap/diagnostics/RuntimeTags.lean 2>&1 | tee "$diagnostics_evidence_dir/runtime-tags.log"
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
       - name: First-use CLI diagnostics
@@ -264,6 +277,10 @@ jobs:
           else
             scripts/progress-hints.sh
           fi
+
+      - name: Finite progress kernel contracts
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: lake env lean tests/roadmap/progress/Total.lean
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
