@@ -1421,6 +1421,43 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
         checkFutex 0 1
         require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
+/-- Explicit environment policy for translated thread assignment. The default retains
+existing proofs under an availability assumption; fallible includes API failure. -/
+inductive SpawnSemantics where
+  | available
+  | fallible
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The fallible boundary accepts only the audited std versions and a constant
+SpawnConfig requesting 1 MiB or the default 16 MiB and a null custom allocator. Other sizes, runtime configs
+and allocator-specific semantics remain outside this model. -/
+def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
+  for f in funcs do
+    for i in f.allInsts do
+      if let .call (.func name _ _) args := i.op then
+        if let some kind := threadFn? name then
+          if kind.spawnArgs?.isSome then
+            unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+              throw s!"{f.name}: fallible spawn requires an audited Zig version"
+            if kind == .spawn then
+              let some (Val.agg ty fields) := (args[0]? : Option Val)
+                | throw s!"{f.name}: fallible Thread.spawn requires a constant SpawnConfig"
+              let some (.struct "Thread.SpawnConfig" _ names) := f.types[ty]?
+                | throw s!"{f.name}: fallible Thread.spawn requires Thread.SpawnConfig"
+              unless names.size == 2 && names[0]!.1 == "stack_size" && names[1]!.1 == "allocator" do
+                throw s!"{f.name}: fallible Thread.spawn has an unaudited SpawnConfig layout"
+              unless fields.size == 2 do
+                throw s!"{f.name}: fallible Thread.spawn has an incomplete SpawnConfig"
+              let .int _ stack := fields[0]!
+                | throw s!"{f.name}: fallible Thread.spawn requires a constant stack_size"
+              unless stack == 1048576 || stack == 16777216 do
+                throw s!"{f.name}: fallible Thread.spawn supports only audited 1 MiB or default 16 MiB stack_size requests"
+              let .optNull _ := fields[1]!
+                | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
+            else
+              unless f.zigVersion == "0.16.0" do
+                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
   let mut targetLists : Std.HashMap String (List String) := {}
@@ -1428,6 +1465,14 @@ private def referenceTargets (refs : Array (String × String)) : Std.HashMap Str
     targetLists := targetLists.insert typ (callee :: targetLists.getD typ [])
   return targetLists.fold (fun buckets typ names => buckets.insert typ names.reverse.toArray)
     ({} : Std.HashMap String (Array String))
+
+/-- Shared CLI/project policy spelling. The policy selects a supported model, not
+an assertion that the host can create a thread. -/
+def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
+  match value with
+  | "available" => .ok .available
+  | "fallible" => .ok .fallible
+  | _ => .error "invalid --spawn-policy (expected available or fallible)"
 
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory

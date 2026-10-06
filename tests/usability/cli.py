@@ -26,4 +26,20 @@ with tempfile.TemporaryDirectory(prefix='air2lean CLI first use ') as temp:
     diagnostics = check([empty, '-o', output, '--namespace', 'My'], 1, 'no *.json files')
     assert 'export fn or comptime references' in diagnostics
     assert output.read_text() == 'previous output\n'
+    complete = [empty, '-o', output, '--namespace', 'My']
+    for policy in ['available', 'fallible']:
+        check([*complete, '--spawn-policy', policy], 1, 'no *.json files')
+    check([*complete, '--spawn-policy'], 1, 'missing value for --spawn-policy')
+    check([*complete, '--spawn-policy', 'unknown'], 1,
+          'invalid --spawn-policy (expected available or fallible)')
+    for first, second in [('available', 'fallible'), ('fallible', 'available'), ('fallible', 'fallible')]:
+        check([*complete, '--spawn-policy', first, '--spawn-policy', second], 1, 'duplicate --spawn-policy')
+    # Existing nonduplicate parser precedence and literal option values remain intact.
+    check([empty, '-o', output, '--spawn-policy', 'unknown'], 1, 'missing --namespace')
+    check([*complete, '--float-semantics', 'unknown', '--spawn-policy', 'unknown'], 1,
+          'invalid --spawn-policy (expected available or fallible)')
+    check([*complete, '--spawn-policy', 'unknown', '--unknown'], 1, 'unknown option')
+    for prefix_value in ['--spawn-policy', '--spawn-policy=anything']:
+        check([*complete, '--prefix', prefix_value], 1, 'no *.json files')
+    assert output.read_text() == 'previous output\n'
 print('First-use CLI diagnostics passed')

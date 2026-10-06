@@ -70,7 +70,8 @@ class AdapterTests(unittest.TestCase):
 
     def runner(self, argv, cwd, limits):
         self.assertEqual(argv[1], '--diagnostics-json')
-        self.assertEqual(argv[3:], ['--profile', 'legacy-abi64-le', '--diagnostic-limit', '256'])
+        self.assertEqual(argv[3:], ['--profile', 'legacy-abi64-le', '--diagnostic-limit', '256',
+                                   '--spawn-policy', self.manifest.get('spawn_policy', 'available')])
         self.assertNotIn('-o', argv)
         files = sorted((cwd / 'air').glob('*.json'))
         self.calls.append((cwd.name, [p.read_bytes() for p in files]))
@@ -86,6 +87,33 @@ class AdapterTests(unittest.TestCase):
 
     def check(self, runner=None):
         return adapter.check_project(self.path, self.tool, 256, runner or self.runner)[0]
+
+    def test_spawn_policies_forward_without_changing_producer_schema(self):
+        for policy in (None, 'available', 'fallible'):
+            with self.subTest(policy=policy):
+                if policy is None:
+                    self.manifest.pop('spawn_policy', None)
+                else:
+                    self.manifest['spawn_policy'] = policy
+                self.save()
+                result = self.check()
+                expected = 'available' if policy is None else policy
+                self.assertEqual(result['evidence']['spawn_policy'], expected)
+                checked = result['root_checks'][0]
+                self.assertEqual(checked['execution']['argv'][-2:], ['--spawn-policy', expected])
+                self.assertNotIn('spawn_policy', checked['producer'])
+                self.assertEqual(checked['producer']['schema'], 1)
+                self.assertEqual(result['proof_status'], 'not_run')
+                self.assertEqual(result['runtime_outcomes'], 'not_observed')
+                self.assertEqual(result['source_correspondence'], 'not_attested')
+                self.assertFalse(list(self.base.rglob('Gen.lean')))
+
+    def test_invalid_spawn_policy_prevents_producer_invocation(self):
+        self.manifest['spawn_policy'] = 'best-effort'
+        self.save()
+        with self.assertRaises(project.Invalid):
+            self.check()
+        self.assertEqual(self.calls, [])
 
     def test_success_preserves_evidence_and_never_emits(self):
         report = self.check()

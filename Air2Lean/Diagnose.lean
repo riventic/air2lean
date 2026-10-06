@@ -13,19 +13,26 @@ structure CheckArgs where
   directory : System.FilePath
   profile : Option String := none
   limit : Nat := 256
+  spawnPolicy : SpawnSemantics := .available
 
-private partial def parseOptions (args : List String) (out : CheckArgs) : Except String CheckArgs := do
+private partial def parseOptions (args : List String) (out : CheckArgs)
+    (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
   match args with
   | [] => return out
   | "--profile" :: p :: rest =>
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
-    parseOptions rest { out with profile := some p }
+    parseOptions rest { out with profile := some p } spawnPolicySeen
   | "--diagnostic-limit" :: value :: rest =>
     let some limit := value.toNat? | throw "--diagnostic-limit must be an integer"
     unless 1 ≤ limit && limit ≤ 4096 do throw "--diagnostic-limit must be from 1 through 4096"
-    parseOptions rest { out with limit }
-  | _ => throw "check-only mode accepts only <air-dir>, --profile and --diagnostic-limit; emission flags are incompatible"
+    parseOptions rest { out with limit } spawnPolicySeen
+  | "--spawn-policy" :: value :: rest =>
+    if spawnPolicySeen then throw "duplicate --spawn-policy"
+    let spawnPolicy ← parseSpawnPolicy value
+    parseOptions rest { out with spawnPolicy } true
+  | ["--spawn-policy"] => throw "missing value for --spawn-policy"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -33,7 +40,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 structure FileResult where
   file : String
@@ -165,7 +172,8 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     structureValid := checked.structureValid
     localPassed := checked.structureValid && log.observed == before }, log)
 
-def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
+def collectProgram (units : Array FileResult) (initial : Log)
+    (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
   let mut log := initial
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
@@ -213,12 +221,29 @@ def collectProgram (units : Array FileResult) (initial : Log) : Log := Id.run do
   -- Retain the authoritative whole-program validator. Its first-error boundary
   -- includes shared definitions and memory effects not independently collected.
   if !funcs.isEmpty then
+    let program := checkProgram funcs
     log := log.record {
       code := .programFailure
       phase := .program
       category := .validationFailure
       message := ""
-      prerequisites := #["structurally_valid_selected_functions"] } (checkProgram funcs)
+      prerequisites := #["structurally_valid_selected_functions"] } program
+    if spawnPolicy == .fallible then
+      if program.toOption.isSome then
+        log := log.record {
+          code := .modelFailure
+          phase := .program
+          category := .unsupportedSemantics
+          message := ""
+          prerequisites := #["validated_selected_program"] } (checkFallibleSpawnCalls funcs)
+      else
+        log := log.add {
+          code := .prerequisiteSkipped
+          phase := .program
+          category := .skipped
+          message := "not inspected: fallible spawn policy requires a valid selected program"
+          prerequisites := #["validated_selected_program"]
+          firstErrorInUnit := true }
   if units.any (!·.localPassed) then
     log := { log with complete := false }
   return log
@@ -309,7 +334,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
         (BuildProfile.checkProgram #[baseline, profile] a.profile)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
-  return (units, collectProgram units log)
+  return (units, collectProgram units log a.spawnPolicy)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

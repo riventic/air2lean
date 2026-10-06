@@ -27,6 +27,14 @@ invalid shared profile blocks that root. Other independently readable roots stil
 Missing source/contract evidence is retained as an import blocker even when supplied AIR
 can be checked. Supplied AIR still does not attest source/export correspondence.
 
+The optional manifest `spawn_policy` is `available` by default or explicitly
+`fallible`. The adapter passes `--spawn-policy` with the effective value on every
+check-only invocation and records it in `evidence` and the execution argv. This does
+not add a field to the producer's schema 1 report. Fallible checking requires a
+producer with the shared fallible-spawn validator; the producer decides which AIR
+is supported. Manifest preflight alone does not establish semantic support. All
+proof, runtime and source disclosures remain unchanged.
+
 Preflight syntax/import, schema and manifest-profile checks have separate typed stages.
 Producer codes, phases, categories, ID spaces, prerequisites and dependency chains are
 validated against the frozen vocabulary and retained. Generic `AIR_DECODE` or validator
