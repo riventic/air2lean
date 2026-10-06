@@ -62,6 +62,32 @@ partial def hasErrorStorage (types : Array Ty) (id : TyId) (seen : Array TyId :=
     | some ty => (childTys ty).any fun child => hasErrorStorage types child (seen.push id)
     | none => false
 
+/-- Unlike byte-storage classification, capability classification follows pointer
+edges. Unknown, cyclic and exhausted type traversals cannot prove a safe view. -/
+private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
+    (seen : Array TyId := #[]) : Option (Nat × Bool) := do
+  if fuel == 0 || seen.contains id then none
+  let ty ← types[id]?
+  let count ← match ty with
+    | .other _ | .errorSet none => none
+    | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .errorUnion .. => some 2
+    | .struct _ _ fields => some fields.size
+    | .union _ _ tag fields => some (tag.toArray.size + fields.size)
+    | .tuple children => some children.size
+    | _ => some 0
+  let mut remaining := fuel - 1
+  if count > remaining then none
+  let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
+  for child in childTys ty do
+    let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
+    remaining := next
+    symbolic := symbolic || childCap
+  return (remaining, symbolic)
+
+private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
+  (errorCapabilityScan types id 1024).map (·.2)
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -545,8 +571,17 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | _ => ptrChild cx.types id
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
-        if hasErrorStorage cx.types source != hasErrorStorage cx.types target then
+        let some sourceCap := hasErrorCapability cx.types source
+          | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+        let some targetCap := hasErrorCapability cx.types target
+          | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
+        if sourceCap != targetCap ||
+            hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
+            ((sourceCap || targetCap) && source != target) then
           cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
+      | none, some target =>
+        unless hasErrorCapability cx.types target == some false do
+          cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
@@ -796,6 +831,75 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+/-- A shared budget proves absence of embedded pointer capabilities, including
+inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
+private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
+  if fuel == 0 then none
+  let ty ← f.types[root]?
+  let count ← match ty with
+    | .int .. | .float .. | .bool | .void | .errorSet (some _) => some 0
+    | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .errorUnion .. => some 2
+    | .struct _ _ fields => some fields.size
+    | .tuple children => some children.size
+    | _ => none
+  let mut remaining := fuel - 1
+  if count > remaining then none
+  let children := childTys ty
+  for child in children do
+    remaining ← pointerFreeInitializerType f child remaining
+  return remaining
+
+/-- Complete constructor values whose typed encoding contains no `errFrag`.
+Success error-union tags and null optional-error tags encode literal zero bytes.
+Undefined/unknown values, error names/arms, pointers and opaque unions fail closed. -/
+private partial def ordinaryInitializer (f : Func) (root : TyId) (v : Val) (fuel : Nat) :
+    Option Nat := do
+  if fuel == 0 then none
+  let ty ← f.types[root]?
+  if let some actual := v.constTy? then
+    if actual != root then none
+  let mut remaining := fuel - 1
+  let items (children : Array TyId) (values : Array Val) : Option Nat := do
+    if children.size != values.size || values.size > remaining then none
+    let mut rest := remaining
+    for (child, value) in children.zip values do
+      rest ← ordinaryInitializer f child value rest
+    return rest
+  match ty, v with
+  | .int .., .int .. | .float .., .float .. | .enum .., .enumTag ..
+  | .bool, .bool _ | .void, .void => return remaining
+  | .optional _, .optNull _ => return remaining
+  | .optional child, .optSome _ value => ordinaryInitializer f child value remaining
+  | .errorUnion set payload, .errUnionOk _ value =>
+    let .errorSet (some _) ← f.types[set]? | none
+    ordinaryInitializer f payload value remaining
+  | .array count child sentinel, .agg _ values =>
+    let count := count + if sentinel then 1 else 0
+    if values.size != count || count > remaining then none
+    for value in values do
+      remaining ← ordinaryInitializer f child value remaining
+    return remaining
+  | .vector count child, .agg _ values =>
+    if values.size != count || count > remaining then none
+    for value in values do
+      remaining ← ordinaryInitializer f child value remaining
+    return remaining
+  | .struct _ _ fields, .agg _ values =>
+    if fields.size != values.size || fields.size > remaining then none
+    items (fields.map (·.2)) values
+  | .tuple children, .agg _ values => items children values
+  | _, _ => none
+
+/-- No mutable or unresolved backing qualifies. Both traversals consume one shared
+1024-node budget. Encoding padding may be undefined; constructor values may not be. -/
+private def immutableOrdinaryGlobal (f : Func) (g : Global) : Bool :=
+  if !g.isConst || g.isExtern || g.threadlocal then false else
+  ((do
+    let value ← g.init
+    let remaining ← pointerFreeInitializerType f g.ty 1024
+    ordinaryInitializer f g.ty value remaining : Option Nat)).isSome
+
 /-- Clipped overlap queries use a shared work budget. `none` means that the
 layout or budget cannot establish absence of symbolic bytes, so callers fail closed. -/
 private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) :
@@ -889,6 +993,14 @@ private def globalAliasPointer? (f : Func) (id : TyId) : Option (String × TyId)
     | _ => none
   | _ => none
 
+/-- Ordinary backing permits numeric views only. Symbolic decoders still require
+matching typed subobjects and cannot escape through this exception. -/
+private def immutableOrdinaryNumericAlias (f : Func) (g : Global) (pty : TyId) : Bool :=
+  match globalAliasPointer? f pty with
+  | some (_, child) => hasErrorCapability f.types child == some false &&
+      (pointerFreeInitializerType f child 1024).isSome && immutableOrdinaryGlobal f g
+  | none => false
+
 private def globalAliasPointerLayout (f : Func) (id : TyId) : Layout :=
   match f.types[id]? with
   | some (.optional p) => f.layouts[p]?.getD {}
@@ -908,9 +1020,11 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
 
 private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit := do
   let some global := f.globals[g]? | throw s!"{f.name}: pointer has unknown global id {g}"
-  if !hasErrorStorage f.types global.ty then return
   let some (kind, child) := globalAliasPointer? f pty
     | throw s!"{f.name}: global alias has no pointer type"
+  let some capability := hasErrorCapability f.types child
+    | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
+  if !hasErrorStorage f.types global.ty && !capability then return
   checkMemTy f.name f.types f.layouts 0 global.ty
   checkMemTy f.name f.types f.layouts 0 child
   let (size, _) ← (modelLayout f.types f.layouts child).mapError fun e => s!"{f.name}: {e}"
@@ -919,13 +1033,13 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
   let (globalSize, _) ← (modelLayout f.types f.layouts global.ty).mapError fun e => s!"{f.name}: {e}"
   if off > globalSize || width > globalSize - off then
     throw s!"{f.name}: global alias subobject exceeds its backing storage"
-  let symbolic := hasErrorStorage f.types child
+  if immutableOrdinaryNumericAlias f global pty then return
   -- Moving either way must preserve element storage throughout the block.
   if kind != "one" && !homogeneousGlobalItems f global.ty child off then
     throw s!"{f.name}: a many/C/slice alias into mixed error-bearing storage is outside the finite error-storage fragment"
-  if symbolic && pointerLayout.hostSize != 0 then
+  if capability && pointerLayout.hostSize != 0 then
     throw s!"{f.name}: a bit-pointer view of symbolic error storage is outside the finite error-storage fragment"
-  let allowed := if symbolic then
+  let allowed := if capability then
       (matchingGlobalSubobject f global.ty off child 1024).map (·.2)
     else (errorFreeGlobalRange f global.ty off width 1024).map (·.2)
   unless allowed == some true do
@@ -1043,9 +1157,28 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
     | _ => none
   | _ => none
 
+/-- Exempt only the final fixed numeric capability; never discard its backing
+provenance while traversing a derived pointer or a block/slice dependency. -/
+private def immutableOrdinaryNumericValue (f : Func) (insts : Array Inst) (v : Val) : Bool :=
+  ((do
+    let pty ← aliasValueTy? insts v
+    let (g, _) ← fixedGlobalOrigin? f insts v
+    let global ← f.globals[g]?
+    return immutableOrdinaryNumericAlias f global pty : Option Bool)).getD false
+
 private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
-  if !enabled then return
   let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
+  -- A numeric getter does not carry an interprocedural proof for recovering a
+  -- symbolic parent. Enforce this also in callees with no local global table.
+  if let .fieldParentPtr p _ := i.op then
+    if let some (_, parent) := globalAliasPointer? f i.ty then
+      let some parentCap := hasErrorCapability f.types parent
+        | throw s!"{f.name}: inst {i.id}: parent recovery has unresolved or cyclic symbolic storage provenance"
+      if parentCap then
+        let source := ((aliasValueTy? insts p).bind (globalAliasPointer? f)).map (·.2)
+        unless (source.bind (hasErrorCapability f.types)) == some true do
+          throw s!"{f.name}: inst {i.id}: recovering an error-bearing parent from a numeric pointer needs unsupported interprocedural provenance"
+  if !enabled then return
   if (globalAliasPointer? f i.ty).isSome && dependsOnErrorGlobal f insts (.inst i.id) then
     let some (g, off) := fixedGlobalOrigin? f insts (.inst i.id) | reject
     checkGlobalAliasAt f i.ty g off
@@ -1053,17 +1186,17 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
   | .bitcast p =>
     if (globalAliasPointer? f i.ty).isNone && ((aliasValueTy? insts p).bind (globalAliasPointer? f)).isSome && dependsOnErrorGlobal f insts p then reject
   | .ret v | .store _ v =>
-    if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+    if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .call _ args =>
     for v in args do
-      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .memcpy dst src =>
     for v in #[dst, src] do
-      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v then reject
+      if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .memset p _ =>
     if dependsOnErrorGlobal f insts p then reject
   | .ptrElemVal p _ | .sliceElemVal p _ =>
-    if dependsOnErrorGlobal f insts p then
+    if dependsOnErrorGlobal f insts p && !immutableOrdinaryNumericValue f insts p then
       let some pty := aliasValueTy? insts p | reject
       let some item := itemTy f.types pty | reject
       let some (g, off) := fixedGlobalOrigin? f insts p | reject

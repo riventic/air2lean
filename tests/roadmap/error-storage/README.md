@@ -83,3 +83,26 @@ through returns/calls/stores, and pointer-to-integer views rooted in these globa
 closed. This bounded local check is not general interprocedural pointer provenance.
 `GlobalAlias.lean` supplies focused checker controls. ROOT must rebuild and run the retained
 stock-compiler/real-AIR folded-cast packet before production qualification is claimed.
+
+The bounded immutable-initializer exception classifies the whole backing block,
+not the addressed field. It requires a const, nonextern, nonthreadlocal global,
+complete known constructor values and no pointer-bearing types. Error names,
+error arms, undefined/unknown values and exhausted work fail closed. Type and
+value walks share a 1024-node budget. Successful finite error unions encode the
+ordinary zero tag; optional null tags also carry no symbolic fragment. Model
+writes use `Mem.accessW`, which rejects constGlobal blocks. Padding may remain
+undefined; this exception claims absence of errFrag, not initialization of every
+byte. The shared classification applies to local aliases and escaping dependency
+checks, including many/slice pointers. Mutable/error-bearing exceptions and
+general interprocedural provenance remain unsupported. Exact source getter
+aliases still require ROOT's fresh L06 AIR and existing full alias oracles.
+
+The immutable exception admits only error-free pointee views. Symbolic views retain complete-subobject and homogeneous-backing checks even when every initializer error union succeeds; symbolic pointer capabilities still cannot escape. A numeric payload is not a valid symbolic error decoder merely because its block has no error fragments. The certificate boundary controls use a numeric payload pointer, while separate controls reject folded symbolic payload views and retain local matching typed loads.
+
+Backing provenance is retained through local instructions and branch/slice dependencies. Only a final numeric pointer with a fixed global origin qualifies for escape or element-read exemption. Numeric-to-error-bearing `fieldParentPtr` recovery is unsupported even in a callee with no globals; this prevents getters from manufacturing new symbolic views without a proven parent relation. Folded symbolic aliases into ordinary numeric global backing also require an exact typed subobject. Dynamic unresolved arithmetic and generic symbolic pointer escapes remain outside this fragment.
+
+Integer or opaque values cannot be cast into pointers whose pointee contains symbolic error storage. This guard also applies to callees with no global table, so an admitted numeric getter cannot be converted through an address roundtrip into a new symbolic error view. Numeric-to-numeric pointer/address behavior is unchanged.
+
+Capability checks follow nested pointer and aggregate edges with a shared 1024-node work budget; unknown types, cycles and exhaustion fail closed. Casts, parent recovery, folded aliases and final exemptions use this capability boundary consistently, while physical byte-overlap checks retain storage-layout classification. The immutable numeric exception additionally requires a pointer-free pointee view. Nested symbolic pointer-slot/address recovery is rejected; ordinary numeric double-pointer/address controls remain admitted.
+
+An error-capability pointer cast must preserve the exact pointee type id as well as the byte-storage classification. An unrelated error field cannot mask changing a numeric pointer slot into a symbolic pointer slot. The capability traversal validates all reachable branches before success, so a known error elsewhere does not hide a cyclic, unknown or exhausted branch.
