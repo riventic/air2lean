@@ -122,7 +122,7 @@ def valueOperands (op : Op) : Array Val :=
   | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
-  | .countBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
+  | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
   | .floatConv a | .floatFromInt a | .intFromFloat _ a | .isNull a | .isNonNull a
   | .optPayload a | .wrapOptional a | .isErr a | .isNonErr a | .errPayload a | .errCode a
   | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a => #[a]
@@ -223,7 +223,7 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
 
 /-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
 inductive AllocFn where
-  | create | destroy | alloc | alignedAlloc | free | dupe | remap
+  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap
   deriving BEq, Repr
 
 /-- The allocator function that the function `name` is an instance of
@@ -234,6 +234,7 @@ def allocFn? (name : String) : Option AllocFn :=
   | "mem.Allocator.destroy" => some .destroy
   | "mem.Allocator.alloc" => some .alloc
   | "mem.Allocator.alignedAlloc" => some .alignedAlloc
+  | "mem.Allocator.allocSentinel" => some .allocSentinel
   | "mem.Allocator.free" => some .free
   | "mem.Allocator.dupe" => some .dupe
   | "mem.Allocator.remap" => some .remap

@@ -13,9 +13,8 @@ The model is one allocator, with its state in `Mem`:
   index in `Mem.allocPolicy.failures`, and requests above `Mem.allocPolicy.maxBytes` fail.
   The default is the legacy one-failure policy with a 1 MiB request cap. Policies are
   explicit environment parameters; they do not guarantee native allocation success.
-* `resize` and `remap` always fail. So `realloc` and a growing `ArrayListUnmanaged` always make
-  a new block, copy, and free the old block, and the number of allocations does not depend on
-  the allocator.
+* The default `remap` policy fails. Explicit byte policies permit in-place or moved success
+  for whole alignment-1 byte blocks; `resize` and other item sizes keep their old behavior.
 * A free of a pointer that is not the start of a live heap block, or with a length other than
   the length of the block, throws `.illegal` (a double free, a use after free).
 
@@ -83,6 +82,18 @@ def Allocator.alloc (_ : Allocator) (size align : Nat) (n : BitVec 64) :
   | .ok p => pure (.ok ⟨p, n⟩)
   | .error e => pure (.error e)
 
+/-- Bounded `allocSentinel(u8, n, s)`: one extra byte, a checked store at offset n,
+then the payload slice of length n. ReleaseSafe overflow panics before consuming an
+allocation-policy decision; even n=0 needs one byte and can fail. -/
+def Allocator.allocSentinel (a : Allocator) (n : BitVec 64) (sentinel : BitVec 8) :
+    MemM (Except ErrName Slice) := do
+  if 2 ^ 64 ≤ n.toNat + 1 then throw .panic
+  match ← a.create (n.toNat + 1) 1 with
+  | .error e => pure (.error e)
+  | .ok p =>
+    store 1 (p.add n.toNat) sentinel
+    pure (.ok ⟨p, n⟩)
+
 /-- `free(s)`, for items of `size` bytes. Zig first sets the bytes to `undefined`; the block is
 dead after the free. The poison write participates in the race check. -/
 def Allocator.free (_ : Allocator) (size : Nat) (s : Slice) : MemM Unit :=
@@ -103,14 +114,58 @@ def Allocator.dupe (a : Allocator) (size align srcAlign : Nat) (m : Slice) :
     pure (.ok s)
   | .error e => pure (.error e)
 
-/-- `remap(s, n)`: the model cannot remap. A new length of 0 frees `s`; items of 0 bytes need no
-bytes, so `s` gets the new length. -/
+/-- Resize byte representations: exact retained prefix, undefined grown suffix.
+This copies undefined/pointer-fragment bytes without decoding them. -/
+def remapBytes (bs : Array Byte) (n : Nat) : Array Byte :=
+  padTo n (bs.extract 0 n)
+
+/-- Every other allocated block, even a dead one, precedes this block's address.
+Check this explicitly rather than assuming arbitrary model states have allocation order. -/
+def Mem.byteRemapLast (m : Mem) (b : BlockId) (blk : Block) : Bool :=
+  b + 1 == m.blocks.size && Nat.allTR m.blocks.size (fun j _ =>
+    j == b || decide (m.blocks[j].addr + m.blocks[j].bytes.size < blk.addr))
+
+/-- The in-place byte resize transition; its caller validates whole-block ownership and
+latest-block growth before applying it. Thread bookkeeping is retained verbatim. -/
+def Mem.afterByteRemap (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Mem :=
+  { m with
+    blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n }
+    nextAddr := Nat.max m.nextAddr (blk.addr + n + 1) }
+
+/-- Selected successful remap of one whole live heap byte-buffer. Growth in place is
+restricted to the latest allocated block, including dead-block history, so addresses
+cannot overlap a later block. New allocations stay beyond the enlarged block.
+A failed request preserves bytes, logical length and lifetime. -/
+def remapByteBuffer (s : Slice) (n : Nat) : MemM (Option Slice) := do
+  let m ← get
+  if m.allocPolicy.byteRemap = .fail then return none
+  let (b, blk, o) ← m.access s.ptr s.len.toNat 1
+  if blk.kind ≠ .heap ∨ o ≠ 0 ∨ blk.bytes.size ≠ s.len.toNat then throw .illegal
+  if blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n then return none
+  match m.allocPolicy.byteRemap with
+  | .fail => return none
+  | .inPlace =>
+    if blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true then return none
+    recordAccess b 0 blk.bytes.size .write
+    let current ← get
+    set (current.afterByteRemap b blk n)
+    return some ⟨s.ptr, BitVec.ofNat 64 n⟩
+  | .move =>
+    recordAccess b 0 (Nat.min blk.bytes.size n) .read
+    let p ← alloc .heap n 1
+    storeBytes p 1 (remapBytes blk.bytes n)
+    poisonFree s.ptr s.len.toNat
+    return some ⟨p, BitVec.ofNat 64 n⟩
+
+/-- `remap(s, n)`: default failure; selected byte policies permit bounded success.
+A new length of 0 frees `s`; nonempty zero-size items change length without bytes. -/
 def Allocator.remap (a : Allocator) (size : Nat) (s : Slice) (n : BitVec 64) :
     MemM (Option Slice) := do
   if n.toNat = 0 then
     a.free size s
     return some ⟨s.ptr, 0⟩
   if s.len.toNat ≠ 0 ∧ size = 0 then return some ⟨s.ptr, n⟩
+  if size = 1 ∧ s.len.toNat ≠ 0 then return ← remapByteBuffer s n.toNat
   return none
 
 end Zig
