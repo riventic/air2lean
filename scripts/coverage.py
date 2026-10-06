@@ -309,7 +309,7 @@ def compiler_inventory(source, cache=None):
 def pointer_dispositions(names, arms):
     return [{'name': name,
              'disposition': 'exporter-explicit-arm-conditional-review' if name in arms else
-             'exporter-fallback-unsupported-marker-review' if '"unsupported"' in arms.get('*', []) else
+             'exporter-fallback-unsupported-marker-review' if any(token in ('"unsupported"', 'unsupported') for token in arms.get('*', [])) else
              'exporter-fallback-unclassified',
              'qualification': 'Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review.'}
             for name in names]
@@ -346,7 +346,7 @@ def generate(version, source, os_name='linux'):
     exporter = cache.tokens(ROOT/'zig-patch/air-json/json.zig')
     decode = switch_arms(function_body(exporter, 'writeInst'), ['tag'], 1)
     type_arms = switch_arms(function_body(exporter, 'writeTypeEntry'), ['ty', '.', 'zigTypeTag', '(', 'zcu', ')'])
-    ptr_arms = switch_arms(function_body(exporter, 'writePtr'), ['base'])
+    ptr_arms = switch_arms(function_body(exporter, 'resolvePtr'), ['base'])
     normalizer_source = cache.text(ROOT/'Air2Lean/Air/Normalize.lean')
     norms = normalizer(normalizer_source)
     rejection_reasons = runtime_tag_reasons(normalizer_source)

@@ -1200,7 +1200,8 @@ private def dependsOnErrorGlobal (f : Func) (insts : Array Inst) (v : Val) : Boo
   ((errorGlobalDependency f insts v 1024).map (·.2)).getD true
 
 /-- Track only transparent local pointer constructors with fixed byte offsets.
-Unknown arithmetic, block joins, loaded pointers and calls intentionally have no origin. -/
+A block result is transparent only with exactly one branch targeting that block.
+Unknown arithmetic, multi-branch joins, loaded pointers and calls have no origin. -/
 private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val) (fuel : Nat := 256) : Option (Nat × Nat) := do
   if fuel == 0 then none
   match v with
@@ -1208,11 +1209,22 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
   | .optSome _ p => fixedGlobalOrigin? f insts p (fuel - 1)
   | .sliceConst _ p _ => fixedGlobalOrigin? f insts p (fuel - 1)
   | .inst id =>
-    let i ← insts.find? (·.id == id)
+    -- Public check also accepts constructed Func values; do not borrow an origin
+    -- from a different definition sharing this ID before canonicalization.
+    let definitions := insts.filter (·.id == id)
+    if definitions.size != 1 then none
+    let i ← definitions[0]?
     let sourceTy (p : Val) : Option TyId := do
       let pty ← aliasValueTy? insts p
       (globalAliasPointer? f pty).map (·.2)
     match i.op with
+    | .block _ =>
+      let branches := insts.filterMap fun j => match j.op with
+        | .br target value => if target == id then some value else none
+        | _ => none
+      if branches.size != 1 then none else
+        let value ← branches[0]?
+        fixedGlobalOrigin? f insts value (fuel - 1)
     | .bitcast p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
       fixedGlobalOrigin? f insts p (fuel - 1)
     | .fieldPtr p field =>
