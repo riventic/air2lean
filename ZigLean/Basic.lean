@@ -45,6 +45,20 @@ abbrev isize := BitVec 64
 panic. -/
 abbrev ErrName := String
 
+/-- Computable equality for generated error-union fields and aggregates.
+Both constructor tags and their payloads participate in equality. -/
+instance {ε : Type u} {α : Type v} [DecidableEq ε] [DecidableEq α] :
+    DecidableEq (Except ε α) := fun left right =>
+  match left, right with
+  | .error a, .error b =>
+    if h : a = b then isTrue (by cases h; rfl)
+    else isFalse (by intro equal; cases equal; exact h rfl)
+  | .ok a, .ok b =>
+    if h : a = b then isTrue (by cases h; rfl)
+    else isFalse (by intro equal; cases equal; exact h rfl)
+  | .error _, .ok _ => isFalse (by intro equal; cases equal)
+  | .ok _, .error _ => isFalse (by intro equal; cases equal)
+
 /-! ## Arithmetic -/
 
 section Arith
