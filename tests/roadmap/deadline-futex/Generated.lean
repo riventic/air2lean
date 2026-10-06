@@ -48,12 +48,9 @@ def main : IO Unit := do
 
   -- Two readable source messages: option 0 is current, option 1 is older.
   let some block := p.block | throw (IO.userError "C04_GENERATED: missing word block")
-  let prior : Msg := { id := 100, bytes := Enc.encode (BitVec.ofNat 32 7),
-    clock := #[], relClock := #[] }
-  let current : Msg := { id := 101, bytes := Enc.encode (BitVec.ofNat 32 0),
-    clock := #[0, 1], relClock := #[] }
-  let history := { memory with atomics := #[{ block, off := 0, len := 4,
-    msgs := #[prior, current] }], nextMsg := 102, seen := #[] }
+  let prior : Msg := { id := 100, bytes := Enc.encode (BitVec.ofNat 32 7), clock := #[], relClock := #[] }
+  let current : Msg := { id := 101, bytes := Enc.encode (BitVec.ofNat 32 0), clock := #[0, 1], relClock := #[] }
+  let history := { memory with atomics := #[{ block, off := 0, len := 4, msgs := #[prior, current] }], nextMsg := 102, seen := #[] }
   let oldInputs := { inputs with readChoice := fun _ => 1 }
   let older := TimedSched.run oldInputs 80 (fun _ => 0)
     (DeadlineActual.waitDeadline {} p 0 (BitVec.ofNat 96 11)) history
