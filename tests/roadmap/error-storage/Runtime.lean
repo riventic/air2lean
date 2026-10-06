@@ -7,8 +7,8 @@ deriving instance DecidableEq for Except
 
 def domain : ErrorDomain := ⟨#["Alpha", "Beta", "Gamma"], by decide, by decide⟩
 def otherDomain : ErrorDomain := ⟨#["Beta", "Other"], by decide, by decide⟩
-def alpha : FiniteError domain := ⟨"Alpha", by decide⟩
-def beta : FiniteError domain := ⟨"Beta", by decide⟩
+def alpha : FiniteError domain := ⟨"Alpha", by unfold domain; decide⟩
+def beta : FiniteError domain := ⟨"Beta", by unfold domain; decide⟩
 
 example : Enc.size (FiniteError domain) = 2 := rfl
 example : Enc.size (Option (FiniteError domain)) = 2 := rfl
@@ -27,35 +27,38 @@ example (bytes : Array Byte) (hsize : 6 ≤ bytes.size) (x : Option (FiniteError
   apply extract_writeBytes_disjoint bytes 2 (Enc.encode x) 4 2
   · rw [LawfulEnc.size_encode x]; change 2 + 2 ≤ bytes.size; omega
   · omega
-  · left; rw [LawfulEnc.size_encode x]; rfl
+  · left; rw [LawfulEnc.size_encode x]; exact Nat.le_refl _
 
 private def value (action : MemM α) : Option (Except Error α) :=
   (action.run {}).run.map (·.map Prod.fst)
 private def require [DecidableEq α] [Repr α] (label : String) (got expected : α) : IO Unit := do
   unless got = expected do throw (IO.userError s!"{label}: {reprStr got} != {reprStr expected}")
 
-private def slots : MemM (Option ErrName × Option ErrName × Option ErrName) := do
+private def slots : MemM (Option ErrName × Option ErrName × Option ErrName) :=
   letI : Enc (Option ErrName) := optionalErrorEnc domain
-  let p ← alloc .heap 6 2
-  store 2 p (some "Gamma" : Option ErrName)
-  store 2 (p.add 2) (none : Option ErrName)
-  store 2 (p.add 4) (some "Beta" : Option ErrName)
-  store 2 (p.add 2) (some "Alpha" : Option ErrName)
-  store 2 p (none : Option ErrName)
-  pure (← load (Option ErrName) 2 p, ← load (Option ErrName) 2 (p.add 2), ← load (Option ErrName) 2 (p.add 4))
+  do
+    let p ← alloc .heap 6 2
+    store 2 p (some "Gamma" : Option ErrName)
+    store 2 (p.add 2) (none : Option ErrName)
+    store 2 (p.add 4) (some "Beta" : Option ErrName)
+    store 2 (p.add 2) (some "Alpha" : Option ErrName)
+    store 2 p (none : Option ErrName)
+    pure (← load (Option ErrName) 2 p, ← load (Option ErrName) 2 (p.add 2), ← load (Option ErrName) 2 (p.add 4))
 
-private def standalone : MemM ErrName := do
+private def standalone : MemM ErrName :=
   letI : Enc ErrName := errorEnc domain
-  let p ← alloc .heap 2 2
-  store 2 p "Alpha"
-  store 2 p "Beta"
-  load ErrName 2 p
+  do
+    let p ← alloc .heap 2 2
+    store 2 p "Alpha"
+    store 2 p "Beta"
+    load ErrName 2 p
 
-private def invalidStored : MemM ErrName := do
+private def invalidStored : MemM ErrName :=
   letI : Enc ErrName := errorEnc domain
-  let p ← alloc .heap 2 2
-  store 2 p "Other"
-  load ErrName 2 p
+  do
+    let p ← alloc .heap 2 2
+    store 2 p "Other"
+    load ErrName 2 p
 
 def main : IO Unit := do
   require "slot frame and overwrite" (value slots) (some (.ok (none, some "Alpha", some "Beta")))
