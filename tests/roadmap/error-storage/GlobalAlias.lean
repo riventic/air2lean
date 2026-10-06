@@ -193,4 +193,28 @@ def main : IO Unit := do
   reject {getter "L06.constErrorArmElsewhere" bytePtr 28 with globals := #[badFrozen]} "escaping, arithmetic"
   reject {getter "L06.mutableBacking" bytePtr 28 with globals := #[{frozen with isConst := false}]} "escaping, arithmetic"
   reject {getter "L06.incompleteConstructor" bytePtr 28 with globals := #[{frozen with init := some (.agg outerTy #[innerValue])}]} "escaping, arithmetic"
+  -- Byte-payload offset 2 and nested single-branch blocks match writeSmall's actual AIR shape.
+  let smallTy := types.size
+  let smallPtr := smallTy + 1
+  let branchTypes := types ++ #[.errorUnion 0 2, .ptr "one" false smallTy]
+  let branchLayouts := layouts ++ #[scalar 4 2, pointer 2]
+  let smallGlobal := global smallTy (.errUnionOk smallTy (.int 2 19))
+  let branchBase := {base "singleBranchPayloadStore" smallGlobal with types := branchTypes, layouts := branchLayouts, ret := 2}
+  let nestedPayload : Array Inst := #[{id := 2, ty := 21, op := .errPayloadPtr false (.ptrConst smallPtr 0 0)}, {id := 3, ty := 4, op := .br 1 (.inst 2)}]
+  let outerPayload : Array Inst := #[{id := 1, ty := 21, op := .block nestedPayload}, {id := 4, ty := 4, op := .br 0 (.inst 1)}]
+  let storeTail : Array Inst := #[{id := 5, ty := 3, op := .store (.inst 0) (.int 2 31)}, {id := 6, ty := 2, op := .load (.inst 0)}, {id := 7, ty := 4, op := .ret (.inst 6)}]
+  accept {branchBase with body := #[{id := 0, ty := 21, op := .block outerPayload}] ++ storeTail}
+  let joined := nestedPayload.push {id := 8, ty := 4, op := .br 1 (.inst 2)}
+  reject {branchBase with name := "folded_alias.multiBranchPayload", body := #[{id := 0, ty := 21, op := .block (#[{id := 1, ty := 21, op := .block joined}, {id := 4, ty := 4, op := .br 0 (.inst 1)}])}] ++ storeTail} "escaping, arithmetic"
+  reject {branchBase with name := "folded_alias.singleBranchOverlap", body := #[{id := 0, ty := 21, op := .block #[{id := 2, ty := 21, op := .bitcast (.ptrConst smallPtr 0 0)}, {id := 3, ty := 4, op := .br 0 (.inst 2)}]}] ++ storeTail} "overlaps symbolic error bytes"
+  reject {branchBase with name := "folded_alias.singleBranchEscape", ret := 21, body := #[{id := 0, ty := 21, op := .block outerPayload}, {id := 5, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
+  reject {branchBase with name := "folded_alias.singleBranchUnknownArithmetic", params := #[17], body := #[{id := 9, ty := 17, op := .arg 0}, {id := 0, ty := 21, op := .block #[{id := 2, ty := 21, op := .ptrAdd false (.ptrConst 21 0 2) (.inst 9)}, {id := 3, ty := 4, op := .br 0 (.inst 2)}]}] ++ storeTail} "escaping, arithmetic"
+  let shadowed : Array Inst := #[{id := 0, ty := 21, op := .block outerPayload}, {id := 0, ty := 21, op := .block #[]}]
+  reject {branchBase with name := "folded_alias.singleBranchDuplicateBlockId", body := shadowed ++ storeTail} "escaping, arithmetic"
+  -- A transparent branch chain still cannot exceed the fixed-origin recursion budget.
+  let mut deep : Inst := {id := 257, ty := 21, op := .errPayloadPtr false (.ptrConst smallPtr 0 0)}
+  for k in (List.range 257).reverse do
+    let child := deep
+    deep := {id := k, ty := 21, op := .block #[child, {id := 1000 + k, ty := 4, op := .br k (.inst child.id)}]}
+  reject {branchBase with name := "folded_alias.singleBranchBudget", body := #[deep, {id := 2001, ty := 3, op := .store (.inst 0) (.int 2 31)}, {id := 2002, ty := 2, op := .load (.inst 0)}, {id := 2003, ty := 4, op := .ret (.inst 2002)}]} "escaping, arithmetic"
   IO.println "finite global alias controls passed"
