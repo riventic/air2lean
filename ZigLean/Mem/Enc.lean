@@ -166,9 +166,11 @@ def errOfBytes (bs : Array Byte) : Result (Option ErrName) :=
   | _, _ => throw .unspecified
 
 /-- The offsets of the error code and the payload in `E!T`, from the size and alignment of
-`T` (the compiler's rule): the payload first only if its alignment is more than 2. -/
+`T` (the compiler's rule): a zero-sized payload has offset 0; otherwise the payload
+comes first when its alignment is at least the error code's alignment (2). -/
 def errUnionOffsets (size align : Nat) : Nat × Nat :=
-  if align > 2 then (alignUp size 2, 0) else (0, alignUp 2 align)
+  if size = 0 then (0, 0)
+  else if align ≥ 2 then (alignUp size 2, 0) else (0, alignUp 2 align)
 
 def errUnionSize (size align : Nat) : Nat :=
   let (eo, po) := errUnionOffsets size align
