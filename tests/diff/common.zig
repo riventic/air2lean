@@ -465,6 +465,14 @@ pub fn forkCallBufsWithRenderingAllocator(
         compat.close(fds[0]);
         panic_fd = fds[1];
         compat.silenceStderr();
+        // ReleaseSafe's inherited crash handler changes FPE/ILL/SEGV/BUS into ABRT.
+        // Keep the original fault signal observable; the parent uses C/R for its phase.
+        const crash_defaults = std.posix.Sigaction{
+            .handler = .{ .handler = std.posix.SIG.DFL },
+            .mask = std.posix.sigemptyset(),
+            .flags = 0,
+        };
+        std.debug.updateSegfaultHandler(&crash_defaults);
 
         // Checked phase bytes distinguish a tested-call trap from renderer/protocol failure.
         if ((compat.write(fds[1], "C") catch reportHarnessFailure("harnessPhaseFailure")) != 1)

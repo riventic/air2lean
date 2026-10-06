@@ -21,6 +21,11 @@ fn sourceInterrupt() u32 {
     return 7;
 }
 
+fn sourceAbort() u32 {
+    std.posix.raise(std.posix.SIG.ABRT) catch @panic("raise failed");
+    return 7;
+}
+
 fn rendererSignal() *const u8 {
     // The tested call returns; reading this payload belongs to the renderer phase.
     return @ptrFromInt(1);
@@ -32,6 +37,10 @@ fn signal(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
 
 fn interrupt(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
     try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceInterrupt)), .{}, sourceInterrupt, false));
+}
+
+fn abortSignal(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceAbort)), .{}, sourceAbort, false));
 }
 
 fn rendererFault(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
@@ -80,5 +89,6 @@ pub fn main() !void {
     try common.forEachLine(allocator, "outcome-accounting", "source", source);
     try common.forEachLine(allocator, "outcome-accounting", "signal", signal);
     try common.forEachLine(allocator, "outcome-accounting", "interrupt", interrupt);
+    try common.forEachLine(allocator, "outcome-accounting", "abort", abortSignal);
     try common.forEachLine(allocator, "outcome-accounting", "renderer-fault", rendererFault);
 }

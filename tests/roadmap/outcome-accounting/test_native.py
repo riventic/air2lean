@@ -53,6 +53,7 @@ def verify(root):
     if kind!=REPORT.Kind.NATIVE_PANIC:raise AssertionError('tested source panic became harness failure')
     for name,expected in [('signal',REPORT.Kind.NATIVE_SIGNAL),
                           ('interrupt',REPORT.Kind.NATIVE_HARNESS_FAILURE),
+                          ('abort',REPORT.Kind.NATIVE_HARNESS_FAILURE),
                           ('renderer-fault',REPORT.Kind.NATIVE_HARNESS_FAILURE)]:
         legacy=rows(name+'.jsonl')
         if legacy!=[{'fail':'unknown'}]:raise AssertionError(name+' legacy failure changed')
@@ -70,7 +71,7 @@ def main():
     binary=Path(sys.argv[1]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix='air2lean-outcome-native-') as name:
         root=Path(name);inputs=root/'tests/diff/outcome-accounting/inputs';inputs.mkdir(parents=True)
-        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n','signal':'[]\n','interrupt':'[]\n','renderer-fault':'[]\n'}.items():
+        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n','signal':'[]\n','interrupt':'[]\n','abort':'[]\n','renderer-fault':'[]\n'}.items():
             (inputs/(fixture+'.jsonl')).write_text(text)
         subprocess.run([str(binary)],cwd=root,check=True,timeout=5)
         verify(root)

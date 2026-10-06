@@ -195,14 +195,14 @@ class Outcomes(unittest.TestCase):
     def test_native_phase_checker_rejects_signal_on_renderer_or_interruption(self):
         spec=importlib.util.spec_from_file_location('native_phase_check',ROOT/'tests/roadmap/outcome-accounting/test_native.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        for wrong in (None,'interrupt','renderer-fault'):
+        for wrong in (None,'interrupt','abort','renderer-fault'):
             root=self.root/('valid' if wrong is None else wrong)
             directory=root/'tests/diff/out/zig/outcome-accounting';directory.mkdir(parents=True)
             payloads={'prefix':{'ok':7},'renderer':{'fail':'harnessRenderFailure'},
                       'source':{'fail':'panic'},'signal':{'fail':'unknown'},
-                      'interrupt':{'fail':'unknown'},'renderer-fault':{'fail':'unknown'}}
+                      'interrupt':{'fail':'unknown'},'abort':{'fail':'unknown'},'renderer-fault':{'fail':'unknown'}}
             kinds={'prefix':'value','renderer':'native_harness_failure','source':'native_panic',
-                   'signal':'native_signal','interrupt':'native_harness_failure','renderer-fault':'native_harness_failure'}
+                   'signal':'native_signal','interrupt':'native_harness_failure','abort':'native_harness_failure','renderer-fault':'native_harness_failure'}
             if wrong:kinds[wrong]='native_signal'
             for name,legacy in payloads.items():
                 (directory/(name+'.jsonl')).write_text(json.dumps(legacy)+'\n')
