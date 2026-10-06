@@ -21,7 +21,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
 
 def help : String :=
@@ -32,6 +32,7 @@ def help : String :=
   "  --namespace <Ns>             Lean namespace, such as My.Program (required).\n" ++
   "  --prefix <p>                 Trim this prefix from emitted function names.\n" ++
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
+  "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
@@ -50,6 +51,7 @@ structure Args where
   profile : Option String
   modelRegistry : Option String
   registryTemplate : Bool := false
+  proofApi : Bool := false
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry : Option String)
@@ -71,6 +73,9 @@ private partial def parseArgsGo (args : List String)
   | "--float-semantics" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ (some v) profile modelRegistry registryTemplate
   | "--profile" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics (some v) modelRegistry registryTemplate
   | "--model-registry" :: v :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile (some v) registryTemplate
+  | "--proof-api" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry registryTemplate).map
+      (fun a => { a with proofApi := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry true
   | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] =>
     .error s!"missing value for {args.head!}\n{usage}"
@@ -128,10 +133,14 @@ private def run (args : List String) : IO UInt32 := do
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
+      -- Preserve the historical <full name>.json emission order even when storage
+      -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let (originalNames, rewrittenTexts) := Anon.renumberAllWithNames texts
+      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
-      for (path, contents) in jsonPaths.zip (Anon.renumberAll texts) do
+      for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           match Raw.parseFile contents with
           | .error e => err := some s!"{path}: {e}"
@@ -156,13 +165,17 @@ private def run (args : List String) : IO UInt32 := do
               IO.FS.writeFile a.outPath (template.pretty ++ "\n")
               pure 0
           else
+            -- Reads and every validation guard retain their original path order.
+            -- Only successful emission depends on identity rather than storage keys.
+            let emissionFuncs := ((emissionKeys.zip funcs).qsort
+              (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
             let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
-              emit funcs a.ns a.prefix_ a.floatSemantics models
+              emit emissionFuncs a.ns a.prefix_ a.floatSemantics models a.proofApi
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
             pure 0

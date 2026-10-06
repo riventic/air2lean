@@ -145,13 +145,26 @@ def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array S
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
   compressParsed texts (renumberParsed texts parsed marker)
 
-/-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
-def renumberAll (texts : Array String) : Array String := Id.run do
-  let mut parsed := texts.map fun text => (StrictJson.parse text).toOption
+private def renumberAllParsed (texts : Array String)
+    (initialParsed : Array (Option Lean.Json)) : Array String := Id.run do
+  let mut parsed := initialParsed
   let mut current := texts
   for marker in ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"] do
     parsed := renumberParsed current parsed marker
     current := compressParsed current parsed
   return current
+
+/-- Internal pipeline result: original full names and all rewritten texts, sharing the
+initial parse. Names are captured before any identity marker is renumbered. -/
+def renumberAllWithNames (texts : Array String) : Array String × Array String :=
+  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  let names := parsed.map fun j =>
+    (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
+  (names, renumberAllParsed texts parsed)
+
+/-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
+def renumberAll (texts : Array String) : Array String :=
+  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  renumberAllParsed texts parsed
 
 end Air2Lean.Anon
