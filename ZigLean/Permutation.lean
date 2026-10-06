@@ -30,7 +30,9 @@ def byteSwap {n : Nat} (a : BitVec n) : BitVec n :=
 /-- Each output bit comes from the corresponding reversed byte, never from another lane. -/
 theorem byteSwap_bit {n : Nat} (a : BitVec n) (i : Nat) (hi : i < n) :
     (byteSwap a).getLsbD i = a.getLsbD (byteSwapIndex n i) := by
-  simp [byteSwap, List.getD_eq_getElem?_getD, hi]
+  unfold byteSwap
+  rw [BitVec.getLsbD_cast, BitVec.getLsbD_ofBoolListLE,
+    List.getD_eq_getElem?_getD, List.getElem?_ofFn, dif_pos hi]
 
 theorem byteSwapIndex_lt {n i : Nat} (hn : n % 8 = 0) (hi : i < n) :
     byteSwapIndex n i < n := by
@@ -78,18 +80,20 @@ theorem byteSwap_byte_bit {n : Nat} (a : BitVec n) (b k : Nat)
     (hn : n % 8 = 0) : Vec.map byteSwap (Vec.map byteSwap v) = v := by
   cases v with
   | mk xs =>
-    congr 1
+    change Vec.mk ((xs.map byteSwap).map byteSwap) = Vec.mk xs
+    apply congrArg Vec.mk
     apply Vector.ext
     intro i hi
-    simp [Vec.map, byteSwap_involution _ hn]
+    simpa only [Vector.getElem_map] using byteSwap_involution (xs[i]) hn
 
 @[simp] theorem bitReverse_vector_involution {n lanes : Nat} (v : Vec (BitVec n) lanes) :
     Vec.map bitReverse (Vec.map bitReverse v) = v := by
   cases v with
   | mk xs =>
-    congr 1
+    change Vec.mk ((xs.map bitReverse).map bitReverse) = Vec.mk xs
+    apply congrArg Vec.mk
     apply Vector.ext
     intro i hi
-    simp [Vec.map]
+    simpa only [Vector.getElem_map] using bitReverse_involution (xs[i])
 
 end Zig
