@@ -16,7 +16,7 @@ pub fn main() void {
         const nested = fixture.nestedOuter(&outer, inner_null);
         const nested_null_ok = nested != null and nested.? == null and outer != null and outer.? == null;
         const nested_error = fixture.nestedOuter(&outer, @as(?fixture.Failure, name));
-        const nested_ok = nested_null_ok and nested_error != null and nested_error.? == name and outer != null and outer.? == name;
+        const nested_ok = nested_null_ok and nested_error != null and nested_error.? != null and nested_error.?.? == name and outer != null and outer.? != null and outer.?.? == name;
         var union_cell: fixture.Failure!fixture.ErrorPayload = error.Gamma;
         const union_ok = if (fixture.payloadUnion(&union_cell, name, false)) |value|
             value.code == name and (if (union_cell) |stored_value| stored_value.code == name else |_| false)
