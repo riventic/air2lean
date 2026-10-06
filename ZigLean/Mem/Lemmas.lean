@@ -602,28 +602,32 @@ instance : LawfulEnc Ptr where
 
 theorem errorEnc_size_encode (d : ErrorDomain) (e : ErrName) :
     ((errorEnc d).encode e).size = 2 := by
-  simp only [errorEnc]
+  simp only [Enc.encode, errorEnc]
   split <;> rfl
 
 /-- The string API is lawful only on the declared finite domain. -/
 theorem errorEnc_roundtrip (d : ErrorDomain) (e : ErrName) (h : d.names.contains e = true) :
     (errorEnc d).decode ((errorEnc d).encode e) = pure e := by
-  simp [errorEnc, h, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure,
+  have hm : e ∈ d.names := Array.contains_iff_mem.mp h
+  simp [Enc.encode, Enc.decode, errorEnc, h, hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure,
     ExceptT.mk, ExceptT.bindCont]
 
 theorem optionalErrorEnc_roundtrip (d : ErrorDomain) (e : Option ErrName)
     (h : ∀ x, e = some x → d.names.contains x = true) :
     (optionalErrorEnc d).decode ((optionalErrorEnc d).encode e) = pure e := by
   cases e with
-  | none => simp [optionalErrorEnc, errOfBytes_errBytes, bind, pure, ExceptT.bind,
+  | none => simp [Enc.encode, Enc.decode, optionalErrorEnc, errOfBytes_errBytes, bind, pure, ExceptT.bind,
       ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
-  | some x => simp [optionalErrorEnc, errorEnc, h x rfl, errOfBytes_errBytes, bind,
+  | some x =>
+    have hm : x ∈ d.names := Array.contains_iff_mem.mp (h x rfl)
+    simp [Enc.encode, Enc.decode, optionalErrorEnc, errorEnc, h x rfl, hm, errOfBytes_errBytes, bind,
       pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
 
 instance (d : ErrorDomain) : LawfulEnc (FiniteError d) where
   size_encode _ := rfl
   decode_encode e := by
-    simp [Enc.encode, Enc.decode, errOfBytes_errBytes, e.property, bind, pure,
+    have hm : e.val ∈ d.names := Array.contains_iff_mem.mp e.property
+    simp [Enc.encode, Enc.decode, errOfBytes_errBytes, e.property, hm, bind, pure,
       ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
 
 instance (d : ErrorDomain) : LawfulEnc (Option (FiniteError d)) where
@@ -632,7 +636,9 @@ instance (d : ErrorDomain) : LawfulEnc (Option (FiniteError d)) where
     cases e with
     | none => simp [Enc.encode, Enc.decode, errOfBytes_errBytes, bind, pure,
         ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
-    | some x => simp [Enc.encode, Enc.decode, errOfBytes_errBytes, x.property,
+    | some x =>
+      have hm : x.val ∈ d.names := Array.contains_iff_mem.mp x.property
+      simp [Enc.encode, Enc.decode, errOfBytes_errBytes, x.property, hm,
         bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
 
 theorem finiteError_encode_injective (d : ErrorDomain) :
@@ -640,18 +646,18 @@ theorem finiteError_encode_injective (d : ErrorDomain) :
   intro x y h
   have := congrArg (Enc.decode : Array Byte → Result (FiniteError d)) h
   simp only [LawfulEnc.decode_encode] at this
-  simpa [pure, ExceptT.pure, ExceptT.mk] using this
+  simpa only [pure, ExceptT.pure, ExceptT.mk, Option.some.injEq, Except.ok.injEq] using this
 
 theorem optionalFiniteError_encode_injective (d : ErrorDomain) :
     Function.Injective (Enc.encode : Option (FiniteError d) → Array Byte) := by
   intro x y h
   have := congrArg (Enc.decode : Array Byte → Result (Option (FiniteError d))) h
   simp only [LawfulEnc.decode_encode] at this
-  simpa [pure, ExceptT.pure, ExceptT.mk] using this
+  simpa only [pure, ExceptT.pure, ExceptT.mk, Option.some.injEq, Except.ok.injEq] using this
 
 @[simp] theorem errorEnc_reject_zero (d : ErrorDomain) :
     (errorEnc d).decode #[.int 0, .int 0] = throw .unspecified := by
-  simp [errorEnc, errOfBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+  simp [Enc.decode, errorEnc, errOfBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
     ExceptT.bindCont, throw, throwThe, MonadExceptOf.throw]
 
 /-! ## Error unions -/
