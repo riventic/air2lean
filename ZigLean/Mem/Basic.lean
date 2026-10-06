@@ -187,12 +187,19 @@ structure ALoc where
 /-- The legacy default request-size cap, in bytes; configurable through `Mem.allocPolicy`. -/
 def maxAllocBytes : Nat := 1 <<< 20
 
+/-- Explicit byte-remap environment. Default failure preserves the legacy allocator.
+Successful policies cover only nonempty, alignment-1 byte buffers. -/
+inductive ByteRemapMode where
+  | fail | inPlace | move
+  deriving DecidableEq, Repr, Inhabited
+
 /-- Selected allocator environment: a per-request cap and permitted failure indices.
 The finite list can describe every finite prefix of an arbitrary failure decision trace.
 It is not a claim about a native allocator's available memory or address policy. -/
 structure AllocPolicy where
   maxBytes : Nat := maxAllocBytes
   failures : List Nat := []
+  byteRemap : ByteRemapMode := .fail
   deriving DecidableEq, Repr, Inhabited
 
 structure Mem where
