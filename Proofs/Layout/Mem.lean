@@ -201,7 +201,23 @@ theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
       (fun _ => pts p 2 (Except.ok (x + 1) : Except ErrName (BitVec 8))) := by
   apply Triple.of_run
   intro m hP hF hd hm hp hst
-  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
+  let domain : ErrorDomain := { names := #["Empty", "TooBig"], unique := by decide, bounded := by decide }
+  let enc : Enc (Except ErrName (BitVec 8)) := errorUnionEnc domain inferInstance
+  have hpFinite : @pts (Except ErrName (BitVec 8)) enc p 2 (.ok x) hP := by
+    obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
+    refine ⟨A, S, K, bs, ha, hs, ?_, hb, hK⟩
+    have hlegacy : (Enc.errorUnionWith (inferInstance : Enc (BitVec 8))).decode bs =
+        pure (.ok x) := hv
+    change (errorUnionEnc domain (inferInstance : Enc (BitVec 8))).decode bs = pure (.ok x)
+    unfold errorUnionEnc
+    dsimp only [Enc.decode]
+    rw [hlegacy]
+    rfl
+  have hloadFinite : ∃ mA, (@load (Except ErrName (BitVec 8)) enc 2 p).run m =
+      pure (.ok x, mA) ∧ mA.heap = hP ∪ hF ∧ mA.Seq := by
+    letI : Enc (Except ErrName (BitVec 8)) := enc
+    exact pts_load_run hpFinite hm (by decide) hst
+  obtain ⟨mA, hl, hmA, hstA⟩ := hloadFinite
   obtain ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩ := hp
   have hs4 : bs.size = 4 := hs
   have hpo : (errUnionOffsets (Enc.size (BitVec 8)) (Enc.align (BitVec 8))).2 = 2 := by decide
@@ -224,7 +240,7 @@ theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
         (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read) = pure ((), mC) := hr₃
     simp only [StateT.run] at hl hl2 e₃
     have hpp : errPayloadPtr (BitVec 8) p = p.add 2 := by simp [errPayloadPtr, hpo]
-    simp [bump, zig_unfold, hl, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
+    simp [bump, zig_unfold, hl, enc, domain, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
   · rw [writeBytes_size _ _ _ (by omega)]; exact hs
   · have := errUnion_decode_setPayload (bs := bs) (x + 1) hs hcode
     rwa [hpo] at this
