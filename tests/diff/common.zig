@@ -481,6 +481,16 @@ pub fn forkCallBufsWithRenderingAllocator(
     compat.close(fds[1]);
     var read_open = true;
     defer if (read_open) compat.close(fds[0]);
+    var child_reaped = false;
+    errdefer if (!child_reaped) {
+        // Allocation errors must not leave a blocked tested call alive or unreaped.
+        if (read_open) {
+            compat.close(fds[0]);
+            read_open = false;
+        }
+        std.posix.kill(pid, std.posix.SIG.KILL) catch {};
+        _ = compat.waitpid(pid, 0);
+    };
     var text: std.ArrayListUnmanaged(u8) = .empty;
     defer text.deinit(out_gpa);
     var chunk: [4096]u8 = undefined;
@@ -497,6 +507,7 @@ pub fn forkCallBufsWithRenderingAllocator(
         try text.appendSlice(out_gpa, chunk[0..n]);
     }
     const wr = compat.waitpid(pid, 0);
+    child_reaped = true;
     if (read_failed) return harnessFailure();
     // Only synchronous fault signals during the tested call are semantic observations.
     // Resource kills, cancellation and renderer-stage signals remain harness failures.

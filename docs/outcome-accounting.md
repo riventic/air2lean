@@ -121,6 +121,8 @@ The source-bound local summary is `/private/tmp/air2lean-outcome-8ab-default16-r
 
 At producer revision `1b5cdde53ac95c3addf16abf41c39410c60934a1`, the coordinator separately compiled and ran the deterministic producer regressions with native Zig15 and Zig16. Both passed the valid metadata prefix, malformed-input failure index, renderer-only allocation-failure classification, zero mutation eligibility and tested-source panic checks. Their logs are `outcome-1b5c-native15.log` and `outcome-1b5c-native16.log` under the same coordinator log directory; both have SHA-256 `1efaec9d4128cd6985be80972d91119b5848b8d948d875a423cb1fda2260b415`. This is narrow failure-boundary evidence, separate from the default Zig16 full run and the pending full Linux/version matrix.
 
+Parent output-buffer allocation errors also close the result reader, terminate the still-owned child and reap it before propagating the error. Once the normal wait has reaped the child, later allocation errors do not signal its former PID. The parent-OOM regression injects a failing allocator into a temporary producer copy, keeps the tested call blocked, and requires no child to remain waitable; it leaves repository sources and the production allocator unchanged. Actual Zig15/Zig16 execution of this new regression remains pending.
+
 ## Selected mutation evidence
 
 At source revision `347bfd5fd4f6fe598763c87777a9e976b342c0c3`, the coordinator ran only differential mutants b and g on Darwin arm64 with stock/legacy Zig16 and the explicit `basic slices` selection. The isolated validation passed in 215.5 seconds with 791.8 MiB sampled peak memory; the restored healthy selection also passed.
