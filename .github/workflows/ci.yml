@@ -76,6 +76,9 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      - name: Local Lake cache hygiene regressions
+        run: python3 tests/roadmap/local-ci/test_cache.py
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
@@ -165,6 +168,9 @@ jobs:
         with:
           path: tests/diff/.lake
           key: lake-diff-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
 
       - name: Build runtime library + translator
         run: lake build
