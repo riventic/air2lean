@@ -267,7 +267,7 @@ def check_project(manifest_path, translator, limit, runner=invoke):
                 record['path_map'].append({'staged': staged.name, 'path': name,
                                            'sha256': evidence['files']['input/' + name]['sha256']})
             argv = [str(translator), '--diagnostics-json', str(air_dir), '--profile', evidence['profile']['name'],
-                    '--diagnostic-limit', str(limit)]
+                    '--diagnostic-limit', str(limit), '--spawn-policy', project.spawn_policy(manifest)]
             try:
                 result = runner(argv, rootdir, dict(limits, max_output_bytes=min(limits['max_output_bytes'], remaining)))
                 consumed += len(result['stdout']) + len(result['stderr'])

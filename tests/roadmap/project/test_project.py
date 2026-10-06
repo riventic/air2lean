@@ -1,10 +1,12 @@
 import importlib.util
 import contextlib
+import copy
 import io
 import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -613,6 +615,136 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual([d['code'] for d in observed[3]['diagnostics']],
                          ['AIR_EXPORT_UNSUPPORTED', 'AIR_JSON'] * 2)
 
+
+
+class SpawnPolicyTests(unittest.TestCase):
+    save = ProjectTests.save
+    mock = ProjectTests.mock
+
+    # Reuse only fixture setup; these tests invoke no CLI or process runner.
+    def setUp(self):
+        ProjectTests.setUp(self)
+        patch = mock.patch.object(project, 'git_state', return_value={'revision': None, 'dirty': None})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def artifact(self, policy=None):
+        if policy is not None:
+            self.manifest['spawn_policy'] = policy
+        self.save()
+        manifest, limits, data, report = project.collect(self.path)
+        staging = self.base / 'artifact'
+        staging.mkdir()
+        def runner(argv, cwd, controls):
+            Path(argv[argv.index('-o') + 1]).write_text('namespace Example\nend Example\n')
+            return {'status': 'passed', 'code': 'TRANSLATION_OK', 'returncode': 0,
+                    'message': '', 'argv': argv}
+        with mock.patch.object(project, 'run_translation', side_effect=runner):
+            project.translate(manifest, limits, data, report, self.translator, staging)
+        self.write_receipt(staging, report)
+        return staging, report
+
+    def write_receipt(self, staging, report):
+        (staging / 'report.json').write_text(json.dumps(report))
+
+    def test_policy_report_and_translation(self):
+        for policy in (None, 'available', 'fallible'):
+            with self.subTest(policy=policy):
+                staging, report = self.artifact(policy)
+                expected = 'available' if policy is None else policy
+                self.assertEqual(report['spawn_policy'], expected)
+                self.assertEqual(report['roots'][0]['stages']['translated']['argv'][-2:],
+                                 ['--spawn-policy', expected])
+                self.assertEqual(report['roots'][0]['stages']['proved']['status'], 'not_run')
+                self.assertEqual(project.verify(self.path, staging)['proof_status'], 'not_attested')
+                shutil.rmtree(staging)
+
+    def test_flag_shaped_prefixes_verify_as_values(self):
+        for prefix in ('--spawn-policy', '--spawn-policy=fallible'):
+            for policy in ('available', 'fallible'):
+                with self.subTest(prefix=prefix, policy=policy):
+                    self.manifest['roots'][0]['prefix'] = prefix
+                    staging, report = self.artifact(policy)
+                    self.assertEqual(project.verify(self.path, staging)['status'], 'hashes_match')
+                    if policy == 'available':
+                        del report['spawn_policy']
+                        report['roots'][0]['stages']['translated']['argv'] = report['roots'][0]['stages']['translated']['argv'][:-2]
+                        self.write_receipt(staging, report)
+                        self.assertEqual(project.verify(self.path, staging)['status'], 'hashes_match')
+                    shutil.rmtree(staging)
+
+    def test_policy_manifest_validation(self):
+        for policy in (None, False, 1, [], {}, '', 'AVAILABLE', 'best-effort'):
+            with self.subTest(policy=policy):
+                self.manifest['spawn_policy'] = policy
+                self.save()
+                with self.assertRaises(project.Invalid):
+                    project.load_manifest(self.path)
+        self.manifest['spawn_policy'] = 'available'
+        self.save()
+        raw = self.path.read_text().replace('"spawn_policy": "available"',
+                                          '"spawn_policy": "available", "spawn_policy": "fallible"')
+        self.path.write_text(raw)
+        with self.assertRaises(project.Invalid):
+            project.load_manifest(self.path)
+
+    def test_historical_available_receipt(self):
+        staging, report = self.artifact()
+        del report['spawn_policy']
+        report['roots'][0]['stages']['translated']['argv'] = report['roots'][0]['stages']['translated']['argv'][:-2]
+        self.write_receipt(staging, report)
+        self.assertEqual(project.verify(self.path, staging)['status'], 'hashes_match')
+
+    def test_historical_receipt_cannot_hide_contradictory_policy(self):
+        staging, report = self.artifact()
+        del report['spawn_policy']
+        report['roots'][0]['stages']['translated']['argv'][-1] = 'fallible'
+        self.write_receipt(staging, report)
+        with self.assertRaises(project.Invalid):
+            project.verify(self.path, staging)
+
+    def test_policy_receipt_retains_input_hash_guard(self):
+        staging, report = self.artifact('fallible')
+        (self.base / 'source.zig').write_text('changed source')
+        with self.assertRaises(project.Invalid):
+            project.verify(self.path, staging)
+
+    def test_fallible_cannot_use_historical_available_receipt(self):
+        staging, report = self.artifact('fallible')
+        del report['spawn_policy']
+        self.write_receipt(staging, report)
+        with self.assertRaises(project.Invalid):
+            project.verify(self.path, staging)
+
+    def test_policy_receipt_tampering_rejected(self):
+        staging, original = self.artifact('fallible')
+        for change in ('contradiction', 'missing_flag', 'duplicate_flag', 'roots', 'stages', 'status', 'policy', 'missing_value', 'equals_flag', 'invalid_value'):
+            with self.subTest(change=change):
+                report = copy.deepcopy(original)
+                translated = report['roots'][0]['stages']['translated']
+                if change == 'contradiction':
+                    translated['argv'][-1] = 'available'
+                elif change == 'missing_flag':
+                    translated['argv'] = translated['argv'][:-2]
+                elif change == 'duplicate_flag':
+                    translated['argv'].extend(['--spawn-policy', 'fallible'])
+                elif change == 'roots':
+                    report['roots'] = []
+                elif change == 'stages':
+                    report['roots'][0]['stages'] = None
+                elif change == 'policy':
+                    report['spawn_policy'] = 'available'
+                elif change == 'missing_value':
+                    translated['argv'].pop()
+                elif change == 'equals_flag':
+                    translated['argv'][-2:] = ['--spawn-policy=fallible']
+                elif change == 'invalid_value':
+                    translated['argv'][-1] = 'best-effort'
+                else:
+                    translated['status'] = 'not_run'
+                self.write_receipt(staging, report)
+                with self.assertRaises(project.Invalid):
+                    project.verify(self.path, staging)
 
 
 if __name__ == '__main__':
