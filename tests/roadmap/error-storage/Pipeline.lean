@@ -20,9 +20,9 @@ private def accept (out : Except String α) : IO α := match out with
 private def reject (out : Except String α) (why : String) : IO Unit := match out with
   | .error _ => pure () | .ok _ => throw (IO.userError s!"accepted {why}")
 def main (args : List String) : IO Unit := do
-  for id in #[0,1,2,3,4] do discard (← accept (checkMemTy "test" types layouts 0 id))
-  discard (← accept (check f))
-  discard (← accept (checkProgram #[f]))
+  for id in #[0,1,2,3,4] do discard (accept (checkMemTy "test" types layouts 0 id))
+  discard (accept (check f))
+  discard (accept (checkProgram #[f]))
   reject (checkMemTy "test" (types.set! 0 (.errorSet none)) layouts 0 0) "unresolved anyerror"
   reject (checkMemTy "test" (types.set! 0 (.errorSet (some #[]))) layouts 0 0) "empty errors"
   reject (checkMemTy "test" (types.set! 0 (.errorSet (some #["Alpha", "Alpha"]))) layouts 0 0) "duplicate domain"
@@ -52,7 +52,7 @@ def main (args : List String) : IO Unit := do
   reject (check directToOptional) "direct to optional raw error exposure"
   let emptyUnionTypes := types.push (.errorUnion 0 8) |>.set! 0 (.errorSet (some #[]))
   let emptyUnionLayouts := layouts.push {size := some 4, align := some 2}
-  discard (← accept (checkMemTy "emptyUnion" emptyUnionTypes emptyUnionLayouts 0 11))
+  discard (accept (checkMemTy "emptyUnion" emptyUnionTypes emptyUnionLayouts 0 11))
   let gen := emit #[f] "ErrorStorage" "error_storage." .ieee
   require ((gen.splitOn "Zig.optionalErrorEnc").length > 1) "optional dictionary missing"
   require ((gen.splitOn "Option (Zig.ErrName)").length > 1) "public optional API changed"
