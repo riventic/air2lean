@@ -13,10 +13,7 @@ private def layouts : Array Layout := #[
   {size := some 8, align := some 8, ptrAlign := some 2},
   {size := some 1, align := some 1}, {}, {size := some 2, align := some 2},
   {size := some 0, align := some 1}, {size := some 8, align := some 8, ptrAlign := some 2}]
-private def f : Func := {zigVersion := "0.16.0", name := "error_storage.optional", params := #[5], ret := 1,
-  types, layouts, globals := #[], body := #[{id := 0, ty := 5, op := .arg 0},
-    {id := 1, ty := 9, op := .store (.inst 0) (.optSome 1 (.err 0 "Alpha"))},
-    {id := 2, ty := 1, op := .load (.inst 0)}, {id := 3, ty := 7, op := .ret (.inst 2)}]}
+private def f : Func := {zigVersion := "0.16.0", name := "error_storage.optional", params := #[5], ret := 1, types, layouts, globals := #[], body := #[{id := 0, ty := 5, op := .arg 0}, {id := 1, ty := 9, op := .store (.inst 0) (.optSome 1 (.err 0 "Alpha"))}, {id := 2, ty := 1, op := .load (.inst 0)}, {id := 3, ty := 7, op := .ret (.inst 2)}]}
 private def require (p : Bool) (why : String) : IO Unit := unless p do throw (IO.userError why)
 private def accept (out : Except String α) : IO α := match out with
   | .ok v => pure v | .error e => throw (IO.userError e)
@@ -55,9 +52,7 @@ def main (args : List String) : IO Unit := do
   reject (check rawPtr) "raw error pointer observation"
   let optionalPtrTypes := rawTypes.push (.optional 10) |>.push (.optional 11)
   let optionalPtrLayouts := rawLayouts.push {size := some 8, align := some 8} |>.push {size := some 8, align := some 8}
-  let optionalRawPtr : Func := {cast with types := optionalPtrTypes, layouts := optionalPtrLayouts,
-    params := #[12], ret := 13, body := #[{id := 0, ty := 12, op := .arg 0},
-      {id := 1, ty := 13, op := .bitcast (.inst 0)}, {id := 2, ty := 7, op := .ret (.inst 1)}]}
+  let optionalRawPtr : Func := {cast with types := optionalPtrTypes, layouts := optionalPtrLayouts, params := #[12], ret := 13, body := #[{id := 0, ty := 12, op := .arg 0}, {id := 1, ty := 13, op := .bitcast (.inst 0)}, {id := 2, ty := 7, op := .ret (.inst 1)}]}
   reject (check optionalRawPtr) "optional pointer raw error exposure"
   let directToOptional := {optionalRawPtr with params := #[10],
     body := optionalRawPtr.body.set! 0 {id := 0, ty := 10, op := .arg 0}}
