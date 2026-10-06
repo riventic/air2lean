@@ -17,10 +17,12 @@ def main : IO Unit := do
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/golden/0.15.2/lists/air/lists.listSum.json")
   require (raw.body.any fun i => i.id == 66 && i.tag == "bitcast" &&
     i.ty == some 21 && i.args == #[.inst 65]) "retained raw list inst66 qualifier cast drift"
-  let f ← get <| normalize raw
-  let some (.optional sourcePointer) := f.types[5]?
+  let f : Func ← get <| normalize raw
+  let sourceType : Option Ty := f.types[5]?
+  let some (Ty.optional sourcePointer) := sourceType
     | throw (IO.userError "retained list source optional shape drift")
-  let some (.optional targetPointer) := f.types[21]?
+  let targetType : Option Ty := f.types[21]?
+  let some (Ty.optional targetPointer) := targetType
     | throw (IO.userError "retained list target optional shape drift")
   require (f.types[sourcePointer]? == some (.ptr "one" false 25) &&
     f.types[targetPointer]? == some (.ptr "one" true 25)) "retained list qualifier type shape drift"
