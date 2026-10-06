@@ -49,6 +49,12 @@ private def permutationFile (name tag : String) (types : Array Json) (aty rty : 
     #[inst 0 "arg" aty #[] [("param", num 0)], inst 1 tag rty args,
       inst 2 "ret" types.size #[ref 1]]
 
+-- Zero-width parameters keep their signature slot, but have no AIR arg instruction.
+private def zeroPermutationFile (tag : String) (signed : Bool) : Json :=
+  file "valid" #[intTy 0 signed, nrTy] #[0] 0
+    #[inst 0 tag 0 #[obj [("ty", num 0), ("val", .str "0")]],
+      inst 1 "ret" 1 #[ref 0]]
+
 private def loopFile (tag : String) : Json :=
   file "captured" #[intTy 16, nrTy, obj [("k", .str "bool")]] #[0] 0
     #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "loop" 1 #[]
@@ -64,7 +70,9 @@ def main (args : List String) : IO Unit := do
   for tag in #["byte_swap", "bit_reverse"] do
     for width in #[0, 8, 16, 24, 64, 128, 65528] do
       for signed in #[false, true] do
-        let _ ← accept (permutationFile "valid" tag #[intTy width signed] 0 0)
+        let input := if width == 0 then zeroPermutationFile tag signed
+          else permutationFile "valid" tag #[intTy width signed] 0 0
+        let _ ← accept input
     if tag == "bit_reverse" then
       for width in #[1, 3, 9, 65, 65535] do
         for signed in #[false, true] do
