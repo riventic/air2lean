@@ -23,11 +23,11 @@ example : (Zig.Vec.map Zig.byteSwap (⟨#v[0x1234, 0x8001, 0x00ff]⟩ : Zig.Vec 
   intro i hi
   have h : i = 0 ∨ i = 1 ∨ i = 2 := by omega
   rcases h with rfl | rfl | rfl <;>
-    simp only [Zig.Vec.map, Vector.getElem_reverse, Vector.getElem_map] <;> decide
+    simp only [Zig.Vec.map, Vector.getElem_reverse, Vector.getElem_map] <;> decide +revert
 example : (Zig.Vec.map Zig.bitReverse (⟨#v[1, 2, 3]⟩ : Zig.Vec (BitVec 3) 3)).lanes =
     #v[4, 2, 6] := by
   apply Vector.ext
   intro i hi
   have h : i = 0 ∨ i = 1 ∨ i = 2 := by omega
   rcases h with rfl | rfl | rfl <;>
-    simp only [Zig.Vec.map, Vector.getElem_reverse, Vector.getElem_map] <;> decide
+    simp only [Zig.Vec.map, Vector.getElem_reverse, Vector.getElem_map] <;> decide +revert
