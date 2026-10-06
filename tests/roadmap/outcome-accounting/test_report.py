@@ -91,6 +91,40 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(data['counts'],{'mismatch':1})
         self.assertEqual(data['setup_failures'],0)
 
+    def test_native_signal_domain_is_native_unknown_only(self):
+        meta={'schema':1,'kind':'native_signal','legacy':{'fail':'unknown'}}
+        self.assertEqual(REPORT.observation(json.dumps(meta),{'fail':'unknown'},'native')[0],K.NATIVE_SIGNAL)
+        with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),{'fail':'unknown'},'model')
+        for wire in ({'fail':'panic'},{'ok':7},{'fail':'unknown','signal':8}):
+            meta['legacy']=wire
+            with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),wire,'native')
+
+    def test_native_signal_is_excluded_only_for_model_exclusion(self):
+        self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_SIGNAL,K.ILLEGAL)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        code,data=self.compare()
+        self.assertEqual(code,0)
+        self.assertEqual(data['counts'],{'illegal_exclusion':1})
+        self.assertEqual(data['setup_failures'],0)
+        self.assertEqual(data['mutation_eligible'],0)
+        self.seed({'fail':'unknown'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('')
+        code,data=self.compare()
+        self.assertEqual(code,1)
+        self.assertEqual(data['counts'],{'mismatch':1})
+        self.assertEqual(data['mutation_eligible'],1)
+        self.assertEqual(REPORT.classify({'fail':'unknown'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE,None,True),S.MISMATCH)
+        self.assertEqual(REPORT.classify({'fail':'unknown'},{'fail':'Zig.Error.panic'},K.NATIVE_SIGNAL,K.MODEL_PANIC,None),S.MISMATCH)
+
+    def test_renderer_and_resource_failure_remain_fatal_against_illegal(self):
+        self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        code,data=self.compare()
+        self.assertEqual(code,1)
+        self.assertEqual(data['counts'],{'native_harness_failure':1})
+        self.assertEqual(data['setup_failures'],1)
+        self.assertEqual(data['mutation_eligible'],0)
+
     def test_illegal_pin_change_with_raw_incomplete_search_is_not_detection(self):
         for search in (self.search('capped'),self.search('bounded',True),self.search('exhausted',True)):
             self.seed({'ok':1},{'fail':'Zig.Error.illegal'},K.VALUE,K.ILLEGAL,search)
@@ -157,6 +191,27 @@ class Outcomes(unittest.TestCase):
         records('renderer.jsonl',[{'fail':'harnessRenderFailure'}])
         records('renderer.jsonl.outcomes',[{'schema':1,'kind':'native_panic','legacy':{'fail':'harnessRenderFailure'}}])
         with self.assertRaisesRegex(AssertionError,'semantic mismatch'):module.verify(self.root)
+
+    def test_native_phase_checker_rejects_signal_on_renderer_or_interruption(self):
+        spec=importlib.util.spec_from_file_location('native_phase_check',ROOT/'tests/roadmap/outcome-accounting/test_native.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        for wrong in (None,'interrupt','renderer-fault'):
+            root=self.root/('valid' if wrong is None else wrong)
+            directory=root/'tests/diff/out/zig/outcome-accounting';directory.mkdir(parents=True)
+            payloads={'prefix':{'ok':7},'renderer':{'fail':'harnessRenderFailure'},
+                      'source':{'fail':'panic'},'signal':{'fail':'unknown'},
+                      'interrupt':{'fail':'unknown'},'renderer-fault':{'fail':'unknown'}}
+            kinds={'prefix':'value','renderer':'native_harness_failure','source':'native_panic',
+                   'signal':'native_signal','interrupt':'native_harness_failure','renderer-fault':'native_harness_failure'}
+            if wrong:kinds[wrong]='native_signal'
+            for name,legacy in payloads.items():
+                (directory/(name+'.jsonl')).write_text(json.dumps(legacy)+'\n')
+                metadata=[dict(schema=1,kind=kinds[name],legacy=legacy)]
+                if name=='prefix':metadata.append(dict(schema=1,kind='input_failure'))
+                (directory/(name+'.jsonl.outcomes')).write_text(''.join(json.dumps(row)+'\n' for row in metadata))
+            if wrong:
+                with self.assertRaisesRegex(AssertionError,'classification changed'):module.verify(root)
+            else:module.verify(root)
 
     def test_actual_diff_setup_failures_invalidate_old_completed_report(self):
         cases=('missing_compiler','version_failure','unknown_example','invalid_example',

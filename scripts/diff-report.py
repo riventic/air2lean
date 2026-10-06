@@ -26,6 +26,7 @@ class Kind(str, Enum):
     ERROR_RETURN = 'error_return'
     MODEL_PANIC = 'model_panic'
     NATIVE_PANIC = 'native_panic'
+    NATIVE_SIGNAL = 'native_signal'
     ILLEGAL = 'illegal'
     UNSPECIFIED = 'unspecified'
     DEADLOCK = 'deadlock'
@@ -158,7 +159,7 @@ def observation(line, legacy, side):
         raise Invalid('observation needs exactly one legacy binding')
     if not json_equal(wire(record.get('legacy', record.get('legacy_line'))),legacy):
         raise Invalid('stale/misaligned observation')
-    allowed = {Kind.VALUE, Kind.ERROR_RETURN, Kind.NATIVE_PANIC, Kind.NATIVE_HARNESS_FAILURE, Kind.INPUT_FAILURE} if side == 'native' else set(Kind) - {Kind.NATIVE_PANIC}
+    allowed = {Kind.VALUE, Kind.ERROR_RETURN, Kind.NATIVE_PANIC, Kind.NATIVE_SIGNAL, Kind.NATIVE_HARNESS_FAILURE, Kind.INPUT_FAILURE} if side == 'native' else set(Kind) - {Kind.NATIVE_PANIC, Kind.NATIVE_SIGNAL}
     if kind not in allowed:
         raise Invalid('observation kind is invalid for producer')
     if kind in {Kind.VALUE, Kind.ERROR_RETURN}:
@@ -173,6 +174,9 @@ def observation(line, legacy, side):
     elif kind == Kind.SEARCH_CAP:
         if legacy != {'fail': 'Zig.Error.capped'}:
             raise Invalid('search-cap observation lacks cap marker')
+    elif kind == Kind.NATIVE_SIGNAL:
+        if legacy != {'fail': 'unknown'}:
+            raise Invalid('native signal requires unknown legacy failure')
     elif kind == Kind.NATIVE_HARNESS_FAILURE:
         if set(legacy) != {'fail'} or not isinstance(legacy['fail'],str):
             raise Invalid('native failure lacks failure marker')
@@ -244,6 +248,7 @@ def classify(native, model, nkind, mkind, search, host=False, values_match=None)
     if mkind == Kind.SEARCH_CAP: return Status.SEARCH_CAP
     if nkind == Kind.NATIVE_PANIC and mkind == Kind.MODEL_PANIC and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return Status.PANIC_MATCH
     if mkind == Kind.BOUNDED_NO_RESULT or (search and search['saw_no_result']): return Status.BOUNDED_NO_RESULT
+    if nkind == Kind.NATIVE_SIGNAL: return Status.MISMATCH
     if host: return Status.HOST
     return Status.MISMATCH
 

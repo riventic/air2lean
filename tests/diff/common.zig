@@ -34,7 +34,7 @@ const compat = @import("compat.zig");
 
 /// The child's output text: the rendered ok-payload or the panic kind. Any length (a result
 /// with the input buffers can be long); `writeResult` frees it.
-pub const OutcomeKind = enum { value, error_return, native_panic, native_harness_failure, input_failure };
+pub const OutcomeKind = enum { value, error_return, native_panic, native_signal, native_harness_failure, input_failure };
 var metadata_writer: ?*std.Io.Writer = null;
 
 pub const Outcome = union(enum) {
@@ -466,7 +466,12 @@ pub fn forkCallBufsWithRenderingAllocator(
         panic_fd = fds[1];
         compat.silenceStderr();
 
+        // Checked phase bytes distinguish a tested-call trap from renderer/protocol failure.
+        if ((compat.write(fds[1], "C") catch reportHarnessFailure("harnessPhaseFailure")) != 1)
+            reportHarnessFailure("harnessPhaseFailure");
         const raw = @call(.auto, func, args);
+        if ((compat.write(fds[1], "R") catch reportHarnessFailure("harnessPhaseFailure")) != 1)
+            reportHarnessFailure("harnessPhaseFailure");
         renderResult(raw, quote_wide, bufs, rendering_allocator, fds[1]) catch
             reportHarnessFailure("harnessRenderFailure");
         compat.exit(0);
@@ -474,36 +479,50 @@ pub fn forkCallBufsWithRenderingAllocator(
 
     // Parent.
     compat.close(fds[1]);
-    defer compat.close(fds[0]);
+    var read_open = true;
+    defer if (read_open) compat.close(fds[0]);
     var text: std.ArrayListUnmanaged(u8) = .empty;
+    defer text.deinit(out_gpa);
     var chunk: [4096]u8 = undefined;
+    var read_failed = false;
     while (true) {
-        const n = std.posix.read(fds[0], &chunk) catch break;
+        const n = std.posix.read(fds[0], &chunk) catch {
+            read_failed = true;
+            // A writer must not remain blocked on an undrained pipe while we wait.
+            compat.close(fds[0]);
+            read_open = false;
+            break;
+        };
         if (n == 0) break;
         try text.appendSlice(out_gpa, chunk[0..n]);
     }
     const wr = compat.waitpid(pid, 0);
+    if (read_failed) return harnessFailure();
+    // Only synchronous fault signals during the tested call are semantic observations.
+    // Resource kills, cancellation and renderer-stage signals remain harness failures.
+    if (std.posix.W.IFSIGNALED(wr.status) and std.mem.eql(u8, text.items, "C")) {
+        const sig = std.posix.W.TERMSIG(wr.status);
+        if (sig == std.posix.SIG.ILL or sig == std.posix.SIG.FPE or
+            sig == std.posix.SIG.SEGV or sig == std.posix.SIG.BUS)
+            return .{ .fail = .{ .name = try out_gpa.dupe(u8, "unknown"), .kind = .native_signal } };
+    }
+    if (text.items.len < 2 or text.items[0] != 'C') return harnessFailure();
+    const returned = text.items[1] == 'R';
+    const payload_start: usize = if (returned) 2 else 1;
+    const payload = text.items[payload_start..];
     const exited_ok = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) == 0;
     const exited_fail = std.posix.W.IFEXITED(wr.status) and std.posix.W.EXITSTATUS(wr.status) != 0;
-    if (text.items.len > 0 and (exited_ok or exited_fail)) {
-        const s = try text.toOwnedSlice(out_gpa);
-        if (!exited_ok) {
-            if (s.len > 1 and (s[0] == 'P' or s[0] == 'H')) {
-                const name = try out_gpa.dupe(u8, s[1..]);
-                const kind: OutcomeKind = if (s[0] == 'P') .native_panic else .native_harness_failure;
-                out_gpa.free(s);
-                return .{ .fail = .{ .name = name, .kind = kind } };
-            }
-            out_gpa.free(s);
-            return harnessFailure();
-        }
-        if (s[0] == 'V' or s[0] == 'E') return .{ .ok = .{
-            .payload = s, .kind = if (s[0] == 'E') .error_return else .value,
-        } };
-        out_gpa.free(s);
-        return harnessFailure();
+    if (exited_fail and payload.len > 1 and (payload[0] == 'P' or payload[0] == 'H')) {
+        const kind: OutcomeKind = if (!returned and payload[0] == 'P') .native_panic else .native_harness_failure;
+        return .{ .fail = .{ .name = try out_gpa.dupe(u8, payload[1..]), .kind = kind } };
     }
-    text.deinit(out_gpa);
+    if (exited_ok and returned and payload.len > 1 and (payload[0] == 'V' or payload[0] == 'E')) {
+        const kind: OutcomeKind = if (payload[0] == 'E') .error_return else .value;
+        // Keep V/E for writeResult's existing payload[1..] protocol, without a second allocation.
+        std.mem.copyForwards(u8, text.items, payload);
+        text.items.len = payload.len;
+        return .{ .ok = .{ .payload = try text.toOwnedSlice(out_gpa), .kind = kind } };
+    }
     return harnessFailure();
 }
 

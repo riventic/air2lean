@@ -11,6 +11,33 @@ fn sourcePanic() u32 {
     @panic("tested source panic");
 }
 
+fn sourceSignal() u32 {
+    std.posix.raise(std.posix.SIG.FPE) catch @panic("raise failed");
+    return 7;
+}
+
+fn sourceInterrupt() u32 {
+    std.posix.raise(std.posix.SIG.TERM) catch @panic("raise failed");
+    return 7;
+}
+
+fn rendererSignal() *const u8 {
+    // The tested call returns; reading this payload belongs to the renderer phase.
+    return @ptrFromInt(1);
+}
+
+fn signal(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceSignal)), .{}, sourceSignal, false));
+}
+
+fn interrupt(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(sourceInterrupt)), .{}, sourceInterrupt, false));
+}
+
+fn rendererFault(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
+    try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(rendererSignal)), .{}, rendererSignal, false));
+}
+
 fn prefix(_: std.mem.Allocator, _: []std.json.Value, writer: anytype) !void {
     try common.writeResult(writer, try common.forkCall(std.meta.ArgsTuple(@TypeOf(value)), .{}, value, false));
 }
@@ -51,4 +78,7 @@ pub fn main() !void {
     if (!input_failed) return error.MalformedInputAccepted;
     try common.forEachLine(allocator, "outcome-accounting", "renderer", renderer);
     try common.forEachLine(allocator, "outcome-accounting", "source", source);
+    try common.forEachLine(allocator, "outcome-accounting", "signal", signal);
+    try common.forEachLine(allocator, "outcome-accounting", "interrupt", interrupt);
+    try common.forEachLine(allocator, "outcome-accounting", "renderer-fault", rendererFault);
 }

@@ -51,15 +51,29 @@ def verify(root):
     if source!=[{'fail':'panic'}]:raise AssertionError('tested source panic changed')
     kind,_=REPORT.observation(json.dumps(rows('source.jsonl.outcomes')[0]),source[0],'native')
     if kind!=REPORT.Kind.NATIVE_PANIC:raise AssertionError('tested source panic became harness failure')
+    for name,expected in [('signal',REPORT.Kind.NATIVE_SIGNAL),
+                          ('interrupt',REPORT.Kind.NATIVE_HARNESS_FAILURE),
+                          ('renderer-fault',REPORT.Kind.NATIVE_HARNESS_FAILURE)]:
+        legacy=rows(name+'.jsonl')
+        if legacy!=[{'fail':'unknown'}]:raise AssertionError(name+' legacy failure changed')
+        kind,_=REPORT.observation(json.dumps(rows(name+'.jsonl.outcomes')[0]),legacy[0],'native')
+        if kind!=expected:raise AssertionError(name+' phase/signal classification changed')
+        # Real harness and resource failures stay fatal even against model-illegal.
+        status=REPORT.classify(legacy[0],{'fail':'Zig.Error.illegal'},kind,REPORT.Kind.ILLEGAL,None)
+        target=REPORT.Status.ILLEGAL if name=='signal' else REPORT.Status.NATIVE_HARNESS_FAILURE
+        if status!=target:raise AssertionError(name+' illegal exclusion masked a harness failure')
+        status=REPORT.classify(legacy[0],{'ok':7},kind,REPORT.Kind.VALUE,None)
+        target=REPORT.Status.MISMATCH if name=='signal' else REPORT.Status.NATIVE_HARNESS_FAILURE
+        if status!=target:raise AssertionError(name+' valid model comparison changed')
 
 def main():
     binary=Path(sys.argv[1]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix='air2lean-outcome-native-') as name:
         root=Path(name);inputs=root/'tests/diff/outcome-accounting/inputs';inputs.mkdir(parents=True)
-        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n'}.items():
+        for fixture,text in {'prefix':'[0]\n{malformed\n','renderer':'[]\n','source':'[]\n','signal':'[]\n','interrupt':'[]\n','renderer-fault':'[]\n'}.items():
             (inputs/(fixture+'.jsonl')).write_text(text)
         subprocess.run([str(binary)],cwd=root,check=True,timeout=5)
         verify(root)
-    print('native producer prefix, renderer failure and source panic checks passed')
+    print('native producer phase, signal, resource interruption, renderer and source panic checks passed')
 
 if __name__=='__main__':main()

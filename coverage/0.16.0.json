@@ -15003,7 +15003,7 @@
       "tests/diff/basic/inputs/tardiness.jsonl": "9b8ea2475e27ee91ffdbd2491293c56a8eed58023edb53ece80ffcb55ada76a9",
       "tests/diff/basic/inputs/totalWeightedTardiness.jsonl": "2ff2802f365df24b219339123d50005d68dd45d68248354a16a09b27b7d70e29",
       "tests/diff/basic/inputs/weightedTardiness.jsonl": "562940a5845f18637ad36aaf34454d1ba62d10754b18e9dabb386b7765853f4f",
-      "tests/diff/common.zig": "c6aa939b378ce88f7d461e4e9f30dd9aa1811457e1fea8b0363b48ee9e5121c0",
+      "tests/diff/common.zig": "ff09eba1e7221292292bc2f5a46d29a647dd44a81bc8f837ee07e5e488e27c73",
       "tests/diff/compat.zig": "106a726539d8b4339e33da66747de1bda6eb054fd0254714976a8311a6efa122",
       "tests/diff/errors/harness.zig": "22e5e9e8d2489741cfa084199d0494629188595d489158bce869b9ce438a13f7",
       "tests/diff/errors/inputs/digitOrZero.jsonl": "12131092f5f8f6b42647096c3b285db00b2980909d45954e54156f1a26b93a97",
