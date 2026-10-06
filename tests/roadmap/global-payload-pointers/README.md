@@ -11,14 +11,15 @@ space and initialized, non-extern, non-threadlocal global backing. Packed/vector
 and actual volatile pointers are rejected. Canonical parent pointers carry volatile metadata
 in the compiler; they do not perform a memory access. Optional payloads begin at offset zero.
 Error payload offsets use the exact compiler alignment order. A layout that differs from the
-current memory model is rejected, including equal-alignment error payloads until the separate
-error-union alignment dependency is integrated. Zero-sized payloads remain outside this scope.
+current memory model is rejected. The composed error-union alignment dependency makes
+nonzero equal-alignment payloads match; the same general comparison now accepts them.
+Zero-sized payloads remain outside this scope.
 
 `payload_base: true` is diagnostic metadata on a successfully resolved constant pointer. It
 records that a compiler payload base actually reached the new resolver, so a compiler fixture
 which flattened to an already-supported nav-plus-offset form cannot qualify these arms.
 
-The public client uses a cross-file frozen nested optional and both byte and wide error union
+The public client uses a cross-file frozen nested optional and byte, equal-alignment and wide error union
 payloads, and runtime projections into a writable global. Native tests use actual source
 pointer addresses and compiler `@offsetOf`; they cover aliasing and neighboring-field frames.
 `Model.lean` separately checks provenance, runtime-projection aliases, framed read/write laws,

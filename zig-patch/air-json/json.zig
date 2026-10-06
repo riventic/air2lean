@@ -1396,9 +1396,9 @@ const W = struct {
                         // Use the same exact layout helper as the compiler's lowerPtr.
                         const compiler_off = @import("../codegen.zig").errUnionPayloadOffset(child, zcu);
                         const align = ca.toByteUnits() orelse return .{ .unsupported = "error_payload_layout" };
-                        const model_off = if (align > 2) 0 else ca.forward(2);
-                        // The current model assumes a two-byte error and differs at equal
-                        // alignment. Do not accept that layout until its Enc laws are fixed.
+                        const model_off = if (align >= 2) 0 else ca.forward(2);
+                        // ZigLean.errUnionOffsets now puts nonzero equal-alignment payloads
+                        // first. Keep the general compiler/model comparison fail-closed.
                         if (es != 2 or ea.toByteUnits() != 2 or compiler_off != model_off)
                             return .{ .unsupported = "error_payload_model_layout" };
                         break :blk compiler_off;

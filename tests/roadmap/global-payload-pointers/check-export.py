@@ -6,7 +6,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 HELPERS = runpy.run_path(str(HERE.parents[2]/'scripts/normalize-generated.py'))
-BASELINE_FEATURES = runpy.run_path(str(HERE.parent/'try-pointers/check-artifacts.py'))['BASELINE_FEATURES']
+BASELINE_FEATURES = HELPERS['BASELINE_FEATURES']
 
 def profile(document, version, backend):
     result = HELPERS['profile_for_air'](document)
@@ -45,7 +45,7 @@ def pointers(value):
 def check(directory, version, backend, reject=False):
     profiles = []
     if reject:
-        expected = {'equalAlignment': 'error_payload_model_layout', 'volatilePayload': 'payload_volatile'}
+        expected = {'zeroPayload': 'error_payload_layout', 'volatilePayload': 'payload_volatile'}
         for name, reason in expected.items():
             doc = HELPERS['parse_json']((directory/f'reject.{name}.json').read_text())
             if doc['name'] != f'reject.{name}': raise ValueError('wrong rejection fixture')
@@ -56,7 +56,7 @@ def check(directory, version, backend, reject=False):
         if any(p != profiles[0] for p in profiles): raise ValueError('mixed rejection profiles')
         print('fresh source payload layout/volatile rejection checks passed')
         return
-    names = ['optionalPtr', 'sameOptionalPtr', 'smallPtr', 'widePtr', 'optionalSlice']
+    names = ['optionalPtr', 'sameOptionalPtr', 'smallPtr', 'widePtr', 'equalPtr', 'optionalSlice']
     roots = []
     for name in names:
         path = directory/f'global_payloads.{name}.json'
@@ -77,12 +77,14 @@ def check(directory, version, backend, reject=False):
             inner = field(doc, g['ty'], 'inner')
             small = field(doc, inner['ty'], 'small')
             wide = field(doc, inner['ty'], 'wide')
+            equal = field(doc, inner['ty'], 'equal')
             opt = field(doc, inner['ty'], 'optional')
             opt_type = type_at(doc, opt['ty'])
             value = field(doc, opt_type['child'], 'value')
             expected = inner['offset'] + (
                 small['offset'] + 2 if name == 'smallPtr' else
-                wide['offset'] if name == 'widePtr' else opt['offset'] + value['offset'])
+                wide['offset'] if name == 'widePtr' else
+                equal['offset'] if name == 'equalPtr' else opt['offset'] + value['offset'])
             if p['off'] != expected: raise ValueError(f'{name}: wrong payload offset {p["off"]}, expected {expected}')
             roots.append(g.get('name'))
     if any(p != profiles[0] for p in profiles): raise ValueError('mixed fresh AIR profiles')

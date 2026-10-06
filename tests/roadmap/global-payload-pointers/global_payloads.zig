@@ -6,6 +6,7 @@ const storage = @import("storage.zig");
 pub fn optionalPtr() *const u8 { return storage.optional_ptr; }
 pub fn smallPtr() *const u8 { return storage.small_ptr; }
 pub fn widePtr() *const u64 { return storage.wide_ptr; }
+pub fn equalPtr() *const u16 { return storage.equal_ptr; }
 pub fn sameOptionalPtr() *const u8 { return &storage.frozen.inner.optional.?.value; }
 pub fn optionalSlice() []const u8 {
     const one: *const [1]u8 = @ptrCast(storage.optional_ptr);
@@ -39,6 +40,8 @@ test "constant payload pointers alias exact nested offsets and retain shared ide
     try std.testing.expectEqual(base + opt + @offsetOf(storage.Payload, "value"), @intFromPtr(optionalPtr()));
     try std.testing.expectEqual(base + inner + @offsetOf(storage.Inner, "small") + 2, @intFromPtr(smallPtr()));
     try std.testing.expectEqual(base + inner + @offsetOf(storage.Inner, "wide"), @intFromPtr(widePtr()));
+    try std.testing.expectEqual(base + inner + @offsetOf(storage.Inner, "equal"), @intFromPtr(equalPtr()));
+    try std.testing.expectEqual(@as(u16, 23), equalPtr().*);
     try std.testing.expect(optionalPtr() == sameOptionalPtr());
     try std.testing.expect(optionalSlice().ptr == optionalPtr());
     try std.testing.expectEqual(@as(u8, 7), optionalRead());
@@ -57,7 +60,7 @@ test "mutable runtime projections preserve tag and unrelated fields" {
 }
 
 comptime {
-    _ = &optionalPtr; _ = &smallPtr; _ = &widePtr; _ = &sameOptionalPtr;
+    _ = &optionalPtr; _ = &smallPtr; _ = &widePtr; _ = &equalPtr; _ = &sameOptionalPtr;
     _ = &optionalSlice; _ = &optionalRead; _ = &smallRead; _ = &wideRead;
     _ = &writeOptional; _ = &writeSmall; _ = &writeWide;
 }

@@ -12469,7 +12469,7 @@
       "Air2Lean/Memory.lean": "8ff3c406627864dfdc41fc4f7d03b0ace72e1dd3dc9ae268a04671dfe40d954f",
       "Air2Lean/ModelRegistry.lean": "ddaf398e7a02af903dbd827b65f3a1230815cf6922ef874c8d2bdfed72a8f387",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
-      "zig-patch/air-json/json.zig": "6e43b997ea7f617c1daea97d78b3cca12fddd3519636a8aa9494e6e342796530",
+      "zig-patch/air-json/json.zig": "a1a0cf33dce9b476b1b800958e37b171d3893a618aaca0ffebb083c74ab0ebdd",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {

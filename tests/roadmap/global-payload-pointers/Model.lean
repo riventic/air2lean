@@ -29,6 +29,11 @@ theorem wide_alias (root : Ptr) (parent : Nat) :
   change root.add ((parent + 0 + 0 : Nat) : Int) = (root.add parent).add (0 : Int)
   simp [Ptr.add]
 
+theorem equal_alias (root : Ptr) (parent : Nat) :
+    resolved root parent 0 0 = errPayloadPtr (BitVec 16) (root.add parent) := by
+  change root.add ((parent + 0 + 0 : Nat) : Int) = (root.add parent).add (0 : Int)
+  simp [Ptr.add]
+
 theorem read_frame {T : Type} [Enc T] (root : Ptr) (parent payload leaf a : Nat)
     (v : T) (R : Assn) (hn : 0 < Enc.size T) :
     Triple (pts (resolved root parent payload leaf) a v ∗ R)
@@ -78,6 +83,7 @@ private def absentError : Mem :=
 def main : IO Unit := do
   check "small runtime projection alias" (resolved root 2 2 0) (errPayloadPtr (BitVec 8) (root.add 2))
   check "wide runtime projection alias" (resolved root 8 0 0) (errPayloadPtr (BitVec 64) (root.add 8))
+  check "equal-alignment runtime projection alias" (resolved root 2 0 0) (errPayloadPtr (BitVec 16) (root.add 2))
   check "optional nested alias" (resolved root 7 0 3) ((root.add 7).add 3)
   check "small write frame" (value smallMem writeSmall) (some (.ok (31#8, 77#8, 99#8)))
   check "wide write frame" (value (Mem.ofGlobals [(wideBytes, 8, .global)]) writeWide)
