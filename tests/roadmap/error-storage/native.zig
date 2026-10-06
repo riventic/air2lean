@@ -24,11 +24,11 @@ pub fn main() void {
         const union_err = if (fixture.payloadUnion(&union_cell, name, true)) |_| false
         else |err| err == name and (if (union_cell) |_| false else |stored_err| stored_err == name);
         std.debug.print("{s} {d} {d} {d} {d} {d} {d} {d} {d} {d}\n", .{
-            @errorName(name), @intFromBool(got == name),
-            @intFromBool(slots[0] == null and slots[2] == error.Beta),
+            @errorName(name), @intFromBool(got != null and got.? == name),
+            @intFromBool(slots[0] == null and slots[2] != null and slots[2].? == error.Beta),
             @intFromBool(stored == name and fixture.readError(&e) == name),
-            @intFromBool(payload == error.Gamma and optional == error.Gamma),
-            @intFromBool(global == name and fixture.global_status.guard == 37 and fixture.global_status.pending == name and fixture.global_status.last == name and fixture.statuses[0] == null and fixture.statuses[2] == error.Beta),
+            @intFromBool(payload == error.Gamma and optional != null and optional.? == error.Gamma),
+            @intFromBool(global != null and global.? == name and fixture.global_status.guard == 37 and fixture.global_status.pending != null and fixture.global_status.pending.? == name and fixture.global_status.last == name and fixture.statuses[0] == null and fixture.statuses[2] != null and fixture.statuses[2].? == error.Beta),
             @intFromBool(propagation), @intFromBool(nested_ok), @intFromBool(union_ok), @intFromBool(union_err),
         });
     }
