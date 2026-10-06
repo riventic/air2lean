@@ -106,3 +106,13 @@ Integer or opaque values cannot be cast into pointers whose pointee contains sym
 Capability checks follow nested pointer and aggregate edges with a shared 1024-node work budget; unknown types, cycles and exhaustion fail closed. Casts, parent recovery, folded aliases and final exemptions use this capability boundary consistently, while physical byte-overlap checks retain storage-layout classification. The immutable numeric exception additionally requires a pointer-free pointee view. Nested symbolic pointer-slot/address recovery is rejected; ordinary numeric double-pointer/address controls remain admitted.
 
 An error-capability pointer cast must preserve the exact pointee type id as well as the byte-storage classification. An unrelated error field cannot mask changing a numeric pointer slot into a symbolic pointer slot. The capability traversal validates all reachable branches before success, so a known error elsewhere does not hide a cyclic, unknown or exhausted branch.
+
+A const-only pointer cast may retain a recursive pointee when both sides have the
+same exact child type id, optionality and pointer kind, and identical complete
+outer/inner layouts (including alignment, sentinel, volatility, nullability and
+bit-pointer metadata). All subsequent pointer checks still run. This preserves
+the retained schema-11 lists.listSum inst66 qualifier cast without introducing a
+new decoder. Same-child casts that change representation or do not change const
+qualification still require the bounded capability proof. Numeric-to-recursive
+parent recovery remains fail-closed when the capability traversal is cyclic;
+no retained recursive-parent client failure or qualification is claimed here.
