@@ -69,3 +69,24 @@ def main : IO Unit := do
   -- No blanket identical-child exception: unchanged constness still requires the scan.
   reject {f with types := f.types.set! targetPointer (.ptr "one" false 25)}
   IO.println "retained recursive list qualifier controls passed"
+  -- Exact observed 0.15 dupe shape: distinct e![]u8 IDs, identical finite domain/payload.
+  let duplicateTypes : Array Ty := #[.int false 8, .errorSet (some #["OutOfMemory"]), .errorSet (some #["OutOfMemory"]), .ptr "slice" false 0, .errorUnion 1 3, .errorUnion 2 3]
+  let duplicateLayouts : Array Layout := #[{size := some 1, align := some 1}, {size := some 2, align := some 2}, {size := some 2, align := some 2}, {size := some 16, align := some 8, ptrAlign := some 1}, {size := some 24, align := some 8}, {size := some 24, align := some 8}]
+  let duplicateCx : CheckCtx := {fnName := "duplicateFiniteUnion", types := duplicateTypes, layouts := duplicateLayouts, instTys := #[(0,5)], places := #[]}
+  require (duplicateCx.valTy? (.inst 0) == some 5) "duplicate finite union source binding drift"
+  discard (get <| checkOp duplicateCx 0 4 (.bitcast (.inst 0)))
+  let rejectDuplicate (cx : CheckCtx) : IO Unit := do
+    match checkOp cx 0 4 (.bitcast (.inst 0)) with
+    | .ok _ => throw (IO.userError "accepted a representation-changing finite union cast")
+    | .error e => require ((e.splitOn "opaque bitcast involving optional, aggregate or error-union error storage").length > 1) s!"wrong finite union rejection: {e}"
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 2 (.errorSet (some #["Other"]))}
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 2 (.errorSet (some #["OutOfMemory", "Extra"]))}
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 4 (.errorUnion 1 0)}
+  rejectDuplicate {duplicateCx with layouts := duplicateLayouts.set! 4 {size := some 32, align := some 8}}
+  rejectDuplicate {duplicateCx with layouts := duplicateLayouts.set! 1 {size := some 4, align := some 2}}
+  rejectDuplicate {duplicateCx with layouts := duplicateLayouts.set! 4 {size := none, align := some 8}}
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 2 (.errorSet none)}
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 1 (.errorSet (some #["OutOfMemory", "OutOfMemory"])) |>.set! 2 (.errorSet (some #["OutOfMemory", "OutOfMemory"]))}
+  rejectDuplicate {duplicateCx with types := duplicateTypes.set! 4 (.errorUnion 1 99) |>.set! 5 (.errorUnion 2 99)}
+  rejectDuplicate {duplicateCx with layouts := duplicateLayouts.set! 3 {size := none, align := some 8}}
+  IO.println "finite duplicate error-union controls passed"

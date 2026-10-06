@@ -572,7 +572,23 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       cx.fail line "raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment"
     if let some aty := sourceTy then
       let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
-      if aty != ty && !bothErrors && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
+      -- Duplicate finite error-union IDs preserve the same symbolic decoder only
+      -- when ordered declared names, payload identity and all representation metadata agree.
+      let sameFiniteErrorUnion := ((do
+        let .errorUnion aset apayload ← cx.types[aty]? | none
+        let .errorUnion bset bpayload ← cx.types[ty]? | none
+        let .errorSet (some anames) ← cx.types[aset]? | none
+        let .errorSet (some bnames) ← cx.types[bset]? | none
+        let a ← cx.layouts[aty]?
+        let b ← cx.layouts[ty]?
+        let ae ← cx.layouts[aset]?
+        let be ← cx.layouts[bset]?
+        let _ ← cx.types[apayload]?
+        let payload ← cx.layouts[apayload]?
+        return apayload == bpayload && anames == bnames && validErrorDomainNames anames &&
+          a.size.isSome && a.align.isSome && ae.size.isSome && ae.align.isSome &&
+          payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
+      if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
         cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
       let pointerChild (id : TyId) : Option TyId :=
         match cx.types[id]? with
