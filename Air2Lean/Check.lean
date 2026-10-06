@@ -88,6 +88,34 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
 private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
   (errorCapabilityScan types id 1024).map (·.2)
 
+/-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
+is used only for global aliases whose strict capability traversal could not finish;
+casts and parent recovery retain the strict cycle-rejecting traversal. -/
+private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : Bool := Id.run do
+  let mut pending : List TyId := [root, child]
+  let mut visited : Std.HashSet TyId := {}
+  for step in [:1024] do
+    match pending with
+    | [] => return true
+    | id :: rest =>
+      pending := rest
+      if visited.contains id then continue
+      let some ty := types[id]? | return false
+      match ty with
+      | .other _ | .errorSet _ | .errorUnion .. => return false
+      | _ => pure ()
+      let count := match ty with
+        | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
+        | .struct _ _ fields => fields.size
+        | .union _ _ tag fields => tag.toArray.size + fields.size
+        | .tuple children => children.size
+        | _ => 0
+      let remaining := 1023 - step
+      if count > remaining || rest.length + count > remaining then return false
+      visited := visited.insert id
+      pending := (childTys ty).toList ++ rest
+  return pending.isEmpty
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -1089,7 +1117,10 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
         !pointerLayout.sentinel && pointerLayout.sentinelByte.isNone &&
         !pointerLayout.isVolatile && !pointerLayout.allowzero &&
         pointerLayout.hostSize == 0 && pointerLayout.bitOffset == 0 then return
-  let some capability := hasErrorCapability f.types child
+  let scanned := hasErrorCapability f.types child
+  if scanned.isNone && !hasErrorStorage f.types global.ty &&
+      closedErrorFreeAliasGraph f.types global.ty child then return
+  let some capability := scanned
     | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   if !hasErrorStorage f.types global.ty && !capability then return
   checkMemTy f.name f.types f.layouts 0 global.ty

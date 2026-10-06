@@ -1,59 +1,62 @@
-# Global-backed constant payload pointers (L06)
+# Global-backed payload pointers (L06)
 
-This source-only scope resolves `opt_payload` and `eu_payload` recursively through ordinary
-struct fields and existing `nav`/`uav` global identities. Checked addition accumulates every
-leaf and parent byte offset; a 64-projection budget rejects deep chains and cycles. Resolution
-never allocates a global identity on failure. `arr_elem` remains rejected: all three compiler
-InternPools define it as an element of a comptime-only array.
+The exporter resolves `opt_payload` and `eu_payload` constants through ordinary struct
+fields and existing `nav`/`uav` global identities. Checked addition includes every parent
+and leaf offset. A 64-projection budget rejects deep or cyclic paths without allocating a
+global identity on failure. `arr_elem` remains unsupported because it denotes a
+comptime-only array element in the supported compiler versions.
 
-Payload constants require a sized, resolved layout, ordinary leaf pointer, generic address
-space and initialized, non-extern, non-threadlocal global backing. Packed/vector projections
-and actual volatile pointers are rejected. Canonical parent pointers carry volatile metadata
-in the compiler; they do not perform a memory access. Optional payloads begin at offset zero.
-Error payload offsets use the exact compiler alignment order. A layout that differs from the
-current memory model is rejected. The composed error-union alignment dependency makes
-nonzero equal-alignment payloads match; the same general comparison now accepts them.
-Zero-sized payloads remain outside this scope.
+Payload constants require resolved, sized layouts, ordinary pointers in the generic address
+space, and initialized, non-extern, non-threadlocal global backing. Packed/vector projections,
+volatile accesses and zero-sized payloads are rejected. Optional payloads start at offset zero;
+error payload offsets follow the compiler's alignment order and must agree with the memory
+model. `payload_base: true` records that a constant reached this resolver, rather than an
+already supported global-plus-offset path.
 
-`payload_base: true` is diagnostic metadata on a successfully resolved constant pointer. It
-records that a compiler payload base actually reached the new resolver, so a compiler fixture
-which flattened to an already-supported nav-plus-offset form cannot qualify these arms.
+The source fixture includes nested optional and small, wide and equal-alignment error-union
+payloads in frozen and writable globals. Generated clients check pointer identities, actual
+heap reads, three writes, complete neighboring bytes and block metadata, and const-write
+rejection. Compiler-folded read exports are checked separately from heap reads. Three
+semantic mutations change the global root, parent offset or small payload offset; each
+mutated generated module and its oracle definitions must compile before a named semantic
+oracle failure counts. `Model.lean` and the shared pointer-offset kernel additionally check
+framing, absent payload bytes, offset overflow and bounded traversal.
 
-The public client uses a cross-file frozen nested optional and byte, equal-alignment and wide error union
-payloads, and runtime projections into a writable global. Native tests use actual source
-pointer addresses and compiler `@offsetOf`; they cover aliasing and neighboring-field frames.
-`Model.lean` separately checks provenance, runtime-projection aliases, framed read/write laws,
-const-write rejection and unspecified reads of absent payload bytes. It does not infer payload
-initialization from an address. The pure shared kernel tests exercise parent-offset
-accumulation, both overflow sites and bounded traversal. Typed semantic mutants must compile
-before named test-assertion failures can count.
+Run the checks from the repository root with the matching patched and stock compilers:
 
-All compiler and Lean execution belongs to the root's single validation lane:
+```sh
+lake build ZigLean Air2Lean air2lean
+export AIR2LEAN_LEAN=$(lake env which lean)
+export LEAN_PATH=$(lake env printenv LEAN_PATH)
+export AIR2LEAN_ZIG_NATIVE=/path/to/stock/zig
+export AIR2LEAN_ZIG_AIR=/path/to/patched/zig
+export AIR2LEAN_ZIG_VERSION=0.16.0
+export AIR2LEAN_ZIG_BACKEND=stage2_x86_64
+bash tests/roadmap/global-payload-pointers/check.sh --kernel
+bash tests/roadmap/global-payload-pointers/check.sh --native
+python3 -m unittest discover -s tests/roadmap/global-payload-pointers -v
+work=$(mktemp -d)
+bash tests/roadmap/global-payload-pointers/check.sh --export "$work/air"
+bash tests/roadmap/global-payload-pointers/check.sh --export-reject "$work/reject-air"
+.lake/build/bin/air2lean "$work/air" -o "$work/Gen.lean" --namespace GlobalPayload --prefix global_payloads.
+python3 scripts/normalize-generated.py report "$work/Gen.lean" "$work/air" "$work/generated-report.json"
+AIR2LEAN_GLOBAL_ACTUAL_GEN="$work/Gen.lean" AIR2LEAN_GLOBAL_CLIENT_OUT="$work/clients" \
+  bash tests/roadmap/global-payload-pointers/check-generated.sh
+```
 
-1. Build core Lean libraries, then set `AIR2LEAN_LEAN` and `LEAN_PATH` to that build.
-2. Set `AIR2LEAN_ZIG_NATIVE` to a stock host compiler and run `check.sh --kernel`.
-3. Run `check.sh --native` for each supported compiler version.
-4. Build each patched compiler from this exact exporter and `pointer-offset.zig` (build.sh
-   installs both), set `AIR2LEAN_ZIG_AIR`, `AIR2LEAN_ZIG_VERSION` and `AIR2LEAN_ZIG_BACKEND`, and run `check.sh --export EMPTY_DIRECTORY`.
-5. Run `check.sh --export-reject OTHER_EMPTY_DIRECTORY` to check explicit layout/volatile
-   rejection. Each export mode validates schema 12, strict JSON, version and exact requested
-   Linux/baseline ReleaseSafe profile. Then translate the successful fresh directory and
-   compile/run its generated functions and independent aliases before any qualification claim.
+The patched compiler must be built from the current seven-input exporter recipe, including
+`pointer-offset.zig`. The same source/native and fresh generated-client procedure supports
+0.14.1, 0.15.2 and 0.16.0 with matching compiler paths and version selection. The existing
+Linux16 CI job runs these feature controls serially.
 
-No compiler output, generated Lean, native acceptance or checked proof is claimed by this
-source packet. Source inventories retain unqualified review labels.
+Source/native correspondence is bounded to `stage2_x86_64`, x86_64 Linux musl,
+baseline CPU and ReleaseSafe. Native tests and exports explicitly select `-fno-llvm -fno-lld`.
+Fresh AIR validation requires schema 12 and rejects LLVM, missing or mixed profiles, and GNU
+ABI for this qualification. General translator acceptance is separate from this correspondence.
 
-Qualification profile boundary: native source checks explicitly use `-fno-llvm -fno-lld
--target x86_64-linux -mcpu=baseline -OReleaseSafe`, matching the patched producer's
-`stage2_x86_64`, Linux musl baseline profile. The fresh AIR gate rejects LLVM, missing
-or mixed profiles and GNU ABI for this qualification. General translator acceptance
-is separate from this profile-specific source/native correspondence claim.
-
-ROOT's bounded address probe on stock 0.14.1, 0.15.2 and 0.16.0 observed the small
-error payload constant at offset 36 with LLVM, while its runtime projection was at
-38. With stage2_x86_64 both addresses were 38. The original offset oracle remains
-unchanged. Optional, wide and equal-alignment controls agreed across both backends;
-all observed reads were 19. This establishes only the tested fixture/backend/target
-boundary, not a general compiler backend theorem. LLVM constant small error payload
-pointer correspondence remains unqualified. See `native-abi-boundary.json` for ROOT's
-reported diagnostic provenance; full fresh exporter/generated alias gates remain pending.
+A native address probe on all three stock versions found the small error payload constant at
+offset 36 with LLVM and its runtime projection at 38; stage2_x86_64 produced 38 for both.
+Optional, wide and equal-alignment controls agreed across both backends. The original offset
+oracle is unchanged. LLVM constant small error-payload pointer correspondence remains
+unqualified; this observation is not a general backend theorem. See
+`native-abi-boundary.json` for the diagnostic provenance.
