@@ -169,7 +169,7 @@ def localize(root, example, function, failure, ctor, air_dir=None):
         for path in sorted(air_dir.glob('*.json')):
             doc = REPORT.decode(CLI.read_bytes(path).decode('utf-8'))
             if isinstance(doc, dict) and isinstance(doc.get('name'), str): docs[doc['name']] = (path, doc)
-    name = next((n for n in docs if n.rpartition('.')[2] == function and n.startswith(example)), None) or \
+    name = next((n for n in docs if n.rpartition('.')[2] == function and n.startswith(example + '.')), None) or \
         next((n for n in docs if n.rpartition('.')[2] == function), None)
     out = dict(function=name, air_dir=str(air_dir.relative_to(root)) if air_dir.is_relative_to(root) else str(air_dir),
                localization='candidate_sites' if failure in CONTRACTS and failure != 'mismatch' else 'function_only',
@@ -234,7 +234,7 @@ def bundle(root, *, source, example, function, input_index, input_value, input_s
     failure_kind = contract or (observed or {}).get('kind')
     ctor = (observed or {}).get('line', '')
     ctor = REPORT.decode(ctor).get('fail', '').removeprefix('Zig.Error.') if ctor.startswith('{') else None
-    result = dict(schema=SCHEMA, qualified=False, classification=classification, reason=reason,
+    return dict(schema=SCHEMA, qualified=False, classification=classification, reason=reason,
                   is_program_bug_evidence=classification == COUNTEREXAMPLE,
                   source=source, example=example, function=function, input_index=input_index,
                   input=input_value, input_sha256=input_sha256, observed=observed, native=native, schedule=schedule,
@@ -242,7 +242,6 @@ def bundle(root, *, source, example, function, input_index, input_value, input_s
                   location=localize(root, example, function, failure_kind, ctor, air_dir),
                   sources_sha256=sources_digest(sources if sources is not None else REPORT.source_hashes(root)),
                   replay=replay or dict(status='unavailable'))
-    return result
 
 
 def schedule_bundle(root, receipt_path, index=None, *, replay=False, binary=None, timeout=60, air_dir=None):
@@ -286,6 +285,8 @@ def replay_block(request, expected, binary):
 def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None):
     data = REPORT.read_summary(summary)
     if data.get('complete') is not True: raise Invalid('incomplete differential summary')
+    # A replay must run the code that produced the summary, as `schedules.py replay --summary` requires.
+    if replay: CLI.bound_context(data, REPORT.source_hashes(root))
     case = None
     for line in REPORT.lines(Path(str(summary)+'.jsonl'), max_bytes=REPORT.MAX_REPORT):
         row = REPORT.decode(line)
@@ -309,8 +310,7 @@ def case_bundle(root, summary, example, function, index, *, replay=False, binary
         options, sparse = search['options'], search['prefix']
         prefix = sparse + [0] * (len(options) - len(sparse))
         schedule = dict(prefix=prefix, options=options, fuel=search['fuel'], search_status='witness')
-        request = dict(schema=1, mode='replay', example=example, function=function, input=raw_input,
-                       fuel=search['fuel'], node_cap=1, prefix_cap=4096, prefix=prefix)
+        request = replay_request(dict(example=example, function=function, input=raw_input, fuel=search['fuel'], prefix_cap=4096), prefix)
         expected = dict(observed, options=options)
         replay_info = replay_block(request, expected, binary)
         if replay: replay_info.update(run_replay(root, request, expected, binary, timeout))

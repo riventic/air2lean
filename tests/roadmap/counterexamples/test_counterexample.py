@@ -255,6 +255,8 @@ class Bundles(unittest.TestCase):
         self.assertEqual(invoke.call_args.args[1]['prefix'], [1, 0])
         data = json.loads(self.out.read_text())
         self.assertEqual((data['classification'], data['contract']['id']), ('counterexample', 'no_illegal_behaviour'))
+        (self.root/'ZigLean/Basic.lean').write_text('-- changed\n')
+        with self.assertRaisesRegex(REPORT.Invalid, 'stale'): self.run_cli(argv + ['--replay'], self.responder(self.RACE))
 
     def test_real_atomics_air_localizes_the_relaxed_message_passing_race(self):
         loc = CX.localize(ROOT, 'atomics', 'mpRelaxed', 'illegal', None)
