@@ -271,7 +271,9 @@ The audit covers whole contract modules, but only goal theorems are judged: a po
 violation in another theorem of a contract module (audit status `fail`) does not fail the
 check. A goal is `allowed` only when its theorem lives in a declared contract module, has
 no audit policy violation, its root definition `namespace.(function without prefix)` is
-defined in the committed `generated` module, and every project assumption it depends on
+defined in the committed `generated` module, the conclusion of its audited statement
+references that definition (`references_root`, the same statement binding coverage uses),
+and every project assumption it depends on
 is named in the root's `assumptions` (which the manifest loader already restricts to
 `allowed_assumptions`). Project assumptions are non-standard axioms, dependency nodes
 missing from the audit graph, and dependencies with an audited `allowed-project-*` or
@@ -279,9 +281,9 @@ missing from the audit graph, and dependencies with an audited `allowed-project-
 `module::name` policy key. Lean's three logical axioms and standard-library opaques,
 externs and redirections are listed as `standard_assumptions` without a manifest entry.
 Other goal rows are `missing`, `outside_contracts`, `policy_violation`,
-`unallowed_assumption` or `unbound_generated`. `references_root` reports whether the
-theorem declaration names the root definition directly; the coverage binding rules above
-still decide verification levels.
+`unallowed_assumption`, `unbound` (the audit lacks statement dependencies),
+`wrapper_or_unrelated` (the conclusion does not name the root) or `unbound_generated`;
+the coverage binding rules above still decide verification levels.
 
 The optional `check` object bounds proof checking: `build_timeout_seconds` and
 `audit_timeout_seconds` (default 3600, maximum 21600) and the guard's sampled `rss_mib`

@@ -1241,11 +1241,16 @@ def audit_goal(root, goal, theorems, nodes, modules):
     unallowed = [p['name'] for p in project if not {p['name'], p['policy_key']} & declared]
     definition = root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
     row.update(standard_assumptions=standard, project_assumptions=project,
-               references_root=direct_reference(nodes, name, definition),
+               references_root=statement_reference(theorem, definition),
                root_definition_module=nodes.get(definition, {}).get('module'))
     if unallowed:
         return dict(row, status='unallowed_assumption', unallowed=unallowed,
                     reason='project assumptions absent from the root assumptions (and allowlist)')
+    if row['references_root'] is None:
+        return dict(row, status='unbound', reason='audit lacks statement dependencies; regenerate it with the current extractor')
+    if not row['references_root']:
+        return dict(row, status='wrapper_or_unrelated',
+                    reason=f'theorem conclusion does not reference generated root definition {definition}')
     if row['root_definition_module'] != modules['generated']:
         return dict(row, status='unbound_generated',
                     reason=f'audited {definition} is not defined in the committed generated module {modules["generated"]}')

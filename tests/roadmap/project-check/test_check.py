@@ -84,6 +84,7 @@ class CheckTests(unittest.TestCase):
     def theorem(name, head='Zig.TotalTriple', **extra):
         return dict({'name': name, 'module': 'Proofs.Example.Contract', 'axioms': ['propext'], 'opaque_dependencies': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
+                     'statement_dependencies': ['Example.root'], 'conclusion_dependencies': ['Example.root'],
                      'conclusion': {'head': head, 'args': []}}, **extra)
 
     def write_audit(self, status='pass'):
@@ -290,6 +291,22 @@ class CheckTests(unittest.TestCase):
         result, record = self.run_check('b')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(record['reproducible']['roots'][0]['goals'][0]['status'], 'unbound_generated')
+
+    def test_goal_conclusion_must_reference_root(self):
+        # A wrapper statement whose proof (but not conclusion) mentions the root does not bind.
+        self.theorems[0]['conclusion_dependencies'] = ['Example.wrapper']
+        self.write_audit()
+        result, record = self.run_check('a')
+        self.assertEqual(result.returncode, 1)
+        goal = record['reproducible']['roots'][0]['goals'][0]
+        self.assertEqual((goal['status'], goal['references_root']), ('wrapper_or_unrelated', False))
+        # Audits from extractors without statement dependencies fail closed.
+        for key in ('statement_dependencies', 'conclusion_dependencies'):
+            self.theorems[0].pop(key, None)
+        self.write_audit()
+        result, record = self.run_check('b')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(record['reproducible']['roots'][0]['goals'][0]['status'], 'unbound')
 
     def test_audit_scope_must_match_contracts(self):
         fixture = json.loads(self.fixture.read_text())
