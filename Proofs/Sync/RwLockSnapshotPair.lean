@@ -1,12 +1,13 @@
 import Proofs.Sync.RwLockContract
 
 /-!
-# Snapshot-pair generated-client proof candidate
+# Snapshot-pair generated-client proofs
 
 This file uses ROOT's actual exported `rwLockSnapshotPair` definition, preserving its full
-profile header. The proof candidates establish same-hold reads, release, writer join and
-stack reclamation using the existing restricted protocol. The all-fuel/all-oracle result
-and strict safety candidates require ROOT kernel elaboration before qualification.
+profile header. The proofs establish same-hold reads, release, writer join and stack
+reclamation using the existing restricted protocol. The all-fuel/all-oracle result and
+strict safety theorems are kernel-checked for the 0.16.0 Linux translation
+(`docs/theorem-inventory.md`).
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Sync Assn
@@ -15,7 +16,7 @@ open Sync.RwLockRead
 namespace Sync.RwLockSnapshotPair
 
 /-- Instantiation of the reusable same-hold contract for the second client's snapshot
-fragment. This is a real ownership/WP source candidate, not yet a theorem of the new
+fragment. This is a real ownership/WP contract, not by itself a theorem of the new
 exported `rwLockSnapshotPair`: the program proof below additionally composes its
 acquire/release, initialization, join and reclamation boundaries. -/
 abbrev snapshot_fragment_wp := @RwLockContract.held_pair_wp
@@ -43,7 +44,7 @@ def QPair : Except ErrName (BitVec 32) → (ThreadId → Gh SPh) → Mem → Nat
   fun v _ m _ => (v = .ok 0 ∨ v = .ok 11 ∨ v = .ok 22) ∧ joinedAll 0 m
 
 /-- WP of ROOT's actual exported client, using the existing initialization and
-primitive contracts. Source candidate; kernel elaboration has not run. -/
+primitive contracts. -/
 theorem main_spec (io : Io) (d : Nat) :
     (proto E₀).WP 0 (rwLockSnapshotPair io) QPair G0 { mem0 with current := 0 } d := by
   unfold rwLockSnapshotPair
@@ -154,8 +155,7 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.pure' ⟨?_, hj⟩
   rcases h3 with h0 | h1 | h2 <;> simp_all [QPair]
 
-/-- Successful results of the actual exported second client, for every fuel/oracle.
-This source candidate still requires ROOT's kernel check. -/
+/-- Successful results of the actual exported second client, for every fuel/oracle. -/
 theorem snapshotPair_spec {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
     (h : (Sched.run dispatch fuel o (rwLockSnapshotPair io) mem0).run = some (.ok (v, m))) :
@@ -165,7 +165,7 @@ theorem snapshotPair_spec {fuel : Nat} {o : Nat → Nat}
   exact hv
 
 /-- Strict scheduler safety of the actual exported second client, for every fuel/oracle.
-No fairness or termination is asserted; ROOT kernel qualification is pending. -/
+No fairness or termination is asserted. -/
 theorem snapshotPair_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     (Sched.run dispatch fuel o (rwLockSnapshotPair io) mem0).run ≠ some (.error e) :=
   (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀)

@@ -106,6 +106,14 @@ jobs:
           python3 -B tests/roadmap/premises/test_premises.py
           python3 -B scripts/premises.py check
 
+      # Offline, before check.sh replaces the committed Gen.lean files whose hashes it compares:
+      # every listed theorem has a current recorded check per translation, and no document
+      # labels a single-step or single-schedule theorem as holding under every schedule.
+      - name: Theorem inventory scope and check results
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
+          python3 -B scripts/theorem-inventory.py check
+
       # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
       - name: Float-semantics label regressions
         run: |

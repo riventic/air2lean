@@ -10,8 +10,8 @@ resource; it does not replace that resource with an arbitrary heap assertion.
 
 The full protocol invariant and semaphore `E.Spec` remain premises of acquire/release.
 In particular, snapshot facts alone cannot justify unlock, join, or reclamation.
-ROOT has exported the new source client; kernel qualification of this adapter and client
-proof candidates is still pending.
+The adapter and the client proofs (`Proofs/Sync/RwLockSnapshotPair.lean`) are kernel-checked
+with the `Proofs` library; `docs/theorem-inventory.md` records the current check and domain.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn

@@ -1,0 +1,860 @@
+{
+  "schema": 1,
+  "scopes": {
+    "sequential": "one thread (no `ConcM`): a `Triple`/`*_run` lemma with `Mem.Seq`, or a pure function equation",
+    "single-step": "one operation or one step of a concurrent program (a `WP` rule or a step fact); composed into a program theorem, not one by itself",
+    "single-schedule": "one concrete oracle and fuel of `Sched.run`, computed by the kernel",
+    "bounded-schedules": "a finite, enumerated set of schedules or a bounded fuel/oracle domain",
+    "all-schedules": "every fuel and every oracle of `Sched.run` (the statement binds both)"
+  },
+  "theorems": [
+    {
+      "name": "swap_sep",
+      "module": "Proofs.Pointers.Sep",
+      "example": "pointers",
+      "scope": "sequential",
+      "domain": "`Triple` (partial correctness, one thread: `Mem.Seq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ∗ pts q 4 y` before, the values swapped after; any frame"
+    },
+    {
+      "name": "swap_self_sep",
+      "module": "Proofs.Pointers.Sep",
+      "example": "pointers",
+      "scope": "sequential",
+      "domain": "`Triple` for every `p` and `x`: `swap(p, p)` keeps `pts p 4 x`"
+    },
+    {
+      "name": "counter_init",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`mem0` (program start) owns the global `counter` with the value 0, split from the rest of the heap"
+    },
+    {
+      "name": "bump_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every counter value `x` with `x + 1 < 2^32` (no overflow): `bump` returns `x + 1` and stores it"
+    },
+    {
+      "name": "copyWithin_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u32` slice and every `d s n` with both ranges in bounds (they can overlap): the items are `copyItems vs d s n` after"
+    },
+    {
+      "name": "fill_sep",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u8` slice whose length matches `vs` and every value `v`: every item is `v` after"
+    },
+    {
+      "name": "reverse_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u32` slice whose length matches `vs`: the items in the other order after"
+    },
+    {
+      "name": "Lists.push_spec",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple emp` for every allocator, list head and value: a new node, or `error.OutOfMemory` and no bytes"
+    },
+    {
+      "name": "Lists.reverse_spec",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` for every linked list `list hd xs`: the list in the other order"
+    },
+    {
+      "name": "Lists.freeAll_spec",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` for every allocator and linked list: no bytes owned after it (every node freed)"
+    },
+    {
+      "name": "Lists.append_run",
+      "module": "Proofs.Lists.Append",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append`: for every allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
+    },
+    {
+      "name": "cmp64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b : f64`: the six comparison bits (`cmpMask`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op16_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f16`: `op16` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op32_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f32`: `op32` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f64`: `op64` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op80_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector and every `a b c : f80` with `a` not a pseudo-denormal (a noncanonical encoding that legacy floor/ceil misread): `op80` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op128_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version and are excluded, F05): `op128` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "divExact64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b : f64`: `@divExact` is the truncated quotient when it is a whole number, else a panic (a NaN quotient panics); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "Vectors.checkedAdd_ok",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values whose every lane sum is below 2^32: the exact lane-wise sum"
+    },
+    {
+      "name": "Vectors.checkedAdd_overflow",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values with some lane sum ≥ 2^32: `error.overflow`"
+    },
+    {
+      "name": "Vectors.checkedAdd_spec",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values, no premise: overflow exactly when a lane overflows, else the exact sum"
+    },
+    {
+      "name": "Vectors.checkedAdd_overflow_iff",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values: the overflow result iff a lane overflows"
+    },
+    {
+      "name": "Vectors.checkedAdd_ok_iff",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values: the exact sum iff every lane fits"
+    },
+    {
+      "name": "Threads.Counter.parallelCounter_spec",
+      "module": "Proofs.Threads.Counter",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): every completed run returns `4 * n` (wrapping `u32`); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threads.Counter.parallelCounter_safe",
+      "module": "Proofs.Threads.Counter",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threads.Disjoint.disjoint_spec",
+      "module": "Proofs.Threads.Disjoint",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): every completed run returns `a + b` (wrapping); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threads.Disjoint.disjoint_safe",
+      "module": "Proofs.Threads.Disjoint",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.MutexCounter.mutexCounter_spec",
+      "module": "Proofs.Sync.Mutex",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.MutexCounter.mutexCounter_safe",
+      "module": "Proofs.Sync.Mutex",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_spec",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): every completed run returns 3; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_safe",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.MutexCounter.mutexCounter_spec",
+      "module": "Proofs.Threadsync.Mutex",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.MutexCounter.mutexCounter_safe",
+      "module": "Proofs.Threadsync.Mutex",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.WG.waitGroup_spec",
+      "module": "Proofs.Threadsync.WaitGroup",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: every completed run returns 2; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.WG.waitGroup_safe",
+      "module": "Proofs.Threadsync.WaitGroup",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.HO.handoff_spec",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.HO.handoff_safe",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Handoff.handoff_spec",
+      "module": "Proofs.Sync.Handoff",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.Handoff.handoff_safe",
+      "module": "Proofs.Sync.Handoff",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.SemCounter.semaphoreCounter_spec",
+      "module": "Proofs.Sync.SemCounter",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.SemCounter.semaphoreCounter_safe",
+      "module": "Proofs.Sync.SemCounter",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockRead.rwLockRead_spec",
+      "module": "Proofs.Sync.RwLock",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockRead.rwLockRead_safe",
+      "module": "Proofs.Sync.RwLock",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.snapshotPair_safe",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MP.mpRelAcq_spec",
+      "module": "Proofs.Atomics.MessagePassing",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`mpRelAcq` (release/acquire flag): every completed run returns 0 or 42; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MP.mpRelAcq_safe",
+      "module": "Proofs.Atomics.MessagePassing",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`mpRelAcq` (release/acquire flag): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MPR.mpRelaxed_spec",
+      "module": "Proofs.Atomics.Relaxed",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`mpRelaxed` (relaxed flag): every completed run returns 0 (a read of 1 races); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness; no safety theorem (runs that race end in an error)"
+    },
+    {
+      "name": "Atomics.Stack.stackPush_spec",
+      "module": "Proofs.Atomics.Stack",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`stackPush` (two `cmpxchgWeak` pushers): every completed run returns 120 or 210; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Atomics.Stack.stackPush_safe",
+      "module": "Proofs.Atomics.Stack",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockContract.held_pair_wp",
+      "module": "Proofs.Sync.RwLockContract",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` rule for the two protected loads of one shared hold, under the restricted RwLock protocol and the semaphore premise `E.Spec`; a step lemma composed into `snapshotPair_spec`, not a program theorem"
+    },
+    {
+      "name": "Sync.RwLockContract.acquire_shared",
+      "module": "Proofs.Sync.RwLockContract",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` rule: the shared acquire under the restricted protocol gives the protected counter facts (`ProtectedFacts`), premise `E.Spec`; one operation, not a program theorem"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.result_of_same_snapshot",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "sequential",
+      "domain": "arithmetic: two equal observations `first ≤ 2` give 0, 11 or 22; equality is a premise, not derived from the lock"
+    },
+    {
+      "name": "Sync.MutexOps.lock_spec",
+      "module": "Proofs.Sync.Lock",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.lock` for every protocol with the lock (`Lock.Fits`): the thread takes the lock and its resource; one operation, not a program theorem"
+    },
+    {
+      "name": "Sync.MutexOps.unlock_spec",
+      "module": "Proofs.Sync.Lock",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.unlock` for every protocol with the lock: the resource goes back to the lock; one operation"
+    },
+    {
+      "name": "Zig.noRace_of_atomic",
+      "module": "Proofs.Threads.Proofs",
+      "example": "threads",
+      "scope": "single-step",
+      "domain": "one access: an atomic access does not race when every earlier access to its block is atomic"
+    },
+    {
+      "name": "Zig.readOpts_zero",
+      "module": "Proofs.Threads.Proofs",
+      "example": "threads",
+      "scope": "single-step",
+      "domain": "one read step: option 0 of an atomic read is the newest message"
+    },
+    {
+      "name": "sb_sc",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`sbRelaxed` returns 2 under the sequentially consistent schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "sb_weak",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`sbRelaxed` returns 0 (weak-memory result) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "twoPlusTwoW_weak",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`twoPlusTwoW` returns 11 (weak-memory result) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "mp_sees_data",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`mpRelAcq` returns 42 under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "mpRelaxed_race",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`mpRelaxed` ends in a data race (`.illegal`) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "tryLock_new",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`Io.Mutex.tryLock` of a new mutex succeeds; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "tryLock_twice",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "a second `tryLock` of a taken mutex fails; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "wait_alone_deadlock",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "the only thread waiting at an unwoken futex is `.deadlock`; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "wait_other_value",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "a futex wait on a different value goes on; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "snapshot_without_clock_edge_rejected",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "one fixed `MemM` run (child write, parent read without acquire or join) ends in `.illegal` (C14 race negative)"
+    }
+  ],
+  "runs": {
+    "0.15.2-linux-goldens": {
+      "zig": "0.15.2",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "atomics=tests/golden/0.15.2/atomics/Gen.lean",
+        "--swap",
+        "floatops=tests/golden/0.15.2/floatops/Gen.lean",
+        "--swap",
+        "lists=tests/golden/0.15.2/lists/Gen.lean",
+        "--swap",
+        "slices=tests/golden/0.15.2/slices/Gen.lean",
+        "--swap",
+        "threads=tests/golden/0.15.2/threads/Gen.lean",
+        "--",
+        "Proofs.Atomics.Proofs",
+        "Proofs.Atomics.MessagePassing",
+        "Proofs.Atomics.Relaxed",
+        "Proofs.Atomics.Stack",
+        "Proofs.Floatops.Proofs",
+        "Proofs.Lists.Sep",
+        "Proofs.Lists.Append",
+        "Proofs.Slices.Proofs",
+        "Proofs.Slices.Sep",
+        "Proofs.Threads.Proofs",
+        "Proofs.Threads.Counter",
+        "Proofs.Threads.Disjoint"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "6fe2dfda14070ec1435a1b7b98bfb1c3ed8b9308",
+        "tracked_dirty": false
+      },
+      "started_utc": "2026-10-07T09:55:01.011920+00:00",
+      "elapsed_seconds": 631.641,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "3d19e44a769e01daa18bb71d0932fa2211fc9691087af0516d3e3c73a0c733d4",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Atomics.MessagePassing",
+        "Proofs.Atomics.Proofs",
+        "Proofs.Atomics.Relaxed",
+        "Proofs.Atomics.Stack",
+        "Proofs.Floatops.Proofs",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Sep",
+        "Proofs.Slices.Proofs",
+        "Proofs.Slices.Sep",
+        "Proofs.Threads.Counter",
+        "Proofs.Threads.Disjoint",
+        "Proofs.Threads.Proofs"
+      ],
+      "gens": {
+        "atomics": {
+          "path": "tests/golden/0.15.2/atomics/Gen.lean",
+          "sha256": "2af830feb84051c7002b27f73568ef8ecf13318cba88a29140c275346252be3f"
+        },
+        "floatops": {
+          "path": "tests/golden/0.15.2/floatops/Gen.lean",
+          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
+        },
+        "lists": {
+          "path": "tests/golden/0.15.2/lists/Gen.lean",
+          "sha256": "30f55d0d7f0be88be77a286521fe2cc132cb8fba7c5922cb6045f8d9f2213e7e"
+        },
+        "slices": {
+          "path": "tests/golden/0.15.2/slices/Gen.lean",
+          "sha256": "71a1ce6fe3468faf207c604e9e0f5ea8491de1fde1a5fe09da20d098d1485969"
+        },
+        "threads": {
+          "path": "tests/golden/0.15.2/threads/Gen.lean",
+          "sha256": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6"
+        }
+      },
+      "sources": {
+        "Proofs.Atomics.MessagePassing": "932dcd2be646d8da7f2253d327c233c2edf8da86adce96680bb5c1bb9d15b029",
+        "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
+        "Proofs.Atomics.Relaxed": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
+        "Proofs.Atomics.Stack": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
+        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
+        "Proofs.Lists.Append": "d2531088b9228faad48d4ac6e653791d018d8424ceeeb125cbd5959929591443",
+        "Proofs.Lists.Sep": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
+        "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
+        "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
+        "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
+        "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
+        "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c"
+      }
+    },
+    "0.15.2-darwin-threadsync": {
+      "zig": "0.15.2",
+      "target": "darwin",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean",
+        "--",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup",
+        "Proofs.Threadsync.Handoff"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "6fe2dfda14070ec1435a1b7b98bfb1c3ed8b9308",
+        "tracked_dirty": false
+      },
+      "started_utc": "2026-10-07T10:05:32.720021+00:00",
+      "elapsed_seconds": 26.513,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "d0da7a5358f2cab917128af2ef2728e3d238ce107471e84aa6b6788ae08526bb",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Threadsync.Deadline",
+        "Proofs.Threadsync.Handoff",
+        "Proofs.Threadsync.Lock",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup"
+      ],
+      "gens": {
+        "threadsync": {
+          "path": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
+          "sha256": "be5f7666af7feaca1523a5d4c7cd50d925fd8d9331209cd444264dd20d6e89ad"
+        }
+      },
+      "sources": {
+        "Proofs.Threadsync.Deadline": "67333b865ca6c1d573c02884b4311f137c959a397daa93436383ac7ffd1074b6",
+        "Proofs.Threadsync.Handoff": "a6364be6dfda3ddd5c0ce611248406ee55c794e7d4af942d58cb5422ea29a653",
+        "Proofs.Threadsync.Lock": "198e84d1e8de8e4b9008c66fd38217891331771e85ba91b802a77aa350426166",
+        "Proofs.Threadsync.Mutex": "157a7780c83bc057fb4260b6982791d31fb8bf994edc3ddc629e7d31894e5577",
+        "Proofs.Threadsync.WaitGroup": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851"
+      }
+    },
+    "0.14.1-linux-floatops": {
+      "zig": "0.14.1",
+      "target": "linux",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.14.1/floatops/Gen.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "6fe2dfda14070ec1435a1b7b98bfb1c3ed8b9308",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-07T10:05:59.276356+00:00",
+      "elapsed_seconds": 1.95,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "7ba9ab4e59402f5e22e64818101ba9af007fc2cba8f02390f216a5521f3aba58",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.14.1/floatops/Gen.lean",
+          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0"
+      }
+    },
+    "committed-linux-all": {
+      "zig": "0.16.0",
+      "target": "linux",
+      "command": [
+        "lake",
+        "build",
+        "Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "b89ed27932e36dd8b274930cb8be18496dd6a475",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-07T09:53:47.997221+00:00",
+      "elapsed_seconds": 72.962,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "c10bad9e53259943436b58989170cb7683e86da1b9cd47a03b292e53e310ca0f",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Asm.Proofs",
+        "Proofs.Atomics.MessagePassing",
+        "Proofs.Atomics.Proofs",
+        "Proofs.Atomics.Relaxed",
+        "Proofs.Atomics.Stack",
+        "Proofs.Basic.Arith",
+        "Proofs.Basic.Common",
+        "Proofs.Basic.Proofs",
+        "Proofs.Basic.Twt",
+        "Proofs.Errors.Proofs",
+        "Proofs.Floatconv.Proofs",
+        "Proofs.Floatops.Proofs",
+        "Proofs.Floats.Proofs",
+        "Proofs.Iogroup.Counter",
+        "Proofs.Layout.Mem",
+        "Proofs.Layout.Proofs",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Sep",
+        "Proofs.Options.Proofs",
+        "Proofs.Pointers.Proofs",
+        "Proofs.Pointers.Sep",
+        "Proofs.Recursion.Proofs",
+        "Proofs.Slices.Proofs",
+        "Proofs.Slices.Sep",
+        "Proofs.Sync.Handoff",
+        "Proofs.Sync.Lock",
+        "Proofs.Sync.Mutex",
+        "Proofs.Sync.Proofs",
+        "Proofs.Sync.RwLock",
+        "Proofs.Sync.RwLockContract",
+        "Proofs.Sync.RwLockSnapshotPair",
+        "Proofs.Sync.SemCounter",
+        "Proofs.Sync.Semaphore",
+        "Proofs.Threads.Counter",
+        "Proofs.Threads.Disjoint",
+        "Proofs.Threads.Proofs",
+        "Proofs.Threadsync.Deadline",
+        "Proofs.Threadsync.Handoff",
+        "Proofs.Threadsync.Lock",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup",
+        "Proofs.Variants.Proofs",
+        "Proofs.Vectors.CheckedAdd",
+        "Proofs.Vectors.Proofs"
+      ],
+      "gens": {
+        "asm": {
+          "path": "Proofs/Asm/Gen.lean",
+          "sha256": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98"
+        },
+        "atomics": {
+          "path": "Proofs/Atomics/Gen.lean",
+          "sha256": "0ef02d7aef29b77fd9c6fe74d1ed04bbbf58c9c412071b5389ea42531ed4146e"
+        },
+        "basic": {
+          "path": "Proofs/Basic/Gen.lean",
+          "sha256": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99"
+        },
+        "errors": {
+          "path": "Proofs/Errors/Gen.lean",
+          "sha256": "42d0f84321e09fac61aca670c66edfdde0ee4fa9b30a84e7387032fd71460c2d"
+        },
+        "floatconv": {
+          "path": "Proofs/Floatconv/Gen.lean",
+          "sha256": "72161485bb3d2e08a0dfda8131c9aa782e403f48f539035688f5aed7bb337559"
+        },
+        "floatops": {
+          "path": "Proofs/Floatops/Gen.lean",
+          "sha256": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b"
+        },
+        "floats": {
+          "path": "Proofs/Floats/Gen.lean",
+          "sha256": "8618fa7b0d2a78273a3129481e4ff4b9d853424ba380d071df58a79ab4ca7716"
+        },
+        "iogroup": {
+          "path": "Proofs/Iogroup/Gen.lean",
+          "sha256": "c1916b15976f9dc2dbc2c030490c205b5e68fc727aaaf9c8af9837caa14a2ef6"
+        },
+        "layout": {
+          "path": "Proofs/Layout/Gen.lean",
+          "sha256": "e0a8f28a43219f93deb8f952bf44784208c919eb88fe51257531eeea877ba9f1"
+        },
+        "lists": {
+          "path": "Proofs/Lists/Gen.lean",
+          "sha256": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d"
+        },
+        "options": {
+          "path": "Proofs/Options/Gen.lean",
+          "sha256": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e"
+        },
+        "pointers": {
+          "path": "Proofs/Pointers/Gen.lean",
+          "sha256": "4d2662a861cb4ca947245022387cb4e10f4982eb78150a87ebadaea8aad3afa4"
+        },
+        "recursion": {
+          "path": "Proofs/Recursion/Gen.lean",
+          "sha256": "d40d069ca39cee2fff2e4588ed04caa130c19e7214a7a24dc78f5317c2428584"
+        },
+        "slices": {
+          "path": "Proofs/Slices/Gen.lean",
+          "sha256": "d8ca92d93311be85f639d3fc8c88434a3ad3537d63e189dafc3672509d843271"
+        },
+        "sync": {
+          "path": "Proofs/Sync/Gen.lean",
+          "sha256": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630"
+        },
+        "threads": {
+          "path": "Proofs/Threads/Gen.lean",
+          "sha256": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6"
+        },
+        "threadsync": {
+          "path": "Proofs/Threadsync/Gen.lean",
+          "sha256": "69e4a521fc99d658ba2c4ed657b5e8eb89f2bb367e756a50fbc8def35791a56a"
+        },
+        "variants": {
+          "path": "Proofs/Variants/Gen.lean",
+          "sha256": "74d7b64f5d2d2a821d5cc2ae97bf1c4c353e0239fd44291c11373e280cc79d7a"
+        },
+        "vectors": {
+          "path": "Proofs/Vectors/Gen.lean",
+          "sha256": "e69585b66b800f87946b2a8457a9851a311fe1a9fd8e1190e1c5bb57aeee2be1"
+        }
+      },
+      "sources": {
+        "Proofs.Asm.Proofs": "a61fe3cba03c5af350da81b0b65fdcdb24be1f3a87debe7a924c69f0356ff87d",
+        "Proofs.Atomics.MessagePassing": "932dcd2be646d8da7f2253d327c233c2edf8da86adce96680bb5c1bb9d15b029",
+        "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
+        "Proofs.Atomics.Relaxed": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
+        "Proofs.Atomics.Stack": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
+        "Proofs.Basic.Arith": "b6aba4d80fd8fdb7616934e423614a2dcfc206f3af8b2f2f1f4a9ad10eb987ec",
+        "Proofs.Basic.Common": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
+        "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
+        "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
+        "Proofs.Errors.Proofs": "cf02a423505740739045d46a3b300dcb3c8cfe6280fe8d02f94cfe8e3dff2e69",
+        "Proofs.Floatconv.Proofs": "91e3d7e423ff603c0669683961ce20e4645079ed6a004d37d569469afb77ce97",
+        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
+        "Proofs.Floats.Proofs": "9045ba75ef9a45663047fb63052315c15fca073239ade371c876b419bb290dfd",
+        "Proofs.Iogroup.Counter": "35d06213a4f2e21c26da998890a4756846e0a92222184caa84d02f34f551bb78",
+        "Proofs.Layout.Mem": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
+        "Proofs.Layout.Proofs": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
+        "Proofs.Lists.Append": "d2531088b9228faad48d4ac6e653791d018d8424ceeeb125cbd5959929591443",
+        "Proofs.Lists.Sep": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
+        "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
+        "Proofs.Pointers.Proofs": "fe793fd054585fcd00c47da37114b2764478f599b8b6f0368910ffa5ae1d1b09",
+        "Proofs.Pointers.Sep": "ccd7983856010a36c64f41b332769c18470b0dceecf7b6e9bc1087af341d4b28",
+        "Proofs.Recursion.Proofs": "9fb582b84b77d054fa9a231f0fcf2bf27456c4506c06625fe020df1c2f9d4961",
+        "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
+        "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
+        "Proofs.Sync.Handoff": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
+        "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
+        "Proofs.Sync.Mutex": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
+        "Proofs.Sync.Proofs": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
+        "Proofs.Sync.RwLock": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
+        "Proofs.Sync.RwLockContract": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
+        "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
+        "Proofs.Sync.SemCounter": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
+        "Proofs.Sync.Semaphore": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
+        "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
+        "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
+        "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c",
+        "Proofs.Threadsync.Deadline": "67333b865ca6c1d573c02884b4311f137c959a397daa93436383ac7ffd1074b6",
+        "Proofs.Threadsync.Handoff": "a6364be6dfda3ddd5c0ce611248406ee55c794e7d4af942d58cb5422ea29a653",
+        "Proofs.Threadsync.Lock": "198e84d1e8de8e4b9008c66fd38217891331771e85ba91b802a77aa350426166",
+        "Proofs.Threadsync.Mutex": "157a7780c83bc057fb4260b6982791d31fb8bf994edc3ddc629e7d31894e5577",
+        "Proofs.Threadsync.WaitGroup": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851",
+        "Proofs.Variants.Proofs": "dcecf6343b9008a2c08fd0339d17e399e524874da36fc42f703304f04a9cb5f8",
+        "Proofs.Vectors.CheckedAdd": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
+        "Proofs.Vectors.Proofs": "f3b67f3459c032b6a0a1819e3a5665cc3ef3805c986b3aed852d0fa2ec6748c5"
+      }
+    }
+  }
+}
