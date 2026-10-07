@@ -108,6 +108,7 @@ def giveBack (a : AllocId) (st : OwnedAlloc) (b : BlockId) (len k : Nat) : MemM 
   | .fixedBuffer .. =>
     if (st.starts.lookup b).map (· + len) = some st.used then
       setOwned a { st with used := st.used - k }
+    else pure ()
 
 /-- `rawFree` through allocator `a`, after the poison write of `Allocator.free`: `p` is the
 start of a live block of `n` bytes of `a`. A fixed buffer gives the bytes of its last
