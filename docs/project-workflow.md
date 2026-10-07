@@ -62,6 +62,7 @@ Required top-level keys:
 | `roots` | Nonempty root records |
 | `limits` | Optional stricter resource limits |
 | `spawn_policy` | Optional `available` (default) or `fallible` spawn model |
+| `check` | Optional proof-checking budget for `check` (below) |
 
 `spawn_policy` selects the translator's spawn model for every root. Both omitted and
 explicit `available` manifests pass `--spawn-policy available`; `fallible` passes
@@ -78,7 +79,8 @@ New translation receipts record the effective policy and each translation's argv
 verify a fallible project. Verification still checks hashes and does not run proofs.
 
 Each root requires `id`, `function`, `air`, `namespace`, `prefix`, `contracts`, `goals`,
-`assumptions` and `exclusions`. AIR paths include the named function and its dependencies.
+`assumptions` and `exclusions`, and may name `generated`: the committed generated Lean
+module its contracts import (hashed like every other input; required by `check`). AIR paths include the named function and its dependencies.
 IDs are letters followed by letters, digits, underscores or hyphens. Namespaces are
 ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a theorem
 name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
@@ -226,4 +228,78 @@ correspondence, backend lowering or native adequacy (see the receipt's trust fie
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
+```
+
+## Reproducible project check
+
+`check` reproduces translation and proof checking from one committed manifest and writes
+a reproducibility record. Run it at the Lake project root (the manifest directory) with a
+built translator; it is the only project command that runs Lake.
+
+```sh
+python3 scripts/project.py check example-project.json \
+  --translator .lake/build/bin/air2lean --out "$RUNNER_TEMP/project-check"
+python3 scripts/project.py compare-records machine-a/record.json machine-b/record.json
+```
+
+Stages, in order; the first failure stops later stages, which stay `not_run`:
+
+| Stage | Action | Pass rule |
+|---|---|---|
+| `translate` | `translate` into `<out>/artifact`, then `verify` | every root translated; all hashes current |
+| `reproduce` | compare each root's fresh `Gen.lean` with its committed `generated` module | byte-identical |
+| `build` | `scripts/build-guard.py --phase proof -- lake build <contract modules>` | guard outcome `success` |
+| `audit` | `build-guard.py --phase check -- python3 scripts/assumptions.py --no-build --module <contract modules>` | completed report whose scope equals the contract modules |
+| goals | each declared goal's audited theorem (`theorem` or `namespace.theorem`) | `allowed` (below) |
+| `claims` | `scripts/claims.py check` on the audit | every declared strength within its type-derived strength |
+| `inputs_stable` | re-hash every manifest input | unchanged since the start |
+
+The audit covers whole contract modules, but only goal theorems are judged: a policy
+violation in another theorem of a contract module (audit status `fail`) does not fail the
+check. A goal is `allowed` only when its theorem lives in a declared contract module, has
+no audit policy violation, its root definition `namespace.(function without prefix)` is
+defined in the committed `generated` module, and every project assumption it depends on
+is named in the root's `assumptions` (which the manifest loader already restricts to
+`allowed_assumptions`). Project assumptions are non-standard axioms, dependency nodes
+missing from the audit graph, and dependencies with an audited `allowed-project-*` or
+`allowed-runtime-redirection` trust class; name each by its Lean declaration or its
+`module::name` policy key. Lean's three logical axioms and standard-library opaques,
+externs and redirections are listed as `standard_assumptions` without a manifest entry.
+Other goal rows are `missing`, `outside_contracts`, `policy_violation`,
+`unallowed_assumption` or `unbound_generated`. `references_root` reports whether the
+theorem declaration names the root definition directly; the coverage binding rules above
+still decide verification levels.
+
+The optional `check` object bounds proof checking: `build_timeout_seconds` and
+`audit_timeout_seconds` (default 3600, maximum 21600) and the guard's sampled `rss_mib`
+(default 8192, maximum 65536). `--lock` selects the guard lock (default
+`AIR2LEAN_BUILD_LOCK`); `--build-guard`, `--assumptions-script` and `--claims-script`
+override the tools (tests use a stub audit). `lake` resolves from `PATH`.
+
+`--out` is a fresh directory published by rename after the record is written:
+`record.json`, `artifact/`, the guard reports and logs, `assumptions.json` and
+`claims.json`. A failed stage still publishes its record and exits 1; invalid
+configuration exits 2 and an interrupted run publishes nothing.
+
+`record.json` (`kind: air2lean-project-check-record`) has `status` (`reproduced` or
+`failed`), `failures`, a `reproducible` section and a `host` section. `reproducible`
+holds the manifest and every input hash, the budget, root modules, the hashes of
+`project.py`, `build-guard.py`, `assumptions.py` and `claims.py`, the `lean-toolchain`
+pin, the float and spawn selections, and every stage result (generated hashes, guard
+outcome, audit policy hash and toolchain, per-goal assumptions and claims). `host` holds
+what legitimately differs between machines: platform, Python, Git revision and dirty
+state, translator path and hash, the Lake executable and pins from the guard report,
+timings and peak RSS. `compare-records` compares only the `reproducible` sections and
+exits 0 only when they are identical and both records are `reproduced`; it lists up to
+200 differing JSON paths.
+
+Scope: a matching pair of records shows that the same committed inputs translate to the
+same committed generated modules and that the same goal theorems check with the same
+allowed assumptions and strengths on both machines. It does not establish export, source
+correspondence or backend adequacy. Translator binaries are trusted per host, and Lake
+dependency revisions are covered only through `lake-manifest.json` when it is listed in
+`components`.
+
+```sh
+python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
 ```
