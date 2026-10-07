@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared setup for doctor.sh and translate.sh; source after computing repo_root.
+# Shared setup for doctor.sh, translate.sh and check.sh; source after computing repo_root.
 # The callers supply zig_version, zig_air and caller_dir.
 # shellcheck disable=SC2154
 workflow_error() { printf 'error: %s\n' "$*" >&2; }
@@ -37,7 +37,7 @@ workflow_lean() {
 }
 workflow_lake() {
   # elan run installs a missing toolchain only when --install is explicitly supplied.
-  LEAN_NUM_THREADS=1 elan run "$toolchain" lake "$@"
+  workflow_run_stage env LEAN_NUM_THREADS=1 elan run "$toolchain" lake "$@"
 }
 workflow_patched_zig() {
   if [ ! -x "$zig_air" ] || [ -d "$zig_air" ]; then
@@ -54,4 +54,31 @@ workflow_patched_zig() {
     workflow_error "patched Zig reports '$actual', expected '$zig_version'; select the matching --zig-version and --zig-air"
     return 1
   fi
+}
+# Bounded stages (docs/safe-output.md): each command runs in its own process group under
+# scripts/safe-output.py. A timeout, a leftover child process or a trapped signal stops the
+# whole group before the caller cleans up, so no stage keeps writing a staged artifact.
+# Callers set workflow_stage_timeout (seconds; 0 disables) and install
+#   trap 'workflow_interrupt 130' INT   (likewise 129 for HUP, 143 for TERM).
+workflow_stage_pid=''
+workflow_run_stage() {
+  # Run in the background and wait, so a trapped signal interrupts the wait at once.
+  python3 "$repo_root/scripts/safe-output.py" run --timeout "${workflow_stage_timeout:-0}" -- "$@" &
+  workflow_stage_pid=$!
+  local status=0
+  wait "$workflow_stage_pid" || status=$?
+  workflow_stage_pid=''
+  return "$status"
+}
+workflow_interrupt() {
+  if [ -n "$workflow_stage_pid" ]; then
+    kill -TERM "$workflow_stage_pid" 2>/dev/null || true
+    wait "$workflow_stage_pid" 2>/dev/null || true
+    workflow_stage_pid=''
+  fi
+  exit "$1"
+}
+workflow_publish() {
+  # workflow_publish --overwrite|--no-clobber STAGED DESTINATION: fsync, then atomic rename/link.
+  python3 "$repo_root/scripts/safe-output.py" publish "$@"
 }

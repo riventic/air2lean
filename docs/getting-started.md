@@ -110,7 +110,7 @@ ZIG
 scripts/translate.sh work/first/demo.zig -o Proofs/MyProgram/Gen.lean --namespace MyProgram
 ```
 
-That single command builds the runtime and translator, exports fresh AIR, translates it, and checks the generated Lean before publishing the output. It uses the reference target `x86_64-linux` with baseline CPU features and `ReleaseSafe`. It requires the toolchain and patched compiler from the setup step; it does not install them or write a property proof. Choose an output path you intend to replace: successful translation replaces that file, while a failed run leaves the existing output intact.
+That single command builds the runtime and translator, exports fresh AIR, translates it, and checks the generated Lean before publishing the output. It uses the reference target `x86_64-linux` with baseline CPU features and `ReleaseSafe`. It requires the toolchain and patched compiler from the setup step; it does not install them or write a property proof. Choose an output path you intend to replace: successful translation atomically replaces that file (`--no-clobber` refuses an existing one), while a failed, interrupted or timed-out run (`--timeout SECONDS`, default 3600 per stage) leaves the existing output intact; see [safe-output.md](safe-output.md).
 
 The default AIR filter and Lean name prefix come from the input basename (`demo.` here). Zig analyzes referenced functions; `export fn` ensures this example is included. For a `pub fn`, reference it from a `comptime { _ = &tardiness; }` block. A file requiring translated std functions may need additional filter prefixes; see [std models](std-models.md).
 

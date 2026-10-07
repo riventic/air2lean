@@ -72,7 +72,7 @@ class Workflow(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.repo = self.base / 'repo with spaces'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('translate.sh', 'doctor.sh', 'workflow-common.sh'):
+        for name in ('translate.sh', 'doctor.sh', 'workflow-common.sh', 'safe-output.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
         shutil.copy2(ROOT / 'lean-toolchain', self.repo / 'lean-toolchain')
         self.bin = self.base / 'fake tools'

@@ -91,7 +91,8 @@ expect_failure "duplicate float override" "duplicate override key" env AIR2LEAN_
 check="$test_dir/check"
 mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air" \
   "$check/Proofs/Basic" "$check/bin"
-cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" "$check/scripts/"
+cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" \
+  "$repo_root/scripts/workflow-common.sh" "$repo_root/scripts/safe-output.py" "$check/scripts/"
 cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
 {
   "schema": 11,

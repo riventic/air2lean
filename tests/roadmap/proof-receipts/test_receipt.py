@@ -399,7 +399,7 @@ class ReceiptTests(unittest.TestCase):
             self.assertEqual(argv[-2:], ['--module', 'Proofs.One'])
             return types.SimpleNamespace(returncode=0)
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run', side_effect=runner):
+             mock.patch.object(r, 'run_child', side_effect=runner):
             self.assertEqual(r.worker(self.attempt), 0)
         self.assertEqual(len(calls), 1)
 
@@ -410,7 +410,7 @@ class ReceiptTests(unittest.TestCase):
         old = source.read_bytes()
         source.write_bytes(old + b'changed')
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run') as run, self.assertRaises(ValueError):
+             mock.patch.object(r, 'run_child') as run, self.assertRaises(ValueError):
             r.worker(self.attempt)
         run.assert_not_called()
         source.write_bytes(old)
@@ -418,7 +418,7 @@ class ReceiptTests(unittest.TestCase):
             source.write_bytes(old + b'changed during audit')
             return types.SimpleNamespace(returncode=0)
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run', side_effect=change), self.assertRaises(ValueError):
+             mock.patch.object(r, 'run_child', side_effect=change), self.assertRaises(ValueError):
             r.worker(self.attempt)
         self.assertFalse((self.attempt / 'after.json').exists())
 

@@ -104,6 +104,16 @@ jobs:
           set -euo pipefail
           python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
 
+      # I08: stub-only interrupt/timeout/partial-write regressions for translate.sh, check.sh
+      # and proof receipts (docs/safe-output.md); no compiler or Lean run.
+      - name: Safe output and cancellation regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/roadmap/safe-output -p 'test_*.py' -v 2>&1 \
+            | tee "$RUNNER_TEMP/safe-output-tests.log"
+
       - name: First-use workflow regressions
         run: python3 tests/usability/workflow.py
 
