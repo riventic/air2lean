@@ -237,9 +237,11 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Kind: environment.
 - Statement: Each atomic location keeps a modification order of messages with release
   clocks. Reads may see any message not older than a happens-before or own observation.
-  RMWs read a message with no RMW after it. The model admits more outcomes than RC11 (a plain
-  write of the same value, read views not transferred through release/acquire), never fewer.
-  Atomic pointees are integers, enums, bools or packed structs.
+  RMWs read a message with no RMW after it. Messages are write events (equal values stay
+  distinct; a plain write of an equal value is its own message). The model admits more outcomes
+  than RC11 (no SC order, read views not transferred through release/acquire), never fewer.
+  Overlapping atomic accesses of another offset or size are `.unspecified`. Atomic pointees are
+  integers, enums, bools or packed structs.
 - Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 

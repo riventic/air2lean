@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1766 theorems in 82 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -16,7 +16,7 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1015 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
@@ -24,8 +24,8 @@ premise was derived. This index covers the committed generated modules.
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
 | [THR-08](premises.md#thr-08) | 901 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 759 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 759 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 791 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 791 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
@@ -35,13 +35,13 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1044 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1366 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1766 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -64,7 +64,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | Theorem | Premises |
 |---|---|
 | `Atomics.MP.Inv.grow` | THR-01, THR-08, SEM-02, TRU-01 |
-| `Atomics.MP.Inv.record` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MP.Inv.record` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.noRace_inv` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.thr_of` | SEM-02, TRU-01 |
 | `Atomics.MP.Inv.congr` | THR-01, THR-08, SEM-02, TRU-01 |
@@ -82,7 +82,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.MP.accW_flag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.acc_flag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.noRace_flag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MP.Inv.pushFlag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MP.Inv.pushFlag` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.step_flag` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.flagStore_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MP.step_load` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
@@ -125,21 +125,21 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 
 | Theorem | Premises |
 |---|---|
-| `Atomics.MPR.Inv.congr` | THR-01, THR-08, SEM-02, TRU-01 |
+| `Atomics.MPR.Inv.congr` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Atomics.MPR.record_clock` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MPR.Inv.record` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MPR.Inv.write0` | THR-01, THR-08, SEM-02, TRU-01 |
-| `Atomics.MPR.step_ctx` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MPR.step_data` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MPR.Inv.pushFlag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MPR.Inv.record` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MPR.Inv.write0` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
+| `Atomics.MPR.step_ctx` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MPR.step_data` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.MPR.Inv.pushFlag` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MPR.loc_flag` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Atomics.MPR.step_flag` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MPR.joinedAll_kid` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Atomics.MPR.dispatch_spec` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.MPR.step_load` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
-| `Atomics.MPR.read_race` | THR-01, THR-08, SEM-02, TRU-01 |
-| `Atomics.MPR.Inv.retag0` | THR-01, THR-08, SEM-02, TRU-01 |
-| `Atomics.MPR.pre_inv` | THR-01, THR-08, SEM-02, TRU-01 |
+| `Atomics.MPR.read_race` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
+| `Atomics.MPR.Inv.retag0` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
+| `Atomics.MPR.pre_inv` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Atomics.MPR.pre_view` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.MPR.inv_fork` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.MPR.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -154,12 +154,12 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.JoinLe.grow` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Atomics.Stack.Inv.grow` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Atomics.Stack.growsAt_current` | THR-01, THR-08, SEM-02, TRU-01 |
-| `Atomics.Stack.Inv.record` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.Stack.Inv.record` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.noRace_inv` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.thr_kid` | SEM-02, TRU-01 |
 | `Atomics.Stack.thr_upd_kid` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Atomics.Stack.ld_done` | SEM-02, TRU-01 |
-| `Atomics.Stack.headLoc_first` | THR-01, THR-08, SEM-02, TRU-01 |
+| `Atomics.Stack.headLoc_first` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Atomics.Stack.loc_head` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Atomics.Stack.head_locIdx_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.Inv.setLoc` | THR-01, THR-08, SEM-02, TRU-01 |
@@ -185,7 +185,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.getElem!_append_lt` | TRU-01 |
 | `Atomics.Stack.getElem!_append_len` | TRU-01 |
 | `Atomics.Stack.val_inj` | SEM-02, TRU-01 |
-| `Atomics.Stack.Inv.pushHead` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.Stack.Inv.pushHead` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.step_cas` | THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.cas_noErr` | THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.ctxS_dec` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
@@ -1263,11 +1263,10 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.total_upd` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.total_congr` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.getElem_of_eq` | TRU-01 |
-| `Threads.Counter.cntOk_of_cntAt` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Threads.Counter.cntAt_len` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Threads.Counter.plainClock_le` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Threads.Counter.cntOk_of_cntAt` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Threads.Counter.cntAt_len` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.cntAt_locIdx` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
-| `Threads.Counter.cntAt_push` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Threads.Counter.cntAt_push` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.cntAt_rmw` | THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.noRace_b0` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Threads.Counter.noRace_b1` | THR-01, THR-08, SEM-02, TRU-01 |
@@ -1293,7 +1292,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.bump_body` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.fork_eq` | THR-01, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Threads.Counter.total_succ` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Threads.Counter.cntOk_mono` | THR-01, THR-08, SEM-02, TRU-01 |
+| `Threads.Counter.cntOk_mono` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
 | `Threads.Counter.inv_spawn` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.inv_join` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.all_joined` | TRU-01 |
@@ -2330,6 +2329,28 @@ File premises: SEM-01, TRU-01
 | `example@L50` | SEM-01, TRU-01 |
 | `example@L56` | SEM-01, TRU-01 |
 | `example@L62` | SEM-01, TRU-01 |
+
+## `tests/roadmap/weak-cas/Messages.lean`
+
+File premises: THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L54` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L63` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L100` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L117` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L143` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L168` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L169` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L183` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L185` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L187` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L189` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L191` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L194` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L204` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `example@L215` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/weak-cas/Preparation.lean`
 

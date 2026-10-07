@@ -23,11 +23,45 @@ many times, exhaust scheduler depth, or never return. The rules establish safety
 correctness, with no fairness or eventual-success assumption. Existing SC and RC11 compiler
 adequacy limitations remain the ones documented by the concurrency model.
 
-C11 remains partly open. A same-value plain write can still be omitted from atomic message
-history; explicit plain-write event tracking is not implemented here. Overlapping atomic
-locations of different sizes still return `.unspecified`. The new weak-CAS behavior does not
-qualify those cases. Modification-order tests cover matching weak failures, successful RMWs and
-failed reads of an RMW predecessor; they do not establish a general mixed-size model.
+## Message precision and mixed sizes
+
+Modification order holds write events. Every atomic write is a fresh message (id, clock, release
+clock, RMW edge); a plain write to an atomic location becomes a message at the next atomic op
+whenever it did not happen before the newest message (`Zig.plainSince` in `locIdx`), even if it
+wrote the bytes the location already holds. Earlier the model compared bytes only and folded an
+equal-valued plain write into the previous message; under the race check that write happened
+after every earlier message, so no outcome changed, but the event was not tracked. The message of
+a plain write carries the join of the plain writes' clocks and no release clock, so it ends a
+release sequence. The proof invariants (`Word.Ok.plain`, `Lock.LocOk.plain`, and the
+`FlagLoc`/`HeadLoc`/`CntOk` invariants of the atomic examples) carry `PlainLe`.
+
+Mixed-size policy: an atomic location is one `(block, offset, size)`. An atomic load, store, RMW
+or `cmpxchg` that overlaps an existing atomic location with another offset or size throws
+`.unspecified` before it reads or writes a message, in either order of the accesses. Adjacent
+non-overlapping atomic words are separate locations. Plain accesses of another size are not
+atomic accesses: a plain write is a write event as above. A proof of "no error" therefore shows
+that its program has no mixed-size atomic access; the model does not give such accesses a meaning.
+
+`tests/roadmap/weak-cas/Messages.lean` (kernel reduction and runtime assertions) checks:
+
+- ABA: `x = 0` (plain), then relaxed `1`, relaxed `0`, release `1` from another thread. The
+  four messages are distinct events; an acquire read of the newest `1` synchronizes and one of
+  the older `1` does not; the pairs of two relaxed reads are exactly the coherent pairs (10 of
+  16), so `1, 0, 1` is observable and `1` (newest) then `0` is not; a strong `cmpxchg(1 → 2)` has
+  one option per message and may succeed on the older `1`, inserting the RMW right after it.
+  Weak CAS adds a read-only failure for each of the two `1` messages.
+- Release sequence through equal values: a release `x = 1`, a relaxed `xchg(x, 1)` reading it
+  and an unrelated relaxed `x = 1`. An acquire reader synchronizes through the release store or
+  the RMW and reads the data; reading the equal-valued relaxed store (or the initial value) and
+  then the data is a race (`.illegal`). The model's release sequence has RMWs only (C++20); RC11
+  also includes same-thread later stores, so the model may synchronize less, never more.
+- An equal-valued plain write after a join becomes a message with no release clock; a following
+  RMW reads it. Without a plain write, an atomic op adds no message.
+- Mixed sizes: `u8`, `u16` at another offset, `u64`, a 2-byte `cmpxchg` and a 1-byte RMW against
+  a `u32` location, and a `u32` against an earlier `u16`, are all `.unspecified`; an adjacent
+  `u32` is a second location; a plain byte store is read back by the next `u32` atomic load.
+
+These are bounded litmus tests of the model, not a compiler correspondence argument.
 
 The checked-in generated stack and std synchronization clients use the weak wrappers at their
 weak-CAS instructions. Their proof rules retain every failed read, including one equal to the

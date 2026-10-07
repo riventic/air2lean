@@ -77,7 +77,8 @@ def Chains : List (List Nat) := [[0], [0, 1], [0, 2], [0, 1, 2], [0, 2, 1]]
 
 /-- The head's atomic location (see the module doc). -/
 def HeadLoc (G : ThreadId → Gh) (m : Mem) (l : ALoc) : Prop :=
-  l.block = 0 ∧ l.off = 0 ∧ l.len = 4 ∧ ALoc.lastBytes l = curBytes m 0 0 4 ∧ l.Chain ∧
+  l.block = 0 ∧ l.off = 0 ∧ l.len = 4 ∧ ALoc.lastBytes l = curBytes m 0 0 4 ∧
+  PlainLe m 0 0 4 l.lastClock ∧ l.Chain ∧
   ∃ vs ∈ Chains, l.msgs.size = vs.length ∧
     (∀ j (h : j < l.msgs.size), Val l.msgs[j] (BitVec.ofNat 32 vs[j]!)) ∧
     (∀ u, (u = 1 ∨ u = 2) → (G u = .done ↔ u ∈ vs)) ∧
@@ -195,10 +196,10 @@ theorem Inv.grow {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} (hi : Inv G m
   b2 := hi.b2.congr hg.grows.blocks
   ctx := by intro u hu; unfold U32At; rw [curBytes_congr hg.grows.blocks, curBytes_congr hg.grows.blocks]; exact hi.ctx u hu
   head := by
-    rcases hi.head with ⟨ha, hu, hn⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hc, vs, hvs, hsz, hv, hd, hnx, hcl⟩
+    rcases hi.head with ⟨ha, hu, hn⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hpl, hc, vs, hvs, hsz, hv, hd, hnx, hcl⟩
     · exact .inl ⟨hg.grows.atomics ▸ ha, by unfold U32At; rw [curBytes_congr hg.grows.blocks]; exact hu, hn⟩
     · refine .inr ⟨l, hg.grows.atomics ▸ ha, hlb, hlo, hll, by rw [curBytes_congr hg.grows.blocks]; exact hlast,
-        hc, vs, hvs, hsz, hv, hd, fun j hj => ?_, fun j hj => VClock.le_trans (hcl j hj) (hg.grows.cle _)⟩
+        by unfold PlainLe; rw [hg.grows.footprint]; exact hpl, hc, vs, hvs, hsz, hv, hd, fun j hj => ?_, fun j hj => VClock.le_trans (hcl j hj) (hg.grows.cle _)⟩
       unfold NextAt U32At; rw [curBytes_congr hg.grows.blocks]; exact hnx j hj
   casn := fun u h hu hc => by unfold NextAt U32At; rw [curBytes_congr hg.grows.blocks]; exact hi.casn u h hu hc
   n0 := by unfold NextAt U32At; rw [curBytes_congr hg.grows.blocks]; exact hi.n0
@@ -223,7 +224,7 @@ theorem growsAt_current (m : Mem) (u : ThreadId) : GrowsAt m { m with current :=
 
 /-- A race-free access by the current thread: its clock is bumped and the entry recorded. -/
 theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKind} (hi : Inv G m)
-    (ht : m.current < m.threads.size) (ha : Act G m.current)
+    (ht : m.current < m.threads.size) (ha : Act G m.current) (hn0 : b = 0 → k = .write → 4 ≤ o)
     (hf : FpOk G (m.recordAt b o len k)
       { tid := m.current, clock := VClock.bump (m.clocks[m.current]!) m.current, block := b,
         off := o, len := len, kind := k }) :
@@ -243,8 +244,24 @@ theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
   have hi₁ := hi.grow hg ha
   have hcur : (m.recordAt b o len k).clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
     simp only [Mem.recordAt]; rw [getElem!_set!_ite]; simp [hcs]
+  have hpf : ∀ e ∈ (m.recordAt b o len k).footprint, e ∈ m₁.footprint ∨ plainHit 0 0 4 e = false := by
+    intro e he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · refine .inr ?_
+      cases hp : plainHit 0 0 4 _
+      · rfl
+      · have h4 := hn0 (plainHit_block hp) (plainHit_kind hp)
+        unfold plainHit at hp
+        simp only [Bool.and_eq_true, decide_eq_true_eq] at hp
+        omega
+  have hhead : HeadOk G (m.recordAt b o len k) := by
+    rcases hi₁.head with h | ⟨l, ha, hlb, hlo, hll, hlast, hpl, hrest⟩
+    · exact .inl h
+    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, hpl.of_fp hpf, hrest⟩
   exact {
-    thr := hi₁.thr, b0 := hi₁.b0, b1 := hi₁.b1, b2 := hi₁.b2, ctx := hi₁.ctx, head := hi₁.head
+    thr := hi₁.thr, b0 := hi₁.b0, b1 := hi₁.b1, b2 := hi₁.b2, ctx := hi₁.ctx, head := hhead
     casn := hi₁.casn, n0 := hi₁.n0, join := hi₁.join
     fp := by
       intro e he
@@ -358,7 +375,9 @@ theorem ld_done {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .ld)
 /-- The first location of the head (`firstLoc`) is a `HeadLoc`. -/
 theorem headLoc_first {G : ThreadId → Gh} {m : Mem} (hu : U32At m 0 0 0)
     (hn : ∀ u, (u = 1 ∨ u = 2) → G u ≠ .done) : HeadLoc G m (firstLoc m 0 0 4) := by
-  refine ⟨rfl, rfl, rfl, rfl, fun j hj => by simp [firstLoc] at hj, [0], by simp [Chains], rfl,
+  refine ⟨rfl, rfl, rfl, rfl, fun e he hh => by
+      simpa [ALoc.lastClock, firstLoc, firstMsg] using plainLe_plainClock m 0 0 4 e he hh,
+    fun j hj => by simp [firstLoc] at hj, [0], by simp [Chains], rfl,
     fun j hj => ?_, fun u hu => ?_, fun j hj => by simp at hj, fun j hj => by simp [firstLoc] at hj⟩
   · have : j = 0 := by simpa [firstLoc] using hj
     subst this; exact hu
@@ -370,10 +389,10 @@ theorem loc_head {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hf : HeadOk G 
     (h : ((locIdx 0 0 4).run m).run = some (.ok (li, m₁))) :
     li = 0 ∧ ∃ l k, HeadLoc G m l ∧ m₁ = { m with atomics := #[l], nextMsg := k } := by
   have h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = 0 ∧ l.off = 0 ∧ l.len = 4 ∧
-      ALoc.lastBytes l = curBytes m 0 0 4 := by
-    rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, -⟩
+      ALoc.lastBytes l = curBytes m 0 0 4 ∧ PlainLe m 0 0 4 l.lastClock := by
+    rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hpl, -⟩
     · exact .inl ha
-    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast⟩
+    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
   obtain ⟨rfl, l, k, rfl, ⟨ha, rfl⟩ | ha⟩ := locIdx_single h0 h
   · rcases hf with ⟨-, hu, hn⟩ | ⟨l, ha', -⟩
     · exact ⟨rfl, firstLoc m 0 0 4, k, headLoc_first hu hn, rfl⟩
@@ -405,7 +424,7 @@ theorem Inv.setLoc {G : ThreadId → Gh} {m : Mem} {l : ALoc} (hi : Inv G m) (hl
 
 theorem HeadLoc.pos {G : ThreadId → Gh} {m : Mem} {l : ALoc} (h : HeadLoc G m l) :
     0 < l.msgs.size := by
-  obtain ⟨-, -, -, -, -, vs, hvs, hsz, -⟩ := h
+  obtain ⟨-, -, -, -, -, -, vs, hvs, hsz, -⟩ := h
   rw [hsz]
   simp only [Chains, List.mem_cons, List.not_mem_nil, or_false] at hvs
   rcases hvs with rfl | rfl | rfl | rfl | rfl <;> decide
@@ -450,7 +469,7 @@ theorem Inv.congr {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (ht : m'.thr
   b1 := hi.b1.congr hb
   b2 := hi.b2.congr hb
   ctx := by intro u hu; unfold U32At; rw [curBytes_congr hb, curBytes_congr hb]; exact hi.ctx u hu
-  head := by unfold HeadOk HeadLoc NextAt U32At; simp only [ha, curBytes_congr hb, hc]; exact hi.head
+  head := by unfold HeadOk HeadLoc NextAt U32At PlainLe; simp only [ha, curBytes_congr hb, hc, hf]; exact hi.head
   casn := by unfold NextAt U32At; simp only [curBytes_congr hb]; exact hi.casn
   n0 := by unfold NextAt U32At; simp only [curBytes_congr hb]; exact hi.n0
   join := by unfold JoinLe; rw [hc]; exact hi.join
@@ -484,7 +503,7 @@ theorem step_ctx {T : Type} [Enc T] {G : ThreadId → Gh} {m m' : Mem} {u o a : 
     unfold curBytes; rw [hb₂]; rfl
   rw [hx, hq] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
-  exact ⟨hdec.symm, rfl, hi.record ht hact (.inr (.inr (.inr (.inr ⟨hu, rfl⟩))))⟩
+  exact ⟨hdec.symm, rfl, hi.record ht hact (fun _ h => by cases h) (.inr (.inr (.inr (.inr ⟨hu, rfl⟩))))⟩
 
 theorem ctx_noErr {T : Type} [Enc T] {G : ThreadId → Gh} {m : Mem} {u o a : Nat} {v₀ : T}
     (hi : Inv G m) (hu : u = 1 ∨ u = 2) (ht : m.current < m.threads.size)
@@ -552,7 +571,7 @@ theorem Inv.writeNext {G : ThreadId → Gh} {M : Mem} {u : ThreadId} {blk : Bloc
         curBytes_write_other hb hfit (.inl (by rcases hv with rfl | rfl <;> decide))]
       exact hi.ctx v hv
     head := by
-      rcases hi.head with ⟨ha, hu0, hn⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hc, vs, hvs, hsz', hv, hd, hnxt, hcl⟩
+      rcases hi.head with ⟨ha, hu0, hn⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hpl, hc, vs, hvs, hsz', hv, hd, hnxt, hcl⟩
       · refine .inl ⟨ha, ?_, fun v hv => ?_⟩
         · unfold U32At
           rw [curBytes_write_other hb hfit (.inr ⟨rfl, by rw [hsz]; decide, .inr (by omega)⟩)]
@@ -561,7 +580,7 @@ theorem Inv.writeNext {G : ThreadId → Gh} {M : Mem} {u : ThreadId} {blk : Bloc
           · subst hvu; rw [upd_self]; exact fun h => by cases h
           · rw [hne v hvu]; exact hn v hv
       · have hnu : u ∉ vs := fun h => hnd ((hd u hu).mpr h)
-        refine .inr ⟨l, ha, hlb, hlo, hll, ?_, hc, vs, hvs, hsz', hv, fun v hv => ?_, fun j hj => ?_, hcl⟩
+        refine .inr ⟨l, ha, hlb, hlo, hll, ?_, hpl, hc, vs, hvs, hsz', hv, fun v hv => ?_, fun j hj => ?_, hcl⟩
         · rw [curBytes_write_other hb hfit (.inr ⟨rfl, by rw [hsz]; decide, .inr (by omega)⟩)]
           exact hlast
         · by_cases hvu : v = u
@@ -614,7 +633,7 @@ theorem step_next {G : ThreadId → Gh} {m m' : Mem} {u : ThreadId} {h : BitVec 
   cases hacc
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hir := hi.record (b := 0) (o := 4 + 4 * u) (len := (Enc.encode h).size) (k := .write) ht
-    (.inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩)
+    (.inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩) (fun _ _ => by omega)
     (.inr (.inr (.inl ⟨rfl, rfl, by rw [hc]; exact hu, by rw [hc], size_encode_u32 h⟩)))
   exact ⟨hc, rfl, hir.writeNext hu hk0 hnd hb₀⟩
 
@@ -660,7 +679,7 @@ theorem step_rload {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {v : BitVec 32
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act G m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
-    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   have hcur : (m.recordAt 0 0 (intSize 32) .atomicRead).current = m.current := rfl
   have hthr : (m.recordAt 0 0 (intSize 32) .atomicRead).threads = m.threads := rfl
   generalize m.recordAt 0 0 (intSize 32) .atomicRead = mr at hir hl hcur hthr
@@ -672,7 +691,7 @@ theorem step_rload {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {v : BitVec 32
 /-- A message of the head holds a `u32`. -/
 theorem HeadLoc.val {G : ThreadId → Gh} {m : Mem} {l : ALoc} (h : HeadLoc G m l) {pos : Nat}
     (hp : pos < l.msgs.size) : ∃ w, (intOfBytes 32 (l.msgs[pos]!).bytes).run = some (.ok w) := by
-  obtain ⟨-, -, -, -, -, vs, -, -, hv, -⟩ := h
+  obtain ⟨-, -, -, -, -, -, vs, -, -, hv, -⟩ := h
   exact ⟨_, by rw [getElem!_pos l.msgs pos hp]; exact hv pos hp⟩
 
 theorem rload_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} {ord : AtomicOrder} (hi : Inv G m)
@@ -682,7 +701,7 @@ theorem rload_noErr {G : ThreadId → Gh} {m : Mem} {c : Nat} {ord : AtomicOrder
   obtain ⟨blk₀, -, -, -, hacc₀⟩ := access_blk (p := sPtr) (a := 4) (len := intSize 32) (o := 0)
     hi.b0 (by decide) (fun A hA => by omega) rfl
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
-    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   refine atomicLoadAt_noErr (loadPrep_noErr (rmw := false) (by simpa using hacc₀)
     (by simpa using noRace_head (k := .atomicRead) rfl hi ht hact)
     (by simp only [Bool.false_eq_true, ↓reduceIte]; exact head_locIdx_noErr hir.head))
@@ -734,9 +753,9 @@ theorem Inv.pushHead {G : ThreadId → Gh} {M : Mem} {l : ALoc} {msg : Msg} {blk
     (ha : M.atomics = #[l]) (hlast : Val (l.msgs[l.msgs.size - 1]!) h) (hb : M.blocks[0]? = some blk)
     (hbs : msg.bytes.size = 4) (hv : Val msg (BitVec.ofNat 32 u))
     (hr : msg.rmwOf = some (l.msgs[l.msgs.size - 1]!).id)
-    (hcl : VClock.le msg.clock (M.clocks[u]!) = true) :
+    (hcl : VClock.le msg.clock (M.clocks[u]!) = true) (hpl : PlainLe M 0 0 4 msg.clock) :
     Inv (upd G u .done) { M.write 0 blk 0 msg.bytes with atomics := #[{ l with msgs := l.msgs.push msg }] } := by
-  obtain ⟨hlb, hlo, hll, -, hc, vs, hvs, hsz, hval, hd, hnxt, hclk⟩ : HeadLoc G M l := by
+  obtain ⟨hlb, hlo, hll, -, -, hc, vs, hvs, hsz, hval, hd, hnxt, hclk⟩ : HeadLoc G M l := by
     rcases hi.head with ⟨ha', -⟩ | ⟨l', ha', hfl⟩
     · rw [ha] at ha'; simp at ha'
     · rw [ha] at ha'
@@ -772,7 +791,9 @@ theorem Inv.pushHead {G : ThreadId → Gh} {M : Mem} {l : ALoc} {msg : Msg} {blk
       rw [curBytes_write_other hb hfit (.inl (by rcases hv with rfl | rfl <;> decide)),
         curBytes_write_other hb hfit (.inl (by rcases hv with rfl | rfl <;> decide))]
       exact hi.ctx v hv
-    head := .inr ⟨_, rfl, hlb, hlo, hll, hlast', hc.push h0 hr, vs ++ [u], chains_push hvs hu hnu,
+    head := .inr ⟨_, rfl, hlb, hlo, hll, hlast',
+      fun e he hh => by simpa [ALoc.lastClock] using hpl e he hh, hc.push h0 hr, vs ++ [u],
+      chains_push hvs hu hnu,
       by simp [hsz], fun j hj => ?_, fun v hv => ?_, fun j hj => ?_, fun j hj => ?_⟩
     casn := fun v x hv hcx => by
       by_cases hvu : v = u
@@ -836,7 +857,7 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act G m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
-    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   have hcur : (m.recordAt 0 0 (intSize 32) .atomicRead).current = m.current := rfl
   have hthr : (m.recordAt 0 0 (intSize 32) .atomicRead).threads = m.threads := rfl
   have hbr : (m.recordAt 0 0 (intSize 32) .atomicRead).blocks[0]? = some blk := hb0
@@ -849,14 +870,14 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
   · -- success: the newest message, then the pusher's message
     obtain ⟨j, hstrong⟩ := weakCasOpts_strong (by simpa [hsp] using hpos)
     have hpos' := cas_chain_pos (m := { mr with atomics := #[l], nextMsg := k })
-      (by rw [hl0]; exact hfl.2.2.2.2.1) hstrong hold
+      (by rw [hl0]; exact hfl.2.2.2.2.2.1) hstrong hold
     rw [hl0] at hpos' hold
     have hbM : ({ mr with atomics := #[l], nextMsg := k } : Mem).blocks[
         (({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]!).block]? = some blk := by
       rw [hl0, hfl.1]; exact hbr
     let mw := ({ mr with atomics := #[l], nextMsg := k } : Mem).recordAt 0 0 (intSize 32) .atomicWrite
     have hiW : Inv G mw := hiM.record (by change mr.current < mr.threads.size; rw [hcur, hthr]; exact ht) hact'
-      (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+      (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
     have hlw : mw.atomics[0]! = l := rfl
     unfold rmwM
     simp only [AtomicOrder.isAcq, Bool.false_eq_true, ↓reduceIte]
@@ -869,6 +890,18 @@ theorem step_cas {G : ThreadId → Gh} {m m' : Mem} {c u : Nat} {h : BitVec 32}
         (BitVec.ofNat 32 u))
       (LawfulEnc.size_encode (α := BitVec 32) _) (intOfBytes_rmw _) rfl
       (by show VClock.le (mw.clocks[mw.current]!) (mw.clocks[u]!) = true; rw [show mw.current = u from hcur.trans hc]; exact VClock.le_refl _)
+      (fun e he hh => by
+        show VClock.le e.clock (mw.clocks[mw.current]!) = true
+        have hb0 := plainHit_block hh
+        have hkw := plainHit_kind hh
+        rcases hiW.fp e he with ⟨-, hbf⟩ | ⟨-, -, -, ha⟩ | ⟨-, -, -, ho, -⟩ | ⟨-, hk, -⟩ | ⟨hbb, -⟩
+        · exact hbf _ (by change mr.current < mr.threads.size; rw [hcur, hthr]; exact ht)
+        · rw [plainHit_atomic ha] at hh; cases hh
+        · unfold plainHit at hh
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hh
+          omega
+        · rw [hkw] at hk; cases hk
+        · rcases hbb with hbb | hbb <;> exact (blk_ne hbb hb0 (by decide)).elim)
     refine ⟨hcur.trans hc, hthr, .inl ⟨trivial, hiN.congr rfl rfl ?_ ?_ rfl⟩⟩
     · show mw.blocks.set! _ _ = mw.blocks.set! _ _
       rw [hfl.1, hfl.2.1]
@@ -890,7 +923,7 @@ theorem cas_noErr {G : ThreadId → Gh} {m : Mem} {c u : Nat} {h : BitVec 32} (h
     hi.b0 (by decide) (fun A hA => by omega) rfl
   have hacc : m.accessW sPtr (intSize 32) 4 = pure (0, blk₀, 0) := by simp [Mem.accessW, hacc₀, hk]
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
-    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   refine cmpxchgWeakAt_noErr (weakCasPrep_noErr (casPrep_noErr hacc (noRace_head rfl hi ht hact)
     (head_locIdx_noErr hir.head))) (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
   · obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := weakCasPrep_ok hp
@@ -1148,10 +1181,11 @@ theorem Inv.frame {G G' : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hthr : T
   b2 := hi.b2.congr hb
   ctx := by intro u hu; unfold U32At; rw [curBytes_congr hb, curBytes_congr hb]; exact hi.ctx u hu
   head := by
-    rcases hi.head with ⟨ha', hu, hn⟩ | ⟨l, ha', hlb, hlo, hll, hlast, hc, vs, hvs, hs, hv, hd, hnx, hclk⟩
+    rcases hi.head with ⟨ha', hu, hn⟩ | ⟨l, ha', hlb, hlo, hll, hlast, hpl, hc, vs, hvs, hs, hv, hd, hnx, hclk⟩
     · exact .inl ⟨ha ▸ ha', by unfold U32At; rw [curBytes_congr hb]; exact hu,
         fun u h1 h2 => hn u h1 ((hdone u h1).mp h2)⟩
-    · refine .inr ⟨l, ha ▸ ha', hlb, hlo, hll, by rw [curBytes_congr hb]; exact hlast, hc, vs, hvs, hs, hv,
+    · refine .inr ⟨l, ha ▸ ha', hlb, hlo, hll, by rw [curBytes_congr hb]; exact hlast,
+        by unfold PlainLe; rw [hf]; exact hpl, hc, vs, hvs, hs, hv,
         fun u h1 => (hdone u h1).trans (hd u h1), fun j hj => ?_,
         fun j hj => VClock.le_trans (hclk j hj) (hcl _)⟩
       unfold NextAt U32At; rw [curBytes_congr hb]; exact hnx j hj
@@ -1414,7 +1448,7 @@ theorem step_top {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : BitVec 32} (h
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
   have hact : Act G m.current := .inl hc
   have hir := hi.record (b := 0) (o := 0) (len := intSize 32) (k := .atomicRead) ht hact
-    (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
+    (fun _ h => by cases h) (.inr (.inl ⟨rfl, rfl, show intSize 32 ≤ 4 by decide, rfl⟩))
   have hcur : (m.recordAt 0 0 (intSize 32) .atomicRead).current = 0 := hc
   have hthr : (m.recordAt 0 0 (intSize 32) .atomicRead).threads = m.threads := rfl
   have hcs : 0 < (m.recordAt 0 0 (intSize 32) .atomicRead).clocks.size := by
@@ -1422,7 +1456,7 @@ theorem step_top {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : BitVec 32} (h
   generalize m.recordAt 0 0 (intSize 32) .atomicRead = mr at hir hl hcur hthr hcs
   obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_head hir.head hl
   have hfl' := hfl
-  obtain ⟨-, -, -, -, -, vs, hvs, hsz, hval, hd, hnx, hclk⟩ := hfl'
+  obtain ⟨-, -, -, -, -, -, vs, hvs, hsz, hval, hd, hnx, hclk⟩ := hfl'
   have hdn := ld_done hir.thr hg
   have h1 : 1 ∈ vs := (hd 1 (.inl rfl)).mp hdn.1
   have h2 : 2 ∈ vs := (hd 2 (.inr rfl)).mp hdn.2
@@ -1481,7 +1515,7 @@ theorem step_rd {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {v w : BitVec 32} (
   rw [hx] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
-  exact ⟨hdec.symm, rfl, hi.record ht (.inl hc) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
+  exact ⟨hdec.symm, rfl, hi.record ht (.inl hc) (fun _ h => by cases h) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
 
 theorem rd_noErr {G : ThreadId → Gh} {m : Mem} {k : Nat} {w : BitVec 32} (hi : Inv G m)
     (hg : G 0 = .ld) (hc : m.current = 0) (hk : k = 1 ∨ k = 2) (hn : NextAt m k w) (e : Error) :
@@ -1548,7 +1582,7 @@ theorem ld_le {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 0 = .ld) :
 
 /-- The head holds a `u32`. -/
 theorem head_val {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) : ∃ v, U32At m 0 0 v := by
-  rcases hi.head with ⟨-, hu, -⟩ | ⟨l, -, -, -, -, hlast, -, vs, hvs, hsz, hv, -⟩
+  rcases hi.head with ⟨-, hu, -⟩ | ⟨l, -, -, -, -, hlast, -, -, vs, hvs, hsz, hv, -⟩
   · exact ⟨0, hu⟩
   · have hp : 0 < l.msgs.size := by rw [hsz]; exact chains_pos hvs
     refine ⟨BitVec.ofNat 32 vs[l.msgs.size - 1]!, ?_⟩
@@ -1598,7 +1632,7 @@ theorem step_whole {G : ThreadId → Gh} {m m' : Mem} {s : Stack} {w0 w1 w2 : Bi
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   subst hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
-  exact ⟨rfl, rfl, hi.record ht (.inl hc) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
+  exact ⟨rfl, rfl, hi.record ht (.inl hc) (fun _ h => by cases h) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
 
 theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi : Inv G m)
     (hg : G 0 = .ld) (hc : m.current = 0) (hn0 : NextAt m 0 w0) (hn1 : NextAt m 1 w1)

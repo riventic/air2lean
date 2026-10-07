@@ -119,6 +119,8 @@ structure Ok (m : Mem) : Prop where
     (e.kind.isAtomic = true ∧ SomeLe m e.clock) ∨ AllLe m e.clock
   /-- The word holds a value. -/
   val : ∃ v, W.Holds m v
+  /-- Every plain write to the word happened before its newest message. -/
+  plain : ∀ i l, W.Loc m i l → PlainLe m W.b W.o nb l.lastClock
 
 /-- A step that keeps the word (module doc): the clocks of the threads do not get smaller (a
 new thread's clock is above another one's). -/
@@ -215,6 +217,18 @@ theorem hits_of {e : FootprintEntry} (hb : e.block = W.b) (h1 : W.o < e.off + e.
   · exact ⟨hb, W.o, ho, .inl h1, Nat.le_refl _, by omega⟩
   · exact ⟨hb, e.off, Nat.le_refl _, .inr rfl, by omega, h2⟩
 
+/-- A plain write to a byte of the word hits it. -/
+theorem hits_of_plain {e : FootprintEntry} (h : plainHit W.b W.o nb e = true) : W.Hits e := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  exact hits_of h.1.1.1 h.1.2 h.2
+
+/-- An access that does not hit the word is not a plain write to it. -/
+theorem plainHit_false {e : FootprintEntry} (h : ¬ W.Hits e) : plainHit W.b W.o nb e = false := by
+  cases hp : plainHit W.b W.o nb e
+  · rfl
+  · exact absurd (hits_of_plain hp) h
+
 /-- An access that hits the word touches a heap with the word's bytes. -/
 theorem touches_of {e : FootprintEntry} {h : Heap} (he : W.Hits e)
     (hw : ∀ x, W.o ≤ x → x < W.o + nb → h (W.b, x) ≠ none) : e.Touches h := by
@@ -266,7 +280,9 @@ theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.
 /-- A step that keeps the word keeps its invariant. -/
 theorem Ok.keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.Ok m' := by
   obtain ⟨hb', hcur⟩ := congr hk.cells hw.blk
-  refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_⟩
+  refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_,
+    fun i l hl => (hw.plain i l ((hk.loc i l).mp hl)).of_fp fun e he =>
+      (hk.fp e he).imp id plainHit_false⟩
   · rcases hk.only l hl with h | h | h | h
     · exact hw.only l h hb h1 h2
     · exact absurd hb h
@@ -525,9 +541,15 @@ theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.cur
     intro u hu; simp only [mr, Mem.recordAt]; rw [Proto.getElem!_set!_ite, if_neg (fun h => hu h.1)]
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
   have hwr : W.Ok mr := by
-    refine ⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val⟩
+    refine ⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val, fun i l hl => ?_⟩
     · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l hl
       exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
+    rotate_left
+    · refine (hw.plain i l hl).of_fp fun e he => ?_
+      simp only [mr, Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · exact .inr (plainHit_atomic hk)
     simp only [mr, Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · rcases hw.wfp e he hh with ⟨ha, hs⟩ | ha
@@ -570,7 +592,7 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
   | some i =>
     have hl := loc_of_find hf
     obtain ⟨hlen, -, -, hlast, -⟩ := hwr.loc i _ hl
-    obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast h
+    obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast (hwr.plain i _ hl) h
     exact ⟨_, hl, hwr, hopr, hist_congr rfl rfl, rfl, rfl⟩
   | none =>
     obtain ⟨rfl, rfl⟩ := locIdx_new hf h
@@ -583,7 +605,10 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
       rw [Array.findIdx?_push, hf]; simp [nl, firstLoc]
     have honly : ∀ i l, W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
         i l → i = mr.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
-    refine ⟨nl, hnl, ⟨hw.blk, fun l hl hb h1 h2 => ?_, fun i l hl => ?_, hwr.wfp, hwr.val⟩,
+    refine ⟨nl, hnl, ⟨hw.blk, fun l hl hb h1 h2 => ?_, fun i l hl => ?_, hwr.wfp, hwr.val,
+      fun i l hl e he hh => by
+        obtain ⟨rfl, rfl⟩ := honly i l hl
+        simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using plainLe_plainClock mr W.b W.o nb e he hh⟩,
       hopr.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
         fun _ _ => rfl, fun e he => .inl he, .push rfl rfl rfl rfl, fun e he => .inl he⟩, ?_, rfl, rfl⟩
     · rcases Array.mem_push.mp hl with hl | rfl
@@ -718,7 +743,8 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     rw [writeBytes_size _ _ _ (by omega)]; exact hsz
   refine ⟨⟨⟨_, hMb, hlv, hsz', ha4, hk⟩,
     fun l₀ hl₀ hb' h1 h2 => ?_, fun i l₀ hl₀ => ?_, fun e he hh => ?_,
-    ⟨new, by unfold Word.Holds; rw [hcur]; exact W.enc_val new⟩⟩, ⟨?_, ?_, ?_, ?_, ?_, ?_,
+    ⟨new, by unfold Word.Holds; rw [hcur]; exact W.enc_val new⟩, fun i l₀ hl₀ => ?_⟩,
+    ⟨?_, ?_, ?_, ?_, ?_, ?_,
     fun u hu => by rw [hMc]; exact hcl₂ u hu, by rw [hMc]; exact hct₂, hMbs, fun x hx => ?_,
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he), ?_,
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he)⟩,
@@ -748,6 +774,14 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
       rw [hMc]; by_cases hu' : u = m₁.current
       · subst hu'; exact hct₂
       · rw [hcl₂ u hu']; exact VClock.le_refl _
+  · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
+    intro e he hh
+    have he' : e ∈ m₁.footprint := by rw [hMe] at he; simpa [observeM, hf₂] using he
+    have hlc : l'.lastClock = m₂.clocks[m₁.current]! := by simp [l', ALoc.lastClock, rmwMsg, hc₂]
+    rw [hlc]
+    rcases hw.wfp e he' (hits_of_plain hh) with ⟨ha', -⟩ | hle
+    · rw [plainHit_atomic ha'] at hh; cases hh
+    · exact VClock.le_trans (hle _ ht) hct₂
   · rw [hMe]; simp [observeM, hc₂]
   · rw [hMe]; simp [observeM, ht₂]
   · rw [hMe]; simp [observeM, hw₂]
@@ -1084,7 +1118,9 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       rw [ho x h2 h3] at hc; cases hc
     rw [hop.cells l hw']; exact hs l c hc
   refine ⟨?_, hi.pdisj, hi.idle, fun u hu => ?_, hblk', ?_, hi.one,
-    ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_⟩, fun u => hown ▸ hi.off u,
+    ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_,
+      fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
+        (hop.fp e he).imp id fun h => plainHit_atomic h.2.2.2.1⟩, fun u => hown ▸ hi.off u,
     fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hop.waiters]; exact hi.fq,
     fun hp => ?_⟩
   · rw [hown]

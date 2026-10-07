@@ -459,11 +459,95 @@ def curBytes (m : Mem) (b o len : Nat) : Array Byte :=
 /-- The bytes of the newest message of `l` (`locIdx`'s `last`). -/
 def ALoc.lastBytes (l : ALoc) : Array Byte := (l.msgs.back?.map (·.bytes)).getD #[]
 
-/-- The location exists, and its newest message has the block's bytes: no change. -/
+/-- Every plain write to the bytes `o..o+len` of block `b` happened before `c`: no plain write
+event since a message with the clock `c` (`plainSince`). -/
+def PlainLe (m : Mem) (b o len : Nat) (c : VClock) : Prop :=
+  ∀ e ∈ m.footprint, plainHit b o len e = true → VClock.le e.clock c = true
+
+theorem plainHit_kind {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
+    e.kind = .write := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, beq_iff_eq] at h
+  exact h.1.1.2
+
+theorem plainHit_block {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
+    e.block = b := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, beq_iff_eq] at h
+  exact h.1.1.1
+
+/-- An atomic access is not a plain write. -/
+theorem plainHit_atomic {b o len : Nat} {e : FootprintEntry} (h : e.kind.isAtomic = true) :
+    plainHit b o len e = false := by
+  cases hp : plainHit b o len e
+  · rfl
+  · rw [plainHit_kind hp] at h; cases h
+
+theorem plainSince_false {m : Mem} {b o len : Nat} {c : VClock} (h : PlainLe m b o len c) :
+    plainSince m b o len c = false := by
+  unfold plainSince
+  rw [Array.any_eq_false]
+  intro i hi hp
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at hp
+  rw [h _ (Array.getElem_mem hi) hp.1] at hp
+  cases hp.2
+
+theorem PlainLe.mono {m : Mem} {b o len : Nat} {c c' : VClock} (h : PlainLe m b o len c)
+    (hc : VClock.le c c' = true) : PlainLe m b o len c' :=
+  fun e he hh => VClock.le_trans (h e he hh) hc
+
+/-- A memory whose footprint has no new plain write to the bytes keeps `PlainLe`. -/
+theorem PlainLe.of_fp {m m' : Mem} {b o len : Nat} {c : VClock} (h : PlainLe m b o len c)
+    (hf : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ plainHit b o len e = false) :
+    PlainLe m' b o len c := fun e he hh => by
+  rcases hf e he with he | hn
+  · exact h e he hh
+  · rw [hn] at hh; cases hh
+
+theorem foldl_merge_ge (xs : List FootprintEntry) (c₀ : VClock) :
+    VClock.le c₀ (xs.foldl (fun c e => VClock.merge c e.clock) c₀) = true ∧
+      ∀ e ∈ xs, VClock.le e.clock (xs.foldl (fun c e => VClock.merge c e.clock) c₀) = true := by
+  induction xs generalizing c₀ with
+  | nil => exact ⟨VClock.le_refl _, fun e he => by cases he⟩
+  | cons x xs ih =>
+    obtain ⟨h1, h2⟩ := ih (VClock.merge c₀ x.clock)
+    refine ⟨VClock.le_trans (VClock.le_merge_left _ _) h1, fun e he => ?_⟩
+    rcases List.mem_cons.mp he with rfl | he
+    · exact VClock.le_trans (VClock.le_merge_right _ _) h1
+    · exact h2 e he
+
+theorem foldl_merge_le (xs : List FootprintEntry) {c₀ c : VClock} (h₀ : VClock.le c₀ c = true)
+    (h : ∀ e ∈ xs, VClock.le e.clock c = true) :
+    VClock.le (xs.foldl (fun c e => VClock.merge c e.clock) c₀) c = true := by
+  induction xs generalizing c₀ with
+  | nil => exact h₀
+  | cons x xs ih =>
+    exact ih (VClock.merge_le h₀ (h x (List.mem_cons_self ..)))
+      (fun e he => h e (List.mem_cons_of_mem _ he))
+
+/-- The clock of a message made from the plain writes is above each of them. -/
+theorem plainLe_plainClock (m : Mem) (b o len : Nat) : PlainLe m b o len (plainClock m b o len) := by
+  intro e he hh
+  unfold plainClock
+  rw [← Array.foldl_toList]
+  exact (foldl_merge_ge _ _).2 e (Array.mem_toList_iff.mpr (Array.mem_filter.mpr ⟨he, hh⟩))
+
+/-- The clock of the plain writes is below a clock above each of them. -/
+theorem plainClock_le_of {m : Mem} {b o len : Nat} {c : VClock} (h : PlainLe m b o len c) :
+    VClock.le (plainClock m b o len) c = true := by
+  unfold plainClock
+  rw [← Array.foldl_toList]
+  refine foldl_merge_le _ (VClock.le_default c) fun e he => ?_
+  obtain ⟨he, hh⟩ := Array.mem_filter.mp (Array.mem_toList_iff.mp he)
+  exact h e he hh
+
+/-- The location exists, its newest message has the block's bytes, and no plain write happened
+since it: no change. -/
 theorem locIdx_found {m m' : Mem} {b o len i r : Nat}
     (hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i)
     (hlen : (m.atomics[i]!).len = len)
     (hlast : ALoc.lastBytes (m.atomics[i]!) = curBytes m b o len)
+    (hpl : PlainLe m b o len (m.atomics[i]!).lastClock)
     (h : ((locIdx b o len).run m).run = some (.ok (r, m'))) : r = i ∧ m' = m := by
   have hi' := (Array.findIdx?_eq_some_iff_getElem.mp hi).1
   unfold locIdx at h
@@ -473,7 +557,8 @@ theorem locIdx_found {m m' : Mem} {b o len i r : Nat}
   split at h₁
   · rename_i hne; simp [hlen] at hne
   · unfold ALoc.lastBytes curBytes at hlast
-    simp only [hlast, beq_self_eq_true, ↓reduceIte] at h₁
+    simp only [hlast, beq_self_eq_true, plainSince_false hpl, Bool.not_false, Bool.and_self,
+      ↓reduceIte] at h₁
     obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
     have := MemM.set_ok hs
     subst this
@@ -527,17 +612,18 @@ whose newest message has the block's bytes: location 0. The op changes only `ato
 location: `l`, or `firstLoc`) and `nextMsg`. -/
 theorem locIdx_single {m m₁ : Mem} {b o len li : Nat}
     (h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = b ∧ l.off = o ∧ l.len = len ∧
-      ALoc.lastBytes l = curBytes m b o len)
+      ALoc.lastBytes l = curBytes m b o len ∧ PlainLe m b o len l.lastClock)
     (h : ((locIdx b o len).run m).run = some (.ok (li, m₁))) :
     li = 0 ∧ ∃ l k, m₁ = { m with atomics := #[l], nextMsg := k } ∧
       ((m.atomics = #[] ∧ l = firstLoc m b o len) ∨ m.atomics = #[l]) := by
-  rcases h0 with ha | ⟨l, ha, hlb, hlo, hll, hlast⟩
+  rcases h0 with ha | ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
   · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) h
     exact ⟨by rw [ha]; rfl, firstLoc m b o len, m.nextMsg + 1, by rw [ha]; rfl, .inl ⟨ha, rfl⟩⟩
   · have hfind : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some 0 := by
       rw [ha]; simp [hlb, hlo]
     have hl0 : m.atomics[0]! = l := by rw [ha]; rfl
-    obtain ⟨rfl, hm⟩ := locIdx_found hfind (by rw [hl0]; exact hll) (by rw [hl0]; exact hlast) h
+    obtain ⟨rfl, hm⟩ := locIdx_found hfind (by rw [hl0]; exact hll) (by rw [hl0]; exact hlast)
+      (by rw [hl0]; exact hpl) h
     refine ⟨rfl, l, m.nextMsg, ?_, .inr ha⟩
     rw [hm]
     cases m
