@@ -13,8 +13,9 @@ import ZigLean.Vec
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
 an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
-encode (`modelLayout`), a pointer constant without a global, and a global that is `threadlocal`,
-`extern` or has no initial value. `checkProgram` checks the slice items that a function that
+encode (`modelLayout`), a pointer constant without a global, a global that is `threadlocal`,
+has no initial value or a partly `undefined` one, and an `extern` global outside
+`checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
@@ -1384,14 +1385,47 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
     if pa > ga then throw (alignment pa ga)
 
+/-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
+default (`0`, `false`), so a partly undefined global initializer fails closed. -/
+partial def Val.hasNestedUndef (v : Val) : Bool :=
+  let undefOrNested (v : Val) : Bool := match v with
+    | .undef _ => true
+    | v => v.hasNestedUndef
+  match v with
+  | .agg _ elems => elems.any undefOrNested
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => undefOrNested v
+  | .sliceConst _ p l => undefOrNested p || undefOrNested l
+  | _ => false
+
+/-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
+field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
+error-free type whose bytes the model encodes qualifies. -/
+private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
+  let fail (why : String) : Except String Unit :=
+    throw s!"{f.name}: `extern` global {what}: {why}; external initial state is an explicit \
+      `ExternInit` parameter of `mem0` only for named, pointer-free, error-free storage"
+  if g.name.isNone then fail "it has no name"
+  if g.init.isSome then fail "the AIR file gives it an initial value"
+  if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
+  if (pointerFreeInitializerType f g.ty 1024).isNone then
+    fail "its type can hold a pointer, a union or an unresolved type"
+  if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
-type that the model encodes. An array with a sentinel is encoded with the sentinel. -/
+type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
+sentinel is encoded with the sentinel. A wholly `undefined` initial value is undefined bytes; a
+partly `undefined` one is rejected, never replaced by a default. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let what := g.name.getD "an unnamed constant"
   if g.threadlocal then throw s!"{f.name}: global {what}: `threadlocal` is outside the subset"
-  if g.isExtern then throw s!"{f.name}: global {what}: `extern` is outside the subset"
+  if g.isExtern then return ← checkExternGlobal f g what
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
+  if init.hasNestedUndef then
+    throw s!"{f.name}: global {what}: a partly `undefined` initial value is outside the subset \
+      (only a wholly `undefined` global is modelled, as undefined bytes)"
   checkNullConstants f.name f.types f.layouts init
   checkGlobalAliasConstants f init
   if f.globals.any (fun g => hasErrorStorage f.types g.ty) &&
@@ -1702,12 +1736,16 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
     unless g.ty < f.types.size do throw s!"{f.name}: global has unknown type id {g.ty}"
     unless g.name.isSome || g.isConst do
       throw s!"{f.name}: unnamed mutable global is ambiguous (only unnamed constants are shared)"
-    let some v := g.init | throw s!"{f.name}: global has no initial value"
-    value v false
-    if let .func name .. := v then
-      unless g.name == some name && g.isConst && (f.types[g.ty]?.map isFnTy).getD false do
-        throw s!"{f.name}: global function initializer must be its named constant function block"
-    else checkConstant f index g.ty v
+    match g.init with
+    | none =>
+      -- Only `extern` storage is absent by definition (`checkExternGlobal`).
+      unless g.isExtern do throw s!"{f.name}: global has no initial value"
+    | some v =>
+      value v false
+      if let .func name .. := v then
+        unless g.name == some name && g.isConst && (f.types[g.ty]?.map isFnTy).getD false do
+          throw s!"{f.name}: global function initializer must be its named constant function block"
+      else checkConstant f index g.ty v
   for i in insts do
     let extra := match i.op with
       | .sliceFieldPtr _ p => #[p]

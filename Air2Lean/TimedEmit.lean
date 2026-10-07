@@ -97,10 +97,10 @@ private def functionDef (fc : FCtx) (f : Func) : String :=
 private def emitChecked (funcs : Array Func) (ns prefix_ : String) : String := Id.run do
   let names := funcs.map (·.name)
   let (named, functions) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_
-    (runtimeNames ++ #["mem0"]) #[] false
+    (runtimeNames ++ #["mem0"] ++ externReservedNames funcs) #[] false
   let structNames := named.map fun n => (n.zigName, n.leanName)
   let mk (f : Func) (ids : Array Nat) := mkFCtx f structNames functions .ieee names ids
-  let (globals, globalIds) := collectGlobals funcs mk
+  let (globals, globalIds) := collectGlobals funcs mk prefix_
   let types := named.toList.map (emitNamed structNames (encTypeNames funcs names))
   let mut output := ["import ZigLean", "import ZigLean.Conc.TimedBody", s!"namespace {ns}"] ++
     types ++ [emitMem0 globals]

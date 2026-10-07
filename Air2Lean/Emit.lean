@@ -2595,13 +2595,24 @@ structure ProgGlobal where
   align : Nat
   /-- A `var`: a writable block. Anything else is read-only (`Zig.BlockKind.constGlobal`). -/
   isVar : Bool := false
+  /-- An `extern` global: its `ExternInit` field and Lean type; `bytes` encode that field. -/
+  externField : Option (String × String) := none
+
+/-- The structure of the explicit external initial state that `mem0` takes (§Globals). -/
+def externInitName : String := "ExternInit"
+
+/-- Program names reserved for explicit external initial state, only if a global is `extern`. -/
+def externReservedNames (funcs : Array Func) : Array String :=
+  if funcs.any (·.globals.any (·.isExtern)) then #[externInitName] else #[]
 
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 
-/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. -/
-def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
+/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. An
+`extern` global (`externField = some field`) is the encoding of `ext.field`, never a default. -/
+def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := none) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
+  if let some field := externField then fc.storageExpr g.ty (encodeTerm s!"ext.{field}" ty) else
   match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
   | some (.func ..) => "#[.undef]"
@@ -2610,8 +2621,9 @@ def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
 
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with
-the same type and value as another one shares its block. Named globals come first. -/
-def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
+the same type and value as another one shares its block. Named globals come first. An `extern`
+global gets an `ExternInit` field named after it (`prefix_` stripped), in block order. -/
+def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (prefix_ : String := "") :
     Array ProgGlobal × Array (String × Array Nat) := Id.run do
   let mut named : Array String := #[]
   for f in funcs do
@@ -2635,12 +2647,18 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
           unnamed := unnamed.push (bytes, (f.layouts[g.ty]?.bind (·.align)).getD 1)
         ids := ids.set! k (f.name, ids[k]!.2.set! j id)
   let mut out : Array ProgGlobal := #[]
+  let mut fields : Array String := typeCoreNames.push "mk"
   for n in named do
     let some (f, k) := funcs.zipIdx.find? fun (f, _) => f.globals.any (·.name == some n)
       | continue
     let some g := f.globals.find? (·.name == some n) | continue
-    out := out.push { label := n, bytes := (mkFc f ids[k]!.2).globalBytes g,
-                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst }
+    let fc := mkFc f ids[k]!.2
+    let externField := if g.isExtern then
+      some (freshName (plainName (mangleName prefix_ n)) fields) else none
+    if let some field := externField then fields := fields.push field
+    out := out.push { label := n, bytes := fc.globalBytes g externField,
+                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
+                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)) }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -2688,13 +2706,32 @@ def nameBytes (s : String) : String :=
   let bs := s.toUTF8.toList.map (s!"{·}")
   encodeTerm s!"#v[{", ".intercalate (bs ++ ["0"])}]" s!"Vector (BitVec 8) {bs.length + 1}"
 
-/-- `mem0`: the memory at program start, one block per global. -/
+/-- `mem0`: the memory at program start, one block per global. With an `extern` global, `mem0`
+takes the explicit external initial state `ext : ExternInit`, one field per `extern` global in
+block order: a proof from `mem0 ext` states its assumptions about external storage on `ext`. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
+  let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
-    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align}, {if g.isVar then ".global" else ".constGlobal"})"
+    let source := match g.externField with
+      | some (field, _) => s!" (extern: initial value `ext.{field}`)"
+      | none => ""
+    s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
-  s!"/-- The memory at program start: block `k` is global `k`. -/\n\
-    def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+  let externs := gs.toList.zipIdx.filterMap fun (g, k) => g.externField.map fun (field, ty) =>
+    let access := if g.isVar then "`var`, writable" else "`const`, read-only"
+    s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
+  if externs.isEmpty then
+    s!"/-- The memory at program start: block `k` is global `k`. -/\n\
+      def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+  else
+    s!"/-- External initial state: the initial value of each `extern` global, which this program \
+      does not define. Fields follow block (initialization) order. Contract: the external \
+      definition holds a valid encoding of the field's type before the program starts; any \
+      other assumption about external storage is a hypothesis on this value. -/\n\
+      structure {externInitName} where\n{"\n".intercalate externs}\n\n\
+      /-- The memory at program start: block `k` is global `k`. Blocks are added in order; an \
+      `extern` block holds its `ext` field, never a default. -/\n\
+      def mem0 (ext : {externInitName}) : Zig.Mem := Zig.Mem.ofGlobals {body}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -3042,7 +3079,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let apiNames := if proofApi then funcs.flatMap (fun f =>
     if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
-    (if memFuncs.isEmpty then #[] else #["mem0"]) ++
+    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
@@ -3056,7 +3093,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     | some site => emitModel model index site structNames
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
-  let (globals, ids) := collectGlobals funcs mkFc
+  let (globals, ids) := collectGlobals funcs mkFc prefix_
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
     fun (gs, defs) (_, lean, fields, exhaustive, bits) =>
