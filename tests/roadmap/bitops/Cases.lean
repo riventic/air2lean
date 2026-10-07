@@ -49,10 +49,21 @@ private def countFile (name tag : String) (types : Array Json) (aty rty : Nat) :
   file name (types.push nrTy) #[aty] rty
     #[inst 0 "arg" aty #[] [("param", num 0)], inst 1 tag rty #[ref 0],
       inst 2 "ret" types.size #[ref 1]]
-private def shiftFile (types : Array Json) (aty bty rty : Nat) : Json :=
-  file "shift" (types.push nrTy) #[aty, bty] rty
+private def shiftFile (types : Array Json) (aty bty rty : Nat) (name := "shift") : Json :=
+  file name (types.push nrTy) #[aty, bty] rty
     #[inst 0 "arg" aty #[] [("param", num 0)], inst 1 "arg" bty #[] [("param", num 1)],
       inst 2 "shl_with_overflow" rty #[ref 0, ref 1], inst 3 "ret" types.size #[ref 2]]
+
+/-- Wider and non-power-of-two widths: (width, signed, checker count width = log2 width + 1). -/
+private def wideCounts : Array (Nat × Bool × Nat) :=
+  #[(16, false, 5), (32, false, 6), (64, false, 7), (128, false, 8), (128, true, 8),
+    (24, false, 5), (40, false, 6), (7, true, 3)]
+/-- (width, signed, Log2Int count width, top valid count, illegal counts). -/
+private def wideShifts : Array (Nat × Bool × Nat × Nat × Array Nat) :=
+  #[(64, false, 6, 63, #[]), (64, true, 6, 63, #[]), (128, false, 7, 127, #[]),
+    (128, true, 7, 127, #[]), (24, false, 5, 23, #[24, 31]), (40, false, 6, 39, #[40, 63]),
+    (7, true, 3, 6, #[7])]
+private def wideName (w : Nat) (signed : Bool) : String := s!"{if signed then "i" else "u"}{w}"
 
 private def countLoop : Json :=
   file "countLoop" #[intTy 8, intTy 4, nrTy, obj [("k", .str "bool")]] #[0] 1
@@ -135,6 +146,51 @@ def main (args : List String) : IO Unit := do
   writeGenerated dir "loopCapture" #[countLoop, shiftLoop]
     #["successful (((Bitops.countLoop.loop1 32).run' default).map fun e => match e with | .ret v => v | _ => 0) = some 5",
         "successful (((Bitops.shiftLoop.loop2 2 7).run' default).map fun e => match e with | .ret v => v | _ => (0, 0)) = some (0, 1)"]
+  -- Each count's zero, all-ones, lowest-bit and top-bit (sign boundary) operands.
+  for tag in #["clz", "ctz", "popcount"] do
+    let mut files := #[]
+    let mut checks := #[]
+    for (w, signed, cw) in wideCounts do
+      let name := tag ++ wideName w signed
+      files := files.push (countFile name tag #[intTy w signed, intTy cw] 0 1)
+      let (ofZero, ofOnes, ofLow, ofTop) : Nat × Nat × Nat × Nat :=
+        if tag == "clz" then (w, 0, w - 1, 0)
+        else if tag == "ctz" then (w, 0, 0, w - 1)
+        else (0, w, 1, 1)
+      let allOnes := if signed then "(-1)" else toString (2 ^ w - 1)
+      checks := checks ++ #[s!"successful (Bitops.{name} 0) = some {ofZero}",
+        s!"successful (Bitops.{name} {allOnes}) = some {ofOnes}",
+        s!"successful (Bitops.{name} 1) = some {ofLow}",
+        s!"successful (Bitops.{name} {2 ^ (w - 1)}) = some {ofTop}"]
+      reject (countFile "bad" tag #[intTy w signed, intTy (cw - 1)] 0 1) s!"{name} count result too narrow"
+      reject (countFile "bad" tag #[intTy w signed, intTy (cw + 1)] 0 1) s!"{name} count result too wide"
+    writeGenerated dir (tag ++ "Wide") files checks
+  -- Shift boundaries: count zero, the top valid count, and illegal counts the Log2Int type can hold.
+  let mut shiftFiles := #[]
+  let mut shiftChecks := #[]
+  for (w, signed, cw, top, illegal) in wideShifts do
+    let name := "shift" ++ wideName w signed
+    shiftFiles := shiftFiles.push (shiftFile #[intTy w signed, intTy cw, intTy 1, tupleTy #[0, 2]] 0 1 3 name)
+    let minusOne := if signed then "(-1)" else toString (2 ^ w - 1)
+    shiftChecks := shiftChecks ++ #[s!"successful (Bitops.{name} 0 {top}) = some (0, 0)",
+      s!"successful (Bitops.{name} {minusOne} 0) = some ({minusOne}, 0)",
+      s!"successful (Bitops.{name} 1 {top}) = some ({2 ^ top}, {if signed then 1 else 0})",
+      s!"successful (Bitops.{name} 3 {top}) = some ({2 ^ top}, 1)",
+      s!"successful (Bitops.{name} {minusOne} {top}) = some ({2 ^ top}, {if signed then 0 else 1})"]
+    for count in illegal do
+      shiftChecks := shiftChecks ++ #[s!"isIllegal (Bitops.{name} 0 {count}) = true",
+        s!"isIllegal (Bitops.{name} 1 {count}) = true"]
+    reject (shiftFile #[intTy w signed, intTy (cw - 1), intTy 1, tupleTy #[0, 2]] 0 1 3) s!"{name} narrow Log2Int"
+    reject (shiftFile #[intTy w signed, intTy (cw + 1), intTy 1, tupleTy #[0, 2]] 0 1 3) s!"{name} wide Log2Int"
+  writeGenerated dir "shiftWide" shiftFiles shiftChecks
+  -- Narrow (u3) and wide (u64) lanes.
+  writeGenerated dir "wideVector"
+    #[countFile "clzNarrowLanes" "clz" #[intTy 3, intTy 2, vecTy 4 0, vecTy 4 1] 2 3,
+      shiftFile #[intTy 64, intTy 6, intTy 1, vecTy 4 0, vecTy 4 1, vecTy 4 2, tupleTy #[3, 5]] 3 4 6 "shiftWideLanes",
+      shiftFile #[intTy 24, intTy 5, intTy 1, vecTy 2 0, vecTy 2 1, vecTy 2 2, tupleTy #[3, 5]] 3 4 6 "shiftOddLanes"]
+    #["(successful (Bitops.clzNarrowLanes ⟨#v[0, 7, 1, 4]⟩)).map (fun v => v.lanes.toArray.map BitVec.toNat) = some #[3, 0, 2, 0]",
+      s!"(successful (Bitops.shiftWideLanes ⟨#v[0, 1, 3, {2 ^ 64 - 1}]⟩ ⟨#v[63, 63, 63, 0]⟩)).map (fun (r, f) => (r.lanes.toArray.map BitVec.toNat, f.lanes.toArray.map BitVec.toNat)) = some (#[0, {2 ^ 63}, {2 ^ 63}, {2 ^ 64 - 1}], #[0, 0, 1, 0])",
+      "isIllegal (Bitops.shiftOddLanes ⟨#v[1, 1]⟩ ⟨#v[23, 24]⟩) = true"]
   reject (shiftFile #[intTy 8, intTy 3 true, intTy 1, tupleTy #[0, 2]] 0 1 3) "signed shift count"
   reject (shiftFile #[intTy 8, intTy 4, intTy 1, tupleTy #[0, 2]] 0 1 3) "wrong Log2Int width"
   reject (shiftFile #[intTy 8, intTy 3, intTy 2, tupleTy #[0, 2]] 0 1 3) "overflow flag width"

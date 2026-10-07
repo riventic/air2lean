@@ -27,10 +27,13 @@ if observed != expected or len(files) != len(expected):
     raise SystemExit(f"bitops export inventory mismatch: observed={observed}, expected={expected}")
 PY_INVENTORY
 lake exe air2lean "$work/air" -o "$work/Gen.lean" --namespace Bitops --prefix bitops.
-lake env lean -R "$work" "$work/Gen.lean"
+lake env lean -R "$work" -o "$work/Gen.olean" "$work/Gen.lean"
+cp tests/roadmap/bitops/GeneratedBitset.lean "$work/GeneratedBitset.lean"
+LEAN_PATH="$work:$(lake env printenv LEAN_PATH)" lake env lean -R "$work" "$work/GeneratedBitset.lean"
 lake env lean tests/roadmap/bitops/Runtime.lean
+lake env lean tests/roadmap/bitops/Bitset.lean
 lake env lean --run tests/roadmap/bitops/Cases.lean "$work/generated"
-for name in clz ctz popcount clzVector ctzVector popcountVector shiftUnsigned shiftSigned shiftNarrow shiftVector shiftSignedVector invalidShiftVector loopCapture; do
+for name in clz ctz popcount clzVector ctzVector popcountVector shiftUnsigned shiftSigned shiftNarrow shiftVector shiftSignedVector invalidShiftVector loopCapture clzWide ctzWide popcountWide shiftWide wideVector; do
   [ -f "$work/generated/$name.lean" ] || { echo "missing generated bitops case: $name" >&2; exit 1; }
   lake env lean -R "$work/generated" --run "$work/generated/$name.lean"
 done
@@ -43,7 +46,7 @@ lake env lean -R "$work" --run "$work/Diff.lean" > "$work/lean.txt"
 cmp "$work/native.txt" "$work/lean.txt"
 python3 tests/roadmap/bitops/mutations.py "$work/mutants"
 lake env lean -R "$work/mutants" "$work/mutants/control.lean"
-for name in clz_is_ctz ctz_is_clz population_is_zero signed_shift_is_unsigned overflow_flag_inverted oversized_shift_allowed; do
+for name in clz_is_ctz ctz_is_clz population_is_zero signed_shift_is_unsigned overflow_flag_inverted oversized_shift_allowed reverse_shift_operands_swapped count_bound_operands_swapped; do
   lean_status=0
   lake env lean -R "$work/mutants" "$work/mutants/$name.lean" > "$work/mutants/$name.log" 2>&1 || lean_status=$?
   python3 tests/roadmap/bitops/classify_mutant.py "$lean_status" "$work/mutants/$name.log"
@@ -54,4 +57,4 @@ if [ -n "${AIR2LEAN_BITOPS_OUT_DIR:-}" ]; then
   # Preserve every manifest-listed artifact, including any compiler-created object files.
   cp -R "$work/." "$AIR2LEAN_BITOPS_OUT_DIR/"
 fi
-echo 'bitops passed: 16 exported functions, 13 generated fixtures, 3092 exact differential observations (256 illegal narrow-shift rows excluded), 6 killed semantic mutants'
+echo 'bitops passed: 16 exported functions, 18 generated fixtures, generated bitset proofs, 3092 exact differential observations (256 illegal narrow-shift rows excluded), 8 killed semantic mutants'
