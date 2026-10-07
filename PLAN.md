@@ -1,5 +1,7 @@
 # Plan
 
+For the current bounded closeout, requirement classifications and remaining acceptance, see the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md).
+
 ## Status
 
 | # | Milestone | State |
