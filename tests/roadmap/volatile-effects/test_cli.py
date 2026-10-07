@@ -31,10 +31,11 @@ def ptr(child, *, volatile, const=False, size="one", align=4):
 
 
 # 0 u32, 1 void, 2 noreturn, 3 *volatile u32, 4 *u32, 5 *const volatile u32,
-# 6 []volatile u8, 7 u8, 8 usize, 9 *const u32, 10 []u8
+# 6 []volatile u8, 7 u8, 8 usize, 9 *const u32, 10 []u8, 11 *volatile u8
 TYPES = [U32, VOID, NORETURN, ptr(0, volatile=True), ptr(0, volatile=False),
          ptr(0, volatile=True, const=True), ptr(7, volatile=True, size="slice", align=1), U8, USIZE,
-         ptr(0, volatile=False, const=True), ptr(7, volatile=False, size="slice", align=1)]
+         ptr(0, volatile=False, const=True), ptr(7, volatile=False, size="slice", align=1),
+         ptr(7, volatile=True, align=1)]
 
 
 def inst(i, tag, ty, args=(), **extra):
@@ -103,10 +104,6 @@ def fixtures(version="0.16.0"):
             inst(1, "call", 1, [ref(0)], callee=dict(func="mem.Allocator.free", noreturn=False)),
             returning(2, void)]), "has no volatile contract"),
     }
-
-
-# `slice_elem_ptr` result: *volatile u8 (type 11).
-TYPES.append(ptr(7, volatile=True, align=1))
 
 
 def invoke(binary, *argv):
