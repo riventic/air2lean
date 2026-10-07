@@ -47,7 +47,7 @@ An invalid existing cache entry is reported with its path; remove it before retr
 |---|---|---|
 | What the compiler can do | write AIR only (`build-obj -fno-emit-bin`) | everything a stock zig can do, plus AIR |
 | Lock | yes: `lock.sh` puts a wrapper in `bin/zig` that refuses every other command; the compiler is `bin/zig-unlocked` | no |
-| Needs | a host `zig` | also cmake, and LLVM, Clang and LLD of the version in `versions.toml` (`llvm`: 19 for 0.14.1, 20 for 0.15.2, 21 for 0.16.0) |
+| Needs | a host `zig` | also cmake, and LLVM, Clang and LLD of the version in `versions.toml` (`llvm`: 19 for 0.14.1, 20 for 0.15.2, 21 for 0.16.0, 22 for 0.17.0) |
 | Build | `zig build` | `cmake` configures only (writes `build/config.h`), then `zig build -Denable-llvm -Dconfig_h=…` |
 
 `AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.
