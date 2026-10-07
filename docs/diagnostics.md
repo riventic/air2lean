@@ -161,7 +161,7 @@ The structured collector retains its existing codes and exported instruction anc
 while using the same reasons for explicit exporter markers.
 
 The inventory selects these classifications only for tags present in each compiler's enum.
-Its `normalizer-rejected-compiler-state-or-effect` disposition is source-only rejection
+Its `rejected-compiler-state-or-effect` disposition is source-only rejection
 policy, with no admitted semantics, proof or compiler-generated fixture qualification.
 Synthetic regressions cover diagnostic routing; compiler fixture qualification remains
 pending. The older `vector_store_elem` tag (0.14/0.15) is rejected as a vector-memory

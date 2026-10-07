@@ -211,6 +211,10 @@ def switch_arms(ts, expression, occurrence=0):
     return arms
 
 
+# A Lean constructor reference `.name` or `.«name»`; group 1 or 2 holds the name.
+CTOR = r'\.(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))'
+
+
 def normalizer(text):
     section = text.split('  match raw.tag with', 1)[1].split('\n/--', 1)[0]
     matches = list(re.finditer(r'^  \| ((?:"[^"\n]+"\s*(?:\|\s*)?)+)=>', section, re.M))
@@ -219,8 +223,8 @@ def normalizer(text):
         next_arm = re.search(r'^  \| ', section[match.end():], re.M)
         end = match.end() + next_arm.start() if next_arm else len(section)
         branch = section[match.end():end]
-        # Constructor references are an index for reviewer inspection, not a semantics proof.
-        ops = sorted(set(a or b for a, b in re.findall(r'\breturn\s+\.(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', branch)))
+        # Constructors returned directly or by a `return if … then .a else .b` choice.
+        ops = sorted(set(a or b for a, b in re.findall(r'(?:\breturn|\bthen|\belse)\s+' + CTOR, branch)))
         for tag in re.findall(r'"([^"\n]+)"', match.group(1)):
             result[tag] = ops
     return result
@@ -306,12 +310,194 @@ def compiler_inventory(source, cache=None):
     return out, hashes
 
 
-def pointer_dispositions(names, arms):
-    return [{'name': name,
-             'disposition': 'exporter-explicit-arm-conditional-review' if name in arms else
-             'exporter-fallback-unsupported-marker-review' if any(token in ('"unsupported"', 'unsupported') for token in arms.get('*', [])) else
-             'exporter-fallback-unclassified',
-             'qualification': 'Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review.'}
+# Every inventory row receives one of these names. Only `unclassified-forbidden`
+# is a placeholder: `generate` and `check` fail while any row carries it.
+FORBIDDEN = 'unclassified-forbidden'
+DISPOSITIONS = {
+    'tags': {
+        'emitted-unqualified': 'Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification.',
+        'erased-at-emission': 'Exported and normalized to line/debug metadata that the emitter drops.',
+        'rejected-fast-math': 'normalizeOp rejects the fast-math suffix with a diagnostic before decoding.',
+        'rejected-compiler-state-or-effect': 'runtimeTagReason? rejects the tag with a specific diagnostic.',
+        'rejected-exporter-unsupported': 'The exporter writes "unsupported": true for this version; normalizeOp rejects the marker with a diagnostic.',
+        'rejected-unknown-tag': 'Exported, but normalizeOp has no branch; its fallback rejects the unknown AIR tag with a diagnostic.',
+        'unreachable-at-export': 'Reviewed override: the compiler cannot place this tag in exported analyzed AIR.',
+        FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
+    },
+    'types': {
+        'exported-checker-restricted': 'Explicit writeTypeEntry arm; Check.lean applies type/layout restrictions.',
+        'exported-as-other-rejected': 'Fallback writes kind "other"; Check.checkTy rejects it with a diagnostic (pointer-to-fn/anyopaque children are checked separately).',
+        'unreachable-at-export': 'Reviewed override: comptime-only type that cannot be a runtime AIR value type.',
+        FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
+    },
+    'constants': {
+        'type-key-via-type-table': 'InternPool type key (`*_type`): exported through the type table and classified by the `types` rows.',
+        'value-exported': 'Explicit writeRef arm or fallback helper that names the key; Json.parseVal checks the form against the type.',
+        'value-fallback-text-restricted': 'Fallback writes the formatted value; Json.parseLeafVal accepts only int/bool/void/packed leaf types and rejects others with a diagnostic.',
+        'unreachable-at-export': 'Reviewed override: internal/comptime key that is not an exported runtime operand.',
+        FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
+    },
+    'pointer_bases': {
+        'resolved-conditional': 'Explicit resolvePtr arm can resolve to a global; nested restrictions may still yield an unsupported pointer that Check.lean rejects.',
+        'rejected-unsupported-pointer-base': 'resolvePtr returns unsupported for the base; Check.lean rejects the pointer constant with a diagnostic.',
+        FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
+    },
+}
+
+# Reviewed exceptions. `replaces` pins the mechanical result an override was reviewed
+# against: when the derivation changes, the override is stale and the row is forbidden.
+OVERRIDES = {
+    'tags': {},
+    'types': {name: {'disposition': 'unreachable-at-export', 'replaces': 'exported-as-other-rejected',
+                     'reason': 'comptime-only type: Sema never gives a runtime AIR instruction or operand this type'}
+              for name in ('type', 'comptime_int', 'comptime_float', 'undefined', 'null', 'enum_literal')},
+    'constants': {
+        'undef': {'disposition': 'value-exported', 'replaces': 'value-fallback-text-restricted',
+                  'reason': 'writeRef fallback tests val.isUndef before formatting and writes the "undef" marker that Json.parseVal accepts'},
+        'enum_literal': {'disposition': 'unreachable-at-export', 'replaces': 'value-fallback-text-restricted',
+                         'reason': 'value of the comptime-only enum_literal type'},
+        'memoized_call': {'disposition': 'unreachable-at-export', 'replaces': 'value-fallback-text-restricted',
+                          'reason': 'Sema comptime call memoization entry, not a value'},
+        'variable': {'disposition': 'unreachable-at-export', 'replaces': 'value-fallback-text-restricted',
+                     'reason': '0.14/0.15 global variable owner; analyzed AIR addresses globals through ptr nav bases'},
+    },
+    'pointer_bases': {},
+}
+
+
+def version_minor(version):
+    match = re.fullmatch(r'0\.(\d+)\.\d+', version)
+    return int(match.group(1)) if match else None
+
+
+def version_branches(ts, minor):
+    """Token branches selected by comptime `Compat.vNN` tests; unknown versions keep all."""
+    if ts[:2] != ['if', '(']:
+        return [ts]
+    close = balanced(ts, 1)
+    cond = ts[2:close]
+    negated = cond[:1] == ['!']
+    cond = cond[1:] if negated else cond
+    if len(cond) != 3 or cond[:2] != ['Compat', '.'] or not re.fullmatch(r'v\d+', cond[2]):
+        return [ts]
+    if ts[close+1:close+2] != ['{']:
+        raise ValueError('Compat version branch without a block')
+    then_end = balanced(ts, close+1)
+    then, rest = ts[close+2:then_end], ts[then_end+1:]
+    other = rest[1:] if rest[:1] == ['else'] else []
+    if other[:1] == ['{'] and balanced(other, 0) == len(other) - 1:
+        other = other[1:-1]
+    flag = None if minor is None else (minor == int(cond[2][1:])) != negated
+    branches = []
+    if flag is not False: branches += version_branches(then, minor)
+    if flag is not True: branches += version_branches(other, minor)
+    return branches
+
+
+def named_members(ts, exporter):
+    """Enum members a branch compares against directly or through a `Compat.is*` helper."""
+    def compared(ts):  # The tokenizer splits `==` into two `=` tokens.
+        return {ts[i+3] for i in range(len(ts)-3) if ts[i:i+3] == ['=', '=', '.']}
+    names = compared(ts)
+    for i in range(len(ts)-3):
+        if ts[i:i+2] == ['Compat', '.'] and ts[i+2].startswith('is') and ts[i+3] == '(':
+            names |= compared(function_body(exporter, ts[i+2]))
+    return {identifier(name) for name in names}
+
+
+def exporter_status(tag, decode, minor, exporter):
+    arm, fallback = decode.get(tag), tag not in decode
+    if fallback:
+        arm = decode.get('*')
+        if arm is None:
+            return 'fallback-unclassified'
+    statuses = set()
+    for branch in version_branches(arm, minor):
+        if fallback:
+            statuses.add('fallback-named-decoder' if tag in named_members(branch, exporter) else
+                          'fallback-unsupported-marker' if '"unsupported"' in branch else
+                          'fallback-unclassified')
+        elif '"unsupported"' not in branch:
+            statuses.add('explicit-arm')
+        elif any(t in ('if', 'switch', 'orelse', 'catch', 'while', 'for') for t in branch):
+            statuses.add('explicit-arm-conditional-unsupported')
+        else:
+            statuses.add('explicit-arm-unsupported-marker')
+    return statuses.pop() if len(statuses) == 1 else 'version-conditional-unresolved'
+
+
+def lean_section(text, name):
+    """One top-level Lean definition, ending at the next top-level command."""
+    match = re.search(r'^(?:(?:private|partial|noncomputable) )*def ' + re.escape(name) + r'(?![^\s])', text, re.M)
+    if not match:
+        raise ValueError(f'missing Lean definition {name}')
+    end = re.compile(r'^(?:/--|@\[|end\b|mutual\b|theorem |(?:(?:private|partial|noncomputable) )*def )', re.M).search(text, match.end())
+    return text[match.start():end.start() if end else len(text)]
+
+
+def normalizer_rules(text):
+    """Diagnostic gates around normalizeOp's tag table: fast-math suffix and call prefix."""
+    body = lean_section(text, 'normalizeOp')
+    fast = re.findall(r'if raw\.tag\.endsWith "([^"]+)" then\s*\n\s*throw', body)
+    call = re.findall(r'if tag\.startsWith "([^"]+)" then', body)
+    if len(fast) != 1 or len(call) != 1 or not re.search(r'if raw\.unsupported then\s*\n\s*throw', body) \
+            or 'unknown AIR tag' not in body:
+        raise ValueError('normalizeOp: fast-math, exporter-marker, call-prefix or unknown-tag gate not found')
+    return fast[0], call[0]
+
+
+def emission_arms(text):
+    """Op constructors with an explicit emitter dispatch arm, and those emitScalar drops."""
+    scalar = lean_section(text, 'emitScalar')
+    dispatch = scalar + lean_section(text, 'emitStmts') + lean_section(text, 'emitTerminator')
+    def ctors(text):
+        return {a or b for a, b in re.findall(r'\|\s*' + CTOR + r'(?![A-Za-z0-9_])', text)}
+    erased = set()
+    for pattern in re.findall(r'^(\s*\|[^\n]*?)=>\s*\(env, none\)\s*$', scalar, re.M):
+        erased |= ctors(pattern)
+    return ctors(dispatch), erased
+
+
+def apply_override(category, row):
+    name = row.get('tag', row.get('name'))
+    override = OVERRIDES[category].get(name)
+    if override is None:
+        row['derivation'] = {'method': 'mechanical'}
+    elif override['replaces'] == row['disposition']:
+        row['derivation'] = {'method': 'reviewed-override', 'replaces': override['replaces'], 'reason': override['reason']}
+        row['disposition'] = override['disposition']
+    else:
+        row['derivation'] = {'method': 'stale-override', 'derived': row['disposition'],
+                             'replaces': override['replaces'], 'reason': override['reason']}
+        row['disposition'] = FORBIDDEN
+    return row
+
+
+UNIVERSES = {'tags': 'air_tags', 'types': 'types', 'constants': 'intern_keys', 'pointer_bases': 'pointer_bases'}
+
+
+def disposition_problems(inventory):
+    """Rows without a named disposition, and compiler universe members without a row."""
+    problems = []
+    for category, universe in UNIVERSES.items():
+        rows = inventory[category]
+        names = [row.get('tag', row.get('name')) for row in rows]
+        if names != inventory['universe'][universe]:
+            problems.append(f'{category}: rows do not match the compiler {universe} universe')
+        for name, row in zip(names, rows):
+            if row.get('disposition') not in DISPOSITIONS[category] or row['disposition'] == FORBIDDEN:
+                problems.append(f'{category}: {name}: {row.get("disposition")} {json.dumps(row.get("derivation"))}')
+    return problems
+
+
+def pointer_dispositions(names, arms, checker_rejects=True):
+    def derive(name):
+        arm = arms.get(name, arms.get('*', []))
+        if arm[:5] == ['return', '.', '{', '.', 'unsupported']:
+            return 'rejected-unsupported-pointer-base' if checker_rejects else FORBIDDEN
+        return 'resolved-conditional' if name in arms else FORBIDDEN
+    return [apply_override('pointer_bases', {'name': name, 'disposition': derive(name),
+             'qualification': 'Source arm/fallback only; writePtr helpers and Check.lean require provenance and layout review.'})
             for name in names]
 
 
@@ -351,9 +537,8 @@ def generate(version, source, os_name='linux'):
     norms = normalizer(normalizer_source)
     rejection_reasons = runtime_tag_reasons(normalizer_source)
     semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
-    emit_paths = [ROOT/'Air2Lean/Emit.lean']
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
-    path_groups = {'semantics': semantic_paths, 'emission': emit_paths, 'proofs': proof_paths}
+    path_groups = {'semantics': semantic_paths, 'proofs': proof_paths}
     @lru_cache(maxsize=None)
     def hits(group, symbol):
         return source_hits(path_groups[group], symbol, cache)
@@ -371,48 +556,76 @@ def generate(version, source, os_name='linux'):
             elif isinstance(value, list):
                 for child in value: visit(child)
         visit(data)
+    minor = version_minor(version)
+    fast_suffix, call_prefix = normalizer_rules(normalizer_source)
+    emitted, erased = emission_arms(cache.text(ROOT/'Air2Lean/Emit.lean'))
+    export_reasons = {
+        'explicit-arm': 'Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified.',
+        'fallback-named-decoder': 'Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it.',
+        'explicit-arm-unsupported-marker': 'Version-selected explicit arm writes only the unsupported marker.',
+        'fallback-unsupported-marker': 'Version-selected fallback writes the unsupported marker for every tag it does not name.',
+        'explicit-arm-conditional-unsupported': 'Arm writes the unsupported marker under a data-dependent condition; review required.',
+        'version-conditional-unresolved': 'Compat version branches disagree and the version label selects none.',
+        'fallback-unclassified': 'Fallback neither names the tag nor writes the unsupported marker.'}
     tags = []
     for tag in universe['air_tags']:
-        arm = decode.get(tag)
-        if arm is None:
-            export_status = 'fallback-unclassified'
-            export_reason = 'No explicit writeInst switch arm; inspect Compat and fallback. Do not infer rejection or decoding.'
-        elif '"unsupported"' in arm:
-            export_status = 'conditional-or-rejected'
-            export_reason = 'Arm can write unsupported; review version and data conditions.'
-        else:
-            export_status = 'explicit-arm'
-            export_reason = 'Explicit source arm found; operand correctness and nested helper conditions are unverified.'
-        if tag in rejection_reasons:
-            disposition = 'normalizer-rejected-compiler-state-or-effect'
-        elif tag.endswith('_optimized'):
-            disposition = 'normalizer-rejected-fast-math'
-        elif tag not in norms and not tag.startswith('call'):
-            disposition = 'normalizer-unclassified-or-unknown'
-        elif export_status != 'explicit-arm':
-            disposition = 'conditional-pipeline-review-required'
-        else:
-            disposition = 'source-pipeline-candidate-unqualified'
-        ops = norms.get(tag, ['call'] if tag.startswith('call') else [])
+        export_status = exporter_status(tag, decode, minor, exporter)
         rejection_reason = rejection_reasons.get(tag)
-        tags.append({'tag': tag, 'disposition': disposition,
-                     'exporter': {'status': export_status, 'reason': export_reason},
-                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'explicit-source-branch' if tag in norms else 'call-prefix-branch' if tag.startswith('call') else 'no-explicit-source-branch', 'constructors': ops},
+        is_call = tag not in norms and tag.startswith(call_prefix)
+        ops = norms.get(tag, ['call'] if is_call else [])
+        unemitted = [op for op in ops if op not in emitted]
+        if tag.endswith(fast_suffix):
+            disposition = 'rejected-fast-math'
+        elif rejection_reason:
+            disposition = 'rejected-compiler-state-or-effect'
+        elif export_status in ('explicit-arm-unsupported-marker', 'fallback-unsupported-marker'):
+            disposition = 'rejected-exporter-unsupported'
+        elif export_status not in ('explicit-arm', 'fallback-named-decoder'):
+            disposition = FORBIDDEN
+        elif tag not in norms and not is_call:
+            disposition = 'rejected-unknown-tag'
+        elif not ops or unemitted:
+            disposition = FORBIDDEN
+        elif all(op in erased for op in ops):
+            disposition = 'erased-at-emission'
+        else:
+            disposition = 'emitted-unqualified'
+        reached = disposition in ('emitted-unqualified', 'erased-at-emission')
+        emission = ('erased-dispatch-arm' if disposition == 'erased-at-emission' else 'dispatch-arm') if reached else \
+            'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
+        tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
+                     'exporter': {'status': export_status, 'reason': export_reasons[export_status]},
+                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'call-prefix-branch' if is_call else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
-                     'emission': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('emission', op)))},
+                     'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
                      'tests': {'status': 'golden-input-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
-                     'guidance': (rejection_reason + '; source-only rejection classification, no compiler fixture or support qualification') if rejection_reason else 'Inspect exporter/Compat, normalizeOp, checker restrictions and emitted runtime calls; add compiler fixture, rejection and differential tests and checked contract before qualification.'})
-    type_rows = [{'name': name, 'disposition': 'exporter-arm-conditional-checker-review' if name in type_arms else 'exporter-fallback-unclassified',
-                  'qualification': 'Type/layout/value restrictions require Check.lean; an arm is not full type support.'}
+                     'guidance': (rejection_reason + '; source-only rejection classification, no compiler fixture or support qualification') if rejection_reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
+    other_written = '"other"' in type_arms.get('*', [])
+    other_rejected = re.search(r'\|\s*\.other name =>\s*\n\s*throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
+    type_rows = [apply_override('types', {'name': name,
+                  'disposition': 'exported-checker-restricted' if name in type_arms else 'exported-as-other-rejected' if other_written and other_rejected else FORBIDDEN,
+                  'qualification': 'Type/layout/value restrictions require Check.lean; an arm is not full type support.'})
                  for name in universe['types']]
-    constants = [{'name': name, 'kind': 'type-key' if name.endswith('_type') else 'value-or-internal-key',
-                  'disposition': 'unclassified-review-writeRef-and-Check',
-                  'qualification': 'InternPool keys include internal/comptime entries; no claim all can reach executable AIR.'}
+    ref_arms = switch_arms(function_body(exporter, 'writeRef'), ['ip', '.', 'indexToKey', '(', 'ip_index', ')'])
+    ref_fallback = ref_arms.get('*', [])
+    fallback_named = named_members(ref_fallback, exporter)
+    fallback_text = 'writeFmt' in ref_fallback and re.search(r'\| other => throw s!"\{fnName\}: constant of unsupported type',
+                                                              lean_section(cache.text(ROOT/'Air2Lean/Air/Json.lean'), 'parseLeafVal')) is not None
+    def constant_disposition(name):
+        if name in ref_arms or name in fallback_named:
+            return 'value-exported'
+        if name.endswith('_type'):
+            return 'type-key-via-type-table'
+        return 'value-fallback-text-restricted' if fallback_text else FORBIDDEN
+    constants = [apply_override('constants', {'name': name, 'kind': 'type-key' if name.endswith('_type') else 'value-or-internal-key',
+                  'disposition': constant_disposition(name),
+                  'qualification': 'writeRef source arm/fallback only; Json.parseVal and Check.lean restrict forms and types.'})
                  for name in universe['intern_keys']]
-    bases = pointer_dispositions(universe['pointer_bases'], ptr_arms)
+    ptr_rejected = re.search(r'ptrOther\? then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
+    bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics'],
               'model-boundaries': ['Air2Lean/Memory.lean', 'docs/std-models.md']}
@@ -425,7 +638,10 @@ def generate(version, source, os_name='linux'):
             'tags': tags, 'types': type_rows, 'constants': constants, 'pointer_bases': bases,
             'models': model_inventory(cache.text(ROOT/'Air2Lean/Memory.lean')),
             'project_source_sha256': project_hashes,
-            'summary': dict(Counter(row['disposition'] for row in tags))}
+            'summary': dict(Counter(row['disposition'] for row in tags)),
+            'category_summary': {category: dict(Counter(row['disposition'] for row in rows))
+                                 for category, rows in (('types', type_rows), ('constants', constants), ('pointer_bases', bases))},
+            'dispositions': DISPOSITIONS}
 
 
 def changes(before, after):
@@ -477,17 +693,24 @@ def main():
         else: print(output, end='')
         return 0
     result = generate(args.version, args.source, args.os)
+    problems = disposition_problems(result)
     if args.command == 'generate':
+        # Written even when incomplete so the forbidden rows can be reviewed in place.
         args.inventory.parent.mkdir(parents=True, exist_ok=True)
         args.inventory.write_text(json.dumps(result, indent=2)+'\n')
         print(f'{args.version}: {len(result["tags"])} AIR tags, {len(result["types"])} type tags, {len(result["constants"])} intern keys, {len(result["pointer_bases"])} pointer bases; source evidence only')
-        return 0
-    old = json.loads(args.inventory.read_text())
-    if old != result:
-        print(json.dumps(changes(old, result), indent=2))
-        print('Inventory stale. Review changes and regenerate only after recording upgrade qualification obligations.', file=sys.stderr)
+    else:
+        old = json.loads(args.inventory.read_text())
+        if old != result:
+            print(json.dumps(changes(old, result), indent=2))
+            print('Inventory stale. Review changes and regenerate only after recording upgrade qualification obligations.', file=sys.stderr)
+            return 1
+    if problems:
+        print('\n'.join(problems), file=sys.stderr)
+        print(f'{len(problems)} rows lack a named disposition: extend the derivation or add a reviewed override in scripts/coverage.py.', file=sys.stderr)
         return 1
-    print(f'{args.version}: inventory current (source evidence only)')
+    if args.command == 'check':
+        print(f'{args.version}: inventory current (source evidence only)')
     return 0
 
 
