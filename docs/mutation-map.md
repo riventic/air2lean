@@ -60,7 +60,8 @@ optimize mode (`scripts/build-modes.py`), automation limits classified as counte
 (`scripts/counterexample.py`), evidence from a CI job on another host
 (`scripts/target-matrix.py`), hidden compiled-mode source gaps and unmapped runtime modules
 (`scripts/premises.py`), and pull-request runs, masked failures and ledger entries without a
-reviewed revision in release records (`scripts/release-record.py`). Each one replaces one exact anchor, compiles the result under the
+reviewed revision in release records (`scripts/release-record.py`), and Lean errors or
+open obligations hidden by the verification-condition report (`scripts/vc-report.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.

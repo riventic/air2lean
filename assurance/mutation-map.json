@@ -236,6 +236,11 @@
           "name": "wrong_target",
           "path": "tests/roadmap/dispatch/mutations.py",
           "category": "other"
+        },
+        {
+          "name": "wrong_exit",
+          "path": "tests/roadmap/dispatch/mutations.py",
+          "category": "other"
         }
       ]
     },
@@ -548,19 +553,78 @@
       "mutants": []
     },
     "C03": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/idle-loops/Check.lean",
+          "anchor": "idle_starves fuel"
+        },
+        {
+          "path": "tests/roadmap/idle-loops/Check.lean",
+          "anchor": "progress_needs_premise"
+        },
+        {
+          "path": "tests/roadmap/idle-loops/Check.lean",
+          "anchor": "not_eventuallyReturns"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "relaxed-publish",
+          "path": "tests/roadmap/idle-loops/Mutants.lean",
+          "category": "invariant-transfer",
+          "anchor": "\"relaxed-publish: a relaxed flag store did not make the read of data race\""
+        },
+        {
+          "name": "idle-loop-skipped",
+          "path": "tests/roadmap/idle-loops/Mutants.lean",
+          "category": "other",
+          "anchor": "\"idle-loop-skipped: the read of data without the idle loop was not rejected with illegal\""
+        }
+      ],
+      "note": "Safety (idle_safe) holds for every oracle and fuel; progress needs the THR-09 Cooperative premise; favorWorker starves the worker although it spins and yields. Mutants.lean (idle-loops/check.sh) requires that the unmutated client never errs on the sampled schedules while both mutants race (.illegal) on one of them."
     },
     "C04": {
       "categories": [],
       "negative_tests": [
         {
+          "path": "tests/roadmap/deadline-cases/Contracts.lean",
+          "anchor": "theorem timeout_not_early"
+        },
+        {
+          "path": "tests/roadmap/deadline-cases/Contracts.lean",
+          "anchor": "theorem real_deadline_rejected"
+        },
+        {
+          "path": "tests/roadmap/deadline-cases/Runtime.lean",
+          "anchor": "#check_failure (TimedBudget.loop countdown (⟨10⟩ : WallTimestamp) 3 0)"
+        },
+        {
+          "path": "tests/roadmap/deadline-cases/Runtime.lean",
+          "anchor": "\"wake before timeout: early timeout rejected\""
+        },
+        {
           "path": "tests/roadmap/deadline-futex/Guard.lean",
           "anchor": "Timed.admitted (.call (.func \"unselected\" true none) #[]) = false"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "boundary-solves-at-deadline",
+          "path": "tests/roadmap/deadline-cases/mutations.py",
+          "category": "other",
+          "anchor": "'boundary-solves-at-deadline'"
+        },
+        {
+          "name": "paused-expires-without-recheck",
+          "path": "tests/roadmap/deadline-cases/mutations.py",
+          "category": "other",
+          "anchor": "'paused-expires-without-recheck'"
+        }
+      ],
+      "note": "Deadline boundary, timeout, wake-before-timeout and wake-at-timeout contracts are kernel theorems (Contracts.lean) and runtime cases (Runtime.lean). The two mutants of ZigLean/Conc/TimedBudget.lean count as killed only by errors inside its named soundness theorems (mutations.py, CI deadline-case step)."
     },
     "C05": {
       "categories": [],
@@ -621,6 +685,22 @@
         {
           "path": "tests/roadmap/weak-cas/Runtime.lean",
           "anchor": "private def failureAcquire"
+        },
+        {
+          "path": "tests/roadmap/weak-cas/Messages.lean",
+          "anchor": "\"a narrower atomic access is rejected\""
+        },
+        {
+          "path": "tests/roadmap/weak-cas/Messages.lean",
+          "anchor": "\"a wider atomic access is rejected\""
+        },
+        {
+          "path": "tests/roadmap/weak-cas/Messages.lean",
+          "anchor": "\"equal values remain distinct write events\""
+        },
+        {
+          "path": "tests/roadmap/weak-cas/Messages.lean",
+          "anchor": "\"release sequence follows RMWs, not equal values\""
         }
       ],
       "mutants": [
@@ -640,7 +720,8 @@
           "category": "other",
           "anchor": "C11_ASSERTION: spurious failure branch removed"
         }
-      ]
+      ],
+      "note": "Retry loops under permitted spurious failure: weak-cas Runtime.lean and the Mutation.lean spurious-failure-removed mutant (scripts/weak-cas.sh). Message precision: Messages.lean (kernel decide +kernel and runtime, run by the weak-CAS gate) checks repeated equal values as distinct write events, coherent read pairs, CAS on an older equal message, release sequences and the rejection (.unspecified) of overlapping atomic accesses of another size. Mutants v and ad (scripts/mutate.sh) change the CAS comparison and stale-message selection; their kill is the proof build."
     },
     "C12": {
       "categories": [
@@ -705,8 +786,22 @@
     },
     "M01": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/allocator-identity/Check.lean",
+          "anchor": "expect \"arena-block-std-free\""
+        },
+        {
+          "path": "tests/roadmap/allocator-identity/Check.lean",
+          "anchor": "expect \"arena-block-other-arena-free\""
+        },
+        {
+          "path": "tests/roadmap/allocator-identity/Check.lean",
+          "anchor": "expect \"reset-own-block\""
+        }
+      ],
+      "mutants": [],
+      "note": "Cross-allocator free/destroy/remap and use after reset are .illegal (executable regressions); no designated mutant yet."
     },
     "M02": {
       "categories": [
@@ -755,6 +850,10 @@
         {
           "path": "tests/roadmap/allocation-policy/fixture.zig",
           "anchor": "return error.PolicyOrCleanupMismatch"
+        },
+        {
+          "path": "tests/roadmap/allocation-policy/Oracle.lean",
+          "anchor": "\"budget mismatch: {oks}\""
         }
       ],
       "mutants": [
@@ -788,6 +887,14 @@
         {
           "path": "tests/roadmap/byte-sentinel/Check.lean",
           "anchor": "| .error _ => pure false"
+        },
+        {
+          "path": "tests/roadmap/sentinel-realloc/Check.lean",
+          "anchor": "\"payload-only realloc\""
+        },
+        {
+          "path": "tests/roadmap/sentinel-realloc/Check.lean",
+          "anchor": "\"non-power-of-two alignment\""
         }
       ],
       "mutants": [
@@ -1047,8 +1154,37 @@
     },
     "P02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/vcs/Extract.lean",
+          "anchor": "theorem wrong_contract_false"
+        },
+        {
+          "path": "tests/roadmap/vcs/Extract.lean",
+          "anchor": "theorem wrong_obligation_false"
+        },
+        {
+          "path": "tests/roadmap/vcs/test_vc_report.py",
+          "anchor": "def test_lean_errors_are_surfaced_and_reports_are_not_errors"
+        },
+        {
+          "path": "tests/roadmap/vcs/test_vc_report.py",
+          "anchor": "def test_open_obligations_are_counted_and_closed_ones_named"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "vc-report-lean-error-masked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "vc-report-open-obligations-hidden",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "Extract.lean (CI) proves contracts of loop-free generated functions through vc_gen obligations, refutes the single goal a wrong tardiness contract leaves, and pins loop requests (invariant + variant) and refusals; report.json is the golden of scripts/vc-report.py. The Python mutants hide a Lean error or open obligations in that report."
     },
     "P03": {
       "categories": [],
