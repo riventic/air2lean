@@ -3823,6 +3823,7 @@
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/External.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
@@ -4647,6 +4648,7 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/External.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4837,6 +4839,7 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/External.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4912,6 +4915,7 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/External.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4987,6 +4991,7 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/External.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -8006,6 +8011,7 @@
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/External.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
@@ -11799,6 +11805,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Total.lean",
+          "ZigLean/External.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean"
@@ -15780,7 +15787,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "3511acf347de1d981d78ae15813a6db5c851b776cd1755217c4f112b98cfd22e",
+      "scripts/coverage.py": "bdd16652ca93d0bb44e420892c2ba29e19c9ba7bcd2290f350ad864805a26fd9",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -15792,14 +15799,15 @@
       "Air2Lean/Air/Op.lean": "4858f1b08bc81540d3ab9dd65d844f2be8d301759fe9c774531f626373889576",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "95df9cfe575d5c3b5e2c5e459275cdd629bf50e9ffdaf27061f7a5773f342cac",
-      "Air2Lean/Diagnose.lean": "bdb6f7f3744a604e0b03a3300f30983131b2375db3f02848d7e5f532860145f5",
+      "Air2Lean/Check.lean": "687d2d9d5501971672ee4551d961605c49438db601de3f2bd0676cf055f07862",
+      "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "dfb0d396e2e791ee1b5111d3e95ab8bcd06fffa7a1e514e447f41b20a9e347eb",
+      "Air2Lean/Emit.lean": "3a34bfcedd9109868b7a38ece7c297024cef74c99eefaf8512ed0af09f746ea1",
       "Air2Lean/Main.lean": "0f07642fcb4e1f56fa48d85c3651e7ee1a855711f61ee9b4c57bbcf1be0c8441",
-      "Air2Lean/Memory.lean": "f4c7237920e0eec26d49f11c6ea04b1d63eacff563ae187f9f0c6c14f8d6450c",
-      "Air2Lean/ModelRegistry.lean": "c6dbbc87d549104ead7ab3b9b229929ba933a82c60d12e302e1edb18125eb06f",
+      "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
+      "Air2Lean/ModelRegistry.lean": "62ee3c124d8e54023c0ac9e270d07a987475bef40feee7ce9d22e7a826a999c2",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
+      "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
       "Air2Lean/TimedCheck.lean": "3c314ba61f3ecd87c57d3d8ed6576ea5e32f371abba606e40b11c30df218cccf",
       "Air2Lean/TimedEmit.lean": "4cf4239973fa4f8316b5417365e574717d6e98355ec340a1ac3e3326f51a301f",
       "zig-patch/air-json/json.zig": "c1faade782b4c6e646126c0fd9d798f746b1981b984bd90d4eb7f8512c49c535",
@@ -15831,7 +15839,7 @@
       "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
       "ZigLean/Conc.lean": "ed1c36f3fe531da0375bbcc01bdd2ab11e7a54c24dd8ca2da259e1083c27cc39",
-      "ZigLean/External.lean": "eeb5524df042fe2d016e36b59f7eb59c2b4dec95db7dac21922286f0ec550046",
+      "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
@@ -16622,8 +16630,9 @@
       "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730"
     },
     "model-boundaries": {
-      "Air2Lean/Memory.lean": "f4c7237920e0eec26d49f11c6ea04b1d63eacff563ae187f9f0c6c14f8d6450c",
-      "docs/std-models.md": "fc35d8412e031a24079ffd787a1df2b91e95c7de1198beb9d73550f794898141"
+      "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
+      "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
+      "docs/std-models.md": "a5736f5afbb3128e7f5b61834a9fea4627daf0924839e3eee64e701e7f774ee7"
     }
   },
   "summary": {

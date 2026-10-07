@@ -161,6 +161,10 @@ class PlanTests(Base):
                               (CANDIDATE, 'emitted-unqualified'),  # legacy inventory -> L01 names
                               (REJECTED, 'rejected-unknown-tag')):
             self.assertNotIn('support:tags:add', plan_tags(before, after), (before, after))
+        # Pre-L01 constant rows were all exported-value reviews; L01 names refine, not expand, them.
+        legacy = {'constants': [{'name': 'bool_true', 'disposition': 'unclassified-review-writeRef-and-Check'}]}
+        for name in ('value-exported', 'type-key-via-type-table', 'unreachable-at-export'):
+            self.assertEqual(q.support_expansions(legacy, {'constants': [{'name': 'bool_true', 'disposition': name}]}), [])
         # A vocabulary the inventories embed (a newer coverage.py) is honoured.
         before, after = inventory(tags=[tag('add', REJECTED, golden)]), inventory(tags=[tag('add', 'rejected-new-kind', golden)])
         after['dispositions'] = {'tags': {'rejected-new-kind': 'synthetic'}}

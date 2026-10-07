@@ -39,6 +39,7 @@ LEGACY_RANKS = {
              'normalizer-unclassified-or-unknown': 0, 'conditional-pipeline-review-required': 1,
              'source-pipeline-candidate-unqualified': 2},
     'types': {'exporter-fallback-unclassified': 0, 'exporter-arm-conditional-checker-review': 1},
+    'constants': {'unclassified-review-writeRef-and-Check': 1},
     'pointer_bases': {'exporter-fallback-unsupported-marker-review': 0,
                       'exporter-explicit-arm-conditional-review': 1},
 }
