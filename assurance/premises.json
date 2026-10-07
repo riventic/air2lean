@@ -5,7 +5,13 @@
   "universal": ["TRU-01"],
   "theorem_roots": ["Proofs", "tests/roadmap", "tutorials", "case-studies"],
   "excluded": {
-    "tests/roadmap/assurance/": "Intentionally untrusted assurance-gate fixtures (hidden sorry, project axiom, native proof); they must fail scripts/assumptions.py and are not shipped premises."
+    "tests/roadmap/assurance/": "Intentionally untrusted assurance-gate fixtures (hidden sorry, project axiom, native proof); they must fail scripts/assumptions.py and are not shipped premises.",
+    "tutorials/allocation-failure/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/concurrent-clients/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/external-contracts/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/first-proof/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/generic-containers/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/mutable-arrays/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check)."
   },
   "import_roots": ["tests/diff"],
   "generated_imports": {

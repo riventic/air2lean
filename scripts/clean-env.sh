@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Clean-environment acceptance recipe: run the first proof end to end in a fresh Ubuntu 24.04
+# Clean-environment acceptance recipe: run the first proof and every tutorial in a fresh Ubuntu 24.04
 # container from tracked files only. No host toolchains, caches, volumes or build outputs reach
 # the container; elan and (with --translate) Zig come from sha256 pins, Lean from the version
 # pinned in lean-toolchain (installed by elan).
 #
 # Usage: scripts/clean-env.sh [--translate] [--keep-image]
 #   default      install elan + pinned Lean, run the doctor (--require proofs), build
-#                Proofs.Basic.Proofs, check tutorials/first-proof, the exercise and its
-#                negative control (docs/getting-started.md, first half)
+#                Proofs.Basic.Proofs, check tutorials/first-proof (docs/getting-started.md,
+#                first half), then every tutorial with its exercise and negative control
+#                (scripts/tutorials.py check)
 #   --translate  additionally bootstrap the pinned Zig 0.16.0, build the AIR-only patched
 #                compiler (no LLVM), verify the lock refuses native output, translate the
 #                getting-started demo and check its separate proof (needs ~12 GiB disk, 8 GiB RAM)
@@ -38,19 +39,10 @@ if [ "${1:-}" = --inside ]; then
   # 3. The first proof, exactly as docs/getting-started.md documents it.
   lake build Proofs.Basic.Proofs
   lake env lean tutorials/first-proof/Main.lean
-  # 4. The exercise, and the negative control Lean must reject.
-  mkdir -p work/first
-  awk '/^end FirstProof/ { print "theorem exactly_on_time (endTime due : BitVec 32)\n    (sameTime : endTime.toNat = due.toNat) :\n    tardiness endTime due = pure 0 := by\n  exact on_time_zero endTime due (Nat.le_of_eq sameTime)\n" } { print }' \
-    tutorials/first-proof/Main.lean >work/first/Exercise.lean
-  grep -q 'theorem exactly_on_time' work/first/Exercise.lean
-  lake env lean work/first/Exercise.lean
-  sed 's/tardiness endTime due = pure 0 := by/tardiness endTime due = pure 1 := by/' \
-    tutorials/first-proof/Main.lean >work/first/Wrong.lean
-  if lake env lean work/first/Wrong.lean >"$out/negative-control.log" 2>&1; then
-    echo 'error: Lean accepted the false negative-control theorem' >&2
-    exit 1
-  fi
-  echo 'OK: first proof, exercise and negative control' | tee "$out/proofs.ok"
+  # 4. Every tutorial: its proof, the solved exercise, and the negative control Lean must reject.
+  lake build $(python3 scripts/tutorials.py modules)
+  python3 scripts/tutorials.py check --results "$out/tutorials"
+  echo 'OK: every tutorial, exercise and negative control' | tee "$out/proofs.ok"
   if [ "$translate" = 1 ]; then
     # 5. Stock host Zig 0.16.0 from its pin, then the default (no-LLVM, AIR-only locked) build.
     url=$(zig-patch/toml-get.sh '[ci.host-zig."0.16.0"]' url)
@@ -77,7 +69,7 @@ PY
     fi
     grep -q 'only writes AIR' "$out/lock-probe.log"
     # 7. Translate the getting-started demo and check its separate proof.
-    mkdir -p Proofs/MyProgram
+    mkdir -p Proofs/MyProgram work/first
     printf 'export fn tardiness(end: u32, due: u32) u32 {\n    return if (end > due) end - due else 0;\n}\n' \
       >work/first/demo.zig
     scripts/translate.sh work/first/demo.zig -o Proofs/MyProgram/Gen.lean --namespace MyProgram

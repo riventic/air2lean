@@ -5,29 +5,29 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1734 theorems in 79 files.
+1748 theorems in 90 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 497 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 308 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
+| [ALC-01](premises.md#alc-01) | 19 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 19 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 7 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 999 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 67 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 688 | Futex model |
+| [THR-05](premises.md#thr-05) | 690 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 899 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 759 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 759 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
+| [THR-08](premises.md#thr-08) | 901 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [ORD-01](premises.md#ord-01) | 761 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 761 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 297 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 442 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 55 | Executable IEEE-754 float model |
@@ -35,15 +35,15 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1016 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1337 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 785 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1349 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 793 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
-| [EXT-01](premises.md#ext-01) | 4 | User external model contracts |
+| [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1734 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1748 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 815 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 815 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 
 ## `Proofs/Asm/Proofs.lean`
@@ -2325,6 +2325,56 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, T
 | `example@L119` | THR-01, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, TRU-01 |
 | `example@L126` | THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01 |
 
+## `tutorials/allocation-failure/Main.lean`
+
+File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocationFailure.push_failure_keeps_heap` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/allocation-failure/Solution.lean`
+
+File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocationFailure.push_success_adds_node` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/concurrent-clients/Main.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `ConcurrentClients.finished_run_returns_four` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/concurrent-clients/Solution.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `ConcurrentClients.never_three` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/external-contracts/Main.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `ExternalContracts.clampEvidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `ExternalContracts.clamp_le_hi` | SEM-01, SEM-02, EXT-01, TRU-01 |
+
+## `tutorials/external-contracts/Solution.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `ExternalContracts.clampEvidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `ExternalContracts.clamp_terminates` | SEM-01, SEM-02, EXT-01, TRU-01 |
+
 ## `tutorials/first-proof/Main.lean`
 
 File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
@@ -2332,3 +2382,44 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 | Theorem | Premises |
 |---|---|
 | `FirstProof.on_time_zero` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/first-proof/Solution.lean`
+
+File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `FirstProof.on_time_zero` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `FirstProof.exactly_on_time` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/generic-containers/Main.lean`
+
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `GenericContainers.append_success` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/generic-containers/Solution.lean`
+
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/mutable-arrays/Main.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `MutableArrays.reverse_twice` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/mutable-arrays/Solution.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `MutableArrays.reverse_one` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
