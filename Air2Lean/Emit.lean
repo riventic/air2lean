@@ -1173,6 +1173,7 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
     let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
     s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
+  | .realloc => s!"Zig.Allocator.realloc {a} {rv (arg 1)} {rv (arg 2)}"
 
 /-- A sync op of the thread model (`ZigLean/Conc/Call.lean`), a `Zig.CM Tgt` term. `.spawn`:
 `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
