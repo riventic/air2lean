@@ -258,4 +258,4 @@ example : value (Nullable.fromOptional (some ⟨none, 5⟩)) = some ⟨none, 5�
   let ts := #[intTy 64, intTy 8, (ptrTy "c" 1).setObjVal! "volatile" (.bool true), boolTy, nrTy]
   reject (file "volatileNullable" ts #[2] 2
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "volatile nullable pointers"
-  IO.println "nullable pointer source pipeline: 22 generated cases; adjacent rejections checked"
+  IO.println "nullable pointer source pipeline: 21 generated cases; adjacent rejections checked"
