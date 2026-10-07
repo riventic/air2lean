@@ -560,6 +560,8 @@ jobs:
           lake build ZigLean.Conc.TimedBudget ZigLean.Conc.TimedCall
           lake env lean tests/roadmap/deadline-cases/Contracts.lean
           lake env lean --run tests/roadmap/deadline-cases/Runtime.lean
+          # Boundary and recheck mutants of the budget path must fail its soundness proofs.
+          python3 -B tests/roadmap/deadline-cases/mutations.py
 
       # Translated worker idle loop: safety under every schedule, progress only under the
       # explicit THR-09 fairness premise, and a starving schedule (docs/progress-hints.md).

@@ -30,4 +30,7 @@ for mod in Gen Basic Total Mem Shape Turns Steps Theorems; do
   lake env lean -R "$dir" -o "$work/olean/IdleLoop/$mod.olean" "$dir/IdleLoop/$mod.lean"
 done
 lake env lean "$dir/Check.lean"
-echo 'idle-loop translation, safety, progress-under-premise and starvation checks passed'
+# Semantic mutants of the client (bounded runtime witnesses): a skipped idle loop and a
+# relaxed publication must make the read of data race.
+lake env lean --run "$dir/Mutants.lean"
+echo 'idle-loop translation, safety, progress-under-premise, starvation and mutant checks passed'
