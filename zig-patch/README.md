@@ -23,8 +23,7 @@ Zig 0.16.0 and 0.17.0 byte sentinel pointer types additionally export `sentinel_
 from the exact comptime sentinel in the result pointer type. `allocSentinel(u8, n, s)`
 requires this field; sentinel presence alone cannot supply the stored byte. Initial
 source/native qualification is restricted to Zig 0.16.0 (0.17.0 exports the field but is not
-qualified yet). Existing 0.14.1/0.15.2
-exports retain their prior sentinel-presence metadata.
+qualified yet). Existing 0.14.1/0.15.2 exports retain their prior sentinel-presence metadata.
 
 ## Env vars
 - `ZIG_AIR_JSON_DIR` — output directory. Unset disables the exporter.

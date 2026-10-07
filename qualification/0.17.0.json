@@ -3,8 +3,8 @@
   "from": "0.16.0",
   "to": "0.17.0",
   "inputs": {
-    "before_sha256": "746299f0e602a481d0566d8e9fe8c49b772973658a801d135751022665533cbb",
-    "after_sha256": "2f18a6b9f4fff5d6649cbd9332836b4e0acb08aca2455fc7f95bd4a4aa13d983"
+    "before_sha256": "d161c199d8646498ae7faa359fedfdcfdff69b2015abafc846ca9d4dfa529111",
+    "after_sha256": "f75040b7a077bf3d60385b51bcae5e44c190c38bf0b59a1eb48ccdee74e86b81"
   },
   "impact_sha256": "31da9402a03859da29e06d5f24ee0056e5237c65fd1b708c1d2441242132b33c",
   "impact": {
@@ -1470,9 +1470,9 @@
         "zig-patch/0.17.0/TAGS.md"
       ],
       "note": "spirv_type is created only by Sema.zirReifySpirvType after its SPIR-V target check; @SpirvType fails on x86_64-linux and aarch64-macos with the patched 0.17.0 compiler (TAGS.md, SPIR-V types).",
-      "recorded_at": "2026-10-07T12:26:23+00:00",
-      "git_head": "429c82f1629ebb0a075b568dd74491c0e2507c40"
+      "recorded_at": "2026-10-07T14:35:44+00:00",
+      "git_head": "ac72b2ce1171e766b1bfa3916a657bf59a43f022"
     }
   },
-  "plan_sha256": "436644fa6d0d5b41da9f5eb7e987cd7f0095e9adfb166babc017fd8f77d63b23"
+  "plan_sha256": "ea6108ef5b847ca80b658c30d195cfe29416c0af7e0956efb16bb1a95d18cf27"
 }

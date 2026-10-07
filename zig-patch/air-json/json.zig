@@ -186,6 +186,11 @@ const Compat = struct {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
     }
 
+    /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
+    fn isRuntimeLane(vector_index: InternPool.Key.PtrType.VectorIndex) bool {
+        return if (v16) false else vector_index == .runtime;
+    }
+
     /// The type of a `ty_pl` instruction: an `Air.Inst.Ref` before 0.17.0, a `Type` since.
     fn tyPlType(ty_pl: anytype) Type {
         return if (v17) ty_pl.ty else ty_pl.ty.toType();
@@ -1635,7 +1640,10 @@ const W = struct {
                 // every lane.
                 if (info.flags.vector_index != .none) {
                     try w.field("vector_index");
-                    try w.j.write(@intFromEnum(info.flags.vector_index));
+                    if (Compat.isRuntimeLane(info.flags.vector_index))
+                        try w.j.write("runtime")
+                    else
+                        try w.j.write(@intFromEnum(info.flags.vector_index));
                 }
             },
             .array => {
