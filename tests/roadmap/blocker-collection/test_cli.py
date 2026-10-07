@@ -22,13 +22,11 @@ inst, function, calls, decode, invoke, write = (cli.inst, cli.function, cli.call
 RET = inst(99, "ret", 1, [dict(ty=0, val="{}")])
 
 
-def blockers(report, code=None):
+def blockers(report, code=None, file=None):
+    """Non-skipped diagnostics, optionally filtered by code and by input file name."""
     return [d for d in report["diagnostics"] if d["category"] != "skipped_prerequisite"
-            and (code is None or d["code"] == code)]
-
-
-def in_file(report, name):
-    return [d for d in report["diagnostics"] if d["file"] and Path(d["file"]).name == name]
+            and (code is None or d["code"] == code)
+            and (file is None or (d["file"] and Path(d["file"]).name == file))]
 
 
 def several():
@@ -108,8 +106,8 @@ def run(binary):
         report = decode(first, "rejected")
         files = {Path(f["file"]).name: f for f in report["files"]}
         assert files["ok.json"]["local_check"] == "passed" and files["main.json"]["local_check"] == "passed"
-        assert len(blockers(dict(diagnostics=in_file(report, "traced.json")), "NORMALIZATION_FAILURE")) == 1
-        assert len(blockers(dict(diagnostics=in_file(report, "unknown.json")), "NORMALIZATION_FAILURE")) == 2
+        assert len(blockers(report, "NORMALIZATION_FAILURE", "traced.json")) == 1
+        assert len(blockers(report, "NORMALIZATION_FAILURE", "unknown.json")) == 2
         assert len(blockers(report, "INSTRUCTION_FAILURE")) == 2
         chains = sorted(d["dependency_chain"] for d in blockers(report, "CALLEE_BLOCKED"))
         assert ["main", "traced"] in chains and ["main", "unknown"] in chains, chains
@@ -127,10 +125,10 @@ def run(binary):
         duplicate = function("duplicate_ids", [inst(0, "unknown_a", 0), inst(0, "unknown_b", 0), RET])
         write(air, {"broken.json": "{", "duplicate.json": duplicate, "several.json": several()})
         report = decode(invoke(binary, air), "rejected")
-        broken = blockers(dict(diagnostics=in_file(report, "broken.json")))
+        broken = blockers(report, file="broken.json")
         assert [d["code"] for d in broken] == ["JSON_SYNTAX"], broken
         assert broken[0]["category"] == "malformed_input" and broken[0]["first_error_in_unit"]
-        dup = blockers(dict(diagnostics=in_file(report, "duplicate.json")))
+        dup = blockers(report, file="duplicate.json")
         assert [d["code"] for d in dup] == ["CANONICAL_FAILURE"], dup
         assert len(blockers(report, "NORMALIZATION_FAILURE")) == 3, "sibling unit still fully collected"
         checks += 1

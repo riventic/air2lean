@@ -192,8 +192,8 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
         (if i.tag.endsWith "_optimized" then .optimizedUnsupported else .exporterUnsupported)
         .normalize .unsupportedSemantics message) with
         anchor := { idSpace := .exported, instruction := some i.id } }
-  -- Canonicalization is tag-agnostic, so markers do not stop it; unmarked siblings still
-  -- receive their own normalization diagnostics below.
+  -- Markers do not stop canonicalization (its rewrites match specific supported tags); a
+  -- canonical failure stays its own fatal error. Unmarked siblings are normalized below.
   let rewritten := Raw.canonicalize raw
   let .ok canonical := rewritten
     | log := log.record (boundary file name .canonicalFailure .canonicalize .validationFailure) rewritten

@@ -61,7 +61,7 @@ Unreadable-input errors precede readable-file checks. `files` is sorted by path.
 Strict JSON failures are distinct from explicit exporter-unsupported and optimized
 instruction markers. Each readable file is inspected independently. All explicit
 unsupported markers are reported with **exported** IDs. Markers no longer stop the
-unit: canonicalization is tag-agnostic and still runs. When the composed normalizer
+unit: canonicalization still runs (a failure there stays its own fatal error). When the composed normalizer
 rejects a canonical function (or markers are present), each canonical instruction is
 normalized on its own, with nested bodies flattened and inspected separately, so
 every independently rejected instruction receives its own `NORMALIZATION_FAILURE`
