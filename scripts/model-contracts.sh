@@ -9,7 +9,8 @@ model_evidence=$(cd "$model_evidence" && pwd)
 export AIR2LEAN_MODEL_EVIDENCE="$model_evidence"
 
 # Generated source imports the ZigLean umbrella, so its .olean is a required prerequisite.
-lake build ZigLean ZigLean.External Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean   2>&1 | tee "$model_evidence/build.log"
+# The Fill client also imports ZigLean.Sep.Heap, which the umbrella does not re-export.
+lake build ZigLean ZigLean.External ZigLean.Sep.Heap Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean   2>&1 | tee "$model_evidence/build.log"
 lake env bash -euo pipefail -c '
   export LEAN_PATH="$AIR2LEAN_MODEL_EVIDENCE:${LEAN_PATH:-}"
   lean -o "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Model.olean"     tests/roadmap/models/Model.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/model.log"

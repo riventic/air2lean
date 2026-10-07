@@ -82,6 +82,6 @@ printf 'mock cli\n'
                              "tests/roadmap/models/Fill.olean", "fill-model.log", "fill-client.log",
                              "fill-contracts.json", "fill-assumed-contracts.json"]:
                 assert (evidence / artifact).is_file(), artifact
-            assert "ZigLean ZigLean.External Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
+            assert "ZigLean ZigLean.External ZigLean.Sep.Heap Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
         assert not (repo / "tests").exists(), "gate wrote generated evidence into checkout"
 print("model contract gate mocks passed (no compiler executed)")
