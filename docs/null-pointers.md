@@ -100,7 +100,7 @@ addresses and the maximum 64-bit address. Native dereference is exercised only
 with a live byte; invalid provenance/dead-block access is tested in the model.
 
 `native_decide` occurs only in generated regression fixtures, following the
-existing emitter-test convention. The five shipped universal theorem definitions
+existing emitter-test convention. The shipped universal theorem definitions (nine in `Null.lean`, twelve in `NullLemmas.lean`)
 use kernel reductions and do not use `native_decide`, `sorry`, `admit` or axioms.
 The root serialized validation queue passed the complete driver at source
 revision `a63879e` on Zig 0.16.0 in 15.4 seconds (614 MiB peak memory), after

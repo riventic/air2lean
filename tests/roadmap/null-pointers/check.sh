@@ -14,8 +14,9 @@ case "$zig_native" in /*) ;; *) zig_native=$(command -v "$zig_native");; esac
 [ "$("$zig_native" version)" = "$version" ] || { echo 'native compiler version mismatch' >&2; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-lake build ZigLean air2lean
-# Imported theorem definitions are kernel checked with the runtime build above.
+lake build ZigLean air2lean ZigLean.Mem.NullLemmas
+# Imported theorem definitions are kernel checked with the runtime build above; the
+# proof-only storage/projection rules (outside the ZigLean umbrella) are built explicitly.
 lake env lean --run tests/roadmap/null-pointers/Generate.lean "$work/generated"
 for name in cNull cNonNull allowzeroAddress allowzeroManyAddress cZero cCast cUnwrap cLoad cEqual \
     storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeVal nodeRoundTrip arrayItem \
