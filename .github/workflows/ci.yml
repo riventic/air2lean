@@ -194,6 +194,10 @@ jobs:
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
 
+      # P02: the report script surfaces Lean errors and open obligations (no Lean is run).
+      - name: Verification condition report script regressions
+        run: python3 -B -m unittest discover -s tests/roadmap/vcs -p 'test_*.py' -v
+
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
         run: |
