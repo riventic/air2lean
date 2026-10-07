@@ -20,7 +20,8 @@ supported version, so one translation (and the proofs over it) serves all versio
    rewrites below match one vocabulary. 0.17.0 also dropped `bool_and`/`bool_or`: Sema's
    safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
-   the meaning is the same). It rejects a tag that the file's `zig_version` does not
+   the meaning is the same). A `ptr_cast` to a whole-byte vector lane becomes 0.16.0's
+   `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's `zig_version` does not
    have (`versionTagReason?`), before the rename can make a misplaced tag look canonical.
 
 1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
@@ -99,12 +100,57 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       elseBody := rewriteBody g i.elseBody,
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
 
+/-- Zig 0.17.0 writes `&v[i]` as a `ptr_cast` of the vector pointer to a lane pointer
+(`Layout.vectorIndex`). 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and the lane index,
+typed as a plain element pointer, when the lane is a power-of-two number of whole bytes. This
+gives those lanes the 0.16.0 form (adding the element pointer and `usize` types if the table
+lacks them); other lane pointers stay, and `Check.lean` rejects them. -/
+def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
+  let mut types := f.types
+  let mut layouts := f.layouts
+  let producers : Std.HashMap InstId TyId := (flatten f.body).foldl (init := {}) fun m i =>
+    match i.ty with | some t => m.insert i.id t | none => m
+  let mut repl : Std.HashMap InstId (TyId × Nat) := {}
+  for i in flatten f.body do
+    let (true, #[.inst p], some ty) := (i.tag == "ptr_cast", i.args, i.ty) | continue
+    let some (.ptr "one" isConst lane) := types[ty]? | continue
+    let some l := layouts[ty]? | continue
+    let some k := l.vectorIndex | continue
+    let some (.ptr "one" _ vec) := (producers[p]?).bind (types[·]?) | continue
+    let some (.vector n child) := types[vec]? | continue
+    let bits := match types[lane]? with | some (.int _ b) | some (.float b) => b | _ => 0
+    let bytes := ((layouts[lane]?).bind (·.size)).getD 0
+    unless child == lane && k < n && bytes ∈ [1, 2, 4, 8, 16] && bits == 8 * bytes do continue
+    let plain : Layout := { l with hostSize := 0, bitOffset := 0, vectorIndex := none }
+    let t := Ty.ptr "one" isConst lane
+    let id := match (types.zip layouts).findIdx? (· == (t, plain)) with
+      | some id => id
+      | none => types.size
+    if id == types.size then
+      types := types.push t
+      layouts := layouts.push plain
+    repl := repl.insert i.id (id, k)
+  if repl.isEmpty then return f
+  let usize : Layout := { size := some 8, align := some 8 }
+  let u := match (types.zip layouts).findIdx? (· == (.int false 64, usize)) with
+    | some u => u
+    | none => types.size
+  if u == types.size then
+    types := types.push (.int false 64)
+    layouts := layouts.push usize
+  let body := rewriteBody (body := f.body) fun i =>
+    some <| match repl[i.id]? with
+      | some (ty, k) => { i with tag := "ptr_elem_ptr", ty := some ty, args := #[i.args[0]!, .int u k] }
+      | none => i
+  return { f with body, types, layouts }
+
 /-- `versionTags` (module doc). -/
 def versionTags (f : RawFunc) : Except String RawFunc := do
   for i in flatten f.body do
     if let some reason := versionTagReason? f.zigVersion i.tag then
       throw s!"{f.name}: inst {i.id}: tag '{i.tag}' {reason}"
   if f.zigVersion != "0.17.0" then return f
+  let f := laneElemPtrs f
   let boolTyped (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with
     | some .bool => true

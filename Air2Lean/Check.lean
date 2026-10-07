@@ -136,6 +136,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
+    -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
+    if l.vectorIndex.isSome then
+      throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside the subset"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then

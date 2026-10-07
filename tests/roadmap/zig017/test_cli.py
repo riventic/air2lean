@@ -46,6 +46,7 @@ example : widen 200#8 = pure 200#32 := by rfl
 example : both true false = pure false := by rfl
 example : both false true = pure true := by rfl
 example : field { a := 1#16, b := 7#32 } = pure 7#32 := by rfl
+example : twice 21#32 = pure 42#32 := by rfl
 end
 """
 
@@ -67,10 +68,15 @@ def positive(binary, elaborate):
         assert header["profile"]["zig_version"] == "0.17.0", header
         # 0.17.0's `safe` build mode keeps the version-independent profile spelling.
         assert header["profile"]["build_mode"] == "ReleaseSafe", header
+        assert "__func_" not in text, "a 0.17.0 instance name leaked into the translation"
         for needle in ("Zig.divCeil false", "Zig.divCeil true", "Zig.Float.divCeil",
                        "Zig.Vec.map2M (fun x0 x1 => Zig.divCeil true x0 x1)",
                        "Zig.enumOf (Color.ofInt?", "(p0 && p1)", "(i2 || p1)", "(p0 &&& p1)",
-                       "Zig.load (BitVec 32) 4 i1", "Zig.Float.toBits? p0"):
+                       "Zig.load (BitVec 32) 4 i1", "Zig.Float.toBits? p0",
+                       # `&v[i]` on a whole-byte lane reads as 0.16.0's element pointer.
+                       "(p0.elem 4 (2 : BitVec 64))", "(p0.elem 4 (1 : BitVec 64))",
+                       # A `__func_<n>` generic instance gets the stable `__anon_<k>` name.
+                       "def double__anon_1"):
             assert needle in text, f"missing {needle!r}"
         checks = 1
         if elaborate:

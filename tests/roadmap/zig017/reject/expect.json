@@ -13,6 +13,7 @@
  "safeOn016": "unsupported profile.build_mode 'safe'",
  "spirv": "SPIR-V runtime arrays",
  "splatArray": "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset",
+ "subByteLane": "a pointer to a vector lane (vector_index) is outside the subset",
  "toVec": "tag 'array_to_vector': Zig 0.17.0's array-to-vector coercion is outside the subset",
  "toVecSentinel": "tag 'array_to_vector': Zig 0.17.0's array-to-vector coercion",
  "unionFromEnum": "tag 'union_from_enum': Zig 0.17.0's enum-to-tagged-union coercion is outside the subset",

@@ -172,6 +172,9 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
+  /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
+  length, not a byte count. -/
+  vectorIndex : Option Nat := none
   deriving Repr, Inhabited, BEq
 
 /-- Both legacy exports may omit the byte value, preserving the presence-only
