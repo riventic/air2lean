@@ -3567,6 +3567,7 @@
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/Sep/TryAlias.lean",
           "ZigLean/Time.lean",
           "ZigLean/Union.lean",
           "ZigLean/VC/Mem.lean",
@@ -3878,7 +3879,8 @@
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -7427,7 +7429,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -7526,7 +7529,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -8095,7 +8099,8 @@
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -9078,6 +9083,7 @@
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/Sep/TryAlias.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/Vec.lean",
           "ZigLean/VecMem.lean"
@@ -9800,6 +9806,7 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/Sep/TryAlias.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VecMem.lean"
         ]
@@ -9929,6 +9936,7 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/Sep/TryAlias.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VecMem.lean"
         ]
@@ -10973,7 +10981,8 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -11081,7 +11090,8 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/Sep/TryAlias.lean"
         ]
       },
       "emission": {
@@ -15976,7 +15986,8 @@
       "ZigLean/Sep/Total.lean": "6959fbadcf627ba55a1f1bddf4989afd93867e7b6cd3cf795b0db266e6f3dc4e",
       "ZigLean/Sep/Triple.lean": "23293c5c6db5e75c941f2248fac6d908416337519b70281ac764d4f82d4f4ac4",
       "ZigLean/Sep/Try.lean": "d71810e014e3ba5dd7c6671f8c02f8b84c7ab86d6614c3d05ee6c0fd6c636845",
-      "ZigLean/Sep.lean": "06dc077bfba98820e81a6517d9794840427512d34c1290577d7e677f0fb0963f",
+      "ZigLean/Sep/TryAlias.lean": "07a8faf3c7239f8b4f0a1b2c355e9a4544a2b0064def1031c1ecf6945a247f8e",
+      "ZigLean/Sep.lean": "d92a034da99c0290361546a8f29c43b98f1fac010aa0d84c4952ff113c60b268",
       "ZigLean/Simp.lean": "81da902a886787276fe83806ee687f8b5511af9211a0be44297ce25e507a0fb4",
       "ZigLean/SimpAttr.lean": "5ea0f23219da196ee7d29ebdc07358a2ba2f4cdcf1261b40dd6a01635338f1b1",
       "ZigLean/Time.lean": "dde394fe1482a009839be9b5a874597890358075df8c6feaf17a86a50e5aab96",

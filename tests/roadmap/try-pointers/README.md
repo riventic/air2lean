@@ -134,3 +134,60 @@ and cleanup results retain the same guarantees. Generic tag-only helper rules
 remain unrestricted. Runtime controls retain every previous oracle and separately
 check that a foreign symbolic error fails with `unspecified`. Compilation and
 runtime qualification of this caller update remain ROOT's responsibility.
+
+## Aliasing and cleanup rules
+
+The tag-only rule above does not say what a payload alias observes. `ZigLean/Sep/TryAlias.lean`
+(not imported by the `ZigLean` runtime umbrella) owns the whole typed union `pts p a u`:
+every pointer try on `p` returns `tryView α p u` (the same payload address, or the original
+error); a load through any such address reads the payload in place; a store through it turns
+`pts p a (.ok x)` into `pts p a (.ok y)` without writing the tag. `tryAliasWriteRead` is the
+two-alias composition. Side conditions are explicit: `Nat.min a 2 ∣ a` and divides the tag
+offset, and the payload access alignment divides `a` and the payload offset.
+
+`TryPointers/AliasProofs.lean` applies these rules to the actual retained generated
+definitions (compiler-exported AIR, unchanged Gen):
+
+| Definition | Rule |
+|---|---|
+| `writeAlias p y` | Result `writeView y u`; the union afterwards holds `writeView y u`. An error writes nothing. |
+| `cleanup p o e` | Distinct counters: success increments `o` only; error increments `e` then `o`, returns the original error and leaves the union unchanged. |
+| `cleanup p c c` | One counter for both cleanup pointers: +1 on success, +2 on error. |
+| `coldPayload p e` | Success returns the payload address with `e` unchanged; the cold error body increments `e`. |
+
+The result is read before cleanup runs. Counter increments are `add_safe`, so the rules require
+room for each increment; the runtime test checks that overflow fails with `.overflow`.
+
+`aliases/` holds two further functions from `try_aliases.zig`. Their schema-11 AIR is
+**hand-written** in the 0.16.0 exporter shape; compiler export, native and kernel
+qualification are pending (`aliases/provenance.json`). `aliases/TryAliases/Proofs.lean` proves:
+
+* `twoPaths p p y` (one union through both pointer-try operands): the same result as `writeAlias`.
+* `twoPaths a b y` (separately owned unions): only `a` is written and only `b` is read. An error
+  on either path returns that path's error and writes nothing.
+* `resetOnError p f` (`errdefer cell.* = f`): the error name is read before the cleanup store,
+  so the original error is returned while the union now holds `.ok f`. Success leaves it
+  unchanged and returns the payload address. The store uses the finite-domain dictionary;
+  for a success value it writes the generic encoding.
+
+`aliases/TryAliases/Runtime.lean` checks these cases and the corresponding retained-AIR cases.
+These are a caller-held payload pointer, a shared cleanup counter (the native call sequence
+ends at 3), `writeAlias` errors, `coldPayload` success and cleanup overflow.
+`try_aliases.zig` has the matching native tests. The cases are finite. Remaining exclusions:
+concurrent aliases (the rules need `Mem.Seq`), overlapping
+but unequal union objects, aliases through casts or different element types, cleanup that frees
+the union, and payloads wider than one byte in the generated cleanup rules.
+
+```sh
+lake build ZigLean.Sep.TryAlias
+python3 tests/roadmap/try-pointers/aliases/check-artifacts.py
+bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
+AIR2LEAN_ZIG_NATIVE=/qualified/stock/zig bash tests/roadmap/try-pointers/aliases/check.sh --native
+AIR2LEAN_ZIG_AIR=/qualified/patched/zig bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
+python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
+```
+
+A fresh export is expected to differ from the hand-written AIR in instruction IDs or debug
+lines. Before claiming compiler correspondence, translate the fresh export and compare the
+generated body with `aliases/TryAliases/Gen.lean`. If they differ, replace the retained AIR with
+the export, regenerate Gen, run `check-artifacts.py --record` and re-run the proofs.

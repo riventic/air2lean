@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1983 theorems in 109 files.
+2010 theorems in 111 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 576 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 590 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 66 | Single modelled allocator |
@@ -35,16 +35,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1863 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1541 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 918 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 1886 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1564 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 933 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1983 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2010 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 928 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 928 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2525,6 +2525,34 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `ThreadTuples.Proofs.reused_output_rejected` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ThreadTuples.Proofs.unowned_output_rejected` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
+## `tests/roadmap/try-pointers/TryPointers/AliasProofs.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `TryPointersAliasProofs.no_overflow` | TRU-01 |
+| `TryPointersAliasProofs.no_overflow_succ` | TRU-01 |
+| `TryPointersAliasProofs.u8_offsets` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.u8_size` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.tag_align` | TRU-01 |
+| `TryPointersAliasProofs.tag_off` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.pay_align` | TRU-01 |
+| `TryPointersAliasProofs.pay_off` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.pay_size` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.writeAlias_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.writeAlias_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.bump_run` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `TryPointersAliasProofs.rot` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.regroup` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.disj3` | SEM-01, SEM-02, TRU-01 |
+| `TryPointersAliasProofs.cleanup_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.cleanup_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.cleanup_shared_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.cleanup_shared_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.coldPayload_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryPointersAliasProofs.coldPayload_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
 ## `tests/roadmap/try-pointers/TryPointers/Proofs.lean`
 
 File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
@@ -2543,6 +2571,19 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | `TryPointersProofs.payloadProgram_owned` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `TryPointersProofs.payload8_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `TryPointersProofs.payload64_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/try-pointers/aliases/TryAliases/Proofs.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `TryAliasesProofs.twoPaths_same_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryAliasesProofs.twoPaths_same_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryAliasesProofs.twoPaths_distinct_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryAliasesProofs.twoPaths_distinct_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryAliasesProofs.resetOnError_run` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `TryAliasesProofs.resetOnError_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/undef-operands/UndefOperands/Proofs.lean`
 

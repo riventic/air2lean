@@ -9,6 +9,9 @@ open Zig
 
 deriving instance DecidableEq for Except
 
+-- Triples of error unions exceed the default instance-search size.
+set_option synthInstance.maxSize 512
+
 private def check [DecidableEq α] [Repr α] (name : String) (actual expected : α) : IO Unit := do
   unless actual = expected do
     throw (IO.userError s!"{name}: expected {reprStr expected}, got {reprStr actual}")

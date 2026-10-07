@@ -90,11 +90,6 @@ private theorem errUnion_decode_write [LawfulEnc α] {bs : Array Byte} {x : α}
   simp [errTagOf, bind, pure, hp, LawfulEnc.decode_encode, Functor.map, ExceptT.bind,
     ExceptT.pure, ExceptT.mk, ExceptT.bindCont, ExceptT.map]
 
-theorem pts_errUnion_size {p : Ptr} {a : Nat} {u : Except ErrName α} {h : Heap}
-    (hp : pts p a u h) : ∃ A S K bs, (A + p.off.toNat) % a = 0 ∧
-      bs.size = errUnionSize (Enc.size α) (Enc.align α) ∧ Enc.decode bs = pure u ∧
-      bytesAt p A S K bs h ∧ K ≠ .constGlobal := hp
-
 private theorem dvd_add_off {A o k b a : Nat} (ha : (A + o) % a = 0) (hb : b ∣ a) (hk : b ∣ k) :
     (A + o + k) % b = 0 :=
   Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hb (Nat.dvd_of_mod_eq_zero ha)) hk)
