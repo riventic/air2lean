@@ -121,3 +121,51 @@ CI retains the build and fixture logs.
 The optional-module build and all six proof-tool fixtures have passed kernel
 checking with the pinned Lean toolchain. These checks establish the stated model
 contracts and rejected proof attempts; they add no native/export qualification.
+
+## Model cost: allocation counts and counted loops (P06)
+
+Import `ZigLean.Sep.Cost` for a qualified cost layer. It adds no field to `Mem` and
+changes no generated code. Each count is read off a run that the existing semantics
+already defines:
+
+- Allocation requests: `Mem.allocs`, the allocator model's own count of `rawAlloc`
+  calls. A failed request counts too.
+- Retained allocations: `Mem.liveHeap`, the number of live `.heap` blocks.
+  `Mem.SameAllocs m m'` says that both counts are unchanged.
+- Loop steps: `LoopRuns body again s m k e s' m'`, a run of `loop body again` with
+  exactly `k` body runs. That is every repeat plus the final exit test.
+  `LoopRuns.run` gives the loop's ordinary run equation. `LoopRuns.unique` shows `k`
+  depends only on the start, so a proved count is exact.
+
+The instrumentation lemmas hold for every successful run of a primitive from any
+memory. `store_cost` and `load_cost` give `SameAllocs`. `create_cost` gives one request,
+plus one retained block on success and none on `OutOfMemory`. `destroy_cost` gives one
+fewer retained block and no request. `loopRuns_exact` turns a ghost count that each
+repeat lowers by exactly one into an exact count. `loopRuns_bound` turns
+`loopMM_ghost`'s decreasing measure `n` into the bound `k ≤ n + 1`.
+
+`Proofs/Lists/Cost.lean` applies the layer to the generated code of
+`examples/lists/lists.zig`:
+
+- `push_cost`: one allocation request, with one new retained block on success and
+  none on `OutOfMemory`.
+- `pushAll_cost`: a client of the generated `push`. After `n` successful pushes there
+  are exactly `n` more requests and `n` more retained blocks.
+- `freeAll_cost`: frees exactly `n` retained blocks in exactly `n + 1` body runs.
+- `sum_cost` and `sum_count_unique`: `sum` over `n` items runs its loop body exactly
+  `n + 1` times, allocates nothing, and returns the sum. The sum must fit in `u64`;
+  otherwise the checked add panics.
+- Capacity premises: `sum_count_capacity` (`n ≤ C` gives at most `C + 1` body runs) and
+  `pushAll_capacity` (at most `C` items gives at most `C` requests and at most `C` new
+  retained blocks).
+- `append_capacity`: `ArrayListUnmanaged(u32).append` with spare capacity
+  (`xs.length < cap`) makes no allocation request and retains no new block, for every
+  allocator policy. `Proofs/Lists/Append.lean`'s `append_cost_run` carries this
+  through the generated `ensureTotalCapacity` and `addOneAssumeCapacity`.
+
+These counts are model counts, premise SEM-05 (`docs/premises.md`). A body run, a load
+and an allocation request have no time or byte weight. Nothing here relates a count
+to CPU time, cache behavior, instruction counts, or a native allocator's memory use.
+Such a claim needs a separate calibration argument, which this layer does not
+provide. The counts cover only successful runs: a panic or divergence has no
+`LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
