@@ -16,7 +16,7 @@ namespace Air2Lean
 
 /-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
 inductive AllocFn where
-  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap
+  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap | realloc
   deriving BEq, Repr
 
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
@@ -77,6 +77,7 @@ def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.free" .free #["free", "freeSentinel"],
   allocModel "mem.Allocator.dupe" .dupe #["dupe"],
   allocModel "mem.Allocator.remap" .remap #["remap"],
+  allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
   threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"],
   threadModel "Thread.join" .join #["joinC"],
   threadModel "Thread.yield" .yield #["threadYieldC"],

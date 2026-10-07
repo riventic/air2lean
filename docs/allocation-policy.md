@@ -91,3 +91,20 @@ reference host. `AIR2LEAN_ALLOCATION_REPORT_DIR` retains raw Lean/native JSON co
 CI sets it under `RUNNER_TEMP` and retains run logs there, outside the cached `.lake`
 directories. It does not introduce an artifact upload or publish a qualified claim from
 an incomplete gate.
+
+## Sentinel bytes and raw allocator preconditions (M04)
+
+Sentinel bytes count in every request. `allocSentinel(u8, n, s)` asks for `n + 1` bytes;
+sentinel reallocation (`Zig.Allocator.reallocSentinel`, the `len + 1`-byte absorbed-buffer
+pattern over the recognized 0.16.0 byte `realloc`) asks for `n + 1` bytes and stores the
+sentinel at `n`; `freeSentinel` releases all `len + 1` bytes. The cap therefore applies to
+the request including the sentinel, and every attempt consumes one policy decision.
+`Triple.reallocSentinel` (`ZigLean/Sep/SentinelRealloc.lean`) proves for every policy, cap,
+failure trace and remap mode that success is a whole sentinel buffer of the new length and
+failure is `OutOfMemory` with the original block, bytes and sentinel intact.
+
+The raw interface contracts (`ZigLean/Sep/RawAlloc.lean`) require an alignment `2 ^ k`,
+`k < 64`, a nonzero length, and for resize/remap/free the whole live heap block allocated
+with that alignment; violations are `.illegal`. Allocation returns an aligned block or fails
+without changing the heap. These are model contracts, not translator recognition: the raw
+calls are `inline` vtable dispatch. See `tests/roadmap/sentinel-realloc/README.md`.

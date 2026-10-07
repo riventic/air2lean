@@ -477,6 +477,14 @@ jobs:
           python3 -B tests/roadmap/byte-sentinel/static.py
           bash tests/roadmap/byte-sentinel/check.sh
 
+      - name: Sentinel reallocation, raw allocator contracts and realloc recognition
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_SENTINEL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_SENTINEL_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: bash tests/roadmap/sentinel-realloc/check.sh
+
       # Selected policy correspondence on the native 64-bit reference CI host. Keep
       # reports in RUNNER_TEMP, outside cached .lake directories; no artifact upload.
       - name: Allocation policy proofs, correspondence and semantic mutations

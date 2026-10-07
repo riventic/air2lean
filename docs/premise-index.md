@@ -16,6 +16,8 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
+| [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |

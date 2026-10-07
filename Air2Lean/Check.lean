@@ -1754,8 +1754,8 @@ private def checkSharedDefinitions (funcs : Array Func) : Except String (Array O
   return indexes
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
-arguments and result have a known item size and `ptr_align`, and a slice that it remaps has no
-sentinel. -/
+arguments and result have a known item size and `ptr_align`, and a slice that it remaps or
+reallocates has no sentinel. -/
 def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId)
     (index : OperandTypes := f.operandTypes) : Except String Unit := do
   let tyOf := index.valTy?
@@ -1772,6 +1772,9 @@ def checkAllocCall (f : Func) (fn : AllocFn) (args : Array Val) (ret : TyId)
         no item size or `ptr_align` in the AIR file"
     if l.sentinel && fn == .remap then
       throw s!"{f.name}: a remap of a slice with a sentinel is outside the subset"
+    if l.sentinel && fn == .realloc then
+      throw s!"{f.name}: a realloc of a slice with a sentinel is outside the subset; reallocate \
+        the absorbed len + 1 byte buffer and store the sentinel"
 
 /-- Compare argument types across per-function type tables. Pointer values keep their
 identity; the source alignment must satisfy the target and mutable pointers may become
@@ -1929,9 +1932,10 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     unless model.qualifies f.zigVersion do
       fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
   if let some fn := allocFn? callee then
-    count (if fn == .create then 1 else if fn == .remap then 3 else 2)
+    count (if fn == .create then 1 else if fn == .remap || fn == .realloc then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
-    if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel || fn == .dupe then
+    if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel || fn == .dupe ||
+        fn == .realloc then
       let hasOutOfMemory := match result with
         | some (.errorUnion set _) => match f.types[set]? with
           | some (.errorSet none) => true
@@ -1952,7 +1956,10 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     | .remap =>
       require (isPtr "slice" (argTy 1) && isSize (argTy 2)) "slice/item-count arguments"
       require (isPtr "slice" optionalPayload) "optional slice result"
-    if fn == .dupe || fn == .remap then
+    | .realloc =>
+      require (isPtr "slice" (argTy 1) && isSize (argTy 2)) "slice/item-count arguments"
+      require (isPtr "slice" errorPayload) "error-union slice result"
+    if fn == .dupe || fn == .remap || fn == .realloc then
       let some source := args[1]?.bind index.valTy? | fail "source slice argument"
       let some srcChild := ptrChild f.types source | fail "source slice argument"
       let payload := match result with | some (.errorUnion _ p) | some (.optional p) => some p | _ => none
@@ -1968,6 +1975,15 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       require (l.hostSize == 0 && l.bitOffset == 0) "ordinary byte sentinel pointer without packed metadata"
       let some sentinel := l.sentinelByte | fail "explicit exported sentinel_byte"
       require (decide (sentinel < 256)) "sentinel_byte in 0..255"
+    if fn == .realloc then
+      -- The model (`Zig.Allocator.realloc`) is byte-only: alignment-1 `u8` slices.
+      let some (.errorUnion _ p) := result | fail "error-union slice result"
+      for t in (args[1]?.bind index.valTy?).toArray.push p do
+        let some (.ptr "slice" _ child) := f.types[t]? | fail "byte slice"
+        require (f.types[child]? == some (.int false 8)) "realloc supports only u8"
+        let l := f.layouts[t]?.getD {}
+        require (l.ptrAlign == some 1) "byte slice with alignment 1"
+        require (l.hostSize == 0 && l.bitOffset == 0) "ordinary byte slice without packed metadata"
     checkAllocCall f fn args ret index
   else if let some fn := threadFn? callee then
     match fn with

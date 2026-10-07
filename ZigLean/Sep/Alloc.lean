@@ -42,7 +42,7 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
     simp [hr, ExceptT.bindCont]
 
 /-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
-private theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
+theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
     {bs : Array Byte} (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF)
     (hS : bs.size = S) (hpos : 0 < S) :
     ∃ b blk, m.access p S 1 = pure (b, blk, p.off.toNat) ∧

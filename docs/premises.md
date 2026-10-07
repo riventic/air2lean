@@ -144,6 +144,29 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Derived from: `ZigLean.Sep.Sentinel`; tokens `allocSentinel`, `freeSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [byte sentinel README](../tests/roadmap/byte-sentinel/README.md).
 
+<a id="alc-05"></a>
+### ALC-05 — Byte realloc and sentinel reallocation
+
+- Kind: environment.
+- Statement: `realloc(s, n)` of an alignment-1 nonsentinel `[]u8` (Zig 0.16.0) tries the
+  selected byte-remap policy, then allocates `n` bytes, copies the retained prefix
+  representation and poisons and frees the old block; allocation failure leaves `s` intact.
+  Sentinel reallocation is the client composition over the absorbed `len + 1`-byte buffer
+  with the sentinel stored at the new length; Zig rejects a sentinel-typed `realloc`.
+- Derived from: `ZigLean.Sep.SentinelRealloc`; tokens `realloc`, `reallocSentinel`, `appendSentinel`.
+- Sources: [std-models.md](std-models.md#allocator-model), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
+
+<a id="alc-06"></a>
+### ALC-06 — Raw allocator interface contracts
+
+- Kind: environment.
+- Statement: the raw vtable calls are modelled by contract only (`vtableAlloc`, `vtableResize`,
+  `vtableRemap`, `vtableFree`); the translator does not recognize them. Each requires an
+  alignment `2 ^ k` with `k < 64` and a nonzero length; resize, remap and free also require
+  the whole live heap block allocated with that alignment. A violation is `.illegal`.
+- Derived from: `ZigLean.Sep.RawAlloc`; tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
+- Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
+
 ## Thread creation and scheduling
 
 <a id="thr-01"></a>
