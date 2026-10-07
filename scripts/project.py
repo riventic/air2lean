@@ -1044,9 +1044,9 @@ PROJECT_TRUST = frozenset({'allowed-project-axiom', 'allowed-project-opaque',
 TRUST_FIELDS = ('trust_class', 'compiler_trust_class', 'extern_trust_class')
 CHECK_STAGES = ('translate', 'reproduce', 'build', 'audit', 'claims', 'inputs_stable')
 RECORD_KIND = 'air2lean-project-check-record'
-CHECK_TOOLS = {'project': Path(__file__).resolve(), 'build_guard': Path(__file__).resolve().with_name('build-guard.py'),
-               'assumptions': Path(__file__).resolve().with_name('assumptions.py'),
-               'claims': Path(__file__).resolve().with_name('claims.py')}
+CHECK_TOOLS = {'project': Path(__file__).resolve()}
+CHECK_TOOLS.update({key: CHECK_TOOLS['project'].with_name(name) for key, name in
+                    (('build_guard', 'build-guard.py'), ('assumptions', 'assumptions.py'), ('claims', 'claims.py'))})
 
 
 def check_budget(manifest):
@@ -1206,7 +1206,12 @@ def project_check(path, translator, staging, tools=None, lock=None):
     host['translator'] = report.get('translator')
     if report['diagnostics']:
         return translation_failed()
-    verify(path, artifact)
+    try:
+        verify(path, artifact)
+    except (OSError, ValueError, UnicodeError) as error:
+        stages['translate'] = {'status': 'failed', 'codes': ['ARTIFACT_VERIFY'], 'reason': str(error)}
+        failures.append(f'translation artifact did not verify: {error}')
+        return finish()
     generated = {root['id']: report['files'][f'generated/{root["id"]}/Gen.lean']['sha256'] for root in manifest['roots']}
     stages['translate'] = {'status': 'passed', 'generated_sha256': generated}
     # 2. The translation must reproduce the committed module that the contracts import.
@@ -1290,7 +1295,7 @@ def check_command(path, translator, out, tools=None, lock=None):
 def load_record(path):
     record = load_evidence(path)
     if not isinstance(record, dict) or record.get('schema') != SCHEMA or record.get('kind') != RECORD_KIND \
-            or not isinstance(record.get('reproducible'), dict):
+            or not isinstance(record.get('reproducible'), dict) or not isinstance(record.get('host', {}), dict):
         raise Invalid(f'{path} is not a schema-{SCHEMA} project check record')
     return record
 
