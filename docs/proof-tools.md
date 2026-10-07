@@ -121,3 +121,54 @@ CI retains the build and fixture logs.
 The optional-module build and all six proof-tool fixtures have passed kernel
 checking with the pinned Lean toolchain. These checks establish the stated model
 contracts and rejected proof attempts; they add no native/export qualification.
+
+## Loop templates and range conversions
+
+Import `ZigLean.Sep.LoopTemplate` for the invariant/measure template and
+`ZigLean.Range` for arithmetic-range lemmas. Both are optional modules.
+
+`LoopTemplate body again inv post` has one field, `step`: for every state `s` and
+measure `n`, one run of the body is a `TotalTriple` from `inv s n` to
+`loopNext again inv post n` (repeat with `inv s' n'` for some `n' < n`, or exit with
+`post e s'`). The measure is a ghost `Nat` carried by the invariant, so it can count
+remaining list nodes or queue items. For a measure `μ` on the locals, use
+`inv s n := ⌜n = μ s⌝ ∗ I s`. `LoopTemplate.total` proves the whole loop through
+`TotalTriple.loop_ghost` (strong induction on the measure). `LoopTemplate.partial` projects the
+`Triple`. `loopNext_repeat` and `loopNext_exit` prove the step's postcondition.
+
+`loop_template inv post` applies to a `TotalTriple` or `Triple` goal on
+`(Zig.loop body again).run s` and leaves the named goals `step`, `entry`
+(`P h → ∃ n, inv s n h`), and `exit` (`post e s' h → Q (e, s') h`). `exit` is closed
+automatically when `post` already is the goal's postcondition. `loop_template?` additionally
+logs the remaining premises and their types. The partial form still requires a decreasing
+measure. A loop whose termination depends on a non-`Nat` argument must first define
+such a measure.
+
+`zig_range` rewrites fixed-width arithmetic with conditional lemmas: `toNat_add_of_lt`,
+`toNat_sub_of_le`, `toNat_mul_of_lt`, `toNat_setWidth_of_le`/`_of_lt`,
+`toNat_ofNat_of_lt`, `toInt_of_lt`, `toNat_ofInt_natCast`, checked
+`add`/`sub`/`mul` without overflow, and unsigned widening/narrowing `intCast`. Each range
+premise must follow from context by `assumption` or `omega`. When a premise does not, the
+term is left unchanged and the obligation remains visible. `sum_toNat_le` and
+`sum_toNat_lt` bound sums of fixed-width values (`l.length ≤ 2 ^ k` items of width `w` fit
+in `w + k` bits). These lemmas are ordinary theorems and use no `native_decide`.
+
+`tests/roadmap/loop-tactics/Queue.lean` applies both tools to the generated `Lists.sum`
+from `examples/lists/lists.zig`, a walk over a singly linked queue from its head. `sum_total`
+is a `TotalTriple`: given the explicit capacity premise `xs.length ≤ 2 ^ 32`, `sum` returns
+the exact sum of the items without an overflow panic and leaves the queue unchanged. The
+proof uses a list-segment invariant, the node interface of `Proofs/Lists/Sep.lean`
+(`node_val_run`, `node_next_run`, `focus_mid`), and `zig_range`. It does not unfold `Zig.load`,
+byte encodings, blocks, or allocators. A `#guard_msgs` check fixes `loop_template?`'s report
+on that loop: exactly `step` and `entry` remain. `Template.lean` checks the report including
+`exit`, the partial form, rejection of non-loop goals, the necessity of a decreasing measure,
+and the `zig_range` conversions, including an undischarged premise.
+Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.Range Proofs.Lists.Sep`, then run
+`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template` and `Queue`.
+
+This is a bounded P03 contribution. The template is single-loop and sequential. It does not
+infer invariants or measures, provide a recursive-call (non-loop) induction rule, or handle
+nested-loop or concurrent termination. `zig_range` performs only conditional rewriting and
+is not a general BitVec decision procedure. The client is a linked-list queue traversal.
+No ring-buffer example exists in `examples/`, and the module adds no exporter or native
+qualification.

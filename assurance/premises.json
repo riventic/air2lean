@@ -38,6 +38,7 @@
     "ZigLean.Union": ["SEM-01", "SEM-02"],
     "ZigLean.Vec": ["SEM-01"],
     "ZigLean.Lemmas": ["SEM-01"],
+    "ZigLean.Range": ["SEM-01"],
     "ZigLean.Loop": ["SEM-03"],
     "ZigLean.SimpAttr": ["TRU-01"],
     "ZigLean.Simp": ["TRU-01"],
@@ -94,6 +95,7 @@
     "ZigLean.Sep.Remap": ["ALC-03"],
     "ZigLean.Sep.Sentinel": ["ALC-04"],
     "ZigLean.Sep.Total": ["SEM-04"],
+    "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Result": ["SEM-03"]
   },
