@@ -70,6 +70,9 @@ pub fn groupMixed(io: Io, first: u32, second: u32) !u32 {
     var out: u32 = 0;
     var other: u32 = 0;
     var group: Io.Group = .init;
+    // Every exit (including a failed `concurrent`) must finish the tasks that
+    // write `out` and `other` before this frame is freed. A no-op after `await`.
+    defer group.cancel(io);
     group.async(io, zeroWorker, .{});
     group.async(io, mixedWorker, .{ first, &out, second, &other });
     try group.concurrent(io, zeroWorker, .{});
