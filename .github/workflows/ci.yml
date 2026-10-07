@@ -148,6 +148,11 @@ jobs:
           python3 -m unittest discover -s tests/roadmap/safe-output -p 'test_*.py' -v 2>&1 \
             | tee "$RUNNER_TEMP/safe-output-tests.log"
 
+      # Q01 (docs/fuzzing.md): generator determinism, shrinker minimality against synthetic
+      # oracles and typed Zig generator invariants; no translator, compiler or Lean run.
+      - name: Fuzz generator and shrinker regressions
+        run: tests/roadmap/fuzz/check.sh --light
+
       - name: Performance budget gate regressions
         run: |
           set -euo pipefail
@@ -309,6 +314,18 @@ jobs:
           export TMPDIR="$evidence_dir/tmp"
           lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
           python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
+
+      # Q01: committed shrunk reproducers, then a small seeded malformed-AIR budget; any
+      # failure is shrunk into $RUNNER_TEMP/air-fuzz/failures (docs/fuzzing.md).
+      - name: Malformed AIR JSON fuzzing
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          fuzz_dir="$RUNNER_TEMP/air-fuzz"
+          mkdir -p "$fuzz_dir/tmp"
+          export TMPDIR="$fuzz_dir/tmp"
+          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 300 "$fuzz_dir/failures" 2>&1 \
+            | tee "$fuzz_dir/fuzz.log"
 
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

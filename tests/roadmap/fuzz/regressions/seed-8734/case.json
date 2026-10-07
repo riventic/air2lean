@@ -1,0 +1,13 @@
+{
+ "seed": 8734,
+ "original_failure": "emit:internal-panic",
+ "expected_exit": 1,
+ "fixed_by": "Check.lean rejects pointer arithmetic whose result type is not a pointer (was Option.get! PANIC)",
+ "generator": {
+  "seed": 8734,
+  "origin": "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
+  "steps": [
+   "doc0: tag ['body', 2] -> ptr_sub"
+  ]
+ }
+}

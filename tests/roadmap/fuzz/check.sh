@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Q01 generated-program and parser fuzzing (docs/fuzzing.md).
+#   --light [SEEDS]                 generator/shrinker unit tests + typed generator invariants; no tools
+#   --air BINARY [SEEDS] [SAVE_DIR]  committed regressions + seeded malformed AIR JSON against a built translator
+#   --heavy OUT_DIR [START] [COUNT]  generated Zig: native test, AIR export + translation, Lean evaluation
+#   --reproduces CASE_DIR STAGE      exit 1 iff STAGE (native|translate|lean) is the first failing stage
+# --heavy needs AIR2LEAN_ZIG_NATIVE (stock Zig) and AIR2LEAN_ZIG_AIR (patched Zig). It runs
+# compilers and Lean sequentially; wrap the whole invocation in one scripts/build-guard.py.
+set -euo pipefail
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+cd "$repo_root"
+here=tests/roadmap/fuzz
+export PYTHONDONTWRITEBYTECODE=1
+
+stages=(native translate lean)
+
+# Run the stages of one emitted case directory; print the first failing stage, if any.
+first_failure() {
+  local dir=$1 zig module namespace
+  zig=$(find "$dir" -maxdepth 1 -name 'fuzz_s*.zig' -print -quit)
+  module=$(basename "$zig" .zig)
+  namespace="Fuzz${module#fuzz_}"
+  if ! "$AIR2LEAN_ZIG_NATIVE" test "$zig" -OReleaseSafe >"$dir/native.log" 2>&1; then
+    echo native; return
+  fi
+  if ! scripts/translate.sh "$zig" -o "$dir/Gen.lean" --namespace "$namespace" \
+      --zig-air "$AIR2LEAN_ZIG_AIR" --overwrite >"$dir/translate.log" 2>&1; then
+    echo translate; return
+  fi
+  if ! python3 "$here/zig_gen.py" lean-checks "$dir/expected.json" "$dir/Gen.lean" "$namespace" \
+      "$dir/Check.lean" >"$dir/lean.log" 2>&1 || ! lake env lean "$dir/Check.lean" >>"$dir/lean.log" 2>&1; then
+    echo lean; return
+  fi
+}
+
+case "${1:-}" in
+  --light)
+    python3 -m unittest discover -s "$here" -p 'test_*.py' -v
+    python3 "$here/zig_gen.py" light --seeds "${2:-300}"
+    ;;
+  --air)
+    [ "$#" -ge 2 ] || { echo 'usage: check.sh --air BINARY [SEEDS] [SAVE_DIR]' >&2; exit 2; }
+    python3 "$here/air_fuzz.py" replay "$2"
+    save=()
+    if [ -n "${4:-}" ]; then save=(--save "$4" --report "$4/report.json"); mkdir -p "$4"; fi
+    python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${save[@]+"${save[@]}"}
+    ;;
+  --reproduces)
+    [ "$#" -eq 3 ] || { echo 'usage: check.sh --reproduces CASE_DIR STAGE' >&2; exit 2; }
+    : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}" "${AIR2LEAN_ZIG_AIR:?set the patched Zig}"
+    [ "$(first_failure "$2")" = "$3" ] && exit 1
+    exit 0
+    ;;
+  --heavy)
+    [ "$#" -ge 2 ] || { echo 'usage: check.sh --heavy OUT_DIR [START] [COUNT]' >&2; exit 2; }
+    : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}" "${AIR2LEAN_ZIG_AIR:?set the patched Zig}"
+    out=$2 start=${3:-0} count=${4:-5} failed=0
+    mkdir -p "$out"
+    out=$(cd -- "$out" && pwd)
+    for ((seed = start; seed < start + count; seed++)); do
+      case_dir="$out/seed-$seed"
+      rm -rf "$case_dir"
+      python3 "$here/zig_gen.py" emit "$seed" "$case_dir" >/dev/null
+      stage=$(first_failure "$case_dir")
+      if [ -z "$stage" ]; then echo "seed $seed: ok"; continue; fi
+      failed=1
+      echo "seed $seed: $stage failed; shrinking (logs in $case_dir)"
+      python3 "$here/zig_gen.py" shrink "$case_dir/program.json" \
+        --command "bash $here/check.sh --reproduces {dir} $stage" "$out/shrunk-$seed"
+      first_failure "$out/shrunk-$seed" >/dev/null || true
+    done
+    exit "$failed"
+    ;;
+  *)
+    echo 'usage: check.sh --light [SEEDS]|--air BINARY [SEEDS] [SAVE_DIR]|--heavy OUT_DIR [START] [COUNT]|--reproduces CASE_DIR STAGE' >&2
+    exit 2
+    ;;
+esac

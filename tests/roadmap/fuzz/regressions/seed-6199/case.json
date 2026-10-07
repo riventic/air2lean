@@ -1,0 +1,13 @@
+{
+ "seed": 6199,
+ "original_failure": "emit:internal-panic",
+ "expected_exit": 1,
+ "fixed_by": "Check.lean rejects pointer arithmetic whose result type is not a pointer (was Option.get! PANIC)",
+ "generator": {
+  "seed": 6199,
+  "origin": "tests/golden/0.16.0/slices/air/slices.subZ.json",
+  "steps": [
+   "doc0: tag ['body', 14] -> ptr_add"
+  ]
+ }
+}

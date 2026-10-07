@@ -1,0 +1,75 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-gnu",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.16.0",
+  "backend": "s",
+  "cpu": "x",
+  "features": [],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "",
+ "params": [
+  0,
+  1,
+  1
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 1,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "ptr_add",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 1,
+     "val": "1"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 0
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1
+  }
+ ]
+}
