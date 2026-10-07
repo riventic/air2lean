@@ -169,7 +169,49 @@ class FixtureTests(unittest.TestCase):
         entries = self.written()
         self.assertIn("ASM-01", entries["body_only"]["premises"])
         self.assertNotIn("ASM-02", entries["body_only"]["premises"])
-        self.assertEqual(entries["body_only"]["via"]["ASM-01"], ["closure token airAsm_17"])
+        self.assertEqual(entries["body_only"]["via"]["ASM-01"], ["closure token Asm.airAsm_17"])
+
+    def test_implicit_dependencies(self):
+        """Field notation on typed binders, unique `.ctor` names and instances resolve in source."""
+        self.fixture.files["ZigLean/Basic.lean"] += """\
+            namespace Zig
+            class Enc (α : Type) where size : Nat
+            def Tid := Nat
+            end Zig
+            """
+        self.fixture.files["ZigLean/Sched.lean"] = """\
+            import ZigLean.Basic
+            namespace Zig.Sched
+            def run (n : Nat) : Nat := n
+            structure Box where n : Nat
+            def Box.get (b : Box) : Nat := b.n
+            inductive Mode where | strict | lax
+            inductive Phase where | done
+            instance : Zig.Enc Zig.Tid where size := 8
+            end Zig.Sched
+            """
+        self.fixture.files["Proofs/Conc/Field.lean"] = """\
+            import ZigLean.Sched
+            inductive Local where | done
+            theorem field_binder (b : Zig.Sched.Box) : b.get = b.get := rfl
+            section
+            variable (c : Zig.Sched.Box)
+            theorem field_variable : c.get = c.get := rfl
+            end
+            theorem field_unbound : x.get = x.get := rfl
+            theorem dot_unique : True := by have := (.lax, 1); trivial
+            theorem dot_ambiguous : True := by have := (.done, 1); trivial
+            open Zig in
+            theorem instance_used : Enc.size Tid = 8 := rfl
+            open Zig in
+            theorem instance_unused : Enc.size Nat = 8 := rfl
+            """
+        entries = self.written()
+        for name in ("field_binder", "field_variable", "dot_unique", "instance_used"):
+            self.assertIn("THR-01", entries[name]["premises"], name)
+        for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
+            self.assertNotIn("THR-01", entries[name]["premises"], name)
+        self.assertIn("SEM-01", entries["instance_unused"]["premises"])
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -311,6 +353,7 @@ class CompiledTests(unittest.TestCase):
         self.assertEqual(result["source_gap_count"], 1)
         # A same-named theorem in another module does not mask the gap.
         self.assertIn("ASM-01", result["theorems"][0]["source_gaps"])
+        self.assertEqual(result["theorems"][0]["gap_via"]["ASM-01"], ["closure token Asm.airAsm_17"])
 
     def test_compiled_private_names_use_user_name(self):
         self.config["rules"].append({"premise": "THR-01", "scope": "closure", "pattern": "Futex",
@@ -378,6 +421,20 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
         self.assertIn("TMR-02", {p for (f, _), e in self.entries.items()
                                  if f == "tests/roadmap/deadline-futex/Kernel.lean" for p in e["premises"]})
+
+    def test_kernel_reviewed_gaps_are_indexed(self):
+        """Premises that the compiled graph showed and the source index once missed."""
+        semaphore = "Proofs/Sync/Semaphore.lean"
+        # Field notation on `S : Sem X` / `hP : S.Fits P U` reaches Sem.R (pts) and the translation.
+        self.assertLessEqual({"PRF-02", "SEM-03", "ORD-01", "TRU-02"},
+                             set(self.premises_of(semaphore, "Sync.Sem.Fits.cur")))
+        # `Enc ThreadId` is an instance of ZigLean.Mem.Thread.
+        self.assertIn("ORD-01", self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.decode_tid"))
+        # `.relaxed` is the unique AtomicOrder constructor; `throw .unspecified` is a Zig.Error.
+        self.assertIn("ORD-01", self.premises_of("Proofs/Atomics/Stack.lean", "Atomics.Stack.growsAt_loadM"))
+        self.assertIn("SEM-01", self.premises_of("Proofs/Floatconv/Proofs.lean", "Zig.Float.toInt_of_isNaN"))
+        # A `{ m with .. }` update carries Mem.allocPolicy without allocating: no allocator premise.
+        self.assertFalse({"ALC-01", "ALC-02"} & set(self.premises_of(semaphore, "Sync.Sem.Step.refl")))
 
     def test_assurance_fixtures_are_excluded(self):
         self.assertFalse(any(f.startswith("tests/roadmap/assurance/") for f, _ in self.entries))

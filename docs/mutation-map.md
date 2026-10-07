@@ -57,8 +57,10 @@ model table rows (`scripts/coverage.py`), non-standard evidence axioms in the ex
 contract report (`scripts/external-contracts.py`), stale check results and over-broad schedule
 claims in the theorem inventory (`scripts/theorem-inventory.py`), probe profiles of another
 optimize mode (`scripts/build-modes.py`), automation limits classified as counterexamples
-(`scripts/counterexample.py`) and evidence from a CI job on another host
-(`scripts/target-matrix.py`). Each one replaces one exact anchor, compiles the result under the
+(`scripts/counterexample.py`), evidence from a CI job on another host
+(`scripts/target-matrix.py`), hidden compiled-mode source gaps and unmapped runtime modules
+(`scripts/premises.py`), and pull-request runs, masked failures and ledger entries without a
+reviewed revision in release records (`scripts/release-record.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.

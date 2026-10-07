@@ -18,6 +18,10 @@ mutations = {
     "signed_shift_is_unsigned": ("shr s r b = a", "shr false r b = a"),
     "overflow_flag_inverted": ("then 0 else 1", "then 1 else 0"),
     "oversized_shift_allowed": ("if b.toNat < n ∨ b.toNat = 0 then", "if true then"),
+    # Operand order: shift the original operand back instead of the result, and swap the
+    # operands of the non-commutative count-width bound.
+    "reverse_shift_operands_swapped": ("shr s r b = a", "shr s a b = r"),
+    "count_bound_operands_swapped": ("b.toNat < n ∨", "n < b.toNat ∨"),
 }
 args.output.mkdir(parents=True, exist_ok=True)
 (args.output / "control.lean").write_text(source + "\nend Zig\n" + tests)

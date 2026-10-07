@@ -29,6 +29,8 @@ PROFILES = 'tests/roadmap/profiles/test_golden_pipeline.py'
 FLOATS = 'tests/roadmap/float-semantics/test_labels.py'
 INVENTORY = 'tests/roadmap/inventory/test_inventory.py'
 THEOREMS = 'tests/roadmap/theorem-inventory/test_inventory.py'
+PREMISES = 'tests/roadmap/premises/test_premises.py'
+RELEASE = 'tests/roadmap/release-record/test_release_record.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -114,6 +116,35 @@ MUTANTS = {
         'scripts/target-matrix.py', '    if job_host != host:\n', '    if False:\n',
         'tests/roadmap/target-matrix/test_target_matrix.py', 'TM',
         ('ForeignGoldens.test_linux_job_compiling_the_darwin_golden_cannot_back_a_darwin_path',)),
+    # D03: a premise the kernel graph reaches but the source index misses is a source gap
+    # (`premises.py compiled --strict` fails on it).
+    'premises-compiled-source-gap-hidden': (
+        'scripts/premises.py',
+        '                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)\n',
+        '                entry["source_gaps"] = []\n', PREMISES, 'premises',
+        ('CompiledTests.test_compiled_source_gaps',)),
+    # D03: a runtime module reached by a theorem must map to premises.
+    'premises-compiled-runtime-module-unmapped': (
+        'scripts/premises.py',
+        '                errors.append(f"{theorem[\'name\']}: runtime module {module} has no premise mapping")\n',
+        '                pass\n', PREMISES, 'premises',
+        ('CompiledTests.test_compiled_unmapped_module_and_axiom',)),
+    # Q08: a pull_request run tests a merge commit, not the recorded revision.
+    'release-record-pull-request-run-accepted': (
+        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",
+        "    if data['event'] not in ('push', 'workflow_dispatch', 'pull_request'):\n", RELEASE, 'rr',
+        ('RecordTests.test_evidence_for_another_revision_is_refused',)),
+    # Q08: a failed step must never be published as passed when other evidence passes.
+    'release-record-failure-masked': (
+        'scripts/release-record.py',
+        "            gate['status'] = 'failed' if 'failed' in statuses else 'passed' if statuses else 'missing'\n",
+        "            gate['status'] = 'passed' if statuses else 'missing'\n", RELEASE, 'rr',
+        ('RecordTests.test_failures_and_skips_are_never_passed_or_hidden',
+         'RecordTests.test_conflicting_evidence_fails_the_gate')),
+    # Q08: every review ledger entry names the revision it reviewed.
+    'release-ledger-revision-unchecked': (
+        'scripts/release-record.py', '        if not SHA1.fullmatch(reviewed):\n', '        if False:\n',
+        RELEASE, 'rr', ('LedgerTests.test_entry_without_reviewed_revision_fails',)),
 }
 
 

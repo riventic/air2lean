@@ -87,6 +87,25 @@ this bounded P01/P04 contribution. These are contracts about existing generated
 model bodies; this slice adds no source/exporter qualification or general compiler
 correspondence claim.
 
+`Proofs/Lists/Container.lean` defines `Lists.SeqImpl`, a reusable sequence contract: a handle
+type `H`, a representation predicate `Rep h xs`, and `add` with `add_spec` stating only that the
+abstract sequence becomes `xs ++ [v]` or stays `xs` with `error.OutOfMemory`. Two generated
+containers from `examples/lists/lists.zig` implement it. `linkedSeq` wraps `push` and stores
+the sequence in reverse (`list hd xs.reverse`). `arraySeq` wraps
+`std.ArrayListUnmanaged(u32).append`. Its representation `AList` requires a zero-capacity
+items pointer without a block, so owned bytes discharge the `ptrOk` premise of `append_run`.
+The `.empty` value, whose pointer names a constant global, is therefore outside `arraySeq`.
+`tests/roadmap/container-contracts/Clients.lean` proves two clients once for every `I : SeqImpl`
+from `I.add_spec` and the generic triple rules, without unfolding a representation. `addAll`
+gives exactly `xs ++ vs`, or `xs` followed by a prefix of `vs` after `OutOfMemory`. Its total
+property is a lemma about abstract lists. `addEvens`, a Lean client modelled on the `evens` loop
+(not the generated `evens` body), always keeps `xs` as a prefix. The same client theorems are
+instantiated unchanged to both containers. A rejected attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
+with `lake build Proofs.Lists.Container` and
+`lake env lean tests/roadmap/container-contracts/Clients.lean`. Queues with removal, maps,
+container deallocation through the interface, and a general ADT library remain outside this
+bounded P04 contribution.
+
 `TotalTriple P c Q` requires an explicit `c.run m = pure (v, m')` witness for
 every admissible sequential input and disjoint frame, along with ownership of
 `Q v` and preservation of the frame. Divergence and safety panics cannot satisfy
@@ -172,3 +191,51 @@ nested-loop or concurrent termination. `zig_range` performs only conditional rew
 is not a general BitVec decision procedure. The client is a linked-list queue traversal.
 No ring-buffer example exists in `examples/`, and the module adds no exporter or native
 qualification.
+
+## Model cost: allocation counts and counted loops (P06)
+
+Import `ZigLean.Sep.Cost` for a qualified cost layer. It adds no field to `Mem` and
+changes no generated code. Each count is read off a run that the existing semantics
+already defines:
+
+- Allocation requests: `Mem.allocs`, the allocator model's own count of `rawAlloc`
+  calls. A failed request counts too.
+- Retained allocations: `Mem.liveHeap`, the number of live `.heap` blocks.
+  `Mem.SameAllocs m m'` says that both counts are unchanged.
+- Loop steps: `LoopRuns body again s m k e s' m'`, a run of `loop body again` with
+  exactly `k` body runs. That is every repeat plus the final exit test.
+  `LoopRuns.run` gives the loop's ordinary run equation. `LoopRuns.unique` shows `k`
+  depends only on the start, so a proved count is exact.
+
+The instrumentation lemmas hold for every successful run of a primitive from any
+memory. `store_cost` and `load_cost` give `SameAllocs`. `create_cost` gives one request,
+plus one retained block on success and none on `OutOfMemory`. `destroy_cost` gives one
+fewer retained block and no request. `loopRuns_exact` turns a ghost count that each
+repeat lowers by exactly one into an exact count. `loopRuns_bound` turns
+`loopMM_ghost`'s decreasing measure `n` into the bound `k ≤ n + 1`.
+
+`Proofs/Lists/Cost.lean` applies the layer to the generated code of
+`examples/lists/lists.zig`:
+
+- `push_cost`: one allocation request, with one new retained block on success and
+  none on `OutOfMemory`.
+- `pushAll_cost`: a client of the generated `push`. After `n` successful pushes there
+  are exactly `n` more requests and `n` more retained blocks.
+- `freeAll_cost`: frees exactly `n` retained blocks in exactly `n + 1` body runs.
+- `sum_cost` and `sum_count_unique`: `sum` over `n` items runs its loop body exactly
+  `n + 1` times, allocates nothing, and returns the sum. The sum must fit in `u64`;
+  otherwise the checked add panics.
+- Capacity premises: `sum_count_capacity` (`n ≤ C` gives at most `C + 1` body runs) and
+  `pushAll_capacity` (at most `C` items gives at most `C` requests and at most `C` new
+  retained blocks).
+- `append_capacity`: `ArrayListUnmanaged(u32).append` with spare capacity
+  (`xs.length < cap`) makes no allocation request and retains no new block, for every
+  allocator policy. `Proofs/Lists/Append.lean`'s `append_cost_run` carries this
+  through the generated `ensureTotalCapacity` and `addOneAssumeCapacity`.
+
+These counts are model counts, premise SEM-05 (`docs/premises.md`). A body run, a load
+and an allocation request have no time or byte weight. Nothing here relates a count
+to CPU time, cache behavior, instruction counts, or a native allocator's memory use.
+Such a claim needs a separate calibration argument, which this layer does not
+provide. The counts cover only successful runs: a panic or divergence has no
+`LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.

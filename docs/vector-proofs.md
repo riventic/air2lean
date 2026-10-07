@@ -46,3 +46,51 @@ and exclusion of the no-result outcome, using symbolic operands.
 The unchanged checked-in vector translation is the initial qualification
 input; version-specific freshly generated translations require their own
 pipeline check.
+
+## Memory layout
+
+`ZigLean/Vec.lean` encodes `@Vector(n, uW)`, `@Vector(n, iW)` and `@Vector(n, fW)` in memory as
+the LLVM backend lays them out (`Vec.packedEnc`): one little-endian integer of `n * W` bits, lane
+`i` in bits `[i * W, (i + 1) * W)`, where `W` is the lane's bit size, not its ABI size. The ABI
+size and alignment are both `⌈n * W / 8⌉` rounded up to a power of 2 (`packedVecLayout`, Zig's
+`Type.abiSize`/`abiAlignment` for every backend except `stage2_c` and `stage2_x86_64`). Bits past
+`n * W` and the bytes after them are padding (undefined). For byte-strided lanes (`u8`, `u32`,
+`f64`, …) this is byte for byte the previous lanes-as-array encoding; `@Vector(n, bool)` keeps its
+own bit-packed instance (`W = 1`).
+
+| Theorem (`ZigLean/VecMem.lean`) | Statement |
+|---|---|
+| `intOfBytes_intBytes`, `intOfBytes_of_extract` | The bytes of an integer of any width read back as that integer. |
+| `laneOf_packLanes` | Lane `i` of the packed integer is the `i`-th lane. |
+| `Vec.packedEnc_lawful`; `LawfulEnc (Vec (BitVec w) n)`, `LawfulEnc (Vec (Float fmt) n)` | Every vector has an image of exactly `Enc.size` bytes, and decoding it gives the vector back (so `load_store_same`/`load_store_other` apply). |
+| `Vec.set_lane_self`, `Vec.set_lane_ne` | A lane write replaces lane `i` and keeps every other lane. |
+| `packLanes_set_mod`, `packLanes_set_shiftRight` | In the memory image, a write of lane `i` keeps every bit below bit `i * W` and every bit from `(i + 1) * W` up. |
+| `laneOf_packBits_set_ne` | Lane `j ≠ i` of the image after a write of lane `i` is unchanged. |
+| `Vec.storeLane_run`, `Vec.load_storeLane` | A lane store through memory (load, replace the lane, store) leaves `encode (v.set i x)` in the block; loading the vector back gives `v.set i x`. |
+
+These are universal over lane width, lane count and lane values. They introduce no axioms.
+
+Compiler evidence. `tests/roadmap/vector-layouts/probe.zig` prints the size, alignment and
+in-memory bytes of 14 vectors (`u9`, `i9`, `u12`, `u4`, `u1`, `u24`, `u40`, `f80`, `bool` and
+byte-lane controls), each before and after a store through a lane pointer `&v[i]`.
+`tests/roadmap/vector-layouts/Model.lean` prints the same lines from `Enc.encode` and requires
+them to be equal, line for line. Stock Zig 0.16.0 (`-fllvm`, aarch64-macos, Apple M1) gave
+`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast gave identical output (layout evidence
+only; ReleaseFast stays unqualified, [build-modes.md](build-modes.md)), and stock Zig
+0.15.2 gave the same images. The probe also builds for baseline x86_64-linux-gnu and
+aarch64-linux-gnu; CI runs it on its x86_64-linux host and compares that output too. The Linux ABI
+probe (`tests/roadmap/abi-probes/probe.zig`, `scripts/abi-probe.py`) adds the layouts of
+`@Vector(4, u9)`, `@Vector(3, u24)`, `@Vector(2, u40)` and `@Vector(5, bool)` and three packed
+memory images to its exact contract.
+
+Translator scope. The checker (`Check.lean`'s `modelLayout`) admits a vector with non-byte or
+ABI-padded lanes in memory only when the AIR file's schema-12 profile names `stage2_llvm`
+(`Layout.packedLanes`, set by `normalize`). The self-hosted x86_64 and C backends give such
+lanes byte strides. Legacy schema-11 files carry no backend and stay rejected. The checker
+still compares the model's size and alignment with the exporter's. A lane pointer into a
+bit-packed vector, like one into a `bool` vector, stays rejected (`CheckCtx.itemAccess`): the
+exporter does not write the pointer type's `vector_index`, so the lane is not known.
+`Vec.storeLane` models such a store for the frame theorems only. `tests/roadmap/vector-layouts/Checker.lean` checks these
+gates. Retranslating every committed golden and roadmap AIR set (54 inputs) gave byte-identical
+output and diagnostics before and after this change. None of them has a schema-12 LLVM profile
+with a non-byte vector in memory.

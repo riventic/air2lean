@@ -4,7 +4,8 @@
 Lean models. This first API admits acyclic, fully checked signatures in sequential programs
 and uses `Zig.MemM` for every external model, including models that preserve memory. Unknown
 calls still fail. Indirect callbacks, noreturn calls, comptime worker targets and concurrent
-programs are outside this extension fragment. Built-in allocator/thread/clock recognition is
+programs are outside this extension fragment. Callbacks have a separate Lean-level interface,
+described in "Callback contracts (E02)" below. Built-in allocator/thread/clock recognition is
 one typed table, `stdModels` in `Air2Lean/StdModels.lean`: each row is a qualified std name,
 its typed model (or rejection reason), its Zig-version qualification and its semantic
 dependencies (the `ZigLean` declarations its emitted term may use). The checker, emitter,
@@ -133,6 +134,12 @@ stay unchanged) and `Contract.accesses_within`. A `proof` must prove the conjunc
 `assumed` bindings emit it as one axiom. The report's `footprint` field is `null` when
 none is declared.
 
+**Volatile parameters (L13).** A binding is the only declared contract for a device access
+([volatile-effects.md](volatile-effects.md)). Every direct volatile pointer parameter must be
+listed in `footprint.writes`, because a device read can change device state. A volatile pointer
+nested inside a parameter (a field, a payload or a pointee) is rejected. Volatile pointers in the
+return type are allowed; the caller's accesses through them are checked.
+
 `tests/roadmap/models/Fill.lean` defines `fill(buf: []u8, value: u8)` with footprint
 `writes: [0]`, together with its proved evidence. Its client `client_fills_both` calls fill on
 two separate buffers. Using only the contract and footprint, it proves both buffers are
@@ -140,6 +147,68 @@ filled: the first stays filled because the second call writes only its own block
 registry test generates `fillClient` from a registered binding and proves the same fact
 through the generated obligation (`FillGenerated.lean`). An assumed variant
 (`FillAssumedGenerated.lean`) also checks, but its theorem rests on the binding axiom.
+
+## Callback contracts (E02)
+
+`ZigLean.External.Callback` extends the contract layer to function-pointer parameters. A
+callback is the model `Ptr × Args → MemM Result`. The first component is the captured context
+pointer, which is always passed explicitly. A `CallbackContract Args Result` holds these fields:
+
+- `contract`: a `Contract (Ptr × Args) Result` with pre/post, frame, access, failure and
+  divergence over the context and the arguments, plus `termination`, `errors` and `effects`.
+- `reads`: blocks the callback may read but not write.
+- `reentrancy` and `reentry`. A `.forbidden` callback never calls back into its caller. An
+  `.allowed` one lists in `reentry` the caller-owned blocks that a nested call may write.
+- `cancellation` and `stop`. `stop` marks the results that ask the caller to stop, for example
+  `false` or a returned Zig error. A `.never` callback returns no such result.
+
+Its footprint is fixed: it writes the context block and the `reentry` blocks, and reads `reads`.
+`CallbackContract.WellFormed` checks the rules that do not depend on an implementation:
+
+- a forbidden callback lists no re-entry blocks;
+- a never-cancelling callback's postcondition excludes every `stop` result;
+- the context is borrowed: a call that starts with the context live leaves it live;
+- `contract.Respects footprint` holds.
+
+`CallbackContract.Holds cc impl` adds `contract.Holds` for the implementation. Clients use
+`CallbackContract.call`, which gives the postcondition, a context that stays live, and every
+block outside the context and the re-entry blocks unchanged. `call_forbidden` and
+`call_continues` are the non-re-entrant and never-cancelling special cases.
+`Contract.comap` adapts an E01 contract to a callback's argument shape.
+
+A call through a function pointer is modelled by `dispatch`. It tries the known targets in
+order and throws `.illegal` for any other pointer. This mirrors the emitted indirect call, whose
+fallback arm is the same throw (`applyTwice_illegal` in `Proofs/Layout/Proofs.lean`); the
+correspondence is by inspection, not a theorem about the emitter. By `dispatch_ok`, a
+successful call ran a known target. `dispatch_unknown` shows that a pointer with no known
+target and no contract never succeeds, so no effects can be assumed for it, empty ones
+included. The registry still rejects address-taken bindings: a callback contract is a Lean-level
+interface for model clients. It is not a registry entry, and the translator does not bind it to
+an emitted indirect call.
+
+`tests/roadmap/models/Callback.lean` proves two clients from the contract alone:
+
+- the observer `forEach(xs, ctx, cb)` (`forEach_spec`, `forEach_frame`);
+- the evaluator `evaluate(cb, ctx, x)` (`evaluate_spec`).
+
+`forEach_spec` takes a caller invariant. It proves that the invariant holds at the end, a live
+context stays live, and every block outside the context and the re-entry blocks is unchanged,
+which includes the caller's own buffer. A never-cancelling callback runs to the end. The concrete
+callback `mark` stores a byte at its context through the E01 `fill` model. Its contract
+`markCallback` is checked (`mark_evidence`), and `forEach_mark` proves that the context holds
+the last element and that every other block is unchanged.
+
+Negative tests:
+
+- `uncontracted_not_effect_free`: no theorem makes every callback effect-free.
+- `uncontracted_forEach_frame_fails`: an uncontracted callback that frees memory breaks the
+  observer's context-liveness fact.
+- `havoc_not_empty`, `clobber_havoc`: a contract whose frame allows any change does not respect
+  the empty footprint, and that freeing callback satisfies it.
+- `havoc_not_callback`: such a contract is not a well-formed non-re-entrant callback contract.
+- `unknown_call_fails`: a dispatch with no known target always fails.
+
+The model gate checks this file after the Fill model (`callback.log`).
 
 ## Contract assumption report
 

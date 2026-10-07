@@ -14,8 +14,9 @@ import ZigLean.Vec
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
 an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
-encode (`modelLayout`), a pointer constant without a global, and a global that is `threadlocal`,
-`extern` or has no initial value. `checkProgram` checks the slice items that a function that
+encode (`modelLayout`), a pointer constant without a global, a global that is `threadlocal`,
+has no initial value or a partly `undefined` one, and an `extern` global outside
+`checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
@@ -225,6 +226,14 @@ def unionLayout (ts ta ps pa : Nat) : Nat × Nat × Nat × Nat :=
   if ta ≥ pa then (0, Zig.alignUp ts pa, Zig.alignUp (Zig.alignUp ts pa + ps) ta, ta)
   else (Zig.alignUp ps ta, 0, Zig.alignUp (Zig.alignUp ps ta + ts) pa, pa)
 
+/-- An integer or float lane type whose bits fill its ABI size (`u8`, `u32`, `f64`): a vector of
+it is its lanes at a byte stride on every backend. Other lanes (`u9`, `u24`, `f80`) are
+bit-packed (`Zig.Vec.packedEnc`). -/
+def byteStridedLane (types : Array Ty) (lane : TyId) : Bool :=
+  match types[lane]? with
+  | some (.int _ bits) | some (.float bits) => bits != 0 && bits == 8 * Zig.intSize bits
+  | _ => false
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
@@ -263,9 +272,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c
-      unless bits != 0 && bits == 8 * s do
-        throw "a vector in memory with non-byte-width or ABI-padded lanes is outside the subset"
-      pure (Zig.vecLayout len s, Zig.vecLayout len s)
+      if bits == 0 then throw "a vector of zero-bit lanes in memory is outside the subset"
+      -- The size check compares the rest with the exporter's.
+      if byteStridedLane types c then return (Zig.vecLayout len s, Zig.vecLayout len s)
+      -- Non-byte (`u9`) or ABI-padded (`u24`, `u40`, `f80`) lanes: bit-packed (`Zig.Vec.packedEnc`),
+      -- as observed for the LLVM backend only.
+      unless (layouts[id]?.map (·.packedLanes)).getD false do
+        throw "a vector in memory with non-byte-width or ABI-padded lanes needs a schema-12 \
+          profile with the LLVM backend (stage2_llvm), whose bit-packed lane layout the model \
+          encodes"
+      pure (Zig.packedVecLayout len bits, Zig.packedVecLayout len bits)
     | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
     | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
@@ -428,6 +444,11 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
       if cx.types[e]? == some .bool then
         cx.fail line "a pointer to a lane of a `bool` vector is outside the subset (the lane is a \
           bit, and the AIR file has no lane index)"
+      -- A bit-packed lane (`u9`, `u24`, `f80`) is not an item at a byte stride.
+      unless byteStridedLane cx.types e do
+        cx.fail line "a pointer to a lane of a vector whose lanes are not byte-strided (non-byte \
+          width or ABI padding) is outside the subset (the lane is a bit field, and the AIR file \
+          has no lane index)"
       checkMemTy cx.fnName cx.types cx.layouts line c
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
@@ -527,6 +548,57 @@ def tryErrorBodyExits (body : Array Inst) : Bool :=
   let flow := (summarizeTryErrors body {}).1
   flow.valid && flow.branches.isEmpty
 
+/-- Volatile and device effects (L13). A volatile access is an observable effect that may
+read or change device state, so it is never an ordinary repeatable memory operation. The
+memory model has no such effect: every volatile load, store, atomic, item access, `@memcpy`,
+`@memset`, pointer-state test/set and asm lvalue output is rejected. So is dropping `volatile`
+in a pointer cast and passing a volatile pointer to a built-in std model. Forming, casting to,
+comparing, passing and returning a volatile pointer value remains supported: it is address
+metadata only. The only declared contract is a project model registry binding whose
+volatile pointer parameter is in its `footprint.writes` (`ModelRegistry.check`). -/
+def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let guidance := "volatile accesses are device-facing effects outside the memory model, \
+    not repeatable memory operations; move the access into a function bound by a project model \
+    registry entry that lists the volatile pointer parameter in `footprint.writes` \
+    (docs/volatile-effects.md)"
+  let accesses : Array (Val × String) := match op with
+    | .load p | .retLoad p | .ptrElemVal p _ | .sliceElemVal p _ => #[(p, "load")]
+    | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
+    | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
+      #[(p, "atomic access")]
+    | .memcpy dst src => #[(dst, "store"), (src, "load")]
+    | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
+    | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
+    | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
+    | _ => #[]
+  for (p, kind) in accesses do
+    if let some pty := cx.valTy? p then
+      if volatilePtrTy cx.types cx.layouts pty then
+        cx.fail line s!"volatile {kind} through pointer type {pty}: {guidance}"
+  -- Derivations must keep the qualifier: a result without a volatile pointer (a `@volatileCast`
+  -- away, `@intFromPtr`) would let a later device access look like an ordinary one.
+  let derived? : Option Val := match op with
+    | .bitcast p | .fieldPtr p _ | .fieldParentPtr p _ | .elemPtr p _ | .ptrAdd _ p _
+    | .slice p _ | .slicePtr p | .arrayToSlice p | .sliceFieldPtr _ p | .optPayloadPtr _ p
+    | .errPayloadPtr _ p | .wrapOptional p => some p
+    | _ => none
+  if let some p := derived? then
+    if let some pty := cx.valTy? p then
+      let keeps := volatilePtrTy cx.types cx.layouts ty || match cx.types[ty]? with
+        | some (.optional c) => volatilePtrTy cx.types cx.layouts c
+        | _ => false
+      if volatilePtrTy cx.types cx.layouts pty && !keeps then
+        cx.fail line s!"volatile pointer type {pty} becomes type {ty} without `volatile`, which \
+          would make device accesses ordinary memory accesses: {guidance}"
+  if let .call (.func name ..) args := op then
+    if (stdModel? name).isSome then
+      for a in args do
+        if let some aty := cx.valTy? a then
+          if containsVolatilePtr cx.types cx.layouts aty then
+            cx.fail line s!"built-in std model '{name}' has no volatile contract (argument \
+              type {aty}): {guidance}"
+
 /-- Scalar or vector integer shape: lane count, signedness and element width. -/
 def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
   match cx.types[t]? with
@@ -548,6 +620,7 @@ partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String
 partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
+  cx.checkVolatile line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -937,6 +1010,44 @@ def ptrOperands (op : Op) : Array Val :=
   | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
+
+/-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
+later read could observe. A store writes undefined bytes: a wholly `undefined` value
+(`Zig.storeUndef`) and a partly `undefined` one, whose undefined items and fields at any depth
+(`undefByteRanges`) are undefined bytes of the one store. Its place becomes a stack block
+(`escapingAllocs`). `memset` of a wholly `undefined` item writes undefined bytes. Every other
+`undefined` operand (a call argument, a return or block result, an `aggregate_init` element,
+an arithmetic, `select` or atomic operand, a partly `undefined` `memset` item, an `undefined`
+`shuffle` lane) has no explicit form in a value and is outside the subset, except
+`Thread.spawn`'s `SpawnConfig`, which the model does not read. `tyOf` is the operand's type. -/
+def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Except String Unit := do
+  let fail {α : Type} (what : String) : Except String α :=
+    throw s!"{f.name}: inst {i.id}: {what} is outside the subset (`undefined` is never read as \
+      a default; only a store or `memset` writes it, as undefined bytes)"
+  let hasUndef (v : Val) : Bool := match v with
+    | .undef _ => true
+    | v => v.hasNestedUndef
+  let (written, rest) : Option Val × Array Val := match i.op with
+    | .store p v => (some v, #[p])
+    | .memset p v => (some v, #[p])
+    -- `Thread.spawn`'s `SpawnConfig` is not a value of the model (`FCtx.threadCall`); the
+    -- fallible policy reads its fields and rejects an `undefined` one.
+    | .call callee@(.func name ..) args =>
+      (none, #[callee] ++ if threadFn? name == some .spawn then args.extract 1 else args)
+    | op => (none, valueOperands op ++ ptrOperands op)
+  if rest.any hasUndef then fail "an `undefined` operand"
+  if let .shuffle _ _ mask := i.op then
+    if mask.any (· matches .undef) then fail "an `undefined` `shuffle` lane"
+  let some v := written | return
+  unless v.hasNestedUndef do return
+  if let .memset .. := i.op then fail "a `memset` of a partly `undefined` item"
+  let some pty := (rest[0]?).bind tyOf | fail "a store of a partly `undefined` value"
+  if (f.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+    fail "a store of a partly `undefined` value to a packed struct field"
+  let some child := ptrChild f.types pty | fail "a store of a partly `undefined` value"
+  if (undefByteRanges f.types f.layouts child v).isNone then
+    fail "a store of a value with an `undefined` part under an optional, error union, union, \
+      slice, vector or packed struct"
 
 /-- A shared budget proves absence of embedded pointer capabilities, including
 inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
@@ -1351,14 +1462,35 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
     if pa > ga then throw (alignment pa ga)
 
+/-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
+field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
+error-free type whose bytes the model encodes qualifies. -/
+private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
+  let fail (why : String) : Except String Unit :=
+    throw s!"{f.name}: `extern` global {what}: {why}; external initial state is an explicit \
+      `ExternInit` parameter of `mem0` only for named, pointer-free, error-free storage"
+  if g.name.isNone then fail "it has no name"
+  if g.init.isSome then fail "the AIR file gives it an initial value"
+  if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
+  if (pointerFreeInitializerType f g.ty 1024).isNone then
+    fail "its type can hold a pointer, a union or an unresolved type"
+  if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
-type that the model encodes. An array with a sentinel is encoded with the sentinel. -/
+type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
+sentinel is encoded with the sentinel. A wholly `undefined` initial value is undefined bytes; a
+partly `undefined` one is rejected, never replaced by a default. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let what := g.name.getD "an unnamed constant"
   if g.threadlocal then throw s!"{f.name}: global {what}: `threadlocal` is outside the subset"
-  if g.isExtern then throw s!"{f.name}: global {what}: `extern` is outside the subset"
+  if g.isExtern then return ← checkExternGlobal f g what
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
+  if init.hasNestedUndef then
+    throw s!"{f.name}: global {what}: a partly `undefined` initial value is outside the subset \
+      (only a wholly `undefined` global is modelled, as undefined bytes)"
   checkNullConstants f.name f.types f.layouts init
   checkGlobalAliasConstants f init
   if f.globals.any (fun g => hasErrorStorage f.types g.ty) &&
@@ -1439,6 +1571,9 @@ def check (f : Func) : Except String Unit := do
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     checkErrorGlobalInstruction errorGlobals f insts i
+    checkUndefOperands f (fun v => match v with
+      | .inst id => (insts.find? (·.id == id)).map (·.ty)
+      | v => v.constTy?) i
     for v in valueOperands i.op ++ ptrOperands i.op do
       if let some vty := v.constTy? then
         unless checkedConstTypes.contains vty do
@@ -1670,12 +1805,16 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
     unless g.ty < f.types.size do throw s!"{f.name}: global has unknown type id {g.ty}"
     unless g.name.isSome || g.isConst do
       throw s!"{f.name}: unnamed mutable global is ambiguous (only unnamed constants are shared)"
-    let some v := g.init | throw s!"{f.name}: global has no initial value"
-    value v false
-    if let .func name .. := v then
-      unless g.name == some name && g.isConst && (f.types[g.ty]?.map isFnTy).getD false do
-        throw s!"{f.name}: global function initializer must be its named constant function block"
-    else checkConstant f index g.ty v
+    match g.init with
+    | none =>
+      -- Only `extern` storage is absent by definition (`checkExternGlobal`).
+      unless g.isExtern do throw s!"{f.name}: global has no initial value"
+    | some v =>
+      value v false
+      if let .func name .. := v then
+        unless g.name == some name && g.isConst && (f.types[g.ty]?.map isFnTy).getD false do
+          throw s!"{f.name}: global function initializer must be its named constant function block"
+      else checkConstant f index g.ty v
   for i in insts do
     let extra := match i.op with
       | .sliceFieldPtr _ p => #[p]
@@ -2207,6 +2346,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
     if typeCheck.toOption.isNone then
       log := log.add { (Diagnostics.skipped file (some f.name) .check "instruction_result_type") with anchor }
+    -- L13: a volatile access has its own stable code; it supersedes the generic check.
+    let volatileCheck := cx.checkVolatile line i.ty i.op
+    log := log.record { (checkDiagnostic file f .volatileAccess anchor) with
+      category := .unsupportedSemantics } volatileCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2220,7 +2363,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
@@ -2268,6 +2411,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for i in insts do
     log := log.record (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
+    log := log.record { (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) with category := .unsupportedSemantics }
+      (checkUndefOperands f index.valTy? i)
     for v in valueOperands i.op ++ ptrOperands i.op do
       let result := do
         checkNullConstants f.name f.types f.layouts v

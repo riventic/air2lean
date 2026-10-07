@@ -140,8 +140,9 @@ premises. This gate inventories constants and axioms, not a semantic interpretat
 human-readable enumeration of all local hypotheses. The semantic premises (profile,
 allocator, scheduler, ordering, timer, float, assembly and trust) have stable IDs in
 [premises.md](premises.md). [premise-index.md](premise-index.md) maps each theorem to
-those IDs. `scripts/premises.py compiled --assurance <this report>` derives the same
-mapping from this report's dependency graph.
+those IDs. `scripts/premises.py compiled --assurance <this report> --strict` derives the
+same mapping from this report's dependency graph and fails if the committed index misses a
+premise of any audited theorem; CI runs it after the audit.
 
 The audit demonstrates that the selected compiled theorem inventory obeys the explicit
 dependency policy. It does not prove Zig export, AIR normalization/emission, backend

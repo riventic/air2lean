@@ -1380,6 +1380,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -1406,7 +1407,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatops/Proofs.lean"
+          "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean"
         ]
       },
       "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
@@ -1488,6 +1490,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -1513,7 +1516,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatops/Proofs.lean"
+          "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean"
         ]
       },
       "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
@@ -1595,6 +1599,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -1614,7 +1619,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatops/Proofs.lean"
+          "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean"
         ]
       },
       "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
@@ -1696,6 +1702,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -1722,7 +1729,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatops/Proofs.lean"
+          "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean"
         ]
       },
       "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
@@ -1804,6 +1812,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -1829,7 +1838,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatops/Proofs.lean"
+          "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean"
         ]
       },
       "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
@@ -2322,6 +2332,7 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Sep/Block.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Heap.lean"
         ]
       },
@@ -2507,6 +2518,7 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Sep/Block.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Heap.lean"
         ]
       },
@@ -2627,7 +2639,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
-          "ZigLean/BitCast.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -2642,7 +2654,8 @@
           "ZigLean/Permutation.lean",
           "ZigLean/Range.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -2707,7 +2720,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
-          "ZigLean/BitCast.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -2722,7 +2735,8 @@
           "ZigLean/Permutation.lean",
           "ZigLean/Range.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3061,7 +3075,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
-          "ZigLean/BitCast.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -3076,7 +3090,8 @@
           "ZigLean/Permutation.lean",
           "ZigLean/Range.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3137,6 +3152,7 @@
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Basic.lean",
           "ZigLean/Conc/Call.lean",
+          "ZigLean/Conc/Capture.lean",
           "ZigLean/Conc/Csl.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Lock.lean",
@@ -3145,6 +3161,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Progress.lean",
           "ZigLean/Conc/Sched.lean",
+          "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/Spawn.lean",
           "ZigLean/Conc/SpawnLemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
@@ -3152,9 +3169,12 @@
           "ZigLean/Conc/TimedCompare.lean",
           "ZigLean/Conc/TimedSched.lean",
           "ZigLean/Conc/Total.lean",
+          "ZigLean/Conc/Transfer.lean",
           "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/External/Callback.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Format.lean",
@@ -3185,7 +3205,8 @@
           "ZigLean/Union.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VC/Result.lean",
-          "ZigLean/VersionGate.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3209,10 +3230,12 @@
           "Proofs/Atomics/Stack.lean",
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/Proofs.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Layout/Mem.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Container.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Pointers/Sep.lean",
           "Proofs/Recursion/Proofs.lean",
@@ -3244,8 +3267,8 @@
       "tag": "bitcast",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -3268,9 +3291,7 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": [
-          "ZigLean/BitCast.lean"
-        ]
+        "paths": []
       },
       "emission": {
         "status": "dispatch-arm",
@@ -3363,8 +3384,10 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/Word.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
@@ -3374,13 +3397,13 @@
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Block.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Discard.lean",
           "ZigLean/Sep/Heap.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean",
-          "ZigLean/VersionGate.lean"
+          "ZigLean/Sep/Try.lean"
         ]
       },
       "emission": {
@@ -3459,6 +3482,8 @@
           "Proofs/Layout/Mem.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Container.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
@@ -3529,11 +3554,13 @@
           "ZigLean/Conc/Sched.lean",
           "ZigLean/Conc/Total.lean",
           "ZigLean/Conc/WeakCas.lean",
+          "ZigLean/Env.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Loop.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Total.lean",
@@ -3577,6 +3604,7 @@
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
@@ -3638,6 +3666,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean"
         ]
@@ -4002,7 +4031,9 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/Env.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4115,7 +4146,9 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/Env.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4191,7 +4224,9 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/Env.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4267,7 +4302,9 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedCall.lean",
+          "ZigLean/Env.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Libm.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4584,6 +4621,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Float/Round.lean"
@@ -5417,6 +5455,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Basic.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -6509,8 +6548,7 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean",
-          "ZigLean/VersionGate.lean"
+          "ZigLean/Sep/Try.lean"
         ]
       },
       "emission": {
@@ -6579,8 +6617,7 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean",
-          "ZigLean/VersionGate.lean"
+          "ZigLean/Sep/Try.lean"
         ]
       },
       "emission": {
@@ -6956,8 +6993,10 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/Word.lean",
           "ZigLean/External.lean",
+          "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
@@ -6967,13 +7006,13 @@
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Block.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Discard.lean",
           "ZigLean/Sep/Heap.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean",
-          "ZigLean/VersionGate.lean"
+          "ZigLean/Sep/Try.lean"
         ]
       },
       "emission": {
@@ -7005,6 +7044,8 @@
           "Proofs/Layout/Mem.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Container.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
@@ -7655,8 +7696,8 @@
       "tag": "bool_and",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -7704,8 +7745,8 @@
       "tag": "bool_or",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -7778,7 +7819,6 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/BitCast.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
@@ -7790,9 +7830,12 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -7952,6 +7995,7 @@
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Container.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
@@ -8144,6 +8188,7 @@
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Container.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
@@ -8251,7 +8296,6 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/BitCast.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -8264,10 +8308,12 @@
           "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -8298,6 +8344,7 @@
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Mem.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
@@ -8355,7 +8402,6 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/BitCast.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -8368,10 +8414,12 @@
           "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
+          "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -8434,6 +8482,7 @@
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Mem.lean",
           "Proofs/Lists/Append.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
@@ -8633,8 +8682,8 @@
       "tag": "intcast",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -8714,8 +8763,8 @@
       "tag": "intcast_safe",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -8897,6 +8946,7 @@
         "paths": [
           "Proofs/Atomics/Gen.lean",
           "Proofs/Iogroup/Gen.lean",
+          "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
           "Proofs/Options/Gen.lean",
@@ -9730,8 +9780,8 @@
       "tag": "struct_field_val",
       "disposition": "emitted-unqualified",
       "exporter": {
-        "status": "fallback-named-decoder",
-        "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
+        "status": "explicit-arm",
+        "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
         "status": "explicit-source-branch",
@@ -9929,7 +9979,10 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Basic.lean",
+          "ZigLean/Conc/Capture.lean",
           "ZigLean/Conc/Total.lean",
+          "ZigLean/Conc/Transfer.lean",
+          "ZigLean/Env.lean",
           "ZigLean/External.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
@@ -10510,6 +10563,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Basic.lean",
+          "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/Lemmas.lean"
         ]
       },
@@ -13396,40 +13450,39 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "382913e8a76166e709c2a6d943555dd01e4d6ec7e47ccfa8a25b597ec068a15f",
-      "zig-patch/versions.toml": "d42f3d0c499c1b1e9acbb293f4ced1e1f09463fd4abdd3aa9562a4e35de9ea7f"
+      "scripts/coverage.py": "bdd16652ca93d0bb44e420892c2ba29e19c9ba7bcd2290f350ad864805a26fd9",
+      "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
-      "Air2Lean/Air/Anon.lean": "13a9d44527a4d7ad5bd451ec2bd6af31e97937a915d7f00400db79014f16ca8e",
-      "Air2Lean/Air/Canon.lean": "6c26a055bfb3b1994ac8ff71c03162739039513e177fd34df98edf847f7eab10",
+      "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
+      "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
-      "Air2Lean/Air/Json.lean": "03ec92765b65e3c2e001c3996cf04c0b30874bec6e93448c6a79774f37a9458c",
-      "Air2Lean/Air/Normalize.lean": "f6019871a70629778d6ef72625f6a3b46c729f0f33f550b6bab6f3a1180e30f1",
-      "Air2Lean/Air/Op.lean": "7467498127498cff73dfc48f5c750a5e147718862bb9f9e5c0179822104a5a74",
-      "Air2Lean/Air/Profile.lean": "9db989c6f3e5573de8e569fb67be73144d23aa88f7ebc69b790ca972888b2bbc",
+      "Air2Lean/Air/Json.lean": "d06cd34259e1b885898ffeffc7fde47ab3be9fd24ac373afd0e5c856e0f6de5f",
+      "Air2Lean/Air/Normalize.lean": "d4c50aa0e246efd95daf6d7842a4b77f8b89e5f518b9e6fd33707ec91834bdac",
+      "Air2Lean/Air/Op.lean": "b5d92746254290688eb532f274d6e270f02fba6c6037fbc9835e83631fca38d2",
+      "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
-      "Air2Lean/Check.lean": "e498384f9be4cb0c4ee5daa089c3fb33f7824e018c51acb2206be2f7a50626dc",
+      "Air2Lean/Check.lean": "8934b3c036ae1f2c77c7f6c18fd33645c61b0eb7eeac454d3c1eb7e150248904",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
-      "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "8bc100238ff708e2183eb0725782c48bf642f57ee30adbc0e4957e560409fb98",
-      "Air2Lean/Main.lean": "0ba20d7713520a95f17e129eb477074b1c8e15518bfb8605bd8d48e8ee98232b",
-      "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
-      "Air2Lean/ModelRegistry.lean": "62ee3c124d8e54023c0ac9e270d07a987475bef40feee7ce9d22e7a826a999c2",
+      "Air2Lean/Diagnostic.lean": "6d52aa00b40712a6b572c462535bbc545d1f48967fc859cbc9d42da36b149c27",
+      "Air2Lean/Emit.lean": "fb784b73fe59db80867f0d8f87cbf9006239d13980d8743033d70b7807277c1a",
+      "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
+      "Air2Lean/Memory.lean": "4e212a13fcebefe6fde5ec2190d86809d882718c3cb50f375a848b6498de80f0",
+      "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
       "Air2Lean/SourceMap.lean": "a71d35b7edcbae8c21c8d2a6061be75df48efd974a126fd94f4e1505f3bef9a9",
-      "Air2Lean/StdModels.lean": "d64d6f8162507e65318eb44d42df1d027bb906da4dd130c4c93eb398772259ce",
+      "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
       "Air2Lean/TimedCheck.lean": "3c314ba61f3ecd87c57d3d8ed6576ea5e32f371abba606e40b11c30df218cccf",
-      "Air2Lean/TimedEmit.lean": "4cf4239973fa4f8316b5417365e574717d6e98355ec340a1ac3e3326f51a301f",
-      "zig-patch/air-json/json.zig": "b0a0890563670493282afe6cf1f122a3ecc7c8155a9447b7cf41ff34439bfac8",
+      "Air2Lean/TimedEmit.lean": "69961957cca4f1280290ccd150e43880bc0a9620a3f0b9220c1dd9d108f32bce",
+      "zig-patch/air-json/json.zig": "c1faade782b4c6e646126c0fd9d798f746b1981b984bd90d4eb7f8512c49c535",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
-      "ZigLean/Basic.lean": "88e94c8b3700d8a980987f8e16e41d96e3e6060ac30ed5706e1161423c587d50",
-      "ZigLean/Bit.lean": "b01d156835b875a81bdb79d827d4955f47e2102719e86baeb158bbc62a46c4d9",
-      "ZigLean/BitCast.lean": "ca86d5f6c22d64af20ee73c29664c31a8343af6ca2a1daaea743f4334c82a778",
+      "ZigLean/Basic.lean": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b",
+      "ZigLean/Bit.lean": "e723daf6d3f5d118cbbf1380bc821cb744a03efcdfc85014e57bc8b3af2dce44",
       "ZigLean/Conc/Basic.lean": "0eb0b455238adb1c0e2c8c68248cf3e0e5c91243c60e0c8a75a780ab77083a77",
       "ZigLean/Conc/Call.lean": "1c280d4d4b16aca8a52d4290998209110f9c3b98da5431d9208846d088db6f50",
+      "ZigLean/Conc/Capture.lean": "a790eab8da1e7379c4f12ced5732259a41b04d9a1a75b4073d70bed209319c9b",
       "ZigLean/Conc/Csl.lean": "e96e73fed694439b4fa8dc46926668da1d9b5d3a74927e1b6d0c595d7c1df505",
       "ZigLean/Conc/Lemmas.lean": "f7e22414bc2443872820d0dc02674580f66727654546acc62efb4d9644c5598d",
       "ZigLean/Conc/Lock.lean": "d472cac76fd785bcce6dd55accc6ed88c4df6d74a0d10546ac00774f1f479044",
@@ -13438,6 +13491,7 @@
       "ZigLean/Conc/Own.lean": "b0774bc5335036983f104a6b2671ab429177e944c5b5cb5d58b8e588b68c32fb",
       "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
+      "ZigLean/Conc/Share.lean": "2fa0b1d5f6d0a4de2d4a0bab627c82a072a0fbc75239050c3a21bda0699e2b58",
       "ZigLean/Conc/Spawn.lean": "0ee436d25744f54faa2551cb3a8486540d1b4a0c3eb0e3304c95e7866de80336",
       "ZigLean/Conc/SpawnLemmas.lean": "0f8f24fd090b100771ed959dbe38ac143fb2acac38ef03981c84c82afdddb1f7",
       "ZigLean/Conc/TimedBody.lean": "78b26cce2c3597849135d35db134c1a2dad2db4af16bd8f3ad3435df04bd73d7",
@@ -13446,22 +13500,26 @@
       "ZigLean/Conc/TimedCompare.lean": "f5836c221c4ce38cbd128f3a63627fd1516812c1360669e3babac73232a3c16e",
       "ZigLean/Conc/TimedSched.lean": "36447fddf1f51cfe29a955e2333ce3393fde5c41262f474eecfccebd55abd4f2",
       "ZigLean/Conc/Total.lean": "2d073f7443bd34c619890ee19b4680a6d31436066a574d7ed604e21c9678f0b0",
+      "ZigLean/Conc/Transfer.lean": "85ccd14cd3480990737b56d315d74fce1c3c4a20aa01b38bc607b969545e7982",
       "ZigLean/Conc/WeakCas.lean": "23b3ff639ccc675f3c3b80f15bd25d1871d955a82445b9cfe7097a38091647de",
       "ZigLean/Conc/WeakCasLemmas.lean": "30dc9a347ab14fffc953e9e9a15e834ca0f6179e6e5341e5a011ecbf674733ac",
       "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "d70650f40f8327e503f92d24df7522377aa26f7eb7adc605622c283f8d640d16",
-      "ZigLean/Conc.lean": "ed1c36f3fe531da0375bbcc01bdd2ab11e7a54c24dd8ca2da259e1083c27cc39",
+      "ZigLean/Conc.lean": "6d6fcff53307469d0327868e053f8340279149eeca0686206e818113bbce2234",
+      "ZigLean/Env.lean": "d6c733c2e60381c487995155f198b5c47254375579265238502e8337c1d11229",
+      "ZigLean/External/Callback.lean": "28574fab3f472dffb951d08f1eae59e84b3e6f61b594f04876f8a202deb3d0f0",
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
-      "ZigLean/Float/CompilerRt.lean": "d5f403e97f8a57866d7fe13b64b6e8143f3eb954cfeb59e143e54d3da5ec2820",
+      "ZigLean/Float/Allowed.lean": "562d97fa9ed6bba75995953a0eebb34c3a495f03590a00fb948ca3bf7feebe66",
+      "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
       "ZigLean/Float/Error.lean": "d185a79a145a33bb3ccfd304544258d296b9e36e55010c4c5d347487e6deccb1",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
       "ZigLean/Float/Libm.lean": "ecc42f5218b1ca552f45a26d65b614f03e2b91a52cc47ed8cf01133530a2c452",
-      "ZigLean/Float/Ops.lean": "b5a432c840a173f1089da15dca08888b661641dba4178e045eb0245943b6325f",
+      "ZigLean/Float/Ops.lean": "ba4f5dbbb1eea9fc4f9e6cb233a4287b471735782efececbd48e39eac2ad072f",
       "ZigLean/Float/Round.lean": "8995a2c87cc8167d696f33caa0330883494157ed0a544ba2655efb195689f894",
       "ZigLean/Float/RoundTrip.lean": "c5f4e94dc55470329f994f57f88d228bebe5331c23739d3322c4bec76b892fd8",
       "ZigLean/Float/Value.lean": "5fe060b996d257f191c9c323a9a97118c1696df08169a2834d082438e4e19a53",
-      "ZigLean/Float.lean": "989952fee1cea32435cc635770218f858d54c3b20bf63fa33598bf38f3eb6625",
+      "ZigLean/Float.lean": "f3dc30217dfab347453408f310bd01b151f81db75f7a76a8177a5e745e1063bb",
       "ZigLean/Lemmas.lean": "1fb0ae49b9ea33ad0caadec7bb61378c06539088e95a014e117d91debd491634",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
       "ZigLean/Mem/Alloc.lean": "6f1f165294dc0ded6fd37198dfa678bd5194e684cf0e6f24ffa9309f5305be87",
@@ -13480,6 +13538,7 @@
       "ZigLean/Sep/Assert.lean": "6ec6646b84bea7e51c0c2be4bc7a77c50d9ff494c678697437eee27f4385353b",
       "ZigLean/Sep/Automation.lean": "ff228307070154c1771636dc7e961ef060a46a55ca66065d38d4f789e2c29d0e",
       "ZigLean/Sep/Block.lean": "a29b916e3566d4bd3e3e3f9b7405dae6d2fad50913f1a35003279df5d159eebf",
+      "ZigLean/Sep/Cost.lean": "4ca0d34c7644cda2ae4f18e80f228f180ca51ac73edf7996b2bb3521f0a1187c",
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
@@ -13497,8 +13556,8 @@
       "ZigLean/VC/Mem.lean": "1e5388f2b14b4cf9f59add62591847702ca99594c5ff6fc07a862551e1f13d27",
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
       "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
-      "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73",
-      "ZigLean/VersionGate.lean": "4523e9160bbc8273c235796da86642a3583aea242126ef5f337b2da5e0e9e2f5"
+      "ZigLean/Vec.lean": "ebfdd75cea4aa5aef1d06a08a2944a5668b7768f17041e82baacf0bc92b6d91d",
+      "ZigLean/VecMem.lean": "c20b6386f4b1a9eb15775b694dac5ca6a9a5be8448c43b2c6590d8794ac78ee5"
     },
     "proof-sources": {
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
@@ -13516,20 +13575,22 @@
       "Proofs/Errors/Gen.lean": "42d0f84321e09fac61aca670c66edfdde0ee4fa9b30a84e7387032fd71460c2d",
       "Proofs/Errors/Proofs.lean": "cf02a423505740739045d46a3b300dcb3c8cfe6280fe8d02f94cfe8e3dff2e69",
       "Proofs/Floatconv/Gen.lean": "72161485bb3d2e08a0dfda8131c9aa782e403f48f539035688f5aed7bb337559",
-      "Proofs/Floatconv/Proofs.lean": "91e3d7e423ff603c0669683961ce20e4645079ed6a004d37d569469afb77ce97",
+      "Proofs/Floatconv/Proofs.lean": "74c841aaf6e2c2101c28a224ce47349033a057cd622838ec21dea9de7d0f86ce",
       "Proofs/Floatops/Gen.lean": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b",
       "Proofs/Floatops/Proofs.lean": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
       "Proofs/Floats/Dot.lean": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
       "Proofs/Floats/Gen.lean": "8618fa7b0d2a78273a3129481e4ff4b9d853424ba380d071df58a79ab4ca7716",
-      "Proofs/Floats/Proofs.lean": "9045ba75ef9a45663047fb63052315c15fca073239ade371c876b419bb290dfd",
-      "Proofs/Iogroup/Counter.lean": "35d06213a4f2e21c26da998890a4756846e0a92222184caa84d02f34f551bb78",
+      "Proofs/Floats/Proofs.lean": "ab76fbbe34b9184ae5495c738d5e39892fb26ca1f0c7dcb5c2a642369530707c",
+      "Proofs/Iogroup/Counter.lean": "d733c9426e17453d9cac1410668a1bcf4788f8dcd7063665fddb0ea83231913f",
       "Proofs/Iogroup/Gen.lean": "c1916b15976f9dc2dbc2c030490c205b5e68fc727aaaf9c8af9837caa14a2ef6",
       "Proofs/Layout/Gen.lean": "e0a8f28a43219f93deb8f952bf44784208c919eb88fe51257531eeea877ba9f1",
       "Proofs/Layout/Mem.lean": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
       "Proofs/Layout/Proofs.lean": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
-      "Proofs/Lists/Append.lean": "2218a3734adced95d0e30d3cc659f46f537a0f1d0ef06a0595d11f1cfa5d0e30",
+      "Proofs/Lists/Append.lean": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
+      "Proofs/Lists/Container.lean": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
+      "Proofs/Lists/Cost.lean": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
       "Proofs/Lists/Gen.lean": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d",
-      "Proofs/Lists/Sep.lean": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
+      "Proofs/Lists/Sep.lean": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
       "Proofs/Options/Gen.lean": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e",
       "Proofs/Options/Proofs.lean": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
       "Proofs/Pointers/Gen.lean": "4d2662a861cb4ca947245022387cb4e10f4982eb78150a87ebadaea8aad3afa4",
@@ -13541,7 +13602,7 @@
       "Proofs/Slices/Proofs.lean": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
       "Proofs/Slices/Sep.lean": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
       "Proofs/Sync/Gen.lean": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630",
-      "Proofs/Sync/Handoff.lean": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
+      "Proofs/Sync/Handoff.lean": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
       "Proofs/Sync/Lock.lean": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
       "Proofs/Sync/Mutex.lean": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
       "Proofs/Sync/Proofs.lean": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
@@ -13549,7 +13610,7 @@
       "Proofs/Sync/RwLockContract.lean": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
       "Proofs/Sync/RwLockSnapshotPair.lean": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
       "Proofs/Sync/SemCounter.lean": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-      "Proofs/Sync/Semaphore.lean": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c",
+      "Proofs/Sync/Semaphore.lean": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
       "Proofs/Threads/Counter.lean": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
       "Proofs/Threads/Disjoint.lean": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
       "Proofs/Threads/Gen.lean": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6",
@@ -13596,8 +13657,8 @@
       "tests/diff/basic/inputs/tardiness.jsonl": "9b8ea2475e27ee91ffdbd2491293c56a8eed58023edb53ece80ffcb55ada76a9",
       "tests/diff/basic/inputs/totalWeightedTardiness.jsonl": "2ff2802f365df24b219339123d50005d68dd45d68248354a16a09b27b7d70e29",
       "tests/diff/basic/inputs/weightedTardiness.jsonl": "562940a5845f18637ad36aaf34454d1ba62d10754b18e9dabb386b7765853f4f",
-      "tests/diff/common.zig": "fee1a00d4d01339034a80daf740743461757693bbf05890b072359cc6455549c",
-      "tests/diff/compat.zig": "505e8ddbd1b71ce1f29ead8c0c5de927d6e7a3f75c17d3e448c7078dc70759a1",
+      "tests/diff/common.zig": "72a802f6c8c51e1615d3490d484ae98980ab6a7628eb23b6593da68aacb4ac75",
+      "tests/diff/compat.zig": "106a726539d8b4339e33da66747de1bda6eb054fd0254714976a8311a6efa122",
       "tests/diff/errors/harness.zig": "22e5e9e8d2489741cfa084199d0494629188595d489158bce869b9ce438a13f7",
       "tests/diff/errors/inputs/digitOrZero.jsonl": "12131092f5f8f6b42647096c3b285db00b2980909d45954e54156f1a26b93a97",
       "tests/diff/errors/inputs/parseDigit.jsonl": "8a22d33c0ce12ba478ce26a0b3bcc5e1b5d641ef61469a1116d1eadf9bedda9e",
@@ -13632,7 +13693,7 @@
       "tests/diff/floats/inputs/hypot2.jsonl": "8d98ee43d80e2032e743df1baf1cb83fbac246b059ecd590b2881b7e24991b65",
       "tests/diff/floats/inputs/isNan.jsonl": "5939b5858a4b96edbb970232491e23fb792fada1905d0035e40ecc2dd2e84063",
       "tests/diff/floats/inputs/lerp.jsonl": "10564abc609aae3292974a4543d365f42b76770d07d569418501a020940c16d8",
-      "tests/diff/gen_inputs.zig": "3a4d7e54a1e80b1a3c30c177f9fbf2dbcc213a0b01ca545fda71503655125708",
+      "tests/diff/gen_inputs.zig": "59bb392c2a9aef8c5bddeb8c967c20e7c39e57e9384c67566fa64a89f446ec6e",
       "tests/diff/iogroup/harness.zig": "04f7a39ba895e87ec31a961e40650d5a920770f8cfd383d2c12c02da312f5377",
       "tests/diff/iogroup/inputs/groupConcurrent.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/iogroup/inputs/groupCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
@@ -13683,8 +13744,8 @@
       "tests/diff/layout/inputs/writeTable.jsonl": "eeebe16636b54fbd000e13ea15a289d85f0b244a8550d969219cfdb0dcd063fb",
       "tests/diff/layout/unspecified.txt": "0fbfff9f32d547e0b961f055fa9dcb399d5818b89bc0512489b7a53c1caed755",
       "tests/diff/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
-      "tests/diff/libm/libm.zig": "d2a7509ad3f2499f80fe0a38571a2986f72e2cc001bb563174ae9e4306a783be",
-      "tests/diff/libm/selfcheck.zig": "ef88adbd2eb68afe60ccca1a7da23f6f218e525f85a84d37957fbdd74e8c1471",
+      "tests/diff/libm/libm.zig": "5e6bbe2fa6b3eeb42bf8aa9231faa25b4073c603991340f94dfb21ac4184aa50",
+      "tests/diff/libm/selfcheck.zig": "be039004f4fcdedef5735eca17bda8d81ec9db936d43ff0da7b61a290714cd07",
       "tests/diff/lists/harness.zig": "8745d911b55a4e05acb4be001a3489d45aca652176003e1036c7e4970be96c29",
       "tests/diff/lists/inputs/dupe.jsonl": "09b247e41aded285d0faaec01d337ea5b8fabf93fc981cfed4ee96c631817cd4",
       "tests/diff/lists/inputs/dupeZLen.jsonl": "4829205a621e78ea45165fcec960363da766e3561de3ae09133ce5b97da143b9",
@@ -13764,7 +13825,7 @@
       "tests/diff/variants/inputs/scale.jsonl": "34508c04afbc49b48641780f764d5f132aa31e401f02f54b8dcc0e0c83349a67",
       "tests/diff/variants/inputs/severity.jsonl": "032dfb378f5520b25f2644ad6794b00f668a277ca05edfa353e98c5342d8bb8c",
       "tests/diff/variants/inputs/totalArea.jsonl": "f3070eb831f5491973eac36299898c17aecef6fb499a1f162ab78c5d4590c1bf",
-      "tests/diff/vectors/harness.zig": "7bc725dc01bff2d18f5e54654a5962ad3702e8ac020a0a956a018e0abae33617",
+      "tests/diff/vectors/harness.zig": "62dad25b38d1b12d31054afe45a30c3ad4cc1a625f20503844aca3b483ded35e",
       "tests/diff/vectors/host.txt": "b86983cd417cf4964adc1a3a8e1e499c5b2bc149ec42ba5649409982bc831422",
       "tests/diff/vectors/inputs/andLanes.jsonl": "616c82611163b5002a2d03f369f9df7e35ed78e570665d7ccd04847974254e93",
       "tests/diff/vectors/inputs/checkedAdd.jsonl": "3baba73290fef4d4ce3157350b4dad264b9ed81c498bf32f7bb8b9bc5261b01d",
@@ -13868,23 +13929,18 @@
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).addOne.json": "7ac6f509c70e0cd6f2b6444d3df0cc30d6141a5ba813449eacd20618b6b2e2fe",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json": "0a8e2b115d20d2e130cda2bbe19b0d07bfb2fddab58302a5255ea0a6b60efcce",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).allocatedSlice.json": "a96d1dd49126c578a9cf93e5447fbe358662e68af6f82c5def6ed4cb36842613",
-      "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).append.json": "3f89cce02158e6eda5e19d1a7a56dd363ccf89b9d214ab3434a78e2c9546a22f",
-      "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).clearAndFree.json": "f93afe3628c08f96159b1a2b23c96400786ef945274060d38dd63283c043e31d",
-      "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).deinit.json": "eed788f3de5e6647cb8ca837028298318186dd3fa9ee366c9692c9559fafa6c9",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json": "a97b1033fb159ecbf22ba273799295c51ac8a5f245888300a4c3d792f4bf9c84",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json": "1b88508dff142b09780d25651ed071dd248b96f794420e7b052f43ddc769f86f",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).growCapacity.json": "3d43ae1033eec0e8ac83061a51f69898c5ab32eeb763a97fb5a3403c26b74b8b",
       "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json": "b5eba7bca13d48ab9d40b380352da679b4d3dc1eb276dfcecdbd2eb6edb903d3",
       "tests/golden/0.15.2/lists/air/debug.assert.json": "d8e5e75b2c55f29e1e8eedf018fcbe3fb9bb0bcd0c6a5a18f920591f3f7aa5a5",
-      "tests/golden/0.15.2/lists/air/lists.dupe.json": "d73adba3291b19b805474813f5e0c0c2208505747b9ead232c920aa7e5d8dbb8",
-      "tests/golden/0.15.2/lists/air/lists.dupeZLen.json": "0a0906dfad73d47362091877234941e4ffab732874636199f3d748f41b30619a",
+      "tests/golden/0.15.2/lists/air/lists.dupeZLen.json": "39de72a397212a638acb76b35902770255a3ef198baeba7ce7d39286dfc0def5",
       "tests/golden/0.15.2/lists/air/lists.evens.json": "bc6368f5a277310cacc8ea3683ea81346dfa4766669505563b4a6da62608914d",
       "tests/golden/0.15.2/lists/air/lists.freeAll.json": "84276d5c5c5948fd495403ec0735e69154e9b13ea48920f0c4bb843f410fd807",
       "tests/golden/0.15.2/lists/air/lists.listSum.json": "cffad046191324e4fd159ac51c9c4e3c75d1acf4897d8e08e789c0fd3ed445ac",
       "tests/golden/0.15.2/lists/air/lists.push.json": "1e4c2f25c560b8ca4849cbcba8d3562690f5fdc731ea15390454f79a5a5540b9",
       "tests/golden/0.15.2/lists/air/lists.reverse.json": "bc67884ce287cd1b4f5b8dee4fa5878cb4204907f9d7b30ed6cfb9c46e7f4116",
       "tests/golden/0.15.2/lists/air/lists.sum.json": "05bfc10f081e1a75c298f91929002b376e95ee67473d4ad484d897b5b47ac2a7",
-      "tests/golden/0.15.2/lists/air/lists.sumRange.json": "67b88094a0818ec70348538b618be0d82f7aa208f0d4428251470929718c1035",
       "tests/golden/0.15.2/lists/air/mem.Allocator.dupeZ__anon_N.json": "5dbff672fab96f138cb626ba13b36fd2626e218191a4240c1abe6fc2aa4c381f",
       "tests/golden/0.15.2/slices/Gen.lean": "71a1ce6fe3468faf207c604e9e0f5ea8491de1fde1a5fe09da20d098d1485969",
       "tests/golden/0.15.2/slices/air/slices.sentinelArr.json": "c2a6998b376a4058b6c18a943b47b354200ad64fc384233b376af381da3f657e",
@@ -13939,26 +13995,7 @@
       "tests/golden/0.16.0/floatops/air/floatops.op32.json": "b78be835b47ee4a40fcb39abf6689c8d4756af2d90cc36529eeeddb206e5ae72",
       "tests/golden/0.16.0/floatops/air/floatops.op64.json": "af4890de135d375a097e9436628b6f1ea5a48c667e6e4190971d63d986248b1c",
       "tests/golden/0.16.0/floatops/air/floatops.op80.json": "7613c8be3155a9d2cd3a1655ae5138bb3bf49f075f9bfac2cd3309c187ac8652",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).addOne.json": "22d00028a5535df27b4f5afcad56b61f2dcb5c13b91d791357e4a4449f8a3ffb",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json": "62ba0b65ffe2deaea0aeacdc899a6194851019ed54a7e9a2e6b757b7ea9bd637",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).allocatedSlice.json": "f9fb181f110f281cfa3d5fe0ff7c4bb0b32723cbb7c81630b3b9d49b45f8644d",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).append.json": "3f89cce02158e6eda5e19d1a7a56dd363ccf89b9d214ab3434a78e2c9546a22f",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).clearAndFree.json": "f93afe3628c08f96159b1a2b23c96400786ef945274060d38dd63283c043e31d",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).deinit.json": "eed788f3de5e6647cb8ca837028298318186dd3fa9ee366c9692c9559fafa6c9",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json": "e4882e3a84412aa5959b1e3c5331c5941916267a2ab478410953dcea538fe80e",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json": "0ffd3ae2499f7e063e4a3151ff1ad95599f3cf4169a8fc1418c844358693765e",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).growCapacity.json": "7b8572ddb69bb9160ee2568ef70d0d29df96574605ca26136056556365b537d9",
-      "tests/golden/0.16.0/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json": "a80a7dd255598659b8705fe0684e1743bca9c1024f2b74e9c98ca09f5698cb1c",
-      "tests/golden/0.16.0/lists/air/debug.assert.json": "494f49a343905d9a4e0c51838673b7cc6c15c2c5cad2fcc23b10ab449e86012d",
-      "tests/golden/0.16.0/lists/air/lists.dupe.json": "d73adba3291b19b805474813f5e0c0c2208505747b9ead232c920aa7e5d8dbb8",
-      "tests/golden/0.16.0/lists/air/lists.dupeZLen.json": "727620853a77ae923ed3aa1f79d3d36b53d532c627471a31ceb4ce70ee33ad1c",
-      "tests/golden/0.16.0/lists/air/lists.evens.json": "64e23f2ebadb2a63a3acfdd3a79c3f46684e5dada035df7af3bd2948fa6f2973",
-      "tests/golden/0.16.0/lists/air/lists.freeAll.json": "db203923d73e4008b82cd399a14257f0990e9980ff93715ab173f728ab04defc",
-      "tests/golden/0.16.0/lists/air/lists.listSum.json": "14962e777b48b9509c31d43152db0e6b13237dd328deb4ab259212eebe63b255",
-      "tests/golden/0.16.0/lists/air/lists.push.json": "3f1d4aff1eeb05cb85ecb33553b73f57a81665d409de13fea95cfe1cf31296b9",
-      "tests/golden/0.16.0/lists/air/lists.reverse.json": "7894d2e25050054c01d160156c634b88edc17ddd4c5b138d416cf10dd5169eee",
-      "tests/golden/0.16.0/lists/air/lists.sum.json": "42f76a3af38df49b38bf757ee9ee794deee19225b72f63fb4c36de3f66792331",
-      "tests/golden/0.16.0/lists/air/lists.sumRange.json": "67b88094a0818ec70348538b618be0d82f7aa208f0d4428251470929718c1035",
+      "tests/golden/0.16.0/lists/air/lists.dupeZLen.json": "4286daed7038430d97d9facf95ef7876e032db79b5dd084f6606b1a0407b5c17",
       "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json": "a3049456d20cb12d719e01ac8e6724587ad17677107d71d58ed5c2a56cd0edc9",
       "tests/golden/0.16.0/lists/air/mem.Allocator.dupeZ__anon_N.json": "7e2e44240622fbce1c7870903787c08cfb48750a9076f86e782d581d34d89f98",
       "tests/golden/0.16.0/options/air/options.findOr.json": "dac53e1464f1d869f210a9b17b88a07bc7aae86af171ba9ef251ed8c13bf6079",
@@ -13975,32 +14012,6 @@
       "tests/golden/0.16.0/slices/air/slices.subZ.json": "484c2adfa49ac84b47c10f5b33de6014bea4bfd518584c44b9feebe68eb6e123",
       "tests/golden/0.16.0/slices/air/slices.sumMid.json": "c6fb0dfd4c18484f2fb29358ccff1540ec10e67647404359eaafe2c66a358135",
       "tests/golden/0.16.0/slices/air/slices.sumZ.json": "af0692a9b681c27d72aae12084d10f8061e50674187f7d1fb5fd8c2553855923",
-      "tests/golden/0.16.0/sync/air/Io.Condition.signal.json": "7040e246927ed4ae4d23e46e6dcdfc03e4f0892166617b222beefbb0d00e6883",
-      "tests/golden/0.16.0/sync/air/Io.Condition.wait.json": "17098485d8afec9526f90e56f9e4ed2c79dfc7c39732dab2bc500a985518e315",
-      "tests/golden/0.16.0/sync/air/Io.Condition.waitInner.json": "622ab18072cb34f92d238ab712d99a81861cd420ad191aafd463babdaa68eb3a",
-      "tests/golden/0.16.0/sync/air/Io.Condition.waitUncancelable.json": "8f45e524d90117541823d247e00e82120f743aa4489089629708e15c64bab5c6",
-      "tests/golden/0.16.0/sync/air/Io.Event.set.json": "e6543b2f077e65c1514db761202d7185568bc9749310930a68e04c151cecd1ef",
-      "tests/golden/0.16.0/sync/air/Io.Event.waitUncancelable.json": "c04e91d79ded00506c65459d51b7154bb99b569538fec4f9f86e0cd7f8946d15",
-      "tests/golden/0.16.0/sync/air/Io.Mutex.lock.json": "669f4c3ec30179322ab8ad94062ef8ec25cddf5037274d91efb1ed4b0b7269ba",
-      "tests/golden/0.16.0/sync/air/Io.Mutex.lockUncancelable.json": "3d38fd8e3501ba9ac2742e7cf5cea27caae946e3d57fd1c292d7681d0fc5e47e",
-      "tests/golden/0.16.0/sync/air/Io.Mutex.tryLock.json": "f4eae588a6be8d7d32c17f526e5c55b92d1595a6ef4562af4beec2d46d561ebf",
-      "tests/golden/0.16.0/sync/air/Io.Mutex.unlock.json": "d76cd90723e500719908f172af41faee4dbb6366aefb3931297b73afd77cd226",
-      "tests/golden/0.16.0/sync/air/Io.RwLock.lockSharedUncancelable.json": "961875b15fcb8ab0c35dc4bca0ebcd0adaa21e8ebdfc6067b439a778738cf82e",
-      "tests/golden/0.16.0/sync/air/Io.RwLock.lockUncancelable.json": "1b7329b9c2ca3de2c462dfb5f821bde3b588d6d6fc298913a317bd13b894a98b",
-      "tests/golden/0.16.0/sync/air/Io.RwLock.unlock.json": "08dbeb4de0d1505aa3de55e7cf5a761c7480f61e0dc94e2a7f430afd31d6100a",
-      "tests/golden/0.16.0/sync/air/Io.RwLock.unlockShared.json": "ad814413f1e7bba359f26a92ccf8002ed44839532c7a54433de681fae32c5591",
-      "tests/golden/0.16.0/sync/air/Io.Semaphore.post.json": "e967429692be3fcb965d613dfe0419bd981ce400d9d629d780a9c6b3c1a72f1a",
-      "tests/golden/0.16.0/sync/air/Io.Semaphore.waitUncancelable.json": "abe509eb0357dd114f695f9a5be5446d9099195e100a71ebbf14b8163196aa67",
-      "tests/golden/0.16.0/sync/air/debug.assert.json": "494f49a343905d9a4e0c51838673b7cc6c15c2c5cad2fcc23b10ab449e86012d",
-      "tests/golden/0.16.0/sync/air/sync.handoff.json": "7fcb33c3f47af9345137fcc58947d6be048f9447bfd5c8342034c1d6afbc1a83",
-      "tests/golden/0.16.0/sync/air/sync.mutexCounter.json": "8244ed5c40cdb2f8f85c7d41a51e49c412762ba13360aed383149713044a0270",
-      "tests/golden/0.16.0/sync/air/sync.producer.json": "8000cc7eae625e54560ccf9fbf662caf87ab3068bb09afcb3268c11a39bf0659",
-      "tests/golden/0.16.0/sync/air/sync.readShared.json": "fc26a9b96aa46b879e3013ca83b2b04b0768cbe4330edf08cd3a658d90e3ee18",
-      "tests/golden/0.16.0/sync/air/sync.rwLockRead.json": "af44e224ee88f149db09b2300492e580783b729e1011421568a5abde93bd8d91",
-      "tests/golden/0.16.0/sync/air/sync.semWork.json": "946debcb13a21f5041d096910e461777daa910107b0351c9d417ae6abdcb46ff",
-      "tests/golden/0.16.0/sync/air/sync.semaphoreCounter.json": "7369dd3b0eacfb14d29a1f4aed9f857f572bdfb22bc5879c123554dd663bc559",
-      "tests/golden/0.16.0/sync/air/sync.work.json": "224b7b31d26c6425a62638a632fe41f823194d41d0b13f8264ca1e02a97cbd6c",
-      "tests/golden/0.16.0/sync/air/sync.writer.json": "4ee6728d418bc7ab2b0b73bc393be91827b4858281e265e27dedac12ac5b6622",
       "tests/golden/0.16.0/sync/air-darwin/sync.rwLockRead.json": "789369262cc68fe86669537e80bc9b6082708d13ea24628abaa3e77ad7e25bec",
       "tests/golden/0.16.0/sync/air-darwin/sync.rwLockSnapshotPair.json": "176ad019244d1e55974c812ba7ad63d0be0095b44c2223d8c6355e32ffdc1d7e",
       "tests/golden/0.16.0/sync/air-linux/sync.handoff.json": "8437112e35773b38b4790103fbe5bf42404ddb78371d59fd07201120fa5d2582",
@@ -14016,169 +14027,6 @@
       "tests/golden/0.16.0/variants/air/variants.area.json": "a3c79737263ee097de027352b7e341b3cc38002cc9d20dd969df033cc305610b",
       "tests/golden/0.16.0/variants/air/variants.radius.json": "336bbbbef06e28c61dffdd8b781723ce2c1dfdf217bb4284870e4aa7615cbcf7",
       "tests/golden/0.16.0/variants/air/variants.scale.json": "fdfb678487c05fbac446681da52ce735f31979a035e907226493ff9baa73a58b",
-      "tests/golden/0.17.0/atomics/air/atomics.mpRelAcq.json": "d0873a4402eff8cdbf41bf4b2bbc98521fd7b7fbdfc83b584984e5b25454e955",
-      "tests/golden/0.17.0/atomics/air/atomics.mpRelaxed.json": "e9d7f9ecee01d25f888a53200a1707914beb2ccf8bc09754350d7c4a4cdbc8d3",
-      "tests/golden/0.17.0/atomics/air/atomics.mpWriter.json": "21fcac237ca26fa1129ed364d08935e52714480e9ed2dc8af7ebea16fe299721",
-      "tests/golden/0.17.0/atomics/air/atomics.mpWriterRelaxed.json": "6468463759c4ec29a73ee873d9d107b2b585a2252ccca3ca7875d587d80e54ab",
-      "tests/golden/0.17.0/atomics/air/atomics.push.json": "1ae0bdd3660dffbfec8fd58a1afc310b337f4eedf3fc75b48f4622568188adfb",
-      "tests/golden/0.17.0/atomics/air/atomics.sb.json": "1dfde58c84e9fde98159d140438132403c156a404e9bb14b69648f0ae32db9e8",
-      "tests/golden/0.17.0/atomics/air/atomics.sbRelaxed.json": "43b7896333c1ed60cef44a1c768696992d0f37ed41388caf96e8d58f2419cc6e",
-      "tests/golden/0.17.0/atomics/air/atomics.stackPush.json": "570a7306453cb44b038dab133e4925e4d1bf726a93b6ea00d9c39862d6051dc3",
-      "tests/golden/0.17.0/atomics/air/atomics.twoPlusTwoW.json": "3fd8dbf00ac8227b217eb82915461bd674c5a7f5733d47e52c265195a02ddd95",
-      "tests/golden/0.17.0/atomics/air/atomics.ww.json": "09dcffd9724ef92331a94664903ecec7f99a3054ab7d98512398b27c521443dc",
-      "tests/golden/0.17.0/basic/air/basic.absDiff.json": "6e0eadb1c078b28ed006a18518f6732cc9b603f63ac7ed6b3d4901a438a5eafe",
-      "tests/golden/0.17.0/basic/air/basic.scale.json": "c784536d2e7d4c9f6ead682123fcdee652352ece8b559f30309c5ea6bd06e895",
-      "tests/golden/0.17.0/basic/air/basic.sum.json": "45aec08aef8fbd318d18d0842f7e2e2166c7aa19c08cd15ca13e7d4da5a17f12",
-      "tests/golden/0.17.0/basic/air/basic.totalWeightedTardiness.json": "f9aa21a21dbd71b7b7fb02f6932096be41ff7da7536b439e4dbdf67fcf80437a",
-      "tests/golden/0.17.0/basic/air/basic.weightedTardiness.json": "0c63a4976cd60bca6a750e7ca3b00a19d90d5eee660ebd59005ee3bc932b54a7",
-      "tests/golden/0.17.0/errors/air/errors.sumDigits.json": "9385de9e67aabc668f5f1b4e8f6cf27729aaa982d5728777cdb1ed7275062ae7",
-      "tests/golden/0.17.0/floatconv/air/floatconv.bits32.json": "91fb4b8278a4fade8363311854ed3d87078a3886d27a9c04d63c7aff01be1e4a",
-      "tests/golden/0.17.0/floatconv/air/floatconv.f16ToF128.json": "4913dcc66a9f946ce510f8a3931233b448be544f5306139922aac12700fd0258",
-      "tests/golden/0.17.0/floatconv/air/floatconv.f80ToF64.json": "f0d4ef835df6f2d1c01927523d000f2d7eedb116fbbc7941641bc78e7439c05d",
-      "tests/golden/0.17.0/floatconv/air/floatconv.ofBits64.json": "52bdb3fee9de6f0108a8f23d55dc29b228958828e064073e3b9905fa27c39bc8",
-      "tests/golden/0.17.0/floatops/air/floatops.op128.json": "2c111655f438ad1a418a16553cae2e81815e9e7ef7c3e57316cdd7184c3ec0f6",
-      "tests/golden/0.17.0/floatops/air/floatops.op16.json": "780b8a1ac5fd549337c53e3d35c435d3220cf80c6d451ad2d8ef16c79bad95f7",
-      "tests/golden/0.17.0/floatops/air/floatops.op32.json": "954456c27faec590c1d41674e103c3cee7646a59547d0e30f805943006186c83",
-      "tests/golden/0.17.0/floatops/air/floatops.op64.json": "1d7eed05a1c3049e623aec8b00096530d8a0fdb2d5479f86c9602d05e1d99f8f",
-      "tests/golden/0.17.0/floatops/air/floatops.op80.json": "948c11cfdbf3089637e0695a8e618423c568e86766d1003173ac28597bc5b2d2",
-      "tests/golden/0.17.0/floats/air/floats.dot.json": "89e6bc194637bbb156c821dbf3ec564c22e15bf060a49579305a9a7898dc4eae",
-      "tests/golden/0.17.0/iogroup/air/Io.Mutex.lock.json": "352fdd39cd02e5bc54dbd3535c01159671bc7f2d2c656cf5b722bd7ca74a0dca",
-      "tests/golden/0.17.0/iogroup/air/Io.Mutex.lockUncancelable.json": "899fb1951eff8b461fab3712564a82d29ac3d729a997b48f4e2f74ca5e0e5eef",
-      "tests/golden/0.17.0/iogroup/air/Io.Mutex.tryLock.json": "304d2ba9e522c0ca1eef02d8bab2a1c00e95c3e4faf6ef1ff5efeadbc8c8d6ea",
-      "tests/golden/0.17.0/iogroup/air/Io.Mutex.unlock.json": "e0e07ba1abf1d04809ceb4f7f3c2601c3861bbd2907bf2f695b78da998dabe7e",
-      "tests/golden/0.17.0/iogroup/air/iogroup.add.json": "07b97cb8789b72a7af01bcca514f66c7ec28419f548346f7f6fa3a41b4e2c1e8",
-      "tests/golden/0.17.0/iogroup/air/iogroup.groupConcurrent.json": "32a7569374b83a4666d1a2c58ae0a2e704c941bd84e98b4fdabfedfac1b8b9e6",
-      "tests/golden/0.17.0/iogroup/air/iogroup.groupCounter.json": "caf0dcce67bbf6009f292345652d27424d2e11aa6fcc7b9cfd0b79c1a674f0eb",
-      "tests/golden/0.17.0/layout/air/layout.addrEq.json": "c79bf65dd49a0999382c6406dd4ed458050e64797f2416346a75400d9d28bd8a",
-      "tests/golden/0.17.0/layout/air/layout.align4.json": "536f77e5a742de23cd0a0c1ab539128a1b3cb53a4c2b535b6b6fcf75763523c1",
-      "tests/golden/0.17.0/layout/air/layout.asConst.json": "110efa0decfff869e5e3ae2f107cf99cbef227bb4aa57d9891ee0cd5def6df32",
-      "tests/golden/0.17.0/layout/air/layout.asVolatile.json": "e2eba15d0f79e1cd013e27d20f9e1949a464b26c0d0ae78711e6c0267bf34304",
-      "tests/golden/0.17.0/layout/air/layout.bitsToFloat.json": "23d9a4609de92a5c062fb9334afd17fb8fd8141551af89fa72a4ae97f30ef2a5",
-      "tests/golden/0.17.0/layout/air/layout.bumpPair.json": "71bf677b596e8b11e8537548a8344a70a442de5c9c259b28c9c3c75ff0d0b109",
-      "tests/golden/0.17.0/layout/air/layout.byteToFlags.json": "5591842f9d6321b6798a8d463d866faea6078e650c4e7b59fe5c6757490efa88",
-      "tests/golden/0.17.0/layout/air/layout.ctlMode.json": "366fae313342b5a872bf2fc17e041caf0a6e3a66813d9a879817b52a295c00bf",
-      "tests/golden/0.17.0/layout/air/layout.ctlSum.json": "2fa4576905b92ff9812df669f96f185c72ac8c51985ce939d711a198ed047d31",
-      "tests/golden/0.17.0/layout/air/layout.dropConst.json": "e1d524652a448de36d46db814afb673f9ed5cefe2a750878ff667372ec414263",
-      "tests/golden/0.17.0/layout/air/layout.flagsToByte.json": "1ba4f9abdcd4742809044bdce618f4a5b4c3e22c623eb985a3daf9218003ba9a",
-      "tests/golden/0.17.0/layout/air/layout.floatBits.json": "eed4417c2bab700bac6cf4ce79690b2a1bc7a0bb985b5f14def4a1044b5035e8",
-      "tests/golden/0.17.0/layout/air/layout.headerLen.json": "b278af4a1214962557ee9bc501269a112d7b92828ea2ed9957f3fa8f21f7f43b",
-      "tests/golden/0.17.0/layout/air/layout.incCount.json": "66d34b92b8194b7a1390d986345033b828af5564ce5b53592d011f63aab4e618",
-      "tests/golden/0.17.0/layout/air/layout.isOk.json": "e32a8657d25cb4cc7818ab750aeaac4caf341b7f7a5c56471ccc11e917162017",
-      "tests/golden/0.17.0/layout/air/layout.laneSet.json": "86caa9af144d9639c0dfddb77b47e360b4997b55a797354a35dff31dd2b5d487",
-      "tests/golden/0.17.0/layout/air/layout.lowByte.json": "53ec3ee0767b1c4623d334b244e1d27d0a7f629a99a721ed3925473f4e6c33bb",
-      "tests/golden/0.17.0/layout/air/layout.maskStore.json": "771f0b69bbafa1cd23a5590c7c9bc16f932e4e0bfc2cd96510619d16ede1c414",
-      "tests/golden/0.17.0/layout/air/layout.nibArg.json": "09760893ae9146535aa7ae4ab60ee4f5c968f4286721ddf5c17d35f9c9ba8090",
-      "tests/golden/0.17.0/layout/air/layout.nibSigned.json": "c7ee19d579765cc8ce98dab1031e446a5bb4267e80ee7be7eaddfb7c6d732610",
-      "tests/golden/0.17.0/layout/air/layout.numInt.json": "91cdb2631260a75994dfbd06271bb6505508e87162123a38f5f09c8465cd984f",
-      "tests/golden/0.17.0/layout/air/layout.numRoundTrip.json": "c132849fc8732c9d3fa679a17e8a36f8800d1de0dae300c96d345f096e86753f",
-      "tests/golden/0.17.0/layout/air/layout.parentOfX.json": "760eb997819f858aa2a1c3c651350eb1f584ed42f4140fee80836959cee0b42f",
-      "tests/golden/0.17.0/layout/air/layout.parentOfY.json": "5a6fb12487266b7ea195f90ce5435c65735827b66e9a071da5f120b3639c9c0f",
-      "tests/golden/0.17.0/layout/air/layout.ptrFromAddr.json": "0e924d6a2ed92786f639b48c50c4d3f038c7f19ffb715327b774a7307d6ffeb4",
-      "tests/golden/0.17.0/layout/air/layout.ptrRoundTrip.json": "914affa9c8214142c94d92510e9b51527d8e2e296af54903aa22dbe1f9a9be62",
-      "tests/golden/0.17.0/layout/air/layout.readHeader.json": "b70459dbd9dc2e9b112e85cc132257135af99c2ca1fc279272dc0bd0670dcad2",
-      "tests/golden/0.17.0/layout/air/layout.regSigned.json": "d0b34ce54cbdef11a46eac7520a94aa3b86df38e26860524508ee796f1e7fd34",
-      "tests/golden/0.17.0/layout/air/layout.setHalf.json": "f17fe356b2af30f6a1b6d3a61acc861604848faae8876b8e3a6161ac6a887066",
-      "tests/golden/0.17.0/layout/air/layout.setMode.json": "49f5cb63e696cf3149fa05c85847232df6eae481aa41c4e78943f274a6c16643",
-      "tests/golden/0.17.0/layout/air/layout.setNib.json": "0ab150777937917b19e80ecd05fbfb4a30c7ae1443f0576d4cf625c77fd772d0",
-      "tests/golden/0.17.0/layout/air/layout.setRegFlags.json": "e155868d436791a6f8ff050d760e5eb57ea9023b022a8648126d184b3c151062",
-      "tests/golden/0.17.0/layout/air/layout.shapeArea.json": "ce87df712fa4da6d895bb9af1e32b4912ac3618bd98f5b3d0db06d0371301907",
-      "tests/golden/0.17.0/layout/air/layout.wordByte.json": "ef0cb460122a9e0d2c68479193d80ebc42c9c9c9c8ff3501f723531af536e8db",
-      "tests/golden/0.17.0/layout/air/layout.wordHalf.json": "50d6a297cc7b6de066fe1b90a05fb5f9561b590efb964aab71e882dd31f5ee47",
-      "tests/golden/0.17.0/layout/air/layout.writeTable.json": "3b41fc15a62283442e8042d54876b1f71b389fca84dbd413ee8b04e1be4fd251",
-      "tests/golden/0.17.0/lists/Gen.lean": "5b6609a92629c1b63b3e47dda53937fa2af774e75c1e1e71f5b77d81f086bfec",
-      "tests/golden/0.17.0/lists/air/debug.SafetyLock.assertUnlocked.json": "23dcf7148d4f04824287522e9d9282f3d52cf52b677149a4fe7210faac3f3f0b",
-      "tests/golden/0.17.0/lists/air/debug.SafetyLock.lock.json": "636e303b78aae5606f6d176539ffefaf454a325be53302ad7722e7fa3db9fd5c",
-      "tests/golden/0.17.0/lists/air/debug.SafetyLock.unlock.json": "1c7aec4df8dabaa05d2d78b1f14e345ab2bc40d94626e3d6b8bf6fbb93e228cc",
-      "tests/golden/0.17.0/lists/air/debug.assert.json": "7e368db92fbff9dc6d1edba68886ccd952a977c8c205d2723073d7b191dae14d",
-      "tests/golden/0.17.0/lists/air/lists.dupe.json": "f83fafe5f341c3e84c8d34b4d7092b1ec4a1f718160b06433cf30ec016c59286",
-      "tests/golden/0.17.0/lists/air/lists.dupeZLen.json": "68198974546be8c651687c6672c3a28ee6753ddfdaf25a86ee3b244068d83dae",
-      "tests/golden/0.17.0/lists/air/lists.evens.json": "ff5772410a9f2f41875c566261a1cf6cc85718ca0afa7b6153f4c32f91bba234",
-      "tests/golden/0.17.0/lists/air/lists.freeAll.json": "ca81fe9e2da7d2b650ba9eb8c979600a998ffc89e3c04b209320a499b7093e3a",
-      "tests/golden/0.17.0/lists/air/lists.listSum.json": "dc39f57e2a2b75270eb171969b34c7c06140f2e416551b221000189d05c472a2",
-      "tests/golden/0.17.0/lists/air/lists.push.json": "9b528048e8e8071a5dd5ef223f5f8df9e322a9fbb81086cb3c7970b930d0f643",
-      "tests/golden/0.17.0/lists/air/lists.reverse.json": "2cabcd5920bab3fc506e8eef73948f1b6c0c194402993b0beeeb9d564ef8ad3b",
-      "tests/golden/0.17.0/lists/air/lists.sum.json": "4d8c95c600435706119d5304351a128c35f421c4f306e35d3fb3234a04db86cd",
-      "tests/golden/0.17.0/lists/air/lists.sumRange.json": "9c79fddc3265899db83097f8dc0f799980b15f66e75f904f89dc1ff1da454810",
-      "tests/golden/0.17.0/lists/air/mem.Allocator.dupeSentinel__func_N.json": "bb4196eee99b9ded62ff18c1ceb4402877d5b2713f2a264b44ad6aec2a2fc092",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-086eaa8eec14510537bd29cf94beb4186e3abf0961eab25fa444e86f42979bdd.json": "ce1730a53ab47fb1e522839ccd01e0e2f676429a564d93c7fbf38886b6c38828",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-1db06747ea8e6d8e140c56423eeee5d6708a6eb05a98ecaddb44af22666aab87.json": "fc4ad0b3bd11997258beb4258241c8b8f0eebdb17b2582f3dcaf47c52f048764",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-38db3023827c5fb7260b78bd6d6a6b8fc571537adc5f7598780a38b2809b2feb.json": "833b278772e3bec36d20cbd9ae253242689a5c6e7148b9fd5e06efbc56c92da5",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-5143cdd2212336537712e24ccd613df3a16e2e0ee507348732102e9a4488d056.json": "0ca2f81e6e654e4ab116e8849fc87530d3808aa4d7b5446cda7ceed7d7804c26",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-6b31da722708a326887bdfbcd45485497d8526ddbc36f8847b7ae9a2ba7a154c.json": "5db8452313c28dc2d905f638fee672f1150ca5aeb7f458da8502f5175fe0e53f",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-6d235d668c23b46c5c62697baffeebeba36b41c86a45adee0deb94a436b50c79.json": "e6781e169348bb0761a4e01da532ad33ced0f478a5120819e159da2da6c5ad6b",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-7d40609a2e4dcb398065fa0942905c6e9679c5be0b092920e6e43fb4d6e9740a.json": "bb6b851042bde1be5319d0012144689330121beab532d0de985db2dc8fc919f8",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-7f5d8946a8956f976e9fa1506d4953fc972fbb8aacb7d8d7fdc872023a329f58.json": "865c5c10b674cc11f7f117530fb3a48b57ca966719ae4309b8330ab176fc7813",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-990c4d11600c9225218ac89eb4184386b8d09e8f8da76e5fb20dfa26828fcb9c.json": "3d204b8a55daa6f93d3eb8f4c1f43fb0cca13475a8ed0c3b8863a6f369612233",
-      "tests/golden/0.17.0/lists/air/~air2lean-sha256-d62300f856f618d200c1ccdec0f282399db28206bbab8ef16da3387c0a2e1ee5.json": "857f64d468107eb06f12e1b6f4b7a631affc8d086eea46427716c280f2e50d60",
-      "tests/golden/0.17.0/options/air/options.find.json": "351cae6c20b0cb92c57449c83d85dab4a256491a3bcccbca72120a71982dcf97",
-      "tests/golden/0.17.0/options/air/options.findOr.json": "4bc440413dc9bd5e3f82fa4902637f2cdbc0e215b83c8adbf9ecabd5b4d30f55",
-      "tests/golden/0.17.0/pointers/air/pointers.addDown.json": "4ba4a94a29f68421a31f75a2a56c3d35c3ce41dec6f92a197574fd44bba5eb2d",
-      "tests/golden/0.17.0/pointers/air/pointers.addTo.json": "248b1f0fc3a67b9ec4cd45b2c363db726e306e51c19aed57002f012170523911",
-      "tests/golden/0.17.0/pointers/air/pointers.delay.json": "93f27531b9c6a550b676a68294b8f30ddfb7ed0da0a8380740fae2a45d7aa73b",
-      "tests/golden/0.17.0/pointers/air/pointers.dueOf.json": "e300351e576a4b34ef6953f94ecfd6d0915286f8d7be5aab92dd8d9dfec6c1e5",
-      "tests/golden/0.17.0/pointers/air/pointers.maxPtr.json": "b5b152810ce464d1c94935a5f023c3d42c137bf8e68f6da01f4c4781bc6aab1f",
-      "tests/golden/0.17.0/slices/air/slices.at.json": "80dc8cb46222bcae8868e1108821ec6933aa4eea6bcd27909f58d2cf71dfdf5c",
-      "tests/golden/0.17.0/slices/air/slices.bumpAt.json": "5cd875c4acda4684dd2f3ad769d2b1e14a6487976a442bf07bdd29a309cd613d",
-      "tests/golden/0.17.0/slices/air/slices.colorName.json": "3743be1a8deba30676cb10d4b7ff44869a1f9c37e38c81d389ede83b845e8033",
-      "tests/golden/0.17.0/slices/air/slices.copy.json": "b738b47fb97319dd37a1b72ff0de2c648f31cec18b482a9ebd12f1c6da1bfa8a",
-      "tests/golden/0.17.0/slices/air/slices.copyWithin.json": "553ff79bc4cc0d0c59c4409eed495e634e3d3d1277a855a405f15002bf00a9fb",
-      "tests/golden/0.17.0/slices/air/slices.failName.json": "3d8e266370caa2930cdb59bfe10d482d681169f39d64edd80a1b5263e83546dd",
-      "tests/golden/0.17.0/slices/air/slices.indexOfScalar.json": "b412ea9f5238b50b6e104a6dd36f7ac52998a25e023f68bcd121641e69849c93",
-      "tests/golden/0.17.0/slices/air/slices.lenOr.json": "d6aed0ce70f6b8152f89151c8566d5e9c6ef14da31fd802d0dee9759fa469c03",
-      "tests/golden/0.17.0/slices/air/slices.localArr.json": "c3d7c6edd36947babf7d5d5af948874b2760dbbb3bfeb6a57d3a01d5bcce0dbe",
-      "tests/golden/0.17.0/slices/air/slices.prevItem.json": "70591ce4376e92a6bd843e00b5d37653af960df7bf19f33b502152c8da035372",
-      "tests/golden/0.17.0/slices/air/slices.reverse.json": "1eec77c13ccac7962a758550060e1ca2e91359c5908fa3b99c0e4e7a74ef472d",
-      "tests/golden/0.17.0/slices/air/slices.second.json": "37f3db2baebd0714aaa358b5af72368a328c7dfc313e6dc2f32a91aa5c95ce42",
-      "tests/golden/0.17.0/slices/air/slices.sentinelArr.json": "3afb2e0057b089473177dfca0e6fdecf835a674689aa099680034d0232c8a021",
-      "tests/golden/0.17.0/slices/air/slices.subZ.json": "fd7674ebeb1737b0253bdbb60aac6f9bbbe004906265feffbdd0d83f333ede9e",
-      "tests/golden/0.17.0/slices/air/slices.sumMid.json": "2a6e2a6357feea61c7664a339ee9e8cbae951546ad48620ef9ebdb35245e4230",
-      "tests/golden/0.17.0/slices/air/slices.sumSlice.json": "b102b464eebb121d0f3843b0e9f51fee6a7dcb04d2c5ec5fe67a439acad83ad3",
-      "tests/golden/0.17.0/slices/air/slices.sumZ.json": "295c2fca4592b82c312ec7d0c012aec436a13a18f9a5dd3a162fbd6de7c11072",
-      "tests/golden/0.17.0/sync/Gen.lean": "ada512fb98e8b8db878e0c350301eb258f5579ab35a8f0b1df7fdd4193fd4d29",
-      "tests/golden/0.17.0/sync/air/Io.Condition.signal.json": "d45f797b34cb3bff4c9d64237a997ed9ccc2c0800eace66581e827df398006e1",
-      "tests/golden/0.17.0/sync/air/Io.Condition.waitUncancelable.json": "3f89f434f31440daa683f1cff65891960800b8daa5e53d6b383b4e39e2aa421c",
-      "tests/golden/0.17.0/sync/air/Io.Event.set.json": "c305e053584925cc6cb9a50c9a6cfc082e5055d79b0efd08467ed3630661a61a",
-      "tests/golden/0.17.0/sync/air/Io.Event.waitUncancelable.json": "1896c9029db696974e3379c020c3d89be2d2ff8309ca66db39e6e08587bc8e30",
-      "tests/golden/0.17.0/sync/air/Io.Mutex.lock.json": "80207c4c9eb5aaec52c85aea2b11e400527ab1debcd29ab0bfbf57868325f2f0",
-      "tests/golden/0.17.0/sync/air/Io.Mutex.lockUncancelable.json": "44af1c8a11f87d751defcf0f2b3f9524960546c8f1a3490c2978a12de703b67a",
-      "tests/golden/0.17.0/sync/air/Io.Mutex.tryLock.json": "304d2ba9e522c0ca1eef02d8bab2a1c00e95c3e4faf6ef1ff5efeadbc8c8d6ea",
-      "tests/golden/0.17.0/sync/air/Io.Mutex.unlock.json": "68462a7e4d83fe66fd9139daa4b711623de10c24eb72321bb6300b3129a43907",
-      "tests/golden/0.17.0/sync/air/Io.RwLock.lockSharedUncancelable.json": "db1f3228b2f098e771fdf8e521569a1341da12287e05f3ed4465edd95febec40",
-      "tests/golden/0.17.0/sync/air/Io.RwLock.lockUncancelable.json": "e01895cc9e708b4e07b7880910f82b3ba5938c8a533e718e0e50487a59ff8220",
-      "tests/golden/0.17.0/sync/air/Io.RwLock.unlock.json": "2c04693e262a341401afd2f5e40e938df0ff17c2da06de7b297b151438667097",
-      "tests/golden/0.17.0/sync/air/Io.RwLock.unlockShared.json": "7279ca219107cc9da6d0eca39c9e714e8c4d4473c946388e3c0e6fc3a4aafbcc",
-      "tests/golden/0.17.0/sync/air/Io.Semaphore.post.json": "70c182fc888af5da4224d99a2f196147cdbdf1c16dc8489bf9a291301d2066e4",
-      "tests/golden/0.17.0/sync/air/Io.Semaphore.waitUncancelable.json": "7d04cc4b5930ecb8e6b6160823b1c12f279e909f19f3b6e1bca42286c909c699",
-      "tests/golden/0.17.0/sync/air/debug.assert.json": "7e368db92fbff9dc6d1edba68886ccd952a977c8c205d2723073d7b191dae14d",
-      "tests/golden/0.17.0/sync/air/sync.handoff.json": "929c623a4419f14ed28e32ba6b1b83bc6fad6b7a95723ea957f38e6229b2f14b",
-      "tests/golden/0.17.0/sync/air/sync.mutexCounter.json": "c61500206b8b20140bd2edb5925660f858e5ba092989fb403695a97c1ad2af6c",
-      "tests/golden/0.17.0/sync/air/sync.producer.json": "948dd655d11e0b705ed8f004879e28437cc879eba7a50c3b4dc38baec1f5d632",
-      "tests/golden/0.17.0/sync/air/sync.readShared.json": "1a17f69a3642ccb4f352a6d16abf30901d848c21305ffdbfc43c6e56fb66f5a1",
-      "tests/golden/0.17.0/sync/air/sync.rwLockRead.json": "3fe84d77cc68c8e0c90713f1778c7a6c612e12120b3118a44010978fdbb8b02f",
-      "tests/golden/0.17.0/sync/air/sync.rwLockSnapshotPair.json": "416f536c02e11684fd0a697e44aa466a09eb4f6b8caf6813521423c1890aab40",
-      "tests/golden/0.17.0/sync/air/sync.semWork.json": "eca88a64e466e72b9b6781e3eacf56b29f30631137ab8546128e77264e0d0efa",
-      "tests/golden/0.17.0/sync/air/sync.semaphoreCounter.json": "986646dd14a7f86ac048438250874da5e114bd251cbed8fc83f5b93dd540308b",
-      "tests/golden/0.17.0/sync/air/sync.work.json": "542d77f3e669bf2a859765afa424ba17f596b6af62c059be4f66df6056800f4c",
-      "tests/golden/0.17.0/sync/air/sync.writer.json": "e41e6017689306c83ff0b9c23d594c917f23e1e4c5ee318464b47fc28c94ca19",
-      "tests/golden/0.17.0/threads/air/threads.bump.json": "25fdf990be33362864cd2a8a1de851e4d4b71b829c2ae0d22ad94a0542907831",
-      "tests/golden/0.17.0/threads/air/threads.claim.json": "b54e70982b19b5a0145755123d29292bf603dc91c8ea7472d695054030acddff",
-      "tests/golden/0.17.0/threads/air/threads.claimOnce.json": "5796345c5344115bff41a14c42d8ee0b54c4f0ab583e3f9e1d1eb590dd0394c2",
-      "tests/golden/0.17.0/threads/air/threads.disjoint.json": "020bad33058e7ed9e05b46474eed262d6d8c114ff69909ca37b4b40851111bcc",
-      "tests/golden/0.17.0/threads/air/threads.parallelCounter.json": "3bf46debc52fe72b7a7fae40b20f832429f779f3d492806ba187fbfb2f07a752",
-      "tests/golden/0.17.0/threads/air/threads.race.json": "01b4c3ea21b788f52421023954ba2413c9f40ef1c99c8fda6df0c4fdb48bdd44",
-      "tests/golden/0.17.0/threads/air/threads.swapFlag.json": "02c77dea65494cf013217fe85608ab54f77383b09c8187cf96f98edd7ef7948a",
-      "tests/golden/0.17.0/threads/air/threads.writeFlag.json": "630016d2d293720ac9d7a4bbdba59bac5eed466832e1f05179c25b1320838217",
-      "tests/golden/0.17.0/threads/air/threads.xchgRace.json": "5b812799ff0f7dd823dc24aefcc6d69a8e945bbcfcd758e0312df6e662ad2586",
-      "tests/golden/0.17.0/variants/air/variants.area.json": "4ba5991667bf6c5d5c7a5775b119636f13b5b9ceee01f50657446ec47fc0ba24",
-      "tests/golden/0.17.0/variants/air/variants.codeOf.json": "9e782d6c4df1e9023c7b30fc23126cf1d1b0dda99a56f328459a3f76590c5fa9",
-      "tests/golden/0.17.0/variants/air/variants.lightOf.json": "cf368e9f6bebf10d85d5ccb9713bb4ca941859de4c8f688f63612cd491d4d687",
-      "tests/golden/0.17.0/variants/air/variants.prioValue.json": "ab109743227f2b82f4cd23cd7ab1b547774ee566331fa90a7c7a99b83978d7dc",
-      "tests/golden/0.17.0/variants/air/variants.radius.json": "36f287c57fcdaec84a4b1e591b42b540a844631a9ee5942c3507b3f808b680aa",
-      "tests/golden/0.17.0/variants/air/variants.scale.json": "9815b4219393147707e938769ac37c94d355b9a1c7db6fe876dce8f201e86f11",
-      "tests/golden/0.17.0/variants/air/variants.totalArea.json": "13b4ad5b4562ee0d85ff4f7938b06f20f8ed6b437137b7af140c5d4086b38e2f",
-      "tests/golden/0.17.0/vectors/air/vectors.vDiv.json": "d425c8c114d9ea4c84a7b0f43a97f80d3665a90a628607fc67e53be5e842bec1",
-      "tests/golden/0.17.0/vectors/air/vectors.vNarrow.json": "2b7c15f99833f4110ab8571de859af5f8b062de2172a58841fe3500bb9169d50",
-      "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json": "430cff35cb8bab95a392402253b1d17ef9cd6cdb9621e7426479f6b1e1fd1c86",
       "tests/golden/asm/air/asm.bswap32.json": "05473c75f00088417595af569b49f004ac13f441174950db2924edc57e095ba3",
       "tests/golden/asm/air/asm.divmod.json": "d8b05332d0b4e85fdea5fe0c5a5d8503a3fd9abc4a4bf2c0bc58953e60d8e8bf",
       "tests/golden/asm/air/asm.lzcnt64.json": "a2cef50ef1257a921bedd9037a77c2b648e1a1ff5066d908788e3bd8dd9bf2b3",
@@ -14287,6 +14135,27 @@
       "tests/golden/layout/air/layout.wordHalf.json": "cae786b45c3761a6dc227cc6aaa59566a102c5f1ef24f62aabfa690f0dbc3ffa",
       "tests/golden/layout/air/layout.wordOf.json": "54b908e0b8d2ca8e71154c1d9ace099f7ac33fb029a3200abf807f360f2d8702",
       "tests/golden/layout/air/layout.writeTable.json": "c6041f1b5d833f6520c189bbfcccd9e06519b7e964d57e0f6164b50c9c7393a0",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).addOne.json": "22d00028a5535df27b4f5afcad56b61f2dcb5c13b91d791357e4a4449f8a3ffb",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json": "62ba0b65ffe2deaea0aeacdc899a6194851019ed54a7e9a2e6b757b7ea9bd637",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json": "f9fb181f110f281cfa3d5fe0ff7c4bb0b32723cbb7c81630b3b9d49b45f8644d",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).append.json": "3f89cce02158e6eda5e19d1a7a56dd363ccf89b9d214ab3434a78e2c9546a22f",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json": "f93afe3628c08f96159b1a2b23c96400786ef945274060d38dd63283c043e31d",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).deinit.json": "eed788f3de5e6647cb8ca837028298318186dd3fa9ee366c9692c9559fafa6c9",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacity.json": "e4882e3a84412aa5959b1e3c5331c5941916267a2ab478410953dcea538fe80e",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json": "0ffd3ae2499f7e063e4a3151ff1ad95599f3cf4169a8fc1418c844358693765e",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).growCapacity.json": "7b8572ddb69bb9160ee2568ef70d0d29df96574605ca26136056556365b537d9",
+      "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json": "a80a7dd255598659b8705fe0684e1743bca9c1024f2b74e9c98ca09f5698cb1c",
+      "tests/golden/lists/air/debug.assert.json": "494f49a343905d9a4e0c51838673b7cc6c15c2c5cad2fcc23b10ab449e86012d",
+      "tests/golden/lists/air/lists.dupe.json": "d73adba3291b19b805474813f5e0c0c2208505747b9ead232c920aa7e5d8dbb8",
+      "tests/golden/lists/air/lists.dupeZLen.json": "b51b5d4b7bfbd730a580f4c3c144305dd7545942fdce870d612e15ef31901340",
+      "tests/golden/lists/air/lists.evens.json": "64e23f2ebadb2a63a3acfdd3a79c3f46684e5dada035df7af3bd2948fa6f2973",
+      "tests/golden/lists/air/lists.freeAll.json": "db203923d73e4008b82cd399a14257f0990e9980ff93715ab173f728ab04defc",
+      "tests/golden/lists/air/lists.listSum.json": "14962e777b48b9509c31d43152db0e6b13237dd328deb4ab259212eebe63b255",
+      "tests/golden/lists/air/lists.push.json": "3f1d4aff1eeb05cb85ecb33553b73f57a81665d409de13fea95cfe1cf31296b9",
+      "tests/golden/lists/air/lists.reverse.json": "7894d2e25050054c01d160156c634b88edc17ddd4c5b138d416cf10dd5169eee",
+      "tests/golden/lists/air/lists.sum.json": "42f76a3af38df49b38bf757ee9ee794deee19225b72f63fb4c36de3f66792331",
+      "tests/golden/lists/air/lists.sumRange.json": "67b88094a0818ec70348538b618be0d82f7aa208f0d4428251470929718c1035",
+      "tests/golden/lists/air/mem.Allocator.dupeZ__anon_N.json": "56572c535d4b2e3c457b7caf2b380a29aa8b2f71d7aa2b291c022c0dfd3cf379",
       "tests/golden/options/air/options.find.json": "e34428c83c5afd533e5bf56a637cf8cbccf6a63e79383d6fe5f37d503aeff4c9",
       "tests/golden/options/air/options.findOr.json": "c7236d829dc5b4f2e1912863ecd4a8fb54fadfd54cd68ca38a601d6533f6abe1",
       "tests/golden/options/air/options.firstIndexPlusOne.json": "522f63edc3cd65c02ce845d71a1e635c44d2cdd366360f003f27ccde7f72fcdb",
@@ -14328,6 +14197,32 @@
       "tests/golden/slices/air/slices.sumSlice.json": "a18c669b084dac3d11bd3b92e3b102c0470c70dd539003f7846fd500251509c9",
       "tests/golden/slices/air/slices.sumZ.json": "fb16f77d6504cf0e7aa279a02fe9ce3c500f34dca2bb09f96e513fa3a411c556",
       "tests/golden/slices/air/slices.total.json": "73faebe7410fc5483ba25b40d240b223ed57f967712817eac32238f7cd09f17f",
+      "tests/golden/sync/air/Io.Condition.signal.json": "7040e246927ed4ae4d23e46e6dcdfc03e4f0892166617b222beefbb0d00e6883",
+      "tests/golden/sync/air/Io.Condition.wait.json": "17098485d8afec9526f90e56f9e4ed2c79dfc7c39732dab2bc500a985518e315",
+      "tests/golden/sync/air/Io.Condition.waitInner.json": "622ab18072cb34f92d238ab712d99a81861cd420ad191aafd463babdaa68eb3a",
+      "tests/golden/sync/air/Io.Condition.waitUncancelable.json": "8f45e524d90117541823d247e00e82120f743aa4489089629708e15c64bab5c6",
+      "tests/golden/sync/air/Io.Event.set.json": "e6543b2f077e65c1514db761202d7185568bc9749310930a68e04c151cecd1ef",
+      "tests/golden/sync/air/Io.Event.waitUncancelable.json": "c04e91d79ded00506c65459d51b7154bb99b569538fec4f9f86e0cd7f8946d15",
+      "tests/golden/sync/air/Io.Mutex.lock.json": "669f4c3ec30179322ab8ad94062ef8ec25cddf5037274d91efb1ed4b0b7269ba",
+      "tests/golden/sync/air/Io.Mutex.lockUncancelable.json": "3d38fd8e3501ba9ac2742e7cf5cea27caae946e3d57fd1c292d7681d0fc5e47e",
+      "tests/golden/sync/air/Io.Mutex.tryLock.json": "f4eae588a6be8d7d32c17f526e5c55b92d1595a6ef4562af4beec2d46d561ebf",
+      "tests/golden/sync/air/Io.Mutex.unlock.json": "d76cd90723e500719908f172af41faee4dbb6366aefb3931297b73afd77cd226",
+      "tests/golden/sync/air/Io.RwLock.lockSharedUncancelable.json": "961875b15fcb8ab0c35dc4bca0ebcd0adaa21e8ebdfc6067b439a778738cf82e",
+      "tests/golden/sync/air/Io.RwLock.lockUncancelable.json": "1b7329b9c2ca3de2c462dfb5f821bde3b588d6d6fc298913a317bd13b894a98b",
+      "tests/golden/sync/air/Io.RwLock.unlock.json": "08dbeb4de0d1505aa3de55e7cf5a761c7480f61e0dc94e2a7f430afd31d6100a",
+      "tests/golden/sync/air/Io.RwLock.unlockShared.json": "ad814413f1e7bba359f26a92ccf8002ed44839532c7a54433de681fae32c5591",
+      "tests/golden/sync/air/Io.Semaphore.post.json": "e967429692be3fcb965d613dfe0419bd981ce400d9d629d780a9c6b3c1a72f1a",
+      "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json": "abe509eb0357dd114f695f9a5be5446d9099195e100a71ebbf14b8163196aa67",
+      "tests/golden/sync/air/debug.assert.json": "494f49a343905d9a4e0c51838673b7cc6c15c2c5cad2fcc23b10ab449e86012d",
+      "tests/golden/sync/air/sync.handoff.json": "7fcb33c3f47af9345137fcc58947d6be048f9447bfd5c8342034c1d6afbc1a83",
+      "tests/golden/sync/air/sync.mutexCounter.json": "8244ed5c40cdb2f8f85c7d41a51e49c412762ba13360aed383149713044a0270",
+      "tests/golden/sync/air/sync.producer.json": "8000cc7eae625e54560ccf9fbf662caf87ab3068bb09afcb3268c11a39bf0659",
+      "tests/golden/sync/air/sync.readShared.json": "fc26a9b96aa46b879e3013ca83b2b04b0768cbe4330edf08cd3a658d90e3ee18",
+      "tests/golden/sync/air/sync.rwLockRead.json": "af44e224ee88f149db09b2300492e580783b729e1011421568a5abde93bd8d91",
+      "tests/golden/sync/air/sync.semWork.json": "946debcb13a21f5041d096910e461777daa910107b0351c9d417ae6abdcb46ff",
+      "tests/golden/sync/air/sync.semaphoreCounter.json": "7369dd3b0eacfb14d29a1f4aed9f857f572bdfb22bc5879c123554dd663bc559",
+      "tests/golden/sync/air/sync.work.json": "224b7b31d26c6425a62638a632fe41f823194d41d0b13f8264ca1e02a97cbd6c",
+      "tests/golden/sync/air/sync.writer.json": "4ee6728d418bc7ab2b0b73bc393be91827b4858281e265e27dedac12ac5b6622",
       "tests/golden/threads/air/atomic.Value(threads.Phase).init.json": "5dc7e1e9f89a5f079aab10fe99d7eec5d9411e34ffdab88803fec7fb4a967a9f",
       "tests/golden/threads/air/atomic.Value(u32).init.json": "852983fbe510395e8d3e0e2f2a3486906827ecacc25a9ee676beb48038e4ea85",
       "tests/golden/threads/air/threads.bump.json": "e27b8539297b3a2ec286d9dba6319a76bb469d1e0f7534d64e0cbe94a8513c8d",
@@ -14415,9 +14310,9 @@
       "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730"
     },
     "model-boundaries": {
-      "Air2Lean/StdModels.lean": "d64d6f8162507e65318eb44d42df1d027bb906da4dd130c4c93eb398772259ce",
-      "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
-      "docs/std-models.md": "c705141910d5b5582e47298ad41661f5ede0329f6b0b2abb22de1593ba47e133"
+      "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
+      "Air2Lean/Memory.lean": "4e212a13fcebefe6fde5ec2190d86809d882718c3cb50f375a848b6498de80f0",
+      "docs/std-models.md": "fb7f74d5338e1edda02215a311c808701468b074648d5495677df7293c201a44"
     }
   },
   "summary": {

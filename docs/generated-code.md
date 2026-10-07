@@ -104,19 +104,24 @@ order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s 
 Sema writes the safety checks of a vector op (division by zero, overflow) as a `cmp_vector` and
 a `reduce` of the `bool` vector, before the op.
 
-In memory, a vector of integers or floats is its lanes, as an array, with the size rounded up
-to a power of 2 (`vecLayout`). This representation requires a nonzero lane width equal to
-`8 * Enc.size T`: every lane occupies whole bytes with no scalar ABI padding. The checker
-rejects full-vector and vector-lane memory accesses for other widths, including non-byte
-integers such as `u9`, ABI-padded integers such as `u24` and `u40`, and `f80`. Value-only
-vectors of these types still support the lane-wise operations above.
+In memory, a vector of integers or floats whose lane width is `8 * Enc.size T` (`u8`, `u32`,
+`f64`, …) is its lanes, as an array, with the size rounded up to a power of 2 (`vecLayout`); every
+backend lays these bytes out alike. A vector whose lanes have a non-byte width (`u9`) or scalar
+ABI padding (`u24`, `u40`, `f80`) is bit-packed by the LLVM backend: lane `i` is bits
+`[i * w, (i + 1) * w)` of one `n * w`-bit little-endian integer (`w = @bitSizeOf(T)`), with size and
+alignment `⌈n * w / 8⌉` rounded up to a power of 2 (`packedVecLayout`, `Vec.packedEnc`; observed by
+`tests/roadmap/vector-layouts/probe.zig`). The checker admits such a vector in memory only for an
+AIR file whose schema-12 profile names `stage2_llvm` (other backends, and legacy profiles without
+a backend, are rejected), and never a lane pointer into it. Value-only vectors of every lane type
+still support the lane-wise operations above.
 
 A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
 size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
 are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
-A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of an integer or float vector is
-an item pointer, as for an array. A lane pointer of a `bool` vector is outside the subset: the
-lane is a bit, and the AIR file has no lane index (the pointer type's `vector_index`).
+A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of a byte-strided integer or float
+vector is an item pointer, as for an array. A lane pointer of a `bool` vector or of a bit-packed
+vector is outside the subset: the lane is a bit field, and the AIR file has no lane index (the
+pointer type's `vector_index`).
 
 ### Places
 
@@ -145,7 +150,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
-| `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p` |
+| `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p`; a partly `undefined` array, struct or tuple constant is `Zig.storeBytes p align (Zig.writeBytes (Zig.Enc.encode (v : T)) off (Array.replicate len .undef))`, one `writeBytes` per `undefined` item or field (below) |
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
@@ -160,6 +165,8 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `tag_name` | `E.tagName e` (below) |
 | `error_name` | `errorNameOf e` (below) |
 | `call` of `mem.Allocator.create`, `alloc`, `free`, … | `Zig.Allocator.create a size align`, … ([std-models.md](std-models.md)) |
+
+**`undefined` operands.** `undefined` is never read as a default (`0`, `false`) that a later read could observe. A store writes it as undefined bytes: a wholly `undefined` value with `Zig.storeUndef`, and a partly `undefined` constant (an `undefined` item of an array, or field of a non-`packed` struct or tuple, at any depth) as the bytes of the value with the bytes of each `undefined` part undefined (`Air2Lean/Memory.lean`'s `undefByteRanges`, from the exporter's sizes and offsets). A load that reads one of those bytes throws `.unspecified`. A local that receives such a store is a stack block, not a `Locals` field (`escapingAllocs`). `memset` of a wholly `undefined` item writes undefined bytes. Every other `undefined` operand is outside the subset (`unsupported_semantics`): a partly `undefined` value under an optional, error union, union, slice, vector or packed struct, a store of one to a packed struct field, a partly `undefined` `memset` item, an `undefined` `shuffle` lane, and `undefined` (wholly or partly) as a call argument, return or block result, `aggregate_init` element, arithmetic, `select` or atomic operand (`Thread.spawn`'s `SpawnConfig`, which the model does not read, is exempt). A wholly `undefined` store to a local that stays a `Locals` field still writes the field type's `default`.
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 
@@ -187,7 +194,43 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   ...
 ```
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` and `extern` globals are outside the subset.
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` globals are outside the subset.
+
+**Initial values are never defaulted.** A wholly `undefined` global (`var x: T = undefined`) is
+`Zig.Enc.size T` undefined bytes, so a load before the first store throws `.unspecified`. A
+partly `undefined` initial value (an aggregate, optional, error-union or union payload with an
+`undefined` part) is rejected: a value constant would read that part as `0`/`false`. A global
+without an `init` that is not `extern` (Sema had not resolved it) is rejected with "the AIR
+file has no initial value".
+
+**External initial state.** An `extern` global (`extern var x: T;`, `extern const`) has no
+initial value in the program. If the program has one, the translator emits a structure
+`ExternInit` with one field per `extern` global, named after it without the prefix, in block
+order, and `mem0` takes it explicitly:
+
+```lean
+structure ExternInit where
+  /-- Block 0: `global_init.counter` (`var`, writable). -/
+  counter : BitVec 32
+
+def mem0 (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals [
+  -- 0: global_init.counter (extern: initial value `ext.counter`)
+  (Zig.Enc.encode (ext.counter : BitVec 32), 4, .global),
+  ...]
+```
+
+The blocks of `mem0` are added in order (`Mem.ofGlobals`), which fixes their addresses and the
+initialization order: block addresses do not depend on the external values. Every statement
+about the program start is therefore about `mem0 ext` for an `ext` that the proof quantifies
+over; assumptions about external storage are hypotheses on `ext`
+(`tests/roadmap/global-init/GlobalInit/Proofs.lean`). The field type is the contract: the
+external definition must hold a valid encoding of that type (padding bytes undefined) before the
+program starts; external writes during the run are not modelled. Only a named, pointer-free,
+union-free and error-free type qualifies (integers, floats, `bool`, enums, arrays, vectors,
+structs, tuples and optionals of these); an `extern` function, pointer, union or error storage,
+an `extern` with an `init`, and an unnamed `extern` are rejected (`GLOBAL_FAILURE`). A name
+shared by several files must agree on `extern`. Without an `extern` global, `mem0 : Zig.Mem` is
+unchanged.
 
 ### Casts, layout and function pointers
 
@@ -253,7 +296,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
 ```
 
-An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture.
+An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture. Such programs also get `Tgt.captures : Tgt → List Zig.Conc.Capture`, which classifies each field in source order from its AIR type. A pointer-free value is `.value`, a pointer is `.ptr p`, a slice is `.slice s`, and any other field is `.other`, for example an aggregate holding a pointer, an allocator, `Io`, or a thread handle. `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`) turns this list into the per-argument ownership obligation; see [proofs.md](proofs.md#concurrent-separation-logic).
 
 Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.yield` emits `Zig.threadYieldC`, preserving both success and `error.SystemCannotYield`. Audited inline `std.atomic.spinLoopHint` instructions emit `Zig.spinLoopHintC`; both expose scheduling opportunities with no fairness guarantee ([progress-hints.md](progress-hints.md)). `Thread.detach` and `Io.futexWaitTimeout` are rejected at translation time (`stdModels`, `Air2Lean/StdModels.lean`), each with its own reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
 
@@ -352,7 +395,7 @@ opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec
 
 A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
 
-`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
+`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
 
 ### Differential-test implementation
 

@@ -180,6 +180,10 @@ structure Layout where
   /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
   export has none, so its bit-pointers may be lane pointers. -/
   vectorIndexExported : Bool := false
+  /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
+  (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
+  Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
+  packedLanes : Bool := false
   deriving Repr, Inhabited, BEq
 
 /-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
@@ -197,6 +201,27 @@ def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool
   match types[id]? with
   | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
   | _ => false
+
+/-- A pointer type whose exported `volatile` flag is set. -/
+def volatilePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr ..) => (layouts[id]?.map (·.isVolatile)).getD false
+  | _ => false
+
+/-- Some type reachable from `root` (fields, payloads, pointees) is a volatile pointer.
+Cycles are visited once; unknown type ids are conservatively volatile. -/
+def containsVolatilePtr (types : Array Ty) (layouts : Array Layout) (root : TyId) : Bool := Id.run do
+  let mut pending := #[root]
+  let mut seen : Std.HashSet TyId := {}
+  while !pending.isEmpty do
+    let id := pending.back!
+    pending := pending.pop
+    if seen.contains id then continue
+    seen := seen.insert id
+    let some ty := types[id]? | return true
+    if volatilePtrTy types layouts id then return true
+    pending := pending ++ childTys ty
+  return false
 
 inductive Val where
   | inst (id : InstId)

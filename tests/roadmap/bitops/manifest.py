@@ -58,15 +58,15 @@ manifest = {
     "target_scope": "Reference x86_64-linux AIR compared against host-native scalar/vector/bitset execution. This does not qualify all x86_64 backend or ABI behavior.",
     "observations": {"exact_matches": 3092, "mismatches": 0,
                      "exclusions": [{"functions": ["shiftNarrow", "shiftSignedNarrow"], "reason": "shift count 3 >= u3/i3 width is illegal behavior", "observation_rows": 256, "function_evaluations": 512}]},
-    "semantic_mutations": {"killed": 6, "survived": 0},
+    "semantic_mutations": {"killed": 8, "survived": 0},
     "air_compiler": compiler_info(args.air_compiler),
     "stock_compiler": compiler_info(args.stock_compiler),
     "lean_toolchain": (root / "lean-toolchain").read_text().strip(),
     "sources": sources, "artifacts": artifacts,
     "validation": {
-        "kernel_checked": ["ZigLean/Bit.lean runtime lemmas", "Runtime.lean edge assertions", "mutation control assertions and decide refutations"],
-        "compiled_execution": ["Cases.lean parser/normalizer/checker regressions", "13 generated fixture IO assertions", "3092 native/Lean differential observation rows"],
+        "kernel_checked": ["ZigLean/Bit.lean runtime lemmas", "Runtime.lean edge assertions", "Bitset.lean bitset client proofs", "GeneratedBitset.lean proofs over the fresh generated bitset fixtures", "mutation control assertions and decide refutations"],
+        "compiled_execution": ["Cases.lean parser/normalizer/checker regressions", "18 generated fixture IO assertions", "3092 native/Lean differential observation rows"],
     },
-    "trust_boundary": "Kernel checks runtime lemmas, Runtime.lean assertions and mutation decide refutations. Generated fixture IO assertions and differential rows are compiled execution evidence. Zig Sema/export/backend and AIR normalization/emission preservation remain unproved.",
+    "trust_boundary": "Kernel checks runtime lemmas, Runtime.lean assertions, bitset client proofs and mutation decide refutations. Generated fixture IO assertions and differential rows are compiled execution evidence. Zig Sema/export/backend and AIR normalization/emission preservation remain unproved.",
 }
 (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

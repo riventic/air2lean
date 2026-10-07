@@ -115,6 +115,8 @@ A thread owns a part of the heap, and the parts move between the threads at the 
 | The parts (`Owned own m`) | `own u` is thread `u`'s part: in `m.heap` with the same cells, two parts are disjoint, each thread owns its part, a thread that does not exist has none. A proof puts a thread's part in its ghost value: after a stop the thread knows only `inv` and its ghost value, and `Owned` tells it that its part is unchanged. |
 | Transfers | A step with a thread triple (`Owned.step`; `WP.liftMem_owned`, `WP.liftM_owned`, and `WP.liftMem_upd`, `WP.liftM_upd` for the parts `upd own t h`); spawn (`Owned.fork`: the parent gives a part to the new thread, whose clock is the parent's); join (`Owned.join`: the parent takes the joined thread's part, whose clock the join merges); a step that changes no part (`Owned.keep`: an atomic op on a location that no thread owns, a futex op); the start (`Owned.start`), a smaller part (`Owned.shrink`), a part that gets a heap the thread owns (`Owned.add`). |
 
+**Per-argument spawn obligations** (`ZigLean/Conc/Capture.lean`, `ZigLean/Conc/Transfer.lean`). For programs with an empty or multi-field capture, the generated `Tgt.captures` lists every captured field as a copied `value`, a `ptr`, a `slice`, or `other` (a value that may embed pointer identities the emitter does not decompose). A proof picks a `Transfer` for each captured pointer: `owned R` moves exactly the cells of `R` to the child, and `shared part` keeps the pointee outside every thread part. `Capture.grant mode target.captures` is the child's obligation. It is the separating conjunction of the per-field cells, with values contributing `emp`, `other` unprovable, and the heap disjoint from every shared part. `Capture.fork_grant` discharges it with `Owned.fork`; `Capture.join_regain` returns the child's part at the join. `Capture.not_grant_of_unowned` shows that a parent cannot hand over an `owned` region outside its own part. A `shared` pointer hands over no cells, so its accesses must be justified by the global invariant. `tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean` uses these for mixed value/pointer/atomic workers.
+
 `Proofs/Threads/Disjoint.lean` proves that `disjoint a b` (two threads each write their own flag, as in `race` but on two flags) gives `a + b` under every schedule and never errs (`disjoint_spec`, `disjoint_safe`). `writeFlag` is a thread triple over the two blocks that the thread owns (`writeFlag_spec`, from the rules above). `main` owns its four blocks, gives `{c1, x}` and `{c2, y}` at the spawns, and takes them back at the joins, with the flag written. The invariant has no footprint and no clock facts: `Owned` has them.
 
 ### A lock that owns a resource
@@ -145,6 +147,20 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | Ops | `Ok.load` (reads write `j`, at least each write that happened before the thread: `Word.Floor`; an acquire adopts its release clock), `Ok.rmw` (reads the newest write and adds one: `rmwEnt`), `Ok.cas` (an RMW of the newest write, or a read of write `j` with another value). In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`, `Ok.cas_noErr`). |
 | Other steps | A step that keeps the word (`Word.Keep`, same writes: `hist_keep`): a step of the lock's code (`keep_lockStep`), a step of a thread on its own part (`keep_stepIn`), a spawn, a join, a plain read, an op at another word (`keep_op`). An op at a word keeps the lock's invariant (`Lock.Inv.wordOp`). |
 
+## Proving memory safety
+
+[`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
+client builds a list with the generated `push`, `reverse` and `freeAll` of
+`examples/lists`, then frees it. The tutorial proves three properties, for every input and
+every allocation-failure pattern. **No use after free, double free or invalid free**: the run
+returns, so it never throws `.illegal`, which every dead access and every bad free throws.
+**No leak**: the live heap after the run equals the live heap before it, also when a `push`
+fails midway and the client frees the partial list. **Values**: on success the list holds
+the items. The proofs are total triples (`TotalTriple`) from `emp` with the caller's whole
+heap as the frame, so an empty post-condition means exact heap equality. Negative controls
+(a double free, a read after free, a missing free) are proved to throw `.illegal` or to
+change the heap.
+
 ## Proved examples
 
 [theorem-inventory.md](theorem-inventory.md) gives each theorem below its scope class, its precise domain and its current check result for each Zig version/target translation. The theorems of `Proofs/Atomics/Proofs.lean` and `Proofs/Sync/Proofs.lean` hold for one schedule (an oracle and fuel that the kernel runs), and the `*_spec` rules of `Proofs/Sync/Lock.lean` and `Proofs/Sync/RwLockContract.lean` for one operation: none of them is a theorem over all schedules.
@@ -156,7 +172,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
 | `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |
 | `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
-| `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error) |
+| `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error), `groupCounter_reclaim` (join before free: the three tasks' read shares of `io` are back when `main` frees it, `ZigLean/Conc/Share.lean`) |
 | `Proofs/Threadsync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Thread.Mutex` of 0.15.2), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Threadsync/WaitGroup.lean` | `waitGroup_spec` (2 under every schedule, with the std `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex` of 0.15.2), `waitGroup_safe` (no data race, the plain read of the whole `Tally` included; no deadlock at a futex, no other error) |
 | `Proofs/Threadsync/Handoff.lean` | `handoff_spec` (7 under every schedule, with the std `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent` of 0.15.2), `handoff_safe` (no data race, no deadlock at a futex, no `unreachable`) |
@@ -167,7 +183,8 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
-| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed) |
+| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
 | `Proofs/Lists/Append.lean` | `append_run` (`ArrayListUnmanaged(u32).append`: `xs ++ [v]`, or `error.OutOfMemory` and the same list; a new buffer when the old one is full) |
+| `Proofs/Lists/Container.lean` | `SeqImpl` (a sequence interface: `Rep h xs` and an `add` contract over the abstract sequence only), `linkedAdd_spec` (`push` as an add to a reversed linked list), `arrayAdd_spec` (`append` as the same add on `ArrayListUnmanaged(u32)`) |
 
 `Proofs/Lists/Append.lean` proves `append` of `ArrayListUnmanaged(u32)` as a `*_run` lemma (`append_run`): the list `xs ++ [v]`, or `error.OutOfMemory` and the same list. When the buffer is full, `ensureTotalCapacityPrecise` allocates a new block, checks that the old and the new items do not overlap (`@memcpy`), copies them and frees the old block. The check holds because the new block lies above every live block (`alloc_run`'s last fact, from `Mem.AddrBelow`). The list's items pointer with capacity 0 points into a block of 0 bytes, which no assertion can state; `append_run` takes it as a fact about the memory (`ptrOk`) and gives it back. The proof holds for the 0.15.2 and the 0.16.0 translations: a `first` with a guard (a definition only the 0.15.2 translation has) picks the loads of each.

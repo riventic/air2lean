@@ -71,7 +71,7 @@ class CIInvocation(unittest.TestCase):
         start = workflow.index("      - name: Thread tuple source and ownership gate\n")
         end = workflow.index("      - name: Golden AIR, translate, build, differential test\n", start)
         gate = [line.strip() for line in workflow[start:end].splitlines()]
-        prerequisite = "lake build ZigLean.Conc.Csl ZigLean.Sep"
+        prerequisite = "lake build ZigLean.Conc.Csl ZigLean.Conc.Transfer ZigLean.Sep"
         self.assertEqual(gate.count(prerequisite), 1)
         self.assertLess(gate.index(prerequisite),
                         gate.index("bash tests/roadmap/thread-tuples/check.sh --check-artifacts"))

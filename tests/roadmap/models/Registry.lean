@@ -178,10 +178,10 @@ def main (args : List String) : IO Unit := do
     types := f.types.push (.struct "p0" "auto" #[("value", 0)])
     layouts := f.layouts.push {size := some 1, align := some 1, offsets := #[0]}
     body := #[
-      {id := 0, ty := 2, op := .call (.func "project.identity" false none) #[.undef 2]},
+      {id := 0, ty := 2, op := .call (.func "project.identity" false none) #[.agg 2 #[.int 0 0]]},
       {id := 1, ty := 1, op := .ret (.inst 0)}]
   }
-  let (collisionParams, collisionReturn) ← get <| ModelRegistry.signature collisionFunc #[.undef 2] 2
+  let (collisionParams, collisionReturn) ← get <| ModelRegistry.signature collisionFunc #[.agg 2 #[.int 0 0]] 2
   let collisionModel : ModelBinding := { models[0]! with
     params := collisionParams
     ret := collisionReturn

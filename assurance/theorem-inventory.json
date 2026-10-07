@@ -79,11 +79,46 @@
       "domain": "`Triple` for every allocator and linked list: no bytes owned after it (every node freed)"
     },
     {
+      "name": "Lists.push_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple emp` for every allocator, list head and value (one thread: `Mem.Seq`): `push` returns, with a new node or `error.OutOfMemory` and no bytes"
+    },
+    {
+      "name": "Lists.reverse_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple` for every linked list `list hd xs` (one thread: `Mem.Seq`): `reverse` returns the list in the other order"
+    },
+    {
+      "name": "Lists.freeAll_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple` for every allocator and linked list (one thread: `Mem.Seq`): `freeAll` returns and no bytes are owned after it (every node freed)"
+    },
+    {
       "name": "Lists.append_run",
       "module": "Proofs.Lists.Append",
       "example": "lists",
       "scope": "sequential",
       "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append`: for every allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
+    },
+    {
+      "name": "Lists.linkedAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, linked list `LList hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
+    },
+    {
+      "name": "Lists.arrayAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, `ArrayListUnmanaged(u32)` `AList p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
       "name": "cmp64_spec",
@@ -224,6 +259,13 @@
       "example": "iogroup",
       "scope": "all-schedules",
       "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_reclaim",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), a completed run ends with every task joined (`joinedAll 0`) and the three read shares of `io` returned before its free (`Reclaimed`); partial correctness, no termination or fairness"
     },
     {
       "name": "Threadsync.MutexCounter.mutexCounter_spec",
@@ -504,6 +546,7 @@
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
         "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
         "Proofs.Threads.Proofs",
@@ -513,16 +556,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f2e6328638a0a97cb434c5973cf11ba96d561e05",
-        "tracked_dirty": false
+        "head": "c10d1153fe95cd25919be14b75d0a7dd4bdba609",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-07T22:23:53.110842+00:00",
-      "elapsed_seconds": 192.614,
+      "started_utc": "2026-10-07T14:45:29.055720+00:00",
+      "elapsed_seconds": 64.105,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "4e0abc1e4ceb09b954833b9d69e352c789ecf39dfcd510409e077179a2955f80",
+      "log_sha256": "c54bde98b508b52083bca7602889bf81ffba53c673e2ebf74471d889e3871dc9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -531,6 +574,7 @@
         "Proofs.Atomics.Stack",
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -566,8 +610,9 @@
         "Proofs.Atomics.Relaxed": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
         "Proofs.Atomics.Stack": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
         "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
-        "Proofs.Lists.Append": "2218a3734adced95d0e30d3cc659f46f537a0f1d0ef06a0595d11f1cfa5d0e30",
-        "Proofs.Lists.Sep": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
+        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
+        "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
+        "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
         "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
         "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
@@ -674,16 +719,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f2e6328638a0a97cb434c5973cf11ba96d561e05",
+        "head": "c10d1153fe95cd25919be14b75d0a7dd4bdba609",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T22:20:35.414241+00:00",
-      "elapsed_seconds": 197.533,
+      "started_utc": "2026-10-07T14:44:40.582210+00:00",
+      "elapsed_seconds": 38.223,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1b2e22ad6ac0bf59f462cf9dbbfe7bddd6ecc291c7b9c4e41d4c622d6954d7de",
+      "log_sha256": "a61aab80a79e17142de1f1f8e972f1ae2e09e4fdbb0ddfe279a73505e38b8203",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -704,6 +749,8 @@
         "Proofs.Layout.Mem",
         "Proofs.Layout.Proofs",
         "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
+        "Proofs.Lists.Cost",
         "Proofs.Lists.Sep",
         "Proofs.Options.Proofs",
         "Proofs.Pointers.Proofs",
@@ -821,22 +868,24 @@
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
         "Proofs.Errors.Proofs": "cf02a423505740739045d46a3b300dcb3c8cfe6280fe8d02f94cfe8e3dff2e69",
-        "Proofs.Floatconv.Proofs": "91e3d7e423ff603c0669683961ce20e4645079ed6a004d37d569469afb77ce97",
+        "Proofs.Floatconv.Proofs": "74c841aaf6e2c2101c28a224ce47349033a057cd622838ec21dea9de7d0f86ce",
         "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
         "Proofs.Floats.Dot": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
-        "Proofs.Floats.Proofs": "9045ba75ef9a45663047fb63052315c15fca073239ade371c876b419bb290dfd",
-        "Proofs.Iogroup.Counter": "35d06213a4f2e21c26da998890a4756846e0a92222184caa84d02f34f551bb78",
+        "Proofs.Floats.Proofs": "ab76fbbe34b9184ae5495c738d5e39892fb26ca1f0c7dcb5c2a642369530707c",
+        "Proofs.Iogroup.Counter": "d733c9426e17453d9cac1410668a1bcf4788f8dcd7063665fddb0ea83231913f",
         "Proofs.Layout.Mem": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
         "Proofs.Layout.Proofs": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
-        "Proofs.Lists.Append": "2218a3734adced95d0e30d3cc659f46f537a0f1d0ef06a0595d11f1cfa5d0e30",
-        "Proofs.Lists.Sep": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
+        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
+        "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
+        "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
+        "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
         "Proofs.Pointers.Proofs": "fe793fd054585fcd00c47da37114b2764478f599b8b6f0368910ffa5ae1d1b09",
         "Proofs.Pointers.Sep": "ccd7983856010a36c64f41b332769c18470b0dceecf7b6e9bc1087af341d4b28",
         "Proofs.Recursion.Proofs": "9fb582b84b77d054fa9a231f0fcf2bf27456c4506c06625fe020df1c2f9d4961",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
         "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
-        "Proofs.Sync.Handoff": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
+        "Proofs.Sync.Handoff": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
         "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
         "Proofs.Sync.Mutex": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
         "Proofs.Sync.Proofs": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
@@ -844,7 +893,7 @@
         "Proofs.Sync.RwLockContract": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
         "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
         "Proofs.Sync.SemCounter": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-        "Proofs.Sync.Semaphore": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c",
+        "Proofs.Sync.Semaphore": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
         "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
         "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
         "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c",
@@ -856,81 +905,6 @@
         "Proofs.Variants.Proofs": "dcecf6343b9008a2c08fd0339d17e399e524874da36fc42f703304f04a9cb5f8",
         "Proofs.Vectors.CheckedAdd": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
         "Proofs.Vectors.Proofs": "f3b67f3459c032b6a0a1819e3a5665cc3ef3805c986b3aed852d0fa2ec6748c5"
-      }
-    },
-    "0.17.0-linux-goldens": {
-      "zig": "0.17.0",
-      "target": "linux",
-      "command": [
-        "python3",
-        "scripts/theorem-inventory.py",
-        "swap-build",
-        "--swap",
-        "lists=tests/golden/0.17.0/lists/Gen.lean",
-        "--swap",
-        "sync=tests/golden/0.17.0/sync/Gen.lean",
-        "--",
-        "Proofs.Lists.Sep",
-        "Proofs.Lists.Append",
-        "Proofs.Sync.Lock",
-        "Proofs.Sync.Mutex",
-        "Proofs.Sync.Semaphore",
-        "Proofs.Sync.SemCounter",
-        "Proofs.Sync.Handoff",
-        "Proofs.Sync.RwLock",
-        "Proofs.Sync.RwLockContract",
-        "Proofs.Sync.RwLockSnapshotPair",
-        "Proofs.Sync.Proofs"
-      ],
-      "outcome": "success",
-      "exit_code": 0,
-      "revision": {
-        "head": "f2e6328638a0a97cb434c5973cf11ba96d561e05",
-        "tracked_dirty": false
-      },
-      "started_utc": "2026-10-07T22:27:05.867178+00:00",
-      "elapsed_seconds": 121.206,
-      "host": {
-        "machine": "arm64",
-        "system": "Darwin"
-      },
-      "log_sha256": "b19cf68286859aadb4cec9024a7500cb44d069e6d05637dcc10c85875eb3d6cc",
-      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
-      "modules": [
-        "Proofs.Lists.Append",
-        "Proofs.Lists.Sep",
-        "Proofs.Sync.Handoff",
-        "Proofs.Sync.Lock",
-        "Proofs.Sync.Mutex",
-        "Proofs.Sync.Proofs",
-        "Proofs.Sync.RwLock",
-        "Proofs.Sync.RwLockContract",
-        "Proofs.Sync.RwLockSnapshotPair",
-        "Proofs.Sync.SemCounter",
-        "Proofs.Sync.Semaphore"
-      ],
-      "gens": {
-        "lists": {
-          "path": "tests/golden/0.17.0/lists/Gen.lean",
-          "sha256": "5b6609a92629c1b63b3e47dda53937fa2af774e75c1e1e71f5b77d81f086bfec"
-        },
-        "sync": {
-          "path": "tests/golden/0.17.0/sync/Gen.lean",
-          "sha256": "ada512fb98e8b8db878e0c350301eb258f5579ab35a8f0b1df7fdd4193fd4d29"
-        }
-      },
-      "sources": {
-        "Proofs.Lists.Append": "2218a3734adced95d0e30d3cc659f46f537a0f1d0ef06a0595d11f1cfa5d0e30",
-        "Proofs.Lists.Sep": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
-        "Proofs.Sync.Handoff": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
-        "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
-        "Proofs.Sync.Mutex": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
-        "Proofs.Sync.Proofs": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
-        "Proofs.Sync.RwLock": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
-        "Proofs.Sync.RwLockContract": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
-        "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
-        "Proofs.Sync.SemCounter": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-        "Proofs.Sync.Semaphore": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c"
       }
     }
   }

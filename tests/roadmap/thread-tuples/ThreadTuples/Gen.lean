@@ -55,6 +55,16 @@ identities are copied; a proof must explicitly justify ownership transfer or sha
 abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (ghost : γ) : Prop :=
   P.init target ghost
 
+/-- Each captured field in source order. A value is copied and carries no ownership;
+a pointer or slice copies only its identity, so a spawn proof must hand over or share its
+region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+def Tgt.captures : Tgt → List Zig.Conc.Capture
+  | .atomicWorker (capture0, capture1, _, _) => [.ptr capture0, .ptr capture1, .value, .value]
+  | .copyWorker (capture0, _, _, _) => [.ptr capture0, .value, .value, .value]
+  | .zeroWorker _ => []
+  | .ZeroWorker_u8_run _ => []
+  | .mixedWorker (_, capture1, _, capture3) => [.value, .ptr capture1, .value, .ptr capture3]
+
 structure atomic_Value_u32_initLocals where
   local1 : atomic_Value_u32
   deriving Inhabited

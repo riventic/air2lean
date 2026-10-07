@@ -1,0 +1,287 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "undef_operands.recLen",
+ "params": [],
+ "ret": 6,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 1,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 10,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "ty": 9,
+     "elems": [
+      {
+       "ty": 6,
+       "val": "2"
+      },
+      {
+       "ty": 8,
+       "elems": [
+        {
+         "ty": 7,
+         "val": "1"
+        },
+        {
+         "ty": 7,
+         "undef": true
+        },
+        {
+         "ty": 7,
+         "val": "3"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 13,
+   "args": [
+    {
+     "ty": 10,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "load",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "undef_operands.rec",
+   "ty": 9,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 9,
+    "elems": [
+     {
+      "ty": 6,
+      "val": "0"
+     },
+     {
+      "ty": 8,
+      "elems": [
+       {
+        "ty": 7,
+        "val": "0"
+       },
+       {
+        "ty": 7,
+        "val": "0"
+       },
+       {
+        "ty": 7,
+        "val": "0"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "undef_operands.Pair",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "b",
+     "ty": 0,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "array",
+   "len": 3,
+   "child": 7,
+   "sentinel": false,
+   "abi_size": 6,
+   "abi_align": 2
+  },
+  {
+   "k": "struct",
+   "name": "undef_operands.Rec",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "len",
+     "ty": 6,
+     "offset": 6
+    },
+    {
+     "name": "buf",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  }
+ ]
+}
