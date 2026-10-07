@@ -5,15 +5,15 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1981 theorems in 108 files.
+1983 theorems in 109 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 574 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 576 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 64 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 64 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 66 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 66 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
 | [THR-01](premises.md#thr-01) | 1042 | Interleaving scheduler and partial-correctness meaning |
@@ -35,16 +35,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1861 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1539 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 916 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 53 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 1863 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1541 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 918 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1981 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 912 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 912 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1983 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2734,6 +2734,27 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, T
 |---|---|
 | `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
+## `tutorials/memory-safety/Controls.lean`
+
+File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `MemorySafety.Controls.create_ok` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
+| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.node_cell` | SEM-01, SEM-02, TRU-01 |
+| `MemorySafety.Controls.access_dead` | SEM-01, SEM-02, TRU-01 |
+| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.loop_throw` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, TRU-01 |
+| `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
+| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
 ## `tutorials/memory-safety/Main.lean`
 
 File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
@@ -2749,26 +2770,14 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
-## `tutorials/memory-safety/Negative.lean`
+## `tutorials/memory-safety/Solution.lean`
 
 File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `MemorySafety.Negative.create_ok` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Negative.push_ok` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.node_cell` | SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Negative.access_dead` | SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Negative.push_free` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.loop_throw` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `MemorySafety.Negative.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.default_seq` | SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Negative.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Negative.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Negative.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Exercise.reverseThenFree_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Exercise.reverseThenFree_no_leak` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/mutable-arrays/Main.lean`
 

@@ -68,6 +68,9 @@ lake env lean tutorials/generic-containers/Negative.lean   # must fail
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-05](../../docs/premises.md#sem-05): `Proofs/Lists/Append.lean` imports the P06 cost
+  layer (`ZigLean.Sep.Cost`) for `append`'s model allocation count; such a count is a model
+  count, not a time or memory measurement.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, the translation of the std source, and
   native lowering.

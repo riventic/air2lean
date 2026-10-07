@@ -11,14 +11,46 @@ allocation-failure pattern:
 It also checks three wrong clients. Each one breaks one of the properties, so the properties
 are not vacuous.
 
+## Steps
+
 ```sh
 lake build Proofs.Lists.Sep
 lake env lean tutorials/memory-safety/Main.lean       # the client and its three properties
-lake env lean tutorials/memory-safety/Negative.lean   # double free, use after free, leak
+lake env lean tutorials/memory-safety/Controls.lean   # double free, use after free, leak refuted
+lake env lean tutorials/memory-safety/Solution.lean   # the exercise, solved
+lake env lean tutorials/memory-safety/Negative.lean   # must fail
 ```
 
-Lean exits with no output when every proof checks. Neither file uses `sorry` or `native_decide`.
-`#print axioms` on the theorems lists only `propext`, `Classical.choice` and `Quot.sound`.
+Lean exits with no output when every proof of `Main.lean`, `Controls.lean` and `Solution.lean`
+checks. No file uses `sorry` or `native_decide`. `#print axioms` on the theorems lists only
+`propext`, `Classical.choice` and `Quot.sound`. `python3 scripts/tutorials.py check` runs the
+`Main`, `Solution` and `Negative` checks with the other tutorials.
+
+## Exercise
+
+Prove that reversing a list with the generated `reverse` and then freeing it with the
+generated `freeAll` leaks nothing: from a memory whose heap is the list plus a disjoint rest
+`hR`, the run returns and the heap after it is `hR`.
+
+```lean
+def reverseThenFree (a : Allocator) (hd : Option Ptr) : MemM Unit :=
+  reverse hd >>= fun r => freeAll a r
+
+theorem reverseThenFree_no_leak (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32))
+    (m : Mem) (hL hR : Heap) (hs : m.Seq) (hdj : Heap.Disjoint hL hR) (hm : m.heap = hL ∪ hR)
+    (hl : list hd xs hL) :
+    ∃ m', (reverseThenFree a hd).run m = pure ((), m') ∧ m'.heap = hR
+```
+
+Hint: compose `reverse_total` and `freeAll_total` with `TotalTriple.bind`. A solution is in
+[`Solution.lean`](Solution.lean).
+
+## Negative control
+
+[`Negative.lean`](Negative.lean) claims that a client that pushes a node and never frees it
+ends owning no bytes (`TotalTriple emp (forgetFree a v) (fun _ => emp)`). On success,
+`push_total`'s post-condition owns the new node, so Lean must reject the proof with a type
+mismatch (`python3 scripts/tutorials.py check` requires that error in the last theorem).
 
 ## The code
 
@@ -50,7 +82,7 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 | `buildThenFree_no_leak` | `m.Seq → (buildThenFree a xs).run m = pure (r, m') → m'.heap = m.heap` |
 | `buildThenFree_every_policy` | the same from `{ m with failAt := k, allocPolicy := pol }`, for every `k` and `pol` |
 
-[`Negative.lean`](Negative.lean) holds the controls. `Room m` says that the next 16-byte
+[`Controls.lean`](Controls.lean) holds the refuted clients; Lean accepts it. `Room m` says that the next 16-byte
 allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
 `buildThenFree_memory_safe`.
 
@@ -96,9 +128,9 @@ push, of the last push, of any push in between, and no failure.
 `hd`, with `val` fields `xs`. `build_total` gives it for the items in order: `pushAll` gives
 them reversed, and the generated `reverse` turns them around.
 
-## Premises
+## Assumptions and remaining obligations
 
-The theorems hold in the model under the premises of
+The theorems of `Main.lean` hold in the model under the premises of
 [docs/premises.md](../../docs/premises.md). The per-theorem list is in
 [docs/premise-index.md](../../docs/premise-index.md#tutorialsmemory-safetymainlean)
 (`python3 scripts/premises.py explain buildThenFree_memory_safe`):

@@ -73,6 +73,8 @@ lake env lean tutorials/allocation-failure/Negative.lean   # must fail
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-04](../../docs/premises.md#sem-04): `push_spec` is the partial form of the total
+  `push_total` (`Proofs/Lists/Sep.lean`); the theorem itself states partial correctness.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 

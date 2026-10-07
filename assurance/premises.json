@@ -11,6 +11,7 @@
     "tutorials/external-contracts/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/first-proof/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/generic-containers/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/memory-safety/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/mutable-arrays/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check)."
   },
   "import_roots": ["tests/diff"],
@@ -103,7 +104,6 @@
     "ZigLean.Sep.Sentinel": ["ALC-04"],
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
-
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Result": ["SEM-03"]

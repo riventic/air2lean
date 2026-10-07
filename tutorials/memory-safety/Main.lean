@@ -30,7 +30,7 @@ For every input, every allocation policy and every failure trace (`Mem.failAt`,
   heap before it (`buildThenFree_no_leak`);
 * on success, the list holds the pushed items in order (`build_total`).
 
-`tutorials/memory-safety/Negative.lean` shows that each property can fail: a double free and
+`tutorials/memory-safety/Controls.lean` shows that each property can fail: a double free and
 a read after free throw `.illegal`, and a client that skips the free leaks. README.md lists
 the premises and limits.
 -/
