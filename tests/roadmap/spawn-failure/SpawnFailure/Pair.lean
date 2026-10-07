@@ -20,8 +20,7 @@ joined.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto SpawnFailure Assn
-open SpawnFailure.Group (flagA KidA enc_u32 writeWorker_spec decode_u32 free_front liftMem_upd'
-  liftM_upd')
+open SpawnFailure.Group (flagA KidA enc_u32 writeWorker_spec decode_u32 free_front)
 
 namespace SpawnFailure.Pair
 

@@ -384,7 +384,9 @@ def qualify(mode, destination):
               "legacy_references": {str(p.relative_to(ROOT)): digest(p) for p in
                   sorted((ROOT / "tests/roadmap/thread-tuples/air/0.16.0").glob("*.json")) +
                   [ROOT / "tests/roadmap/thread-tuples/ThreadTuples/Gen.lean", ROOT / "tests/roadmap/thread-tuples/provenance.json"]},
-              "fixture": {p.name: digest(p) for p in FIXTURE.iterdir() if p.is_file()}}
+              # Recursive: the checked AIR, translation and proofs are evidence too.
+              "fixture": {str(p.relative_to(FIXTURE)): digest(p) for p in sorted(FIXTURE.rglob("*"))
+                          if p.is_file() and "__pycache__" not in p.parts}}
     try:
         lean = [os.environ["AIR2LEAN_LEAN"]] if os.environ.get("AIR2LEAN_LEAN") else ["lake", "env", "lean"]
         translator = Path(os.environ.get("AIR2LEAN_TRANSLATOR", ROOT / ".lake/build/bin/air2lean")).resolve()

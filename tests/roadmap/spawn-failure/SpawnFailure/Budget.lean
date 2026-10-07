@@ -19,7 +19,7 @@ private def withLimit (limit : Option Nat) : Mem := { SpawnFailure.mem0 with spa
 
 private def children (m : Mem) : Nat := m.threads.size - 1
 
-/-- Three spawn sites in one run: two caught spawns and the pair (two more sites). -/
+/-- Four assignments in one run: two caught spawns and both spawns of the pair. -/
 private def several : ConcM SpawnFailure.Tgt (BitVec 32 × BitVec 32 × Except ErrName (BitVec 32)) := do
   let a ← SpawnFailure.threadCatch 5
   let b ← SpawnFailure.threadCatch 6
