@@ -160,7 +160,8 @@ def main : IO Unit := do
   reject (ptrReturn "constErrorArm" {constUnion with init := some (.errUnionErr 6 "Alpha")} 8 0) "escaping, arithmetic"
   reject (loadAt "constRawErrorArm" {constUnion with init := some (.errUnionErr 6 "Alpha")} 8 2) "overlaps symbolic error bytes"
   reject (ptrReturn "constUndefined" {constUnion with init := some (.undef 6)} 8 0) "escaping, arithmetic"
-  reject (ptrReturn "constUndefinedPayload" {constUnion with init := some (.errUnionOk 6 (.undef 1))} 8 0) "escaping, arithmetic"
+  -- A partly undefined initial value is rejected before alias analysis (L12).
+  reject (ptrReturn "constUndefinedPayload" {constUnion with init := some (.errUnionOk 6 (.undef 1))} 8 0) "a partly `undefined` initial value is outside the subset"
   reject (ptrReturn "constUnknownInit" {constUnion with init := none} 8 0) "no initial value"
   reject (ptrReturn "constExtern" {constUnion with isExtern := true} 8 0) "`extern`"
   reject (ptrReturn "constThreadlocal" {constUnion with threadlocal := true} 8 0) "`threadlocal`"

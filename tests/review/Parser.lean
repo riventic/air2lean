@@ -225,8 +225,8 @@ def main (args : List String) : IO Unit := do
     reject (file "cycle" #[t, nrTy] #[] 0 #[inst 0 "ret" 1 #[undef 0]]) "cyclic value type"
   let node := obj [("k", .str "struct"), ("name", .str "Node"), ("layout", .str "auto"),
     ("fields", .arr #[obj [("name", .str "next"), ("ty", num 1)]])]
-  let _ ← accept (file "recursivePointer" #[node, ptrTy "one" 0, nrTy] #[] 1
-    #[inst 0 "ret" 2 #[undef 1]])
+  let _ ← accept (file "recursivePointer" #[node, ptrTy "one" 0, nrTy] #[1] 1
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "ret" 2 #[ref 0]])
   reject (file "selfUse" #[intTy 8, nrTy] #[] 0
     #[inst 10 "add" 0 #[ref 10, lit 0 "1"], inst 20 "ret" 1 #[ref 10]]) "self SSA use"
   reject (file "forwardUse" #[intTy 8, nrTy] #[] 0
@@ -289,13 +289,17 @@ def main (args : List String) : IO Unit := do
     obj [("k", .str "error_set"), ("any", .bool true)], modelStruct "Thread",
     obj [("k", .str "error_union"), ("error", num 5), ("payload", num 6)],
     modelStruct "Io.Group", ptrTy "one" 8, modelStruct "Io"]
-  for (callee, args) in #[ ("Thread.spawn", #[undef 4, ref 0]),
-      ("Io.Group.async", #[undef 9, undef 10, ref 0]) ] do
-    let result := if callee == "Thread.spawn" then 7 else 1
-    let spawn := file "spawnMissing" spawnTypes #[] 1
-      #[inst 0 "aggregate_init" 2 #[lit 0 "7"], inst 1 "call" result args
+  -- Only `Thread.spawn`'s `SpawnConfig` may be `undefined`; the group and `io` are parameters.
+  for (callee, args) in #[ ("Thread.spawn", #[undef 4, ref 2]),
+      ("Io.Group.async", #[ref 0, ref 1, ref 2]) ] do
+    let group := callee != "Thread.spawn"
+    let result := if group then 1 else 7
+    let spawn := file "spawnMissing" spawnTypes (if group then #[9, 10] else #[]) 1
+      ((if group then #[inst 0 "arg" 9 #[] [("param", num 0)], inst 1 "arg" 10 #[] [("param", num 1)]]
+        else #[]) ++
+      #[inst 2 "aggregate_init" 2 #[lit 0 "7"], inst 3 "call" result args
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "missingWorker")])],
-        inst 2 "ret" 3 #[lit 1 "{}"]]
+        inst 4 "ret" 3 #[lit 1 "{}"]])
     let f ← accept spawn
     match checkProgram #[f] with
     | .ok _ => throw (IO.userError s!"accepted missing worker for {callee}")
