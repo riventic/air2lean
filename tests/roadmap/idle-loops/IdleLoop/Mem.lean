@@ -172,15 +172,28 @@ theorem Inv.record {s : Bool} {m : Mem} {b o len : Nat} {k : AccessKind} (hi : I
 
 /-! ## `flag` -/
 
+/-- `flag` has no plain write (every access to block 1 is atomic): each clock bounds its plain
+writes (`PlainLe`). -/
+theorem plainLe_flag {s : Bool} {m : Mem} (hfp : ∀ e ∈ m.footprint, FpOk s e) (c : VClock) :
+    PlainLe m 1 0 4 c := by
+  intro e he hh
+  have hk := plainHit_kind hh
+  have hb := plainHit_block hh
+  rcases hfp e he with ⟨hb0, -⟩ | ⟨hb0, -⟩ | ⟨-, ha⟩
+  · rw [hb] at hb0; cases hb0
+  · rw [hb] at hb0; cases hb0
+  · rw [hk] at ha; cases ha
+
 /-- The flag's location at an atomic op (`locIdx 1 0 4`): location 0. -/
 theorem loc_flag {s : Bool} {m m₁ : Mem} {li : Nat} (hf : FlagOk s m)
+    (hfp : ∀ e ∈ m.footprint, FpOk s e)
     (h : ((locIdx 1 0 4).run m).run = some (.ok (li, m₁))) :
     li = 0 ∧ ∃ l k, FlagLoc s m l ∧ m₁ = { m with atomics := #[l], nextMsg := k } := by
   have h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = 1 ∧ l.off = 0 ∧ l.len = 4 ∧
-      ALoc.lastBytes l = curBytes m 1 0 4 := by
+      ALoc.lastBytes l = curBytes m 1 0 4 ∧ PlainLe m 1 0 4 l.lastClock := by
     rcases hf with ⟨-, ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, -⟩
     · exact .inl ha
-    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast⟩
+    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, plainLe_flag hfp _⟩
   obtain ⟨rfl, l, k, rfl, ⟨ha, rfl⟩ | ha⟩ := locIdx_single h0 h
   · rcases hf with ⟨hs, -, hu⟩ | ⟨l, ha', -⟩
     · exact ⟨rfl, firstLoc m 1 0 4, k, ⟨rfl, rfl, rfl, rfl, .inl ⟨hs, firstMsg m 1 0 4, rfl, hu⟩⟩, rfl⟩
@@ -257,7 +270,7 @@ theorem step_load {s : Bool} {m m' : Mem} {c : Nat} {v : BitVec 32} (hi : Inv s 
     show 1 < (m.clocks.set! _ _).size; simp [hi.csize]
   have hthr : (m.recordAt 1 0 (intSize 32) .atomicRead).threads = m.threads := rfl
   generalize m.recordAt 1 0 (intSize 32) .atomicRead = mr at hir hl hcur hcs hthr
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hl
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hir.fp hl
   have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
   have hiM := hir.setLoc hfl k
   have hg' := grows_loadM { mr with atomics := #[l], nextMsg := k } 0 .acquire
@@ -309,7 +322,7 @@ theorem load_noErr {s : Bool} {m : Mem} {c : Nat} (hi : Inv s m) (ht : m.current
   simp only [Bool.false_eq_true, ↓reduceIte] at hacc' hl
   rw [show fPtr = ⟨some 1, 0⟩ from rfl, hacc₁] at hacc'
   cases hacc'
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hl
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hir.fp hl
   have hl0 : ({ m.recordAt 1 0 (intSize 32) .atomicRead with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
   have hcount : loadCnt m = (readOpts { m.recordAt 1 0 (intSize 32) .atomicRead with
       atomics := #[l], nextMsg := k } 0 false).size := optCount_eq hp
@@ -409,7 +422,7 @@ theorem step_store {m m' : Mem} {c : Nat} (hi : Inv false m) (hc : m.current = 0
   have hbr : (m.recordAt 1 0 (intSize 32) .atomicWrite).blocks[1]? = some blk := hb₁
   have hthr : (m.recordAt 1 0 (intSize 32) .atomicWrite).threads = m.threads := rfl
   generalize m.recordAt 1 0 (intSize 32) .atomicWrite = mr at hir hl hcur hbr hthr
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hl
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hir.fp hl
   obtain ⟨hlb, hlo, hll, hlast, ⟨-, m0, hms, h0⟩ | ⟨hs', -⟩⟩ := hfl
   · have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
     obtain ⟨hf1, hs1⟩ := writeSlots_bounds hs
@@ -452,7 +465,7 @@ theorem store_noErr {m : Mem} {c : Nat} (hi : Inv false m) (ht : m.current < 2)
   obtain ⟨b, blk, o, hacc', -, hl, rfl⟩ := storePrep_ok hp
   rw [hacc₁] at hacc'
   cases hacc'
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hl
+  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hir.fp hl
   have hne := writeSlots_ne (m := { m.recordAt 1 0 (intSize 32) .atomicWrite with atomics := #[l], nextMsg := k })
     (li := 0) (by show 0 < l.msgs.size; exact hfl.pos)
   have hcount : storeCnt m = (writeSlots { m.recordAt 1 0 (intSize 32) .atomicWrite with
