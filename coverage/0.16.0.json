@@ -17806,7 +17806,7 @@
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
       "tests/roadmap/diagnostics/Collector.lean": "2ee51db19697067cf114efca6196a79d9149ef7908300b22489a009eaa87dc53",
-      "tests/roadmap/diagnostics/RuntimeTags.lean": "de6d2ff152e0308d363146f61fedec97c4a98b092b22ee183f471b2f138d8820",
+      "tests/roadmap/diagnostics/RuntimeTags.lean": "7653c5e231b47c061e232607123c3d87d5403deb8e3a7323c31383a162cec68f",
       "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730",
       "tests/roadmap/runtime-tags/runtime_tags.zig": "23422983282b3a6475593ed50e00cbc39cd39ee22aa15d56acaa9ea8365dd3df",
       "tests/roadmap/thread-tuples/air/0.16.0/atomic.Value(u32).init.json": "6f79df035939d65b587a248e20d477f2037a2fea7037c9e3b0d085fdc3cf4325",
