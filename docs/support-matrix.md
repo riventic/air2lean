@@ -61,12 +61,12 @@ From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). 
 | `floats` | yes | yes | yes | yes |
 | `iogroup` | yes | yes | — | — |
 | `layout` | yes | yes | yes | yes |
-| `lists` | — | yes | yes | — |
+| `lists` | yes | yes | yes | — |
 | `options` | yes | yes | yes | yes |
 | `pointers` | yes | yes | yes | yes |
 | `recursion` | yes | yes | yes | yes |
 | `slices` | yes | yes | yes | — |
-| `sync` | — | yes | — | — |
+| `sync` | yes | yes | — | — |
 | `threads` | yes | yes | yes | — |
 | `threadsync` | — | — | yes | — |
 | `variants` | yes | yes | yes | yes |
