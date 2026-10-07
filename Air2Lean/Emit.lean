@@ -202,20 +202,23 @@ def emitErrorDomain (names : Array String) : String :=
   s!"(⟨#[{String.intercalate ", " (names.toList.map String.quote)}], by decide, by decide⟩ : Zig.ErrorDomain)"
 
 /-- An explicit type-indexed storage dictionary. No instance for `String` is registered.
-Named aggregate dictionaries choose these recursively for their fields. -/
+Named aggregate dictionaries choose these recursively for their fields. A C/allowzero
+pointer (`layouts` gives allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero
+bytes (`Check.lean` rejects an optional of one, which would need a separate flag). -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (id : TyId) : Option String :=
+    (id : TyId) (layouts : Array Layout := #[]) : Option String :=
   match types[id]? with
+  | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
   | some (.errorSet (some names)) => some s!"Zig.errorEnc {emitErrorDomain names}"
   | some (.optional c) =>
     match types[c]? with
     | some (.errorSet (some names)) => some s!"Zig.optionalErrorEnc {emitErrorDomain names}"
-    | _ => (emitStorageEnc structNames types c).map fun enc => s!"Zig.Enc.optionWith ({enc})"
+    | _ => (emitStorageEnc structNames types c layouts).map fun enc => s!"Zig.Enc.optionWith ({enc})"
   | some (.array n c sentinel) =>
-    (emitStorageEnc structNames types c).map fun enc =>
+    (emitStorageEnc structNames types c layouts).map fun enc =>
       s!"Zig.Enc.vectorWith {n + if sentinel then 1 else 0} ({enc})"
   | some (.errorUnion set payload) =>
-    let payloadEnc := emitStorageEnc structNames types payload
+    let payloadEnc := emitStorageEnc structNames types payload layouts
     let enc := payloadEnc.getD
       s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]!}))"
     match types[set]? with
@@ -226,8 +229,8 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
 def withStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (id : TyId) (expr : String) : String :=
-  match emitStorageEnc structNames types id with
+    (id : TyId) (expr : String) (layouts : Array Layout := #[]) : String :=
+  match emitStorageEnc structNames types id layouts with
   | none => expr
   | some enc =>
     s!"(letI : Zig.Enc ({emitTy structNames types types[id]!}) := {enc}; {expr})"
@@ -371,10 +374,10 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     let enc := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
-      else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes id "Zig.Enc.encode x"})]"
+      else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes id "Zig.Enc.encode x" s.srcLayouts})]"
     let dec := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => pure .{fm f}"
-      else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {po}"}))"
+      else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {po}" s.srcLayouts}))"
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
@@ -385,9 +388,9 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
        s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, id), o) =>
-      s!"({o}, {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.encode v.{fm f}"})"
+      s!"({o}, {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.encode v.{fm f}" s.srcLayouts})"
     let decs := (fields.zip s.layout.offsets).toList.map fun ((f, id), o) =>
-      s!"{fm f} := ← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {o}"}"
+      s!"{fm f} := ← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {o}" s.srcLayouts}"
     String.intercalate "\n" (head ++
       [s!"  encode v := Zig.Enc.fields {size} [{String.intercalate ", " parts}]",
        s!"  decode bs := do pure \{ {String.intercalate ", " decs} }"])
@@ -445,9 +448,9 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     let ns := rawUnionNs layout
     let perField := fields.toList.flatMap fun (f, id) =>
       let t := tyStr id
-      ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {withStorageEnc structNames s.srcTypes id s!"{ns}.get ({t}) u.bytes"}", "",
+      ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {withStorageEnc structNames s.srcTypes id s!"{ns}.get ({t}) u.bytes" s.srcLayouts}", "",
        s!"def {n}.{hn s!"modify_{f}"} (g : {t} → {t}) (u : {n}) : {n} :=",
-       s!"  {withStorageEnc structNames s.srcTypes id s!"⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"}"]
+       s!"  {withStorageEnc structNames s.srcTypes id s!"⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩" s.srcLayouts}"]
     String.intercalate "\n"
       ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
         "  deriving Repr, Inhabited, DecidableEq"] ++ perField)
@@ -649,7 +652,7 @@ def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
   emitTy fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
-  withStorageEnc fc.structNames fc.types tid expr
+  withStorageEnc fc.structNames fc.types tid expr fc.layouts
 
 def FCtx.tyBits (fc : FCtx) (tid : TyId) : Nat := match fc.tyOfId tid with | .int _ b => b | _ => 0
 def FCtx.tySigned (fc : FCtx) (tid : TyId) : Bool :=
@@ -1047,6 +1050,23 @@ def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
 /-- `v` is a pointer to memory: not a place. -/
 def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
   !fc.isPlace v && match fc.valTy v with | .ptr .. => true | _ => false
+
+/-- `v`'s type is a C/allowzero pointer (address zero is a value). -/
+def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
+  (fc.valTyId? v |>.map (nullablePtrTy fc.types fc.layouts)).getD false
+
+/-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
+def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool :=
+  match t with
+  | .optional c => match fc.tyOfId c with | .ptr size .. => size != "slice" | _ => false
+  | _ => false
+
+/-- A projection `project` (`(·.add off)`, `(·.elem size i)`) of the pointer `base`, whose
+term is `p`. From a C/allowzero base it is `Zig.ptrProjectNullable`: address zero is illegal
+behaviour; otherwise `pure (p.project)`. -/
+def FCtx.projectExpr (fc : FCtx) (base : Val) (p project : String) : String :=
+  if fc.nullableVal base then s!"{fc.callMName} (Zig.ptrProjectNullable {p} (·.{project}))"
+  else s!"pure ({p}.{project})"
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
 def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
@@ -1716,8 +1736,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .ptr .., .gt => some s!"Zig.ptrLt {rv b} {rv a}"
       | .ptr .., .ge => some s!"Zig.ptrLe {rv b} {rv a}"
       | _, _ => none
-    let nullableVal (v : Val) := (fc.valTyId? v |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false)
-    let nullable := nullableVal a || nullableVal b
+    let nullable := fc.nullableVal a || fc.nullableVal b
     let expr := match ptrOrder, op with
       | some e, _ => s!"{fc.callMName} ({e})"
       | none, .eq => if nullable then s!"{fc.callMName} (Zig.ptrEqAddr {rv a} {rv b})" else s!"pure ({expr})"
@@ -1776,8 +1795,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
       let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
-    else if srcPtr && dstPtr &&
-        (fc.valTyId? a |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false) &&
+    else if srcPtr && fc.nullableVal a && fc.isOptScalarPtr (fc.tyOfId inst.ty) then
+      -- A C/allowzero pointer to `?*T`: address zero is the explicit `none`.
+      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrToOptional {rv a})"
+      (env, some l)
+    else if dstPtr && nullablePtrTy fc.types fc.layouts inst.ty && fc.isOptScalarPtr (fc.valTy a) then
+      -- `?*T` to a C/allowzero pointer: `none` is address zero.
+      let (env, l) := bindLet fc env inst.id s!"pure (Zig.ptrOfOptional {rv a})"
+      (env, some l)
+    else if srcPtr && dstPtr && fc.nullableVal a &&
         !(nullablePtrTy fc.types fc.layouts inst.ty) then
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
       (env, some l)
@@ -1920,7 +1946,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if fc.isMemPtr base then
       -- A bit-pointer points to the host integer: the base's own address.
       let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv base}.add {off})"
+      let (env, l) := bindLet fc env inst.id (fc.projectExpr base (rv base) s!"add {off}")
       (env, some l)
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
@@ -2025,11 +2051,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then "elemSub" else "elem"
-    let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.{f} {size} {rv n})"; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.projectExpr p (rv p) s!"{f} {size} {rv n}"); (env, some l)
   | .elemPtr p i =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let base := if fc.isSlice p then s!"{rv p}.ptr" else rv p
-    let (env, l) := bindLet fc env inst.id s!"pure ({base}.elem {size} {rv i})"; (env, some l)
+    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.elem {size} {rv i})"
+      else fc.projectExpr p (rv p) s!"elem {size} {rv i}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
     (env, some l)
@@ -3188,7 +3215,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
             some (emitTy structNames worker.types worker.types[child]!,
               Nat.min ((worker.layouts[parameter]?.bind (·.ptrAlign)).getD 1)
                 ((worker.layouts[child]?.bind (·.align)).getD 1),
-              emitStorageEnc structNames worker.types child)
+              emitStorageEnc structNames worker.types child worker.layouts)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)

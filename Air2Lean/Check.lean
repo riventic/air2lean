@@ -160,10 +160,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       else recur child
     | "many" | "slice" | "c" => recur child
     | _ => throw s!"{fnName}: near line {line}: pointer size '{size}' is outside the subset"
-  | .array _ child _ =>
-    if nullablePtrTy types layouts child then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
-    recur child
+  -- Arrays and ordinary structs of C/allowzero pointers use the null-byte storage
+  -- dictionary (`Zig.nullablePtrEnc`); unions, tuples and error-union payloads do not.
+  | .array _ child _ => recur child
   | .vector _ child =>
     unless (match types[child]? with
       | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
@@ -184,8 +183,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: an error encoding domain must have at most 65535 distinct nonempty names"
     pure ()
   | .struct name layout fields =>
-    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) && layout == "packed" then
+      throw s!"{fnName}: near line {line}: nullable pointers in packed aggregates are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
         integer, a `bool`, an enum or a packed struct: outside the subset"
@@ -244,10 +243,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
-  | some (.ptr size ..) =>
-    if nullablePtrTy types layouts id then
-      throw "a C/allowzero pointer stored as a memory value needs qualified null-byte encoding"
-    pure (if size == "slice" then 16 else 8, 8)
+  -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
+  | some (.ptr size ..) => pure (if size == "slice" then 16 else 8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
   | some .io => pure (16, 8)
@@ -410,11 +407,12 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
-/-- Nullable pointer projections/arithmetic are not yet part of the qualified fragment.
-Cast to a nonnullable pointer after a null check before projecting or constructing a slice. -/
+/-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
+qualified fragment. Field/element projections and pointer arithmetic are
+(`Zig.ptrProjectNullable`). Cast to a nonnullable pointer after a null check first. -/
 def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
-    cx.fail line "nullable pointer arithmetic, indexing and projections require a nonnull cast first (outside the qualified pointer fragment)"
+    cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
 
 /-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
 (`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
@@ -431,7 +429,6 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
-  cx.rejectNullableProjection line ptr
   let pty ← cx.memPtrTy line ptr
   if let some (.ptr "one" _ c) := cx.types[pty]? then
     if let some (.vector _ e) := cx.types[c]? then
@@ -753,11 +750,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
+    -- A C/allowzero pointer and an ordinary optional single/many pointer convert with explicit
+    -- null mapping (`Zig.ptrToOptional`/`Zig.ptrOfOptional`); address zero is `none`.
+    let isOptScalarPtr (t : TyId) : Bool := match cx.types[t]? with
+      | some (.optional c) => match cx.types[c]? with
+        | some (.ptr size ..) => size != "slice" | _ => false
+      | _ => false
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
-      if isOptPtr ty && nullablePtrTy cx.types cx.layouts aty then
-        cx.fail line "casting a C/allowzero pointer to an optional pointer needs explicit null wrapping and is outside the qualified pointer fragment"
+      let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
+      if (isOptPtr ty && nullable aty && !isOptScalarPtr ty) || (isOptPtr aty && nullable ty && !isOptScalarPtr aty) then
+        cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
+      if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then return line
       if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
@@ -796,7 +801,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
-    cx.rejectNullableProjection line base
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
@@ -820,9 +824,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
     checkMemTy fnName cx.types cx.layouts line parent
     pure line
-  | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
+  | .ptrElemVal p _ => cx.itemAccess line p; pure line
+  | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
-    cx.rejectNullableProjection line p
     -- The result is a pointer to an item: its child is the item type.
     if let some pty := cx.valTy? p then
       if let some (.ptr "one" _ c) := cx.types[pty]? then
