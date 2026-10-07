@@ -175,7 +175,7 @@ Unsupported features include `threadlocal` globals, `extern` globals other than 
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual lane of a `bool` vector or of a vector whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`); such vectors in memory outside a schema-12 LLVM-backend profile ([layouts](docs/vector-proofs.md#memory-layout)) |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
-| scalar nonoptional C/allowzero pointer null tests, casts and direct access ([fragment](docs/null-pointers.md)) | nullable-pointer storage/aggregates/optionals, volatile/null-bit/slice representations and nullable projections |
+| nonoptional C/allowzero pointer null tests, casts, direct access, storage, struct/array fields and projections ([fragment](docs/null-pointers.md)) | optionals of nullable pointers, nullable pointers in unions/tuples/error unions, volatile/null-bit/slice representations and nullable slicing/bulk memory |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm, register operands only, as opaque functions (x86_64 only) | |

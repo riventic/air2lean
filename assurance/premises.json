@@ -52,6 +52,7 @@
     "ZigLean.Mem.Enc": ["SEM-02"],
     "ZigLean.Mem.Lemmas": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
+    "ZigLean.Mem.NullLemmas": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Thread": ["ORD-01", "THR-01"],
     "ZigLean.Conc.Basic": ["THR-01"],
