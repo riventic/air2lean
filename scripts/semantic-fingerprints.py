@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -56,9 +57,14 @@ def load_sidecar(path, generated=None):
             raise ValueError(f"{path}: duplicate function {record['source']!r}")
         seen.add(record["source"])
     if generated is not None:
-        metadata, _ = _normalize.split_generated(Path(generated).read_bytes(), required=True)
+        metadata, body = _normalize.split_generated(Path(generated).read_bytes(), required=True)
         if metadata != doc["metadata"]:
             raise ValueError(f"{generated}: profile header differs from the source map")
+        # A stale sidecar from another run must not describe this module's declarations.
+        declared = set(re.findall(r"^def (\S+)", body.decode("utf-8"), re.MULTILINE))
+        if (f"namespace {doc['namespace']}\n".encode() not in body or
+                any(r["definition"] not in declared for r in doc["functions"])):
+            raise ValueError(f"{generated}: declarations differ from the source map")
     return doc
 
 

@@ -68,6 +68,11 @@ A fingerprint is an invalidation key, not a semantic-equivalence proof: equal
 fingerprints mean the translated inputs agree after this normalization. It is
 conservative. A reordered per-function type table, an AIR shape change between Zig
 versions, or a renamed callee changes it even when meaning is preserved.
+Fingerprints hash translator inputs, not the emitted Lean text: compare sidecars
+produced by the same translator revision, since an `Emit.lean` change can alter
+generated bodies without changing any fingerprint. `--generated` binds a sidecar to
+its Lean file by profile header, namespace and declaration names, which rejects a
+sidecar left from another run; it is not a content hash.
 Generic-instance numbers come from `Anon.lean`'s first-use scan. A new instance of
 an existing generic that is reached before the existing one renumbers it. Its
 callers then report `invalidated`, and the instance itself appears as

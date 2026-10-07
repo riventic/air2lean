@@ -289,11 +289,12 @@ private def run (args : List String) : IO UInt32 := do
               -- the same identity order as emission.
               let entries := ((emissionKeys.zip (jsonPaths.zip (originalNames.zip (rewrittenTexts.zip funcs)))).qsort
                 (fun x y => decide (x.1 < y.1))).map (·.2)
+              let declOf : Std.HashMap String String := declNames.foldl (fun m (k, v) => m.insert k v) {}
               let records ← entries.mapM fun (airPath, airName, text, f) => do
                 let doc ← match StrictJson.parse text with
                   | .ok doc => pure doc
                   | .error e => throw (IO.userError s!"{airPath}: {e}")
-                let definition := ((declNames.find? (·.1 == f.name)).map (·.2)).getD f.name
+                let definition := declOf.getD f.name f.name
                 let api := if a.proofApi && (proofApiFacts f).isSome then
                   some (proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold") else none
                 pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)

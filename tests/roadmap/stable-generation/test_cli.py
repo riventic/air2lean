@@ -176,6 +176,12 @@ def main():
         for ex in SEMANTIC:
             check_example(binary, ex, work)
         check_generic_instance(binary, work)
+        # A sidecar bound to another module's Lean output is rejected as stale.
+        stale = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'index',
+                                str(work / 'recursion-base.source-map.json'),
+                                '--generated', str(work / 'pointers-base.lean')],
+                               capture_output=True, text=True, timeout=60)
+        assert stale.returncode == 2 and 'declarations differ' in stale.stderr, stale
     print('stable-generation translator checks passed')
 
 
