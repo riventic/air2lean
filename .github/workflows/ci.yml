@@ -936,7 +936,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC Proofs.Pointers.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
+          lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
       - name: Result verification condition regressions
         if: ${{ !matrix.mutate }}
@@ -955,6 +955,23 @@ jobs:
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
+
+      # Reflect committed loop-free translations into the VC AST; loops must request invariants.
+      - name: Automatic verification condition extraction regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+
+      - name: Verification condition report regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          python3 -B scripts/vc-report.py --json \
+            --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
+            --namespace Basic --namespace Pointers --namespace Errors \
+            tests/roadmap/vcs/Extract.lean > "$RUNNER_TEMP/vcs/report.json"
+          diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16.
       - name: Loop-switch dispatch regressions
