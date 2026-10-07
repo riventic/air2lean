@@ -338,10 +338,13 @@ def declared(meta):
     hosts = {h for v in versions for h in v.get('hosts', [])}
     profile_hosts = {}
     for profile in profiles:
-        triples = profile.get('target_triples', [])
+        triples = profile.get('target_triples') or []
         if triples == ['unverified']:
             input_only.append(profile['name'])
             continue
+        if not triples:
+            errors.append(f'profile {profile["name"]} declares no target triples '
+                          '(use ["unverified"] for an input-only profile)')
         targets = set()
         for triple in triples:
             arch_os = '-'.join(triple.split('-')[:2])
@@ -413,6 +416,9 @@ def check_entry(entry, path, jobs):
             errors.append(f'{pid}: unknown evidence kind {kind!r}')
     for kind in KINDS:
         names, gap = evidence.get(kind) or [], gaps.get(kind)
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            errors.append(f'{pid}: {kind} evidence must be a list of step names')
+            continue
         if gap is not None:
             if kind not in GAPPABLE:
                 errors.append(f'{pid}: {kind} cannot be waived as a gap')
@@ -518,8 +524,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         errors, rows, input_only = check(args.root, args.strict)
-    except Unreadable as error:
-        print(f'target-matrix: {error}', file=sys.stderr)
+    except (Unreadable, KeyError, TypeError, AttributeError) as error:
+        # Malformed input shapes (a profile without a name, a non-object entry) are unreadable.
+        print(f'target-matrix: {type(error).__name__}: {error}', file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps({'ok': not errors, 'errors': errors, 'paths': rows,

@@ -212,6 +212,22 @@ class Declarations(Scratch):
         self.check_fails('declares target wasm32-wasi-musl with no supported native host',
                          'wasm32-wasi is listed as not declared')
 
+    def test_profile_without_targets_is_not_silently_ignored(self):
+        self.edit_json('compatibility.json', lambda d: d['profiles'].append(
+            {'name': 'empty', 'target_triples': []}))
+        self.check_fails('profile empty declares no target triples')
+
+    def test_malformed_shapes_are_exit_2(self):
+        self.edit_json('compatibility.json', lambda d: d['profiles'][0].pop('name'))
+        code, output = run('check', '--root', self.root)
+        self.assertEqual(code, 2, output)
+
+    def test_evidence_must_be_a_list_of_step_names(self):
+        def change(data):
+            self.entry(data, '0.16.0', 'x86_64-linux')['evidence']['proof_check'] = 'Build proofs'
+        self.edit_json(TM['MAP'], change)
+        self.check_fails('proof_check evidence must be a list of step names')
+
     def test_input_only_profiles_must_match(self):
         self.edit_json(TM['MAP'], lambda d: d.__setitem__('input_only_profiles', []))
         self.check_fails('input_only_profiles [] != ')
