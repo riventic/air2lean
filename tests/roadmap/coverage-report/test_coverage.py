@@ -10,6 +10,9 @@ import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
+# Theorem entries extracted from tests/roadmap/assurance/StatementBinding.lean; that check.sh
+# requires the real extraction to match this file exactly.
+STATEMENT_FIXTURE = json.loads((Path(__file__).parent / 'statement-binding.json').read_text())
 spec = importlib.util.spec_from_file_location('project', SCRIPT)
 project = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(project)
@@ -59,6 +62,9 @@ class CoverageTests(unittest.TestCase):
         self.nodes = [{'name': 'Example.root', 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []},
                       {'name': 'Example.root_spec', 'module': 'contract', 'kind': 'theorem', 'dependencies': ['Example.root', 'propext']},
                       {'name': 'propext', 'module': 'Init.Core', 'kind': 'axiom', 'dependencies': []}]
+        # Statement-only dependencies per theorem: (statement, conclusion). Unlisted theorems state
+        # their conclusion about every non-axiom declaration they depend on.
+        self.statements = {}
         self.generated_sha = sha(GENERATED)
         self.write_receipt()
         self.diff = self.base / 'diff.json'
@@ -76,9 +82,13 @@ class CoverageTests(unittest.TestCase):
                                'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
                                'attempt': str(self.attempt), 'theorem_count': 1, 'artifacts': []})
         write('plan.json', {'schema': 1, 'root': str(self.base), 'modules': ['contract'], 'scope': 'explicit-modules'})
+        def statement(node):
+            default = [d for d in node['dependencies'] if d != 'propext']
+            deps, conclusion = self.statements.get(node['name'], (default, default))
+            return {'statement_dependencies': deps, 'conclusion_dependencies': conclusion}
         theorems = [{'name': n['name'], 'module': n['module'], 'axioms': ['propext'], 'opaque_dependencies': [],
-                     'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True}
-                    for n in self.nodes if n['kind'] == 'theorem']
+                     'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
+                     **statement(n)} for n in self.nodes if n['kind'] == 'theorem']
         write('audit.json', {'schema_version': 1, 'status': 'pass', 'modules': ['contract'], 'theorem_count': len(theorems),
                              'theorems': theorems, 'nodes': self.nodes, 'violations': []})
         write('after.json', {'context': {'sources': [{'path': str(self.base / 'contract.lean'), 'kind': 'regular',
@@ -140,6 +150,50 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage(diff=False)
         self.assertEqual(root['goals'][0]['binding'], 'wrapper_or_unrelated')
         self.assertEqual(root['level'], 'compiled')
+        self.assertNotFunctional(root)
+
+    def use_statement_fixture(self, *goals):
+        """Bind goals against real extracted theorems; the fixture's root stands in for generated code."""
+        self.nodes = [{'name': 'StatementFixture.root', 'module': 'Gen.Example.Gen', 'kind': 'definition', 'dependencies': []}]
+        for theorem in STATEMENT_FIXTURE['theorems']:
+            self.nodes.append({'name': theorem['name'], 'module': 'contract', 'kind': 'theorem',
+                               'dependencies': theorem['dependencies']})
+            self.statements[theorem['name']] = (theorem['statement_dependencies'], theorem['conclusion_dependencies'])
+        self.write_receipt()
+        self.manifest['roots'][0]['namespace'] = 'StatementFixture'
+        self.manifest['roots'][0]['goals'] = [{'theorem': g, 'strength': 'total_correctness', 'domain': 'all'} for g in goals]
+        self.save()
+        self.rebuild_artifact()
+        return self.run_coverage()
+
+    def test_only_statements_about_the_root_bind(self):
+        names = ['wrapper_spec', 'trivial_spec', 'premise_only', 'root_spec']
+        # Every fixture proof term mentions the root, so declaration edges alone would bind all four.
+        self.assertTrue(all('StatementFixture.root' in t['dependencies'] for t in STATEMENT_FIXTURE['theorems']))
+        self.assertEqual(sorted(t['name'] for t in STATEMENT_FIXTURE['theorems']),
+                         sorted('StatementFixture.' + n for n in names))
+        root = self.use_statement_fixture(*names)
+        self.assertEqual([g['binding'] for g in root['goals']], ['wrapper_or_unrelated'] * 3 + ['direct'])
+        self.assertEqual(root['stages']['proved']['status'], 'partial')
+        self.assertNotFunctional(root)
+        for name in names[:3]:
+            with self.subTest(goal=name):
+                root = self.use_statement_fixture(name)
+                self.assertEqual(root['goals'][0]['binding'], 'wrapper_or_unrelated')
+                self.assertEqual(root['stages']['proved']['status'], 'failed')
+                self.assertNotFunctional(root)
+        root = self.use_statement_fixture('root_spec')
+        self.assertEqual(root['goals'][0]['binding'], 'direct')
+        self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+
+    def test_audit_without_statement_dependencies_fails_closed(self):
+        audit = json.loads((self.attempt / 'audit.json').read_text())
+        for theorem in audit['theorems']:
+            del theorem['statement_dependencies'], theorem['conclusion_dependencies']
+        (self.attempt / 'audit.json').write_text(json.dumps(audit))
+        root = self.run_coverage()
+        self.assertEqual(root['goals'][0]['binding'], 'unbound')
+        self.assertIn('statement dependencies', root['goals'][0]['reason'])
         self.assertNotFunctional(root)
 
     def test_sampled_tests_only_are_not_functional(self):
