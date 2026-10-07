@@ -9,22 +9,31 @@ cannot catch a regression.
 ## Workloads
 
 `assurance/perf-budgets.json` lists representative real modules. Each one is a
-committed 0.16.0 AIR golden set (`tests/golden/<ex>/air`, then the
-`tests/golden/0.16.0/<ex>/air` overlay, as in `scripts/check.sh`) plus that example's
-committed proof modules:
+committed golden AIR set, the example's committed proof modules, and a reference
+translation (`reference_gen`).
 
-| Workload | Why |
-| --- | --- |
-| `basic` | small scalar functions, several proof modules |
-| `slices` | slice/pointer memory model, separation proofs |
-| `layout` | largest AIR set (51 files), struct/error-union layout |
-| `vectors` | SIMD lanes (31 files) |
-| `variants` | tagged unions, optionals |
-| `floatops` | floats with `--float-semantics compiler-rt` |
-| `threadsync` | thread/mutex/wait-group models, concurrency proofs |
+Golden AIR folders are comparison artifacts. `scripts/check.sh` compares fresh dumps
+against them after normalization, so a shared `tests/golden/<ex>/air` folder plus a
+`tests/golden/<version>/<ex>/air` overlay can mix Zig versions and profile schemas.
+The translator rejects mixed sets ("mixed AIR profiles"). Each workload therefore
+lists only folders that form one uniform set: one `zig_version`, schema and profile,
+declared as `air_zig_version`. `validate` (in CI) and `record` both refuse a mixed
+or mismatched set.
 
-Examples needing OS-specific AIR overlays (`atomics`, `threads`, `sync`) are
-excluded so one budget file applies to one reference platform.
+| Workload | AIR | Reference translation | Why |
+| --- | --- | --- | --- |
+| `basic` | shared (0.15.2) | `Proofs/Basic/Gen.lean` | small scalar functions, several proof modules |
+| `slices` | shared + 0.15.2 overlay | `tests/golden/0.15.2/slices/Gen.lean` | slice/pointer memory model, separation proofs |
+| `layout` | shared (0.16.0) | `Proofs/Layout/Gen.lean` | largest AIR set (51 files), struct/error-union layout |
+| `vectors` | shared (0.16.0) | `Proofs/Vectors/Gen.lean` | SIMD lanes (31 files) |
+| `variants` | shared (0.15.2) | `Proofs/Variants/Gen.lean` | tagged unions, optionals |
+| `floatops` | shared (0.15.2) | `tests/golden/0.15.2/floatops/Gen.lean` | floats with `--float-semantics compiler-rt` |
+| `threadsync` | shared (0.15.2) | `tests/golden/0.15.2/threadsync/Gen-darwin.lean` | thread/mutex/wait-group models, concurrency proofs |
+
+The golden AIR is legacy schema 11 (no target profile), so the translation step does
+not depend on the host. The proof phases build the committed `Proofs/<Ex>` modules
+(the reference-host 0.16.0 translation where it differs from the golden AIR). Those
+modules are proof workloads, not outputs of the measured translation.
 
 ## Phases
 
@@ -39,9 +48,11 @@ excluded so one budget file applies to one reference platform.
 | `proof.cold` | `lake build` of the example's proof modules after deleting only their build outputs | `wait4` |
 | `proof.warm` | the same build again (up-to-date trace check) | `wait4` |
 
-It also records the emitted file's size and SHA-256, whether it equals the
-committed `Proofs/<Ex>/Gen.lean`, and fails a workload if repeated runs emit
-different bytes.
+It also records the emitted file's size and SHA-256, and `matches_reference`.
+`matches_reference` means the definitions are byte-identical to `reference_gen`,
+ignoring only the first-line `-- air2lean-profile:` record, as in
+`scripts/normalize-generated.py`. A workload fails if repeated runs emit different
+bytes. `baseline` refuses a workload whose output does not match its reference.
 
 `air2lean --timing-json PATH` writes `{"schema": "air2lean-timing/1", "files",
 "functions", "input_bytes", "output_bytes", "phases_ns": {read, renumber, parse,
@@ -49,8 +60,9 @@ normalize, check, emit, write}}` after a successful run. The path must differ fr
 `-o`. Times are monotonic
 nanoseconds summed over files; `check` includes the program-level checks. The flag
 only observes the stages. Pure stages run in the same order and the Lean output is
-unchanged. `tests/roadmap/perf-budgets/timing_cli.py` checks byte-identical output
-with and without the flag on every workload.
+unchanged. `tests/roadmap/perf-budgets/timing_cli.py` (built translator only) checks
+on every workload that output is byte-identical with and without the flag, and
+that it matches the reference translation.
 
 Limits:
 - Peak RSS is the kernel high-water mark of the largest single process in a step,

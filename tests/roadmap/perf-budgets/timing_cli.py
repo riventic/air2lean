@@ -35,7 +35,7 @@ def main():
         work = Path(temporary)
         for workload in budgets["workloads"]:
             ident = workload["id"]
-            air = perf.stage_air(ROOT, workload["air"], work / ident / "air")
+            air = perf.stage_air(ROOT, workload["air"], work / ident / "air", workload["air_zig_version"])
             base = [args.air2lean, air, "--namespace", workload["namespace"],
                     "--prefix", workload["prefix"], *workload["translate_args"]]
             plain, timed, report = (work / ident / name for name in ("plain.lean", "timed.lean", "t.json"))
@@ -43,13 +43,16 @@ def main():
             second = run([*base, "-o", timed, "--timing-json", report])
             assert first.returncode == 0 and second.returncode == 0, (ident, first.stderr, second.stderr)
             assert plain.read_bytes() == timed.read_bytes(), f"{ident}: --timing-json changed the output"
+            matches = perf.matches_reference(plain, workload["reference_gen"])
+            assert matches is not False, f"{ident}: definitions differ from {workload['reference_gen']}"
             data = json.loads(report.read_text())
             assert data["schema"] == perf.TIMING_SCHEMA, data
             assert set(data["phases_ns"]) == PHASES, data
             assert all(isinstance(value, int) and value >= 0 for value in data["phases_ns"].values())
             assert data["output_bytes"] == plain.stat().st_size, (ident, data)
             assert data["files"] == len(list(air.glob("*.json"))), (ident, data)
-            print(f"{ident}: identical output, {data['functions']} functions, "
+            reference = "n/a" if matches is None else workload["reference_gen"]
+            print(f"{ident}: identical output, matches {reference}, {data['functions']} functions, "
                   f"{sum(data['phases_ns'].values()) / 1e6:.1f} ms")
         air = work / "basic" / "air"
         duplicate = run([args.air2lean, air, "-o", work / "d.lean", "--namespace", "B",

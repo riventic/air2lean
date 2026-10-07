@@ -38,7 +38,7 @@ def measured_workload(scale=1.0, rss=100_000, sha="a" * 64):
     phases["proof.cold"] = {"seconds": 60.0 * scale, "peak_rss_kib": rss * 20}
     phases["proof.warm"] = {"seconds": 1.0 * scale, "peak_rss_kib": rss * 2}
     return {"status": "ok", "phases": phases,
-            "output": {"bytes": 1234, "sha256": sha, "matches_committed": True}}
+            "output": {"bytes": 1234, "sha256": sha, "matches_reference": True}}
 
 
 def measurement(**workloads):
@@ -49,12 +49,16 @@ def measurement(**workloads):
             "workloads": workloads or {"basic": measured_workload(), "layout": measured_workload()}}
 
 
+AIR_VERSIONS = {"basic": "0.15.2", "layout": "0.16.0"}
+
+
 def pending_budgets(ids=("basic", "layout")):
     return {"schema": perf.BUDGETS_SCHEMA, "status": "pending", "reference_platform": None,
             "tolerance": copy.deepcopy(TOLERANCE),
             "workloads": [{"id": ident, "air": [f"tests/golden/{ident}/air"],
+                           "air_zig_version": AIR_VERSIONS[ident],
                            "namespace": ident.capitalize(), "prefix": ident + ".",
-                           "translate_args": [], "committed_gen": f"Proofs/{ident.capitalize()}/Gen.lean",
+                           "translate_args": [], "reference_gen": f"Proofs/{ident.capitalize()}/Gen.lean",
                            "proof_modules": [], "budget": None} for ident in ids]}
 
 
@@ -73,7 +77,7 @@ class CommittedBudgets(unittest.TestCase):
         ids = [workload["id"] for workload in data["workloads"]]
         self.assertGreaterEqual(len(ids), 5)
         for workload in data["workloads"]:
-            self.assertTrue((ROOT / workload["committed_gen"]).is_file(), workload["id"])
+            self.assertTrue((ROOT / workload["reference_gen"]).is_file(), workload["id"])
             self.assertTrue(workload["proof_modules"], workload["id"])
         if data["status"] == "pending":
             self.assertTrue(any(workload["budget"] is None for workload in data["workloads"]))
@@ -85,6 +89,13 @@ class CommittedBudgets(unittest.TestCase):
         data = pending_budgets()
         data["workloads"][0]["air"] = ["tests/golden/no-such-example/air"]
         self.assertTrue(any("missing AIR" in error for error in perf.validate_budgets(data)))
+        # A shared golden folder plus a version overlay can mix Zig versions.
+        data = pending_budgets()
+        data["workloads"][0]["air"].append("tests/golden/0.16.0/basic/air")
+        self.assertTrue(any("mixed AIR" in error for error in perf.validate_budgets(data)))
+        data = pending_budgets()
+        data["workloads"][0]["air_zig_version"] = "0.16.0"
+        self.assertTrue(any("expected 0.16.0" in error for error in perf.validate_budgets(data)))
         data = pending_budgets()
         data["status"] = "recorded"
         self.assertTrue(any("pending" in error for error in perf.validate_budgets(data)))
@@ -231,16 +242,30 @@ class RecordHelpers(unittest.TestCase):
             root = Path(temporary)
             (root / "shared").mkdir()
             (root / "version").mkdir()
-            (root / "shared/a.json").write_text("shared-a")
-            (root / "shared/b.json").write_text("shared-b")
-            (root / "version/b.json").write_text("version-b")
+            def air(path, version, tag):
+                (root / path).write_text(json.dumps({"schema": 11, "zig_version": version, "tag": tag}))
+            air("shared/a.json", "0.15.2", "shared-a")
+            air("shared/b.json", "0.16.0", "shared-b")
+            air("version/b.json", "0.15.2", "version-b")
             (root / "shared/notes.txt").write_text("ignored")
-            out = perf.stage_air(root, ["shared", "version"], root / "out")
+            out = perf.stage_air(root, ["shared", "version"], root / "out", "0.15.2")
             self.assertEqual(sorted(path.name for path in out.iterdir()), ["a.json", "b.json"])
-            self.assertEqual((out / "b.json").read_text(), "version-b")
+            self.assertEqual(json.loads((out / "b.json").read_text())["tag"], "version-b")
+            with self.assertRaisesRegex(RuntimeError, "mixed AIR"):
+                perf.stage_air(root, ["shared"], root / "mixed")
+            self.assertFalse((root / "mixed").exists())
+            with self.assertRaisesRegex(RuntimeError, "expected 0.16.0"):
+                perf.stage_air(root, ["shared", "version"], root / "other", "0.16.0")
             (root / "empty").mkdir()
             with self.assertRaises(RuntimeError):
                 perf.stage_air(root, ["empty"], root / "x")
+
+    def test_reference_comparison_ignores_only_the_profile_record(self):
+        body = b"import ZigLean\n\ndef f := 1\n"
+        header = b'-- air2lean-profile: {"profile":{}}\n'
+        self.assertEqual(perf.lean_body(header + body), body)
+        self.assertEqual(perf.lean_body(body), body)
+        self.assertEqual(perf.lean_body(b"-- other\n" + body), b"-- other\n" + body)
 
     def test_cold_removal_is_module_local(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -304,7 +329,9 @@ class Record(unittest.TestCase):
             self.assertEqual(set(result["phases"]),
                              {"translate.cold", "translate.warm", *perf.INTERNAL_PHASES})
             self.assertEqual(result["phases"]["emit"]["seconds"], 5e-06)
-            self.assertFalse(result["output"]["matches_committed"])
+            self.assertIs(result["output"]["matches_reference"], False)
+            with self.assertRaisesRegex(ValueError, "differ from"):
+                perf.derive(perf.load_json(perf.BUDGETS), data, only=["basic"], allow_dirty=True)
             self.assertEqual(data["lean_num_threads"], "1")
             self.assertTrue(out.with_suffix(".log").is_file())
             # A pending suite with one measured workload: the gate reports what is missing.

@@ -95,13 +95,19 @@ def validate_budgets(data, root=ROOT):
         air = workload.get("air")
         if not isinstance(air, list) or not air:
             errors.append(f"{ident}: air must list golden directories")
+        elif not all((root / directory).is_dir() for directory in air):
+            errors.append(f"{ident}: missing AIR directory in {air}")
         else:
-            for directory in air:
-                if not (root / directory).is_dir():
-                    errors.append(f"{ident}: missing AIR directory {directory}")
-        for key in ("namespace", "prefix", "committed_gen"):
+            try:
+                air_set(root, air, workload.get("air_zig_version"))
+            except RuntimeError as error:
+                errors.append(f"{ident}: {error}")
+        for key in ("namespace", "prefix", "air_zig_version"):
             if not isinstance(workload.get(key), str):
                 errors.append(f"{ident}: {key} must be a string")
+        reference = workload.get("reference_gen", "")
+        if reference is not None and not (isinstance(reference, str) and (root / reference).is_file()):
+            errors.append(f"{ident}: reference_gen must be null or an existing file")
         if not isinstance(workload.get("translate_args"), list):
             errors.append(f"{ident}: translate_args must be a list")
         for module in workload.get("proof_modules", []):
@@ -250,6 +256,9 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
         result = measurement.get("workloads", {}).get(workload["id"])
         if not result or result.get("status") != "ok":
             raise ValueError(f"{workload['id']}: no successful measurement to baseline")
+        if result.get("output", {}).get("matches_reference") is False:
+            raise ValueError(f"{workload['id']}: emitted definitions differ from "
+                             f"{workload.get('reference_gen')}; refusing to baseline them")
         missing = sorted(set(required_phases(workload)) - set(result["phases"]))
         if missing:
             raise ValueError(f"{workload['id']}: measurement lacks phases {', '.join(missing)} "
@@ -280,17 +289,61 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
 # Record
 
 
-def stage_air(root, directories, destination):
-    """Overlay golden AIR directories in order (later files replace earlier ones), like check.sh."""
-    destination.mkdir(parents=True, exist_ok=True)
-    count = 0
+def air_identity(path):
+    """Version/schema/profile fields that the translator requires to agree across files."""
+    doc = load_json(path)
+    return (doc.get("zig_version"), doc.get("schema"),
+            json.dumps(doc.get("profile"), sort_keys=True))
+
+
+def air_set(root, directories, expected_version=None):
+    """Overlay AIR directories in order (later names replace earlier ones).
+
+    Golden directories are comparison artifacts (scripts/check.sh compares fresh dumps
+    against them after normalization), so a shared folder plus a version overlay can
+    mix Zig versions or profiles. Only a uniform set is a valid translation input.
+    Returns {file name: source path}.
+    """
+    files = {}
     for directory in directories:
         for path in sorted((root / directory).glob("*.json")):
-            shutil.copyfile(path, destination / path.name)
-            count += 1
-    if not count:
+            files[path.name] = path
+    if not files:
         raise RuntimeError(f"no AIR JSON in {directories}")
+    identities = {}
+    for name, path in sorted(files.items()):
+        identities.setdefault(air_identity(path), []).append(name)
+    if len(identities) != 1:
+        summary = "; ".join(f"zig {version} schema {schema}: {len(names)} files (e.g. {names[0]})"
+                            for (version, schema, _), names in identities.items())
+        raise RuntimeError(f"mixed AIR versions/profiles in {directories}: {summary}")
+    version = next(iter(identities))[0]
+    if expected_version is not None and version != expected_version:
+        raise RuntimeError(f"AIR in {directories} is Zig {version}, expected {expected_version}")
+    return files
+
+
+def stage_air(root, directories, destination, expected_version=None):
+    """Copy one uniform AIR set (`air_set`) into `destination`."""
+    files = air_set(root, directories, expected_version)
+    destination.mkdir(parents=True, exist_ok=True)
+    for name, path in files.items():
+        shutil.copyfile(path, destination / name)
     return destination
+
+
+def lean_body(data):
+    """Generated Lean without its first-line profile record (scripts/normalize-generated.py)."""
+    first, newline, body = data.partition(b"\n")
+    return body if newline and first.startswith(b"-- air2lean-profile: ") else data
+
+
+def matches_reference(generated, reference):
+    """Definitions equal to the reference translation, ignoring only the profile record."""
+    if reference is None:
+        return None
+    path = ROOT / reference
+    return path.is_file() and lean_body(generated.read_bytes()) == lean_body(path.read_bytes())
 
 
 def maxrss_kib(usage):
@@ -361,7 +414,7 @@ def remove_module_artifacts(root, modules):
 def run_workload(workload, args, work, log):
     ident = workload["id"]
     phases = {}
-    staged = stage_air(ROOT, workload["air"], work / ident / "air")
+    staged = stage_air(ROOT, workload["air"], work / ident / "air", workload["air_zig_version"])
     command_base = [args.air2lean, staged, "--namespace", workload["namespace"],
                     "--prefix", workload["prefix"], *workload["translate_args"]]
     outputs = []
@@ -388,10 +441,8 @@ def run_workload(workload, args, work, log):
         phases[phase] = {"seconds": round(statistics.median(
             report["phases_ns"][phase] for _, report in warm) / 1e9, 6)}
     generated = outputs[0]
-    committed = ROOT / workload["committed_gen"]
-    generated_sha = digest(generated)
-    output = {"bytes": generated.stat().st_size, "sha256": generated_sha,
-              "matches_committed": committed.is_file() and digest(committed) == generated_sha,
+    output = {"bytes": generated.stat().st_size, "sha256": digest(generated),
+              "matches_reference": matches_reference(generated, workload.get("reference_gen")),
               "functions": runs[0][1].get("functions"), "input_bytes": runs[0][1].get("input_bytes")}
     if not args.skip_elaborate:
         step = measure([args.lake, "env", "lean", generated], ROOT, log, args.timeout)

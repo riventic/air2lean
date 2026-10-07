@@ -2,7 +2,6 @@
   "schema": "air2lean-perf-budgets/1",
   "status": "pending",
   "note": "No real-module baseline is recorded yet; see docs/perf-budgets.md for the serial recording command.",
-  "zig_version": "0.16.0",
   "reference_platform": null,
   "tolerance": {
     "translator": {
@@ -23,13 +22,13 @@
       "id": "basic",
       "description": "small scalar/arith functions with several proof modules",
       "air": [
-        "tests/golden/basic/air",
-        "tests/golden/0.16.0/basic/air"
+        "tests/golden/basic/air"
       ],
+      "air_zig_version": "0.15.2",
       "namespace": "Basic",
       "prefix": "basic.",
       "translate_args": [],
-      "committed_gen": "Proofs/Basic/Gen.lean",
+      "reference_gen": "Proofs/Basic/Gen.lean",
       "proof_modules": [
         "Proofs.Basic.Arith",
         "Proofs.Basic.Common",
@@ -44,12 +43,13 @@
       "description": "slice/pointer memory model with separation proofs",
       "air": [
         "tests/golden/slices/air",
-        "tests/golden/0.16.0/slices/air"
+        "tests/golden/0.15.2/slices/air"
       ],
+      "air_zig_version": "0.15.2",
       "namespace": "Slices",
       "prefix": "slices.",
       "translate_args": [],
-      "committed_gen": "Proofs/Slices/Gen.lean",
+      "reference_gen": "tests/golden/0.15.2/slices/Gen.lean",
       "proof_modules": [
         "Proofs.Slices.Gen",
         "Proofs.Slices.Proofs",
@@ -63,10 +63,11 @@
       "air": [
         "tests/golden/layout/air"
       ],
+      "air_zig_version": "0.16.0",
       "namespace": "Layout",
       "prefix": "layout.",
       "translate_args": [],
-      "committed_gen": "Proofs/Layout/Gen.lean",
+      "reference_gen": "Proofs/Layout/Gen.lean",
       "proof_modules": [
         "Proofs.Layout.Gen",
         "Proofs.Layout.Mem",
@@ -80,10 +81,11 @@
       "air": [
         "tests/golden/vectors/air"
       ],
+      "air_zig_version": "0.16.0",
       "namespace": "Vectors",
       "prefix": "vectors.",
       "translate_args": [],
-      "committed_gen": "Proofs/Vectors/Gen.lean",
+      "reference_gen": "Proofs/Vectors/Gen.lean",
       "proof_modules": [
         "Proofs.Vectors.CheckedAdd",
         "Proofs.Vectors.Gen",
@@ -95,13 +97,13 @@
       "id": "variants",
       "description": "tagged unions and optionals",
       "air": [
-        "tests/golden/variants/air",
-        "tests/golden/0.16.0/variants/air"
+        "tests/golden/variants/air"
       ],
+      "air_zig_version": "0.15.2",
       "namespace": "Variants",
       "prefix": "variants.",
       "translate_args": [],
-      "committed_gen": "Proofs/Variants/Gen.lean",
+      "reference_gen": "Proofs/Variants/Gen.lean",
       "proof_modules": [
         "Proofs.Variants.Gen",
         "Proofs.Variants.Proofs"
@@ -112,16 +114,16 @@
       "id": "floatops",
       "description": "floating point with compiler-rt semantics",
       "air": [
-        "tests/golden/floatops/air",
-        "tests/golden/0.16.0/floatops/air"
+        "tests/golden/floatops/air"
       ],
+      "air_zig_version": "0.15.2",
       "namespace": "Floatops",
       "prefix": "floatops.",
       "translate_args": [
         "--float-semantics",
         "compiler-rt"
       ],
-      "committed_gen": "Proofs/Floatops/Gen.lean",
+      "reference_gen": "tests/golden/0.15.2/floatops/Gen.lean",
       "proof_modules": [
         "Proofs.Floatops.Gen",
         "Proofs.Floatops.Proofs"
@@ -134,10 +136,11 @@
       "air": [
         "tests/golden/threadsync/air"
       ],
+      "air_zig_version": "0.15.2",
       "namespace": "Threadsync",
       "prefix": "threadsync.",
       "translate_args": [],
-      "committed_gen": "Proofs/Threadsync/Gen.lean",
+      "reference_gen": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
       "proof_modules": [
         "Proofs.Threadsync.Deadline",
         "Proofs.Threadsync.Gen",
