@@ -124,8 +124,9 @@ The differential test runs the real functions: `tests/diff/libm/` builds a stati
 | `sumLeft_isNaN` | one NaN term makes the fold NaN |
 | `lt_of_error`, `gt_of_error` | a comparison against a computed value equals the exact comparison when the exact value clears the threshold by more than the error bound |
 
-The bounds are stated for `ieee` semantics (`assurance/float-semantics.json`). The
-overflow bound is conservative: values up to `(2 − 2^-prec)·2^emax` also stay finite. The fold
+The rounding-only lemmas (`roundRat_error`, `roundRat_isSome`) are labeled `abstract-spec`, the
+lemmas about `+`, `*` and comparisons `ieee` (`assurance/float-semantics.json`). The overflow
+bound is conservative: magnitudes below `(2 − 2^-prec)·2^emax` also stay finite. The fold
 lemmas follow the evaluation order step by step and never reassociate a float sum. A
 precondition that fails can give infinity (overflow) or NaN (`inf − inf`); the theorems do not
 hold without it.

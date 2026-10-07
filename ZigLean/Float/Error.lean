@@ -31,7 +31,7 @@ def unitRoundoff (fmt : FloatFmt) : Rat := (2 : Rat) ^ (-(fmt.prec : Int))
 def underflowError (fmt : FloatFmt) : Rat := (2 : Rat) ^ (fmt.emin - fmt.prec)
 
 /-- Overflow threshold `2^emax`. Every exact value of smaller magnitude rounds to a finite
-value. It is conservative: values up to `(2 - 2^-prec)·2^emax` also stay finite. -/
+value. It is conservative: magnitudes below `(2 - 2^-prec)·2^emax` also stay finite. -/
 def overflowBound (fmt : FloatFmt) : Rat := (2 : Rat) ^ fmt.emax
 
 theorem unitRoundoff_pos (fmt : FloatFmt) : 0 < fmt.unitRoundoff := Rat.zpow_pos (by decide)
@@ -126,6 +126,13 @@ private theorem mul_den_eq_num {x : Rat} (hx : 0 ≤ x) : x * x.den = (x.num.toN
   rw [hn]
   conv => lhs; rw [← h]
   grind
+
+/-- A nonzero rational's magnitude has a positive numerator. -/
+private theorem abs_num_toNat_pos {q : Rat} (hq : q ≠ 0) : 0 < q.abs.num.toNat := by
+  have habs : q.abs ≠ 0 := fun h => hq (Rat.abs_eq_zero_iff.mp h)
+  have hnn : 0 ≤ q.abs.num := Rat.num_nonneg.mpr Rat.abs_nonneg
+  have : q.abs.num ≠ 0 := fun h0 => habs (Rat.num_eq_zero.mp h0)
+  omega
 
 /-- The rounded magnitude `roundMant * 2^roundExp` of `x = n / d` is within `2^roundExp / 2`. -/
 private theorem roundMant_half (fmt : FloatFmt) {n d : Nat} (hd : 0 < d) {x : Rat}
@@ -234,11 +241,7 @@ theorem roundRat_isSome (fmt : FloatFmt) (s : Bool) {q : Rat}
   · subst hq
     rw [roundRat_zero]
     exact ⟨_, by unfold Float.toRat?; rw [classify_zero]⟩
-  have habs : q.abs ≠ 0 := fun h => hq (Rat.abs_eq_zero_iff.mp h)
-  have hnn : 0 ≤ q.abs.num := Rat.num_nonneg.mpr Rat.abs_nonneg
-  have hn : 0 < q.abs.num.toNat := by
-    have : q.abs.num ≠ 0 := fun h0 => habs (Rat.num_eq_zero.mp h0)
-    omega
+  have hn := abs_num_toNat_pos hq
   have hd := q.abs.den_pos
   have hx := mul_den_eq_num (Rat.abs_nonneg (x := q))
   rw [roundRat_eq_finalize fmt s hq]
@@ -286,11 +289,7 @@ theorem roundRat_error (fmt : FloatFmt) {neg : Bool} {q A : Rat}
   obtain ⟨r, hr⟩ := roundRat_isSome fmt neg (q := q) (by grind)
   refine ⟨r, hr, ?_⟩
   have hval := roundRat_toRat_value fmt neg hq hr
-  have habs : q.abs ≠ 0 := fun h => hq (Rat.abs_eq_zero_iff.mp h)
-  have hnn : 0 ≤ q.abs.num := Rat.num_nonneg.mpr Rat.abs_nonneg
-  have hn : 0 < q.abs.num.toNat := by
-    have : q.abs.num ≠ 0 := fun h0 => habs (Rat.num_eq_zero.mp h0)
-    omega
+  have hn := abs_num_toNat_pos hq
   have hx := mul_den_eq_num (Rat.abs_nonneg (x := q))
   have hhalf := roundMant_half fmt q.abs.den_pos hx
   have hulp := ulp_le fmt hn q.abs.den_pos hx

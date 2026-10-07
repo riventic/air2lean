@@ -58,6 +58,7 @@
     "ZigLean.Float.Error::Zig.FloatFmt.f64_constants": {"semantics": "abstract-spec", "correspondence": "model"},
     "ZigLean.Float.Error::Zig.FloatFmt.underflowError_pos": {"semantics": "abstract-spec", "correspondence": "model"},
     "ZigLean.Float.Error::Zig.FloatFmt.unitRoundoff_pos": {"semantics": "abstract-spec", "correspondence": "model"},
+    "ZigLean.Float.Error::Zig.abs_num_toNat_pos": {"semantics": "abstract-spec", "correspondence": "model"},
     "ZigLean.Float.Error::Zig.add_error": {"semantics": "ieee", "correspondence": "model"},
     "ZigLean.Float.Error::Zig.add_isNaN_left": {"semantics": "ieee", "correspondence": "model"},
     "ZigLean.Float.Error::Zig.add_isNaN_right": {"semantics": "ieee", "correspondence": "model"},
