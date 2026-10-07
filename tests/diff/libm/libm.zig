@@ -29,6 +29,9 @@ const std = @import("std");
 const crt = @import("crt");
 
 const v16 = @import("builtin").zig_version.minor >= 16;
+/// 0.17.0's compiler_rt/<op>.zig has a `pub fn <op>_f<N>` (Zig calling convention) per width and
+/// keeps its C-ABI wrappers private.
+const v17 = @import("builtin").zig_version.minor >= 17;
 
 /// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.0 removed it
 /// (for `@Int`, which 0.15.2 does not parse).
@@ -39,7 +42,7 @@ fn FloatBits(comptime T: type) type {
 // See the module doc comment: 0.16.0's compiler_rt/sin.zig does not mark f80's `sinx` `pub`.
 extern fn __sinx(f80) callconv(.c) f80;
 
-fn narrow(comptime T: type, x: u64, comptime f: fn (T) callconv(.c) T) u64 {
+fn narrow(comptime T: type, x: u64, comptime f: anytype) u64 {
     const Bits = FloatBits(T);
     const arg: T = @bitCast(@as(Bits, @truncate(x)));
     const rbits: Bits = @bitCast(f(arg));
@@ -53,13 +56,13 @@ fn wideBits(comptime T: type, hi: u64, lo: u64) T {
     return @bitCast(bits);
 }
 
-fn wideHi(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T) u64 {
+fn wideHi(comptime T: type, hi: u64, lo: u64, comptime f: anytype) u64 {
     const Bits = FloatBits(T);
     const rbits: Bits = @bitCast(f(wideBits(T, hi, lo)));
     return @truncate(@as(u128, rbits) >> 64);
 }
 
-fn wideLo(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T) u64 {
+fn wideLo(comptime T: type, hi: u64, lo: u64, comptime f: anytype) u64 {
     const Bits = FloatBits(T);
     const rbits: Bits = @bitCast(f(wideBits(T, hi, lo)));
     return @truncate(rbits);
@@ -67,184 +70,184 @@ fn wideLo(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T)
 
 // sin
 export fn air2lean_libm_sin_f16(x: u64) u64 {
-    return narrow(f16, x, if (v16) crt.sin.sinh else crt.sin.__sinh);
+    return narrow(f16, x, if (v17) crt.sin.sin_f16 else if (v16) crt.sin.sinh else crt.sin.__sinh);
 }
 export fn air2lean_libm_sin_f32(x: u64) u64 {
-    return narrow(f32, x, crt.sin.sinf);
+    return narrow(f32, x, if (v17) crt.sin.sin_f32 else crt.sin.sinf);
 }
 export fn air2lean_libm_sin_f64(x: u64) u64 {
-    return narrow(f64, x, crt.sin.sin);
+    return narrow(f64, x, if (v17) crt.sin.sin_f64 else crt.sin.sin);
 }
 export fn air2lean_libm_sin_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, __sinx);
+    return wideHi(f80, hi, lo, if (v17) crt.sin.sin_f80 else __sinx);
 }
 export fn air2lean_libm_sin_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, __sinx);
+    return wideLo(f80, hi, lo, if (v17) crt.sin.sin_f80 else __sinx);
 }
 export fn air2lean_libm_sin_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.sin.sinq);
+    return wideHi(f128, hi, lo, if (v17) crt.sin.sin_f128 else crt.sin.sinq);
 }
 export fn air2lean_libm_sin_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.sin.sinq);
+    return wideLo(f128, hi, lo, if (v17) crt.sin.sin_f128 else crt.sin.sinq);
 }
 
 // cos
 export fn air2lean_libm_cos_f16(x: u64) u64 {
-    return narrow(f16, x, if (v16) crt.cos.cosh else crt.cos.__cosh);
+    return narrow(f16, x, if (v17) crt.cos.cos_f16 else if (v16) crt.cos.cosh else crt.cos.__cosh);
 }
 export fn air2lean_libm_cos_f32(x: u64) u64 {
-    return narrow(f32, x, crt.cos.cosf);
+    return narrow(f32, x, if (v17) crt.cos.cos_f32 else crt.cos.cosf);
 }
 export fn air2lean_libm_cos_f64(x: u64) u64 {
-    return narrow(f64, x, crt.cos.cos);
+    return narrow(f64, x, if (v17) crt.cos.cos_f64 else crt.cos.cos);
 }
 export fn air2lean_libm_cos_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, if (v16) crt.cos.cosx else crt.cos.__cosx);
+    return wideHi(f80, hi, lo, if (v17) crt.cos.cos_f80 else if (v16) crt.cos.cosx else crt.cos.__cosx);
 }
 export fn air2lean_libm_cos_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, if (v16) crt.cos.cosx else crt.cos.__cosx);
+    return wideLo(f80, hi, lo, if (v17) crt.cos.cos_f80 else if (v16) crt.cos.cosx else crt.cos.__cosx);
 }
 export fn air2lean_libm_cos_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.cos.cosq);
+    return wideHi(f128, hi, lo, if (v17) crt.cos.cos_f128 else crt.cos.cosq);
 }
 export fn air2lean_libm_cos_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.cos.cosq);
+    return wideLo(f128, hi, lo, if (v17) crt.cos.cos_f128 else crt.cos.cosq);
 }
 
 // tan
 export fn air2lean_libm_tan_f16(x: u64) u64 {
-    return narrow(f16, x, if (v16) crt.tan.tanh else crt.tan.__tanh);
+    return narrow(f16, x, if (v17) crt.tan.tan_f16 else if (v16) crt.tan.tanh else crt.tan.__tanh);
 }
 export fn air2lean_libm_tan_f32(x: u64) u64 {
-    return narrow(f32, x, crt.tan.tanf);
+    return narrow(f32, x, if (v17) crt.tan.tan_f32 else crt.tan.tanf);
 }
 export fn air2lean_libm_tan_f64(x: u64) u64 {
-    return narrow(f64, x, crt.tan.tan);
+    return narrow(f64, x, if (v17) crt.tan.tan_f64 else crt.tan.tan);
 }
 export fn air2lean_libm_tan_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, if (v16) crt.tan.tanx else crt.tan.__tanx);
+    return wideHi(f80, hi, lo, if (v17) crt.tan.tan_f80 else if (v16) crt.tan.tanx else crt.tan.__tanx);
 }
 export fn air2lean_libm_tan_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, if (v16) crt.tan.tanx else crt.tan.__tanx);
+    return wideLo(f80, hi, lo, if (v17) crt.tan.tan_f80 else if (v16) crt.tan.tanx else crt.tan.__tanx);
 }
 export fn air2lean_libm_tan_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.tan.tanq);
+    return wideHi(f128, hi, lo, if (v17) crt.tan.tan_f128 else crt.tan.tanq);
 }
 export fn air2lean_libm_tan_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.tan.tanq);
+    return wideLo(f128, hi, lo, if (v17) crt.tan.tan_f128 else crt.tan.tanq);
 }
 
 // exp
 export fn air2lean_libm_exp_f16(x: u64) u64 {
-    return narrow(f16, x, crt.exp.__exph);
+    return narrow(f16, x, if (v17) crt.exp.exp_f16 else crt.exp.__exph);
 }
 export fn air2lean_libm_exp_f32(x: u64) u64 {
-    return narrow(f32, x, crt.exp.expf);
+    return narrow(f32, x, if (v17) crt.exp.exp_f32 else crt.exp.expf);
 }
 export fn air2lean_libm_exp_f64(x: u64) u64 {
-    return narrow(f64, x, crt.exp.exp);
+    return narrow(f64, x, if (v17) crt.exp.exp_f64 else crt.exp.exp);
 }
 export fn air2lean_libm_exp_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.exp.__expx);
+    return wideHi(f80, hi, lo, if (v17) crt.exp.exp_f80 else crt.exp.__expx);
 }
 export fn air2lean_libm_exp_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.exp.__expx);
+    return wideLo(f80, hi, lo, if (v17) crt.exp.exp_f80 else crt.exp.__expx);
 }
 export fn air2lean_libm_exp_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.exp.expq);
+    return wideHi(f128, hi, lo, if (v17) crt.exp.exp_f128 else crt.exp.expq);
 }
 export fn air2lean_libm_exp_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.exp.expq);
+    return wideLo(f128, hi, lo, if (v17) crt.exp.exp_f128 else crt.exp.expq);
 }
 
 // exp2
 export fn air2lean_libm_exp2_f16(x: u64) u64 {
-    return narrow(f16, x, crt.exp2.__exp2h);
+    return narrow(f16, x, if (v17) crt.exp2.exp2_f16 else crt.exp2.__exp2h);
 }
 export fn air2lean_libm_exp2_f32(x: u64) u64 {
-    return narrow(f32, x, crt.exp2.exp2f);
+    return narrow(f32, x, if (v17) crt.exp2.exp2_f32 else crt.exp2.exp2f);
 }
 export fn air2lean_libm_exp2_f64(x: u64) u64 {
-    return narrow(f64, x, crt.exp2.exp2);
+    return narrow(f64, x, if (v17) crt.exp2.exp2_f64 else crt.exp2.exp2);
 }
 export fn air2lean_libm_exp2_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.exp2.__exp2x);
+    return wideHi(f80, hi, lo, if (v17) crt.exp2.exp2_f80 else crt.exp2.__exp2x);
 }
 export fn air2lean_libm_exp2_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.exp2.__exp2x);
+    return wideLo(f80, hi, lo, if (v17) crt.exp2.exp2_f80 else crt.exp2.__exp2x);
 }
 export fn air2lean_libm_exp2_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.exp2.exp2q);
+    return wideHi(f128, hi, lo, if (v17) crt.exp2.exp2_f128 else crt.exp2.exp2q);
 }
 export fn air2lean_libm_exp2_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.exp2.exp2q);
+    return wideLo(f128, hi, lo, if (v17) crt.exp2.exp2_f128 else crt.exp2.exp2q);
 }
 
 // log
 export fn air2lean_libm_log_f16(x: u64) u64 {
-    return narrow(f16, x, crt.log.__logh);
+    return narrow(f16, x, if (v17) crt.log.log_f16 else crt.log.__logh);
 }
 export fn air2lean_libm_log_f32(x: u64) u64 {
-    return narrow(f32, x, crt.log.logf);
+    return narrow(f32, x, if (v17) crt.log.log_f32 else crt.log.logf);
 }
 export fn air2lean_libm_log_f64(x: u64) u64 {
-    return narrow(f64, x, crt.log.log);
+    return narrow(f64, x, if (v17) crt.log.log_f64 else crt.log.log);
 }
 export fn air2lean_libm_log_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.log.__logx);
+    return wideHi(f80, hi, lo, if (v17) crt.log.log_f80 else crt.log.__logx);
 }
 export fn air2lean_libm_log_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.log.__logx);
+    return wideLo(f80, hi, lo, if (v17) crt.log.log_f80 else crt.log.__logx);
 }
 export fn air2lean_libm_log_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.log.logq);
+    return wideHi(f128, hi, lo, if (v17) crt.log.log_f128 else crt.log.logq);
 }
 export fn air2lean_libm_log_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.log.logq);
+    return wideLo(f128, hi, lo, if (v17) crt.log.log_f128 else crt.log.logq);
 }
 
 // log2
 export fn air2lean_libm_log2_f16(x: u64) u64 {
-    return narrow(f16, x, crt.log2.__log2h);
+    return narrow(f16, x, if (v17) crt.log2.log2_f16 else crt.log2.__log2h);
 }
 export fn air2lean_libm_log2_f32(x: u64) u64 {
-    return narrow(f32, x, crt.log2.log2f);
+    return narrow(f32, x, if (v17) crt.log2.log2_f32 else crt.log2.log2f);
 }
 export fn air2lean_libm_log2_f64(x: u64) u64 {
-    return narrow(f64, x, crt.log2.log2);
+    return narrow(f64, x, if (v17) crt.log2.log2_f64 else crt.log2.log2);
 }
 export fn air2lean_libm_log2_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.log2.__log2x);
+    return wideHi(f80, hi, lo, if (v17) crt.log2.log2_f80 else crt.log2.__log2x);
 }
 export fn air2lean_libm_log2_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.log2.__log2x);
+    return wideLo(f80, hi, lo, if (v17) crt.log2.log2_f80 else crt.log2.__log2x);
 }
 export fn air2lean_libm_log2_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.log2.log2q);
+    return wideHi(f128, hi, lo, if (v17) crt.log2.log2_f128 else crt.log2.log2q);
 }
 export fn air2lean_libm_log2_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.log2.log2q);
+    return wideLo(f128, hi, lo, if (v17) crt.log2.log2_f128 else crt.log2.log2q);
 }
 
 // log10
 export fn air2lean_libm_log10_f16(x: u64) u64 {
-    return narrow(f16, x, crt.log10.__log10h);
+    return narrow(f16, x, if (v17) crt.log10.log10_f16 else crt.log10.__log10h);
 }
 export fn air2lean_libm_log10_f32(x: u64) u64 {
-    return narrow(f32, x, crt.log10.log10f);
+    return narrow(f32, x, if (v17) crt.log10.log10_f32 else crt.log10.log10f);
 }
 export fn air2lean_libm_log10_f64(x: u64) u64 {
-    return narrow(f64, x, crt.log10.log10);
+    return narrow(f64, x, if (v17) crt.log10.log10_f64 else crt.log10.log10);
 }
 export fn air2lean_libm_log10_f80_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f80, hi, lo, crt.log10.__log10x);
+    return wideHi(f80, hi, lo, if (v17) crt.log10.log10_f80 else crt.log10.__log10x);
 }
 export fn air2lean_libm_log10_f80_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f80, hi, lo, crt.log10.__log10x);
+    return wideLo(f80, hi, lo, if (v17) crt.log10.log10_f80 else crt.log10.__log10x);
 }
 export fn air2lean_libm_log10_f128_hi(hi: u64, lo: u64) u64 {
-    return wideHi(f128, hi, lo, crt.log10.log10q);
+    return wideHi(f128, hi, lo, if (v17) crt.log10.log10_f128 else crt.log10.log10q);
 }
 export fn air2lean_libm_log10_f128_lo(hi: u64, lo: u64) u64 {
-    return wideLo(f128, hi, lo, crt.log10.log10q);
+    return wideLo(f128, hi, lo, if (v17) crt.log10.log10_f128 else crt.log10.log10q);
 }

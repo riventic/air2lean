@@ -139,6 +139,23 @@ pub inline fn symbol(comptime func: *const anyopaque, comptime name: []const u8)
     _ = func;
     _ = name;
 }
+// 0.17.0's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
+fn HardAbi(comptime T: type) type {
+    return struct {
+        pub const Abi = T;
+        pub inline fn toAbi(x: T) T {
+            return x;
+        }
+        pub inline fn fromAbi(x: T) T {
+            return x;
+        }
+    };
+}
+pub const @"f16" = HardAbi(f16);
+pub const @"f32" = HardAbi(f32);
+pub const @"f64" = HardAbi(f64);
+pub const @"f80" = HardAbi(f80);
+pub const @"f128" = HardAbi(f128);
 EOF
 cat >"$build_dir/air2lean_root.zig" <<'EOF'
 pub const sin = @import("compiler_rt/sin.zig");
