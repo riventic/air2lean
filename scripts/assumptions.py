@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -106,7 +107,22 @@ def classify(node: dict, policy: dict, modules: set[str]) -> tuple[str, str | No
     return "kernel-declaration", None
 
 
-def apply_policy(raw: dict, policy: dict) -> dict:
+_FLOAT_SEMANTICS = None
+
+
+def float_semantics():
+    """The float-semantics labeler next to this script (docs/float-semantics.md)."""
+    global _FLOAT_SEMANTICS
+    if _FLOAT_SEMANTICS is not None:
+        return _FLOAT_SEMANTICS
+    spec = importlib.util.spec_from_file_location("air2lean_float_semantics", ROOT / "scripts/float-semantics.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _FLOAT_SEMANTICS = module
+    return module
+
+
+def apply_policy(raw: dict, policy: dict, labels: dict | None = None) -> dict:
     if raw.get("schema_version") != 1:
         raise ValueError("unsupported extractor schema")
     modules = set(raw["modules"])
@@ -157,11 +173,22 @@ def apply_policy(raw: dict, policy: dict) -> dict:
             if dependency not in nodes:
                 raise ValueError(f"incomplete declaration graph: {name} -> {dependency}")
 
+    if any(t["name"] not in nodes or nodes[t["name"]]["kind"] != "theorem" for t in raw["theorems"]):
+        raise ValueError("theorem inventory does not match checked declaration graph")
+    # Every numerical theorem states the float semantics it concerns; none claims binary
+    # correspondence. Label issues fail the audit exactly like dependency-policy issues.
+    labeler = float_semantics()
+    registry = labeler.load_registry(root=ROOT) if labels is None else labels
+    float_records, float_issues, float_summary = labeler.label_theorems(nodes, raw["theorems"], modules, registry)
+    for name, issue in float_issues.items():
+        issues.setdefault(name, issue)
+
     theorems = []
     for original in raw["theorems"]:
         theorem = dict(original)
-        if theorem["name"] not in nodes or nodes[theorem["name"]]["kind"] != "theorem":
-            raise ValueError("theorem inventory does not match checked declaration graph")
+        theorem.pop("float_semantics", None)
+        if theorem["name"] in float_records:
+            theorem["float_semantics"] = float_records[theorem["name"]]
         visited, pending = set(), [theorem["name"]]
         while pending:
             name = pending.pop()
@@ -191,6 +218,7 @@ def apply_policy(raw: dict, policy: dict) -> dict:
             "theorems": sorted(theorems, key=lambda t: t["name"]),
             "project_declarations": raw.get("project_declarations", []),
             "nodes": sorted(nodes.values(), key=lambda n: n["name"]),
+            "float_semantics": float_summary,
             "violations": sorted(issues.values(), key=lambda n: n["name"])}
 
 
@@ -295,16 +323,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".lake/assurance/assumptions.json")
     parser.add_argument("--policy", type=Path, default=ROOT / "assurance/policy.json")
+    parser.add_argument("--float-semantics", type=Path, default=ROOT / "assurance/float-semantics.json",
+                        help="float-semantics label registry (docs/float-semantics.md)")
     parser.add_argument("--module", action="append", help="audit explicit modules instead of the complete shipped scope")
     parser.add_argument("--no-build", action="store_true", help="audit prebuilt modules (caller must ensure artifacts are current)")
     args = parser.parse_args()
     try:
         policy = load_policy(args.policy)
+        labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
         raw = extract(modules, not args.no_build)
         if raw["modules"] != modules:
             raise ValueError("extractor scope differs from requested module inventory")
-        report = apply_policy(raw, policy)
+        report = apply_policy(raw, policy, labels)
         report["extractor"] = raw["extractor"]
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"

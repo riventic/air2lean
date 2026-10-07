@@ -106,6 +106,13 @@ jobs:
           python3 -B tests/roadmap/premises/test_premises.py
           python3 -B scripts/premises.py check
 
+      # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
+      - name: Float-semantics label regressions
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v
+          python3 scripts/float-semantics.py check
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
@@ -607,6 +614,7 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
           scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
+          python3 scripts/float-semantics.py check-report "$RUNNER_TEMP/air2lean-assumptions.json"
 
       # Same premise tables over the kernel dependency graph of the audited translation.
       - name: Map audited theorems to premise IDs

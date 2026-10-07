@@ -104,6 +104,10 @@ The report has a versioned schema and contains:
   complete transitive declaration dependency set without duplicating it for every theorem.
 - `project_declarations`: trust-relevant project declarations checked independently of
   theorem reachability, and `violations`: the gate's global rejection list.
+- `float_semantics`: per numerical theorem and as a summary, the float semantics it concerns
+  (`ieee`, `compiler-rt@<versions>` or `abstract-spec`, from `assurance/float-semantics.json`).
+  An unlabeled numerical theorem or a label that contradicts the graph is a violation
+  (`docs/float-semantics.md`).
 
 Logical dependency edges do not include `implemented_by` replacement edges. The report
 records those targets separately because execution and kernel proof reduction use different
