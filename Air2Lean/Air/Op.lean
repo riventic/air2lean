@@ -172,6 +172,9 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
+  /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
+  length, not a byte count. -/
+  vectorIndex : Option Nat := none
   deriving Repr, Inhabited, BEq
 
 /-- Both legacy exports may omit the byte value, preserving the presence-only
@@ -258,7 +261,8 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
-  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment" => some ".panic"
+  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
+  | some "unexpectedErrorCode" | some "loadUninstantiableType" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -298,8 +302,9 @@ inductive ArithOp where
   | add | sub | mul
   deriving Repr, Inhabited, BEq
 
+/-- `divCeil` is `@divCeil` (Zig 0.17.0's `div_ceil`). -/
 inductive DivOp where
-  | divTrunc | divFloor | divExact | rem | mod
+  | divTrunc | divFloor | divExact | rem | mod | divCeil
   deriving Repr, Inhabited, BEq
 
 inductive BitOp where
@@ -359,7 +364,8 @@ inductive Op where
   | shlWithOverflow (a b : Val)
   | countBits (op : BitCountOp) (a : Val)
   | permuteBits (op : BitPermuteOp) (a : Val)
-  /-- `splat`: a vector with every lane equal to the scalar `a`. -/
+  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.0 also splats to an
+  array; `Check.lean` rejects that. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
   or `b` (false). -/
