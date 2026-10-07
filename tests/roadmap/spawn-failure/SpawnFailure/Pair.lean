@@ -366,7 +366,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
     (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hr0, hAr]) (by decide)).frameL) ho₃ hc₃
     (by rw [ht₃, htt₂]; decide) F₃ fun _ m₄ h₄ ho₄ F₄ hc₄ ht₄ => ?_)
   have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, htt₂]
-  rw [writeBytes_all (by simp [enc_u32]), writeBytes_all (by simp [enc_u32])] at F₄
+  rw [writeBytes_all (by simp [enc_u32])] at F₄
   obtain ⟨hL, hR, hdLR, rfl, hLa, hRa⟩ := F₄
   let B : Blks := ⟨s1, s3, Al, Ar⟩
   have hB : B.Ok := ⟨hl0, hr0, hAl, hAr⟩
@@ -500,7 +500,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
       simp [ownOf, joinedB, r, hf1, Gh.heap]
     have hd : Heap.Disjoint hR hk1 := by
       have := hi₉.own.disj 0 1 (by decide); rwa [e0, e1] at this
-    rw [e0, e1] at ho₁₀
+    rw [e0, e1, upd_comm _ _ _ (show (0 : Nat) ≠ 1 by decide)] at ho₁₀
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     have hsz₁₀ : m₁₀.threads.size = 2 := by rw [hth₁₀, Array.size_setIfInBounds, hsz₉]

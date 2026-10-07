@@ -597,7 +597,7 @@ theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
   have hB : B.Ok := ⟨hx0, hg0, hAx⟩
   have hi₀ : Inv v (upd (fun _ => .none) 0 (.main .solo 0 (hX ∪ hGr) B)) m₄ := by
     refine ⟨?_, fun u h x ax w dn hu => ?_, ⟨.solo, 0, hX ∪ hGr, B, upd_self _ _ _, hB,
-      ⟨hX, hGr, hdX, rfl, hxF, _, by simp, hgF⟩, by rw [htt₄]; rfl, hgr₄, fun u hu => ?_⟩,
+      ⟨hX, hGr, hdX, rfl, hxF, _, enc_group, hgF⟩, by rw [htt₄]; rfl, hgr₄, fun u hu => ?_⟩,
       by rw [htt₄]; rfl⟩
     · have e : ownOf (upd (fun _ => .none) 0 (.main .solo 0 (hX ∪ hGr) B)) m₄ =
           upd (fun _ => Heap.empty) 0 (hX ∪ hGr) := by
@@ -630,18 +630,19 @@ theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
     simp [ownOf, joinedB, Gh.heap]
   have htl : 0 < m₇.threads.size := by
     have := hi₇.t0; exact (Array.getElem?_eq_some_iff.mp this).1
-  refine WP.bind (WP.liftM_owned ((TTriple.loadAt (p := B.x) (A := B.ax) (S := 4) (K := .stack)
+  refine WP.bind (WP.liftM_owned ((TTriple.loadAt (p := s2) (A := Ax) (S := 4) (K := .stack)
     (k := 0) (a := 4) (v := v) (by simp [Ptr.add])
     (by decide) (by rw [enc_u32]; decide) (by simp [hx0, hAx]) (decode_u32 v)).frame_eq)
     hi₇.own hc₇ htl (by rw [hown]; exact ⟨hX₇, hG₇, hd₇, rfl, hx₇, hg₇⟩)
     fun r₁ m₈ h₈ _ ho₈ hq₈ hs₈ _ _ => ?_)
-  obtain ⟨hr₁, hq₈⟩ := sep_lift.mp hq₈
+  have hF₈ := (sep_lift.mp hq₈).2
+  have hr₁ := (sep_lift.mp hq₈).1
   subst r₁
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
   -- The frees.
   refine WP.bind (WP.liftMem_upd (free_front (R := bytesAt B.g B.ag 16 .stack bs) (enc_u32 v) hx0
-    (by decide)) ho₈ (hs₈.current.trans hc₇) (by rw [hs₈.threads]; exact htl) hq₈
+    (by decide)) ho₈ (hs₈.current.trans hc₇) (by rw [hs₈.threads]; exact htl) hF₈
     fun _ m₉ h₉ ho₉ hq₉ hc₉ ht₉ => ?_)
   refine WP.bind (WP.liftMem_upd (TTriple.free hbs hg0 (by decide)) ho₉ hc₉
     (by rw [ht₉, hs₈.threads]; exact htl) hq₉ fun _ m₁₀ _ _ _ _ ht₁₀ => ?_)
