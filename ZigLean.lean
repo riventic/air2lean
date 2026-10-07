@@ -11,5 +11,6 @@ import ZigLean.Packed
 import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.Vec
+import ZigLean.VecMem
 import ZigLean.External
 import ZigLean.External.Callback

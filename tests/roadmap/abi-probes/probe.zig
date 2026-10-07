@@ -9,6 +9,14 @@ fn rt(comptime T: type, value: T) T {
     const pointer: *volatile T = &storage;
     return pointer.*;
 }
+/// The in-memory bytes of `value` (at most 8) as a little-endian integer, without the padding
+/// bits past `@bitSizeOf(T)`.
+fn image(comptime T: type, value: *const T) u64 {
+    const bytes: *const volatile [@sizeOf(T)]u8 = @ptrCast(value);
+    var result: u64 = 0;
+    for (0..@sizeOf(T)) |i| result |= @as(u64, bytes[i]) << @intCast(8 * i);
+    return result & ((@as(u64, 1) << @bitSizeOf(T)) - 1);
+}
 fn layout(out: *std.Io.Writer, comptime name: []const u8, comptime T: type) !void {
     try out.print("layout {s} {d} {d}\n", .{ name, @sizeOf(T), @alignOf(T) });
 }
@@ -38,6 +46,10 @@ pub fn main() !void {
     try layout(out, "pointer", *const u32);
     try layout(out, "packed32", Packed);
     try layout(out, "vector4", @Vector(4, u32));
+    try layout(out, "vector_u9x4", @Vector(4, u9));
+    try layout(out, "vector_u24x3", @Vector(3, u24));
+    try layout(out, "vector_u40x2", @Vector(2, u40));
+    try layout(out, "vector_bool5", @Vector(5, bool));
     try layout(out, "record", Record);
     try out.print("offset record_count {d}\noffset record_pointer {d}\n", .{
         @offsetOf(Record, "count"), @offsetOf(Record, "pointer"),
@@ -45,6 +57,15 @@ pub fn main() !void {
     const odd = rt(u24, 0xffffff) +% rt(u24, 2);
     const packed_value = Packed{ .low = rt(u9, 257), .high = rt(u23, 3) };
     const vector: @Vector(4, u32) = .{ rt(u32, 1), rt(u32, 2), rt(u32, 3), rt(u32, 4) };
+    // Bit-packed lanes: lane i at bit i * @bitSizeOf(lane), and a lane store keeps the others.
+    var nine: @Vector(4, u9) = .{ rt(u9, 0x1ff), rt(u9, 0), rt(u9, 0x1ff), rt(u9, 1) };
+    const nine_image = image(@Vector(4, u9), &nine);
+    const nine_lane = &nine[2];
+    nine_lane.* = rt(u9, 0x0aa);
+    var pair: @Vector(2, u24) = .{ rt(u24, 0xabcdef), rt(u24, 0x123456) };
+    try out.print("value vector_u9_image {d}\nvalue vector_u9_lane_write {d}\nvalue vector_u24_image {d}\n", .{
+        nine_image, image(@Vector(4, u9), &nine), image(@Vector(2, u24), &pair),
+    });
     var value = rt(u32, 1234567);
     const pointer: *volatile u32 = &value;
     try out.print("value wrapping24 {d}\nvalue packed_bits {d}\nvalue vector_sum {d}\nvalue pointer_load {d}\n", .{

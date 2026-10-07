@@ -376,8 +376,14 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     throw s!"{raw.name}: unsupported zig_version '{raw.zigVersion}' (supported: \
       {String.intercalate ", " supportedVersions})"
   let body ← raw.body.mapM (normalizeInst raw.name)
+  -- The bit-packed vector layout is the LLVM backend's (`tests/roadmap/vector-layouts`).
+  let llvm := raw.profile.backend == "stage2_llvm"
+  let layouts := raw.layouts.mapIdx fun i l =>
+    match raw.types[i]? with
+    | some (.vector ..) => { l with packedLanes := llvm }
+    | _ => l
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
-           body, types := raw.types, layouts := raw.layouts, globals := raw.globals }
+           body, types := raw.types, layouts, globals := raw.globals }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do

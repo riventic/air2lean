@@ -673,6 +673,19 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
 
+      # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
+      # encoding, the recorded aarch64-macos images, and the checker's backend gate.
+      - name: Vector memory layouts, compiler probe and checker controls
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean Air2Lean
+          observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
+          host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
+          lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
+          lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/vector-layouts/Checker.lean
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

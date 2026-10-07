@@ -172,6 +172,10 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
+  /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
+  (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
+  Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
+  packedLanes : Bool := false
   deriving Repr, Inhabited, BEq
 
 /-- Both legacy exports may omit the byte value, preserving the presence-only
