@@ -34,9 +34,14 @@ python3 tests/roadmap/inventory/test_inventory.py
 
 Repeat generation/check for every supported version. `check` exits 1 when a
 compiler fingerprint, universe, disposition, model boundary, golden input or
-project evidence changes. New and renamed tags cannot disappear through a
-normalizer filter. Renaming appears as removal plus addition; the tool does not
-infer equivalence. Exit 2 means invalid/inaccessible input. CI must provision the
+project evidence changes. Both `generate` and `check` also exit 1 while any AIR
+tag, type tag, intern key or pointer base lacks a named disposition (see
+[Dispositions](#dispositions)); `generate` still writes the file so the
+`unclassified-forbidden` rows can be reviewed. New and renamed tags cannot
+disappear through a normalizer filter. Renaming appears as removal plus addition;
+the tool does not infer equivalence. Exit 2 means invalid/inaccessible input,
+including a translator source whose diagnostic gates the derivation can no
+longer find. CI must provision the
 compiler source root and check committed evidence before overwriting generated
 proof modules.
 Regeneration records evidence; it does not itself qualify an upgrade.
@@ -50,31 +55,93 @@ and independently of the patched compiler cache. A new/renamed tag, changed
 compiler fingerprint or stale project evidence fails the job. The source gate
 invokes neither Zig nor Lean; later pipeline steps supply execution/proof evidence.
 
-The initial snapshots use these already available source directories:
+The snapshots are generated from the checksum-verified release source archives
+pinned in `zig-patch/versions.toml` (the same archives the CI gate checks):
 
-| Zig | Source root | AIR tags | Type tags | Intern keys | Pointer bases |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 0.14.1 | `/opt/dev/air2lean-build/0.14.1/zig-0.14.1-pristine` | 207 | 24 | 34 | 9 |
-| 0.15.2 | `/opt/dev/air2lean-build/zig-0.15.2-pristine` | 212 | 24 | 34 | 9 |
-| 0.16.0 | `/opt/dev/air2lean-build/zig-0.16.0-src` | 214 | 24 | 33 | 9 |
+| Zig | AIR tags | Type tags | Intern keys | Pointer bases |
+| --- | ---: | ---: | ---: | ---: |
+| 0.14.1 | 207 | 24 | 34 | 9 |
+| 0.15.2 | 212 | 24 | 34 | 9 |
+| 0.16.0 | 214 | 24 | 33 | 9 |
+
+## Dispositions
+
+Every row carries one name from `DISPOSITIONS` in `scripts/coverage.py`; each
+inventory embeds that vocabulary under `dispositions`, and per-category counts
+under `summary` (AIR tags) and `category_summary`. Each row's `derivation`
+records `mechanical` or `reviewed-override`.
+
+**AIR tags.** Derived in pipeline order from the exporter's `writeInst` switch
+(with comptime `Compat.vNN` branches resolved for the inventory's version),
+`normalizeOp` and the emitter's instruction dispatch (`emitScalar`, `emitStmts`,
+`emitTerminator`):
+
+| Disposition | Mechanical rule |
+| --- | --- |
+| `rejected-fast-math` | The tag has the suffix that `normalizeOp` rejects first (`_optimized`). |
+| `rejected-compiler-state-or-effect` | `runtimeTagReason?` gives the tag a specific diagnostic. |
+| `rejected-exporter-unsupported` | The version-selected exporter arm writes only `"unsupported": true`, or the fallback writes it for every tag it does not name; `normalizeOp` rejects the marker. |
+| `rejected-unknown-tag` | Exported, but no `normalizeOp` branch; the fallback rejects it as an unknown AIR tag. |
+| `erased-at-emission` | Exported and normalized to constructors that `emitScalar` maps to `(env, none)` (line/debug metadata). |
+| `emitted-unqualified` | Exported (explicit arm, or a fallback branch naming the tag directly or via a `Compat.is*` helper), normalized, and every constructor has an emitter dispatch arm. |
+| `unreachable-at-export` | Reviewed override only. |
+| `unclassified-forbidden` | Anything else: unknown version branches that disagree, data-dependent `unsupported` arms, a fallback without a marker, or a constructor without a dispatch arm. |
+
+**Types** (`std.builtin.Type`): `exported-checker-restricted` (explicit
+`writeTypeEntry` arm; `Check.lean` restrictions apply) or
+`exported-as-other-rejected` (fallback writes kind `other`, which `checkTy`
+rejects; pointer-to-fn/anyopaque children are checked separately).
+
+**Intern keys** (`InternPool.Key`): `value-exported` (explicit `writeRef` arm, or a
+fallback `Compat.is*` helper naming the key, such as 0.16 `bitpack`),
+`type-key-via-type-table` (`*_type` keys are exported through the type table and
+classified by the type rows) or `value-fallback-text-restricted` (fallback
+writes formatted text; `parseLeafVal` accepts only int/bool/void/packed leaves).
+
+**Pointer bases** (`BaseAddr`): `rejected-unsupported-pointer-base` when the
+`resolvePtr` arm or fallback returns `.unsupported` and `Check.lean` rejects
+`ptrOther` constants; `resolved-conditional` for other explicit arms.
+
+**Reviewed overrides** (`OVERRIDES` in `scripts/coverage.py`) cover what source
+structure cannot show: comptime-only types (`type`, `comptime_int`,
+`comptime_float`, `undefined`, `null`, `enum_literal`) and intern keys
+`enum_literal`, `memoized_call` and 0.14/0.15 `variable` are
+`unreachable-at-export`; `undef` is `value-exported` through the fallback's
+`isUndef` marker. Each override pins the mechanical disposition it was reviewed
+against (`replaces`). If the derivation changes, the row becomes
+`unclassified-forbidden` and generation fails until the override is re-reviewed.
+
+A new or renamed compiler tag therefore fails CI twice: the universe/fingerprint
+comparison reports it, and the row needs a named disposition. An unknown tag
+reaching the exporter's unsupported fallback is classified
+`rejected-exporter-unsupported` automatically; any tag the exporter starts to
+decode needs a normalizer branch and emitter arm, or it stays forbidden.
 
 ## Reading stage evidence
 
 All inventories have `evidence_level` **source-inventory**. They make no new
 compiler execution, differential agreement, proof checking or preservation claim.
+Dispositions describe which source stage accepts or rejects a tag; they are not
+semantic support claims.
 
-* **Exporter:** an explicit `writeInst` switch arm is indexed separately from an
-  arm containing an `unsupported` marker. A fallback is **unclassified**, since
-  version-dependent `Compat` helpers can decode it. An explicit arm still needs
-  operand and helper review. In particular, `assembly` is conditional on version;
-  shuffle and new cast tags may be decoded through fallback helpers.
-* **Normalization:** explicit tag branches and the call-prefix branch are indexed;
-  `_optimized` is always classified as rejected fast math. Missing branches are
-  unclassified/unknown, with diagnostic guidance to inspect `normalizeOp`.
+* **Exporter:** `exporter.status` is one of `explicit-arm`,
+  `fallback-named-decoder`, `explicit-arm-unsupported-marker`,
+  `fallback-unsupported-marker`, `explicit-arm-conditional-unsupported`,
+  `version-conditional-unresolved` or `fallback-unclassified`. Version selection
+  only resolves `Compat.vNN` tests; an explicit arm still needs operand and
+  nested helper review. A version label that is not `0.N.P` keeps every branch,
+  and a tag stays forbidden unless they agree.
+* **Normalization:** explicit tag branches, the call-prefix branch, fast-math
+  and runtime-reason rejections, and unknown-tag rejection are recorded with
+  their returned constructors. The fast-math suffix, call prefix and the
+  unsupported-marker and unknown-tag gates are read from `normalizeOp`.
 * **Parser and checker:** generic schema parsing and conditional type/layout
   checking are source references. They do not establish acceptance of all
   operands or all representations of a tag.
-* **Semantics/emission/proofs:** constructor-symbol occurrences provide reviewer
+* **Emission:** `dispatch-arm`, `erased-dispatch-arm`, `not-reached` (the tag is
+  rejected earlier) or `missing-dispatch-arm`. A dispatch arm is a source match
+  arm, not evidence that every operand type is emitted correctly.
+* **Semantics/proofs:** constructor-symbol occurrences provide reviewer
   navigation. A hit can occur in comments or unrelated code; it is explicitly a
   symbol index, not a semantic implementation or theorem-coverage assertion.
   A missing hit is not a proof that the operation is unsupported. No theorem
@@ -87,13 +154,10 @@ compiler execution, differential agreement, proof checking or preservation claim
   applicability does not establish an actual run for this version/OS. Presence
   does not mean the test was run, passed, covers boundaries or has a
   differential/proof contract. Missing golden paths remain explicit.
-* **Types/constants:** type exporter arms require conditional checker review.
-  All intern keys are listed with an explicit unclassified disposition pending
-  `writeRef`/checker review. Pointer bases record conditional global resolution
-  from the actual `writePtr` switch: explicit arms require conditional review;
-  missing arms are marked by the actual unsupported fallback marker, or left
-  unclassified if no such marker exists. No base names are hardcoded as
-  supported. This does not qualify pointer provenance, fields or layouts.
+* **Types/constants/pointer bases:** dispositions come from the actual
+  `writeTypeEntry`, `writeRef` and `resolvePtr` switches plus the matching
+  `Check.lean`/`Json.lean` rejection. No base names are hardcoded as supported.
+  This does not qualify pointer provenance, fields or layouts.
 * **Models:** names recognized/rejected by `allocFn?`, `threadFn?` and
   `rejectedThreadFn?` are extracted from `Memory.lean`, with its anonymous-instance
   recognition rule. Recognition is a model boundary, not verification. Timer
@@ -101,10 +165,10 @@ compiler execution, differential agreement, proof checking or preservation claim
   Contracts, target/version restrictions and spawn/allocator assumptions remain
   in `docs/std-models.md` and the checker.
 
-A `source-pipeline-candidate-unqualified` tag has explicit export and normalizer
-arms, subject to the preceding restrictions. It is deliberately not called
-fully supported or verified. L14's source-feature qualification still requires a
-compiler-generated fixture and a checked contract for that source feature.
+An `emitted-unqualified` tag passes every source stage, subject to the preceding
+restrictions. It is deliberately not called fully supported or verified. L14's
+source-feature qualification still requires a compiler-generated fixture and a
+checked contract for that source feature.
 
 ## Upgrade change impact
 
@@ -174,5 +238,7 @@ runners; a real `run` builds Zig probes, translations, differential tests and pr
 The offline synthetic tests cover nested syntax, escaped identifiers, malformed
 input rejection, all four compiler universes, unknown AIR tags, rename impact,
 fingerprint-only changes, Zig escapes, shared/version/OS overlays, new pointer
-source arms, invocation cache freshness, switch scoping and model recognition. They intentionally
+source arms, invocation cache freshness, switch scoping, model recognition, Compat
+version branches, named fallback decoders, emission dispatch/erasure, stale
+overrides and the forbidden-disposition exit. They intentionally
 invoke no compiler.

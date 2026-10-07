@@ -75,11 +75,11 @@ From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). 
 
 Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source inventory: it records no compiler execution, proof checking or support qualification ([docs/coverage.md](coverage.md)).
 
-| Zig | AIR tags | `conditional-pipeline-review-required` | `normalizer-rejected-compiler-state-or-effect` | `normalizer-rejected-fast-math` | `normalizer-unclassified-or-unknown` | `source-pipeline-candidate-unqualified` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
+| Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.16.0 | 214 | 5 | 10 | 19 | 16 | 164 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.15.2 | 212 | 5 | 8 | 19 | 16 | 164 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.14.1 | 207 | 2 | 7 | 19 | 15 | 164 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.16.0 | 214 | 164 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.15.2 | 212 | 164 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.14.1 | 207 | 160 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
 
 ## Requirement register
 

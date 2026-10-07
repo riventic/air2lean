@@ -60,12 +60,95 @@ class InventoryTests(unittest.TestCase):
                 self.assertCountEqual(darwin, [paths[0], paths[4], paths[5], paths[6], paths[8]])
 
     def test_pointer_classification_follows_new_source_arm(self):
-        body = coverage.function_body('fn writePtr() void { while (true) switch (base) { .nav => |n| { use(n); }, .int => |i| { conditional(i); }, else => { field("unsupported"); }, }; }', 'writePtr')
+        body = coverage.function_body('fn resolvePtr() void { while (true) switch (base) { .nav => |n| { use(n); }, .int => |i| { conditional(i); }, .arr_elem => return .{ .unsupported = "arr_elem" }, else => return .{ .unsupported = @tagName(base) }, }; }', 'resolvePtr')
         arms = coverage.switch_arms(body, ['base'])
-        rows = coverage.pointer_dispositions(['nav', 'int', 'field'], arms)
-        self.assertEqual(rows[1]['disposition'], 'exporter-explicit-arm-conditional-review')
-        self.assertEqual(rows[2]['disposition'], 'exporter-fallback-unsupported-marker-review')
-        self.assertTrue(all('review' in row['disposition'] for row in rows))
+        rows = coverage.pointer_dispositions(['nav', 'int', 'arr_elem', 'field'], arms)
+        self.assertEqual([row['disposition'] for row in rows], ['resolved-conditional', 'resolved-conditional',
+                         'rejected-unsupported-pointer-base', 'rejected-unsupported-pointer-base'])
+        # Without the checker's rejection, or without an unsupported fallback, nothing is named.
+        unchecked = coverage.pointer_dispositions(['nav', 'arr_elem', 'field'], arms, checker_rejects=False)
+        self.assertEqual([row['disposition'] for row in unchecked],
+                         ['resolved-conditional', coverage.FORBIDDEN, coverage.FORBIDDEN])
+        silent = coverage.switch_arms(coverage.function_body('fn resolvePtr() void { switch (base) { .nav => {}, else => {}, } }', 'resolvePtr'), ['base'])
+        self.assertEqual(coverage.pointer_dispositions(['field'], silent)[0]['disposition'], coverage.FORBIDDEN)
+
+    def test_compat_version_branches_and_named_fallback_decoders(self):
+        exporter = coverage.tokens('''fn isNewTyOp(tag: Tag) bool { return if (v14) false else tag == .new_ty; }
+          fn writeInst() void { switch (tag) { else => {}, } switch (tag) {
+            .asm_tag => if (Compat.v14) { try w.field("unsupported"); } else { try w.writeAsm(inst); },
+            .guarded => { if (bad) { try w.field("unsupported"); } },
+            else => if (!Compat.v14) { if (tag == .split_one) { one(); } else if (Compat.isNewTyOp(tag)) { ty(); } else { try w.field("unsupported"); } }
+                    else if (tag == .old_shuffle) { old(); } else { try w.field("unsupported"); },
+          } }''')
+        decode = coverage.switch_arms(coverage.function_body(exporter, 'writeInst'), ['tag'], 1)
+        def status(tag, minor):
+            return coverage.exporter_status(tag, decode, minor, exporter)
+        self.assertEqual(status('asm_tag', 14), 'explicit-arm-unsupported-marker')
+        self.assertEqual(status('asm_tag', 16), 'explicit-arm')
+        self.assertEqual(status('asm_tag', None), 'version-conditional-unresolved')
+        self.assertEqual(status('guarded', 16), 'explicit-arm-conditional-unsupported')
+        self.assertEqual(status('split_one', 15), 'fallback-named-decoder')
+        self.assertEqual(status('new_ty', 16), 'fallback-named-decoder')
+        self.assertEqual(status('old_shuffle', 14), 'fallback-named-decoder')
+        self.assertEqual(status('old_shuffle', 16), 'fallback-unsupported-marker')
+        # Every branch rejects an unnamed tag, so even an unknown version label agrees.
+        self.assertEqual(status('brand_new', None), 'fallback-unsupported-marker')
+        self.assertEqual(coverage.version_minor('0.15.2'), 15)
+        self.assertIsNone(coverage.version_minor('synthetic'))
+
+    def test_emission_dispatch_arms_and_erasure(self):
+        emit = '''def emitScalar (fc : FCtx) :=
+  match inst.op with
+  | .arith op a b => (env, some "x")
+  | .line _ => (env, none)
+  | .«try» v _ | .dbg _ _ => (env, none)
+  | _ => (env, some "-- unexpected")
+
+def laneOp? : Op → Option Op
+  | .notDispatched => none
+
+mutual
+partial def emitStmts (fc : FCtx) := match i.op with
+      | .block body => ""
+partial def emitTerminator (fc : FCtx) := match inst.op with
+  | .ret v => ""
+end
+'''
+        arms, erased = coverage.emission_arms(emit)
+        self.assertEqual(arms, {'arith', 'line', 'try', 'dbg', 'block', 'ret'})
+        self.assertEqual(erased, {'line', 'try', 'dbg'})
+
+    def test_committed_inventories_name_every_disposition(self):
+        for path in sorted((ROOT/'coverage').glob('*.json')):
+            inventory = json.loads(path.read_text())
+            self.assertEqual(coverage.disposition_problems(inventory), [], path.name)
+            self.assertEqual(inventory['dispositions'], coverage.DISPOSITIONS, path.name)
+            overridden = [row for category in coverage.UNIVERSES for row in inventory[category]
+                          if row['derivation']['method'] != 'mechanical']
+            self.assertTrue(all(row['derivation']['method'] == 'reviewed-override' and row['derivation']['reason']
+                                for row in overridden), path.name)
+
+    def test_disposition_problems_fail_closed(self):
+        inventory = {'universe': {'air_tags': ['a', 'b'], 'types': [], 'intern_keys': [], 'pointer_bases': []},
+                     'tags': [{'tag': 'a', 'disposition': 'emitted-unqualified'}], 'types': [], 'constants': [], 'pointer_bases': []}
+        self.assertEqual(coverage.disposition_problems(inventory), ['tags: rows do not match the compiler air_tags universe'])
+        inventory['tags'].append({'tag': 'b', 'disposition': 'invented-name'})
+        self.assertEqual(len(coverage.disposition_problems(inventory)), 1)
+        inventory['tags'][1]['disposition'] = coverage.FORBIDDEN
+        self.assertEqual(len(coverage.disposition_problems(inventory)), 1)
+        inventory['tags'][1]['disposition'] = 'rejected-unknown-tag'
+        self.assertEqual(coverage.disposition_problems(inventory), [])
+
+    def test_stale_override_is_forbidden(self):
+        override = {'disposition': 'unreachable-at-export', 'replaces': 'rejected-exporter-unsupported', 'reason': 'reviewed'}
+        with patch.dict(coverage.OVERRIDES['tags'], {'gpu_tag': override}):
+            applied = coverage.apply_override('tags', {'tag': 'gpu_tag', 'disposition': 'rejected-exporter-unsupported'})
+            self.assertEqual(applied['disposition'], 'unreachable-at-export')
+            self.assertEqual(applied['derivation']['method'], 'reviewed-override')
+            # The exporter started decoding the tag: the reviewed premise no longer holds.
+            stale = coverage.apply_override('tags', {'tag': 'gpu_tag', 'disposition': 'emitted-unqualified'})
+            self.assertEqual(stale['disposition'], coverage.FORBIDDEN)
+            self.assertEqual(stale['derivation']['derived'], 'emitted-unqualified')
 
     def test_optional_compiler_file_requires_exact_case(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -195,9 +278,11 @@ class InventoryTests(unittest.TestCase):
             report = coverage.generate('synthetic-no-goldens', source)
             self.assertEqual(len(report['tags']), 2)
             new = next(row for row in report['tags'] if row['tag'] == 'new_tag')
-            self.assertEqual(new['exporter']['status'], 'fallback-unclassified')
+            # An unknown tag reaches the real exporter's unsupported fallback in every version branch.
+            self.assertEqual(new['exporter']['status'], 'fallback-unsupported-marker')
+            self.assertEqual(new['disposition'], 'rejected-exporter-unsupported')
             self.assertEqual(new['tests']['paths'], [])
-            self.assertNotIn('supported', new['disposition'])
+            self.assertEqual(coverage.disposition_problems(report), [])
             self.assertTrue(all(row['proofs']['status'] == 'symbol-index-only-not-proof-coverage' for row in report['tags']))
             snapshot = source/'inventory.json'
             command = [sys.executable, str(ROOT/'scripts/coverage.py')]
@@ -206,6 +291,15 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(generated.returncode, 0, generated.stderr)
             checked = subprocess.run(command + ['check'] + arguments, capture_output=True, text=True)
             self.assertEqual(checked.returncode, 0, checked.stderr)
+            # A row without a named disposition fails generate and an otherwise current check.
+            forbidden = source/'forbidden.json'
+            stale = {'add': {'disposition': 'unreachable-at-export', 'replaces': 'rejected-unknown-tag', 'reason': 'test'}}
+            forbidden_arguments = ['--version', 'synthetic-no-goldens', '--source', str(source), '--inventory', str(forbidden)]
+            with patch.dict(coverage.OVERRIDES['tags'], stale), patch('sys.stderr'), patch('sys.stdout'):
+                for name in ('generate', 'check'):
+                    with patch.object(sys, 'argv', ['coverage.py', name] + forbidden_arguments):
+                        self.assertEqual(coverage.main(), 1, name)
+            self.assertEqual(json.loads(forbidden.read_text())['tags'][0]['disposition'], coverage.FORBIDDEN)
             # A renamed AIR tag and payload-only changes both fail the fingerprint gate.
             (source/'src/Air.zig').write_text('pub const Tag = enum(u8) { add, renamed_tag, };')
             upgraded = coverage.generate('synthetic-next', source)
