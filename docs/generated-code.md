@@ -145,7 +145,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
-| `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p` |
+| `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p`; a partly `undefined` array, struct or tuple constant is `Zig.storeBytes p align (Zig.writeBytes (Zig.Enc.encode (v : T)) off (Array.replicate len .undef))`, one `writeBytes` per `undefined` item or field (below) |
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
@@ -160,6 +160,8 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `tag_name` | `E.tagName e` (below) |
 | `error_name` | `errorNameOf e` (below) |
 | `call` of `mem.Allocator.create`, `alloc`, `free`, … | `Zig.Allocator.create a size align`, … ([std-models.md](std-models.md)) |
+
+**`undefined` operands.** `undefined` is never read as a default (`0`, `false`) that a later read could observe. A store writes it as undefined bytes: a wholly `undefined` value with `Zig.storeUndef`, and a partly `undefined` constant (an `undefined` item of an array, or field of a non-`packed` struct or tuple, at any depth) as the bytes of the value with the bytes of each `undefined` part undefined (`Air2Lean/Memory.lean`'s `undefByteRanges`, from the exporter's sizes and offsets). A load that reads one of those bytes throws `.unspecified`. A local that receives such a store is a stack block, not a `Locals` field (`escapingAllocs`). `memset` of a wholly `undefined` item writes undefined bytes. Every other `undefined` operand is outside the subset (`unsupported_semantics`): a partly `undefined` value under an optional, error union, union, slice, vector or packed struct, a store of one to a packed struct field, a partly `undefined` `memset` item, an `undefined` `shuffle` lane, and `undefined` (wholly or partly) as a call argument, return or block result, `aggregate_init` element, arithmetic, `select` or atomic operand (`Thread.spawn`'s `SpawnConfig`, which the model does not read, is exempt). A wholly `undefined` store to a local that stays a `Locals` field still writes the field type's `default`.
 
 `align` is the pointer type's `align(N)` (`ptr_align`, `docs/air-json.md`). An access throws `.illegal` if the block is dead, a byte is outside the block, or the address is not a multiple of `align`.
 

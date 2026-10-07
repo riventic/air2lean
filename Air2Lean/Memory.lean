@@ -17,6 +17,8 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
   memory. A cast to a different pointee also escapes: its loads and stores reinterpret bytes.
   A place passed to `Thread.spawn` escapes (it is not in this list), so a variable shared
   with a spawned thread is a memory block subject to the race check (`ZigLean/Mem/Thread.lean`).
+  A store of a partly `undefined` constant to a place also escapes: a `Locals` field has no
+  undefined parts, memory has undefined bytes.
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
   pointer constant and no memory op (`memoryOp`, which includes a call to the allocator model),
@@ -165,12 +167,59 @@ def valueOperands (op : Op) : Array Val :=
       | some v => acc.push v
       | none => acc
 
-/-- The `alloc`s of `f` that escape. -/
+/-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
+default (`0`, `false`), so a partly undefined global initializer fails closed. -/
+partial def Val.hasNestedUndef (v : Val) : Bool :=
+  let undefOrNested (v : Val) : Bool := match v with
+    | .undef _ => true
+    | v => v.hasNestedUndef
+  match v with
+  | .agg _ elems => elems.any undefOrNested
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => undefOrNested v
+  | .sliceConst _ p l => undefOrNested p || undefOrNested l
+  | _ => false
+
+/-- The byte ranges `(offset, length)`, from `base`, of the `undefined` parts of the constant
+`v` of type `tid` in memory: the bytes that a store of `v` leaves undefined. Only an `undefined`
+item of an array, or field of a non-`packed` struct or tuple, at any depth, has a range (from
+the exporter's sizes and field offsets, which `Check.lean` compares with the model's encoding).
+`none` for an `undefined` part under an optional, error union, union, slice, vector or packed
+struct, or an unknown layout: such a store is outside the subset. -/
+partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : TyId) (v : Val)
+    (base : Nat := 0) : Option (Array (Nat × Nat)) := do
+  match v with
+  | .undef _ =>
+    let size ← (layouts[tid]?).bind (·.size)
+    pure (if size == 0 then #[] else #[(base, size)])
+  | .agg _ elems =>
+    if !v.hasNestedUndef then return #[]
+    -- The type and byte offset of each item or field.
+    let parts : Array (TyId × Nat) ← match types[tid]? with
+      | some (.array _ child _) =>
+        let stride ← (layouts[child]?).bind (·.size)
+        pure (elems.mapIdx fun k _ => (child, k * stride))
+      | some (.struct _ layout fields) =>
+        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+        if layout == "packed" || offsets.size != fields.size then none
+        pure ((fields.zip offsets).map fun ((_, t), o) => (t, o))
+      | some (.tuple fields) =>
+        let offsets := ((layouts[tid]?).map (·.offsets)).getD #[]
+        if offsets.size != fields.size then none
+        pure (fields.zip offsets)
+      | _ => none
+    if parts.size != elems.size then none
+    (elems.zip parts).foldlM (init := #[]) fun acc (e, t, o) =>
+      (acc ++ ·) <$> undefByteRanges types layouts t e (base + o)
+  | v => if v.hasNestedUndef then none else pure #[]
+
+/-- The `alloc`s of `f` that escape. A store of a partly `undefined` constant to a place makes
+its `alloc` escape: memory holds the undefined parts as undefined bytes (`undefByteRanges`). -/
 def escapingAllocs (f : Func) : Array InstId :=
   let insts := f.allInsts
   let roots := placeRoots insts
   insts.foldl (init := #[]) fun acc i =>
     let operands := valueOperands i.op ++ match i.op with
+      | .store p v => if v.hasNestedUndef then #[p] else #[]
       | .bitcast v@(.inst id) =>
         match insts.find? (·.id == id) with
         | some source => if samePointee f.types source.ty i.ty then #[] else #[v]
