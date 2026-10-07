@@ -113,6 +113,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v
           python3 scripts/float-semantics.py check
 
+      # Q07: synthetic inventories and stub runners; consumes coverage.py diff, runs no compiler.
+      - name: Upgrade qualification driver regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
