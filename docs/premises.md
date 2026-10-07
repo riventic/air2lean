@@ -144,7 +144,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `Mem.failAt` decide `OutOfMemory`. Theorems over arbitrary `Mem` quantify over every
   policy; a theorem that fixes initial memory fixes the policy. The cap is not a resource
   guarantee of the host.
-- Derived from: `ZigLean.Mem.Alloc`; tokens `AllocPolicy.maxBytes`, `AllocPolicy.failures`,
+- Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
   `releaseAttempt`. The `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct
   update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).

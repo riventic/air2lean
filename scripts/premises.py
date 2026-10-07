@@ -196,17 +196,23 @@ def strip_comments(text: str) -> str:
     return "".join(out)
 
 
-def statement_of(text: str) -> str:
-    """Text of a declaration before its first top-level `:=`."""
+def top_level(text: str, sep: str) -> int:
+    """Index of the first `sep` outside brackets, or -1."""
     depth = 0
     for i, c in enumerate(text):
-        if c in "([{⟨":
+        if c in "([{⟨⦃":
             depth += 1
-        elif c in ")]}⟩":
+        elif c in ")]}⟩⦄":
             depth = max(0, depth - 1)
-        elif depth == 0 and text.startswith(":=", i):
-            return text[:i]
-    return text
+        elif depth == 0 and text.startswith(sep, i):
+            return i
+    return -1
+
+
+def statement_of(text: str) -> str:
+    """Text of a declaration before its first top-level `:=`."""
+    end = top_level(text, ":=")
+    return text if end < 0 else text[:end]
 
 
 @dataclass
@@ -259,17 +265,10 @@ def instance_type(decl: Decl) -> frozenset:
     """Names in an instance's type, `instance [Enc α] : Enc (Array α) where` -> {Enc, Array}.
     Binder names and single-letter (auto-bound) variables are dropped."""
     text = re.split(r"\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
-    depth = 0
-    for i, c in enumerate(text):
-        if c in "([{⟨⦃":
-            depth += 1
-        elif c in ")]}⟩⦄":
-            depth = max(0, depth - 1)
-        elif c == ":" and depth == 0:
-            text = text[i + 1:]
-            break
-    else:
+    colon = top_level(text, ":")
+    if colon < 0:
         return frozenset()
+    text = text[colon + 1:]
     bound = {name for name, _ in binders(decl.text)}
     names = {t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(text)}
     return frozenset(n for n in names - bound - {"Type", "Prop", "Sort"} if len(n.rstrip("'₀₁₂₃₄₅₆₇₈₉")) > 1)
