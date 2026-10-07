@@ -93,6 +93,61 @@ must still be audited (for example with `#print axioms`) before claiming impleme
 verification. `dependencies` is the project's explicit semantic dependency inventory, not an
 automatically inferred proof-dependency closure.
 
+## Memory footprints (E01)
+
+An entry may add an optional `footprint`, bound to the same exact symbol and signature:
+
+```json
+"footprint": {"reads": [], "writes": [0]}
+```
+
+Each list holds zero-based parameter indices; every listed parameter must be a pointer or
+slice at every call site. Indices must be in range, unique, and not both read and written.
+`preserves` bindings cannot list any index. Unknown footprint keys are rejected. A declared
+footprint becomes part of the generated obligation:
+
+```lean
+def air2lean_model_0_footprint : Zig.External.Footprint (Args) where
+  reads := fun _ => []
+  writes := fun args => [Zig.External.Region.block args.1]
+theorem air2lean_model_0_evidence :
+    air2lean_model_0_contract.Holds ... ∧ air2lean_model_0_contract.Respects air2lean_model_0_footprint
+```
+
+`Contract.Respects` (in `ZigLean.External`) requires two things. Every access the contract
+permits must fall in a written region, or be a non-write access to a read region. The
+contract's frame must also leave every block outside the written regions unchanged. A
+footprint therefore excludes allocating or freeing other blocks; models that allocate or
+free declare no footprint. Clients use `Contract.frame_outside` (blocks outside the writes
+stay unchanged) and `Contract.accesses_within`. A `proof` must prove the conjunction.
+`assumed` bindings emit it as one axiom. The report's `footprint` field is `null` when
+none is declared.
+
+`tests/roadmap/models/Fill.lean` defines `fill(buf: []u8, value: u8)` with footprint
+`writes: [0]`, together with its proved evidence. Its client `client_fills_both` calls fill on
+two separate buffers. Using only the contract and footprint, it proves both buffers are
+filled: the first stays filled because the second call writes only its own block. The
+registry test generates `fillClient` from a registered binding and proves the same fact
+through the generated obligation (`FillGenerated.lean`). An assumed variant
+(`FillAssumedGenerated.lean`) also checks, but its theorem rests on the binding axiom.
+
+## Contract assumption report
+
+```sh
+lake env python3 scripts/external-contracts.py --check Generated.lean [...]
+```
+
+The script reads each file's `-- air2lean-models:` marker. It kernel checks the file with
+`#print axioms` on every `air2lean_model_<i>_evidence` and lists each used contract. A
+contract is `verified` only if its trust is `proved-obligation`, the file checks, and its
+evidence uses only `propext`, `Classical.choice` and `Quot.sound`. Every other contract is
+listed under `assumptions`, with a reason. That covers assumed axioms, unchecked runs
+(no `--check`), failed checks, and proofs that reach `sorryAx` or a project axiom.
+`--expect-assumptions=a,b` fails unless the assumption set is exactly that list. The model
+gate requires an empty list for the proved fill client and `project.fill` for the assumed one.
+A verified status still covers only the Lean model. Correspondence to the real foreign
+function remains EXT-01's environment premise.
+
 Compile project model modules and the generated output before treating the translation as
 usable proof evidence. Clients use `Contract.success` under the declared precondition and
 `Contract.terminates` for total contracts. Changing a binding/profile requires regeneration

@@ -332,6 +332,7 @@ jobs:
           AIR2LEAN_MODEL_EVIDENCE: ${{ runner.temp }}/model-contracts
         run: |
           python3 tests/roadmap/models/test_gate.py
+          python3 -B tests/roadmap/models/test_external_contracts.py
           scripts/model-contracts.sh
 
       # This checks committed Flow artifacts only: no production checkout, Zig export,

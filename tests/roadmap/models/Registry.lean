@@ -229,4 +229,82 @@ def main (args : List String) : IO Unit := do
     "    exact run\n" ++
     "  exact (air2lean_model_0_contract.success air2lean_model_0_evidence (by trivial) modelRun).1\n" ++
     "end TupleClient\n")
+  -- E01 footprints: `fill(buf: []u8, value: u8)` writes only its buffer's block.
+  let fillTypes : Array Ty := #[.int false 8, .noreturn, .ptr "slice" false 0, .void]
+  let fillFunc : Func := { f with
+    name := "fillClient"
+    params := #[2, 2, 0, 0]
+    ret := 3
+    types := fillTypes
+    layouts := #[{size := some 1, align := some 1}, {},
+      {size := some 16, align := some 8, ptrAlign := some 1}, {size := some 0, align := some 1}]
+    body := #[{id := 0, ty := 2, op := .arg 0}, {id := 1, ty := 2, op := .arg 1},
+      {id := 2, ty := 0, op := .arg 2}, {id := 3, ty := 0, op := .arg 3},
+      {id := 4, ty := 3, op := .call (.func "project.fill" false none) #[.inst 0, .inst 2]},
+      {id := 5, ty := 3, op := .call (.func "project.fill" false none) #[.inst 1, .inst 3]},
+      {id := 6, ty := 1, op := .ret .void}]
+  }
+  let _ ← get <| check fillFunc
+  let fillTemplate ← get <| ModelRegistry.template raw.profile #[fillFunc]
+  let fillBase := ((fillTemplate.getObjValD "models").getArr?.toOption.getD #[])[0]!
+  let fillEntry (effects : String) (footprint : Json) : Except String Json := do
+    pure <| Json.mkObj <| (← fillBase.getObj?).toArray.toList ++ [
+      ("import", .str "tests.roadmap.models.Fill"), ("implementation", .str "FillExample.fill"),
+      ("contract", .str "FillExample.contract"), ("trust", .str "proved"),
+      ("proof", .str "FillExample.evidence"), ("termination", .str "total"),
+      ("errors", .arr #[.str "illegal"]), ("effects", .str effects), ("dependencies", .arr #[]),
+      ("footprint", footprint)]
+  let fillDoc (entry : Json) : Json := Json.mkObj [("schema", toJson (1 : Nat)), ("models", .arr #[entry])]
+  let footprintJson (reads writes : List Nat) : Json :=
+    Json.mkObj [("reads", toJson reads), ("writes", toJson writes)]
+  let fillDocument := fillDoc (← get <| fillEntry "tracked" (footprintJson [] [0]))
+  let fillModels ← get <| ModelRegistry.parse fillDocument.compress
+  require (fillModels[0]!.footprint == some {reads := #[], writes := #[0]}) "footprint parsed"
+  let _ ← get <| checkProgram #[fillFunc] fillModels (some raw.profile)
+  for (fp, effects, part) in [
+      (footprintJson [] [2], "tracked", "is not a parameter"),
+      (footprintJson [] [0, 0], "tracked", "duplicate footprint writes"),
+      (footprintJson [0] [0], "tracked", "both read and write"),
+      (footprintJson [] [0], "preserves", "preserves binding cannot declare"),
+      (Json.mkObj [("reads", toJson ([] : List Nat))], "tracked", "property not found"),
+      (Json.mkObj [("reads", toJson ([] : List Nat)), ("writes", toJson [0]), ("allocates", .bool true)],
+        "tracked", "unsupported field 'allocates'")] do
+    expectError (ModelRegistry.parse (fillDoc (← get <| fillEntry effects fp)).compress) part
+  let scalarFootprint ← get <| ModelRegistry.parse (fillDoc (← get <| fillEntry "tracked" (footprintJson [1] [0]))).compress
+  expectError (ModelRegistry.check scalarFootprint raw.profile #[fillFunc]) "footprint parameter 1 is not a pointer"
+  let fillReport := ModelRegistry.report fillModels
+  require ((((fillReport.getObjValD "bindings").getArrVal? 0).toOption.getD .null).getObjValD "footprint" ==
+    footprintJson [] [0]) "report lists the declared footprint"
+  require (fillReport.getObjValD "assumptions" == toJson ([] : List String)) "proved binding is not an assumption"
+  let assumedFields := (← get <| (← get <| fillEntry "tracked" (footprintJson [] [0])).getObj?).toArray.toList
+  let assumedEntry := Json.mkObj <| (assumedFields.filter (·.1 != "proof")).map fun (k, v) =>
+    if k == "trust" then (k, .str "assumed") else (k, v)
+  let assumedModels ← get <| ModelRegistry.parse (fillDoc assumedEntry).compress
+  require ((ModelRegistry.report assumedModels).getObjValD "assumptions" == toJson ["project.fill"])
+    "assumed binding is listed as an assumption"
+  let fillSource := emit #[fillFunc] "FillClient" "" .ieee fillModels
+  require (decide ((fillSource.splitOn "def air2lean_model_0_footprint").length > 1)) "footprint definition"
+  require (decide ((fillSource.splitOn "Respects air2lean_model_0_footprint := _root_.FillExample.evidence").length > 1))
+    "footprint obligation"
+  let assumedSource := emit #[fillFunc] "FillClient" "" .ieee assumedModels
+  require (decide ((assumedSource.splitOn "axiom air2lean_model_0_evidence").length > 1)) "assumed footprint axiom"
+  IO.FS.writeFile (directory / "fill-registry.json") (fillDocument.pretty ++ "\n")
+  let fillClient := "\n" ++
+    "namespace FillClient\n" ++
+    "theorem fillClient_eq (a c : Zig.Slice) (x y : BitVec 8) :\n" ++
+    "    fillClient a c x y = FillExample.client FillExample.fill a c x y := by\n" ++
+    "  funext before\n" ++
+    "  simp [fillClient, FillExample.client, air2lean_model_0, Zig.callM, StateT.run'_eq]\n" ++
+    "/-- Frame preservation through the registry-bound obligation and footprint. -/\n" ++
+    "theorem fillClient_fills_both {a c : Zig.Slice} {x y : BitVec 8} {before after : Zig.Mem}\n" ++
+    "    (separate : a.ptr.block ≠ c.ptr.block)\n" ++
+    "    (run : fillClient a c x y before = some (.ok ((), after))) :\n" ++
+    "    FillExample.Filled after a x ∧ FillExample.Filled after c y := by\n" ++
+    "  rw [fillClient_eq] at run\n" ++
+    "  exact FillExample.client_fills_both air2lean_model_0_evidence separate run\n" ++
+    "end FillClient\n"
+  -- The CLI's `-- air2lean-models:` marker feeds scripts/external-contracts.py.
+  let marker (models : Array ModelBinding) := "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n"
+  IO.FS.writeFile (directory / "FillGenerated.lean") (marker fillModels ++ fillSource ++ fillClient)
+  IO.FS.writeFile (directory / "FillAssumedGenerated.lean") (marker assumedModels ++ assumedSource ++ fillClient)
   IO.println "model registry tests passed; generated typed client obligation"
