@@ -716,7 +716,7 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hL, hR, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw3 (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hp => ?_)
-    hpt (by rw [hclM]; exact rmwMsg_clock (by first | exact hc | simp [acqM, hc] | (subst hm₂; split <;> simp [acqM, hc])))⟩
+    hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rename_i hu; subst hu; rw [L.part_set, L.held_set]
       have := hdj u; rw [hownt] at this; exact this.symm
@@ -808,7 +808,7 @@ theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)) (fun hU _ => ?_)
-    (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by first | exact hc | simp [acqM, hc] | (subst hm₂; split <;> simp [acqM, hc])))⟩
+    (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -883,7 +883,7 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
     (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hq => ?_) hng
-    (by rw [hclM]; exact rmwMsg_clock (by first | exact hc | simp [acqM, hc] | (subst hm₂; split <;> simp [acqM, hc])))⟩
+    (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -967,7 +967,7 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
     (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u))
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))
-    (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by first | exact hc | simp [acqM, hc] | (subst hm₂; split <;> simp [acqM, hc])))⟩
+    (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u

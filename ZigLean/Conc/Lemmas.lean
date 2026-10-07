@@ -483,6 +483,13 @@ theorem plainHit_atomic {b o len : Nat} {e : FootprintEntry} (h : e.kind.isAtomi
   · rfl
   · rw [plainHit_kind hp] at h; cases h
 
+/-- An access to block `b` that is not a write is not a plain write to it. -/
+theorem plainHit_false_of {b o len : Nat} {e : FootprintEntry} (h : e.block = b → e.kind ≠ .write) :
+    plainHit b o len e = false := by
+  cases hp : plainHit b o len e
+  · rfl
+  · exact absurd (plainHit_kind hp) (h (plainHit_block hp))
+
 theorem plainSince_false {m : Mem} {b o len : Nat} {c : VClock} (h : PlainLe m b o len c) :
     plainSince m b o len c = false := by
   unfold plainSince

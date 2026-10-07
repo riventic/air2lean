@@ -541,15 +541,14 @@ theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.cur
     intro u hu; simp only [mr, Mem.recordAt]; rw [Proto.getElem!_set!_ite, if_neg (fun h => hu h.1)]
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
   have hwr : W.Ok mr := by
-    refine ⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val, fun i l hl => ?_⟩
+    refine ⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val,
+      fun i l hl => (hw.plain i l hl).of_fp fun e he => by
+        simp only [mr, Mem.recordAt, Array.mem_push] at he
+        rcases he with he | rfl
+        · exact .inl he
+        · exact .inr (plainHit_atomic hk)⟩
     · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l hl
       exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
-    rotate_left
-    · refine (hw.plain i l hl).of_fp fun e he => ?_
-      simp only [mr, Mem.recordAt, Array.mem_push] at he
-      rcases he with he | rfl
-      · exact .inl he
-      · exact .inr (plainHit_atomic hk)
     simp only [mr, Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · rcases hw.wfp e he hh with ⟨ha, hs⟩ | ha

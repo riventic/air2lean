@@ -169,10 +169,7 @@ theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
     simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl he
-    · refine .inr ?_
-      cases hp : plainHit 1 0 4 _
-      · rfl
-      · exact absurd (plainHit_kind hp) (hn1 (plainHit_block hp))
+    · exact .inr (plainHit_false_of hn1)
   exact {
     thr := hi₁.thr, b0 := hi₁.b0, b1 := hi₁.b1, b2 := hi₁.b2, ctx := hi₁.ctx, data := hi₁.data
     flag := by

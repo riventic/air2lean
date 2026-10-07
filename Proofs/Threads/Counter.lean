@@ -615,10 +615,7 @@ theorem inv_recordAt {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : Access
   · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl he
-    · refine .inr ?_
-      cases hp : plainHit 1 0 4 _
-      · rfl
-      · exact absurd (Proto.plainHit_kind hp) (hn1 (Proto.plainHit_block hp))
+    · exact .inr (Proto.plainHit_false_of hn1)
 
 /-- A `bump` thread's increment keeps the invariant, with one more increment in its ghost
 value. -/
