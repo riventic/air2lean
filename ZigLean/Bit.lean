@@ -104,6 +104,104 @@ theorem shlWithOverflow_illegal {n m : Nat} (s : Bool) (a : BitVec n) (b : BitVe
     shlWithOverflow s a b = throw .illegal := by
   simp [shlWithOverflow, Nat.not_lt_of_le hwidth, hpositive]
 
+/-! ## Arbitrary widths
+
+The lemmas below are uniform in the operand width, so they cover u128/i128, non-power-of-two
+widths such as u24/u40/i7, and every lane of a vector. Concrete wide/narrow instances are
+kernel-checked in `tests/roadmap/bitops/Runtime.lean`. -/
+
+/-- The checker's count width `log2 n + 1` can hold every count of an `n`-bit operand. -/
+theorem countWidth_holds (n : Nat) : n < 2 ^ (Nat.log2 n + 1) := Nat.lt_log2_self
+
+theorem clz_le_width {n : Nat} (a : BitVec n) : a.clz.toNat ≤ n := by
+  have h := BitVec.le_def.mp (BitVec.clz_le (x := a))
+  simpa [Nat.mod_eq_of_lt (Nat.lt_two_pow_self (n := n))] using h
+
+theorem ctz_le_width {n : Nat} (a : BitVec n) : a.ctz.toNat ≤ n := by
+  rw [BitVec.ctz_eq_reverse_clz]
+  exact clz_le_width a.reverse
+
+/-- With a result width that can hold the source width, every count is exact. -/
+theorem clz_toNat_of_width {n m : Nat} (a : BitVec n) (h : n < 2 ^ m) :
+    (clz m a).toNat = a.clz.toNat :=
+  clz_toNat m a (Nat.lt_of_le_of_lt (clz_le_width a) h)
+
+theorem ctz_toNat_of_width {n m : Nat} (a : BitVec n) (h : n < 2 ^ m) :
+    (ctz m a).toNat = a.ctz.toNat :=
+  ctz_toNat m a (Nat.lt_of_le_of_lt (ctz_le_width a) h)
+
+theorem popcount_toNat_of_width {n m : Nat} (a : BitVec n) (h : n < 2 ^ m) :
+    (popcount m a).toNat = a.cpop.toNat :=
+  popcount_toNat m a (Nat.lt_of_le_of_lt (BitVec.toNat_cpop_le a) h)
+
+/-- Signed/unsigned boundary: a set top bit (every negative signed value, and every unsigned
+value at or above `2^(n-1)`) has no leading zeros. -/
+theorem clz_of_msb {n : Nat} (m : Nat) (a : BitVec n) (h : a.msb = true) :
+    clz m a = 0 := by
+  have hn : 0 < n := by
+    rcases n with _ | n
+    · have hlt := a.isLt
+      simp [BitVec.msb_eq_decide] at h hlt
+      omega
+    · omega
+  have hz : a.clz.toNat = 0 :=
+    (BitVec.clz_eq_zero_iff hn).mpr (by simpa [BitVec.msb_eq_decide] using h)
+  apply BitVec.eq_of_toNat_eq
+  simp [clz, BitVec.toNat_setWidth, hz]
+
+@[simp] theorem clz_allOnes {n : Nat} (m : Nat) (hn : 0 < n) : clz m (BitVec.allOnes n) = 0 :=
+  clz_of_msb m _ (by simp [BitVec.msb_allOnes hn])
+
+@[simp] theorem ctz_allOnes {n : Nat} (m : Nat) (hn : 0 < n) : ctz m (BitVec.allOnes n) = 0 := by
+  have hr : (BitVec.allOnes n).reverse = BitVec.allOnes n := by
+    ext i hi; simp [BitVec.getElem_reverse, hi]
+  unfold ctz BitVec.ctz
+  rw [hr]
+  exact clz_allOnes m hn
+
+/-- A count of the operand's width is valid exactly when it is zero or below the width;
+`Log2Int` counts of a power-of-two width are therefore always valid. -/
+theorem shlWithOverflow_valid {n m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m)
+    (hb : b.toNat < n ∨ b.toNat = 0) :
+    shlWithOverflow s a b = pure (shl a b, if shr s (shl a b) b = a then 0 else 1) := by
+  simp [shlWithOverflow, hb]
+
+theorem shlWithOverflow_pow2 {k : Nat} (s : Bool) (a : BitVec (2 ^ k)) (b : BitVec k) :
+    shlWithOverflow s a b = pure (shl a b, if shr s (shl a b) b = a then 0 else 1) :=
+  shlWithOverflow_valid s a b (.inl (Nat.lt_of_lt_of_le b.isLt (Nat.le_refl _)))
+
+/-- A zero count preserves the operand and never overflows, at every width. -/
+@[simp] theorem shlWithOverflow_zero_count {n m : Nat} (s : Bool) (a : BitVec n) :
+    shlWithOverflow s a (0 : BitVec m) = pure (a, 0) := by
+  cases s <;> simp [shlWithOverflow, shl, shr]
+
+/-- A zero operand never loses bits under a valid count. -/
+theorem shlWithOverflow_zero_operand {n m : Nat} (s : Bool) (b : BitVec m)
+    (hb : b.toNat < n ∨ b.toNat = 0) :
+    shlWithOverflow s (0 : BitVec n) b = pure (0, 0) := by
+  cases s <;> simp [shlWithOverflow, shl, shr, hb, BitVec.zero_shiftLeft, BitVec.zero_ushiftRight]
+
+/-- Bitset iteration (`x & (x -% 1)`, removing the lowest member) strictly decreases a
+nonempty word at every width: the iterator's termination measure. -/
+theorem and_subWrap_one_lt {n : Nat} (x : BitVec n) (hx : x ≠ 0) :
+    (x &&& subWrap x 1).toNat < x.toNat := by
+  have hpos : 0 < x.toNat := by
+    rcases Nat.eq_zero_or_pos x.toNat with h | h
+    · exact absurd (BitVec.eq_of_toNat_eq (by simpa using h)) hx
+    · exact h
+  have hn : n ≠ 0 := by
+    rintro rfl
+    exact hx (Subsingleton.elim x 0)
+  have h1 : (1 : BitVec n).toNat = 1 := by
+    simp [Nat.mod_eq_of_lt (Nat.one_lt_two_pow hn)]
+  have hlt := x.isLt
+  have hsub : (subWrap x 1).toNat = x.toNat - 1 := by
+    simp only [subWrap, BitVec.toNat_sub, h1]
+    rw [show 2 ^ n - 1 + x.toNat = (x.toNat - 1) + 2 ^ n by omega, Nat.add_mod_right,
+      Nat.mod_eq_of_lt (by omega)]
+  rw [BitVec.toNat_and]
+  exact Nat.lt_of_le_of_lt Nat.and_le_right (by omega)
+
 /-- Clients can move between the explicit overflow flag and the existing checked shift. -/
 theorem shlExact_of_noOverflow {n m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m)
     (h : shr s (shl a b) b = a) : shlExact s a b = pure (shl a b) := by

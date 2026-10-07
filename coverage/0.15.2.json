@@ -15523,7 +15523,7 @@
     },
     "runtime-models": {
       "ZigLean/Basic.lean": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b",
-      "ZigLean/Bit.lean": "b01d156835b875a81bdb79d827d4955f47e2102719e86baeb158bbc62a46c4d9",
+      "ZigLean/Bit.lean": "e723daf6d3f5d118cbbf1380bc821cb744a03efcdfc85014e57bc8b3af2dce44",
       "ZigLean/Conc/Basic.lean": "0eb0b455238adb1c0e2c8c68248cf3e0e5c91243c60e0c8a75a780ab77083a77",
       "ZigLean/Conc/Call.lean": "1c280d4d4b16aca8a52d4290998209110f9c3b98da5431d9208846d088db6f50",
       "ZigLean/Conc/Csl.lean": "e96e73fed694439b4fa8dc46926668da1d9b5d3a74927e1b6d0c595d7c1df505",

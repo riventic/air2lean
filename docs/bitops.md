@@ -37,7 +37,24 @@ are rejected. Accepting vectors as values does not expand the separate memory-la
 
 `ZigLean/Bit.lean` exposes zero-count lemmas, exact numeric count lemmas under a result-width
 bound, shift result/overflow rules, and a connection to the checked exact-shift operation.
+Width-generic lemmas cover wider and non-power-of-two representations: the checker's count
+width `log2 n + 1` holds every count, so counts are exact at every width; a set top bit
+(negative signed values) has no leading zeros; all-ones has no leading or trailing zeros;
+every `Log2Int` count of a power-of-two width is valid; a zero count and a zero operand never
+overflow; and `x & (x -% 1)` strictly decreases a nonempty word.
 These are executable bitvector semantics and kernel-checked rules; they do not prove Zig Sema,
 the exporter, normalization, emission, or backend preservation. Compiler-generated fixtures,
-differential observations, shape rejection cases, loop-capture cases, and six semantic mutants
+differential observations, shape rejection cases, loop-capture cases, and eight semantic mutants
 supply separate evidence. See `tests/roadmap/bitops/README.md` for the qualification commands.
+
+Wider representations (u16, u32, u64, u128, i128, u24, u40, i7, u3 and u64 vector lanes,
+u24 lanes with an invalid lane) are checked by kernel assertions and generated-fixture
+assertions on synthetic AIR at the zero, all-ones, lowest-bit, top-bit and shift-count
+boundaries, including representable but illegal counts of non-power-of-two widths. Their
+compiler-generated export and native differential qualification is still pending; only the
+8-bit, u3/i3, u1, four-lane u8/i8 and u64 bitset (`firstSet`, `clearLowest`, `cardinality`)
+kernels are differentially qualified. A
+`std.bit_set`-style client (`tests/roadmap/bitops/Bitset.lean`) proves `isSet`/`set`/`unset`/
+`toggle`/`count`/`findFirstSet` for every `IntegerBitSet(2^k)` word and for `ArrayBitSet` over
+`[N]u64`; `GeneratedBitset.lean` proves the generated `firstSet`, `clearLowest` and
+`cardinality` fixtures correct, bounded and terminating.

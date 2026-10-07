@@ -155,6 +155,16 @@
           "category": "other"
         },
         {
+          "name": "reverse_shift_operands_swapped",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "count_bound_operands_swapped",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "operand-order"
+        },
+        {
           "name": "a",
           "path": "scripts/mutate.sh",
           "category": "other"
@@ -164,8 +174,7 @@
           "path": "scripts/mutate.sh",
           "category": "other"
         }
-      ],
-      "note": "clz/ctz swaps exchange operations, not operands: operand order has no designated mutant yet."
+      ]
     },
     "L03": {
       "categories": [

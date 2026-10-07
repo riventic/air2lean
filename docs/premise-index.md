@@ -5,13 +5,13 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1819 theorems in 83 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
+| [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
@@ -35,15 +35,15 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 1090 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1819 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 810 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 810 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 
 ## `Proofs/Asm/Proofs.lean`
@@ -1818,6 +1818,57 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 | `FlowTime.timestamp32_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp64_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 
+## `tests/roadmap/bitops/Bitset.lean`
+
+File premises: SEM-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `BitsetClient.width_lt` | TRU-01 |
+| `BitsetClient.index_lt` | TRU-01 |
+| `BitsetClient.getLsbD_maskBit` | SEM-01, TRU-01 |
+| `BitsetClient.toNat_beq` | TRU-01 |
+| `BitsetClient.and_maskBit` | SEM-01, TRU-01 |
+| `BitsetClient.maskBit_ne_zero` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_eq` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_set` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_unset` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_toggle` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_empty` | SEM-01, TRU-01 |
+| `BitsetClient.isSet_full` | SEM-01, TRU-01 |
+| `BitsetClient.count_toNat` | SEM-01, TRU-01 |
+| `BitsetClient.count_le` | SEM-01, TRU-01 |
+| `BitsetClient.count_empty` | SEM-01, TRU-01 |
+| `BitsetClient.count_full` | SEM-01, TRU-01 |
+| `BitsetClient.findFirstSet_empty` | SEM-01, TRU-01 |
+| `BitsetClient.findFirstSet_spec` | SEM-01, TRU-01 |
+| `BitsetClient.clearLowest_subset` | SEM-01, TRU-01 |
+| `BitsetClient.clearLowest_lt` | SEM-01, TRU-01 |
+| `BitsetClient.clearLowest_zero` | SEM-01, TRU-01 |
+| `BitsetClient.word_lt` | TRU-01 |
+| `BitsetClient.bitIndex_toNat` | TRU-01 |
+| `BitsetClient.index_ext` | TRU-01 |
+| `BitsetClient.word_update` | TRU-01 |
+| `BitsetClient.arrayIsSet_set` | SEM-01, TRU-01 |
+| `BitsetClient.arrayIsSet_unset` | SEM-01, TRU-01 |
+| `example@L201` | SEM-01, TRU-01 |
+| `example@L202` | SEM-01, TRU-01 |
+| `example@L204` | SEM-01, TRU-01 |
+| `example@L209` | SEM-01, TRU-01 |
+| `example@L212` | SEM-01, TRU-01 |
+
+## `tests/roadmap/bitops/GeneratedBitset.lean`
+
+File premises: PRF-03, SEM-01, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `BitopsGenerated.cardinality_spec` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `BitopsGenerated.firstSet_empty` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `BitopsGenerated.firstSet_spec` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `BitopsGenerated.clearLowest_spec` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `BitopsGenerated.clearLowest_lt` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+
 ## `tests/roadmap/bitops/Runtime.lean`
 
 File premises: SEM-01, TRU-01
@@ -1839,6 +1890,36 @@ File premises: SEM-01, TRU-01
 | `example@L22` | SEM-01, TRU-01 |
 | `example@L23` | SEM-01, TRU-01 |
 | `example@L24` | SEM-01, TRU-01 |
+| `example@L28` | SEM-01, TRU-01 |
+| `example@L29` | SEM-01, TRU-01 |
+| `example@L30` | SEM-01, TRU-01 |
+| `example@L31` | SEM-01, TRU-01 |
+| `example@L32` | SEM-01, TRU-01 |
+| `example@L33` | SEM-01, TRU-01 |
+| `example@L35` | SEM-01, TRU-01 |
+| `example@L36` | SEM-01, TRU-01 |
+| `example@L37` | SEM-01, TRU-01 |
+| `example@L40` | SEM-01, TRU-01 |
+| `example@L42` | SEM-01, TRU-01 |
+| `example@L44` | SEM-01, TRU-01 |
+| `example@L46` | SEM-01, TRU-01 |
+| `example@L47` | SEM-01, TRU-01 |
+| `example@L48` | SEM-01, TRU-01 |
+| `example@L49` | SEM-01, TRU-01 |
+| `example@L50` | SEM-01, TRU-01 |
+| `example@L51` | SEM-01, TRU-01 |
+| `example@L52` | SEM-01, TRU-01 |
+| `example@L53` | SEM-01, TRU-01 |
+| `example@L54` | SEM-01, TRU-01 |
+| `example@L55` | SEM-01, TRU-01 |
+| `example@L56` | SEM-01, TRU-01 |
+| `example@L57` | SEM-01, TRU-01 |
+| `example@L58` | SEM-01, TRU-01 |
+| `example@L59` | SEM-01, TRU-01 |
+| `example@L60` | SEM-01, TRU-01 |
+| `example@L61` | SEM-01, TRU-01 |
+| `example@L62` | SEM-01, TRU-01 |
+| `example@L63` | SEM-01, TRU-01 |
 
 ## `tests/roadmap/byte-permutation/Contracts.lean`
 
