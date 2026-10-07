@@ -557,6 +557,12 @@ jobs:
           lake env lean tests/roadmap/deadline-cases/Contracts.lean
           lake env lean --run tests/roadmap/deadline-cases/Runtime.lean
 
+      # Translated worker idle loop: safety under every schedule, progress only under the
+      # explicit THR-09 fairness premise, and a starving schedule (docs/progress-hints.md).
+      - name: Worker idle-loop safety, fairness-premised progress and starvation
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: bash tests/roadmap/idle-loops/check.sh
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'
