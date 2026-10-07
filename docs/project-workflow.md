@@ -176,7 +176,7 @@ Every input is optional; a missing input leaves its stages `not_run`. Evidence s
 | `translated` | `--artifact` | `verify` succeeds: manifest, inputs, generated Lean and translator hashes current |
 | `compiled` | `--receipt` ([proof receipt](proof-receipts.md) attempt) | `proof-receipt.py verify` reports `current`; some receipt `after.json` generated profile is byte-identical to the artifact's `Gen.lean`; each contract file's current hash equals the receipt source inventory; generated and contract modules are in the compiled inventory |
 | `proved` | receipt `audit.json` | per goal (below); `passed` only when every declared goal is `direct` |
-| `tested` | `--diff` (repeatable, typed diff-report summary + `.jsonl`) | summary complete; it hashes at least one declared source-closure file and all such hashes are current; at least one match and no mismatch, host difference, input or harness failure for `example.function` |
+| `tested` | `--diff` (repeatable, typed diff-report summary + `.jsonl`) | summary complete; it hashes at least one declared source-closure file and all such hashes are current; at least one match and no mismatch, host difference, input or harness failure or unrecognized status for `example.function` |
 
 The receipt verifier defaults to `scripts/proof-receipt.py` and can be overridden with
 `--receipt-verifier` (tests use a mock). Any nonzero exit or non-`current` answer marks

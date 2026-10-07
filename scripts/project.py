@@ -730,16 +730,12 @@ def load_receipt(attempt, verifier, limits):
     current, detail = run_receipt_verifier(verifier, attempt, limits)
     if not current:
         return None, f'stale or unverifiable receipt: {detail}'
-    nodes = {}
-    for node in audit['nodes']:
-        if isinstance(node, dict) and isinstance(node.get('name'), str):
-            nodes[node['name']] = node
+    nodes = {n['name']: n for n in audit['nodes'] if isinstance(n, dict) and isinstance(n.get('name'), str)}
     theorems = {t['name']: t for t in audit['theorems'] if isinstance(t, dict) and isinstance(t.get('name'), str)}
     sources = {row['path']: source_sha(row) for row in after['context']['sources']
                if isinstance(row, dict) and isinstance(row.get('path'), str)}
     compiled_paths = {row['path'] for row in after['compiled'] if isinstance(row, dict) and isinstance(row.get('path'), str)}
-    return {'attempt': str(attempt), 'root': Path(plan['root']), 'modules': set(plan['modules']),
-            'scope': plan.get('scope'), 'nodes': nodes, 'theorems': theorems, 'sources': sources,
+    return {'attempt': str(attempt), 'root': Path(plan['root']), 'nodes': nodes, 'theorems': theorems, 'sources': sources,
             'compiled': compiled_paths, 'profiles': after['profiles'],
             'trust': {k: receipt.get(k) for k in ('authentication', 'source_correspondence', 'native_adequacy', 'proof_scope')}}, None
 
@@ -763,40 +759,44 @@ def compiled_olean(bundle, module):
     return any(path.endswith(suffix) for path in bundle['compiled'])
 
 
-def bind_receipt(root, base, generated_sha, bundle):
+def goal_rows(root, binding, reason):
+    return [dict(goal, binding=binding, reason=reason, audited_theorem=None) for goal in root['goals']]
+
+
+def bind_receipt(root, base, generated_sha, bundle, file_hashes):
     """Compiled status plus per-goal theorem bindings for one root."""
-    goals = []
-    def goal_rows(status, reason):
-        return [dict(goal, binding=status, reason=reason, audited_theorem=None) for goal in root['goals']]
     if generated_sha is None:
         reason = 'no verified translation artifact; generated Lean cannot be bound to the receipt'
-        return stage('not_run', reason), goal_rows('unbound', reason)
+        return stage('not_run', reason), goal_rows(root, 'unbound', reason)
     matches = sorted(path for path, entry in bundle['profiles'].items()
                      if isinstance(entry, dict) and entry.get('sha256') == generated_sha)
     gen_modules = sorted({module_of(p) for p in matches} - {None})
     if not gen_modules:
         reason = 'source hash mismatch: receipt compiled no generated Lean byte-identical to the translation artifact'
-        return stage('failed', reason), goal_rows('source_hash_mismatch', reason)
+        return stage('failed', reason), goal_rows(root, 'source_hash_mismatch', reason)
     contracts = {}
     for name in root['contracts']:
-        path = (base / name).resolve()
+        # Lexical path: the receipt inventories (and Lean names) the tracked path, not a symlink target.
+        path = base / name
         if not path.is_relative_to(bundle['root']):
             reason = f'contract {name} lies outside the receipt repository'
-            return stage('failed', reason), goal_rows('unbound', reason)
+            return stage('failed', reason), goal_rows(root, 'unbound', reason)
+        # Preflight already hashed every declared contract; unreadable ones have no hash.
         recorded = bundle['sources'].get(str(path))
-        if recorded is None or recorded != hash_bounded(path, LIMITS['max_file_bytes'])[0]:
+        if recorded is None or recorded != file_hashes.get(name):
             reason = f'source hash mismatch: contract {name} differs from receipt source inventory'
-            return stage('failed', reason), goal_rows('source_hash_mismatch', reason)
+            return stage('failed', reason), goal_rows(root, 'source_hash_mismatch', reason)
         contracts[name] = module_of(path.relative_to(bundle['root']))
     gen_modules = [m for m in gen_modules if compiled_olean(bundle, m)]
     missing = [name for name, m in contracts.items() if not m or not compiled_olean(bundle, m)]
     if not gen_modules or missing:
         reason = f'receipt compiled inventory lacks generated module or contracts {missing}'
-        return stage('failed', reason), goal_rows('unbound', reason)
+        return stage('failed', reason), goal_rows(root, 'unbound', reason)
     compiled = stage('passed', 'current receipt compiled byte-identical generated Lean and declared contracts',
                      generated_modules=gen_modules, generated_paths=matches, receipt=bundle['attempt'])
     definition = root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
     contract_modules = set(contracts.values())
+    goals = []
     for goal in root['goals']:
         name = next((n for n in (goal['theorem'], root['namespace'] + '.' + goal['theorem']) if n in bundle['theorems']), None)
         row = dict(goal, audited_theorem=name)
@@ -851,7 +851,8 @@ def diff_coverage(root, source_closure, file_hashes, summaries):
     total = sum(counts.values())
     if not total:
         return stage('not_run', 'no differential cases recorded for this root function', counts=counts), exclusions
-    failures = {s: counts[s] for s in DIFF_FAILURES if counts.get(s)}
+    # Fail closed on statuses this reader does not know how to classify.
+    failures = {s: n for s, n in counts.items() if s in DIFF_FAILURES or s not in DIFF_MATCHES + DIFF_EXCLUSIONS}
     if failures:
         return stage('failed', f'differential failures: {failures}', counts=counts, scope='sampled'), exclusions
     if not any(counts.get(s) for s in DIFF_MATCHES):
@@ -879,22 +880,23 @@ def coverage_level(record):
     strengths = {g['strength'] for g in direct}
     if not strengths & set(FUNCTIONAL):
         blockers.append('no direct theorem has functional strength (partial/total correctness)')
-    elif 'total_correctness' not in strengths:
+    # Every functional precondition (preflight, translated, compiled, all goals direct) is a blocker above.
+    functional = not blockers
+    total = 'total_correctness' in strengths
+    if strengths & set(FUNCTIONAL) and not total:
         blockers.append('termination not proved: only partial_correctness theorems are direct')
-    if ok['translated'] and ok['compiled'] and not [b for b in blockers if not b.startswith('termination')]:
-        level = 'functionally_verified_total' if 'total_correctness' in strengths else 'functionally_verified_partial'
-    elif ok['translated'] and ok['compiled'] and direct:
-        level = 'proved_scoped'
-    elif ok['translated'] and ok['compiled'] and ok['tested']:
-        level = 'tested_sampled'
-    elif ok['translated'] and ok['compiled']:
-        level = 'compiled'
-    elif ok['translated']:
+    if record['input_validation']['status'] != 'passed' or not ok['translated']:
+        level = 'none'
+    elif functional:
+        level = 'functionally_verified_total' if total else 'functionally_verified_partial'
+    elif not ok['compiled']:
         level = 'translated'
+    elif direct:
+        level = 'proved_scoped'
+    elif ok['tested']:
+        level = 'tested_sampled'
     else:
-        level = 'none'
-    if record['input_validation']['status'] != 'passed':
-        level = 'none'
+        level = 'compiled'
     return level, blockers
 
 
@@ -922,15 +924,15 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
         if translated is not None:
             stages['translated'] = translated
         if receipt is None:
-            goals = [dict(g, binding='no_receipt', reason='no proof receipt supplied', audited_theorem=None) for g in root['goals']]
+            goals = goal_rows(root, 'no_receipt', 'no proof receipt supplied')
             stages['compiled'] = stage('not_run', 'no proof receipt supplied')
             stages['proved'] = stage('not_run', 'no proof receipt supplied')
         elif bundle is None:
-            goals = [dict(g, binding='stale_receipt', reason=receipt_error, audited_theorem=None) for g in root['goals']]
+            goals = goal_rows(root, 'stale_receipt', receipt_error)
             stages['compiled'] = stage('failed', receipt_error)
             stages['proved'] = stage('failed', receipt_error)
         else:
-            stages['compiled'], goals = bind_receipt(root, base, generated.get(root['id']), bundle)
+            stages['compiled'], goals = bind_receipt(root, base, generated.get(root['id']), bundle, file_hashes)
             bound = sum(g['binding'] == 'direct' for g in goals)
             if stages['compiled']['status'] != 'passed':
                 stages['proved'] = stage(stages['compiled']['status'], stages['compiled']['reason'])
@@ -966,8 +968,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
     return {'schema': SCHEMA, 'kind': 'air2lean-coverage-report', 'manifest_sha256': report['manifest_sha256'],
             'levels': list(LEVELS), 'roots': roots, 'diagnostics': report['diagnostics'],
             'rules': ['Sampled differential tests never raise a root above tested_sampled.',
-                      'A theorem counts only when its audited dependency closure reaches the generated root definition '
-                      'in a module byte-identical to the verified translation artifact (wrapper theorems do not).',
+                      'A theorem counts only when its own audited declaration (statement or proof term) directly references '
+                      'the generated root definition in a module byte-identical to the verified translation artifact; '
+                      'theorems reaching it only through wrappers or lemmas do not count. A wrapper statement whose proof '
+                      'term mentions the root still counts, so declared strength and domain remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.'],
@@ -989,6 +993,12 @@ def coverage_text(result):
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
         lines.extend(f'  blocker: {b}' for b in root['blockers'])
     return '\n'.join(lines) + '\n'
+
+
+def reject_input_overlap(out, manifest_path, manifest):
+    protected = {manifest_path} | {manifest_path.parent / name for name in input_names(manifest)}
+    if out.resolve() in {p.resolve() for p in protected}:
+        raise Invalid('report destination overlaps an input file')
 
 
 def main(argv=None):
@@ -1014,9 +1024,7 @@ def main(argv=None):
                               args.receipt, args.receipt_verifier.resolve(), [d.resolve() for d in args.diff])
             encoded = report_bytes(result, LIMITS)
             if args.out:
-                protected = {args.manifest.resolve()} | {args.manifest.resolve().parent / name for name in input_names(load_manifest(args.manifest.resolve())[0])}
-                if args.out.resolve() in {p.resolve() for p in protected}:
-                    raise Invalid('report destination overlaps an input file')
+                reject_input_overlap(args.out, args.manifest.resolve(), load_manifest(args.manifest.resolve())[0])
                 atomic_report(args.out, encoded, args.overwrite)
             print(coverage_text(result) if args.format == 'text' else encoded.decode('utf-8'), end='')
             if result['diagnostics']:
@@ -1048,9 +1056,7 @@ def main(argv=None):
                     os.rename(staging, args.out)
         else:
             if args.out:
-                protected = {args.manifest.resolve()} | {args.manifest.resolve().parent / name for name in input_names(manifest)}
-                if args.out.resolve() in {p.resolve() for p in protected}:
-                    raise Invalid('report destination overlaps an input file')
+                reject_input_overlap(args.out, args.manifest.resolve(), manifest)
             encoded = report_bytes(report, limits)
             if args.out:
                 atomic_report(args.out, encoded, args.overwrite)

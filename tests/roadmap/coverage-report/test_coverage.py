@@ -249,8 +249,26 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual(root['stages']['tested']['status'], 'passed')
         self.assertIn('differential unspecified_exclusion: 1 sampled case(s)', root['exclusions'])
+        self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'future_status'},
+                         {'schema': 1, 'example': 'example', 'function': 'root', 'status': 'value_match'}])
+        self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')  # unknown statuses fail closed
         self.diff.write_text(json.dumps({'schema': 1, 'complete': False}))
         self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')
+
+    def test_symlinked_contract_binds_by_tracked_path(self):
+        (self.base / 'contract-target.lean').write_text('contract.lean\n')
+        (self.base / 'contract.lean').unlink()
+        (self.base / 'contract.lean').symlink_to('contract-target.lean')
+        root = self.run_coverage()
+        self.assertEqual(root['stages']['compiled']['status'], 'passed', root['stages']['compiled'])
+        self.assertEqual(root['goals'][0]['binding'], 'direct')
+
+    def test_deleted_contract_reports_without_aborting(self):
+        (self.base / 'contract.lean').unlink()
+        root = self.run_coverage()
+        self.assertEqual(root['input_validation']['status'], 'failed')
+        self.assertEqual(root['goals'][0]['binding'], 'unbound')
+        self.assertEqual(root['level'], 'none')
 
     def test_no_evidence(self):
         root = self.run_coverage(receipt=False, diff=False, artifact=False)
