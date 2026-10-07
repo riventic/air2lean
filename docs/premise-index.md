@@ -5,27 +5,27 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1850 theorems in 100 files.
+1858 theorems in 101 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 535 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 536 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 40 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 40 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 45 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 45 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1025 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 67 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1033 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 68 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
-| [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 741 | Futex model |
+| [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
+| [THR-05](premises.md#thr-05) | 743 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 917 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 854 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 854 | No load buffering in compiled code |
+| [THR-08](premises.md#thr-08) | 920 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [ORD-01](premises.md#ord-01) | 860 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 860 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 312 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
@@ -35,16 +35,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1737 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1475 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 892 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 1745 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1483 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 893 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 28 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1850 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 868 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 868 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1858 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 869 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 869 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -386,6 +386,8 @@ File premises: PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, S
 
 | Theorem | Premises |
 |---|---|
+| `Iogroup.GroupCounter.ioOk_iff` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Iogroup.GroupCounter.covers_io` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Iogroup.GroupCounter.blk1_step` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Iogroup.GroupCounter.stable` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Iogroup.GroupCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -435,6 +437,7 @@ File premises: PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, S
 | `Iogroup.GroupCounter.main_spec` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.groupCounter_spec` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.groupCounter_safe` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Iogroup.GroupCounter.groupCounter_reclaim` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Layout/Mem.lean`
 
@@ -2371,6 +2374,18 @@ File premises: ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, TRU-01
 |---|---|
 | `example@L5` | ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, TRU-01 |
 | `example@L7` | ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/shared-reclamation/Runtime.lean`
+
+File premises: ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `twoReaders_joined_free_ok` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `twoReaders_one_outstanding_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `twoReaders_none_returned_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `read_after_free_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `free_before_late_reader_ok` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/spawn-failure/Runtime.lean`
 

@@ -1,5 +1,6 @@
 import Proofs.Iogroup.Gen
 import ZigLean.Conc.LockRules
+import ZigLean.Conc.Share
 
 /-!
 # `groupCounter` over all schedules
@@ -79,10 +80,19 @@ def S : States Io_Mutex_State where
   ne02 := by decide
   ne12 := by decide
 
-/-- Each access to the bytes of `io` (0..16 of the `Counter`) is a read, or happened before every
-thread. -/
+/-- The accesses to the bytes of `io` (0..16 of the `Counter`). -/
+def IoR (e : FootprintEntry) : Prop := e.block = 0 ∧ e.off < 16
+
+/-- The tasks read-share `io` (`ZigLean/Conc/Share.lean`): each access to it is a read that
+happened before some thread, or happened before every thread. -/
 def IoOk (m : Mem) : Prop :=
-  ∀ e ∈ m.footprint, e.block = 0 → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
+  ∀ e ∈ m.footprint, e.block = 0 → e.off < 16 → (e.kind = .read ∧ SomeLe m e.clock) ∨
+    AllLe m e.clock
+
+theorem ioOk_iff {m : Mem} : IoOk m ↔ ReadShared IoR m :=
+  ⟨fun h e he hr => h e he hr.1 hr.2, fun h e he hb ho => h e he ⟨hb, ho⟩⟩
+
+theorem covers_io : Covers IoR 0 0 16 := fun _ hb _ h2 => ⟨hb, by omega⟩
 
 /-- The tasks of the group after `j` spawns. -/
 def grp (j : Nat) : Array (Ptr × ThreadId) := (Array.range j).map fun i => (gPtr, i + 1)
@@ -126,9 +136,14 @@ def proto : Proto Tgt Gh where
   strict := true
   joins g := g.1.ph = .out ∧ ∃ i, g.2 = .joins i
 
-/-- `main`'s post: the result. -/
+/-- Join before free: block 0 (the `Counter`, with the read-shared `io`) is freed, and every
+access to `io` happened before `main` (`ZigLean/Conc/Share.lean`'s `RegionOwned`). -/
+def Reclaimed (m : Mem) : Prop :=
+  (∃ blk, m.blocks[0]? = some blk ∧ blk.live = false) ∧ RegionOwned IoR m (m.clocks[0]!)
+
+/-- `main`'s post: the result, all tasks joined, and `io` reclaimed. -/
 def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Prop :=
-  fun v _ m _ => v = .ok 3 ∧ joinedAll 0 m
+  fun v _ m _ => v = .ok 3 ∧ joinedAll 0 m ∧ Reclaimed m
 
 /-! ## The protocol has the lock -/
 
@@ -152,8 +167,8 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
   refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, ?_, blk1_step hs hblk1, fun v hv => ?_⟩
   · rw [snd_set]; unfold Shape at hsh ⊢; rw [hs.threads, hs.groups, hjb]; exact hsh
   · rcases hs.fp e he with h' | ⟨hb', ho', -⟩
-    · rcases hio e h' hb ho with h'' | h''
-      · exact .inl h''
+    · rcases hio e h' hb ho with ⟨hk, h''⟩ | h''
+      · exact .inl ⟨hk, someLe_mono hs.threads (fun u _ => hs.clocks u) h''⟩
       · exact .inr (hs.allLe h'')
     · exact absurd ho (by rw [ho']; decide)
   · unfold upd; split
@@ -458,8 +473,8 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     blk1_keep hi.2.blk1 (hcell 1 0 (.inr rfl) (blk1_heap hi.2.blk1)), fun v hv => ?_⟩
   · rw [snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads, hs.groups, hjb]; exact hsh
   · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
-    · rcases hi.2.io e h' hb ho with h'' | h''
-      · exact .inl h''
+    · rcases hi.2.io e h' hb ho with ⟨hk, h''⟩ | h''
+      · exact .inl ⟨hk, someLe_mono hs.threads (fun u _ => hs.clock u) h''⟩
       · exact .inr (allLe_stepIn hs h'')
     · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
         rw [hb, hrest _ _ (.inl ⟨rfl, by omega⟩)]; exact blk_heap hi.2.blk (by omega)⟩ hnt
@@ -477,10 +492,7 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
 
 theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
     NoRace m 0 0 16 .read :=
-  noRace_of fun e he hb _ h2 => by
-    rcases hio e he hb (by omega) with h | h
-    · exact .inr (by rw [h]; rfl)
-    · exact .inl (h _ ht)
+  (ioOk_iff.mp hio).noRace_read ht covers_io
 
 /-- A read of `io` (bytes 0..16 of the `Counter`) by a thread that is not joined: no race, and
 the invariant holds after it. -/
@@ -496,13 +508,8 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
   · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1 (by decide)
       (fun u x _ hx => own_none hi u (.inl ⟨rfl, by omega⟩))
       (fun hL hR x _ hx => pts_none hR (.inl ⟨rfl, by omega⟩)) (.inr (.inl (by decide)))
-  · refine ⟨hi.2.shape, fun e he hb ho => ?_, hi.2.parts, hi.2.blk, hi.2.blk1, fun v hv => ?_⟩
-    · simp only [Mem.recordAt, Array.mem_push] at he
-      rcases he with he | rfl
-      · rcases hi.2.io e he hb ho with h | h
-        · exact .inl h
-        · exact .inr fun u hu => VClock.le_trans (h u hu) (recordAt_le m 0 0 16 .read u)
-      · exact .inl rfl
+  · refine ⟨hi.2.shape, ioOk_iff.mpr ((ioOk_iff.mp hi.2.io).read ht
+      (by rw [hi.1.own.csize]) 0 0 16), hi.2.parts, hi.2.blk, hi.2.blk1, fun v hv => ?_⟩
     · have hv' : joinedB m v = true := hv
       obtain ⟨h1, h2⟩ := hi.2.jle v hv'
       refine ⟨h1, ?_⟩
@@ -889,7 +896,7 @@ theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j
       .inl ⟨j' + 1, by omega,
         by show (upd (upd G₁ (j' + 1) (gTask false)) 0 (gSpawn (j' + 1)) 0).2 = _
            rw [upd_self]; rfl, by simp [hsz],
-        by rw [hgr, grp_succ], fun u => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_, hi.2.blk,
+        by rw [hgr, grp_succ], fun u => ?_⟩⟩, ?_, fun u => ?_, hi.2.blk,
       hi.2.blk1, fun v hv => ?_⟩⟩
   · -- the counter does not change: the new task has not done its increment
     apply R_main
@@ -924,16 +931,13 @@ theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j
     by_cases hu : u = m₁.threads.size
     · simp [hu]
     · rw [if_neg hu]; have := hjb u; unfold joinedB at this; exact this
-  · rcases hi.2.io e he hb ho16 with h | h
-    · exact .inl h
-    · obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₁.clocks) (t := 0) (by
-        rw [hcs]; exact Nat.succ_pos _)
-      refine .inr fun u hu => ?_
-      simp only [Array.size_push] at hu
-      by_cases hu' : u < m₁.threads.size
-      · exact VClock.le_trans (h u hu') (hcl u (by rw [hi.1.own.csize]; exact hu'))
-      · have : u = m₁.clocks.size := by rw [hi.1.own.csize]; omega
-        subst this; exact VClock.le_trans (h 0 (by rw [hsz]; omega)) hcn
+  · obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₁.clocks) (t := 0) (by
+      rw [hcs]; exact Nat.succ_pos _)
+    exact ioOk_iff.mpr ((ioOk_iff.mp hi.2.io).fork (t := 0)
+      (by rw [← hi.1.own.csize, hcs]; exact Nat.succ_pos _)
+      (by show (m₁.threads.push _).size = _; simp)
+      (fun u hu => hcl u (by rw [hi.1.own.csize]; exact hu)) (by rw [← hi.1.own.csize]; exact hcn)
+      fun _ he _ => he)
   · unfold upd; split
     · rfl
     · split
@@ -1053,7 +1057,7 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     rw [upd_ne _ _ hu]
   refine ⟨by rw [hm'], hl, ⟨⟨?_, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨i' + 1, by omega,
     by show (upd G₁ 0 _ 0).2 = _; rw [upd_self]; rfl, hsz', by rw [hm']; exact hgr, fun u => ?_⟩⟩,
-    fun e he hb ho16 => ?_, fun u => ?_, ?_, ?_, fun v hv => ?_⟩⟩
+    ?_, fun u => ?_, ?_, ?_, fun v hv => ?_⟩⟩
   · rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (by omega)]
     exact h00
   · rw [hsz'] at hu
@@ -1077,13 +1081,11 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     · subst hu; simp
     · rw [if_neg hu, hjb u]
       constructor <;> intro h <;> unfold ThreadId at * <;> omega
-  · rcases hi.2.io e (by rw [hm'] at he; exact he) hb ho16 with h | h
-    · exact .inl h
-    · refine .inr fun u hu => ?_
-      rw [hsz'] at hu
-      by_cases hu0 : u = 0
-      · subst hu0; exact VClock.le_trans (h 0 (by rw [hsz]; decide)) hgrow
-      · rw [hcv u hu0]; exact h u (by rw [hsz]; exact hu)
+  · refine ioOk_iff.mpr ((ioOk_iff.mp hi.2.io).keep (by rw [hsz', hsz]) (fun u _ => ?_)
+      fun e he _ => by rw [hm'] at he; exact he)
+    by_cases hu0 : u = 0
+    · subst hu0; exact hgrow
+    · rw [hcv u hu0]; exact VClock.le_refl _
   · unfold upd; split
     · rfl
     · exact hi.2.parts u
@@ -1170,11 +1172,13 @@ theorem groups_spawn3 {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (
   · change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [upd_self] at h0; cases h0; exact hgr
   · change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [upd_self] at h0; cases h0
 
-/-- After the three joins: `main` owns the counter, which holds 3; every thread is joined. -/
+/-- After the three joins: `main` owns the counter, which holds 3; every thread is joined, and
+the tasks' read shares of `io` are back: `main` owns `io` alone (`ReadShared.reclaim`). -/
 theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoins 3)) m) :
     ∃ own : ThreadId → Heap, ∃ rest, Owned own m ∧
       (pts (cPtr.add 20) 4 (BitVec.ofNat 32 3) ∗ fun h => h = rest) (own 0) ∧
-      m.threads.size = 4 ∧ joinedAll 0 m ∧ BlkOk m ∧ Blk1 m := by
+      m.threads.size = 4 ∧ joinedAll 0 m ∧ BlkOk m ∧ Blk1 m ∧
+      RegionOwned IoR m (m.clocks[0]!) := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
   have hX0 : (upd G 0 (gJoins 3) 0).2 = .joins 3 := by rw [upd_self]; rfl
   obtain ⟨j, -, h0, -⟩ | ⟨i, -, h0, hsz, -, hjb⟩ := hph
@@ -1201,11 +1205,13 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoi
         cases hu
       · have := (hi.1.live u (by rw [hu]; decide)).1
         rw [hsz] at this; unfold ThreadId at *; omega
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hi.1.take (t := 0) (by rw [hsz]; decide) hF (by rw [upd_self]; decide) fun u hu => by
+  have hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[0]!) = true := fun u hu => by
     by_cases h0 : u = 0
     · subst h0; exact VClock.le_refl _
     · rw [hsz] at hu
       exact (hi.2.jle u ((hjb u).mpr ⟨Nat.pos_of_ne_zero h0, by unfold ThreadId at *; omega⟩)).2
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ :=
+    hi.1.take (t := 0) (by rw [hsz]; decide) hF (by rw [upd_self]; decide) hall
   have hR3 : pts (cPtr.add 20) 4 (BitVec.ofNat 32 3) hL := by
     have : R (fun u => (upd G 0 (gJoins 3) u).2) hL := hR
     have h3 : sum (fun u => (upd G 0 (gJoins 3) u).2) = 3 := by
@@ -1220,7 +1226,8 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoi
   have heq : own 0 ∪ (hL ∪ L.wordH m) = hL ∪ (own 0 ∪ L.wordH m) :=
     Heap.union_left_comm (Heap.disjoint_union_right.mp hd).1
   refine ⟨_, own 0 ∪ L.wordH m, ho, by rw [upd_self, heq]; exact ⟨hL, _, hd', rfl, hR3, rfl⟩, hsz,
-    fun r hr hsp => ?_, hi.2.blk, hi.2.blk1⟩
+    fun r hr hsp => ?_, hi.2.blk, hi.2.blk1,
+    (ioOk_iff.mp hi.2.io).reclaim (by rw [hsz]; decide) hall⟩
   obtain ⟨k, hk, rfl⟩ := Array.mem_iff_getElem.mp hr
   by_cases hk0 : k = 0
   · subst hk0
@@ -1350,7 +1357,7 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.pure' ?_
   simp only [StateT.run_bind]
   -- the counter holds 3
-  obtain ⟨own, rest, ho, hp, hsz, hja, hbk, hb1⟩ := inv_final hi₁₁
+  obtain ⟨own, rest, ho, hp, hsz, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4)
     (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; decide) hp
     fun a m₁₂ hQ hr ho' hq hs₁₂ _ _ => ?_)
@@ -1371,11 +1378,16 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
     simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₁)
     hl₁ e he).elim) fun _ m₁₄ hfr' => ?_)
-  obtain ⟨-, -, -, -, rfl⟩ := free_ok hfr'
-  refine ⟨rfl, WP.pure' ⟨rfl, ?_⟩⟩
-  have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂]; rfl
-  intro r hr hsp
-  exact hja r (by simpa [hth] using hr) hsp
+  obtain ⟨b'', -, hb'', -, rfl⟩ := free_ok hfr'
+  cases hb''
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk' with live := false }, ?_, rfl⟩, ?_⟩⟩
+  · have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂]; rfl
+    exact hja r (by simpa [hth] using hr) hsp
+  · simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (by decide : (1 : Nat) ≠ 0)]
+    exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk').1
+  · show RegionOwned IoR m₁₂ (m₁₂.clocks[0]!)
+    rw [hm₁₂]
+    exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; decide) b o 4 .read
 
 /-! ## The results -/
 
@@ -1384,13 +1396,25 @@ theorem groupCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (Bi
     (io : Io) (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
     v = .ok 3 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
   exact hv
 
 /-- **No run of `groupCounter` gives an error**: no data race on the counter, no deadlock at the
 futex or at `Group.await`, no panic, under every schedule. -/
 theorem groupCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     (Sched.run dispatch fuel o (groupCounter io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec io)
+
+/-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
+0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined
+and every access to `io` happened before it. The run ends right after the frees, which change no
+thread, clock or footprint entry, so the final memory gives these facts at the free. -/
+theorem groupCounter_reclaim {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+    {m : Mem} (io : Io)
+    (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
+    joinedAll 0 m ∧ Reclaimed m := by
+  obtain ⟨_, _, -, hq⟩ := proto.run_sound dispatch G0 dispatch_spec
+    (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
+  exact hq
 
 end Iogroup.GroupCounter

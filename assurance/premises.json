@@ -63,6 +63,7 @@
     "ZigLean.Conc.Lemmas": ["THR-08"],
     "ZigLean.Conc.Lock": ["THR-08", "THR-05"],
     "ZigLean.Conc.LockRules": ["THR-08", "THR-05"],
+    "ZigLean.Conc.Share": ["THR-08"],
     "ZigLean.Conc.Word": ["THR-08", "THR-05", "ORD-01"],
     "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],
