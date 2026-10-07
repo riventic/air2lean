@@ -5,27 +5,28 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1867 theorems in 89 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 364 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1090 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 106 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 688 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
-| [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 901 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 759 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 759 | No load buffering in compiled code |
+| [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
+| [THR-08](premises.md#thr-08) | 943 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
+| [ORD-01](premises.md#ord-01) | 823 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 823 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
@@ -35,15 +36,15 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 1113 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1450 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 843 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 21 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1867 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 863 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 863 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 
 ## `Proofs/Asm/Proofs.lean`
@@ -2022,6 +2023,177 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `GlobalPayloads.equal_alias` | SEM-01, SEM-02, TRU-01 |
 | `GlobalPayloads.read_frame` | SEM-02, SEM-03, TRU-01 |
 | `GlobalPayloads.write_frame` | SEM-02, SEM-03, TRU-01 |
+
+## `tests/roadmap/idle-loops/Check.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-07, THR-08, THR-09, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L8` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L12` | PRF-02, THR-01, THR-02, THR-07, THR-08, THR-09, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L16` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L18` | THR-01, THR-09, TRU-01 |
+| `example@L19` | THR-01, THR-09, TRU-01 |
+| `example@L20` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L22` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L26` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Basic.lean`
+
+File premises: PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.pickC_eq` | THR-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.spinLoopHintC_eq` | THR-01, THR-07, TRU-01 |
+| `IdleLoop.Client.threadYieldC_eq` | THR-01, THR-07, SEM-01, TRU-01 |
+| `IdleLoop.Client.bindC` | THR-01, TRU-01 |
+| `IdleLoop.Client.run_ite` | TRU-01 |
+| `IdleLoop.Client.treeMap_bind` | THR-01, TRU-01 |
+| `IdleLoop.Client.retarget_bind` | THR-01, TRU-01 |
+| `IdleLoop.Client.retarget_pure` | THR-01, TRU-01 |
+| `IdleLoop.Client.retarget_liftMem` | THR-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.retarget_syncPick` | THR-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.retarget_syncYield` | THR-01, TRU-01 |
+| `IdleLoop.Client.retarget_syncChoose` | THR-01, TRU-01 |
+| `IdleLoop.Client.locals_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.iterRun_eq` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.loopRun_eq` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.wLoop_eq` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.worker_eq` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Mem.lean`
+
+File premises: THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.GBlk.congr` | SEM-02, TRU-01 |
+| `IdleLoop.Client.GBlk.write` | SEM-02, TRU-01 |
+| `IdleLoop.Client.acc_g` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.accW_g` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.grow` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.cur` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.record` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.loc_flag` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
+| `IdleLoop.Client.flag_locIdx_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.setLoc` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.FlagLoc.pos` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.noRace_flag` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.readOpts_zero` | THR-01, THR-08, ORD-01, ORD-02, SEM-02, TRU-01 |
+| `IdleLoop.Client.step_load` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.load_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.congr` | THR-01, THR-08, SEM-02, TRU-01 |
+| `IdleLoop.Client.Inv.pushFlag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.step_store` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.store_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.read_run` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Shape.lean`
+
+File premises: PRF-02, THR-01, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.wLoop_succ` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.worker_succ` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.wAfter_zero` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.wAfter_one` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.check_run` | PRF-02, THR-01, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.mainStore_succ` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Steps.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.choose_snd` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.choose_fst` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.pick_two` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.pick_one` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.ready_ne` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.kid_set` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.wstep` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.mstore` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.mjoin` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.turn` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-07, THR-08, THR-09, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.gblk_mem1` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.mem1_fp` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.mem1_cur` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.store_mem1` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.inv_mem2` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.ready_first` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.run_eq` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.run_init` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.run_one` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.run_zero` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.go_safe` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.idle_safe` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.go_starve` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.idle_starves` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.pot_le` | SEM-02, TRU-01 |
+| `IdleLoop.Client.go_tail` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.go_eventually` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.idle_progress` | PRF-02, THR-01, THR-02, THR-07, THR-08, THR-09, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.favorWorker_not_cooperative` | THR-01, THR-09, TRU-01 |
+| `IdleLoop.Client.zero_cooperative` | THR-01, THR-09, TRU-01 |
+| `IdleLoop.Client.progress_needs_premise` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.not_eventuallyReturns` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Total.lean`
+
+File premises: THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.nn_pure` | SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_bind` | SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_get` | SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_set` | SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_modify` | SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_throw` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_lift` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.rnn_pure` | SEM-01, TRU-01 |
+| `IdleLoop.Client.rnn_throw` | SEM-01, TRU-01 |
+| `IdleLoop.Client.rnn_bind` | SEM-01, TRU-01 |
+| `IdleLoop.Client.rnn_access` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.rnn_accessW` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.rnn_intOfBytes` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_recordAccess` | SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_locIdx` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_loadPrep` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_atomicLoadAt` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_storePrep` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.nn_atomicStoreAt` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.ok_of` | SEM-02, TRU-01 |
+
+## `tests/roadmap/idle-loops/IdleLoop/Turns.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `IdleLoop.Client.go_kid` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.go_main` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.ready_store` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.ready_join` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.ready_done` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_start` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_spin` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_yld` | PRF-02, THR-01, THR-02, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_load` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_store` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_store_zero` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `IdleLoop.Client.tt_join` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/local-parent/Proofs.lean`
 

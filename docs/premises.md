@@ -59,7 +59,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
@@ -214,7 +214,8 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Kind: environment.
 - Statement: `Thread.yield` and `spinLoopHint` are scheduling opportunities only. `yield`
   may return `SystemCannotYield`. No fence, happens-before edge or fairness follows. Total
-  results hold only for the finite single-task client in `ZigLean.Conc.Total`.
+  results hold for the finite single-task client in `ZigLean.Conc.Total`; any other
+  termination claim names an explicit fairness premise such as THR-09.
 - Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; tokens `spinLoopHint`, `threadYield`.
 - Sources: [progress-hints.md](progress-hints.md).
 
@@ -229,6 +230,19 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
+
+<a id="thr-09"></a>
+### THR-09 — Eventually cooperative schedule (progress premise)
+
+- Kind: environment.
+- Statement: `Cooperative o`: from some oracle index on, every choice of `o` is option 0.
+  The scheduler then runs the lowest-numbered ready thread, and each atomic read reads the
+  newest message. It is a hypothesis of a progress theorem, never a property of the model:
+  every oracle remains a legal schedule, and safety theorems quantify over all of them.
+  Spin hints and `Thread.yield` do not establish it (`IdleLoop.Client.idle_starves`).
+- Derived from: token `Cooperative`.
+- Sources: [progress-hints.md](progress-hints.md#worker-idle-loop),
+  `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`.
 ## Memory ordering
 
 <a id="ord-01"></a>
