@@ -94,6 +94,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
 
+      # Stub translator, Lake and audit; real build-guard and claims. No Lean, Lake or Zig.
+      - name: Project check and reproducibility record regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
+
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
