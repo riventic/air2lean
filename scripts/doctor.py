@@ -155,6 +155,10 @@ class Doctor:
                          'choose %s on this host' % ' or '.join(others))
                 return False
         self.add('zig-version', 'ok', 'selected Zig %s (supported hosts: %s)' % (version, ', '.join(hosts)))
+        if self.versions[version].get('status') == 'in-qualification':
+            self.add('zig-version-status', 'note', 'Zig %s is in qualification: CI runs it, but its '
+                     'version-specific gates and evidence are incomplete' % version,
+                     'use the default Zig %s for qualified results' % self.meta['zig']['default'])
         return True
 
     def lean(self):
