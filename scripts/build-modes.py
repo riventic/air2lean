@@ -144,7 +144,8 @@ def check_shipping(root, data, records, errors):
         return
     for part in ('export', 'native'):
         entry = shipping.get(part)
-        if not isinstance(entry, dict) or not isinstance(entry.get('flags'), str) or not entry.get('sources'):
+        if (not isinstance(entry, dict) or not isinstance(entry.get('flags'), str)
+                or not isinstance(entry.get('sources'), list) or not entry['sources']):
             errors.append(f'shipping.{part}: needs flags and sources')
             continue
         for rel in entry['sources']:
@@ -154,8 +155,14 @@ def check_shipping(root, data, records, errors):
     export = shipping.get('export')
     if isinstance(export, dict) and export.get('recorded_backend') not in BACKENDS.values():
         errors.append('shipping.export: recorded_backend must be a known backend')
-    compat = json.loads((root / 'compatibility.json').read_text(encoding='utf-8'))
-    optimize = compat.get('translation', {}).get('optimize')
+    text = read(root, 'compatibility.json', errors, 'shipping')
+    try:
+        compat = json.loads(text) if text is not None else {}
+    except json.JSONDecodeError as error:
+        errors.append(f'shipping: compatibility.json is not JSON ({error})')
+        compat = {}
+    translation = compat.get('translation') if isinstance(compat, dict) else None
+    optimize = translation.get('optimize') if isinstance(translation, dict) else None
     if shipping.get('compatibility_optimize') != optimize:
         errors.append(f'shipping: compatibility.json translation.optimize is {optimize!r}, '
                       f'record says {shipping.get("compatibility_optimize")!r}')
