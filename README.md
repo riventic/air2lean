@@ -77,6 +77,8 @@ scripts/doctor.sh
 zig-patch/build.sh 0.16.0
 ```
 
+`scripts/doctor.sh` checks every prerequisite (`--json` for tools); [distribution](docs/distribution.md) covers the release compatibility metadata (`compatibility.json`), the clean-container recipe and editor diagnostics.
+
 Then build the translator, dump AIR, translate it, and check the generated Lean in one command:
 
 ```sh

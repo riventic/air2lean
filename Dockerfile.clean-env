@@ -1,0 +1,12 @@
+FROM ubuntu:24.04
+
+# Clean supported environment for scripts/clean-env.sh: only the documented prerequisites.
+# No Lean, elan, Zig or caches are preinstalled; the recipe installs pinned, checksum-verified
+# tools at run time, so every step is the one docs/getting-started.md documents.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash ca-certificates curl git patch python3 xz-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash prover
+
+USER prover
+WORKDIR /home/prover
