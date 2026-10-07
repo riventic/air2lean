@@ -171,8 +171,9 @@ block outside the context and the re-entry blocks unchanged. `call_forbidden` an
 `Contract.comap` adapts an E01 contract to a callback's argument shape.
 
 A call through a function pointer is modelled by `dispatch`. It tries the known targets in
-order and throws `.illegal` for any other pointer, which is the fallback arm of the emitted
-indirect call (`applyTwice_illegal` in `Proofs/Layout/Proofs.lean`). By `dispatch_ok`, a
+order and throws `.illegal` for any other pointer. This mirrors the emitted indirect call, whose
+fallback arm is the same throw (`applyTwice_illegal` in `Proofs/Layout/Proofs.lean`); the
+correspondence is by inspection, not a theorem about the emitter. By `dispatch_ok`, a
 successful call ran a known target. `dispatch_unknown` shows that a pointer with no known
 target and no contract never succeeds, so no effects can be assumed for it, empty ones
 included. The registry still rejects address-taken bindings: a callback contract is a Lean-level
@@ -195,7 +196,7 @@ Negative tests:
 
 - `uncontracted_not_effect_free`: no theorem makes every callback effect-free.
 - `uncontracted_forEach_frame_fails`: an uncontracted callback that frees memory breaks the
-  observer's frame and liveness facts.
+  observer's context-liveness fact.
 - `havoc_not_empty`, `clobber_havoc`: a contract whose frame allows any change does not respect
   the empty footprint, and that freeing callback satisfies it.
 - `havoc_not_callback`: such a contract is not a well-formed non-re-entrant callback contract.

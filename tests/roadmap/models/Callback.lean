@@ -171,12 +171,11 @@ theorem forEach_mark {ctx : Ptr} {xs : List (BitVec 8)} {last : BitVec 8} {befor
     {done : Bool} (run : forEach mark markCallback.stop ctx (xs ++ [last]) before =
       some (.ok (done, after))) :
     FillExample.Filled after ⟨ctx, 1⟩ last ∧ done = true ∧
-      ∀ b, some b ≠ ctx.block → after.blocks[b]? = before.blocks[b]? :=
-  ⟨forEach_mark_last run,
-    (forEach_spec mark_evidence (fun _ => True) (fun _ _ _ _ => trivial)
-      (fun _ _ _ _ _ _ _ => trivial) trivial run).2.2.2 rfl,
-    fun _ => forEach_frame mark_evidence rfl (fun _ => True) (fun _ _ _ _ => trivial)
-      (fun _ _ _ _ _ _ _ => trivial) trivial run⟩
+      ∀ b, some b ≠ ctx.block → after.blocks[b]? = before.blocks[b]? := by
+  have spec := forEach_spec mark_evidence (fun _ => True) (fun _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ _ => trivial) trivial run
+  exact ⟨forEach_mark_last run, spec.2.2.2 rfl,
+    fun b hb => spec.2.2.1 b hb fun _ _ => by simp [markCallback]⟩
 
 /-! ## Negative tests: an uncontracted callback has no empty effects -/
 
@@ -194,8 +193,8 @@ theorem uncontracted_not_effect_free :
   have := congrArg (·.blocks.size) (h clobber (⟨some 0, 0⟩, 0) oneBlock () _ rfl)
   simp [oneBlock] at this
 
-/-- Without a contract, the observer's frame theorem fails: `clobber` ends the context's
-lifetime and changes a block that is not the context. -/
+/-- Without a contract, the observer's liveness fact fails: `clobber` ends the lifetime of a
+live context. -/
 theorem uncontracted_forEach_frame_fails :
     ∃ before after done, forEach clobber (fun _ => false) ⟨some 0, 0⟩ [0] before =
         some (.ok (done, after)) ∧ Live before ⟨some 0, 0⟩ ∧ ¬ Live after ⟨some 0, 0⟩ :=

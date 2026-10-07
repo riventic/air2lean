@@ -2055,7 +2055,7 @@ File premises: THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01
 | `CallbackExample.clobber_havoc` | SEM-02, EXT-01, TRU-01 |
 | `CallbackExample.havoc_not_callback` | SEM-02, EXT-01, TRU-01 |
 | `CallbackExample.unknown_call_fails` | SEM-02, EXT-01, TRU-01 |
-| `example@L243` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `example@L242` | SEM-01, SEM-02, EXT-01, TRU-01 |
 
 ## `tests/roadmap/models/Fill.lean`
 

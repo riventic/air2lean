@@ -14,18 +14,18 @@ external `Contract` over `(context, args)` and adds the following:
 * ownership. The context is borrowed: a call never ends the lifetime of the context block.
 
 Clients reason from `CallbackContract.Holds` alone, so the callback body need not be translated.
-A call through a pointer that has neither a known target nor a contract is `dispatch []`: the
-`throw .illegal` fallback of the emitted indirect call. It never succeeds, so no effects,
+A call through a pointer that has neither a known target nor a contract is `dispatch []`, which
+mirrors the `throw .illegal` fallback of the emitted indirect call. It never succeeds, so no effects,
 including empty ones, follow for it. -/
 namespace Zig.External
 
 inductive Reentrancy where
   | forbidden | allowed
-  deriving BEq, DecidableEq, Repr
+  deriving DecidableEq, Repr
 
 inductive Cancellation where
   | never | byResult
-  deriving BEq, DecidableEq, Repr
+  deriving DecidableEq, Repr
 
 /-- The pointer designates a live block of `m`. -/
 def Live (m : Mem) (p : Ptr) : Prop :=
