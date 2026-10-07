@@ -16,6 +16,7 @@ Reads committed text only; never runs a test, a mutant or a toolchain.
 """
 
 import argparse
+import ast
 import json
 from pathlib import Path
 import re
@@ -50,7 +51,12 @@ def shard_labels(root):
 
 
 def py_mutant_names(root):
-    return set(re.findall(r"^    '([a-z0-9-]+)': \($", (root / PY_MUTANTS).read_text(), re.M))
+    """Keys of the module-level `MUTANTS = {...}` literal, however they are written."""
+    for node in ast.parse((root / PY_MUTANTS).read_text()).body:
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and any(isinstance(t, ast.Name) and t.id == 'MUTANTS' for t in node.targets)):
+            return {k.value for k in node.value.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    raise ValueError(f'{PY_MUTANTS}: no MUTANTS dictionary literal')
 
 
 def repo_file(root, rel, where, problems):
@@ -66,28 +72,37 @@ def repo_file(root, rel, where, problems):
 
 
 def check_entry(root, rid, entry, problems, labels):
-    """Validate one requirement entry; return its mutant category set."""
-    if not isinstance(entry, dict) or set(entry) - {'categories', 'negative_tests', 'mutants', 'note'}:
-        problems.append(f'{rid}: entry must be an object with categories/negative_tests/mutants/note')
-        return set()
+    """Validate one entry; return (declared categories, tests, mutants, mutant categories).
+
+    Malformed parts are recorded as problems and returned empty, so callers never iterate them.
+    """
+    fields = ('categories', 'negative_tests', 'mutants')
+    if (not isinstance(entry, dict) or set(entry) - {*fields, 'note'}
+            or any(not isinstance(entry.get(f, []), list) for f in fields)):
+        problems.append(f'{rid}: entry must be an object with categories/negative_tests/mutants lists and a note')
+        return [], [], [], set()
     declared = entry.get('categories', [])
-    if not isinstance(declared, list) or any(c not in CATEGORIES for c in declared) or len(set(declared)) != len(declared):
+    if any(c not in CATEGORIES for c in declared) or len(set(declared)) != len(declared):
         problems.append(f'{rid}: categories must be distinct names from {", ".join(CATEGORIES)}')
-    for i, test in enumerate(entry.get('negative_tests', [])):
+        declared = []
+    tests, mutants = entry.get('negative_tests', []), entry.get('mutants', [])
+    for i, test in enumerate(tests):
         where = f'{rid}: negative_tests[{i}]'
-        if not isinstance(test, dict) or set(test) != {'path', 'anchor'} or not isinstance(test['anchor'], str) or not test['anchor']:
+        if (not isinstance(test, dict) or set(test) != {'path', 'anchor'}
+                or not isinstance(test['anchor'], str) or not test['anchor']):
             problems.append(f'{where}: needs exactly a path and a nonempty anchor')
             continue
         text = repo_file(root, test['path'], where, problems)
         if text is not None and test['anchor'] not in text:
             problems.append(f'{where}: anchor {test["anchor"]!r} not in {test["path"]}')
-    found, seen = set(), set()
-    for i, mutant in enumerate(entry.get('mutants', [])):
+    found, seen, valid = set(), set(), []
+    for i, mutant in enumerate(mutants):
         where = f'{rid}: mutants[{i}]'
         if (not isinstance(mutant, dict) or not {'name', 'path', 'category'} <= set(mutant) <= {'name', 'path', 'category', 'anchor'}
-                or not isinstance(mutant['name'], str) or not mutant['name']):
+                or any(not isinstance(mutant[k], str) or not mutant[k] for k in ('name', 'path', 'category'))):
             problems.append(f'{where}: needs name, path, category and optional anchor')
             continue
+        valid.append(mutant)
         key = (mutant['path'], mutant['name'])
         if key in seen:
             problems.append(f'{where}: duplicate mutant {mutant["name"]}')
@@ -111,7 +126,7 @@ def check_entry(root, rid, entry, problems, labels):
                 problems.append(f'{where}: anchor {mutant.get("anchor")!r} not in {mutant["path"]}')
         elif f"'{name}'" not in text and f'"{name}"' not in text:
             problems.append(f'{where}: no mutant named {name!r} in {mutant["path"]}')
-    return found
+    return declared, tests, valid, found
 
 
 def analyze(root=ROOT, data=None):
@@ -137,16 +152,13 @@ def analyze(root=ROOT, data=None):
         entry = entries.get(rid)
         if entry is None:
             continue
-        found = check_entry(root, rid, entry, problems, labels)
-        if not isinstance(entry, dict):
-            continue
-        tests, mutants = entry.get('negative_tests', []), entry.get('mutants', [])
+        declared, tests, mutants, found = check_entry(root, rid, entry, problems, labels)
         for m in mutants:
-            if isinstance(m, dict) and m.get('category') in by_category:
-                by_category[m['category']].append(f'{rid}:{m.get("name")}')
-                if m.get('path') in mapped:
-                    mapped[m['path']].add(m.get('name'))
-        missing = [c for c in entry.get('categories', []) if c not in found]
+            if m['category'] in by_category:
+                by_category[m['category']].append(f'{rid}:{m["name"]}')
+            if m['path'] in mapped:
+                mapped[m['path']].add(m['name'])
+        missing = [c for c in declared if c not in found]
         lacks = [what for what, items in (('negative tests', tests), ('designated mutants', mutants)) if not items]
         if missing:
             lacks.append('mutants for ' + ', '.join(missing))

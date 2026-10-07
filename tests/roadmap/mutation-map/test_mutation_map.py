@@ -162,7 +162,8 @@ class Map(Scratch):
         write(self.root / mm.MUTATE_SH, MUTATE + 'echo "== mutation (c) three"\n')
         write(self.root / mm.SHARDS, 'a\nb\nc\n')
         self.assertEqual(self.problems(), [f'{mm.MUTATE_SH}: mutation c is mapped to no register ID'])
-        write(self.root / mm.PY_MUTANTS, PY_MUTANTS.replace("}\n", "    'qm': (\n    ),\n}\n"))
+        # However the key is written: the unmapped gate reads the dictionary literal.
+        write(self.root / mm.PY_MUTANTS, PY_MUTANTS.replace("}\n", '    "qm":\n        (),\n}\n'))
         self.assertProblem(f'{mm.PY_MUTANTS}: mutation qm is mapped to no register ID')
 
     def test_category_without_any_mutant_fails(self):
@@ -185,6 +186,10 @@ class Map(Scratch):
             (lambda r: r['L02']['mutants'].append({'name': 'swap', 'path': 'tests/x/mutations.py'}), 'needs name, path, category'),
             (lambda r: r['L02']['categories'].append('renaming'), 'categories must be distinct names'),
             (lambda r: r['L02'].update(status='complete'), 'entry must be an object'),
+            (lambda r: r['L02'].update(mutants=5), 'entry must be an object'),
+            (lambda r: r['L02'].update(categories='layout'), 'entry must be an object'),
+            (lambda r: r['L02']['mutants'].append(mutant('swap', 'layout', ['tests/x/mutations.py'])), 'needs name, path, category'),
+            (lambda r: r['L02']['mutants'].append(mutant('swap', ['layout'])), 'needs name, path, category'),
         ]
         for change, needle in cases:
             data = copy.deepcopy(self.data)
