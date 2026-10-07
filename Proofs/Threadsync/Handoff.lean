@@ -1204,14 +1204,14 @@ theorem wp_dstore {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (hQ : ∀ m' hD', m'.current = 0 → DL q hD' → proto.inv (upd G 0 (⟨lp, hD', hL⟩, x0)) m' →
       Q ((), s) G m' d) :
-    proto.WP 0 ((liftM (store (α := Thread_Futex_Deadline) 8 q dl0) : CM Tgt σ Unit).run s)
+    proto.WP 0 ((liftM (storeBytes q 8 dl0) : CM Tgt σ Unit).run s)
       Q G m d := by
   obtain ⟨A₁, hA₁, hb₁⟩ := hdl.bytes
-  have hw : writeBytes bs 0 (Enc.encode dl0) = bsD := by
+  have hw : writeBytes bs 0 dl0 = bsD := by
     unfold bsD
     rw [writeBytes_all (by rw [dl0_size, hbs]), writeBytes_all (by rw [dl0_size]; simp)]
-  refine wp_mownM (TTriple.storeAt' (p := q) (q := q) (k := 0) (a := 8) dl0 dl0_size
-    (by cases q; simp [Ptr.add]) (by decide) (by rw [hbs]; exact Nat.le_refl 48)
+  refine wp_mownM (TTriple.storeBytesAt (p := q) (q := q) (k := 0) (a := 8) dl0
+    (by cases q; simp [Ptr.add]) (by rw [dl0_size]; decide) (by simp [hbs, dl0_size])
     (by rw [hdl.off]; simpa using hA₁) (by decide))
     hlp hidle hi hc hb₁ (fun _ hQ' hq' => hb0_of hq' (hdl.blk.choose_spec.1) hdl.blk.choose_spec.2)
     fun _ m' hQ' hc' _ hq' hi' => hQ m' hQ' hc' ⟨hdl.off, hdl.blk, A₁, hA₁, by rw [← hw]; exact hq'⟩ hi'

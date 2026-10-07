@@ -524,6 +524,11 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
     let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
       | .union _ _ none _ => memNamed f.types f.layouts acc id
       | _ => acc
+    -- A byte local (`Zig.Bytes T`) encodes its value, also in a pure function.
+    let acc := (byteLocals f).foldl (init := acc) fun acc aid =>
+      match (f.allInsts.find? (·.id == aid)).bind (fun i => ptrChild f.types i.ty) with
+      | some c => memNamed f.types f.layouts acc c
+      | none => acc
     if !memFuncs.contains f.name then acc
     else
       let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts acc g.ty) acc
@@ -623,6 +628,17 @@ structure FCtx where
   /-- The functions whose address the program takes (`fnRefs`), as `(function type name,
   function name, block)`: an indirect call compares its pointer with these blocks. -/
   fnBlocks : Array (String × String × Nat) := #[]
+  /-- The byte locals (`Air2Lean/Memory.lean`'s `byteLocals`): `Locals` fields of type
+  `Zig.Bytes T`, the bytes of a value with undefined parts. -/
+  byteLocals : Array InstId := #[]
+  /-- Each place of a byte local: `(place, alloc, byte offset)`. -/
+  bytePlaces : Array (InstId × InstId × Nat) := #[]
+  /-- The functions that return `Zig.Bytes T` (`rawFunctions`). -/
+  rawFuncs : Array String := #[]
+  /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
+  rawInsts : Array InstId := #[]
+  /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
+  rawRet : Bool := false
 
 private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std.HashMap String String :=
   let empty : Std.HashMap String String := {}
@@ -876,7 +892,9 @@ a `bitcast` of a place with the same path. -/
 def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) :=
   fc.allInsts.foldl (init := #[]) fun acc i =>
     match i.op with
-    | .alloc => if fc.escaping.contains i.id then acc else acc.push (i.id, i.id, #[])
+    | .alloc =>
+      if fc.escaping.contains i.id || fc.byteLocals.contains i.id then acc
+      else acc.push (i.id, i.id, #[])
     | .fieldPtr (.inst b) idx =>
       match acc.find? (·.1 == b) with
       | some (_, root, path) =>
@@ -916,6 +934,36 @@ def FCtx.place? (fc : FCtx) (v : Val) : Option (String × Array PathStep) :=
   | _ => none
 
 def FCtx.isPlace (fc : FCtx) (v : Val) : Bool := (fc.place? v).isSome
+
+/-- Every place of a byte local, with its byte offset: the `alloc` at 0, a field pointer at the
+field's offset (`byteLocalOk` admits only these). -/
+def FCtx.computeBytePlaces (fc : FCtx) : Array (InstId × InstId × Nat) :=
+  fc.allInsts.foldl (init := #[]) fun acc i =>
+    match i.op with
+    | .alloc => if fc.byteLocals.contains i.id then acc.push (i.id, i.id, 0) else acc
+    | .fieldPtr (.inst b) idx =>
+      match acc.find? (·.1 == b) with
+      | some (_, root, off) =>
+        let base := (ptrChild fc.types (fc.instTyId b)).getD 0
+        acc.push (i.id, root, off + (structFieldOffset? fc.types fc.layouts base idx).getD 0)
+      | none => acc
+    | _ => acc
+
+/-- A place of a byte local: its `Locals` field and byte offset. -/
+def FCtx.bytePlace? (fc : FCtx) (v : Val) : Option (String × Nat) :=
+  match v with
+  | .inst id => do
+    let (_, root, off) ← fc.bytePlaces.find? (·.1 == id)
+    let (_, field) ← fc.allocFields.find? (·.1 == root)
+    pure (field, off)
+  | _ => none
+
+def FCtx.isBytePlace (fc : FCtx) (v : Val) : Bool := (fc.bytePlace? v).isSome
+
+/-- The Lean type of the value of `id`: `Zig.Bytes T` for a raw instruction. -/
+def FCtx.instLeanTy (fc : FCtx) (id : InstId) : String :=
+  let t := fc.emitTyOf (fc.instTyId id)
+  if fc.rawInsts.contains id then s!"Zig.Bytes ({t})" else t
 
 /-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
 def FCtx.monad (fc : FCtx) : String :=
@@ -1046,7 +1094,7 @@ def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
 
 /-- `v` is a pointer to memory: not a place. -/
 def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
-  !fc.isPlace v && match fc.valTy v with | .ptr .. => true | _ => false
+  !fc.isPlace v && !fc.isBytePlace v && match fc.valTy v with | .ptr .. => true | _ => false
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
 def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
@@ -1063,6 +1111,35 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
         {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
     else fc.pointeeStorageExpr ptr s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
   | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
+
+/-- A use of the instruction `x` that takes its value as `Zig.Bytes T`: a `struct_field_val` of a
+non-`packed` struct (`Zig.Bytes.get` decodes only the field), a store to memory (`Zig.storeBytes`)
+or to a byte local (`Zig.Bytes.copy`) of the same type, a `ret` of a function that can return
+`Zig.Bytes T` (`canRet`), and `dbg`. -/
+def FCtx.rawUseOk (fc : FCtx) (canRet : Bool) (x : InstId) (u : Inst) : Bool :=
+  let xty := fc.instTyId x
+  match u.op with
+  | .structFieldVal (.inst y) k => y == x && (structFieldOffset? fc.types fc.layouts xty k).isSome
+  | .store p (.inst y) =>
+    y == x && p != .inst x &&
+      (fc.isBytePlace p || (fc.isMemPtr p && ((fc.valTyId? p).map fc.hostSize).getD 0 == 0)) &&
+      ((fc.valTyId? p).bind (ptrChild fc.types)).any (fun c => fc.tyOfId c == fc.tyOfId xty)
+  | .ret (.inst y) => canRet && y == x
+  | .dbg .. => true
+  | _ => false
+
+/-- The instructions whose value is `Zig.Bytes T`, not decoded: a load of a whole byte local and a
+call of a function in `rawFuncs`, if each of their uses is a `rawUseOk`. `canRet`: this function
+can return `Zig.Bytes T` (`rawFunctions`). -/
+def FCtx.computeRawInsts (fc : FCtx) (canRet : Bool) : Array InstId :=
+  fc.allInsts.filterMap fun i =>
+    let candidate := match i.op with
+      | .load (.inst a) => fc.byteLocals.contains a
+      | .call (.func name ..) _ => fc.rawFuncs.contains name
+      | _ => false
+    if candidate && fc.allInsts.all (fun u =>
+        !(placeOperands u.op).contains (.inst i.id) || fc.rawUseOk canRet i.id u)
+    then some i.id else none
 
 /-- A call argument. A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`). -/
 def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
@@ -1189,9 +1266,12 @@ def collectAllocs (types : Array Ty) (allInsts : Array Inst) (reserved : Array S
 memory. -/
 def emitLocalsStruct (structNames : Array (String × String)) (types : Array Ty)
     (localsName : String) (allocs : Array (InstId × String × TyId)) (escaping : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) : String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (byteLocals : Array InstId := #[]) :
+    String :=
   let lines := (allocs.map fun (aid, nm, cty) =>
     if escaping.contains aid then s!"  {nm} : Zig.Ptr"
+    else if byteLocals.contains aid then
+      s!"  {nm} : Zig.Bytes ({emitTy structNames types types[cty]! (pureSlice := !mem)})"
     else s!"  {nm} : {emitTy structNames types types[cty]! (pureSlice := !mem)}").toList
   String.intercalate "\n" ([s!"structure {localsName} where"] ++ lines ++
     (dispatches.map fun (id, ty) => s!"  {dispatchFieldName id} : {emitTy structNames types ty (pureSlice := !mem)}").toList ++
@@ -1223,10 +1303,12 @@ def repTargets (allInsts : Array Inst) : Array InstId :=
 
 def emitExitInductive (structNames : Array (String × String)) (types : Array Ty)
     (exitName : String) (retTy : TyId) (blTys : Array (InstId × TyId)) (brT repT : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) : String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (rawRet : Bool := false) : String :=
   let retLine := match types[retTy]! with
     | .void => "  | ret"
-    | rt => s!"  | ret (v : {emitTy structNames types rt (pureSlice := !mem)})"
+    | rt =>
+      let t := emitTy structNames types rt (pureSlice := !mem)
+      s!"  | ret (v : {if rawRet then s!"Zig.Bytes ({t})" else t})"
   let brLines := (brT.map fun k =>
     let kty := (blTys.find? (·.1 == k)).map (fun (_, t) => types[t]!) |>.getD .void
     match kty with
@@ -1386,7 +1468,7 @@ def FCtx.loopCaptures (fc : FCtx) (body : Array Inst) : Array (InstId × String 
     |>.qsort (fun a b => decide (a < b))
   (params ++ rest).map fun id =>
     let name := match fc.argIndexOf id with | some idx => s!"p{idx}" | none => s!"i{id}"
-    (id, name, fc.emitTyOf (fc.instTyId id))
+    (id, name, fc.instLeanTy id)
 
 /-- Case values and bodies determine captures; initialization reads the initial operand
 at the caller. References to that original operand inside bodies remain ordinary captures. -/
@@ -1948,7 +2030,17 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.{fc.helperName (fc.pointeeOf ptr) s!"setTag_{f}"} {old})"))
     | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
   | .load ptr =>
-    if fc.isMemPtr ptr then
+    if let some (field, off) := fc.bytePlace? ptr then
+      -- A byte local: a whole copy keeps its bytes, a typed read decodes only the bytes read.
+      if fc.rawInsts.contains inst.id then
+        let (env, l) := bindLet fc env inst.id s!"pure (← get).{field}"; (env, some l)
+      else if !fc.isReferenced inst.id then (env, none)
+      else
+        let child := ((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0
+        let (env, l) := bindLet fc env inst.id
+          (fc.storageExpr child s!"Zig.Bytes.get ({fc.pointeeTy ptr}) (← get).{field} {off}")
+        (env, some l)
+    else if fc.isMemPtr ptr then
       if !fc.isReferenced inst.id then
         -- Keep the full access/read record, but do not decode a value with no runtime use.
         -- A bit-pointer reads its complete host, rather than only the field's byte width.
@@ -1961,8 +2053,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
       let (env, l) := bindLet fc env inst.id s!"pure ({fc.loadPlace ptr})"; (env, some l)
   | .store ptr v =>
-    if fc.isMemPtr ptr then
+    let isRaw := match v with | .inst x => fc.rawInsts.contains x | _ => false
+    if let some (field, off) := fc.bytePlace? ptr then
+      let ty := fc.pointeeTy ptr
+      let new := match v with
+        | .undef _ => s!"Zig.Bytes.setUndef ({ty}) s.{field} {off}"
+        | v => if isRaw then s!"Zig.Bytes.copy s.{field} {off} {rv v}"
+          else s!"Zig.Bytes.set s.{field} {off} ({rv v} : {ty})"
+      (env, some (fc.pointeeStorageExpr ptr s!"modify (fun s => \{ s with {field} := {new} })"))
+    else if fc.isMemPtr ptr then
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
+      -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
+      if isRaw then (env, some s!"Zig.storeBytes {rv ptr} {align} {rv v}") else
       match v with
       -- `undefined`: every byte of the value becomes undefined.
       | .undef _ => (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
@@ -2066,6 +2168,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .errorName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"errorNameOf {rv a}"); (env, some l)
   | .structFieldVal s index =>
+    let rawField : Option (TyId × Nat) := match s with
+      | .inst x =>
+        if !fc.rawInsts.contains x then none else
+        match fc.valTy s, structFieldOffset? fc.types fc.layouts (fc.instTyId x) index with
+        | .struct _ _ fields, some off => (fields[index]?).map fun (_, t) => (t, off)
+        | _, _ => none
+      | _ => none
+    if let some (fty, off) := rawField then
+      -- A field of a value with undefined parts: decode only the field's bytes.
+      let (env, l) := bindLet fc env inst.id
+        (fc.storageExpr fty s!"Zig.Bytes.get ({fc.emitTyOf fty}) {rv s} {off}")
+      (env, some l)
+    else
     match fc.unionField? (fc.valTy s) index with
     | some (u, f, _) =>
       let (env, l) := bindLet fc env inst.id (fc.liftR s!"{u}.{fc.helperName (fc.valTy s) s!"get_{f}"} {rv s}"); (env, some l)
@@ -2126,6 +2241,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let expr := match callee with
         | .func name .. => fc.callOf name term memCallee
         | _ => fc.liftR term
+      -- A callee that returns `Zig.Bytes T`, whose value is read as a `T`: decode it.
+      let expr := match callee with
+        | .func name .. =>
+          if fc.rawFuncs.contains name && !fc.rawInsts.contains inst.id then
+            fc.storageExpr inst.ty s!"Zig.Bytes.get ({fc.emitTyOf inst.ty}) (← {expr}) 0"
+          else expr
+        | _ => expr
       let (env, l) := bindLet fc env inst.id expr
       (env, some l)
   | .line _ => (env, none)
@@ -2339,13 +2461,21 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
   | .ret v =>
     match fc.tyOfId fc.retTy with
     | .void => "pure .ret"
-    | _ => s!"pure (.ret {rv v})"
+    | _ =>
+      -- A function that returns `Zig.Bytes T` returns the bytes of a value that has none
+      -- undefined.
+      let raw := match v with | .inst x => fc.rawInsts.contains x | _ => false
+      if fc.rawRet && !raw then
+        s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({rv v} : {fc.emitTyOf fc.retTy}))"})"
+      else s!"pure (.ret {rv v})"
   | .retLoad ptr =>
     match fc.tyOfId fc.retTy with
     | .void => "pure .ret"
     | _ =>
-      if fc.isMemPtr ptr then s!"pure (.ret (← {fc.loadMem ptr (rv ptr)}))"
-      else s!"pure (.ret {fc.loadPlace ptr})"
+      let v := if fc.isMemPtr ptr then s!"(← {fc.loadMem ptr (rv ptr)})" else fc.loadPlace ptr
+      if fc.rawRet then
+        s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
+      else s!"pure (.ret {v})"
   | .unreach => "throw .unreachable"
   | .trap => "throw .panic"
   | .condBr c thenBody elseBody =>
@@ -2462,10 +2592,13 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let stack := fc.stackBlocks
   let allocLines := (stack.map fun (aid, _, size, align) =>
     s!"  let s{aid} ← Zig.allocStack {size} {align}").toList
-  let init := if stack.isEmpty then s!"(default : {localsName})"
-    else
-      let sets := stack.map fun (aid, field, _, _) => s!"{field} := s{aid}"
-      s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
+  -- A byte local starts with every byte undefined.
+  let byteSets := fc.byteLocals.map fun aid =>
+    let field := (fc.allocFields.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
+    s!"{field} := Zig.Bytes.undef ({fc.emitTyOf ((ptrChild fc.types (fc.instTyId aid)).getD 0)})"
+  let sets := stack.map (fun (aid, field, _, _) => s!"{field} := s{aid}") ++ byteSets
+  let init := if sets.isEmpty then s!"(default : {localsName})"
+    else s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
   let freeLines := (stack.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
@@ -2484,7 +2617,7 @@ def emitFunctionHeader (fc : FCtx) (leanName : String) (paramTys : Array TyId)
     (retTy : TyId) : String :=
   let paramsStr := String.intercalate " "
     ((paramTys.mapIdx fun i pt => s!"(p{i} : {fc.emitTyOf pt})").toList)
-  let retStr := fc.emitTyOf retTy
+  let retStr := if fc.rawRet then s!"Zig.Bytes ({fc.emitTyOf retTy})" else fc.emitTyOf retTy
   let resultTy := if fc.conc then "Zig.ConcM Tgt" else if fc.mem then "Zig.MemM" else "Zig.Result"
   s!"def {leanName} {paramsStr} : {resultTy} ({retStr}) := "
 
@@ -2506,7 +2639,7 @@ structure FuncParts where
 /-- The static context without block-emission membership, for global encoding. -/
 private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
     (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
-    (concFuncs : Array String := #[]) : FCtx :=
+    (concFuncs : Array String := #[]) (rawFuncs : Array String := #[]) : FCtx :=
   let allInsts := f.allInsts
   let leanName := (funcNames.find? (·.1 == f.name)).map (·.2) |>.getD f.name
   -- `«at»` (a keyword) gives `atLocals`.
@@ -2520,15 +2653,18 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       exitName := mangleField s!"{plain}Exit", floatSemantics, zigVersion := f.zigVersion, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
-      escaping := escapingAllocs f, globalIds }
-  { fc with places := fc.computePlaces }
+      escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
+      rawRet := rawFuncs.contains f.name }
+  let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
+  { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 
 /-- The static context of `f`, prepared for block emission. `globalIds`: the block of
  each global of `f.globals`. Bare contexts are also prepared by `emitStmts`. -/
 def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
     (floatSemantics : FloatSemantics) (memFuncs : Array String) (globalIds : Array Nat)
-    (concFuncs : Array String := #[]) : FCtx :=
+    (concFuncs : Array String := #[]) (rawFuncs : Array String := #[]) : FCtx :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
+    rawFuncs
   { fc with outwardBlocks := (controlFlowSummaries f.body).outwardBlocks
   }.prepareInstUses.prepareBranchTargets
 
@@ -2537,8 +2673,10 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) : FuncParts :=
+    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[]) :
+    FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
+    rawFuncs
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
@@ -2552,8 +2690,10 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let localsName := fc.localsName
   let exitName := fc.exitName
   let escaping := fc.escaping
-  let localsStr := emitLocalsStruct structNames f.types localsName allocs escaping fc.mem fc.dispatchTys
-  let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT fc.mem fc.dispatchTys
+  let localsStr := emitLocalsStruct structNames f.types localsName allocs escaping fc.mem
+    fc.dispatchTys fc.byteLocals
+  let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT fc.mem
+    fc.dispatchTys fc.rawRet
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
   -- before its children (pre-order), so a parent loop always precedes a nested one; reversing
   -- flips that to child-before-parent, which is what "the inner loop's def is emitted before
@@ -2592,9 +2732,28 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) : FuncParts :=
+    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[]) :
+    FuncParts :=
   emitOneFunctionWithFallbackMap f (prepareSpawnFallbackMap spawnFallbacks) structNames funcNames
-    floatSemantics memFuncs globalIds fnBlocks concFuncs spawnSemantics spawnFallbacks
+    floatSemantics memFuncs globalIds fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
+
+/-- The functions that return `Zig.Bytes T`: those with a `ret` of a raw instruction
+(`FCtx.computeRawInsts`), up to a fixpoint (a call of one is raw too). A function whose address
+is taken or that a thread runs keeps its type. `mk f raw`: `f`'s context with `rawFuncs := raw`. -/
+partial def rawFunctions (funcs : Array Func) (mk : Func → Array String → FCtx) : Array String :=
+  -- A raw value starts at a byte local.
+  if funcs.all (byteLocals · |>.isEmpty) then #[] else
+  let excluded := (spawnTargets funcs).map (·.1) ++ (fnRefs funcs).map (·.2)
+  let rec go (raw : Array String) : Array String :=
+    let next := funcs.filterMap fun f =>
+      if raw.contains f.name || excluded.contains f.name then none else
+      let fc := mk f raw
+      let insts := fc.computeRawInsts true
+      if fc.allInsts.any (fun i => match i.op with
+          | .ret (.inst x) => insts.contains x
+          | _ => false) then some f.name else none
+    if next.isEmpty then raw else go (raw ++ next)
+  go #[]
 
 /-! ## Globals (`docs/generated-code.md` §Globals) -/
 
@@ -3159,6 +3318,8 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     | some site => emitModel model index site structNames
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
+  let rawFuncs := rawFunctions funcs fun f raw =>
+    mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs #[] concFuncs raw
   let (globals, ids) := collectGlobals funcs mkFc prefix_
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
@@ -3202,7 +3363,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
@@ -3214,7 +3375,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
       String.intercalate "\n\n" ((members.toList.zip parts).flatMap fun (f, p) =>
         p.types ++ p.agains ++ p.loops ++ [p.defn] ++
           (if proofApi then
-            (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs) p.body).toList
+            (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs rawFuncs) p.body).toList
           else []))
   (String.intercalate "\n\n"
     (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++

@@ -1541,10 +1541,12 @@ def check (f : Func) : Except String Unit := do
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
-  -- An escaping local is a stack block: its type must be one the model encodes.
+  -- An escaping local is a stack block, a byte local is the bytes of its value: its type must
+  -- be one the model encodes.
+  let bytesLocals := byteLocals f
   for i in insts do
     if let .alloc := i.op then
-      if escaping.contains i.id then
+      if escaping.contains i.id || bytesLocals.contains i.id then
         if let some c := ptrChild f.types i.ty then
           checkMemTy f.name f.types f.layouts 0 c
   for g in f.globals do
@@ -2379,9 +2381,10 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
   let places := localRoots.filterMap fun (p, r) => if escaping.contains r then none else some p
+  let bytesLocals := byteLocals f
   for i in insts do
     if let .alloc := i.op then
-      if escaping.contains i.id then
+      if escaping.contains i.id || bytesLocals.contains i.id then
         if let some c := ptrChild f.types i.ty then
           log := log.record (checkDiagnostic file f .memoryFailure
             { idSpace := .canonical, instruction := some i.id, typeId := some c })
