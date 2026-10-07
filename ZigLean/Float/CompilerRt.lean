@@ -715,4 +715,34 @@ theorem Float.divRt_of_subnormal {a b : Float .f128} {s : Bool} {m : Nat} {e : I
   rw [h]; exact ite_eq_left ⟨hm0, hm⟩
 
 
+/-- Zig 0.14.1/0.15.2 `f128` division with a NaN, infinite or zero operand is IEEE division:
+the IEEE quotient is then a NaN, an infinity or a signed zero, never a nonzero subnormal. -/
+theorem Float.divRt_eq_div_of_special {a b : Float .f128}
+    (h : (∀ s m e, a.classify = .finite s m e → m = 0) ∨
+      (∀ s m e, b.classify = .finite s m e → m = 0)) :
+    Float.divRt a b = Float.div a b := by
+  apply Float.divRt_eq_div_of_not_subnormal
+  intro s m e hc
+  left
+  have hz : ∀ t : Bool, (Float.zero t : Float .f128).classify = .finite t 0 (-16494) := by
+    intro t; cases t <;> decide
+  have hn : (Float.nan : Float .f128).classify = .nan := by decide
+  have hi : ∀ t : Bool, (Float.inf t : Float .f128).classify = .inf t := by
+    intro t; cases t <;> decide
+  have hr : ∀ (t : Bool) (q : Rat), q = 0 → Float.roundRat .f128 t q = Float.zero t := by
+    intro t q hq; subst hq; unfold Float.roundRat; simp
+  unfold Float.div at hc
+  split at hc <;> (try simp only [hn, hi, hz] at hc)
+  case h_1 | h_2 | h_3 | h_4 => cases hc
+  case h_5 => cases hc; rfl
+  case h_6 sa ma ea sb mb eb hca hcb =>
+    split at hc
+    · split at hc <;> simp only [hn, hi] at hc <;> cases hc
+    · rename_i hmb
+      rcases h with h | h
+      · rw [hr _ _ (by rw [h _ _ _ hca]; unfold finiteToRat; split <;> split <;>
+          simp [Rat.div_def]), hz] at hc
+        cases hc; rfl
+      · exact absurd (h _ _ _ hcb) hmb
+
 end Zig

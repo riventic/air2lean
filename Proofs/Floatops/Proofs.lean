@@ -1,4 +1,5 @@
 import Proofs.Floatops.Gen
+import ZigLean.Float.RoundTrip
 
 /-!
 # Proofs about `examples/floatops/floatops.zig`
@@ -455,6 +456,37 @@ theorem op128_spec_full (sel : BitVec 8) (a b c : Zig.Float .f128) :
     by_cases h9 : sel = 9
     · subst h9; rfl
     exact absurd ⟨h3, h5, h6, h9⟩ hs
+
+/-- `f128` on every Zig version: with a NaN, infinite or zero `a` (no finite class with a
+nonzero mantissa) every selector is `opSpec`, i.e. IEEE division and `@sqrt`; with such a `b`
+every selector except `@sqrt` is. The two division profiles and the legacy `@sqrt` differ from
+IEEE only on finite nonzero operands. -/
+theorem op128_eq_opSpec_of_special (sel : BitVec 8) (a b c : Zig.Float .f128)
+    (h : (∀ s m e, a.classify = .finite s m e → m = 0) ∨
+      ((∀ s m e, b.classify = .finite s m e → m = 0) ∧ sel ≠ 9)) :
+    op128 sel a b c = opSpec sel a b c := by
+  have hdiv : ∀ rt : F128Rt, rt.div a b = Zig.Float.div a b := by
+    have h' := h.imp_right And.left
+    intro rt; cases rt
+    · exact Zig.Float.divRt_eq_div_of_special h'
+    · exact Zig.Float.divRt016_eq_div_of_special h'
+  rw [op128_spec_full]
+  by_cases hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9
+  · exact opSpec128_of_ne _ hs a b c
+  by_cases h3 : sel = 3
+  · subst h3; show pure _ = pure _; rw [hdiv]
+  by_cases h5 : sel = 5
+  · subst h5; show pure _ = pure _; rw [hdiv]
+  by_cases h6 : sel = 6
+  · subst h6; show pure _ = pure _; rw [hdiv]
+  by_cases h9 : sel = 9
+  · subst h9
+    have ha := h.resolve_right (fun hb => hb.2 rfl)
+    show pure _ = pure _
+    cases op128Profile
+    · exact congrArg pure (Zig.sqrtF128ViaF64_eq_sqrt_of_special ha)
+    · rfl
+  exact absurd ⟨h3, h5, h6, h9⟩ hs
 
 /-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics); the
 safety check panics if it is not a whole number, so a NaN quotient panics too. -/
