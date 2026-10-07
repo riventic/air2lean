@@ -70,6 +70,7 @@
     "ZigLean.Float.Round": ["MTH-01"],
     "ZigLean.Float.Ops": ["MTH-01"],
     "ZigLean.Float.Lemmas": ["MTH-01"],
+    "ZigLean.Float.Allowed": ["MTH-01"],
     "ZigLean.Float.RoundTrip": ["MTH-01"],
     "ZigLean.Float.Libm": ["MTH-02"],
     "ZigLean.Float.CompilerRt": ["MTH-03"],
