@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1814 theorems in 97 files.
+1828 theorems in 98 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -16,14 +16,14 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-02](premises.md#alc-02) | 32 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 13 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1021 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1025 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 67 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 741 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 913 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 917 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [ORD-01](premises.md#ord-01) | 854 | RC11 approximation for atomics |
 | [ORD-02](premises.md#ord-02) | 854 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 312 | `seq_cst` treated as `acq_rel` |
@@ -35,13 +35,13 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1711 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1449 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1725 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1463 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 879 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 28 | Total-correctness statements |
-| [EXT-01](premises.md#ext-01) | 12 | User external model contracts |
+| [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1814 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1828 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 856 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 856 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2118,6 +2118,27 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `example@L99` | SEM-01, TRU-01 |
 | `example@L104` | TRU-01 |
 | `example@L109` | SEM-01, TRU-01 |
+
+## `tests/roadmap/models/Callback.lean`
+
+File premises: THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `CallbackExample.evaluate_spec` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.forEach_spec` | THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.forEach_frame` | THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.fill_live` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.mark_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.forEach_mark_last` | THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.forEach_mark` | THR-01, THR-08, SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.uncontracted_not_effect_free` | SEM-01, SEM-02, TRU-01 |
+| `CallbackExample.uncontracted_forEach_frame_fails` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.havoc_not_empty` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.clobber_havoc` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.havoc_not_callback` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `CallbackExample.unknown_call_fails` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `example@L242` | SEM-01, SEM-02, EXT-01, TRU-01 |
 
 ## `tests/roadmap/models/Fill.lean`
 
