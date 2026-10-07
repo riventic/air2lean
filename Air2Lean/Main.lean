@@ -108,6 +108,8 @@ def parseArgs (args : List String) : Except String Args := do
     throw "--model-registry-template cannot be combined with --model-registry"
   if a.registryTemplate && a.spawnSemantics == .fallible then
     throw "--model-registry-template cannot be combined with --spawn-policy fallible"
+  if a.timingJson == some a.outPath.toString then
+    throw s!"--timing-json must not name the -o output '{a.outPath}'\n{usage}"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then

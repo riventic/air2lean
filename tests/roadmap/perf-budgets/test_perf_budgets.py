@@ -196,6 +196,10 @@ class Baseline(unittest.TestCase):
             perf.derive(pending_budgets(), failed)
         with self.assertRaisesRegex(ValueError, "unknown"):
             perf.derive(pending_budgets(), measurement(), only=["nope"])
+        skipped = measured_workload()
+        del skipped["phases"]["elaborate"]
+        with self.assertRaisesRegex(ValueError, "elaborate"):
+            perf.derive(pending_budgets(), measurement(basic=skipped, layout=measured_workload()))
         partial = perf.derive(pending_budgets(), measurement(), only=["basic"])
         self.assertEqual(partial["status"], "pending")
         self.assertIsNone(partial["workloads"][1]["budget"])

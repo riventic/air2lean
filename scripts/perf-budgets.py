@@ -12,6 +12,7 @@ and `gate` only read JSON and never start a process.
 """
 
 import argparse
+import copy
 import datetime
 import hashlib
 import json
@@ -129,7 +130,7 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
     """Compare one measurement with the budgets.
 
     Returns (exit_code, findings). Each finding is a dict with `kind`, `workload`,
-    optional `phase` and a `message`. Kinds other than `pending` and `pass` are failures.
+    optional `phase` and a `message`. Every kind except `pending` is a failure.
     """
     findings = []
 
@@ -209,6 +210,14 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
 # Baseline
 
 
+def required_phases(workload):
+    """Phases a full `record` run measures for one workload."""
+    phases = ["translate.cold", "translate.warm", *INTERNAL_PHASES, "elaborate"]
+    if workload.get("proof_modules"):
+        phases += ["proof.cold", "proof.warm"]
+    return phases
+
+
 def limit(value, ratio, slack):
     return max(value * ratio, value + slack)
 
@@ -228,7 +237,7 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
         problems.append("a partial rebaseline must use the reference platform")
     if problems:
         raise ValueError("; ".join(problems))
-    updated = json.loads(json.dumps(budgets))
+    updated = copy.deepcopy(budgets)
     selected = set(only) if only else {workload["id"] for workload in updated["workloads"]}
     unknown = selected - {workload["id"] for workload in updated["workloads"]}
     if unknown:
@@ -241,6 +250,10 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
         result = measurement.get("workloads", {}).get(workload["id"])
         if not result or result.get("status") != "ok":
             raise ValueError(f"{workload['id']}: no successful measurement to baseline")
+        missing = sorted(set(required_phases(workload)) - set(result["phases"]))
+        if missing:
+            raise ValueError(f"{workload['id']}: measurement lacks phases {', '.join(missing)} "
+                             "(recorded with --skip-elaborate/--skip-proof?)")
         phases = {}
         for phase, got in sorted(result["phases"].items()):
             tolerance = budgets["tolerance"][phase_class(phase)]
@@ -318,6 +331,17 @@ def measure(command, cwd, log, timeout, env=None):
             "exit_code": child.returncode, "timed_out": expired.is_set()}
 
 
+def require_success(step, what):
+    if step["timed_out"]:
+        raise RuntimeError(f"{what} timed out")
+    if step["exit_code"] != 0:
+        raise RuntimeError(f"{what} exited {step['exit_code']}")
+
+
+def wall_and_rss(step):
+    return {"seconds": step["seconds"], "peak_rss_kib": step["peak_rss_kib"]}
+
+
 def remove_module_artifacts(root, modules):
     """Delete build outputs of the given modules only (module-local cold build)."""
     removed = 0
@@ -346,8 +370,7 @@ def run_workload(workload, args, work, log):
         output = work / ident / f"Gen-{attempt}.lean"
         timing = work / ident / f"timing-{attempt}.json"
         step = measure([*command_base, "-o", output, "--timing-json", timing], ROOT, log, args.timeout)
-        if step["exit_code"] != 0:
-            raise RuntimeError(f"translator exited {step['exit_code']} (attempt {attempt})")
+        require_success(step, f"translator (attempt {attempt})")
         report = load_json(timing)
         if report.get("schema") != TIMING_SCHEMA:
             raise RuntimeError("translator timing report has an unexpected schema")
@@ -357,7 +380,7 @@ def run_workload(workload, args, work, log):
     if len(hashes) != 1:
         raise RuntimeError("translator output differs between repeated runs")
     cold, warm = runs[0], runs[1:]
-    phases["translate.cold"] = {key: cold[0][key] for key in ("seconds", "peak_rss_kib")}
+    phases["translate.cold"] = wall_and_rss(cold[0])
     phases["translate.warm"] = {
         "seconds": round(statistics.median(step["seconds"] for step, _ in warm), 4),
         "peak_rss_kib": max(step["peak_rss_kib"] for step, _ in warm)}
@@ -366,22 +389,21 @@ def run_workload(workload, args, work, log):
             report["phases_ns"][phase] for _, report in warm) / 1e9, 6)}
     generated = outputs[0]
     committed = ROOT / workload["committed_gen"]
-    output = {"bytes": generated.stat().st_size, "sha256": digest(generated),
-              "matches_committed": committed.is_file() and digest(committed) == digest(generated),
+    generated_sha = digest(generated)
+    output = {"bytes": generated.stat().st_size, "sha256": generated_sha,
+              "matches_committed": committed.is_file() and digest(committed) == generated_sha,
               "functions": runs[0][1].get("functions"), "input_bytes": runs[0][1].get("input_bytes")}
     if not args.skip_elaborate:
         step = measure([args.lake, "env", "lean", generated], ROOT, log, args.timeout)
-        if step["exit_code"] != 0:
-            raise RuntimeError(f"generated Lean did not elaborate (exit {step['exit_code']})")
-        phases["elaborate"] = {key: step[key] for key in ("seconds", "peak_rss_kib")}
+        require_success(step, "elaboration of the generated Lean")
+        phases["elaborate"] = wall_and_rss(step)
     modules = workload.get("proof_modules", [])
     if modules and not args.skip_proof:
         removed = remove_module_artifacts(ROOT, modules)
         for cache in ("cold", "warm"):
             step = measure([args.lake, "build", *modules], ROOT, log, args.timeout)
-            if step["exit_code"] != 0:
-                raise RuntimeError(f"proof build ({cache}) exited {step['exit_code']}")
-            phases[f"proof.{cache}"] = {key: step[key] for key in ("seconds", "peak_rss_kib")}
+            require_success(step, f"proof build ({cache})")
+            phases[f"proof.{cache}"] = wall_and_rss(step)
         phases["proof.cold"]["artifacts_removed"] = removed
     return {"status": "ok", "phases": phases, "output": output}
 

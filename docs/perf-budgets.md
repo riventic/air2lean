@@ -45,7 +45,8 @@ different bytes.
 
 `air2lean --timing-json PATH` writes `{"schema": "air2lean-timing/1", "files",
 "functions", "input_bytes", "output_bytes", "phases_ns": {read, renumber, parse,
-normalize, check, emit, write}}` after a successful run. Times are monotonic
+normalize, check, emit, write}}` after a successful run. The path must differ from
+`-o`. Times are monotonic
 nanoseconds summed over files; `check` includes the program-level checks. The flag
 only observes the stages. Pure stages run in the same order and the Lean output is
 unchanged. `tests/roadmap/perf-budgets/timing_cli.py` checks byte-identical output
@@ -86,7 +87,8 @@ narrow a run. A gate run with skipped phases fails `missing-phase` against a ful
 baseline.
 
 `baseline` refuses a measurement from a dirty tracked tree, with failed workloads,
-or without `LEAN_NUM_THREADS=1`. It writes per-phase limits
+with skipped phases (`--skip-elaborate`/`--skip-proof`), or without
+`LEAN_NUM_THREADS=1`. It writes per-phase limits
 `max(baseline × ratio, baseline + slack)` using the file's `tolerance` classes:
 
 | Class | Phases | Time | Peak RSS |

@@ -57,6 +57,10 @@ def main():
         assert duplicate.returncode != 0 and "duplicate --timing-json" in duplicate.stderr, duplicate.stderr
         missing = run([args.air2lean, air, "-o", work / "m.lean", "--namespace", "B", "--timing-json"])
         assert missing.returncode != 0 and "missing value for --timing-json" in missing.stderr, missing.stderr
+        clobber = run([args.air2lean, air, "-o", work / "c.lean", "--namespace", "B",
+                       "--timing-json", work / "c.lean"])
+        assert clobber.returncode != 0 and "must not name the -o output" in clobber.stderr, clobber.stderr
+        assert not (work / "c.lean").exists()
         failing = run([args.air2lean, work / "nonexistent", "-o", work / "f.lean", "--namespace", "B",
                        "--timing-json", work / "f.json"])
         assert failing.returncode != 0 and not (work / "f.json").exists()
