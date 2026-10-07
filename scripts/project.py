@@ -745,13 +745,17 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
-def direct_reference(nodes, theorem, definition):
-    """A statement about the root names it, so its own declaration depends on it directly.
+def statement_reference(theorem, definition):
+    """A goal theorem must state its claim about the root: the generated definition must occur
+    in the conclusion of its kernel type, not only in hypotheses or the proof term.
 
-    Requiring a direct edge (not transitive reachability) rejects theorems about wrappers
-    or re-implementations that only reach the generated definition through other lemmas."""
-    deps = nodes.get(theorem, {}).get('dependencies')
-    return isinstance(deps, list) and definition in deps
+    The audit's declaration edges include the proof, so a wrapper-statement or `True`
+    theorem whose proof mentions the root would otherwise bind. Audits from extractors
+    without statement dependencies fail closed."""
+    deps = theorem.get('conclusion_dependencies')
+    if not isinstance(deps, list) or not isinstance(theorem.get('statement_dependencies'), list):
+        return None
+    return definition in deps
 
 
 def compiled_olean(bundle, module):
@@ -807,12 +811,13 @@ def bind_receipt(root, base, generated_sha, bundle, file_hashes):
             row.update(binding='outside_contracts', reason='theorem module is not a declared contract file')
         elif theorem.get('allowed') is not True or theorem.get('violations'):
             row.update(binding='policy_violation', reason='audited theorem violates dependency policy')
-        elif (not direct_reference(bundle['nodes'], name, definition)
-              or bundle['nodes'].get(definition, {}).get('module') not in gen_modules):
+        elif (states := statement_reference(theorem, definition)) is None:
+            row.update(binding='unbound', reason='receipt audit lacks statement dependencies; regenerate it with the current extractor')
+        elif not states or bundle['nodes'].get(definition, {}).get('module') not in gen_modules:
             row.update(binding='wrapper_or_unrelated',
-                       reason=f'theorem does not directly reference generated root definition {definition} in {gen_modules}')
+                       reason=f'theorem conclusion does not reference generated root definition {definition} in {gen_modules}')
         else:
-            row.update(binding='direct', reason='audited theorem depends on the hash-bound generated root definition',
+            row.update(binding='direct', reason='audited theorem states its conclusion about the hash-bound generated root definition',
                        audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                             ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')})
         goals.append(row)
@@ -968,10 +973,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
     return {'schema': SCHEMA, 'kind': 'air2lean-coverage-report', 'manifest_sha256': report['manifest_sha256'],
             'levels': list(LEVELS), 'roots': roots, 'diagnostics': report['diagnostics'],
             'rules': ['Sampled differential tests never raise a root above tested_sampled.',
-                      'A theorem counts only when its own audited declaration (statement or proof term) directly references '
-                      'the generated root definition in a module byte-identical to the verified translation artifact; '
-                      'theorems reaching it only through wrappers or lemmas do not count. A wrapper statement whose proof '
-                      'term mentions the root still counts, so declared strength and domain remain review obligations.',
+                      'A theorem counts only when the conclusion of its audited statement (kernel type, not hypotheses '
+                      'or proof term) references the generated root definition in a module byte-identical to the verified '
+                      'translation artifact; wrapper or True statements do not count even when their proofs mention the root. '
+                      'Statements are not otherwise interpreted, so declared strength and domain remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.'],

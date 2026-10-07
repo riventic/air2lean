@@ -1,0 +1,120 @@
+{
+  "module": "tests.roadmap.assurance.StatementBinding",
+  "theorems": [
+    {
+      "name": "StatementFixture.premise_only",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "trivial",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "conclusion_dependencies": [
+        "True"
+      ]
+    },
+    {
+      "name": "StatementFixture.root_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "rfl",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ]
+    },
+    {
+      "name": "StatementFixture.trivial_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "rfl",
+        "trivial",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "statement_dependencies": [
+        "True"
+      ],
+      "conclusion_dependencies": [
+        "True"
+      ]
+    },
+    {
+      "name": "StatementFixture.wrapper_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "rfl",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root",
+        "StatementFixture.wrapper"
+      ],
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.wrapper"
+      ],
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.wrapper"
+      ]
+    }
+  ]
+}

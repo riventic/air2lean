@@ -191,10 +191,17 @@ Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`,
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
 contract file), `policy_violation` (audit `allowed` false or violations),
 `wrapper_or_unrelated`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
-`direct` requires the theorem declaration itself to depend on the generated root
+`direct` requires the conclusion of the theorem's statement (its kernel type after binders
+and hypotheses, the audit's `conclusion_dependencies`) to reference the generated root
 definition `namespace.(function without prefix)`, which must live in the hash-bound
-generated module. A theorem about a wrapper or a hand-written model that reaches the
-generated code only through other definitions or lemmas is `wrapper_or_unrelated`.
+generated module. Proof terms are not consulted: a theorem stated about a wrapper, a
+hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or_unrelated`
+even when its proof mentions the generated code. An audit without statement dependencies
+(an older extractor) leaves goals `unbound`. Statements are not otherwise interpreted, so a
+weak conclusion that mentions the root (for example `root x = root x`) still binds; declared
+strength and domain remain review obligations. `tests/roadmap/assurance/StatementBinding.lean`
+holds a wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last
+binds (`tests/roadmap/coverage-report/test_coverage.py`).
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
 `functionally_verified_partial`, `functionally_verified_total`.

@@ -146,6 +146,17 @@ class PolicyTests(unittest.TestCase):
             "kind": "inline", "backend": "all", "target": "wrong_computation"}])
         self.assertEqual(audit.apply_policy(self.raw([], [external]), self.policy)["status"], "fail")
 
+    def test_statement_dependencies_pass_through_and_are_checked(self):
+        root = self.node("root", "definition")
+        raw = self.raw(["root", "True"], [root, self.node("True", "inductive", module="Init.Prelude")])
+        raw["theorems"][0].update(statement_dependencies=["True", "root"], conclusion_dependencies=["True"])
+        theorem = audit.apply_policy(raw, self.policy)["theorems"][0]
+        self.assertEqual((theorem["statement_dependencies"], theorem["conclusion_dependencies"]), (["True", "root"], ["True"]))
+        for statement, conclusion in ((["True"], ["root"]), (["unrelated"], []), (["True"], None), ("root", "root")):
+            raw["theorems"][0].update(statement_dependencies=statement, conclusion_dependencies=conclusion)
+            with self.assertRaisesRegex(ValueError, "statement dependencies"):
+                audit.apply_policy(raw, self.policy)
+
     def test_incomplete_graph_and_empty_scope_fail_closed(self):
         with self.assertRaises(ValueError):
             audit.apply_policy(self.raw(["missing"], []), self.policy)
