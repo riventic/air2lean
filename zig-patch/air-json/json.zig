@@ -1629,6 +1629,14 @@ const W = struct {
                     try w.field("bit_offset");
                     try w.j.write(info.packed_offset.bit_offset);
                 }
+                // A pointer to one lane of a vector (`&v[i]`): its `host_size` is the vector
+                // length, not bytes, and the lane is only in the type. Before 0.17.0 only a lane
+                // that is not a whole power-of-two number of bytes gets one; 0.17.0 uses it for
+                // every lane.
+                if (info.flags.vector_index != .none) {
+                    try w.field("vector_index");
+                    try w.j.write(@intFromEnum(info.flags.vector_index));
+                }
             },
             .array => {
                 try w.j.write("array");

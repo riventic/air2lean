@@ -15,10 +15,15 @@ New dumps include `target_endian` (`little` or `big`) in schema 11. The translat
 explicitly non-little-endian dumps; older dumps without this optional field assume little
 endian. Memory layout checks also enforce the model's 64-bit ABI.
 
-Zig 0.16.0 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
+A pointer to one vector lane (`&v[i]`) exports `vector_index`; its `host_size` is then the
+vector length. Zig 0.17.0 makes every such pointer a lane pointer (earlier versions only for
+lanes that are not whole power-of-two bytes), so a reader must not take it as a bit-pointer.
+
+Zig 0.16.0 and 0.17.0 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
 from the exact comptime sentinel in the result pointer type. `allocSentinel(u8, n, s)`
 requires this field; sentinel presence alone cannot supply the stored byte. Initial
-source/native qualification is restricted to Zig 0.16.0. Existing 0.14.1/0.15.2
+source/native qualification is restricted to Zig 0.16.0 (0.17.0 exports the field but is not
+qualified yet). Existing 0.14.1/0.15.2
 exports retain their prior sentinel-presence metadata.
 
 ## Env vars
