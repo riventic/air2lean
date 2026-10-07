@@ -3,6 +3,7 @@
 import argparse
 from contextlib import ExitStack
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -20,7 +21,6 @@ from typing import NamedTuple, Optional
 
 
 def _sibling(name):
-    import importlib.util
     spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
