@@ -528,11 +528,17 @@
       "correspondence": "model"
     },
     "ZigLean.Float.CompilerRt::Zig.f128_fields": {
-      "semantics": "abstract-spec",
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
       "correspondence": "model"
     },
     "ZigLean.Float.CompilerRt::Zig.f128_finite_of_fields": {
-      "semantics": "abstract-spec",
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.FloatFmt.f64_constants": {

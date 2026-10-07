@@ -604,11 +604,11 @@ private theorem divtf3Subnormal_of_exp (a b : Float .f128)
       2 ≤ (aExp : Int) - bExp + sc - (if bExp = 0 then (normalize128 bSig).2 else 0) + 16383 →
         jp1 () t sc = none := by
     intro t sc hsc
-    simp -zeta only [jp1]
+    dsimp -zeta only [jp1]
     extract_lets aSig1 jp2 bSig2 scale2
     have k2 : ∀ u sc', 2 ≤ (aExp : Int) - bExp + sc' + 16383 → jp2 () u sc' = none := by
       intro u sc' hsc
-      simp -zeta only [jp2]
+      dsimp -zeta only [jp2]
       extract_lets bSig3 qExp q63b recip64 q127blo jp3 qExpm1
       have hbind : ∀ {α : Type} (x : Id α) (f : α → Id (Option (Float .f128))),
           (∀ v, f v = pure none) → x >>= f = pure none := fun x f h => h x
@@ -617,7 +617,7 @@ private theorem divtf3Subnormal_of_exp (a b : Float .f128)
       extract_lets
       have hj : ∀ q x y, 1 ≤ q + 16383 → jp3 () q x y = pure none := by
         intro q x y hq
-        simp -zeta only [jp3]
+        dsimp -zeta only [jp3]
         extract_lets w
         exact ite_eq_left hq
       split
