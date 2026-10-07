@@ -1,0 +1,13 @@
+{
+ "seed": 644,
+ "original_failure": "emit:placeholder",
+ "expected_exit": 1,
+ "fixed_by": "Check.lean rejects operand references to debug instructions (no bound value)",
+ "generator": {
+  "seed": 644,
+  "origin": "tests/golden/recursion/air/recursion.fact.json",
+  "steps": [
+   "doc0: int ['body', 2, 'body', 0, 'args', 0, 'inst'] 0->1"
+  ]
+ }
+}

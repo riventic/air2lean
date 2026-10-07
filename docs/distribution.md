@@ -90,7 +90,7 @@ The doctor needs Python 3.8+; committed proofs themselves need only elan.
 ## Clean environment recipe
 
 ```sh
-scripts/clean-env.sh               # first proof, exercise and negative control
+scripts/clean-env.sh               # every tutorial, its exercise and negative control
 scripts/clean-env.sh --translate   # also bootstrap Zig 0.16.0, check the lock, translate and prove
 ```
 
@@ -99,8 +99,11 @@ patch, python3 and xz-utils; `linux/amd64`) with no build context, copies tracke
 (no `.lake`, compilers or caches), mounts no cache volumes and runs as an unprivileged user.
 Inside it follows [getting started](getting-started.md) literally: installs the pinned elan
 (sha256-verified), `elan toolchain install $(cat lean-toolchain)`, `scripts/doctor.sh --require
-proofs`, `lake build Proofs.Basic.Proofs`, `lake env lean tutorials/first-proof/Main.lean`, the
-`exactly_on_time` exercise, and checks that Lean rejects the `pure 1` negative control.
+proofs`, `lake build Proofs.Basic.Proofs`, `lake env lean tutorials/first-proof/Main.lean`,
+then builds the modules of every tutorial (`python3 scripts/tutorials.py modules`) and runs
+`python3 scripts/tutorials.py check`: each `Main.lean` and solved exercise must elaborate, and
+each negative control (for example the first proof's `pure 1`) must fail with its expected
+error. The documentation-only cross-target tutorial is not run.
 `--translate` additionally installs the pinned host Zig, runs `zig-patch/build.sh 0.16.0`
 (default: no LLVM, AIR-only lock), requires the doctor to report `locked`, verifies the locked
 compiler refuses `build-exe`, translates the getting-started demo and checks its separate proof.

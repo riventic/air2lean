@@ -3072,10 +3072,11 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
 
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
-`--float-semantics` (default `ieee`). -/
-def emit (funcs : Array Func) (ns : String) (prefix_ : String)
+`--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
+def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
-    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) : String :=
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
+    String × Array (String × String) :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
@@ -3161,10 +3162,16 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
           (if proofApi then
             (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs) p.body).toList
           else []))
-  String.intercalate "\n\n"
+  (String.intercalate "\n\n"
     (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
       [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr ++
-      funcsStr ++ dispatchStr ++ [s!"end {ns}"])
+      funcsStr ++ dispatchStr ++ [s!"end {ns}"]), ownFuncNames)
+
+/-- `emitWithNames`'s Lean source only. -/
+def emit (funcs : Array Func) (ns : String) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) : String :=
+  (emitWithNames funcs ns prefix_ floatSemantics models spawnSemantics proofApi).1
 
 end Air2Lean

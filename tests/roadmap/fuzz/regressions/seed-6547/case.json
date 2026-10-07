@@ -1,0 +1,14 @@
+{
+ "seed": 6547,
+ "original_failure": "emit:placeholder",
+ "expected_exit": 1,
+ "fixed_by": "Check.lean rejects array_to_slice of a pointer whose pointee is not an array or vector",
+ "generator": {
+  "seed": 6547,
+  "origin": "tests/golden/threadsync/air/Thread.Mutex.unlock.json",
+  "steps": [
+   "doc0: int ['types', 7, 'abi_align'] 4->5",
+   "doc0: tag ['body', 2] -> array_to_slice"
+  ]
+ }
+}

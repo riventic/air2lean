@@ -63,6 +63,9 @@ and its standard library are still installed; `-Dno-lib` is not used. `-j1` alon
 prevent documentation tools from launching child compilers.
 Set `AIR2LEAN_OPTIMIZE=ReleaseFast` for a faster compiler when bootstrap memory allows it.
 The exporter flags and LLVM selection stay the same in either mode.
+Zig's `build.zig` declares a memory ceiling for compiling the compiler (0.15.2: 7.8 GB, 0.16.0:
+8 GB). The build refuses to start that step on a machine with less memory. On such a machine,
+set `AIR2LEAN_ZIG_MAXRSS=<bytes>` to pass `--maxrss`, as the CI `macos` job does on its 7 GiB runner.
 
 Builds install into an adjacent temporary directory and apply the AIR-only lock before
 publishing the prefix. A failed build leaves the previous compiler available. Writers to the

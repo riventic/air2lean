@@ -1,0 +1,13 @@
+{
+ "seed": 8382,
+ "original_failure": "emit:placeholder",
+ "expected_exit": 1,
+ "fixed_by": "Check.lean rejects operand references to debug instructions (no bound value)",
+ "generator": {
+  "seed": 8382,
+  "origin": "tests/golden/0.15.2/threadsync/air-linux/Thread.Futex.Deadline.init.json",
+  "steps": [
+   "doc0: tag ['body', 11] -> dbg_arg_inline"
+  ]
+ }
+}

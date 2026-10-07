@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 9 complete, 60 partial, 8 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 11 complete, 58 partial, 8 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -37,6 +37,8 @@ paired target fixtures, a precise observation relation and target-independent co
 Classification: partial.
 
 record the actual shipping compiler/backend/flags. Check ReleaseFast correspondence where claimed, and state the premise relating safe AIR behavior to that build. Acceptance: each supported mode has a qualification record; fast-math and other changed semantics require separate treatment.
+
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): assurance/build-modes.json + scripts/build-modes.py check: a qualification record per optimize mode x backend pair; ReleaseSafe/llvm is qualified (probe profile and command evidence, analyzed-AIR claim with stated premises); ReleaseFast/llvm is unqualified pending native observations; fast-math and shipping-binary semantics are excluded with guard text checked in the sources. Remaining: native qualification of ReleaseFast and the other unqualified pairs (Debug, ReleaseSmall, stage2_x86_64).
 
 ## L01 — Executable full AIR coverage inventory
 
@@ -286,6 +288,8 @@ Classification: partial.
 
 non-NaN/finite closure, rounding bounds, range bounds, stable comparison conditions, and accumulated-error reasoning for sums, penalties and reductions. Acceptance: prove a fitness or bound calculation's stated numerical property, including its overflow/NaN conditions. Never assume float addition is associative.
 
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLean/Float/Error.lean: non-NaN closure, relative rounding bounds for add/mul with underflow term, and left-fold accumulated error for sums, applied to the translated f64 dot product (Proofs/Floats/Dot.lean, with its overflow/NaN conditions). Remaining: sub/div/fma/sqrt bounds, f80/compiler-rt variants, a fitness-calculation case study.
+
 ## A01 — Assembly effects and operand coverage
 
 Classification: partial.
@@ -300,9 +304,13 @@ selected verified instruction semantics or qualified contracts; optional archite
 
 ## A03 — End-to-end assembly testing
 
-Classification: partial.
+Classification: complete.
 
 test real generated wrappers and their result/memory plumbing, with an explicit executable interpretation. Retain a strict separation from proof definitions. Acceptance: mutation of operand order, result placement or wrapper stores fails a test; harness assumptions are listed and cannot enter theorem dependencies.
+
+Completed in [PR120](https://github.com/riventic/air2lean/pull/120): Generated asm wrappers run unchanged under a test-only x86_64 interpretation bound to the translator's asm hash (tests/roadmap/asm-wrappers); operand-order, result-placement and wrapper-store mutants fail; harness assumptions AH-01..06 listed (instruction semantics hand-written from the Intel manual, not hardware-validated); audit.py keeps the harness out of theorem dependencies.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## E01 — User-defined external function contracts
 
@@ -354,6 +362,8 @@ Classification: partial.
 
 invariant/measure templates, recursive induction scaffolding, arithmetic-range lemmas and proof-producing BitVec/Int/Nat conversions. Acceptance: a queue loop can be proved without unfolding unrelated runtime internals; automation reports the remaining premises.
 
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLean/Sep/LoopTemplate.lean + loop_template?/loop_template tactics reduce a generated loop to invariant, step and exit premises; ZigLean/Range.lean zig_range discharges in-range casts and wrapping arithmetic; a linked-list queue walk is proved total without unfolding memory internals. Remaining: recursive-call induction, invariant inference, nested/concurrent loops.
+
 ## P04 — Modular contracts and abstract data types
 
 Classification: partial.
@@ -380,11 +390,15 @@ Classification: partial.
 
 documented stable proof interfaces, generated unfolding/step lemmas, source maps and semantic fingerprints. Preserve contracts across harmless AIR renumbering. Acceptance: adding an unrelated generic instantiation does not break downstream proof interfaces; semantic changes still invalidate affected proof checks.
 
+Bounded progress: PR93 deterministic names and PR94 scalar stable proof API merged. [PR120](https://github.com/riventic/air2lean/pull/120): air2lean --source-map-json writes a per-function source-map sidecar bound to its Lean output; scripts/semantic-fingerprints.py computes renumbering-invariant fingerprints folded over call-graph SCCs and an invalidation checker reports exactly the changed functions, their cycles and callers. Remaining: step/unfolding lemmas beyond the scalar proof API; binding fingerprints to the translator revision.
+
 ## P08 — Counterexamples and proof diagnostics
 
 Classification: partial.
 
 map failed obligations to Zig file/line, AIR instruction and contract. Export executable failure inputs or scheduler traces when available; distinguish a counterexample from an unsolved proof. Acceptance: a failed queue or concurrency check produces a reproducible case where one exists; an automation timeout is never called a program bug.
+
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): scripts/counterexample.py writes replayable counterexample bundles (input, full schedule prefix, violated contract, AIR candidate sites); only replayed failures are counterexamples, while timeouts, caps and fuel limits are unsolved and unreplayed failures stay candidates; a real-atomics relaxed message-passing race is localized end to end. Remaining: exact source maps, Lean goal-failure counterexamples, sequential replay without Zig.
 
 ## I01 — Zig build integration and root selection
 
@@ -498,6 +512,8 @@ Classification: partial.
 
 typed Zig program generation, malformed JSON generation, reproducible seeds and failure shrinking. Include aliasing, globals, cleanup, unions, casts and nested control flow. Acceptance: failures reduce to a minimal reproducible source/input; malformed inputs fail predictably rather than reaching emitter placeholders.
 
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): tests/roadmap/fuzz: a seeded malformed-AIR fuzzer with delta-debugging shrinking found and fixed 3 checker gaps (debug-instruction operand refs, non-pointer pointer arithmetic, array_to_slice of a non-array pointee), kept as 6 minimal regressions; 300 seeds run in CI; a typed Zig program generator runs in light mode. Remaining: the heavy Zig differential mode has not been run.
+
 ## Q02 — Property coverage and mutation expansion
 
 Classification: partial.
@@ -525,6 +541,8 @@ publish exact matches, host differences, undefined/unspecified cases, capped sea
 Classification: partial.
 
 version/target/profile matrices for every declared supported path, including WASM execution once T02/T05 are implemented. Acceptance: platform support is backed by native execution, target probes and proof checks appropriate to that platform, not just compilation of foreign goldens.
+
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): assurance/target-matrix.json + scripts/target-matrix.py check: every declared version/host/target/profile path is backed by native execution, target probes and proof checks on its own host, or records a gap; foreign-golden compilation does not count; a native macOS (aarch64) CI job backs the 0.16.0 and 0.15.2 macOS paths. Remaining gaps: target probe for 0.14.1 Linux and 0.15.2 macOS; WASM undeclared (T02/T05).
 
 ## Q06 — Translation and proof performance budgets
 
@@ -560,9 +578,13 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## D02 — Verify and close the current theorem inventory
 
-Classification: partial.
+Classification: complete.
 
 build the current theorem modules for their declared version/target translations, then update T7 and related claims. Remaining scope includes C14 and F05. Acceptance: each listed theorem has a current check result and precise domain. A theorem about one step or one schedule is not labeled as a full all-schedules theorem.
+
+Completed in [PR120](https://github.com/riventic/air2lean/pull/120): docs/theorem-inventory.md + scripts/theorem-inventory.py check: 67 listed theorems each have a scope class, precise domain and a current guarded check result per Zig version/target translation (0.16.0, 0.15.2 Linux and macOS threadsync, 0.14.1 floatops); single-step/single-schedule theorems cannot be labelled all-schedules. C14 general contracts and F05 excluded selectors remain under their own IDs.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## D03 — Assumption and contract reference
 
@@ -577,3 +599,5 @@ Bounded progress ([PR115](https://github.com/riventic/air2lean/pull/115)): docs/
 Classification: partial.
 
 tutorials for pure arithmetic, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients and cross-target verification. Acceptance: each tutorial runs from a clean qualified environment and exposes the assumptions and remaining obligations.
+
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): Six checked tutorials (first proof, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients) each with a solved exercise, a negative control that must fail with its expected error and an assumptions section matching the premise index; scripts/tutorials.py lint/check in CI and scripts/clean-env.sh runs every tutorial in a clean container. Remaining: cross-target verification tutorial is documentation only.

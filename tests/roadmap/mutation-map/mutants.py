@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PROFILES = 'tests/roadmap/profiles/test_golden_pipeline.py'
 FLOATS = 'tests/roadmap/float-semantics/test_labels.py'
 INVENTORY = 'tests/roadmap/inventory/test_inventory.py'
+THEOREMS = 'tests/roadmap/theorem-inventory/test_inventory.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -85,6 +86,34 @@ MUTANTS = {
         'scripts/external-contracts.py', '    extra = sorted(set(axioms) - STANDARD_AXIOMS)\n', '    extra = []\n',
         'tests/roadmap/models/test_external_contracts.py', 'contracts',
         ('ContractReportTests.test_nonstandard_axioms_stay_assumptions',)),
+    # D02: a recorded check result goes stale when an imported proof source changes.
+    'theorem-inventory-stale-proof-accepted': (
+        'scripts/theorem-inventory.py',
+        '                return sources.get(mod) == sha256(root / module_path(mod))\n',
+        '                return True\n', THEOREMS, 'ti',
+        ('FixtureTests.test_edited_proof_or_translation_is_stale',)),
+    # D02: a document must not say "every schedule" of a single-schedule theorem.
+    'theorem-inventory-narrow-claim-accepted': (
+        'scripts/theorem-inventory.py',
+        "                    narrower = by_name.get(token, set()) - {'all-schedules'}\n",
+        '                    narrower = set()\n', THEOREMS, 'ti',
+        ('FixtureTests.test_narrow_theorem_labeled_all_schedules_in_docs',)),
+    # T06: a probe profile of another optimize mode must not qualify a mode/backend record.
+    'build-mode-profile-mode-unchecked': (
+        'scripts/build-modes.py', "        if profile.get('build_mode') != mode:\n", '        if False:\n',
+        'tests/roadmap/build-modes/test_build_modes.py', 'bm',
+        ('NegativeControls.test_profile_mode_mismatch',)),
+    # P08: an automation limit (timeout, cap, fuel) is never a counterexample.
+    'counterexample-automation-limit-is-bug': (
+        'scripts/counterexample.py', '        return UNSOLVED, automation, None\n',
+        '        return COUNTEREXAMPLE, automation, None\n',
+        'tests/roadmap/counterexamples/test_counterexample.py', 'CX',
+        ('Bundles.test_verdict_table_never_calls_an_automation_limit_a_bug',)),
+    # Q05: a CI job on another host must not back a declared target path.
+    'target-matrix-foreign-host-accepted': (
+        'scripts/target-matrix.py', '    if job_host != host:\n', '    if False:\n',
+        'tests/roadmap/target-matrix/test_target_matrix.py', 'TM',
+        ('ForeignGoldens.test_linux_job_compiling_the_darwin_golden_cannot_back_a_darwin_path',)),
 }
 
 

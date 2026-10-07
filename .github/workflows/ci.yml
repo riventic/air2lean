@@ -86,6 +86,9 @@ jobs:
       - name: Schedule exploration cap accounting regressions
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
 
+      - name: Counterexample bundle regressions
+        run: python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
+
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
 
@@ -115,15 +118,50 @@ jobs:
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
 
+      # Offline (Q05): each version x host x target x profile path that compatibility.json
+      # declares maps to native execution, target probe and proof steps of a CI job on that
+      # host; foreign-golden compilation does not count (docs/target-matrix.md).
+      - name: Declared target matrix is natively backed
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/roadmap/target-matrix -v
+          python3 scripts/target-matrix.py check
+
       # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
+
+      # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
+      - name: Asm wrapper harness offline regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s tests/roadmap/asm-wrappers -v
+          python3 tests/roadmap/asm-wrappers/audit.py
+
+      - name: Semantic fingerprint classification regressions
+        run: python3 -I -B tests/roadmap/stable-generation/test_fingerprints.py
 
       # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
       - name: Theorem premise reference and index
         run: |
           python3 -B tests/roadmap/premises/test_premises.py
           python3 -B scripts/premises.py check
+
+      # Offline: tutorial layout, README sections and premise lists match the index.
+      - name: Tutorial layout regressions
+        run: python3 -B -m unittest discover -s tests/roadmap/tutorials -v
+
+      # Offline, before check.sh replaces the committed Gen.lean files whose hashes it compares:
+      # every listed theorem has a current recorded check per translation, and no document
+      # labels a single-step or single-schedule theorem as holding under every schedule.
+      - name: Theorem inventory scope and check results
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
+          python3 -B scripts/theorem-inventory.py check
 
       # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
       - name: Float-semantics label regressions
@@ -146,6 +184,13 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
+
+      # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
+      - name: Build-mode qualification records
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/build-modes -v
+          python3 -B scripts/build-modes.py check
 
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
@@ -181,6 +226,11 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests/roadmap/safe-output -p 'test_*.py' -v 2>&1 \
             | tee "$RUNNER_TEMP/safe-output-tests.log"
+
+      # Q01 (docs/fuzzing.md): generator determinism, shrinker minimality against synthetic
+      # oracles and typed Zig generator invariants; no translator, compiler or Lean run.
+      - name: Fuzz generator and shrinker regressions
+        run: tests/roadmap/fuzz/check.sh --light
 
       - name: Performance budget gate regressions
         run: |
@@ -288,6 +338,11 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
 
+      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
+      - name: Source maps and semantic fingerprints on golden AIR
+        if: ${{ !matrix.mutate }}
+        run: python3 -I -B tests/roadmap/stable-generation/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
@@ -352,6 +407,15 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      - name: Loop template and range-conversion regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/loop-tactics"
+          lake build ZigLean.Sep.LoopTemplate ZigLean.Range Proofs.Lists.Sep 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
+          lake env lean tests/roadmap/loop-tactics/Template.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Template.log"
+          lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
+
       - name: Validate AIR input and whole-program signatures
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
@@ -361,6 +425,18 @@ jobs:
           export TMPDIR="$evidence_dir/tmp"
           lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
           python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
+
+      # Q01: committed shrunk reproducers, then a small seeded malformed-AIR budget; any
+      # failure is shrunk into $RUNNER_TEMP/air-fuzz/failures (docs/fuzzing.md).
+      - name: Malformed AIR JSON fuzzing
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          fuzz_dir="$RUNNER_TEMP/air-fuzz"
+          mkdir -p "$fuzz_dir/tmp"
+          export TMPDIR="$fuzz_dir/tmp"
+          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 300 "$fuzz_dir/failures" 2>&1 \
+            | tee "$fuzz_dir/fuzz.log"
 
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
@@ -652,6 +728,8 @@ jobs:
             --schedule-receipts "$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json"
           python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
+          # P08: the relaxed message-passing race replays; limits stay unsolved.
+          python3 -I -B tests/roadmap/counterexamples/test_e2e.py tests/diff/.lake/build/bin/schedules
           zig build-exe -OReleaseSafe -lc --dep common \
             -Mroot=tests/roadmap/outcome-accounting/Native.zig \
             -Mcommon=tests/diff/common.zig -femit-bin="$RUNNER_TEMP/outcome-native"
@@ -686,6 +764,17 @@ jobs:
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
             --output "$RUNNER_TEMP/air2lean-premises.json"
 
+      # A03: real generated asm wrappers under a test-only interpretation, five wrapper
+      # mutants, and the harness kept out of the audited theorem dependencies.
+      - name: Generated asm wrappers, interpretation and mutations
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/asm-wrappers/harness.py --work "$RUNNER_TEMP/asm-wrappers"
+          python3 tests/roadmap/asm-wrappers/audit.py --assurance "$RUNNER_TEMP/air2lean-assumptions.json"
+
       - name: Assurance environment regressions
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
@@ -712,9 +801,11 @@ jobs:
           LEAN_NUM_THREADS: "1"
         run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
 
-      - name: First-proof tutorial
+      # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
+      # with its expected error. `lake build Proofs` above built the imported modules.
+      - name: Tutorials
         if: ${{ !matrix.mutate }}
-        run: lake env lean tutorials/first-proof/Main.lean
+        run: python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Integer bit operations regression and differential gate
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
@@ -885,3 +976,152 @@ jobs:
           bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
+
+  # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
+  # (assurance/target-matrix.json, docs/target-matrix.md). One job without a matrix, since
+  # macOS runner concurrency is limited; each evidence step binds AIR2LEAN_ZIG_VERSION.
+  # WASM is not a declared target (T02/T05).
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Stock aarch64-macos releases bootstrap zig-patch/build.sh and build the native
+      # probes/harnesses. sha256 from https://ziglang.org/download/index.json
+      # ("<version>" -> "aarch64-macos".shasum), confirmed by downloading and hashing each.
+      - name: Install stock zig (aarch64-macos)
+        run: |
+          set -euo pipefail
+          install_zig() {
+            curl -fL --output "$RUNNER_TEMP/zig-$1.tar.xz" \
+              "https://ziglang.org/download/$1/zig-aarch64-macos-$1.tar.xz"
+            echo "$2  $RUNNER_TEMP/zig-$1.tar.xz" | shasum -a 256 -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$1"
+            tar -xJf "$RUNNER_TEMP/zig-$1.tar.xz" -C "$RUNNER_TEMP/host-zig-$1" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$1/zig" version)" = "$1" ]
+          }
+          install_zig 0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
+          install_zig 0.15.2 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
+
+      # Builds and executes probe.zig for aarch64-macos-none (docs/profiles.md).
+      - name: macOS ABI target probe (0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/abi-probes/test_probe.py
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+              --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
+          done
+
+      - name: Cache patched zig 0.16.0 (macOS)
+        id: cache-zig-air-16
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-0.16.0/
+          key: zig-air-macos-arm64-0.16.0-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.16.0/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      - name: Cache patched zig 0.15.2 (macOS)
+        id: cache-zig-air-15
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-0.15.2/
+          key: zig-air-macos-arm64-0.15.2-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.15.2/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      # One retry per version, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB
+      # bound that Zig's build.zig declares for compiling the compiler; --maxrss lets it start.
+      - name: Build patched zig (macOS)
+        if: steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
+        env:
+          AIR2LEAN_ZIG_MAXRSS: "8000000000"
+        run: |
+          set -euo pipefail
+          for v in 0.16.0 0.15.2; do
+            if [ ! -x "zig-air-$v/bin/zig" ]; then
+              PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+                || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+            fi
+          done
+
+      # zig-patch/versions.toml [ci.elan] pins elan v4.2.4's Linux asset; this is the same
+      # release's aarch64-apple-darwin asset (sha256 = the release asset digest, confirmed).
+      - name: Install elan (macOS)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-apple-darwin.tar.gz
+          echo "7ad829861392c718dfebde3a83b5c8508df47be02af68894b094b0b3952616e5  $RUNNER_TEMP/elan.tar.gz" \
+            | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (macOS root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (macOS tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-macos-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator (macOS)
+        run: lake build
+
+      # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
+      # overrides, translated, built and differentially tested against native Zig (host-listed
+      # float differences count as `host`, scripts/diff.sh). Rewrites Proofs/<Ex>/Gen.lean.
+      - name: macOS golden AIR, translate, differential test (0.16.0)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
+        run: scripts/check.sh
+
+      - name: macOS proofs (0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: lake build Proofs
+
+      - name: Restore committed translations (0.16.0)
+        run: git checkout -- Proofs
+
+      # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects
+      # tests/golden/0.15.2/threadsync/Gen-darwin.lean and the proofs build against it natively.
+      - name: macOS golden AIR, translate, differential test (0.15.2)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
+        run: scripts/check.sh
+
+      - name: macOS proofs (0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: lake build Proofs
+
+      # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
+      - name: Upload the dumped Darwin AIR
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-macos-arm64
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7
