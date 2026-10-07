@@ -97,7 +97,10 @@ class Stale(Scratch):
         self.edit('ROADMAP.md', '| D01 | Reconcile stale milestones | partial |',
                   '| D01 | Reconcile stale milestones | complete |')
         self.assertProblem('docs/support-matrix.md: generated region is stale')
-        self.assertProblem('ROADMAP.md header does not state **88 requirements: 4 complete')
+        reg = MATRIX['register'](self.root)
+        complete = sum(row['status'] == 'complete' for row in reg)
+        self.assertProblem(f'ROADMAP.md header does not state **{len(reg)} requirements: '
+                           f'{complete} complete')
 
     def test_coverage_change_is_stale(self):
         path = self.root/'coverage/0.15.2.json'
@@ -121,6 +124,11 @@ class Agreement(Scratch):
         self.edit('Air2Lean/Main.lean', '  --model-registry-template    Write',
                   '  (registry template)          Write')
         self.assertProblem('help does not describe --model-registry-template')
+
+    def test_cli_help_flag_prefix_does_not_describe_longer_flag(self):
+        self.edit('Air2Lean/Main.lean', '  --model-registry <json>      Bind',
+                  '  (model registry)             Bind')
+        self.assertProblem('help does not describe --model-registry\n')
 
     def test_cli_usage_matches_diagnostics_usage(self):
         self.edit('Air2Lean/Diagnose.lean', '[--diagnostic-limit 1..4096]', '[--diagnostic-limit 1..8192]')

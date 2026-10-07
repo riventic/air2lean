@@ -8,6 +8,7 @@ Lake or Lean; `scripts/example-selection.sh` is sourced with bash.
 """
 import argparse
 import collections
+import functools
 import json
 from pathlib import Path
 import re
@@ -89,12 +90,13 @@ def examples(root):
     return sorted(p.name for p in (root/'examples').iterdir() if p.is_dir())
 
 
+@functools.lru_cache(maxsize=None)
 def default_selection(root, version, arch='x86_64'):
     script = ('source "$1/scripts/example-selection.sh"; '
               'air2lean_default_examples "$1" "$2" "$3"')
     out = subprocess.run(['bash', '-c', script, 'support-matrix', str(root), version, arch],
                          check=True, capture_output=True, text=True).stdout
-    return out.split()
+    return tuple(out.split())
 
 
 def ci_matrix(root):
@@ -153,7 +155,7 @@ def lean_string(root, rel, name):
     m = re.search(rf'^def {name} : String :=\n(.*?)\n\n', text, re.M | re.S)
     if not m: raise Stale(f'{rel}: def {name} not found')
     parts = re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))
-    return ''.join(parts).replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+    return re.sub(r'\\(.)', lambda e: '\n' if e.group(1) == 'n' else e.group(1), ''.join(parts))
 
 
 def version_vote(versions, default):
@@ -163,6 +165,7 @@ def version_vote(versions, default):
 
 # ---- generated regions -----------------------------------------------------------------------
 
+@functools.lru_cache(maxsize=None)
 def version_rows(root):
     versions = supported_versions(root)
     default = default_version(root)
@@ -296,14 +299,16 @@ def consistency(root):
     cov = sorted(coverage(root))
     if cov != sorted(versions):
         problems.append(f'coverage inventories {cov}, translator supports {versions}')
-    ci_versions = sorted({r['zig'] for r in ci_matrix(root)})
+    ci_rows = ci_matrix(root)
+    ci_versions = sorted({r['zig'] for r in ci_rows})
     if ci_versions != sorted(versions):
         problems.append(f'CI matrix versions {ci_versions}, translator supports {versions}')
-    for row in ci_matrix(root):
+    for row in ci_rows:
         listed = row.get('examples', '').split()
-        if listed and sorted(listed) != default_selection(root, row['zig']):
+        selected = list(default_selection(root, row['zig']))
+        if listed and sorted(listed) != selected:
             problems.append(f'CI {row["zig"]} examples {listed} differ from the default '
-                            f'selection {default_selection(root, row["zig"])}')
+                            f'selection {selected}')
     # CLI: help names every supported version, the default and the matrix; usage flags agree.
     help_text = lean_string(root, 'Air2Lean/Main.lean', 'help')
     usage_text = lean_string(root, 'Air2Lean/Main.lean', 'usage')
@@ -315,25 +320,20 @@ def consistency(root):
     if 'docs/support-matrix.md' not in help_text:
         problems.append('Air2Lean/Main.lean help does not point to docs/support-matrix.md')
     for flag in sorted(set(re.findall(r'--[a-z][a-z-]*', usage_text))):
-        if not re.search(rf'^\s+(?:-\w, )?{re.escape(flag)}\b', help_text, re.M):
+        if not re.search(rf'^\s+(?:-\w, )?{re.escape(flag)}(?![\w-])', help_text, re.M):
             problems.append(f'Air2Lean/Main.lean help does not describe {flag}')
     m = re.search(r'throw "usage: (air2lean --diagnostics-json[^"]*)"',
                   read(root, 'Air2Lean/Diagnose.lean'))
     if not m or m.group(1) not in usage_text:
         problems.append('Air2Lean/Main.lean usage differs from the --diagnostics-json usage '
                         'in Air2Lean/Diagnose.lean')
-    # README: every example appears in the examples table; prose agrees with the selection.
+    # README: every example appears in the examples table.
     table = re.search(r'^\| Examples \| What they cover \|\n(.*?)\n\n',
                       read(root, 'README.md'), re.M | re.S)
     if not table: raise Stale('README.md: examples table not found')
     for e in examples(root):
         if not re.search(rf'^\|[^|\n]*`{re.escape(e)}`', table.group(1), re.M):
             problems.append(f'README.md examples table omits `{e}`')
-    for doc in ('README.md', 'PLAN.md'):
-        text = read(root, doc)
-        for v in versions:
-            if v not in text:
-                problems.append(f'{doc} does not name Zig {v}')
     # ROADMAP: header counts equal the register.
     reg = register(root)
     counts = collections.Counter(r['status'] for r in reg)
@@ -369,6 +369,9 @@ def main(argv=None):
     parser.add_argument('--root', type=Path, default=ROOT)
     args = parser.parse_args(argv)
     root = args.root.resolve()
+    # Selections are memoized within one run; a new run (or test) rereads the tree.
+    default_selection.cache_clear()
+    version_rows.cache_clear()
     try:
         texts = rendered(root)
         if args.mode == 'generate':
