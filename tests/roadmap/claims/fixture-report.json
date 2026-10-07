@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "theorem_count": 12,
+  "theorems": [
+    {
+      "name": "ClaimFixture.diverge_not_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Not"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.diverge_partial",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Triple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.panic_run",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "head": "MonadExcept.throw"
+          }
+        ],
+        "head": "Eq"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.panic_some",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "args": [
+              {
+                "head": "Except.error"
+              }
+            ],
+            "head": "Option.some"
+          }
+        ],
+        "head": "Eq"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.partial_and_returns",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "And"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.premise_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.TotalTriple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.ret_partial",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Triple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.ret_returns",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Returns"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.ret_run",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "head": "Pure.pure"
+          }
+        ],
+        "head": "Eq"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.ret_some",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "args": [
+              {
+                "head": "Except.ok"
+              }
+            ],
+            "head": "Option.some"
+          }
+        ],
+        "head": "Eq"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.ret_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.TotalTriple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.wrapped_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "ClaimFixture.Wrapped"
+      },
+      "allowed": true
+    }
+  ]
+}

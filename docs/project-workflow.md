@@ -84,7 +84,9 @@ ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a
 name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
 `total_correctness`, `resource_bound` or `correspondence`. Every root assumption must occur
 in `allowed_assumptions`. These are declarations for review, not discovered theorem
-premises or checked contracts.
+premises or checked contracts. `scripts/claims.py check` separately rejects a goal whose
+declared strength exceeds the strength derived from its audited theorem type
+(`docs/claim-strength.md`).
 
 The legacy profile artifact has exactly `name: "legacy-abi64-le"` and `zig_version`.
 It preserves explicit missing-target-metadata disclosure. A schema-12 profile artifact is

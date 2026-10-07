@@ -76,6 +76,36 @@ private partial def graph (env : Environment) (pending : List Name)
         ("extern", externJson env n)]
       graph env (ds.toList ++ rest) seen (nodes.push node)
 
+/-- Binders and hypotheses are premises; the conclusion is what remains. No definition is
+unfolded, so a wrapper definition keeps its own head constant. -/
+private partial def stripBinders : Expr → Expr
+  | .forallE _ _ b _ => stripBinders b
+  | .mdata _ b => stripBinders b
+  | e => e
+
+private def headJson (e : Expr) : Json :=
+  match e.consumeMData.getAppFn.consumeMData with
+  | .const n _ => toJson n.toString
+  | _ => Json.null
+
+/-- Value shape on an equation's right-hand side: only `Option.some` is peeled. -/
+private partial def valueShape (depth : Nat) (e : Expr) : Json :=
+  let e := e.consumeMData
+  let head := ("head", headJson e)
+  if depth != 0 && e.isAppOfArity ``Option.some 2 then
+    Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) e.appArg!])]
+  else Json.mkObj [head]
+
+/-- Raw conclusion shape for claim classification; policy is applied in `scripts/claims.py`.
+Only an equation's right-hand side is expanded: the left side is the computation it states. -/
+private def conclusionShape (depth : Nat) (e : Expr) : Json :=
+  let e := (stripBinders e).consumeMData
+  let head := ("head", headJson e)
+  if depth == 0 then Json.mkObj [head]
+  else if e.isAppOfArity ``Eq 3 then
+    Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) e.appArg!])]
+  else Json.mkObj [head]
+
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
 
 elab_rules : command
@@ -99,9 +129,12 @@ elab_rules : command
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
+      let conclusion := match env.checked.get.find? n with
+        | some c => conclusionShape 8 c.type
+        | none => Json.null
       theorems := theorems.push <| Json.mkObj [
         ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
-        ("axioms", namesJson axs)]
+        ("axioms", namesJson axs), ("conclusion", conclusion)]
     let result := Json.mkObj [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),

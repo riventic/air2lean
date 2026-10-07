@@ -95,7 +95,8 @@ The report has a versioned schema and contains:
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
-  `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status.
+  `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,
+  plus the kernel type's `conclusion` shape used for claim strength (see `docs/claim-strength.md`).
 - `nodes`: a shared dependency graph with actual kernel names, stable user names, defining
   modules, declaration kind, direct dependencies, trust class, unsafe/partial flags,
   `implemented_by` targets, and complete extern entries (kind, backend, and symbol/inline
