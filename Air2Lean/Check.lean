@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
@@ -358,6 +359,8 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
+  /-- The function's `zig_version`: selects the `@bitCast` semantics (`Air2Lean/BitCast.lean`). -/
+  zigVersion : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -674,6 +677,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless hasErrorCapability cx.types target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
+    -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
+    -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
+    -- ≤0.16 memory rules below.
+    if let some aty := sourceTy then
+      if logicalBitCastApplies cx.zigVersion cx.types aty ty then
+        match logicalBitCastShapes cx.types aty ty with
+        | .ok _ => return line
+        | .error e => cx.fail line e
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
@@ -1440,7 +1451,8 @@ def check (f : Func) : Except String Unit := do
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
-                         localRoots, localPaths := localPlacePaths f.types f.layouts insts }
+                         localRoots, localPaths := localPlacePaths f.types f.layouts insts,
+                         zigVersion := f.zigVersion }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -2258,7 +2270,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     instTys := insts.map fun i => (i.id, i.ty)
     places
     localRoots
-    localPaths := localPlacePaths f.types f.layouts insts }
+    localPaths := localPlacePaths f.types f.layouts insts
+    zigVersion := f.zigVersion }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

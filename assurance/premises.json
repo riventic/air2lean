@@ -28,6 +28,7 @@
     "ZigLean.Basic": ["SEM-01"],
     "ZigLean.Bit": ["SEM-01"],
     "ZigLean.Permutation": ["SEM-01"],
+    "ZigLean.BitCast": ["SEM-01", "SEM-02"],
     "ZigLean.Packed": ["SEM-01", "SEM-02"],
     "ZigLean.Union": ["SEM-01", "SEM-02"],
     "ZigLean.Vec": ["SEM-01"],
