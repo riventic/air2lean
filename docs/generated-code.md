@@ -187,7 +187,43 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   ...
 ```
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` and `extern` globals are outside the subset.
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` globals are outside the subset.
+
+**Initial values are never defaulted.** A wholly `undefined` global (`var x: T = undefined`) is
+`Zig.Enc.size T` undefined bytes, so a load before the first store throws `.unspecified`. A
+partly `undefined` initial value (an aggregate, optional, error-union or union payload with an
+`undefined` part) is rejected: a value constant would read that part as `0`/`false`. A global
+without an `init` that is not `extern` (Sema had not resolved it) is rejected with "the AIR
+file has no initial value".
+
+**External initial state.** An `extern` global (`extern var x: T;`, `extern const`) has no
+initial value in the program. If the program has one, the translator emits a structure
+`ExternInit` with one field per `extern` global, named after it without the prefix, in block
+order, and `mem0` takes it explicitly:
+
+```lean
+structure ExternInit where
+  /-- Block 0: `global_init.counter` (`var`, writable). -/
+  counter : BitVec 32
+
+def mem0 (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals [
+  -- 0: global_init.counter (extern: initial value `ext.counter`)
+  (Zig.Enc.encode (ext.counter : BitVec 32), 4, .global),
+  ...]
+```
+
+The blocks of `mem0` are added in order (`Mem.ofGlobals`), which fixes their addresses and the
+initialization order: block addresses do not depend on the external values. Every statement
+about the program start is therefore about `mem0 ext` for an `ext` that the proof quantifies
+over; assumptions about external storage are hypotheses on `ext`
+(`tests/roadmap/global-init/GlobalInit/Proofs.lean`). The field type is the contract: the
+external definition must hold a valid encoding of that type (padding bytes undefined) before the
+program starts; external writes during the run are not modelled. Only a named, pointer-free,
+union-free and error-free type qualifies (integers, floats, `bool`, enums, arrays, vectors,
+structs, tuples and optionals of these); an `extern` function, pointer, union or error storage,
+an `extern` with an `init`, and an unnamed `extern` are rejected (`GLOBAL_FAILURE`). A name
+shared by several files must agree on `extern`. Without an `extern` global, `mem0 : Zig.Mem` is
+unchanged.
 
 ### Casts, layout and function pointers
 

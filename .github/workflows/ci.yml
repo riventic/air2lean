@@ -355,6 +355,15 @@ jobs:
           lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
           python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
 
+      # L12: explicit `ExternInit` external initial state, generated-client proofs and
+      # rejection of every absent/partly undefined global initializer. Hand-written AIR only.
+      - name: Global initialization and external initial state
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Sep
+          bash tests/roadmap/global-init/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
