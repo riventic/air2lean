@@ -77,24 +77,24 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 | Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.16.0 | 214 | 164 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.15.2 | 212 | 164 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.14.1 | 207 | 160 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.16.0 | 214 | 164 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.15.2 | 212 | 164 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.14.1 | 207 | 160 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 88 requirements, 14 complete, 57 partial, 6 open, 11 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 88 requirements, 18 complete, 53 partial, 6 open, 11 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T04, T06 | T02 | T03, T05 |
 | L: Language and representation | L01 | L02, L03, L04, L05, L06, L07, L08, L09, L10, L11, L12, L13, L14 | — | — |
-| C: Concurrency | — | C01, C03, C04, C06, C11, C14 | C02, C05, C07, C08, C09 | C10, C12, C13 |
+| C: Concurrency | C03, C04, C11 | C01, C06, C14 | C02, C05, C07, C08, C09 | C10, C12, C13 |
 | M: Memory and allocation | M06 | M01, M02, M03, M04 | — | M05 |
 | F: Floats | F01 | F04, F05, F06 | — | F02, F03 |
 | A: Inline assembly | A03 | A01 | — | A02 |
 | E: External boundaries | E01, E04 | E02, E03 | — | — |
-| P: Proof support | — | P01, P02, P03, P04, P05, P06, P07, P08 | — | — |
+| P: Proof support | P02 | P01, P03, P04, P05, P06, P07, P08 | — | — |
 | I: Integration and tooling | I09 | I01, I02, I03, I04, I05, I06, I07, I08 | — | — |
 | V: Validation and trust | V04, V05 | V03, V06 | — | V01, V02 |
 | Q: Quality and testing | Q08 | Q01, Q02, Q03, Q04, Q05, Q06, Q07 | — | — |
