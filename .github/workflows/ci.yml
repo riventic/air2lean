@@ -79,6 +79,12 @@ jobs:
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
 
+      # Fixture receipts/audits/diff summaries only; no Lean, Lake or Zig.
+      - name: Verification coverage report regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
