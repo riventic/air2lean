@@ -213,13 +213,18 @@ partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : T
   | v => if v.hasNestedUndef then none else pure #[]
 
 /-- The `alloc`s of `f` that escape. A store of a partly `undefined` constant to a place makes
-its `alloc` escape: memory holds the undefined parts as undefined bytes (`undefByteRanges`). -/
+its `alloc` escape: memory holds the undefined parts as undefined bytes (`undefByteRanges`). So
+does a store of `undefined` through a bit-pointer: memory holds the field's undefined bits
+(`Zig.storeUndefBits`), a `Locals` field has none. -/
 def escapingAllocs (f : Func) : Array InstId :=
   let insts := f.allInsts
   let roots := placeRoots insts
+  let bitPtr (p : Val) : Bool := match p with
+    | .inst id => ((insts.find? (·.id == id)).bind (f.layouts[·.ty]?) |>.map (·.hostSize)).getD 0 != 0
+    | _ => false
   insts.foldl (init := #[]) fun acc i =>
     let operands := valueOperands i.op ++ match i.op with
-      | .store p v => if v.hasNestedUndef then #[p] else #[]
+      | .store p v => if v.hasNestedUndef || (v matches .undef _) && bitPtr p then #[p] else #[]
       | .bitcast v@(.inst id) =>
         match insts.find? (·.id == id) with
         | some source => if samePointee f.types source.ty i.ty then #[] else #[v]

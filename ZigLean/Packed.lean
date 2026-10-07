@@ -29,11 +29,6 @@ instance {n : Nat} : Packed (BitVec n) n where
   toBits v := v
   ofBits v := v
 
-/-- A float field: its bits (`@bitCast`). -/
-instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
-  toBits v := v.bits
-  ofBits b := ⟨b⟩
-
 instance : Packed Bool 1 where
   toBits b := if b then 1#1 else 0#1
   ofBits v := v == 1#1
