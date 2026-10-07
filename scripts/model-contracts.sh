@@ -14,6 +14,8 @@ lake env bash -euo pipefail -c '
   export LEAN_PATH="$AIR2LEAN_MODEL_EVIDENCE:${LEAN_PATH:-}"
   lean -o "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Model.olean"     tests/roadmap/models/Model.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/model.log"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Model.olean"
+  lean -o "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Fill.olean"     tests/roadmap/models/Fill.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/fill-model.log"
+  test -s "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Fill.olean"
   lean --run tests/roadmap/models/Registry.lean "$AIR2LEAN_MODEL_EVIDENCE"     2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/registry.log"
   lean --run tests/roadmap/models/StdModels.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/std-models.log"
   lean tests/roadmap/models/StdDependencies.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/std-dependencies.log"
@@ -21,9 +23,17 @@ lake env bash -euo pipefail -c '
   test -s "$AIR2LEAN_MODEL_EVIDENCE/Generated.lean"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/CollisionGenerated.lean"
+  test -s "$AIR2LEAN_MODEL_EVIDENCE/FillGenerated.lean"
+  test -s "$AIR2LEAN_MODEL_EVIDENCE/FillAssumedGenerated.lean"
   lean "$AIR2LEAN_MODEL_EVIDENCE/Generated.lean"     2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/client.log"
   lean "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/tuple-client.log"
   lean "$AIR2LEAN_MODEL_EVIDENCE/CollisionGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/collision-client.log"
+  lean "$AIR2LEAN_MODEL_EVIDENCE/FillGenerated.lean" 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/fill-client.log"
+  # E01 report: a kernel-checked proved contract is verified; an assumed one stays an assumption.
+  python3 -B scripts/external-contracts.py --check --expect-assumptions= \
+    "$AIR2LEAN_MODEL_EVIDENCE/FillGenerated.lean" > "$AIR2LEAN_MODEL_EVIDENCE/fill-contracts.json"
+  python3 -B scripts/external-contracts.py --check --expect-assumptions=project.fill \
+    "$AIR2LEAN_MODEL_EVIDENCE/FillAssumedGenerated.lean" > "$AIR2LEAN_MODEL_EVIDENCE/fill-assumed-contracts.json"
 '
 (
   python3 -B tests/roadmap/models/test_cli_helpers.py

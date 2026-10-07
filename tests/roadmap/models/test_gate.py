@@ -47,6 +47,8 @@ elif [ "$1" = --run ]; then
   printf generated > "$evidence/Generated.lean"
   printf generated > "$evidence/TupleGenerated.lean"
   printf generated > "$evidence/CollisionGenerated.lean"
+  printf generated > "$evidence/FillGenerated.lean"
+  printf generated > "$evidence/FillAssumedGenerated.lean"
 else
   echo "mock client"
   [ "${MOCK_FAILURE:-}" != client ] || exit 10
@@ -54,6 +56,7 @@ fi
 ''',
         "python3": r'''#!/usr/bin/env bash
 set -euo pipefail
+case "$*" in *external-contracts.py*) printf '{"mock": "contracts"}\n'; exit 0;; esac
 printf 'mock cli\n'
 [ "${MOCK_FAILURE:-}" != cli ] || exit 11
 ''',
@@ -75,7 +78,9 @@ printf 'mock cli\n'
             assert f"mock {stage}" in (evidence / f"{stage}.log").read_text()
         else:
             for artifact in ["tests/roadmap/models/Model.olean", "registry.json", "Generated.lean",
-                             "model.log", "registry.log", "std-models.log", "std-dependencies.log", "client.log", "tuple-client.log", "collision-client.log", "cli.log"]:
+                             "model.log", "registry.log", "std-models.log", "std-dependencies.log", "client.log", "tuple-client.log", "collision-client.log", "cli.log",
+                             "tests/roadmap/models/Fill.olean", "fill-model.log", "fill-client.log",
+                             "fill-contracts.json", "fill-assumed-contracts.json"]:
                 assert (evidence / artifact).is_file(), artifact
             assert "ZigLean ZigLean.External Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
         assert not (repo / "tests").exists(), "gate wrote generated evidence into checkout"

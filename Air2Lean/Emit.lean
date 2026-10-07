@@ -2999,14 +2999,26 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
   let base := s!"air2lean_model_{index}"
   let errors := "[" ++ ", ".intercalate (m.errors.map ("Zig.Error." ++ ·)).toList ++ "]"
   let termination := if m.termination == "partial" then "«partial»" else "total"
-  let obligation := s!"{base}_contract.Holds .{termination} {errors} .{m.effects} _root_.{m.implementation}"
+  let holds := s!"{base}_contract.Holds .{termination} {errors} .{m.effects} _root_.{m.implementation}"
+  -- Right-associated argument tuple: parameter `i` of `n` is `.2` (i times) then `.1` unless last.
+  let project (i : Nat) : String :=
+    "args" ++ String.join (List.replicate i ".2") ++ (if i + 1 < tys.size then ".1" else "")
+  let regions (indices : Array Nat) : String :=
+    (if indices.isEmpty then "fun _ => [" else "fun args => [") ++
+      ", ".intercalate (indices.map fun i => s!"Zig.External.Region.block {project i}").toList ++ "]"
+  let (footprintDef, obligation) := match m.footprint with
+    | some fp =>
+      ([s!"def {base}_footprint : Zig.External.Footprint ({argsTy}) where\n" ++
+          s!"  reads := {regions fp.reads}\n  writes := {regions fp.writes}"],
+        s!"{holds} ∧ {base}_contract.Respects {base}_footprint")
+    | none => ([], holds)
   let evidence := match m.proof with
     | some proof => s!"theorem {base}_evidence : {obligation} := _root_.{proof}"
     | none => s!"-- Explicit imported-model assumption; reported in air2lean-models.\naxiom {base}_evidence : {obligation}"
-  return String.intercalate "\n\n" [
+  return String.intercalate "\n\n" ([
     s!"def {base}_contract : Zig.External.Contract ({argsTy}) ({result}) := _root_.{m.contract}",
-    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}",
-    evidence]
+    s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
+    footprintDef ++ [evidence])
 
 /-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
 stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
@@ -3023,8 +3035,9 @@ def emit (funcs : Array Func) (ns : String) (prefix_ : String)
   let modelCalls := firstModelCalls models funcs
   let maxModelArgs := modelCalls.fold (fun count _ site => max count site.args.size) 0
   let modelBinders := (Array.range maxModelArgs).map fun i => s!"p{i}"
-  let modelNames := (Array.range models.size).flatMap fun i =>
-    #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"]
+  let modelNames := models.zipIdx.flatMap fun (m, i) =>
+    #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"] ++
+      (if m.footprint.isSome then #[s!"air2lean_model_{i}_footprint"] else #[])
   let apiNames := if proofApi then funcs.flatMap (fun f =>
     if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++

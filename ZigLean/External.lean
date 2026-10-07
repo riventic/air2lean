@@ -60,4 +60,61 @@ theorem Contract.terminates {Args Result : Type} (c : Contract Args Result)
   rw [run] at h
   cases h.1
 
+/-! ## Declared memory footprints
+
+A footprint names the argument regions (blocks of pointer/slice arguments) that one call may
+read and write. `Respects` ties it to a contract: every newly recorded access is covered, and
+the frame leaves every block outside the written regions unchanged. A footprint excludes
+allocation/free of other blocks; such models declare no footprint. -/
+
+/-- The block an argument designates; `none` for a pointer without a block. -/
+class Region (α : Type) where
+  block : α → Option BlockId
+
+instance : Region Ptr := ⟨Ptr.block⟩
+instance : Region Slice := ⟨fun s => s.ptr.block⟩
+
+structure Footprint (Args : Type) where
+  reads : Args → List (Option BlockId)
+  writes : Args → List (Option BlockId)
+
+/-- An access is covered by a written region, or is a non-writing access of a read region. -/
+def Footprint.Covers {Args : Type} (fp : Footprint Args) (args : Args) (entry : FootprintEntry) :
+    Prop :=
+  some entry.block ∈ fp.writes args ∨
+    (some entry.block ∈ fp.reads args ∧ entry.kind.isWrite = false)
+
+def Contract.Respects {Args Result : Type} (c : Contract Args Result) (fp : Footprint Args) :
+    Prop :=
+  (∀ args before entry, c.access args before entry → fp.Covers args entry) ∧
+  (∀ args before after, c.pre args before → c.frame args before after →
+    ∀ b, some b ∉ fp.writes args → after.blocks[b]? = before.blocks[b]?)
+
+/-- Client frame rule: a successful call leaves every block outside its written regions
+unchanged. -/
+theorem Contract.frame_outside {Args Result : Type} (c : Contract Args Result)
+    {termination : Termination} {errors : List Error} {effects : Effects}
+    {implementation : Args → MemM Result} {fp : Footprint Args}
+    (evidence : c.Holds termination errors effects implementation) (respects : c.Respects fp)
+    {args before result after} (pre : c.pre args before)
+    (run : implementation args before = some (.ok (result, after)))
+    {b : BlockId} (outside : some b ∉ fp.writes args) : after.blocks[b]? = before.blocks[b]? := by
+  have h := evidence args before pre
+  rw [run] at h
+  exact respects.2 args before after pre h.2.1 b outside
+
+/-- Every access a successful call records is covered by the declared footprint. -/
+theorem Contract.accesses_within {Args Result : Type} (c : Contract Args Result)
+    {termination : Termination} {errors : List Error} {effects : Effects}
+    {implementation : Args → MemM Result} {fp : Footprint Args}
+    (evidence : c.Holds termination errors effects implementation) (respects : c.Respects fp)
+    {args before result after} (pre : c.pre args before)
+    (run : implementation args before = some (.ok (result, after))) :
+    ∃ delta : Array FootprintEntry, after.footprint = before.footprint ++ delta ∧
+      ∀ entry, entry ∈ delta.toList → fp.Covers args entry := by
+  have h := evidence args before pre
+  rw [run] at h
+  obtain ⟨delta, hlog, hcov⟩ := h.2.2.1
+  exact ⟨delta, hlog, fun entry mem => respects.1 args before entry (hcov entry mem)⟩
+
 end Zig.External
