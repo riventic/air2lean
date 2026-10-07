@@ -5,9 +5,23 @@ import Air2Lean.Air.Json
 /-!
 # Canonical AIR
 
-Five rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Six rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
+
+0. `versionTags`. The canonical tag vocabulary is 0.16.0's. Zig 0.17.0 renamed `intcast`,
+   `intcast_safe` and `struct_field_val` (`int_cast`, `int_cast_safe`, `agg_field_val`) and split
+   the overloaded `bitcast` by operand kind (`bit_cast`, `bit_cast_safe`, `ptr_cast`,
+   `ptr_from_int`, `int_from_ptr`, `error_cast`, `error_from_int`, `int_from_error`); 0.16.0
+   lowered every one of these through `bitcast`, and `Check.lean`/`Emit.lean` dispatch a
+   `bitcast` on its operand and result types. `bit_cast_safe` adds only
+   the invalid-tag check for an exhaustive-enum destination, which the `bitcast` emission of an
+   enum destination already performs (`Zig.enumOf`). The pass renames them back, so the
+   rewrites below match one vocabulary. 0.17.0 also dropped `bool_and`/`bool_or`: Sema's
+   safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
+   operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
+   the meaning is the same). It rejects a tag that the file's `zig_version` does not
+   have (`versionTagReason?`), before the rename can make a misplaced tag look canonical.
 
 1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
    payload) to a read-only stack copy: `alloc`, one `store` of `v`, and `bitcast`s to a const
@@ -43,6 +57,33 @@ supported version, so one translation (and the proofs over it) serves all versio
 
 namespace Air2Lean.Raw
 
+/-- Zig 0.17.0 AIR tags renamed to their 0.16.0 spelling (`versionTags`, module doc). -/
+def tagAliases017 : List (String × String) :=
+  [("int_cast", "intcast"), ("int_cast_safe", "intcast_safe"), ("agg_field_val", "struct_field_val"),
+   ("bit_cast", "bitcast"), ("bit_cast_safe", "bitcast"), ("ptr_cast", "bitcast"),
+   ("ptr_from_int", "bitcast"), ("int_from_ptr", "bitcast"), ("error_cast", "bitcast"),
+   ("error_from_int", "bitcast"), ("int_from_error", "bitcast")]
+
+/-- Zig 0.17.0 AIR tags without a 0.16.0 spelling. -/
+def tagsOnly017 : List String :=
+  ["div_ceil", "div_ceil_optimized", "array_to_vector", "union_from_enum", "spirv_runtime_array_len"] ++
+    tagAliases017.map (·.1)
+
+/-- 0.16.0 AIR tags that Zig 0.17.0 removed or renamed (0.17.0 writes `bool_and`/`bool_or` as
+`bit_and`/`bit_or` on `bool` operands). -/
+def tagsRemoved017 : List String :=
+  ["bitcast", "intcast", "intcast_safe", "struct_field_val", "bool_and", "bool_or"]
+
+/-- Why `tag` cannot occur in an AIR file of `zigVersion`, if it cannot. -/
+def versionTagReason? (zigVersion tag : String) : Option String :=
+  if zigVersion == "0.17.0" then
+    if tagsRemoved017.contains tag then
+      some s!"is not a Zig 0.17.0 AIR tag (removed or renamed in 0.17.0)"
+    else none
+  else if tagsOnly017.contains tag then
+    some s!"is not a Zig {zigVersion} AIR tag (introduced in 0.17.0)"
+  else none
+
 /-- Every instruction of `body`, nested bodies included, in body order. -/
 partial def flatten (body : Array RawInst) : Array RawInst :=
   body.foldl (init := #[]) fun acc i =>
@@ -57,6 +98,25 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       body := rewriteBody g i.body, thenBody := rewriteBody g i.thenBody,
       elseBody := rewriteBody g i.elseBody,
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
+
+/-- `versionTags` (module doc). -/
+def versionTags (f : RawFunc) : Except String RawFunc := do
+  for i in flatten f.body do
+    if let some reason := versionTagReason? f.zigVersion i.tag then
+      throw s!"{f.name}: inst {i.id}: tag '{i.tag}' {reason}"
+  if f.zigVersion != "0.17.0" then return f
+  let boolTyped (ty : Option TyId) : Bool :=
+    match ty.bind (f.types[·]?) with
+    | some .bool => true
+    | some (.vector _ c) => f.types[c]? == some .bool
+    | _ => false
+  let rename (i : RawInst) : RawInst :=
+    match tagAliases017.lookup i.tag, i.tag with
+    | some tag, _ => { i with tag }
+    | none, "bit_and" => if boolTyped i.ty then { i with tag := "bool_and" } else i
+    | none, "bit_or" => if boolTyped i.ty then { i with tag := "bool_or" } else i
+    | none, _ => i
+  return { f with body := rewriteBody (body := f.body) fun i => some (rename i) }
 
 /-- `i` with `f` applied to each value operand (not to nested bodies), asm operands included. -/
 def RawInst.mapVals (f : Val → Val) (i : RawInst) : RawInst :=
@@ -436,8 +496,9 @@ def argRanks (f : RawFunc) : Except String RawFunc := do
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }
 
-/-- The five rewrites (module doc). -/
+/-- The six rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
+  let f ← versionTags f
   validateRefs f
   let f ← argRanks f
   let f := dropTrueChecks (itemReads (forwardReadOnlyCopies f))

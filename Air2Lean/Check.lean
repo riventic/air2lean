@@ -554,6 +554,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .splat _ =>
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    unless (cx.types[ty]? matches some (.vector ..)) do
+      cx.fail line "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset"
+    pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"
     let some (_, _, bits) := cx.intShape? aty

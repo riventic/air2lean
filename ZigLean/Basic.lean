@@ -88,6 +88,14 @@ variable {n : Nat}
                   else pure (.ofInt n (Int.fdiv a.toInt b.toInt)))
   else pure (a.udiv b)
 
+/-- `@divCeil` (Zig 0.17.0): the quotient rounded toward positive infinity. Division by zero
+and `minInt / -1` are illegal, as for `@divFloor`. -/
+@[inline] def divCeil (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
+  if b = 0 then throw .divByZero
+  else if s then (if a.sdivOverflow b then throw .overflow
+                  else pure (.ofInt n (-Int.fdiv (-a.toInt) b.toInt)))
+  else pure (.ofNat n ((a.toNat + b.toNat - 1) / b.toNat))
+
 /-- `@divExact`: the remainder must be zero. -/
 @[inline] def divExact (s : Bool) (a b : BitVec n) : Result (BitVec n) := do
   let q ← divTrunc s a b

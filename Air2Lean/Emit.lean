@@ -1571,6 +1571,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .divFloor =>
           let f := s!"Zig.Float.divFloor{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
+        | .divCeil =>
+          let f := s!"Zig.Float.divCeil{fc.divRtSuffix}"
+          s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
           let f := s!"Zig.Float.div{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
@@ -1580,6 +1583,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let sgn := if fc.valSigned a then "true" else "false"
         let f := match op with
           | .divTrunc => "Zig.divTrunc" | .divFloor => "Zig.divFloor" | .divExact => "Zig.divExact"
+          | .divCeil => "Zig.divCeil"
           | .rem => "Zig.rem" | .mod => "Zig.mod"
         s!"{f} {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
