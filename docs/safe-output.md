@@ -50,7 +50,7 @@ is 3600, and 0 disables the limit. `translate.sh` bounds the Lean build, the AIR
 translation and the Lean check. `check.sh` bounds the AIR dump and translation. Its
 final `lake build` and differential tests remain bounded by the CI job timeout or an
 outer `scripts/build-guard.py` ([build-budgets.md](build-budgets.md)).
-`proof-receipt.py worker` runs the auditor in its own group. SIGTERM/SIGHUP, an
+`proof-receipt.py worker` runs the auditor in its own group. SIGINT/SIGTERM/SIGHUP, an
 exception, or an auditor exiting with live children stops that group, and no
 `after.json`/receipt is written. The outer guard owns its timeout.
 
@@ -67,7 +67,9 @@ and enforced by `project.py` and `proof-receipt.py`.
   the runner's control. `scripts/build-guard.py` tracks such descendants with `ps`
   sampling.
 - After the leader is reaped, the group is probed by its ID. In the brief window
-  after the group empties, an unrelated new group could reuse that ID.
+  after the group empties, an unrelated new group could reuse that ID. The runner sends
+  KILL once, while the last probe still saw members, and afterwards only probes, so a
+  reused ID can delay its exit by the grace period but is not signalled.
 
 ## Tests
 

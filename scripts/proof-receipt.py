@@ -149,12 +149,14 @@ def write_new(path, data):
 def run_child(argv, cwd, grace=2.0):
     """Run the auditor in its own process group; any exit path stops the whole group.
 
-    SIGTERM/SIGHUP become KeyboardInterrupt here, so cancellation never leaves a live
-    auditor writing into the attempt after this worker (and the outer guard) report it."""
+    SIGINT/SIGTERM/SIGHUP become one KeyboardInterrupt here, so cancellation never leaves a
+    live auditor writing into the attempt after this worker (and the outer guard) report it."""
+    cancelled = []
     def cancel(signum, frame):
-        raise KeyboardInterrupt
-    previous = {s: signal.signal(s, cancel) for s in (signal.SIGTERM, signal.SIGHUP)}
-    child = subprocess.Popen(argv, cwd=cwd, start_new_session=True)
+        if not cancelled:  # Raise once: a repeated signal must not abort stop() mid-cleanup.
+            cancelled.append(signum)
+            raise KeyboardInterrupt
+    child = None
     def group_alive():
         try:
             os.killpg(child.pid, 0)
@@ -177,13 +179,16 @@ def run_child(argv, cwd, grace=2.0):
                 if not group_alive():
                     return
                 time.sleep(0.02)
+    previous = {s: signal.signal(s, cancel) for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     try:
+        child = subprocess.Popen(argv, cwd=cwd, start_new_session=True)
         returncode = child.wait()
         if group_alive():
             raise ValueError('auditor exited with live child processes')
         return subprocess.CompletedProcess(argv, returncode)
     except BaseException:
-        stop()
+        if child is not None:
+            stop()
         raise
     finally:
         for signum, handler in previous.items():

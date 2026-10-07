@@ -130,9 +130,7 @@ for ex in $examples; do
   workflow_publish --overwrite "$generated" "$report_dir/$ex.Gen.lean"
   if [ -n "${AIR2LEAN_OUT_DIR:-}" ]; then
     mkdir -p "$AIR2LEAN_OUT_DIR/check-reports/$zig_version"
-    if [ ! "$report" -ef "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json" ]; then
-      workflow_publish --overwrite "$report" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json"
-    fi
+    workflow_publish --overwrite "$cmp_dir/report.json" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json"
     workflow_publish --overwrite "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
   fi
 

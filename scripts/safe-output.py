@@ -59,11 +59,12 @@ def _stop_group(child, grace):
         if child.poll() is not None and not _group_alive(child.pid):
             return
         time.sleep(0.02)
+    # One KILL, sent while the last probe saw members (or the unreaped leader pins the PGID).
+    # Afterwards only probe: once the group empties its PGID may be reused by an unrelated group.
     _signal_group(child.pid, signal.SIGKILL)
     child.wait()
     deadline = time.monotonic() + max(grace, 1.0)
     while _group_alive(child.pid) and time.monotonic() < deadline:
-        _signal_group(child.pid, signal.SIGKILL)
         time.sleep(0.02)
 
 
@@ -177,6 +178,11 @@ def main(argv=None):
         if not command or args.timeout < 0 or args.grace < 0:
             parser.error('run needs -- COMMAND and nonnegative --timeout/--grace')
         return run(command, args.timeout, args.grace)
+
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt  # Unwind through publish() so the temporary file is removed.
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, interrupted)
     try:
         publish(args.source, args.destination, args.overwrite)
     except (OSError, Refused) as error:
