@@ -80,6 +80,11 @@ def mutants(generated):
     yield "wrong_target", changed_once(nested,
         rf"pure \(.dispatch{inner} \(0 : BitVec 8\)\)",
         f"pure (.dispatch{outer} (2 : BitVec 8))")
+    exits = (generated / "nestedExit.lean").read_text()
+    outer = re.search(r"\| dispatch([0-9]+) ", exits).group(1)
+    # Turn the inner loop's two-level break into the outer continue that shares its cond_br.
+    yield "wrong_exit", changed_once(exits,
+        r"pure \(.br[0-9]+ \(55 : BitVec 8\)\)", f"pure (.dispatch{outer} (1 : BitVec 8))")
     capture = (generated / "blockCapture.lean").read_text()
     # Drop an extracted block-result capture while keeping the emitted source well typed.
     yield "dropped_capture", changed_once(capture,

@@ -29,11 +29,16 @@ if [ "$synthetic" = 1 ]; then
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
-expected = {'step','fixedCapture','blockCapture','nested','crossed','ranges','boolLoop','fieldCollision','plainExit','blockDispatch'}
+expected = {'step','fixedCapture','blockCapture','nested','crossed','ranges','boolLoop','fieldCollision','plainExit','blockDispatch','nestedExit','innerValue','countdown'}
 actual = {p.stem for p in root.glob('*.lean')}
 assert actual == expected, (actual, expected)
 CHECK
-  for source in "$work/generated/"*.lean; do lake env lean -R "$work/generated" "$source"; done
+  for source in "$work/generated/"*.lean; do
+    lake env lean -R "$work/generated" -o "${source%.lean}.olean" "$source"
+  done
+  # Invariant/measure proofs about the fresh generated nested dispatch machine.
+  LEAN_PATH="$work/generated:$(lake env printenv LEAN_PATH)" \
+    lake env lean tests/roadmap/dispatch/CountdownProof.lean
   python3 tests/roadmap/dispatch/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'dispatch synthetic and kernel-proof regressions passed'; exit 0; fi
