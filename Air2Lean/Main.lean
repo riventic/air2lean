@@ -22,7 +22,7 @@ namespace Air2Lean
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -33,8 +33,15 @@ def help : String :=
   "  --prefix <p>                 Trim this prefix from emitted function names.\n" ++
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
   "  --spawn-policy <policy>      available (default) or fallible; see docs/spawn-failure.md.\n" ++
+  "  --profile <name>             Require this input build profile; see docs/profiles.md.\n" ++
+  "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
+  "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
+  "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
+  "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
+  "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
   "To translate a Zig source file, use scripts/translate.sh instead.\n" ++
