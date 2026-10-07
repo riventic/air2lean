@@ -234,6 +234,10 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
+  /-- The thread-assignment budget of the `fallible` spawn policy (`ZigLean/Conc/Spawn.lean`):
+  at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
+  no budget. The `available` policy ignores it. -/
+  spawnLimit : Option Nat := none
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
