@@ -150,7 +150,8 @@ def check(root):
     default = get(('zig', 'default'))
     if default not in pinned:
         errors.append('zig.default %r is not a pinned version' % default)
-    found = re.search(r'AIR2LEAN_ZIG_VERSION:-([0-9.]+)\}', text('scripts/translate.sh'))
+    translate = text('scripts/translate.sh')
+    found = re.search(r'AIR2LEAN_ZIG_VERSION:-([0-9.]+)\}', translate)
     expect('zig.default', default, found.group(1) if found else None, 'scripts/translate.sh')
 
     # Every hard-coded supported-version list agrees.
@@ -176,7 +177,6 @@ def check(root):
     names = sorted(re.findall(r'def (?:legacy|current)Name : String := "([^"]+)"', profile_src))
     expect('profiles', sorted(p.get('name') for p in get(('profiles',), []) or []), names,
            'Air2Lean/Air/Profile.lean')
-    translate = text('scripts/translate.sh')
     tr = get(('translation',), {}) or {}
     flags = '-OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline'
     wanted = {'target': 'x86_64-linux', 'cpu': 'baseline', 'optimize': 'ReleaseSafe', 'error_tracing': False}

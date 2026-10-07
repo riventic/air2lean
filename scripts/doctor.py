@@ -108,6 +108,11 @@ class Doctor:
             self.versions = {e['version']: e for e in versions}
             self.order = [e['version'] for e in versions]
             self.budgets = self.meta['resources']
+            # Touch every field later checks index, so a malformed file fails here, not with a traceback.
+            for entry in versions:
+                list(entry['hosts'])
+            for profile in ('proofs', 'translate'):
+                float(self.budgets[profile]['min_disk_gib']), float(self.budgets[profile]['min_memory_gib'])
             self.args.zig_version = self.args.zig_version or self.meta['zig']['default']
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.add('metadata', 'fail', 'compatibility.json is missing or malformed: %s' % exc,
@@ -131,6 +136,11 @@ class Doctor:
         else:
             self.add('host', 'ok', 'host %s' % self.host_id, host=self.host_id)
 
+    def on_host_os(self, version):
+        """True when some supported host of version shares this host's OS."""
+        system = self.host_id.split('-')[1]
+        return any(h.split('-')[1] == system for h in self.versions[version]['hosts'])
+
     def zig_selection(self):
         version = self.args.zig_version
         if version not in self.versions:
@@ -139,10 +149,8 @@ class Doctor:
             return False
         hosts = self.versions[version]['hosts']
         if self.host_id.endswith('-linux') or self.host_id.endswith('-macos'):
-            same_os = [h for h in hosts if h.split('-')[1] == self.host_id.split('-')[1]]
-            if not same_os:
-                others = [v for v in self.order if any(h.split('-')[1] == self.host_id.split('-')[1]
-                                                        for h in self.versions[v]['hosts'])]
+            if not self.on_host_os(version):
+                others = [v for v in self.order if self.on_host_os(v)]
                 self.add('zig-version', 'fail', 'Zig %s is supported on %s only' % (version, ', '.join(hosts)),
                          'choose %s on this host' % ' or '.join(others))
                 return False
@@ -156,12 +164,13 @@ class Doctor:
         except OSError:
             self.add('lean-toolchain', 'fail', 'lean-toolchain is missing', 'run from a complete checkout')
             return False
-        if not shutil.which('elan', path=self.env.get('PATH')):
+        elan = shutil.which('elan', path=self.env.get('PATH'))
+        if not elan:
             self.add('elan', 'fail', 'elan is missing',
                      'install elan (https://github.com/leanprover/elan#installation), open a new terminal, '
                      'then run: elan toolchain install %s' % self.toolchain)
             return False
-        code, out = run([shutil.which('elan', path=self.env.get('PATH')), 'toolchain', 'list'])
+        code, out = run([elan, 'toolchain', 'list'])
         if code != 0:
             self.add('elan', 'fail', 'could not list installed elan toolchains: %s' % out,
                      'repair the elan installation (elan self update)')
@@ -185,13 +194,14 @@ class Doctor:
         version = self.args.zig_version
         stock = self.env.get('AIR2LEAN_ZIG') or 'zig'
         path = shutil.which(stock, path=self.env.get('PATH'))
-        hint = 'only rebuilding the exporter needs stock Zig %s on PATH (zig-patch/build.sh)' % version
+        need = 'only rebuilding the exporter needs stock Zig %s on PATH' % version
+        hint = need + ' (zig-patch/build.sh)'
         if not path:
-            self.add('stock-zig', 'note', 'stock Zig is missing (%s); %s' % (stock, hint.split(' (')[0]), hint)
+            self.add('stock-zig', 'note', 'stock Zig is missing (%s); %s' % (stock, need), hint)
             return
         code, out = run([path, 'version'])
         if code != 0:
-            self.add('stock-zig', 'note', 'could not query stock Zig (%s); %s' % (stock, hint.split(' (')[0]), hint)
+            self.add('stock-zig', 'note', 'could not query stock Zig (%s); %s' % (stock, need), hint)
         elif out not in self.versions:
             self.add('stock-zig', 'note', 'stock Zig %s is unsupported' % out, hint, version=out)
         elif out != version:
@@ -282,10 +292,11 @@ class Doctor:
             return
         command = self.env.get('AIR2LEAN_DOCKER') or 'docker'
         hint = 'only scripts/local-ci.sh and scripts/clean-env.sh need Docker'
-        if not shutil.which(command, path=self.env.get('PATH')):
+        path = shutil.which(command, path=self.env.get('PATH'))
+        if not path:
             self.add('docker', 'note', 'Docker is not installed', hint)
             return
-        code, out = run([shutil.which(command, path=self.env.get('PATH')), 'info', '--format', '{{.ServerVersion}} {{.Architecture}}'])
+        code, out = run([path, 'info', '--format', '{{.ServerVersion}} {{.Architecture}}'])
         if code != 0:
             self.add('docker', 'note', 'Docker is installed but the daemon is unreachable',
                      'start the Docker daemon; ' + hint, error=out[:300])
@@ -333,8 +344,7 @@ class Doctor:
                 selected = self.caller / selected
             translate = self.patched(self.args.zig_version, selected, True) and translate
             for version in self.order:
-                if version != self.args.zig_version and any(
-                        h.split('-')[1] == self.host_id.split('-')[1] for h in self.versions[version]['hosts']):
+                if version != self.args.zig_version and self.on_host_os(version):
                     self.patched(version, self.root / ('zig-air-%s/bin/zig' % version), False)
         self.translator()
         self.tools(needed=not translate)

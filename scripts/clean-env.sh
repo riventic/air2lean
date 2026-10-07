@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Clean-environment acceptance recipe: run the first proof end to end in a fresh Ubuntu 24.04
 # container from tracked files only. No host toolchains, caches, volumes or build outputs reach
-# the container; elan, Lean and (with --translate) Zig are installed from checksum pins.
+# the container; elan and (with --translate) Zig come from sha256 pins, Lean from the version
+# pinned in lean-toolchain (installed by elan).
 #
 # Usage: scripts/clean-env.sh [--translate] [--keep-image]
 #   default      install elan + pinned Lean, run the doctor (--require proofs), build
@@ -104,7 +105,7 @@ for arg in "$@"; do
   case "$arg" in
     --translate) translate=1 ;;
     --keep-image) keep_image=1 ;;
-    -h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "error: unknown argument: $arg" >&2; exit 2 ;;
   esac
 done

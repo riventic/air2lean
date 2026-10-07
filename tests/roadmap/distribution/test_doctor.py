@@ -183,6 +183,11 @@ class Doctor(unittest.TestCase):
         self.assertEqual(self.check(self.doctor('--require', 'proofs'), 'disk')['status'], 'ok')
 
     def test_missing_metadata_fails_closed(self):
+        meta = json.loads((self.repo / 'compatibility.json').read_text())
+        meta['resources'].pop('proofs')
+        (self.repo / 'compatibility.json').write_text(json.dumps(meta))
+        report = self.doctor('--require', 'proofs', expected=1)
+        self.assertEqual(self.check(report, 'metadata')['status'], 'fail')
         os.unlink(self.repo / 'compatibility.json')
         report = self.doctor('--require', 'proofs', expected=1)
         self.assertEqual(self.check(report, 'metadata')['status'], 'fail')

@@ -1,7 +1,8 @@
 # Distribution, doctor and editor workflow
 
 air2lean is distributed as source plus checksum-pinned build instructions. Nothing in a
-working setup depends on undocumented local state: every download is pinned by sha256, and
+working setup depends on undocumented local state: the elan and Zig downloads are pinned by
+sha256, the Lean toolchain by its exact version in `lean-toolchain` (elan installs it), and
 `scripts/clean-env.sh` reproduces the first proof in a fresh container from tracked files only.
 
 ## Compatibility metadata
