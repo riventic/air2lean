@@ -131,7 +131,10 @@ cleanup() {
     fi
   fi
   rm -rf "$snapshot"
-  [ -z "$artifacts" ] || printf 'Local CI results: %s\n' "$artifacts" >&2
+  if [ -n "$artifacts" ]; then
+    printf '%s\n' "$status" >"$artifacts/exit-status"
+    printf 'Local CI results: %s\n' "$artifacts" >&2
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -153,6 +156,12 @@ git ls-files -z | while IFS= read -r -d '' path; do
   if [ -e "$path" ] || [ -L "$path" ]; then printf '%s\0' "$path"; fi
 done >"$snapshot/files"
 COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
+# Source binding for scripts/release-record.py: the snapshot is evidence for HEAD only when
+# no tracked file differs from it (untracked files are never copied).
+tracked_clean=no
+[ -n "$(git status --porcelain --untracked-files=no)" ] || tracked_clean=yes
+printf 'revision=%s\ntracked_clean=%s\nmode=%s\nversion=%s\n' \
+  "$(git rev-parse HEAD)" "$tracked_clean" "$mode" "$version" >"$artifacts/source-revision"
 # Build with only this Dockerfile as context: no checkout or private files reach the daemon.
 cp Dockerfile.local-ci "$snapshot/Dockerfile"
 case "$(docker info --format '{{.Architecture}}')" in

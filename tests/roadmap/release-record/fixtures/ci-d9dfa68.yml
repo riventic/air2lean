@@ -76,57 +76,8 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
-      - name: Schedule exploration cap accounting regressions
-        run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
-
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
-
-      # Fixture receipts/audits/diff summaries only; no Lean, Lake or Zig.
-      - name: Verification coverage report regressions
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
-
-      # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
-      # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
-      - name: Support matrix is current and consistent
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
-        run: |
-          python3 scripts/support-matrix.py check
-          python3 -m unittest discover -s tests/roadmap/support-matrix -v
-
-      # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
-      - name: Artifact manifest provenance regressions
-        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
-
-      # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
-      - name: Theorem premise reference and index
-        run: |
-          python3 -B tests/roadmap/premises/test_premises.py
-          python3 -B scripts/premises.py check
-
-      # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
-      - name: Float-semantics label regressions
-        run: |
-          set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v
-          python3 scripts/float-semantics.py check
-
-      # Q07: synthetic inventories and stub runners; consumes coverage.py diff, runs no compiler.
-      - name: Upgrade qualification driver regressions
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
-
-      # Q02: every register ID maps to negative tests and designated mutants; complete rows
-      # need both. The Python-side mutants run in memory against existing regressions.
-      - name: Mutation map and Python-side mutants
-        run: |
-          set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
-          python3 -B scripts/mutation-map.py check
-          python3 -B tests/roadmap/mutation-map/mutants.py
 
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
@@ -153,48 +104,8 @@ jobs:
           set -euo pipefail
           python3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee "$RUNNER_TEMP/build-guard-tests.log"
 
-      # I08: stub-only interrupt/timeout/partial-write regressions for translate.sh, check.sh
-      # and proof receipts (docs/safe-output.md); no compiler or Lean run.
-      - name: Safe output and cancellation regressions
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          set -euo pipefail
-          python3 -m unittest discover -s tests/roadmap/safe-output -p 'test_*.py' -v 2>&1 \
-            | tee "$RUNNER_TEMP/safe-output-tests.log"
-
-      - name: Performance budget gate regressions
-        run: |
-          set -euo pipefail
-          python3 tests/roadmap/perf-budgets/test_perf_budgets.py
-          python3 scripts/perf-budgets.py validate
-
       - name: First-use workflow regressions
         run: python3 tests/usability/workflow.py
-
-      - name: Release compatibility metadata and doctor regressions
-        run: |
-          set -euo pipefail
-          python3 scripts/compat.py check
-          python3 -m unittest discover -s tests/roadmap/distribution -v
-
-      # Offline fixture repositories (docs/release-record.md). The ledger check verifies each
-      # entry's reviewed revision and baseline hash; the shallow checkout fetches only those
-      # commits. Local CI snapshots have no origin or history: structure only there.
-      - name: Release record and review ledger regressions
-        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          set -euo pipefail
-          python3 -m unittest discover -s tests/roadmap/release-record -v
-          if git remote get-url origin >/dev/null 2>&1; then
-            read -r -a reviewed <<<"$(python3 scripts/release-record.py ledger --revisions)"
-            git fetch --no-tags --depth=1 origin "${reviewed[@]}"
-            python3 scripts/release-record.py ledger
-          else
-            python3 scripts/release-record.py ledger --allow-unfetched
-          fi
 
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
@@ -263,11 +174,6 @@ jobs:
 
       - name: Build runtime library + translator
         run: lake build
-
-      # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
-      - name: Translator timing flag preservation
-        if: ${{ !matrix.mutate }}
-        run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
@@ -616,10 +522,6 @@ jobs:
             --fuel 1000 --node-cap 4 --prefix-cap 128 --output "$RUNNER_TEMP/schedules.json"
           python3 scripts/schedules.py replay --receipt "$RUNNER_TEMP/schedules.json" \
             --output "$RUNNER_TEMP/schedule-replay.json"
-          # Separate observed/enumeration coverage; the summary keeps qualified=false.
-          python3 scripts/diff-report.py compare --summary "$RUNNER_TEMP/schedule-report.json" \
-            --root "$PWD" --examples atomics --version "${{ matrix.zig }}" --host "$(uname -s)-$(uname -m)" \
-            --schedule-receipts "$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json"
           python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
           zig build-exe -OReleaseSafe -lc --dep common \
@@ -647,14 +549,6 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
           scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
-          python3 scripts/float-semantics.py check-report "$RUNNER_TEMP/air2lean-assumptions.json"
-
-      # Same premise tables over the kernel dependency graph of the audited translation.
-      - name: Map audited theorems to premise IDs
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
-        run: |
-          python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
-            --output "$RUNNER_TEMP/air2lean-premises.json"
 
       - name: Assurance environment regressions
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
@@ -666,14 +560,6 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_check.py
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_ci_stash.py
           tests/roadmap/assurance/check.sh
-
-      # Claim strength is derived from extracted theorem types; overstated goals are rejected.
-      - name: Claim strength regressions
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
-        env:
-          LEAN_NUM_THREADS: "1"
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: tests/roadmap/claims/check.sh
 
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}
