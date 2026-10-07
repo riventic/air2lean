@@ -584,5 +584,8 @@ structure Func where
   /-- `layouts[i]` is the layout of `types[i]`. -/
   layouts : Array Layout
   globals : Array Global
+  /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
+  Legacy profiles and hand-built functions keep the default 16. -/
+  errorSetBits : Nat := 16
 
 end Air2Lean

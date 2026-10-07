@@ -50,6 +50,8 @@
     "ZigLean.Env": ["ENV-01"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
+    "ZigLean.Mem.ErrWidth": ["SEM-02"],
+    "ZigLean.Mem.ErrWidthLemmas": ["SEM-02"],
     "ZigLean.Mem.Lemmas": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
