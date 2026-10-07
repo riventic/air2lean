@@ -650,6 +650,7 @@ jobs:
           lake build Proofs
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
+            lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
           fi
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit

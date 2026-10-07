@@ -226,7 +226,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   kernel-proved. A client theorem holds for the protocol, global invariant, ghost state and
   ownership splits that it states or discharges. Strict-safety theorems additionally exclude
   every scheduler error, including races and deadlock.
-- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`.
+- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
 ## Memory ordering
