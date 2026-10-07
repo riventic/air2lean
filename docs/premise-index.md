@@ -5,18 +5,18 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1759 theorems in 82 files.
+1760 theorems in 82 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 490 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 19 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 19 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 20 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 20 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1008 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1009 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 66 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
@@ -24,8 +24,8 @@ premise was derived. This index covers the committed generated modules.
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
 | [THR-08](premises.md#thr-08) | 904 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 764 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 764 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 765 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 765 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
@@ -35,13 +35,13 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1035 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1359 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1036 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1360 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 793 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1759 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1760 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 806 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 806 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2242,6 +2242,7 @@ File premises: ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
 | `twoReaders_one_outstanding_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `twoReaders_none_returned_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `read_after_free_rejected` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `free_before_late_reader_ok` | ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/spawn-failure/Runtime.lean`
 

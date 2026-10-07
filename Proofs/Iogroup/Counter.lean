@@ -896,7 +896,7 @@ theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j
       .inl ⟨j' + 1, by omega,
         by show (upd (upd G₁ (j' + 1) (gTask false)) 0 (gSpawn (j' + 1)) 0).2 = _
            rw [upd_self]; rfl, by simp [hsz],
-        by rw [hgr, grp_succ], fun u => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_, hi.2.blk,
+        by rw [hgr, grp_succ], fun u => ?_⟩⟩, ?_, fun u => ?_, hi.2.blk,
       hi.2.blk1, fun v hv => ?_⟩⟩
   · -- the counter does not change: the new task has not done its increment
     apply R_main
@@ -933,15 +933,11 @@ theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j
     · rw [if_neg hu]; have := hjb u; unfold joinedB at this; exact this
   · obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₁.clocks) (t := 0) (by
       rw [hcs]; exact Nat.succ_pos _)
-    rcases hi.2.io e he hb ho16 with ⟨hk, u, hu, hle⟩ | h
-    · refine .inl ⟨hk, u, by simp only [Array.size_push]; omega, VClock.le_trans hle
-        (hcl u (by rw [hi.1.own.csize]; exact hu))⟩
-    · refine .inr fun u hu => ?_
-      simp only [Array.size_push] at hu
-      by_cases hu' : u < m₁.threads.size
-      · exact VClock.le_trans (h u hu') (hcl u (by rw [hi.1.own.csize]; exact hu'))
-      · have : u = m₁.clocks.size := by rw [hi.1.own.csize]; omega
-        subst this; exact VClock.le_trans (h 0 (by rw [hsz]; omega)) hcn
+    exact ioOk_iff.mpr ((ioOk_iff.mp hi.2.io).fork (t := 0)
+      (by rw [← hi.1.own.csize, hcs]; exact Nat.succ_pos _)
+      (by show (m₁.threads.push _).size = _; simp)
+      (fun u hu => hcl u (by rw [hi.1.own.csize]; exact hu)) (by rw [← hi.1.own.csize]; exact hcn)
+      fun _ he _ => he)
   · unfold upd; split
     · rfl
     · split
@@ -1061,7 +1057,7 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     rw [upd_ne _ _ hu]
   refine ⟨by rw [hm'], hl, ⟨⟨?_, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨i' + 1, by omega,
     by show (upd G₁ 0 _ 0).2 = _; rw [upd_self]; rfl, hsz', by rw [hm']; exact hgr, fun u => ?_⟩⟩,
-    fun e he hb ho16 => ?_, fun u => ?_, ?_, ?_, fun v hv => ?_⟩⟩
+    ?_, fun u => ?_, ?_, ?_, fun v hv => ?_⟩⟩
   · rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (by omega)]
     exact h00
   · rw [hsz'] at hu
@@ -1085,16 +1081,11 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     · subst hu; simp
     · rw [if_neg hu, hjb u]
       constructor <;> intro h <;> unfold ThreadId at * <;> omega
-  · rcases hi.2.io e (by rw [hm'] at he; exact he) hb ho16 with ⟨hk, u, hu, hle⟩ | h
-    · refine .inl ⟨hk, u, by rw [hsz']; rwa [hsz] at hu, ?_⟩
-      by_cases hu0 : u = 0
-      · subst hu0; exact VClock.le_trans hle hgrow
-      · rw [hcv u hu0]; exact hle
-    · refine .inr fun u hu => ?_
-      rw [hsz'] at hu
-      by_cases hu0 : u = 0
-      · subst hu0; exact VClock.le_trans (h 0 (by rw [hsz]; decide)) hgrow
-      · rw [hcv u hu0]; exact h u (by rw [hsz]; exact hu)
+  · refine ioOk_iff.mpr ((ioOk_iff.mp hi.2.io).keep (by rw [hsz', hsz]) (fun u _ => ?_)
+      fun e he _ => by rw [hm'] at he; exact he)
+    by_cases hu0 : u = 0
+    · subst hu0; exact hgrow
+    · rw [hcv u hu0]; exact VClock.le_refl _
   · unfold upd; split
     · rfl
     · exact hi.2.parts u

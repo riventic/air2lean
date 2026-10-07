@@ -50,8 +50,9 @@ private def twoReaders (joins : Nat) : MemM Unit := do
   if 2 ≤ joins then Thread.join r2
   poisonFree p 4
 
-/-- The owner frees the region before the second reader reads it. -/
-private def readAfterFree : MemM Unit := do
+/-- The owner frees the region before the second reader reads it (`read`: the reader then
+reads). -/
+private def readAfterFree (read : Bool) : MemM Unit := do
   let p ← alloc .heap 4 4
   store 4 p (7 : BitVec 32)
   let r1 ← Thread.fork
@@ -61,8 +62,9 @@ private def readAfterFree : MemM Unit := do
   Thread.join r1
   let r2 ← Thread.fork
   poisonFree p 4
-  modify fun m => { m with current := r2 }
-  let _ ← load (BitVec 32) 4 p
+  if read then
+    modify fun m => { m with current := r2 }
+    let _ ← load (BitVec 32) 4 p
 
 private def outcome (x : MemM Unit) : Option (Except Error Unit) :=
   ((x.run {}).run).map fun r => r.map (·.1)
@@ -79,7 +81,11 @@ theorem twoReaders_none_returned_rejected :
     outcome (twoReaders 0) = some (.error .illegal) := by decide +kernel
 
 /-- A reader whose share was not returned before the free cannot read: use after free. -/
-theorem read_after_free_rejected : outcome readAfterFree = some (.error .illegal) := by
+theorem read_after_free_rejected : outcome (readAfterFree true) = some (.error .illegal) := by
+  decide +kernel
+
+/-- The same run without the late read succeeds: the rejection above is the read. -/
+theorem free_before_late_reader_ok : outcome (readAfterFree false) = some (.ok ()) := by
   decide +kernel
 
 /-! ## Runtime: the translated `groupCounter` with a mutated reclamation -/

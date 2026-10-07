@@ -80,18 +80,19 @@ theorem read (hs : ReadShared R m) (ht : m.current < m.threads.size)
     · exact .inl ⟨hk, u, hu, VClock.le_trans hle (Lock.recordAt_le m b o len .read u)⟩
     · exact .inr fun u hu => VClock.le_trans (h u hu) (Lock.recordAt_le m b o len .read u)
   · refine .inl ⟨rfl, m.current, ht, ?_⟩
-    show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
-    rw [getElem!_set!_ite]
-    split
-    · exact VClock.le_refl _
-    · rename_i h; exact absurd ⟨rfl, hcs ▸ ht⟩ h
+    rw [recordAt_clock (hcs ▸ ht)]
+    exact VClock.le_refl _
 
-/-- A step that keeps the threads, makes no clock smaller and adds no access in the region keeps
-every share. -/
-theorem keep (hs : ReadShared R m) (ht : m'.threads = m.threads)
+/-- A step that keeps the number of threads, makes no clock smaller and adds no access in the
+region keeps every share. A join is such a step: it marks the joined thread and grows the
+joiner's clock. -/
+theorem keep (hs : ReadShared R m) (ht : m'.threads.size = m.threads.size)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hfp : ∀ e ∈ m'.footprint, R e → e ∈ m.footprint) : ReadShared R m' := fun e he hr =>
-  (hs e (hfp e he hr) hr).imp (fun ⟨hk, h⟩ => ⟨hk, Lock.someLe_mono ht hcl h⟩) (Lock.allLe_mono ht hcl)
+    (hfp : ∀ e ∈ m'.footprint, R e → e ∈ m.footprint) : ReadShared R m' := by
+  intro e he hr
+  rcases hs e (hfp e he hr) hr with ⟨hk, u, hu, hle⟩ | h
+  · exact .inl ⟨hk, u, by omega, VClock.le_trans hle (hcl u hu)⟩
+  · exact .inr fun u hu => VClock.le_trans (h u (by omega)) (hcl u (by omega))
 
 /-- A spawn: the new thread `m.threads.size`, whose clock is above its spawner `t`'s, holds a
 share too. -/
@@ -139,11 +140,8 @@ theorem recordAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.cu
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact VClock.le_trans (ho e he hr) (Lock.recordAt_le m b o len k m.current)
-  · show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
-    rw [getElem!_set!_ite]
-    split
-    · exact VClock.le_refl _
-    · rename_i h; exact absurd ⟨rfl, ht⟩ h
+  · rw [recordAt_clock ht]
+    exact VClock.le_refl _
 
 /-- Full ownership: no access of any kind to a covered range races, including a write, such as
 `std`'s poison write before `free`. -/
