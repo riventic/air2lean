@@ -29,8 +29,8 @@ instance : Enc ThreadId where
 
 /-! ## Atomics (RC11)
 
-The memory model approximates RC11's operational form without promises. Its missing SC order,
-same-value plain writes and read-view transfer can permit extra outcomes
+The memory model approximates RC11's operational form without promises. Its missing SC order
+and read-view transfer can permit extra outcomes
 (`docs/std-models.md` §Thread model). An atomic location (`ALoc`) keeps its writes (`Msg`) in
 modification order; the block's
 bytes are those of the last one. At each atomic op the oracle picks (`SyncOp.pick`, the options
@@ -48,23 +48,45 @@ from `*Count`):
 - An acquire read adopts the message's release clock (`Msg.relClock`): the writer's clock for a
   release write, joined along the RMWs after it. That is the only happens-before edge of atomics.
 
-A plain write to an atomic location (the value before the first atomic op, or a write after a
-join) becomes a message at the next atomic op (`locIdx`); a race with it is `.illegal`, so it
-happened before. Two atomic accesses never race (`racePair`). An atomic location with an overlap
-of another size throws `.unspecified`.
+Modification order holds write events, not values: every atomic write is a new message with a
+fresh id, so repeated equal values stay distinct messages with their own clocks, release clocks
+and RMW edges. A plain write to an atomic location (the value before the first atomic op, or a
+write after a join) becomes a message at the next atomic op (`locIdx`) whenever it did not happen
+before the newest message (`plainSince`), even if it wrote the bytes the location already had; a
+race with it is `.illegal`, so it happened before that op. Two atomic accesses never race
+(`racePair`).
+
+**Mixed-size policy**: an atomic location is one `(block, offset, size)`. An atomic access that
+overlaps an existing atomic location with another offset or size is rejected with
+`.unspecified`, before any message is read or written (`locIdx`). Plain accesses of any size are
+unaffected; a plain write that overlaps the location becomes a message as above.
 
 **Trusted assumption** (`docs/std-models.md` §Thread model): the compiled code has no load
 buffering (RC11); LLVM does not promise that for relaxed atomics.
 -/
 
-/-- The clock of the last plain write to the bytes `o..o+len` of block `b` (`#[]`: none, the
-value from before every thread). -/
+/-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. -/
+def plainHit (b : BlockId) (o len : Nat) (e : FootprintEntry) : Bool :=
+  e.block == b && e.kind == .write && o < e.off + e.len && e.off < o + len
+
+/-- The join of the clocks of the plain writes to the bytes `o..o+len` of block `b` (`#[]`: none,
+the value from before every thread). Without a race these writes are ordered, so it is the clock
+of the last one. -/
 def plainClock (m : Mem) (b : BlockId) (o len : Nat) : VClock :=
-  ((m.footprint.filter fun e => e.block == b && e.kind == .write && o < e.off + e.len &&
-    e.off < o + len).back?.map (·.clock)).getD #[]
+  (m.footprint.filter (plainHit b o len)).foldl (fun c e => VClock.merge c e.clock) #[]
+
+/-- A plain write to the bytes `o..o+len` of block `b` did not happen before the clock `c` (of
+the newest message): it is a write event after that message. -/
+def plainSince (m : Mem) (b : BlockId) (o len : Nat) (c : VClock) : Bool :=
+  m.footprint.any fun e => plainHit b o len e && !VClock.le e.clock c
+
+/-- The clock of the newest message of `l`. -/
+def ALoc.lastClock (l : ALoc) : VClock := (l.msgs.back?.map (·.clock)).getD #[]
 
 /-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
-bytes as its first message; a plain write since the last message becomes a message. -/
+bytes as its first message; a plain write since the last message (a write event, whatever its
+value) becomes a message. An overlapping location of another offset or size is `.unspecified`
+(the mixed-size policy). -/
 def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
   let m ← get
   let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
@@ -73,7 +95,7 @@ def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
     let l := m.atomics[i]!
     if l.len != len then throw .unspecified
     let last := (l.msgs.back?.map (·.bytes)).getD #[]
-    let (msgs, next) := if last == cur then (l.msgs, m.nextMsg) else
+    let (msgs, next) := if last == cur && !plainSince m b o len l.lastClock then (l.msgs, m.nextMsg) else
       (l.msgs.push { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] },
        m.nextMsg + 1)
     set { m with atomics := m.atomics.set! i { l with msgs }, nextMsg := next }

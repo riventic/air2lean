@@ -288,14 +288,15 @@ def Loc (m : Mem) (i : Nat) (l : ALoc) : Prop :=
   m.atomics.findIdx? (fun l => l.block == L.b && l.off == L.o) = some i ∧ m.atomics[i]? = some l
 
 /-- The word's atomic location: no other location overlaps the word; the location is an RMW
-chain of 4-byte messages that hold `0`, `1` or `c`, and its newest message has the word's
-bytes. -/
+chain of 4-byte messages that hold `0`, `1` or `c`, its newest message has the word's
+bytes, and every plain write to the word happened before that message. -/
 structure LocOk (m : Mem) : Prop where
   only : ∀ l ∈ m.atomics, l.block = L.b → l.off < L.o + 4 → L.o < l.off + l.len → l.off = L.o
   ok : ∀ i l, L.Loc m i l → l.len = 4 ∧ 0 < l.msgs.size ∧ l.Chain ∧
     (∀ j (h : j < l.msgs.size), ∃ w, L.Val w ∧
       (intOfBytes 32 l.msgs[j].bytes).run = some (.ok (BitVec.ofNat 32 w))) ∧
     ALoc.lastBytes l = curBytes m L.b L.o 4
+  plain : ∀ i l, L.Loc m i l → PlainLe m L.b L.o 4 l.lastClock
 
 /-- The clock `c` happened before every thread that has not ended (`gone`): a thread that
 ended does not access the word or the resource again. -/
@@ -460,14 +461,14 @@ theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
     (s : Array (ThreadId × Nat × Nat)) (k : Nat) (w : Array ThreadId) :
     L.Inv G { m with current := c, seen := s, nextMsg := k, woken := w } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
-    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit⟩
 
 /-- The same memory, but the groups' tasks. -/
 theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array (Ptr × ThreadId)) :
     L.Inv G { m with groups := gs } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
-    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit⟩
 
 /-- The queue with fewer threads, whose places stay. -/
@@ -519,7 +520,7 @@ theorem Inv.congr {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
   refine ⟨hown ▸ hi.own, fun u => by rw [hpart, hheld]; exact hi.pdisj u,
     fun u hu => by rw [hheld]; exact hi.idle u (by rw [← hph]; exact hu),
     fun u hu => hi.live u (by rw [← hph]; exact hu), hi.blk, ?_, fun u v hu hv => hi.one u v
-      (by rw [← hph]; exact hu) (by rw [← hph]; exact hv), ⟨hi.loc.only, hi.loc.ok⟩,
+      (by rw [← hph]; exact hu) (by rw [← hph]; exact hv), ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩,
     fun u => hown ▸ hi.off u, hi.wfpW (fun u h => by rw [← hph]; exact h), fun i l hl => ?_,
     fun hF => ?_, fun u hu => ?_, hi.fq.mono (fun w hw => hw) (fun w _ => hph w.1), fun hp => ?_⟩
   · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
@@ -569,11 +570,29 @@ theorem hits_of {e : FootprintEntry} (hb : e.block = L.b) (h1 : L.o < e.off + e.
   · exact ⟨hb, L.o, ho, .inl h1, Nat.le_refl _, by omega⟩
   · exact ⟨hb, e.off, Nat.le_refl _, .inr rfl, by omega, h2⟩
 
+/-- A plain write to a byte of the word hits it. -/
+theorem hits_of_plain {e : FootprintEntry} (h : plainHit L.b L.o 4 e = true) : L.Hits e := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  exact L.hits_of h.1.1.1 h.1.2 h.2
+
+/-- An access that does not hit the word is not a plain write to it. -/
+theorem plainHit_false {e : FootprintEntry} (h : ¬ L.Hits e) : plainHit L.b L.o 4 e = false := by
+  cases hp : plainHit L.b L.o 4 e
+  · rfl
+  · exact absurd (L.hits_of_plain hp) h
+
 /-- An access that hits the word touches a heap with the word's bytes. -/
 theorem touches_word {e : FootprintEntry} {h : Heap} (he : L.Hits e)
     (hw : ∀ x, L.o ≤ x → x < L.o + 4 → h (L.b, x) ≠ none) : e.Touches h := by
   obtain ⟨hb, x, h1, h2, h3, h4⟩ := he
   exact ⟨x, h1, h2, by rw [hb]; exact hw x h3 h4⟩
+
+/-- An access that touches no part of a heap with the word's bytes is not a plain write to it. -/
+theorem plainHit_false_of {e : FootprintEntry} {h : Heap}
+    (hw : ∀ x, L.o ≤ x → x < L.o + 4 → h (L.b, x) ≠ none) (hnt : ¬ e.Touches h) :
+    plainHit L.b L.o 4 e = false :=
+  L.plainHit_false fun hh => hnt (L.touches_word hh hw)
 
 /-- The same cells at the word: the same facts of its block, and the same word. -/
 theorem word_congr {m m' : Mem}
@@ -643,8 +662,8 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   have hrest : ∀ hL : Heap, hL.Sub m.heap → Heap.Disjoint hL (L.own G m t) →
       hL.Sub (m.heap.diff (L.own G m t)) := fun hL h1 h2 => Heap.sub_diff h1 h2
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
-    fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_⟩,
-    fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
+    fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_,
+      fun i l hl => ?_⟩, fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
     hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_⟩
   · by_cases hu : u = t
     · subst hu; rw [upd_self]; exact hpd
@@ -658,6 +677,8 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   · rw [hphu] at hu hv; exact hi.one u v hu hv
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i l ((hloc i l).mp hl)
     exact ⟨h1, h2, h3, h4, by rw [h5, hcur]⟩
+  · exact (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
+      (hs.fp e he).imp id fun h => L.plainHit_false_of hwF h.2.1
   · rw [hown]
     by_cases hu : u = t
     · subst hu; rw [upd_self]; exact off_of_disj hd hwF
@@ -726,7 +747,7 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
   have hfree : L.Free (upd G t g) ↔ L.Free G := by
     unfold Lock.Free; exact forall_congr' fun u => not_congr (hholds u)
   refine ⟨hown ▸ hi.own, fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_,
-    fun u v hu hv => hi.one u v ((hholds u).mp hu) ((hholds v).mp hv), ⟨hi.loc.only, hi.loc.ok⟩,
+    fun u v hu hv => hi.one u v ((hholds u).mp hu) ((hholds v).mp hv), ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩,
     fun u => hown ▸ hi.off u, hi.wfpW hgw, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
     fun w hw => ?_, fun hp => ?_⟩
   · unfold upd; split
@@ -870,7 +891,7 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
       · simp [h1, h2, hct]; exact hs0
       · simp [h1, h2]; exact fun _ _ h => h
   refine ⟨hown ▸ ho, fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_,
-    fun u v hu hv => ?_, ⟨hi.loc.only, hi.loc.ok⟩, fun u => ?_, fun e he hh => ?_,
+    fun u v hu hv => ?_, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => ?_, fun e he hh => ?_,
     fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, fun w hw => ?_, fun hp => ?_⟩
   · unfold upd
     by_cases h1 : u = t
@@ -996,7 +1017,7 @@ theorem Inv.join {G : ThreadId → γ} {m m' : Mem} {t u : ThreadId} {g : γ} (h
     unfold Lock.Free; exact forall_congr' fun w => by rw [hphu]
   have hnu : ∀ w, L.ph (G w) ≠ .gone → w ≠ u := fun w hw e => hw (by rw [e, huo])
   refine ⟨hown ▸ ho, fun w => ?_, fun w hw => ?_, fun w hw => ?_, hi.blk, ?_,
-    fun v w hv hw => ?_, ⟨hi.loc.only, hi.loc.ok⟩, fun w => ?_, fun e he hh => ?_,
+    fun v w hv hw => ?_, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun w => ?_, fun e he hh => ?_,
     fun i l hl => ?_, fun hF => ?_, fun v hv => ?_,
     hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_⟩
   · unfold upd; split
@@ -1090,7 +1111,8 @@ theorem Inv.make {G : ThreadId → γ} {m : Mem} {own : ThreadId → Heap} {t : 
     fun u _ => hheld u, fun u hu => ((hph u).resolve_right hu).2, hblk,
     ⟨0, .inl rfl, h0, ⟨fun _ => hfree, fun _ => rfl⟩⟩,
     fun u _ hu => absurd hu (hfree u),
-    ⟨fun l hl hb => absurd hb (hat l hl), fun i l hl => absurd hl (hnoloc i l)⟩, hoffu,
+    ⟨fun l hl hb => absurd hb (hat l hl), fun i l hl => absurd hl (hnoloc i l),
+      fun i l hl => absurd hl (hnoloc i l)⟩, hoffu,
     fun e he hh => .inr fun u hu _ => VClock.le_trans
       (ho.owns t ht e he (.inl (touches_word hh hWt))) (hall u hu),
     fun i l hl => absurd hl (hnoloc i l), fun _ => ⟨hL, hR, hL1.trans (ho.sub t), fun u => ?_,

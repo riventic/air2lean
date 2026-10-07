@@ -183,7 +183,8 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
     (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (hw : m'.waiters = m.waiters)
     (hcs : m'.clocks.size = m.clocks.size)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ L.NewOk G m m' e) : L.Inv G m' := by
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ L.NewOk G m m' e)
+    (hpl : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ plainHit L.b L.o 4 e = false) : L.Inv G m' := by
   have hjb : joinedB m' = joinedB m := joinedB_congr ht
   have hown : L.own G m' = L.own G m := by funext u; unfold Lock.own; rw [hjb]
   have hheap : m'.heap = m.heap := by funext l; obtain ⟨b, x⟩ := l; simp only [Mem.heap, hb]
@@ -193,7 +194,8 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
   have hall : ∀ {c}, L.LiveLe G m c → L.LiveLe G m' c := fun h => LiveLe.mono ht (fun u _ => hcl u) h
   have hsome : ∀ {c}, SomeLe m c → SomeLe m' c := fun h => someLe_mono ht (fun u _ => hcl u) h
   refine ⟨?_, hi.pdisj, hi.idle, fun u hu => ?_, by rw [hb]; exact hi.blk, ?_, hi.one,
-    ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_⟩, fun u => hown ▸ hi.off u,
+    ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_,
+      fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp hpl⟩, fun u => hown ▸ hi.off u,
     fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw]; exact hi.fq,
     fun hp => ?_⟩
   · rw [hown]
@@ -240,7 +242,12 @@ theorem Inv.record {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessK
     L.Inv G (m.recordAt L.b L.o 4 k) := by
   have hcs : m.current < m.clocks.size := by rw [hi.own.csize]; exact ht
   obtain ⟨blk, hblk, -⟩ := hi.blk
-  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) (fun e he => ?_)
+    fun e he => by
+      simp only [Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · exact .inr (plainHit_atomic hk)
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
@@ -283,7 +290,12 @@ theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
     (hnR : ∀ hL, L.R G hL → ∀ x, o ≤ x → x < o + n → hL (b, x) = none)
     (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
     L.Inv G (m.recordAt b o n .read) := by
-  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) (fun e he => ?_)
+    fun e he => by
+      simp only [Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · exact .inr (by simp [plainHit])
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
@@ -313,7 +325,12 @@ theorem Inv.readAll {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G 
     by_cases hu' : u = m.current
     · subst hu'; rw [getElem!_set!_ite]; simp [hcs, VClock.le_refl]
     · exact absurd (hsole u hu hu') hg
-  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) fun e he => ?_
+  refine hi.mono rfl rfl rfl rfl (by simp [Mem.recordAt]) (recordAt_le m _ _ _ _) (fun e he => ?_)
+    fun e he => by
+      simp only [Mem.recordAt, Array.mem_push] at he
+      rcases he with he | rfl
+      · exact .inl he
+      · exact .inr (by simp [plainHit])
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
@@ -369,7 +386,8 @@ theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G
     have hl : L.Loc m i m.atomics[i] := ⟨hf, Array.getElem?_eq_getElem hi'⟩
     obtain ⟨hlen, -, -, -, hlast⟩ := hi.loc.ok i _ hl
     have hg : m.atomics[i]! = m.atomics[i] := getElem!_pos m.atomics i hi'
-    obtain ⟨rfl, rfl⟩ := locIdx_found hf (by rw [hg]; exact hlen) (by rw [hg]; exact hlast) h
+    obtain ⟨rfl, rfl⟩ := locIdx_found hf (by rw [hg]; exact hlen) (by rw [hg]; exact hlast)
+      (by rw [hg]; exact hi.loc.plain i _ hl) h
     exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ h => h, .of_eq rfl⟩
   | none =>
     obtain ⟨rfl, rfl⟩ := locIdx_new hf h
@@ -398,7 +416,11 @@ theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G
         · simp only [nl, firstLoc, List.size_toArray, List.length_cons, List.length_nil] at hj
           obtain rfl : j = 0 := by omega
           exact ⟨w, hw, hu⟩
-        · simp [ALoc.lastBytes, nl, firstLoc, firstMsg, curBytes]⟩,
+        · simp [ALoc.lastBytes, nl, firstLoc, firstMsg, curBytes],
+       fun i l hl => by
+        obtain ⟨rfl, rfl⟩ := honly i l hl
+        intro e he hh
+        simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using plainLe_plainClock m L.b L.o 4 e he hh⟩,
       hi.off, hi.wfp,
       fun i l hl => by
         obtain ⟨rfl, rfl⟩ := honly i l hl
@@ -485,7 +507,8 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
     (hfq : L.Queue G' M.waiters)
     (hwit : L.U32 M (BitVec.ofNat 32 w') → L.Waits M.waiters → ∃ v, v < M.threads.size ∧
       M.waiters.any (·.1 == v) = false ∧ (L.ph (G' v)).busy = true ∧
-      (L.ph (G' v) = .holds → L.U32 M (BitVec.ofNat 32 L.c))) :
+      (L.ph (G' v) = .holds → L.U32 M (BitVec.ofNat 32 L.c)))
+    (hpt : L.ph (G t) ≠ .gone) (hmc : msg.clock = M.clocks[t]!) :
     L.Inv G' M := by
   obtain ⟨blk₀, hb₀, hlv, hsz, ha4, hk⟩ := hi.blk
   rw [hb] at hb₀; cases hb₀
@@ -507,7 +530,8 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
   have hjb : joinedB M = joinedB m₁ := joinedB_congr hst.threads
   have honly : ∀ i l₀, L.Loc M i l₀ → i = li ∧ l₀ = l' := fun i l₀ h => loc_unique h hl'
   refine ⟨hown, hpdisj, hidle, fun u hu => ?_, ?_, ⟨w', hw', hU, hz⟩, hone, ⟨fun l₀ hl₀ hb' h1 h2 => ?_,
-    fun i l₀ hl₀ => ?_⟩, hoff, fun e he hh => ?_, fun i l₀ hl₀ => ?_, hfree, hres, hfq, hwit hU⟩
+    fun i l₀ hl₀ => ?_, fun i l₀ hl₀ => ?_⟩, hoff, fun e he hh => ?_, fun i l₀ hl₀ => ?_, hfree, hres,
+    hfq, hwit hU⟩
   · rw [hst.threads, hjb]; exact hi.live u (hlive u hu)
   · refine ⟨_, hMb, hlv, ?_, ha4, hk⟩
     show L.o + 4 ≤ (writeBytes blk.bytes L.o msg.bytes).size
@@ -525,6 +549,15 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
       · exact hval j (by assumption)
       · exact ⟨w', hw', hmv⟩
     · unfold ALoc.lastBytes; simp [l', hcur]
+  · obtain ⟨rfl, rfl⟩ := honly i l₀ hl₀
+    intro e he hh
+    have hlc : l'.lastClock = msg.clock := by simp [l', ALoc.lastClock]
+    rw [hlc, hmc]
+    rcases hst.fp e he with h | ⟨-, -, -, hat', -⟩
+    · rcases hi.wfp e h (L.hits_of_plain hh) with ⟨ha', -⟩ | hle
+      · rw [plainHit_atomic ha'] at hh; cases hh
+      · exact VClock.le_trans (hle t (hi.live t hpt).1 hpt) (hst.clocks t)
+    · rw [plainHit_atomic hat'] at hh; cases hh
   · rcases hst.fp e he with h | ⟨-, -, -, hat', hle⟩
     · rcases hi.wfp e h hh with ⟨ha', hle⟩ | hle
       · exact .inl ⟨ha', hst.someLe hle⟩
@@ -533,6 +566,11 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
   · obtain ⟨rfl, rfl⟩ := honly i l₀ hl₀
     simp only [l', back_push]
     exact hrel
+
+/-- The clock of an RMW's message is its thread's clock. -/
+theorem rmwMsg_clock {m₂ : Mem} {t : ThreadId} {ord : AtomicOrder} {rd : Msg} {new : BitVec 32}
+    (hc : m₂.current = t) : (rmwMsg m₂ ord rd new).clock = m₂.clocks[t]! := by
+  simp [rmwMsg, hc]
 
 /-- The facts of an RMW at the word by thread `t` that read the newest message `rd`. -/
 theorem Inv.rmwStep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder}
@@ -677,7 +715,8 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     rw [hown]; exact ho1.add (by rw [hst.threads]; exact ht) (hst.sub hoff hsub) hdj howns
   refine ⟨hst, hcM, hL, hR, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw3 (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
-    (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hp => ?_)⟩
+    (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hp => ?_)
+    hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rename_i hu; subst hu; rw [L.part_set, L.held_set]
       have := hdj u; rw [hownt] at this; exact this.symm
@@ -768,7 +807,8 @@ theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) L.valC (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
-    (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)) (fun hU _ => ?_)⟩
+    (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)) (fun hU _ => ?_)
+    (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -842,7 +882,8 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
-    (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hq => ?_)⟩
+    (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hq => ?_) hng
+    (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -926,7 +967,7 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
     (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u))
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))
-    (fun hU hp' => ?_)⟩
+    (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -1021,7 +1062,7 @@ theorem Inv.queue {G : ThreadId → γ} {m : Mem} {t c : ThreadId} {p : LPh}
       · exact h
   refine ⟨by rw [hown]; exact ⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩,
     fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_, fun u v hu hv => ?_,
-    ⟨hi.loc.only, hi.loc.ok⟩, fun u => by rw [hown]; exact hi.off u, hi.wfpW hgw,
+    ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => by rw [hown]; exact hi.off u, hi.wfpW hgw,
     fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, hfq, hwit⟩
   · unfold upd; split
     · rw [L.held_set, L.part_set]; exact Heap.disjoint_empty _
@@ -1175,7 +1216,7 @@ theorem Inv.requeue {G : ThreadId → γ} {m : Mem} {c : ThreadId} {ws : Array (
       (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))) :
     L.Inv G { m with current := c, waiters := ws, woken := wk } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
-    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hfq, hwit⟩
 
 /-- A futex wait of thread `t` (`away`, not in the queue) at another futex `p`. If it sleeps, the
@@ -1427,7 +1468,8 @@ theorem Inv.cas {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} [Pack
         (.inl hb₁),
         by rw [hmM, ← hcu₁]; rfl, .inr ⟨w, hw, hw0, rfl, ?_⟩⟩
       rw [hmM]
-      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) fun e he => .inl he
+      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) (fun e he => .inl he)
+        fun e he => .inl he
   rcases cmpxchgAs_ok h with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
   · obtain ⟨hst, hcu, h1 | ⟨w, -, -, he, -⟩⟩ := core none ho
     · exact ⟨hst, hcu, .inl ⟨rfl, h1.2⟩⟩
@@ -1580,7 +1622,8 @@ theorem Inv.load {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {ord : AtomicOrd
   refine ⟨hst₁.trans (by rw [hmM]; exact Step.same rfl rfl rfl rfl rfl rfl fun _ _ => Iff.rfl)
     (.inl hb₁), by rw [hmM, ← hcu₁]; rfl, ?_⟩
   rw [hmM]
-  exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) fun e he => .inl he
+  exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) (fun e he => .inl he)
+        fun e he => .inl he
 
 /-! ## No error at the word -/
 
@@ -1822,7 +1865,8 @@ theorem Inv.casD {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {r : Option (Bit
       rw [hm']; unfold loadM; rfl
     have hi' : L.Inv G m' := by
       rw [hmM]
-      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) fun e he => .inl he
+      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) (fun e he => .inl he)
+        fun e he => .inl he
     have hq := hi'.queue (c := m'.current) (ws := m'.waiters) (wk := m'.woken) (p := .wait) hnh hng
       (by decide) (by decide) (fq_keep hi' hnw hna) (wit_keep hi' hnh (by decide) fun _ => rfl)
     cases m'
