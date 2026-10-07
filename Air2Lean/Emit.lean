@@ -836,6 +836,45 @@ def FCtx.enumIntCast (fc : FCtx) (a : Val) (dstId : TyId) (av : String) : String
     else s!"Zig.intCast {fc.tySigned tag} {fc.tySigned dstId} {fc.tyBits dstId} {bits}"
   | _, _ => s!"Zig.intCast {fc.valSigned a} {fc.tySigned dstId} {fc.tyBits dstId} {av}"
 
+/-- Zig 0.17's logical-order `@bitCast` (`Air2Lean/BitCast.lean`, `ZigLean/BitCast.lean`) of
+`a` (Lean value `av`) to `dst`: the source's logical bits, then the destination made from them,
+as a `Zig.Result`. `none` outside that path: ≤0.16 input, identical types, or no array, vector,
+enum or `void` on either side (the existing `bitcast` rules then apply). An exhaustive enum
+result checks the tag (`Zig.enumOf`: `invalidEnumValue`, the check of 0.17's `bit_cast_safe`). -/
+def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : Option String := do
+  let src ← fc.valTyId? a
+  unless logicalBitCastVersion fc.zigVersion && src != dst &&
+      (logicalBitCastTy fc.types src || logicalBitCastTy fc.types dst) do none
+  let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
+  let dstTy := fc.emitTyOf dst
+  let toBits (v : String) : String := match s with
+    | .int _ => s!"pure ({v})"
+    | .bool => s!"pure (if {v} then 1#1 else 0#1)"
+    | .float _ => s!"Zig.Float.toBits? ({v})"
+    | .packed _ => s!"pure (Zig.Packed.toBits ({v}))"
+    | .enum .. => s!"pure ({fc.emitTyOf src}.{fc.helperName (fc.tyOfId src) "toBits"} ({v}))"
+    | .intLanes true .. => s!"pure (Zig.BitCast.ofLanes ({v}).lanes)"
+    | .intLanes false .. => s!"pure (Zig.BitCast.ofLanes ({v}))"
+    | .boolLanes true _ => s!"pure (Zig.BitCast.ofBools ({v}).lanes)"
+    | .boolLanes false _ => s!"pure (Zig.BitCast.ofBools ({v}))"
+  let fromBits (b : String) : String := match d with
+    | .int _ => s!"pure ({b})"
+    | .bool => s!"pure ({b} == 1#1)"
+    | .float _ => s!"pure (Zig.Float.ofBits ({b}))"
+    | .packed _ => s!"Zig.Packed.ofBits? (α := {dstTy}) ({b})"
+    | .enum _ signed =>
+      s!"Zig.enumOf ({dstTy}.{fc.helperName (fc.tyOfId dst) "ofInt?"} (Zig.val {signed} ({b})))"
+    | .intLanes true n w => s!"pure ⟨Zig.BitCast.toLanes (n := {n}) (w := {w}) ({b})⟩"
+    | .intLanes false n w => s!"pure (Zig.BitCast.toLanes (n := {n}) (w := {w}) ({b}))"
+    | .boolLanes true _ => s!"pure ⟨Zig.BitCast.toBools ({b})⟩"
+    | .boolLanes false _ => s!"pure (Zig.BitCast.toBools ({b}))"
+  -- An integer side needs no conversion; otherwise compose through `BitVec (bits)`.
+  let body := match s, d with
+    | .int _, _ => fromBits av
+    | _, .int _ => toBits av
+    | _, _ => s!"(({toBits av} : Zig.Result (BitVec {s.bits})) >>= fun bits => {fromBits "bits"})"
+  pure s!"({body} : Zig.Result ({dstTy}))"
+
 /-- The Lean name of a union type, and its field `idx`: the Zig name (in accessor names
 `get_f`, `modify_f`, `setTag_f`; `mangleField` for the constructor) and whether it has no
 payload. -/
@@ -1733,6 +1772,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .bitcast a =>
     if fc.isPlace a then (env, none) else
+    if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
