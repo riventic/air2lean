@@ -304,6 +304,50 @@ class LocalCiTests(Repo):
             self.record(local_runs=[incomplete])
 
 
+MACOS_JOB = """  macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@0000000000000000000000000000000000000000 # v0
+      - name: Unit
+        run: echo macos unit
+      - name: Build when uncached
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: echo build
+"""
+
+
+class MacosJobTests(Repo):
+    """Q05's matrix-free `macos` job: GitHub evidence only; local CI never covers it."""
+    workflow = WORKFLOW + MACOS_JOB
+
+    def test_macos_gates_exclude_cache_dependent_setup(self):
+        plan = rr.build_plan(self.repo, self.head)
+        macos = plan['jobs'][-1]
+        self.assertEqual((macos['name'], macos['matrix'], macos['gates']), ('macos', None, ['Unit']))
+        self.assertEqual(macos['reproduce'], rr.MACOS_REPRODUCE)
+        self.assertEqual(plan['commands']['macos::Unit'], {'run': 'echo macos unit'})
+        self.assertEqual(plan['commands']['Unit'], {'run': 'echo unit'})
+
+    def test_local_ci_leaves_macos_missing_and_github_covers_it(self):
+        local = self.local_dir([(FULL_ROW, 'Unit'), (FULL_ROW, 'Full only')])
+        record = self.record(local_runs=[local])
+        self.assertEqual(self.gate(record, 'macos', 'Unit')['status'], 'missing')
+        self.assertEqual(record['status'], 'incomplete')
+        macos = self.run_json({'macos': {'Unit': 'failure'}})
+        record = self.record(local_runs=[local], github_runs=[macos])
+        self.assertEqual(self.gate(record, 'macos', 'Unit')['status'], 'failed')
+
+    def test_other_jobs_and_macos_conditions_fail_closed(self):
+        self.write('.github/workflows/ci.yml', self.workflow + '  lint:\n    runs-on: ubuntu-24.04\n')
+        with self.assertRaisesRegex(rr.ReleaseError, 'only the test and macos jobs'):
+            rr.build_plan(self.repo, self.commit('extra job'))
+        self.write('.github/workflows/ci.yml', self.workflow.replace(
+            'run: echo macos unit', 'if: failure()\n        run: echo macos unit'))
+        with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
+            rr.build_plan(self.repo, self.commit('conditional macos step'))
+
+
 class LedgerTests(Repo):
     def test_valid_ledger(self):
         errors, unverified, counts = rr.check_ledger(self.repo)

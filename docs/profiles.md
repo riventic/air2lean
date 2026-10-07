@@ -155,7 +155,8 @@ pointer width, backend, CPU/features, mode, error-set width and tracing. Per-mod
 
 Two more profile inputs select baseline `aarch64-macos-none` (CPU `apple_m1`) in
 ReleaseSafe and ReleaseFast. They execute only on a Darwin host; the CI `macos` job
-observes both ([target-matrix.md](target-matrix.md)). A macOS report stays outside the
+observes both ([target-matrix.md](target-matrix.md); per-mode status:
+[build-modes.md](build-modes.md)). A macOS report stays outside the
 paired Linux `compare` relation.
 
 ```sh

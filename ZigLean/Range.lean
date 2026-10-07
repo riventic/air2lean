@@ -5,8 +5,8 @@ import ZigLean.Lemmas
 
 Conditional rewrite lemmas that move fixed-width arithmetic to `Nat`/`Int` once a range
 premise holds, and range bounds for sums of fixed-width values. Every lemma is an ordinary
-kernel-checked theorem (no `native_decide`, no evaluation of large numerals). The premises are
-ordinary hypotheses, discharged by `omega` or `assumption` in `zig_range`.
+kernel-checked theorem (no compiled decision procedure, no evaluation of large numerals). The
+premises are ordinary hypotheses, discharged by `omega` or `assumption` in `zig_range`.
 
 `zig_range` rewrites with these lemmas and the unsigned lemmas of `ZigLean.Lemmas`, trying to
 discharge each range premise from the context; a premise it cannot prove leaves the original
