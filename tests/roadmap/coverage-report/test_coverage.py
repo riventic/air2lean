@@ -309,6 +309,51 @@ class CoverageTests(unittest.TestCase):
         self.diff.write_text(json.dumps({'schema': 1, 'complete': False}))
         self.assertEqual(self.run_coverage()['stages']['tested']['status'], 'failed')
 
+    def test_absence_claims_from_outcome_taxonomy(self):
+        root = self.run_coverage()
+        self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
+                         {'no-panic': 'proved', 'guaranteed-return': 'proved'})
+        self.assertEqual(root['outcomes'], {'valid': 3})
+        # Error returns are values, not panics: they never refuse no-panic.
+        self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'error_return_match',
+                          'model_kind': 'error_return'}] * 2)
+        root = self.run_coverage()
+        self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+        self.assertEqual(root['absence_claims']['no-panic']['status'], 'proved')
+        capped = {'status': 'capped', 'runs': 8, 'cap': 8, 'fuel': 100, 'saw_no_result': False}
+        refusing = [{'status': 'search_cap', 'model_kind': 'value', 'schedule': capped},
+                    {'status': 'unspecified_exclusion', 'model_kind': 'unspecified'},
+                    {'status': 'bounded_no_result', 'model_kind': 'bounded_no_result',
+                     'schedule': dict(capped, status='bounded', saw_no_result=True)}]
+        for extra in refusing:
+            with self.subTest(extra=extra):
+                self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'value_match'},
+                                 dict(extra, schema=1, example='example', function='root')])
+                root = self.run_coverage()
+                self.assertEqual(root['stages']['tested']['status'], 'passed')
+                self.assertEqual(root['absence_claims']['no-panic']['status'], 'refused')
+                self.assertTrue(any(b.startswith('absence claim no-panic refused') for b in root['blockers']))
+                self.assertEqual(root['level'], 'proved_scoped')
+        # Sampled tests alone never prove absence, even when clean.
+        self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'value_match'}])
+        root = self.run_coverage(receipt=False)
+        self.assertEqual(root['absence_claims']['no-panic']['status'], 'not_proved')
+        # Partial correctness asserts no-panic but not a guaranteed return.
+        self.manifest['roots'][0]['goals'][0]['strength'] = 'partial_correctness'
+        self.save()
+        self.rebuild_artifact()
+        claims = self.run_coverage()['absence_claims']
+        self.assertEqual((claims['no-panic']['status'], claims['guaranteed-return']['status']), ('proved', 'not_proved'))
+
+    def test_unsupported_air_is_an_outcome_and_not_proved_absence(self):
+        (self.base / 'air.json').write_text(json.dumps({'schema': 11, 'name': 'example.root', 'zig_version': '0.16.0',
+                                                        'body': [{'id': 1, 'tag': 'future', 'unsupported': True}]}))
+        root = self.run_coverage()
+        self.assertEqual(root['outcomes'].get('unsupported_semantics'), 1, root['outcomes'])
+        self.assertNotEqual(root['absence_claims']['no-panic']['status'], 'proved')
+        self.assertEqual(project.absence_claims([{'theorem': 't', 'binding': 'direct', 'strength': 'safety'}],
+                                                root['outcomes'])['no-panic']['status'], 'refused')
+
     def test_symlinked_contract_binds_by_tracked_path(self):
         (self.base / 'contract-target.lean').write_text('contract.lean\n')
         (self.base / 'contract.lean').unlink()
