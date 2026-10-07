@@ -679,7 +679,7 @@ jobs:
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean Air2Lean
+          lake build ZigLean ZigLean.VecMem Air2Lean
           observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
           host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
