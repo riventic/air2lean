@@ -44,7 +44,14 @@ private def requireError (result : Except String Unit) (expected : String) : IO 
   | .ok _ => throw (IO.userError s!"expected rejection: {expected}")
   | .error error => require (error == expected) s!"expected {expected}, got {error}"
 
+/-- A spawning function. Only `Thread.spawn`'s `SpawnConfig` may be `undefined` (the model does
+not read it); an `Io.Group` call's group pointer and `io` are runtime parameters. -/
 private def spawner (callee : String) (fields : Array Nat) (values : Array Json) : Json :=
+  let group := callee != "Thread.spawn"
+  let lead : Array Json := if group then
+      #[node 0 "arg" 10 #[] [("param", num 0)], node 1 "arg" 11 #[] [("param", num 1)]]
+    else #[]
+  let k := lead.size
   file "spawn" #[u8, u16, tuple fields, voidTy, nrTy,
     obj [("k", .str "struct"), ("name", .str "Thread"), ("fields", .arr #[])],
     obj [("k", .str "error_set"), ("errors", .arr #[.str "ThreadQuotaExceeded"])],
@@ -52,12 +59,13 @@ private def spawner (callee : String) (fields : Array Nat) (values : Array Json)
     nominal "Thread.SpawnConfig", nominal "Io.Group",
     obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false), ("child", num 9),
       ("abi_size", num 8), ("abi_align", num 8), ("ptr_align", num 1)],
-    nominal "Io", obj [("k", .str "error_union"), ("error", num 6), ("payload", num 3)]] #[] 3
-    #[node 0 "aggregate_init" 2 values,
-      node 1 "call" (if callee == "Thread.spawn" then 7 else if callee == "Io.Group.concurrent" then 12 else 3)
-        (if callee == "Thread.spawn" then #[undef 8, ref 0] else #[undef 10, undef 11, ref 0])
+    nominal "Io", obj [("k", .str "error_union"), ("error", num 6), ("payload", num 3)]]
+    (if group then #[10, 11] else #[]) 3
+    (lead ++ #[node k "aggregate_init" 2 values,
+      node (k + 1) "call" (if callee == "Thread.spawn" then 7 else if callee == "Io.Group.concurrent" then 12 else 3)
+        (if group then #[ref 0, ref 1, ref k] else #[undef 8, ref k])
         [("callee", obj [("func", .str callee), ("comptime_fn", .str "worker")])],
-      node 2 "ret" 4 #[lit 3 "{}"]]
+      node (k + 2) "ret" 4 #[lit 3 "{}"]])
 
 private def worker (params : Array Nat) (retVoid : Bool := false) : Json :=
   file "worker" #[u8, u16, voidTy, nrTy] params (if retVoid then 2 else 0)
