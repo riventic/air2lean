@@ -5,10 +5,10 @@ import ZigLean.Float.RoundTrip
 # Proofs about `examples/floatops/floatops.zig`
 
 `floatops` is a test bench: `opN` dispatches on `sel` to one float op, and the diff test checks
-each op against the compiled Zig bit for bit. The proofs here state what does not depend on the
-Zig version: the division selectors (3, 5, 6) call a different model function per version
-(`docs/floats.md` §Per-version differences), and CI builds these proofs against each version's
-translation.
+each op against the compiled Zig bit for bit. CI builds these proofs against each Zig version's
+translation, so every statement holds for each of them. Where the versions differ (`f128`
+division and `@sqrt`, `docs/floats.md` §Per-version differences) the statement names the
+translation's profile.
 
 - `opN_spec`: every `sel` picks its op (`opSpec`). `/`, `@divTrunc` and `@divFloor` are
   `Float.div` on every version for `f16`..`f80`; `op128_spec` leaves out `sel` 3, 5, 6, 9
@@ -16,6 +16,12 @@ translation.
   compiler-rt helpers selected by this example. `op80_spec` excludes a pseudo-denormal
   numerator because f80 floor/ceil changed in 0.16.0. `opN_other`: a `sel` of 26 or more returns
   `a` unchanged.
+- `op128_spec_full`: every `sel` of `op128` is `opSpec128 op128Profile`: the division family and
+  `@sqrt` use the helpers of the translation's profile (`F128Rt.legacy` for 0.14.1 and 0.15.2,
+  `F128Rt.v016` for 0.16.0), whose specifications against IEEE are in
+  `ZigLean/Float/CompilerRt.lean` and `ZigLean/Float/RoundTrip.lean`.
+  `op128_eq_opSpec_of_special`: on every version, a NaN, infinite or zero `a` (or `b`, except
+  for `@sqrt`) gives `opSpec`, the IEEE result.
 - `divExact64_spec`: the truncated quotient, or a panic when it is not a whole number.
 - `cmp64_spec`: the bitmask is the 6 comparisons; `cmp64_nan`: with a NaN operand only `!=` is
   true (IEEE 754: NaN is unordered), so the mask is `8`.

@@ -160,7 +160,21 @@
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version and are excluded, F05): `op128` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version; `op128_spec_full` covers them): `op128` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op128_spec_full",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f128`: `op128` is `opSpec128 op128Profile sel`, where `op128Profile` is the profile whose helpers the translation calls (`legacy` on 0.14.1/0.15.2: `Float.divRt`, `Float.sqrtF128ViaF64`; `v016` on 0.16.0: `Float.divRt016`, IEEE `Float.sqrt`) and every other selector is `opSpec sel`; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md §Per-version differences)"
+    },
+    {
+      "name": "op128_eq_opSpec_of_special",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector and every `a b c : f128` with `a` NaN, infinite or zero, or with `b` NaN, infinite or zero and a selector other than 9 (`@sqrt`): `op128` is `opSpec sel` (IEEE division and `@sqrt`) on every profile; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md)"
     },
     {
       "name": "divExact64_spec",

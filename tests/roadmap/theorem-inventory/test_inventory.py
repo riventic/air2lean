@@ -295,6 +295,14 @@ class RepositoryTests(unittest.TestCase):
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec']
         self.assertIn('sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9', statement['statement'])
 
+    def test_f05_full_selector_theorem_is_listed_without_exclusion(self):
+        inv = json.loads((ROOT / ti.INVENTORY).read_text())
+        full = next(t for t in inv['theorems'] if t['name'] == 'op128_spec_full')
+        self.assertIn('every selector', full['domain'])
+        statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec_full']
+        self.assertNotIn('≠', statement['statement'])
+        self.assertIn('opSpec128 op128Profile sel', statement['statement'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -63,9 +63,12 @@ committed goldens.
 
 ## Remaining scope
 
-- F05: `op128_spec` excludes the `f128` selectors 3, 5, 6 and 9 (`/`, `@divTrunc`,
-  `@divFloor`, `@sqrt`), which call a different model function per Zig version. They stay
-  excluded; the theorem's domain says so.
+- F05: `op128_spec` still excludes the `f128` selectors 3, 5, 6 and 9 (`/`, `@divTrunc`,
+  `@divFloor`, `@sqrt`); `op128_spec_full` covers them with the helpers of each translation's
+  profile. For 0.16.0 `f128` division with operand exponents differing by −16382 or less, the
+  specification is the `divtf3.zig` port itself, not a closed IEEE form; for 0.14.1/0.15.2
+  `@sqrt` of a finite nonzero operand it is the `f64` route of `Float.sqrtF128ViaF64`
+  ([floats.md](floats.md#per-version-differences)).
 - C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
   `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
   at most 2). There is no reusable RwLock contract for arbitrary readers, resources, fairness

@@ -502,22 +502,22 @@ def Float.fmaRtChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
 
 /-! ## `f128` division per Zig version: what each port computes
 
-The specifications of the two division helpers over their whole domain, against IEEE
-`Float.div`:
+How the two division helpers relate to IEEE `Float.div`:
 
 - `Float.divRt` (Zig 0.14.1 and 0.15.2): `Float.div`, except that a nonzero subnormal quotient
   becomes the signed zero of its sign (`Float.divRt_eq_div_of_not_subnormal`,
-  `Float.divRt_of_subnormal`; NaN, infinity, zero and normal quotients are in the first).
+  `Float.divRt_of_subnormal`; NaN, infinity, zero and normal quotients are in the first, and
+  a NaN, infinite or zero operand gives one of those: `Float.divRt_eq_div_of_special`).
 - `Float.divRt016` (Zig 0.16.0): `Float.div` when an operand is NaN, infinite or zero
   (`Float.divRt016_eq_div_of_special`), and when the binary exponents `log2 m + e` of the
-  operands differ by at least −16381, so that `|a / b| > 2^-16382` by the exponents alone
+  operands differ by at least −16381, which holds whenever `|a / b| ≥ 2^-16381`
   (`Float.divRt016_eq_div_of_exp`). Otherwise the quotient can be subnormal and
   `divtf3Subnormal` itself is the specification: its rounding reads the truncated
   Newton-Raphson quotient and a deep underflow wraps its shift amount, so it has no closed
   IEEE form here (`docs/floats.md` §Per-version differences).
 
-Both concern the port: its normal range is `Float.div` by construction (see
-`divtf3Subnormal`). -/
+These are theorems about the ports; the 0.16.0 port's normal range is `Float.div` by
+construction (see `divtf3Subnormal`). -/
 
 /-- The exponent and fraction fields of a finite `f128`, read off `classify`. -/
 private theorem f128_fields {x : Float .f128} {s : Bool} {m : Nat} {e : Int}
