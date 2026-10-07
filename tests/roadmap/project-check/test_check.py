@@ -1,5 +1,6 @@
 """Offline I03 project check regressions: stub translator, Lake and audit; real guard and claims."""
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -163,6 +164,46 @@ class CheckTests(unittest.TestCase):
         stages = record['reproducible']['stages']
         self.assertEqual((stages['translate']['status'], stages['reproduce']['status']), ('passed', 'failed'))
         self.assertEqual(stages['build']['status'], 'not_run')
+        self.assertEqual(self.calls(), [])
+
+    def header(self, zig_version='0.16.0', float_semantics='ieee'):
+        profile = dict(name='legacy-abi64-le', schema=11, zig_version=zig_version, target_triple='unverified',
+                       pointer_bits=64, endian='little', abi='unverified', backend='unverified', cpu='unverified',
+                       features=[], build_mode='unverified', float_mode='unverified', error_set_bits=16,
+                       error_layout='reference-model', error_tracing=None, export_stage='unverified')
+        record = {'correspondence': 'model', 'float_semantics': float_semantics, 'profile': profile}
+        return '-- air2lean-profile: ' + json.dumps(record, sort_keys=True, separators=(',', ':')) + '\n'
+
+    def translate_with_header(self, header):
+        self.write_tool(self.translator, "import pathlib,sys\npathlib.Path(sys.argv[sys.argv.index('-o')+1]).write_text(%r)\n"
+                        % (header + GENERATED))
+
+    def test_profile_header_with_and_without_committed_header(self):
+        self.translate_with_header(self.header())
+        result, record = self.run_check('absent')
+        self.assertEqual(result.returncode, 0, record['failures'])
+        root = record['reproducible']['stages']['reproduce']['roots']['root']
+        self.assertEqual((root['header_profile']['name'], root['header_profile']['zig_version'], root['committed_header']),
+                         ('legacy-abi64-le', '0.16.0', False))
+        self.assertEqual(root['body_sha256'], hashlib.sha256(GENERATED.encode()).hexdigest())
+        (self.base / 'Proofs/Example/Gen.lean').write_text(self.header() + GENERATED)
+        result, record = self.run_check('present')
+        self.assertEqual(result.returncode, 0, record['failures'])
+        self.assertTrue(record['reproducible']['stages']['reproduce']['roots']['root']['committed_header'])
+        # A committed header that differs from the fresh one is not a reproduction.
+        (self.base / 'Proofs/Example/Gen.lean').write_text(self.header(float_semantics='compiler-rt') + GENERATED)
+        result, record = self.run_check('different')
+        self.assertEqual(record['reproducible']['stages']['reproduce']['status'], 'failed')
+
+    def test_profile_header_must_match_manifest(self):
+        for name, header in (('version', self.header(zig_version='0.15.2')),
+                             ('float', self.header(float_semantics='compiler-rt'))):
+            self.translate_with_header(header)
+            result, record = self.run_check(name)
+            self.assertEqual(result.returncode, 1)
+            stage = record['reproducible']['stages']['reproduce']
+            self.assertEqual((stage['status'], stage['mismatched_roots']), ('failed', ['root']))
+            self.assertIn('manifest', stage['roots']['root']['reason'])
         self.assertEqual(self.calls(), [])
 
     def test_translation_failure_stops_before_lake(self):

@@ -4,6 +4,7 @@ import argparse
 from contextlib import ExitStack
 import datetime
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -1046,7 +1047,8 @@ CHECK_STAGES = ('translate', 'reproduce', 'build', 'audit', 'claims', 'inputs_st
 RECORD_KIND = 'air2lean-project-check-record'
 CHECK_TOOLS = {'project': Path(__file__).resolve()}
 CHECK_TOOLS.update({key: CHECK_TOOLS['project'].with_name(name) for key, name in
-                    (('build_guard', 'build-guard.py'), ('assumptions', 'assumptions.py'), ('claims', 'claims.py'))})
+                    (('build_guard', 'build-guard.py'), ('assumptions', 'assumptions.py'), ('claims', 'claims.py'),
+                     ('normalize', 'normalize-generated.py'))})
 
 
 def check_budget(manifest):
@@ -1059,6 +1061,44 @@ def check_budget(manifest):
             raise Invalid(f'check.{key} must be an integer from 1 through {CHECK_MAXIMA[key]}')
         budget[key] = value
     return budget
+
+
+_NORMALIZE = None
+
+
+def normalize_generated():
+    """The generated-profile header parser shared with check.sh (scripts/normalize-generated.py)."""
+    global _NORMALIZE
+    if _NORMALIZE is None:
+        spec = importlib.util.spec_from_file_location('air2lean_normalize_generated', CHECK_TOOLS['normalize'])
+        module = importlib.util.module_from_spec(spec)
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(module)
+        _NORMALIZE = module
+    return _NORMALIZE
+
+
+def reproduced_body(split, manifest, profile, fresh, committed):
+    """Header profile and body hash when the fresh translation reproduces the committed module.
+
+    The fresh first-line profile record must agree with the manifest's profile artifact and
+    float semantics. A committed module may omit that record (legacy layout) or carry the
+    identical one; the remaining bytes must be identical either way."""
+    header, body = split(fresh)
+    committed_header, committed_body = split(committed)
+    if header is not None:
+        claimed = header['profile']
+        if not isinstance(profile, dict) or any(claimed.get(k) != v for k, v in profile.items()):
+            raise ValueError(f'generated profile record {claimed.get("name")}/{claimed.get("zig_version")} '
+                             'differs from the manifest profile')
+        if header['float_semantics'] != manifest['float_semantics']:
+            raise ValueError('generated float_semantics differs from the manifest')
+    if committed_header is not None and committed_header != header:
+        raise ValueError('committed profile record differs from the fresh translation')
+    if body != committed_body:
+        raise ValueError('generated definitions differ from the committed module')
+    return {'header_profile': header and header['profile'], 'committed_header': committed_header is not None,
+            'body_sha256': digest(body)}
 
 
 def check_modules(manifest):
@@ -1215,9 +1255,19 @@ def project_check(path, translator, staging, tools=None, lock=None):
     generated = {root['id']: report['files'][f'generated/{root["id"]}/Gen.lean']['sha256'] for root in manifest['roots']}
     stages['translate'] = {'status': 'passed', 'generated_sha256': generated}
     # 2. The translation must reproduce the committed module that the contracts import.
-    mismatched = [root['id'] for root in manifest['roots']
-                  if inputs['input/' + root['generated']]['sha256'] != generated[root['id']]]
-    stages['reproduce'] = {'status': 'failed' if mismatched else 'passed', 'mismatched_roots': mismatched}
+    # Only the first-line profile record may differ, and only by being absent from the committed file.
+    split = normalize_generated().split_generated
+    bodies, mismatched = {}, []
+    for root in manifest['roots']:
+        try:
+            bodies[root['id']] = reproduced_body(split, manifest, report['profile'],
+                                                 (artifact / root['id'] / 'Gen.lean').read_bytes(),
+                                                 (base / root['generated']).read_bytes())
+        except (OSError, ValueError, UnicodeError) as error:
+            mismatched.append(root['id'])
+            bodies[root['id']] = {'reason': str(error)}
+    stages['reproduce'] = {'status': 'failed' if mismatched else 'passed', 'mismatched_roots': mismatched,
+                           'roots': bodies}
     if mismatched:
         failures.append(f'fresh translation differs from committed generated module for {mismatched}')
         return finish()

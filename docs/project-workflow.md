@@ -247,7 +247,7 @@ Stages, in order; the first failure stops later stages, which stay `not_run`:
 | Stage | Action | Pass rule |
 |---|---|---|
 | `translate` | `translate` into `<out>/artifact`, then `verify` | every root translated; all hashes current |
-| `reproduce` | compare each root's fresh `Gen.lean` with its committed `generated` module | byte-identical |
+| `reproduce` | split each fresh `Gen.lean` and committed `generated` module with `scripts/normalize-generated.py` | fresh profile record agrees with the manifest profile and `float_semantics`; committed record absent or identical; bodies byte-identical |
 | `build` | `scripts/build-guard.py --phase proof -- lake build <contract modules>` | guard outcome `success` |
 | `audit` | `build-guard.py --phase check -- python3 scripts/assumptions.py --no-build --module <contract modules>` | completed report whose scope equals the contract modules |
 | goals | each declared goal's audited theorem (`theorem` or `namespace.theorem`) | `allowed` (below) |
@@ -284,8 +284,8 @@ configuration exits 2 and an interrupted run publishes nothing.
 `record.json` (`kind: air2lean-project-check-record`) has `status` (`reproduced` or
 `failed`), `failures`, a `reproducible` section and a `host` section. `reproducible`
 holds the manifest and every input hash, the budget, root modules, the hashes of
-`project.py`, `build-guard.py`, `assumptions.py` and `claims.py`, the `lean-toolchain`
-pin, the float and spawn selections, and every stage result (generated hashes, guard
+`project.py`, `build-guard.py`, `assumptions.py`, `claims.py` and `normalize-generated.py`, the `lean-toolchain`
+pin, the float and spawn selections, and every stage result (generated hashes, header profiles and body hashes, guard
 outcome, audit policy hash and toolchain, per-goal assumptions and claims). `host` holds
 what legitimately differs between machines: platform, Python, Git revision and dirty
 state, translator path and hash, the Lake executable and pins from the guard report,
