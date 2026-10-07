@@ -87,6 +87,25 @@ this bounded P01/P04 contribution. These are contracts about existing generated
 model bodies; this slice adds no source/exporter qualification or general compiler
 correspondence claim.
 
+`Proofs/Lists/Container.lean` defines `Lists.SeqImpl`, a reusable sequence contract: a handle
+type `H`, a representation predicate `Rep h xs`, and `add` with `add_spec` stating only that the
+abstract sequence becomes `xs ++ [v]` or stays `xs` with `error.OutOfMemory`. Two generated
+containers from `examples/lists/lists.zig` implement it. `linkedSeq` wraps `push` and stores
+the sequence in reverse (`list hd xs.reverse`). `arraySeq` wraps
+`std.ArrayListUnmanaged(u32).append`. Its representation `AList` requires a zero-capacity
+items pointer without a block, so owned bytes discharge the `ptrOk` premise of `append_run`.
+The `.empty` value, whose pointer names a constant global, is therefore outside `arraySeq`.
+`tests/roadmap/container-contracts/Clients.lean` proves two clients once for every `I : SeqImpl`
+from `I.add_spec` and the generic triple rules, without unfolding a representation. `addAll`
+gives exactly `xs ++ vs`, or `xs` followed by a prefix of `vs` after `OutOfMemory`. Its total
+property is a lemma about abstract lists. `addEvens`, the `evens` loop, always keeps `xs` as a
+prefix. The same client theorems are instantiated unchanged to both containers. A rejected
+attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
+with `lake build Proofs.Lists.Container` and
+`lake env lean tests/roadmap/container-contracts/Clients.lean`. Queues with removal, maps,
+container deallocation through the interface, and a general ADT library remain outside this
+bounded P04 contribution.
+
 `TotalTriple P c Q` requires an explicit `c.run m = pure (v, m')` witness for
 every admissible sequential input and disjoint frame, along with ownership of
 `Q v` and preservation of the frame. Divergence and safety panics cannot satisfy
