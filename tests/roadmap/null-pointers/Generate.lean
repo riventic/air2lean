@@ -11,9 +11,9 @@ private def ref (n : Nat) := obj [("inst", num n)]
 private def lit (t : Nat) (v : String) := obj [("ty", num t), ("val", .str v)]
 private def intTy (bits : Nat) := obj [("k", .str "int"), ("signed", .bool false),
   ("bits", num bits), ("abi_size", num (Zig.intSize bits)), ("abi_align", num (Zig.intAlign bits))]
-private def ptrTy (size : String) (child : Nat) (allowzero : Bool := false) :=
+private def ptrTy (size : String) (child : Nat) (allowzero : Bool := false) (align : Nat := 1) :=
   obj [("k", .str "ptr"), ("size", .str size), ("child", num child), ("const", .bool false),
-    ("allowzero", .bool allowzero), ("ptr_align", num 1), ("abi_size", num 8), ("abi_align", num 8)]
+    ("allowzero", .bool allowzero), ("ptr_align", num align), ("abi_size", num 8), ("abi_align", num 8)]
 private def boolTy := obj [("k", .str "bool")]
 private def nrTy := obj [("k", .str "noreturn")]
 private def inst (id : Nat) (tag : String) (ty : Nat) (args : Array Json := #[])
@@ -38,13 +38,42 @@ private def reject (j : Json) (diagnostic : String) : IO Unit := do
   | .ok _ => throw (IO.userError s!"accepted rejection fixture: {diagnostic}")
   | .error e => unless (e.splitOn diagnostic).length > 1 do
       throw (IO.userError s!"wrong rejection: expected {diagnostic}, got {e}")
-private def writeCase (dir : System.FilePath) (name : String) (j : Json) (tests : String) : IO Unit := do
+private def writeCase (dir : System.FilePath) (name : String) (j : Json) (tests : String)
+    (needles : List String := []) : IO Unit := do
   let f ← accept j
-  IO.FS.writeFile (dir / (name ++ ".lean")) (emit #[f] "Nullable" "" ++
+  let source := emit #[f] "Nullable" ""
+  for needle in needles do
+    unless (source.splitOn needle).length > 1 do
+      throw (IO.userError s!"{name}: emitted translation lacks {needle}")
+  IO.FS.writeFile (dir / (name ++ ".lean")) (source ++
     "\nprivate def value (f : Zig.MemM α) : Option α := ((f.run {}).run.bind Except.toOption).map Prod.fst\n" ++
     "private def failure (f : Zig.MemM α) (e : Zig.Error) : Bool := match (f.run {}).run with | some (.error got) => decide (got = e) | _ => false\n" ++ tests ++ "\n")
 private def types (size : String := "c") (allowzero : Bool := false) :=
   #[intTy 64, intTy 8, ptrTy size 1 allowzero, boolTy, nrTy, ptrTy "one" 1]
+/-- Storage, aggregate and projection types after `types`: 6 `*[*c]u8` (8-aligned),
+7 `extern struct Node { next: [*c]u8, val: u8 }`, 8 `[*c]Node`, 9 `[*c][*c]u8`,
+10 `[2][*c]u8`, 11 `*[2][*c]u8`, 12 `?*u8`, 13 `*Node`. -/
+private def storageTypes (size : String := "c") (allowzero : Bool := false) :=
+  (types size allowzero) ++ #[ptrTy "one" 2 (align := 8),
+    obj [("k", .str "struct"), ("name", .str "Node"), ("layout", .str "extern"),
+      ("abi_size", num 16), ("abi_align", num 8),
+      ("fields", .arr #[obj [("name", .str "next"), ("ty", num 2), ("offset", num 0)],
+        obj [("name", .str "val"), ("ty", num 1), ("offset", num 8)]])],
+    ptrTy "c" 7 (align := 8), ptrTy "c" 2 (align := 8),
+    obj [("k", .str "array"), ("len", num 2), ("child", num 2), ("abi_size", num 16), ("abi_align", num 8)],
+    ptrTy "one" 10 (align := 8),
+    obj [("k", .str "optional"), ("child", num 5), ("abi_size", num 8), ("abi_align", num 8)],
+    ptrTy "one" 7 (align := 8)]
+private def argInsts (tys : List Nat) : Array Json :=
+  (tys.toArray.mapIdx fun i t => inst i "arg" t #[] [("param", num i)])
+/-- Shared runtime helpers for the storage cases: a live 8-aligned heap block and raw bytes. -/
+private def storageHelpers : String := "
+private def zeros (n : Nat) : Zig.Mem := { blocks := #[{ bytes := Array.replicate n (.int 0), align := 8, kind := .heap, live := true, addr := 4096 }], nextAddr := 4096 + n + 1 }
+private def block0 : Zig.Ptr := ⟨some 0, 0⟩
+private def valueIn (m : Zig.Mem) (f : Zig.MemM α) : Option α := ((f.run m).run.bind Except.toOption).map Prod.fst
+private def failureIn (m : Zig.Mem) (f : Zig.MemM α) (e : Zig.Error) : Bool := match (f.run m).run with | some (.error got) => decide (got = e) | _ => false
+private def bytesAfter (m : Zig.Mem) (f : Zig.MemM α) : Option (Array Zig.Byte) := match (f.run m).run with | some (.ok (_, m')) => m'.blocks[0]?.map (·.bytes) | _ => none
+"
 private def castInput (name tag : String) := file name (types) #[0] 3
   #[inst 0 "arg" 0 #[] [("param", num 0)], inst 1 "bitcast" 2 #[ref 0],
     inst 2 tag 3 #[ref 1], inst 3 "ret" 4 #[ref 2]]
@@ -79,6 +108,105 @@ def main (args : List String) : IO Unit := do
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "arg" 2 #[] [("param", num 1)],
       inst 2 "cmp_eq" 3 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]])
     "example : value (Nullable.cEqual Zig.Ptr.null Zig.Ptr.null) = some true := by native_decide\nexample : value (Nullable.cEqual Zig.Ptr.null ⟨none, 1⟩) = some false := by native_decide\nprivate def sameAddressMemory : Zig.Mem := { blocks := #[{ bytes := Array.replicate 32 .undef, align := 1, kind := .heap, live := true, addr := 100 }] }\nexample : (((Nullable.cEqual ⟨some 0, 20⟩ ⟨none, 120⟩).run sameAddressMemory).run.bind Except.toOption).map Prod.fst = some true := by native_decide"
+  -- Nullable storage: a stored C pointer, including address zero, is eight zero bytes.
+  writeCase dir "storeLoad" (file "storeLoad" (storageTypes) #[6, 2] 2
+    (argInsts [6, 2] ++ #[inst 2 "store" 4 #[ref 0, ref 1], inst 3 "load" 2 #[ref 0], inst 4 "ret" 4 #[ref 3]]))
+    (storageHelpers ++ "example : valueIn (zeros 8) (Nullable.storeLoad block0 Zig.Ptr.null) = some Zig.Ptr.null := by native_decide
+example : bytesAfter (zeros 8) (Nullable.storeLoad block0 Zig.Ptr.null) = some (Array.replicate 8 (.int 0)) := by native_decide
+example : valueIn (zeros 16) (Nullable.storeLoad block0 ⟨some 0, 8⟩) = some ⟨some 0, 8⟩ := by native_decide
+example : valueIn (zeros 8) (Nullable.storeLoad block0 ⟨none, 77⟩) = some ⟨none, 77⟩ := by native_decide
+example : failureIn (zeros 8) (Nullable.storeLoad Zig.Ptr.null Zig.Ptr.null) .illegal = true := by native_decide
+example : failureIn (zeros 4) (Nullable.storeLoad block0 Zig.Ptr.null) .illegal = true := by native_decide")
+    ["Zig.nullablePtrEnc"]
+  writeCase dir "storedIsNull" (file "storedIsNull" (storageTypes) #[6] 3
+    (argInsts [6] ++ #[inst 1 "load" 2 #[ref 0], inst 2 "is_null" 3 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
+    (storageHelpers ++ "example : valueIn (zeros 8) (Nullable.storedIsNull block0) = some true := by native_decide
+private def undefMem : Zig.Mem := { blocks := #[{ bytes := Array.replicate 8 .undef, align := 8, kind := .heap, live := true, addr := 4096 }], nextAddr := 4105 }
+example : failureIn undefMem (Nullable.storedIsNull block0) .unspecified = true := by native_decide
+private def storedLive : Zig.MemM Bool := do
+  let p ← Zig.alloc .heap 8 8
+  let q ← Zig.alloc .heap 1 1
+  letI : Zig.Enc Zig.Ptr := Zig.nullablePtrEnc
+  Zig.store 8 p q
+  Nullable.storedIsNull p
+example : valueIn {} storedLive = some false := by native_decide")
+    ["Zig.nullablePtrEnc"]
+  let allowzeroStorage := storageTypes "one" true
+  writeCase dir "allowzeroStoreLoad" (file "allowzeroStoreLoad" allowzeroStorage #[6, 2] 2
+    (argInsts [6, 2] ++ #[inst 2 "store" 4 #[ref 0, ref 1], inst 3 "load" 2 #[ref 0], inst 4 "ret" 4 #[ref 3]]))
+    (storageHelpers ++ "example : bytesAfter (zeros 8) (Nullable.allowzeroStoreLoad block0 Zig.Ptr.null) = some (Array.replicate 8 (.int 0)) := by native_decide
+example : valueIn (zeros 8) (Nullable.allowzeroStoreLoad block0 Zig.Ptr.null) = some Zig.Ptr.null := by native_decide")
+    ["Zig.nullablePtrEnc"]
+  -- Aggregates: a C pointer field in an extern struct, in memory and as a value.
+  writeCase dir "nodeNext" (file "nodeNext" (storageTypes) #[8] 2
+    (argInsts [8] ++ #[inst 1 "struct_field_ptr" 9 #[ref 0] [("index", num 0)],
+      inst 2 "load" 2 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
+    (storageHelpers ++ "example : failureIn (zeros 16) (Nullable.nodeNext Zig.Ptr.null) .illegal = true := by native_decide
+example : failureIn (zeros 16) (Nullable.nodeNext ⟨none, 4096⟩) .illegal = true := by native_decide
+example : valueIn (zeros 16) (Nullable.nodeNext block0) = some Zig.Ptr.null := by native_decide")
+    ["Zig.ptrProjectNullable"]
+  writeCase dir "nodeVal" (file "nodeVal" (storageTypes) #[8] 1
+    (argInsts [8] ++ #[inst 1 "struct_field_ptr" 2 #[ref 0] [("index", num 1)],
+      inst 2 "load" 1 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
+    (storageHelpers ++ "example : failureIn (zeros 16) (Nullable.nodeVal Zig.Ptr.null) .illegal = true := by native_decide
+example : valueIn (zeros 16) (Nullable.nodeVal block0) = some 0#8 := by native_decide")
+    ["Zig.ptrProjectNullable"]
+  writeCase dir "nodeRoundTrip" (file "nodeRoundTrip" (storageTypes) #[13, 1] 7
+    (argInsts [13, 1] ++ #[inst 2 "aggregate_init" 7 #[nullVal 2, ref 1],
+      inst 3 "store" 4 #[ref 0, ref 2], inst 4 "load" 7 #[ref 0],
+      inst 5 "struct_field_val" 2 #[ref 4] [("index", num 0)],
+      inst 6 "is_null" 3 #[ref 5], inst 7 "cond_br" 4 #[ref 6]
+        [("then", .arr #[inst 8 "ret" 4 #[ref 4]]), ("else", .arr #[inst 9 "trap" 4])]]))
+    (storageHelpers ++ "example : (valueIn (zeros 16) (Nullable.nodeRoundTrip block0 9)).map (·.val) = some 9#8 := by native_decide
+example : (valueIn (zeros 16) (Nullable.nodeRoundTrip block0 9)).map (·.next) = some Zig.Ptr.null := by native_decide
+example : (bytesAfter (zeros 16) (Nullable.nodeRoundTrip block0 9)).map (·.extract 0 8) = some (Array.replicate 8 (.int 0)) := by native_decide")
+    ["Zig.nullablePtrEnc"]
+  writeCase dir "arrayItem" (file "arrayItem" (storageTypes) #[11, 0] 2
+    (argInsts [11, 0] ++ #[inst 2 "ptr_elem_val" 2 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
+    (storageHelpers ++ "example : valueIn (zeros 16) (Nullable.arrayItem block0 1) = some Zig.Ptr.null := by native_decide
+example : failureIn (zeros 16) (Nullable.arrayItem block0 2) .illegal = true := by native_decide")
+    ["Zig.nullablePtrEnc"]
+  -- Projections from a C pointer: nonnull precondition, then the existing access rule.
+  writeCase dir "cAdd" (file "cAdd" (types) #[2, 0] 2
+    (argInsts [2, 0] ++ #[inst 2 "ptr_add" 2 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
+    "example : failure (Nullable.cAdd Zig.Ptr.null 1) .illegal = true := by native_decide
+example : value (Nullable.cAdd ⟨none, 100⟩ 2) = some ⟨none, 102⟩ := by native_decide"
+    ["Zig.ptrProjectNullable"]
+  -- `&p[i]` keeps the projection; a load through it (`p[i]`) is `cElem`'s item access.
+  writeCase dir "cIndex" (file "cIndex" (types) #[2, 0] 5
+    (argInsts [2, 0] ++ #[inst 2 "ptr_elem_ptr" 5 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
+    "example : failure (Nullable.cIndex Zig.Ptr.null 0) .illegal = true := by native_decide
+example : value (Nullable.cIndex ⟨none, 4096⟩ 3) = some ⟨none, 4099⟩ := by native_decide
+example : failure (do Zig.load (BitVec 8) 1 (← Nullable.cIndex ⟨none, 4096⟩ 0)) .illegal = true := by native_decide
+private def liveIndex : Zig.MemM (BitVec 8) := do
+  let p ← Zig.alloc .heap 2 1
+  Zig.store 1 (p.add 1) (42#8)
+  Zig.load (BitVec 8) 1 (← Nullable.cIndex p 1)
+example : value liveIndex = some 42#8 := by native_decide
+private def pastEnd : Zig.MemM (BitVec 8) := do
+  let p ← Zig.alloc .heap 2 1
+  Zig.load (BitVec 8) 1 (← Nullable.cIndex p 2)
+example : failure pastEnd .illegal = true := by native_decide"
+    ["Zig.ptrProjectNullable"]
+  writeCase dir "cElem" (file "cElem" (types) #[2, 0] 1
+    (argInsts [2, 0] ++ #[inst 2 "ptr_elem_val" 1 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
+    "example : failure (Nullable.cElem Zig.Ptr.null 0) .illegal = true := by native_decide
+private def liveElem : Zig.MemM (BitVec 8) := do
+  let p ← Zig.alloc .heap 2 1
+  Zig.store 1 (p.add 1) (7#8)
+  Nullable.cElem p 1
+example : value liveElem = some 7#8 := by native_decide"
+  -- Permitted casts between C pointers and ordinary optional pointers.
+  writeCase dir "toOptional" (file "toOptional" (storageTypes) #[2] 12
+    (argInsts [2] ++ #[inst 1 "bitcast" 12 #[ref 0], inst 2 "ret" 4 #[ref 1]]))
+    "example : value (Nullable.toOptional Zig.Ptr.null) = some none := by native_decide
+example : value (Nullable.toOptional ⟨none, 5⟩) = some (some ⟨none, 5⟩) := by native_decide"
+    ["Zig.ptrToOptional"]
+  writeCase dir "fromOptional" (file "fromOptional" (storageTypes) #[12] 2
+    (argInsts [12] ++ #[inst 1 "bitcast" 2 #[ref 0], inst 2 "ret" 4 #[ref 1]]))
+    "example : value (Nullable.fromOptional none) = some Zig.Ptr.null := by native_decide
+example : value (Nullable.fromOptional (some ⟨none, 5⟩)) = some ⟨none, 5⟩ := by native_decide"
+    ["Zig.ptrOfOptional"]
   reject (file "badZero" (types "one") #[] 2 #[inst 0 "ret" 4 #[nullVal 2]]) "address-zero constant requires"
   reject (file "badOffset" (types) #[] 2 #[inst 0 "ret" 4 #[nullVal 2 1]]) "nonzero offset"
   let ambiguous := obj [("ty", num 2), ("ptr", obj [("null", .bool true), ("off", num 0), ("unsupported", .str "int")])]
@@ -99,21 +227,35 @@ def main (args : List String) : IO Unit := do
     let ts := (types size zero).push (obj [("k", .str "optional"), ("child", num 2)])
     reject (file "optionalNullable" ts #[6] 6
       #[inst 0 "arg" 6 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "separate null flag"
-    let ts := (types size zero).push (ptrTy "one" 2)
-    reject (file "storedNullable" ts #[6] 2
-      #[inst 0 "arg" 6 #[] [("param", num 0)], inst 1 "load" 2 #[ref 0], inst 2 "ret" 4 #[ref 1]]) "null-byte encoding"
-  reject (file "nullableArithmetic" (types) #[2] 2
-    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ptr_add" 2 #[ref 0, lit 0 "1"], inst 2 "ret" 4 #[ref 1]]) "nonnull cast first"
+    -- A stored optional of a nullable pointer stays out: it needs a separate null flag.
+    let ts := (types size zero) ++ #[obj [("k", .str "optional"), ("child", num 2)], ptrTy "one" 6]
+    reject (file "storedOptionalNullable" ts #[7] 6
+      #[inst 0 "arg" 7 #[] [("param", num 0)], inst 1 "load" 6 #[ref 0], inst 2 "ret" 4 #[ref 1]]) "separate null flag"
+  let ts := (types).push (ptrTy "slice" 1)
+  reject (file "nullableSlice" ts #[2, 0] 6
+    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "arg" 0 #[] [("param", num 1)],
+      inst 2 "slice" 6 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]) "nonnull cast first"
+  reject (file "nullableMemset" (types) #[2, 0] 0
+    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "arg" 0 #[] [("param", num 1)],
+      inst 2 "memset" 4 #[ref 0, lit 1 "0"], inst 3 "ret" 4 #[ref 1]]) "nonnull cast first"
+  let ts := (types) ++ #[ptrTy "slice" 1, obj [("k", .str "optional"), ("child", num 6)]]
+  reject (file "optionalSliceCast" ts #[2] 7
+    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "bitcast" 7 #[ref 0], inst 2 "ret" 4 #[ref 1]]) "optional slice"
   let ts := (types).push (obj [("k", .str "optional"), ("child", num 5)])
-  reject (file "optionalCast" ts #[2] 6
-    #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "bitcast" 6 #[ref 0], inst 2 "ret" 4 #[ref 1]]) "explicit null wrapping"
   reject (file "wrapNullable" ts #[2] 6
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "wrap_optional" 6 #[ref 0], inst 2 "ret" 4 #[ref 1]]) "explicit null wrapping"
-  let ts := (types).push (obj [("k", .str "struct"), ("name", .str "Box"), ("layout", .str "auto"),
+  let ts := (types).push (obj [("k", .str "union"), ("name", .str "Box"), ("layout", .str "extern"),
     ("fields", .arr #[obj [("name", .str "pointer"), ("ty", num 2)]])])
-  reject (file "aggregateNullable" ts #[6] 6
+  reject (file "unionNullable" ts #[6] 6
     #[inst 0 "arg" 6 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "nullable pointers in aggregate values"
+  let ts := (types).push (obj [("k", .str "tuple"), ("fields", .arr #[obj [("ty", num 2)], obj [("ty", num 1)]])])
+  reject (file "tupleNullable" ts #[6] 6
+    #[inst 0 "arg" 6 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "nullable pointers in aggregate values"
+  let ts := (types) ++ #[obj [("k", .str "error_set"), ("errors", .arr #[.str "Bad"])],
+    obj [("k", .str "error_union"), ("error", num 6), ("payload", num 2)]]
+  reject (file "errorUnionNullable" ts #[7] 7
+    #[inst 0 "arg" 7 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "error-union payloads"
   let ts := #[intTy 64, intTy 8, (ptrTy "c" 1).setObjVal! "volatile" (.bool true), boolTy, nrTy]
   reject (file "volatileNullable" ts #[2] 2
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "volatile nullable pointers"
-  IO.println "nullable pointer source pipeline: 9 generated cases; adjacent rejections checked"
+  IO.println "nullable pointer source pipeline: 22 generated cases; adjacent rejections checked"
