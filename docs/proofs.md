@@ -147,6 +147,8 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 
 ## Proved examples
 
+[theorem-inventory.md](theorem-inventory.md) gives each theorem below its scope class, its precise domain and its current check result for each Zig version/target translation. The theorems of `Proofs/Atomics/Proofs.lean` and `Proofs/Sync/Proofs.lean` hold for one schedule (an oracle and fuel that the kernel runs), and the `*_spec` rules of `Proofs/Sync/Lock.lean` and `Proofs/Sync/RwLockContract.lean` for one operation: none of them is a theorem over all schedules.
+
 | File | Theorems |
 |---|---|
 | `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
@@ -161,6 +163,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | `Proofs/Sync/Handoff.lean` | `handoff_spec` (7 under every schedule, with the std `Io.Mutex`, `Io.Condition` and `Io.Event`), `handoff_safe` (no data race, no deadlock at a futex, no `unreachable`) |
 | `Proofs/Sync/SemCounter.lean` | `semaphoreCounter_spec` (4 under every schedule, with the std `Io.Semaphore`, `Io.Mutex` and `Io.Condition`), `semaphoreCounter_safe` (no data race, no deadlock at a futex, no other error) |
 | `Proofs/Sync/RwLock.lean` | `rwLockRead_spec` (2, 12 or 22 under every schedule, with the std `Io.RwLock`, its `Io.Mutex` and its `Io.Semaphore`), `rwLockRead_safe` (no data race, no deadlock at a futex, no other error) |
+| `Proofs/Sync/RwLockSnapshotPair.lean` | `snapshotPair_spec` (0, 11 or 22 under every schedule, for the restricted protocol of `Proofs/Sync/RwLockContract.lean`: one shared hold over both loads, the writer joined before reclamation), `snapshotPair_safe` (no data race, no deadlock at a futex, no other error) |
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
