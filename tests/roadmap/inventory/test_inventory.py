@@ -147,9 +147,11 @@ end
         rows['sub_sat']['fixture_request'] = None
         rows['prefetch']['rejection']['reason'] = 'stale text'
         rows['add_optimized']['rejection'] = None
+        # A reason recorded under the wrong translator definition is not current.
+        rows['breakpoint']['rejection']['definition'] = 'runtimeTagReason?'
         problems = coverage.l14_problems(inventory)
-        self.assertEqual(len(problems), 4, problems)
-        for tag in ('add', 'sub_sat', 'prefetch', 'add_optimized'):
+        self.assertEqual(len(problems), 5, problems)
+        for tag in ('add', 'sub_sat', 'prefetch', 'add_optimized', 'breakpoint'):
             self.assertTrue(any(f': {tag}:' in p for p in problems), tag)
         self.assertIsNone(coverage.fixture_request('no_such_tag', ''))
         with patch.dict(coverage.FIXTURE_REQUESTS, {'sub_sat': 'missingFunction'}):

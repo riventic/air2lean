@@ -307,14 +307,18 @@ def roadmap_fixture_paths(version):
     return selected
 
 
+def compiler_fixture_root(directory):
+    """Whether a repository-relative directory is a reviewed COMPILER_FIXTURE_ROOTS entry."""
+    return any(re.fullmatch(re.escape(t).replace(re.escape('{version}'), r'[^/]+'), directory)
+               for t in COMPILER_FIXTURE_ROOTS)
+
+
 def unreviewed_air_roots():
     """AIR JSON directories under tests/roadmap in neither reviewed table."""
-    compiler = [re.compile(re.escape(t).replace(re.escape('{version}'), r'[^/]+') + r'$')
-                for t in COMPILER_FIXTURE_ROOTS]
     found = set()
     for path in (ROOT/'tests/roadmap').rglob('*.json'):
         relative = str(path.parent.relative_to(ROOT))
-        if any(p.match(relative) for p in compiler) or \
+        if compiler_fixture_root(relative) or \
                 any(relative == r or relative.startswith(r + '/') for r in NON_COMPILER_AIR):
             continue
         try:
@@ -453,6 +457,13 @@ def fixture_request(tag, source_text):
         return None
     return {'source': FIXTURE_SOURCE, 'function': function,
             'reason': 'candidate source not yet exported by a patched compiler; see docs/coverage.md §L14'}
+
+
+# Normalize.lean definition holding the reason and guidance for each rejected disposition.
+# `rejected-unknown-tag` has none, so the L14 gate fails any such row.
+REJECTION_DEFINITIONS = {'rejected-fast-math': 'optimizedFloatGuidance',
+                         'rejected-compiler-state-or-effect': 'runtimeTagReason?',
+                         'rejected-exporter-unsupported': 'exporterTagReason?'}
 
 
 # Reviewed exceptions. `replaces` pins the mechanical result an override was reviewed
@@ -605,12 +616,11 @@ def compiler_fixture_path(relative):
     """A committed golden or a file directly inside a reviewed compiler-export root."""
     if relative.startswith('tests/golden/'):
         return True
-    parent = relative.rsplit('/', 1)[0]
-    return any(re.fullmatch(re.escape(t).replace(re.escape('{version}'), r'[^/]+'), parent)
-               for t in COMPILER_FIXTURE_ROOTS)
+    return compiler_fixture_root(relative.rsplit('/', 1)[0])
 
 
-def air_tags_in(path):
+def air_tags(data):
+    """Instruction tags (objects with a string tag and an integer id) anywhere in AIR JSON."""
     found = set()
     def visit(value):
         if isinstance(value, dict):
@@ -619,7 +629,7 @@ def air_tags_in(path):
             for child in value.values(): visit(child)
         elif isinstance(value, list):
             for child in value: visit(child)
-    visit(json.loads(path.read_text()))
+    visit(data)
     return found
 
 
@@ -644,7 +654,7 @@ def l14_problems(inventory):
                 path = ROOT/relative
                 if compiler_fixture_path(relative) and path.is_file():
                     if relative not in tags_cache:
-                        tags_cache[relative] = air_tags_in(path)
+                        tags_cache[relative] = air_tags(json.loads(path.read_text()))
                     if tag in tags_cache[relative]:
                         witnesses.append(relative)
             if not witnesses:
@@ -657,8 +667,8 @@ def l14_problems(inventory):
                 problems.append(f'{label}: emitted-unfixtured without a current FIXTURE_REQUESTS entry')
         elif disposition.startswith('rejected-'):
             rejection = row.get('rejection') or {}
-            definition = rejection.get('definition')
-            current = reasons.get(definition)
+            definition = REJECTION_DEFINITIONS.get(disposition)
+            current = reasons.get(definition) if rejection.get('definition') == definition else None
             current = current.get(tag) if isinstance(current, dict) else current
             if not rejection.get('reason') or rejection['reason'] != current:
                 problems.append(f'{label}: {disposition} without a current translator reason and guidance')
@@ -725,16 +735,8 @@ def generate(version, source, os_name='linux'):
     # fixture is not silently evidence.
     test_tags = {}
     for p in golden_paths(version, os_name) + roadmap_fixture_paths(version):
-        data = json.loads(cache.text(p))
-        def visit(value):
-            if isinstance(value, dict):
-                tag = value.get('tag')
-                if isinstance(tag, str) and type(value.get('id')) is int:
-                    test_tags.setdefault(tag, set()).add(str(p.relative_to(ROOT)))
-                for child in value.values(): visit(child)
-            elif isinstance(value, list):
-                for child in value: visit(child)
-        visit(data)
+        for tag in air_tags(json.loads(cache.text(p))):
+            test_tags.setdefault(tag, set()).add(str(p.relative_to(ROOT)))
     minor = version_minor(version)
     fast_suffix, call_prefix = normalizer_rules(normalizer_source)
     emitted, erased = emission_arms(cache.text(ROOT/'Air2Lean/Emit.lean'))
@@ -777,8 +779,6 @@ def generate(version, source, os_name='linux'):
         reason = (fast_guidance if disposition == 'rejected-fast-math' else rejection_reason
                   if disposition == 'rejected-compiler-state-or-effect' else exporter_reasons.get(tag)
                   if disposition == 'rejected-exporter-unsupported' else None)
-        source = {'rejected-fast-math': 'optimizedFloatGuidance', 'rejected-compiler-state-or-effect': 'runtimeTagReason?',
-                  'rejected-exporter-unsupported': 'exporterTagReason?'}.get(disposition)
         emission = ('erased-dispatch-arm' if disposition == 'erased-at-emission' else 'dispatch-arm') if reached else \
             'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
@@ -790,7 +790,7 @@ def generate(version, source, os_name='linux'):
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
                      'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
-                     'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': source} if reason else None,
+                     'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': REJECTION_DEFINITIONS[disposition]} if reason else None,
                      'fixture_request': fixture_request(tag, fixture_text) if disposition == 'emitted-unfixtured' else None,
                      'guidance': (reason + '; source-only rejection classification, no compiler fixture or support qualification') if reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
     other_written = '"other"' in type_arms.get('*', [])
