@@ -42,7 +42,12 @@ DIAGNOSIS = {
 }
 THEOREM = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|nonrec|unsafe|partial)\s+)*'
                      r'(?:theorem|lemma)\s+(«[^»]+»|[^\s:({\[⦃]+)')
-SCOPE = re.compile(r'^\s*(namespace|section|mutual|end)\b[ \t]*([^\s]*)')
+SCOPE = re.compile(r'^\s*(?:(?:public|noncomputable)\s+)*(namespace|section|mutual|end)\b[ \t]*([^\s]*)')
+TRANSLATOR = ('Air2Lean.lean', 'Air2Lean', 'scripts/check.sh', 'scripts/translate.sh',
+              'scripts/normalize-generated.py', 'scripts/normalize-air.py')
+RUNTIME = ('ZigLean.lean', 'ZigLean')
+TOOLCHAIN = ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json')
+RECEIPT_FILES = ('receipt.json', 'plan.json', 'audit.json', 'after.json')
 
 
 def canonical(value):
@@ -59,7 +64,7 @@ def chain_step(previous, name, link_digest):
 
 
 def git_at(root, *args):
-    return subprocess.run(['git', '-C', str(root), *args], check=True, stdout=subprocess.PIPE,
+    return subprocess.run(['git', '--literal-pathspecs', '-C', str(root), *args], check=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, timeout=10).stdout
 
 
@@ -119,21 +124,17 @@ def link_record(root, files, value=None):
     return dict(body, sha256=digest_of(body))
 
 
-def capitalized(example):
-    return example[:1].upper() + example[1:]
-
-
 def default_inputs(root, example, zig_version):
     demand(isinstance(example, str) and re.fullmatch(r'[a-z][a-z0-9_]*', example), 'invalid example name')
     demand(isinstance(zig_version, str) and re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', zig_version),
            'invalid Zig version')
-    proofs_dir = root / 'Proofs' / capitalized(example)
-    proofs = sorted(label(root, p) for p in proofs_dir.glob('*.lean') if p.name != 'Gen.lean')
-    if (root / 'Proofs' / (capitalized(example) + '.lean')).is_file():
-        proofs.append('Proofs/' + capitalized(example) + '.lean')
+    module = example[:1].upper() + example[1:]
+    proofs = sorted(label(root, p) for p in (root / 'Proofs' / module).glob('*.lean') if p.name != 'Gen.lean')
+    if (root / 'Proofs' / (module + '.lean')).is_file():
+        proofs.append('Proofs/' + module + '.lean')
     return {'example': example, 'zig_version': zig_version, 'sources': ['examples/' + example],
             'air_dir': 'tests/golden/%s/%s/air' % (zig_version, example),
-            'generated': 'Proofs/%s/Gen.lean' % capitalized(example), 'proofs': proofs,
+            'generated': 'Proofs/%s/Gen.lean' % module, 'proofs': proofs,
             'audit': None, 'receipt': None}
 
 
@@ -146,16 +147,9 @@ def toml_pin(root, zig_version):
     return {k: entry[k] for k in sorted(entry) if isinstance(entry[k], (str, int))}
 
 
-def helper_at(root, name):
-    spec = importlib.util.spec_from_file_location('manifest_' + name, root / 'scripts' / (name + '.py'))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def profile_value(root, inputs):
     """One validated target/build profile shared by every AIR file and any Gen.lean header."""
-    normalize = helper_at(root, 'normalize-generated')
+    normalize = receipt.helper('normalize-generated')
     air_files = expand(root, [inputs['air_dir']], '.json')
     demand(air_files, 'no AIR files in ' + inputs['air_dir'])
     distinct = {}
@@ -214,6 +208,26 @@ def audit_theorems(root, inputs, audit_path):
             'not_allowed': sorted(t['name'] for t in selected if t.get('allowed') is not True)}
 
 
+def patch_paths(version):
+    return ['zig-patch/versions.toml', 'zig-patch/%s/hook.patch' % version, 'zig-patch/air-json',
+            'zig-patch/build.sh', 'zig-patch/lock.sh']
+
+
+def audit_input(inputs):
+    if inputs['audit'] is None and inputs['receipt'] is not None:
+        return str(Path(inputs['receipt']) / 'audit.json')
+    return inputs['audit']
+
+
+def link_scopes(inputs):
+    """Every path named by a link, so provenance also sees deletions beneath it."""
+    audit = audit_input(inputs)
+    receipt_files = [] if inputs['receipt'] is None else [str(Path(inputs['receipt']) / n) for n in RECEIPT_FILES]
+    return [*inputs['sources'], *patch_paths(inputs['zig_version']), inputs['air_dir'], *TRANSLATOR,
+            inputs['generated'], *RUNTIME, *TOOLCHAIN, *inputs['proofs'],
+            *([] if audit is None else [audit]), *receipt_files]
+
+
 def compute_links(root, inputs):
     """Return {link: record or {'error': text}} for every link applicable to these inputs."""
     links, state = {}, {}
@@ -232,13 +246,11 @@ def compute_links(root, inputs):
         path = absolute(root, inputs['generated'])
         body = state.get('body')
         if body is None:
-            _, body = helper_at(root, 'normalize-generated').split_generated(read_file(path, MAX_JSON))
+            _, body = receipt.helper('normalize-generated').split_generated(read_file(path, MAX_JSON))
         return link_record(root, [path], {'body_sha256': hashlib.sha256(body).hexdigest()})
 
     proof_files = [absolute(root, p) for p in inputs['proofs']]
-    audit_path = inputs['audit']
-    if inputs['receipt'] is not None and audit_path is None:
-        audit_path = str(Path(inputs['receipt']) / 'audit.json')
+    audit_path = audit_input(inputs)
 
     def theorems():
         value = {'modules': proof_modules(root, inputs), 'source_scan': scan_theorems(root, proof_files),
@@ -250,33 +262,30 @@ def compute_links(root, inputs):
 
     version = inputs['zig_version']
     attempt('source', lambda: link_record(root, expand(root, inputs['sources'])))
-    attempt('compiler_patch', lambda: link_record(root, expand(root, [
-        'zig-patch/versions.toml', 'zig-patch/%s/hook.patch' % version, 'zig-patch/air-json',
-        'zig-patch/build.sh', 'zig-patch/lock.sh']), {'pin': toml_pin(root, version)}))
+    attempt('compiler_patch', lambda: link_record(root, expand(root, patch_paths(version)),
+                                                  {'pin': toml_pin(root, version)}))
     attempt('air', lambda: link_record(root, expand(root, [inputs['air_dir']], '.json')))
     attempt('profile', profile)
-    attempt('translator', lambda: link_record(root, expand(root, [
-        'Air2Lean.lean', 'Air2Lean', 'scripts/check.sh', 'scripts/translate.sh',
-        'scripts/normalize-generated.py', 'scripts/normalize-air.py'])))
+    attempt('translator', lambda: link_record(root, expand(root, TRANSLATOR)))
     attempt('generated', generated)
-    attempt('runtime', lambda: link_record(root, expand(root, ['ZigLean.lean', 'ZigLean'])))
-    attempt('toolchain', lambda: link_record(root, expand(root, ['lean-toolchain', 'lakefile.toml', 'lake-manifest.json']),
+    attempt('runtime', lambda: link_record(root, expand(root, RUNTIME)))
+    attempt('toolchain', lambda: link_record(root, expand(root, TOOLCHAIN),
             {'lean_toolchain': read_file(root / 'lean-toolchain', 4096).decode().strip()}))
     attempt('proofs', lambda: link_record(root, proof_files))
     attempt('theorems', theorems)
     if inputs['receipt'] is not None:
-        attempt('receipt', lambda: link_record(root, [Path(inputs['receipt']) / n for n in
-                ('receipt.json', 'plan.json', 'audit.json', 'after.json')]))
+        attempt('receipt', lambda: link_record(root, [Path(inputs['receipt']) / n for n in RECEIPT_FILES]))
     return links
 
 
-def provenance(root, links):
+def provenance(root, links, inputs):
     paths = sorted({row['path'] for record in links.values() for row in record.get('files', [])})
     inside = [p for p in paths if not Path(p).is_absolute()]
-    tracked_paths = set(git_paths(root, 'ls-files', '-z', '--', *inside)) if inside else set()
-    modified = (set(git_paths(root, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', '--', *inside))
-                if inside else set())
-    dirty = sorted(p for p in inside if p in modified)
+    scopes = sorted({label(root, absolute(root, s)) for s in link_scopes(inputs)})
+    scopes = [s for s in scopes if not Path(s).is_absolute()]
+    tracked_paths = set(git_paths(root, 'ls-files', '-z', '--', *scopes)) if scopes else set()
+    # Diff the named scopes, not just hashed files, so deleted link files (staged or not) count.
+    dirty = git_paths(root, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', '--', *scopes) if scopes else []
     untracked = sorted(p for p in inside if p not in tracked_paths)
     return {'head': git_at(root, 'rev-parse', 'HEAD').decode().strip(),
             'tracked_dirty': bool(git_at(root, 'status', '--porcelain', '--untracked-files=no')),
@@ -285,13 +294,15 @@ def provenance(root, links):
             'status': 'dirty' if dirty or untracked else 'clean'}
 
 
-def seal_chain(links):
+def seal_chain(links, inputs, provenance_record):
+    """Chain every link, then bind the inputs and provenance so neither can be edited silently."""
     current = hashlib.sha256(MANIFEST_FORMAT.encode()).hexdigest()
     chain = []
-    for name in LINKS:
-        if name in links:
-            current = chain_step(current, name, links[name]['sha256'])
-            chain.append({'link': name, 'sha256': links[name]['sha256'], 'chain_sha256': current})
+    steps = [(name, links[name]['sha256']) for name in LINKS if name in links]
+    steps.append(('inputs_provenance', digest_of({'inputs': inputs, 'provenance': provenance_record})))
+    for name, link_digest in steps:
+        current = chain_step(current, name, link_digest)
+        chain.append({'link': name, 'sha256': link_digest, 'chain_sha256': current})
     return chain, current
 
 
@@ -299,11 +310,12 @@ def build_manifest(root, inputs):
     links = compute_links(root, inputs)
     broken = sorted('%s: %s' % (k, v['error']) for k, v in links.items() if 'error' in v)
     demand(not broken, 'cannot record manifest: ' + '; '.join(broken))
-    chain, final = seal_chain(links)
+    record = provenance(root, links, inputs)
+    chain, final = seal_chain(links, inputs, record)
     return {'format': MANIFEST_FORMAT, 'schema': 1, 'authentication': 'not_attested',
             'claim': 'byte identities of recorded inputs; no rebuild, proof check or source correspondence',
             'inputs': inputs, 'links': links, 'chain': chain, 'manifest_sha256': final,
-            'provenance': provenance(root, links)}
+            'provenance': record}
 
 
 def manifest_integrity(manifest):
@@ -311,17 +323,16 @@ def manifest_integrity(manifest):
            and manifest['schema'] == 1,
            'unsupported manifest format/schema (proof receipt schema 1 is checked with `verify`)')
     links = mapping(manifest.get('links'), 'manifest links')
-    demand(set(links) <= set(LINKS) and {'source', 'air', 'profile', 'generated', 'theorems'} <= set(links),
-           'unknown or missing manifest link')
+    inputs = mapping(manifest.get('inputs'), 'manifest inputs')
+    expected = set(LINKS) - ({'receipt'} if inputs.get('receipt') is None else set())
+    demand(set(links) == expected, 'unknown or missing manifest link')
     for name, record in links.items():
         mapping(record, 'link ' + name)
         demand(record.get('sha256') == digest_of({'files': record.get('files'), 'value': record.get('value')}),
                'manifest link %s was edited after recording' % name)
-    chain, final = seal_chain(links)
+    chain, final = seal_chain(links, inputs, mapping(manifest.get('provenance'), 'manifest provenance'))
     demand(manifest.get('chain') == chain and manifest.get('manifest_sha256') == final,
            'manifest chain was edited after recording')
-    mapping(manifest.get('inputs'), 'manifest inputs')
-    mapping(manifest.get('provenance'), 'manifest provenance')
 
 
 def compare_link(name, recorded, current):
@@ -372,7 +383,8 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
     recorded = manifest['provenance']
     report['provenance'] = {'recorded': recorded}
     try:
-        report['provenance']['current'] = provenance(root, {k: v for k, v in current.items() if 'error' not in v})
+        report['provenance']['current'] = provenance(root, {k: v for k, v in current.items() if 'error' not in v},
+                                                 manifest['inputs'])
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         report['provenance']['current'] = {'error': str(error)}
     if recorded.get('status') != 'clean' and not allow_dirty:

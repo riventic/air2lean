@@ -10,6 +10,8 @@ import sys
 import tempfile
 import unittest
 
+sys.dont_write_bytecode = True
+ENV = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('artifact_manifest', ROOT / 'scripts/artifact-manifest.py')
 r = importlib.util.module_from_spec(spec)
@@ -97,7 +99,7 @@ class ManifestTests(unittest.TestCase):
     def tool(self, *args):
         result = subprocess.run([sys.executable, str(self.repo / 'scripts/proof-receipt.py'), *args],
                                 capture_output=True, text=True, cwd=self.base,
-                                env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+                                env=ENV)
         return result.returncode, result.stdout, result.stderr
 
     def record(self, *extra, path=None):
@@ -124,7 +126,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest['format'], 'air2lean-artifact-manifest-v1')
         self.assertEqual([c['link'] for c in manifest['chain']],
                          ['source', 'compiler_patch', 'air', 'profile', 'translator', 'generated', 'runtime',
-                          'toolchain', 'proofs', 'theorems'])
+                          'toolchain', 'proofs', 'theorems', 'inputs_provenance'])
         self.assertEqual(manifest['manifest_sha256'], manifest['chain'][-1]['chain_sha256'])
         self.assertEqual(manifest['links']['compiler_patch']['value']['pin']['hook'], '0.16.0/hook.patch')
         profile = manifest['links']['profile']['value']
@@ -210,6 +212,13 @@ class ManifestTests(unittest.TestCase):
         current = self.check('--allow-dirty')['provenance']['current']
         self.assertEqual(current['status'], 'clean')
 
+    def test_deleted_link_file_is_dirty(self):
+        self.write('examples/demo/extra.zig', 'pub const x = 1;\n')
+        (self.repo / 'examples/demo/extra.zig').unlink()
+        self.assertEqual(self.record()['provenance'], 'dirty')
+        provenance = json.loads(self.manifest.read_text())['provenance']
+        self.assertEqual(provenance['modified_link_paths'], ['examples/demo/extra.zig'])
+
     def test_expected_identities_detect_proof_for_another_source_or_profile(self):
         self.record()
         manifest = json.loads(self.manifest.read_text())
@@ -236,6 +245,28 @@ class ManifestTests(unittest.TestCase):
         record['sha256'] = r.digest_of({'files': record['files'], 'value': record['value']})
         self.manifest.write_text(json.dumps(manifest))
         self.assertIn('chain was edited', self.check()['problems'][0])
+
+    def rewrite(self, edit):
+        manifest = json.loads(self.manifest.read_text())
+        edit(manifest)
+        self.manifest.unlink()
+        self.manifest.write_text(json.dumps(manifest))
+        return self.check()
+
+    def test_provenance_and_inputs_are_sealed(self):
+        self.write('Proofs/Demo/Gen.lean', generated(body='def add := 3\n'), commit=False)
+        self.record()
+        report = self.rewrite(lambda m: m['provenance'].update(status='clean'))
+        self.assertEqual(report['status'], 'invalid')
+        self.assertIn('chain was edited', report['problems'][0])
+        report = self.rewrite(lambda m: m['inputs'].update(audit='/elsewhere.json'))
+        self.assertIn('chain was edited', report['problems'][0])
+
+    def test_dropped_link_is_invalid(self):
+        self.record()
+        report = self.rewrite(lambda m: m['links'].pop('runtime'))
+        self.assertEqual(report['status'], 'invalid')
+        self.assertIn('missing manifest link', report['problems'][0])
 
     def test_no_clobber_and_receipt_schema_is_not_a_manifest(self):
         self.record()
@@ -286,7 +317,7 @@ class ManifestTests(unittest.TestCase):
             {'name': 'toplevel', 'module': 'Proofs.Demo.Proofs', 'allowed': True}]}))
         self.record('--receipt', str(attempt))
         manifest = json.loads(self.manifest.read_text())
-        self.assertEqual(manifest['chain'][-1]['link'], 'receipt')
+        self.assertEqual(manifest['chain'][-2]['link'], 'receipt')
         self.assertEqual(manifest['links']['theorems']['value']['compiled_audit']['names'], ['toplevel'])
         self.assertEqual(self.check()['status'], 'current')
         report = self.check('--verify-receipt')  # A fake attempt is never a current proof receipt.
@@ -297,12 +328,13 @@ class ManifestTests(unittest.TestCase):
     def test_standalone_entry_point(self):
         self.record()
         result = subprocess.run([sys.executable, str(self.repo / 'scripts/artifact-manifest.py'),
-                                 'check-manifest', str(self.manifest)], capture_output=True, text=True)
+                                 'check-manifest', str(self.manifest)], capture_output=True, text=True,
+                                env=ENV)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_theorem_scan_namespaces(self):
         path = self.base / 'Scan.lean'
-        path.write_text('namespace A.B\nsection\ntheorem x : True := trivial\nend\nmutual\n'
+        path.write_text('namespace A.B\nnoncomputable section\ntheorem x : True := trivial\nend\nmutual\n'
                         'theorem y : True := trivial\nend\nend A.B\nlemma «odd name» : True := trivial\n')
         self.assertEqual(r.scan_theorems(self.base, [path]), ['A.B.x', 'A.B.y', '«odd name»'])
 
@@ -314,10 +346,10 @@ class RepositoryManifestTests(unittest.TestCase):
             path = Path(directory).resolve() / 'basic.json'
             command = [sys.executable, str(ROOT / 'scripts/proof-receipt.py')]
             created = subprocess.run(command + ['manifest', str(path), '--example', 'basic', '--zig-version',
-                                                '0.16.0'], capture_output=True, text=True)
+                                                '0.16.0'], capture_output=True, text=True, env=ENV)
             self.assertEqual(created.returncode, 0, created.stderr)
             checked = subprocess.run(command + ['check-manifest', str(path), '--allow-dirty'],
-                                     capture_output=True, text=True)
+                                     capture_output=True, text=True, env=ENV)
             self.assertEqual(checked.returncode, 0, checked.stderr)
             manifest = json.loads(path.read_text())
             self.assertIn('tardiness_spec', manifest['links']['theorems']['value']['source_scan'])

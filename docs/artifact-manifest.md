@@ -36,8 +36,10 @@ export or `.lake/check-reports` file). The output path must not exist; it is nev
 | `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json`, `after.json` | changed proof receipt |
 
 Each link digest is SHA-256 over canonical JSON of its `{files, value}`; each chain entry
-is `sha256(previous || link || digest)` starting from the format name, and the final value is
-`manifest_sha256`. Editing any recorded hash, value or chain entry makes the manifest `invalid`.
+is `sha256(previous || link || digest)` starting from the format name. A last `inputs_provenance`
+entry binds the canonical `{inputs, provenance}`, and its chain value is `manifest_sha256`. Editing
+any recorded hash, value, input, provenance field or chain entry, or dropping a link the inputs
+imply, makes the manifest `invalid` (this detects edits; it does not authenticate the recorder).
 
 Recording refuses inconsistent inputs instead of hiding them: AIR files with different profiles,
 an AIR `zig_version` different from `--zig-version`, a `Gen.lean` profile header that differs from
@@ -46,10 +48,10 @@ the AIR profile, a missing pin, or any unreadable link. Schema < 12 AIR records 
 
 ### Dirty-tree provenance
 
-`provenance` records `HEAD`, whether any tracked file is dirty, and, per link file,
-`modified_link_paths` (differs from `HEAD`, staged or not), `untracked_link_paths` and
-`external_link_paths` (outside the repository). `status` is `dirty` if any link file is modified or
-untracked. Content hashes still describe the recorded bytes, but such a manifest is not
+`provenance` records `HEAD`, whether any tracked file is dirty, `modified_link_paths` (any path
+under a link's named inputs that differs from `HEAD`, staged or not, including deletions),
+`untracked_link_paths` (hashed link files not in the index) and `external_link_paths` (outside the
+repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
 reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given.
 
 ## Check
