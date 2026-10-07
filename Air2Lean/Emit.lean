@@ -2893,10 +2893,62 @@ def emitSpawnFallbacks (funcs : Array Func)
   emitSpawnFallbacksWithStorage funcs (descriptions.map fun (worker, name, args, kind) =>
     (worker, name, captureStorageArgs args, kind))
 
+/-- Whether a value of type `id` holds no pointer identity. Opaque runtime handles
+(allocators, `Io`, threads) and unknown types count as holding one. -/
+def pointerFree (types : Array Ty) (id : TyId) (fuel : Nat := types.size + 1) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel + 1 =>
+    match types[id]? with
+    | some (.int ..) | some (.float _) | some .bool | some .void | some .noreturn
+    | some (.errorSet _) | some (.enum ..) => true
+    | some (.array _ c _) | some (.vector _ c) | some (.optional c) => pointerFree types c fuel
+    | some (.errorUnion s p) => pointerFree types s fuel && pointerFree types p fuel
+    | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.all fun (_, c) => pointerFree types c fuel
+    | some (.tuple fs) => fs.all fun c => pointerFree types c fuel
+    | _ => false
+
+/-- The `Zig.Conc.Capture` constructor of a captured field (`ZigLean/Conc/Capture.lean`). -/
+inductive CaptureClass where
+  | value | ptr | slice | other
+  deriving BEq, Inhabited
+
+def captureClass (types : Array Ty) (id : TyId) : CaptureClass :=
+  match types[id]? with
+  | some (.ptr "slice" ..) => .slice
+  | some (.ptr ..) => .ptr
+  | _ => if pointerFree types id then .value else .other
+
+/-- `Tgt.captures`: every captured field in source order, as a `Zig.Conc.Capture`. The
+ownership obligation over it is `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`). -/
+def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
+  let arms := targets.toList.map fun (n, classes) =>
+    let binder (i : Nat) := if classes.size == 1 then "a" else s!"capture{i}"
+    let parts := classes.toList.zipIdx.map fun (c, i) =>
+      if c == .ptr || c == .slice then binder i else "_"
+    let pattern := match parts with
+      | [] => "_"
+      | [p] => p
+      | _ => s!"({String.intercalate ", " parts})"
+    let items := classes.toList.zipIdx.map fun (c, i) => match c with
+      | .value => ".value"
+      | .ptr => s!".ptr {binder i}"
+      | .slice => s!".slice {binder i}"
+      | .other => ".other"
+    s!"  | .{n} {pattern} => [{String.intercalate ", " items}]"
+  let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
+  String.intercalate "\n" (["/-- Each captured field in source order. A value is copied and carries no ownership;",
+    "a pointer or slice copies only its identity, so a spawn proof must hand over or share its",
+    "region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/",
+    s!"def Tgt.captures : Tgt → List Zig.Conc.Capture{if arms.isEmpty then " :=" else ""}"] ++ body)
+
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in
-source order, adapting every slice argument for a pure worker in the child thread. -/
+source order, adapting every slice argument for a pure worker in the child thread.
+`captureClasses` (by target index) classifies the fields for `Tgt.captures`; a missing entry
+classifies every field as `other`. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
-    (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat)) :
+    (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
+    (captureClasses : Array (Array CaptureClass) := #[]) :
     List String × List String :=
   let ctors := targets.toList.map fun (n, args, _) =>
     let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
@@ -2918,7 +2970,9 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
-  ([tgt] ++ (if extendedCapture then [obligation] else []), [dispatch])
+  let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
+    (n, captureClasses[i]?.getD (args.map fun _ => .other)))
+  ([tgt] ++ (if extendedCapture then [obligation, captures] else []), [dispatch])
 
 /-- Preserve the public helper for callers whose captures need ordinary dictionaries. -/
 def emitTgt (structNames : Array (String × String)) (extendedCapture : Bool)
@@ -3093,7 +3147,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
     (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
-    (if extendedCapture then #["spawnInit"] else #[]) ++
+    (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
   let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
   let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
@@ -3144,6 +3198,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
+      (targets.map fun (_, f, fields) => fields.map (captureClass f.types))
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs

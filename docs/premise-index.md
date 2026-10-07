@@ -5,28 +5,28 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1946 theorems in 106 files.
+1956 theorems in 106 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 548 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 556 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 45 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 45 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1033 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 68 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1042 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 70 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 743 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 920 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 860 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 860 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 312 | `seq_cst` treated as `acq_rel` |
+| [THR-08](premises.md#thr-08) | 925 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [ORD-01](premises.md#ord-01) | 869 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 869 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
@@ -35,16 +35,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1826 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1504 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 896 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 1836 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1514 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 901 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 28 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1946 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 886 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 886 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1956 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 894 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 894 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2511,6 +2511,16 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `ThreadTuples.Proofs.explicit_fork` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `ThreadTuples.Proofs.mixed_fork` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ThreadTuples.Proofs.atomic_fork` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.zero_captures` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.mixed_captures` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.copied_captures` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.atomic_captures` | PRF-01, THR-01, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.atomic_spawn` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.mixed_spawn` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.worker_join` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `ThreadTuples.Proofs.pts_cell` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `ThreadTuples.Proofs.reused_output_rejected` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadTuples.Proofs.unowned_output_rejected` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/try-pointers/TryPointers/Proofs.lean`
 
