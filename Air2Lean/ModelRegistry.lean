@@ -390,11 +390,24 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
         completedShapes[site.functionIndex]!
       unless params == m.params && ret == m.ret do
         throw s!"{site.function.name}: model '{m.symbol}' has incompatible signature/layout"
+      let ids ← argumentTypeIds site.values site.args
+      let types := site.function.types
+      let layouts := site.function.layouts
       if let some fp := m.footprint then
-        let ids ← argumentTypeIds site.values site.args
         for index in fp.reads ++ fp.writes do
-          unless (match site.function.types[ids[index]!]? with | some (.ptr ..) => true | _ => false) do
+          unless (match types[ids[index]!]? with | some (.ptr ..) => true | _ => false) do
             throw s!"model '{m.symbol}': footprint parameter {index} is not a pointer or slice"
+      -- L13: a volatile parameter is a device effect. Its explicit contract is a write
+      -- footprint (a read may change device state); no nested volatile capability.
+      for (id, index) in ids.zipIdx do
+        let nested := match types[id]? with
+          | some (.ptr _ _ child) => containsVolatilePtr types layouts child
+          | _ => containsVolatilePtr types layouts id
+        if nested then
+          throw s!"model '{m.symbol}': parameter {index} has a nested volatile pointer (VOLATILE_ACCESS; only a direct volatile pointer parameter can carry a device contract)"
+        if volatilePtrTy types layouts id &&
+            !((m.footprint.map (·.writes.contains index)).getD false) then
+          throw s!"model '{m.symbol}': volatile pointer parameter {index} must be listed in footprint.writes (VOLATILE_ACCESS: a device access is an observable effect, not a pure repeatable read)"
   checkDependencies models
   unless (concFunctions funcs).isEmpty do
     throw "external model bindings currently require a sequential program"

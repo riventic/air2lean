@@ -1,3 +1,4 @@
+import ZigLean.Float.Allowed
 import ZigLean.Float.RoundTrip
 import Proofs.Floats.Gen
 
@@ -134,6 +135,19 @@ theorem isNan_spec (x : Zig.F64) : isNan x = pure (Zig.Float.isNaN x) := by
   unfold isNan
   simp [zig_unfold, Zig.eq_self]
 
+/-- `isNan` gives the same answer for every allowed operand (`ZigLean/Float/Allowed.lean`): NaN
+detection does not depend on the sign or payload the target gives a NaN. -/
+theorem isNan_allowed {x r : Zig.F64} (h : Zig.Float.Allowed x r) : isNan r = isNan x := by
+  rw [isNan_spec, isNan_spec, h.isNaN_eq]
+
+/-- `0 / 0` is a NaN whose sign and payload the target picks; `isNan` detects every one of them. -/
+theorem isNan_zero_div_zero :
+    Zig.Float.AllowedSpec (pure (Zig.Float.div (Zig.Float.zero false) (Zig.Float.zero false)))
+      (fun r : Zig.F64 => isNan r = pure true) := by
+  have hnan : (Zig.Float.div (Zig.Float.zero false) (Zig.Float.zero false) : Zig.F64).isNaN := by
+    unfold Zig.Float.div; rw [Zig.Float.classify_zero]; simp
+  exact ⟨_, rfl, fun r hr => by simp only [isNan_spec, hr.isNaN_of_isNaN hnan]⟩
+
 /-- `clamp`'s monadic scaffolding reduces to a plain nested `if` on `x < lo` / `x > hi`. -/
 theorem clamp_body (x lo hi : Zig.F32) : clamp x lo hi =
     pure (if Zig.Float.lt x lo then lo else if Zig.Float.gt x hi then hi else x) := by
@@ -162,6 +176,19 @@ theorem clamp_id (x lo hi : Zig.F32) (hxn : ¬x.isNaN) (hlon : ¬lo.isNaN) (hhin
   have h2 : Zig.Float.gt x hi = false := Zig.Float.lt_eq_false_of_le hxn hhin hxhi
   rw [h1, h2]
   rfl
+
+/-- `clamp` maps an allowed operand to an allowed result of the model's: its comparisons are
+false for a NaN of any payload, so a NaN passes through as a NaN, and a non-NaN operand is
+fixed. A proof about `clamp` of a varying result (e.g. of `0 / 0`) needs no payload. -/
+theorem clamp_allowed {x r : Zig.F32} (lo hi : Zig.F32) (h : Zig.Float.Allowed x r) :
+    ∃ v v', clamp x lo hi = pure v ∧ clamp r lo hi = pure v' ∧ Zig.Float.Allowed v v' := by
+  rw [clamp_body, clamp_body, h.lt_eq (.refl lo), h.gt_eq (.refl hi)]
+  refine ⟨_, _, rfl, rfl, ?_⟩
+  split
+  · exact .refl _
+  · split
+    · exact .refl _
+    · exact h
 
 /-- `dot` of two empty slices is `+0` (the model's zero result, no addends). -/
 theorem dot_nil : dot (#[] : Array Zig.F64) (#[] : Array Zig.F64) =

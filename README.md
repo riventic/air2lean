@@ -33,6 +33,8 @@ Lake uses the Lean version pinned in `lean-toolchain`; the first build downloads
 
 The [getting-started guide](docs/getting-started.md) walks through the Zig source, generated Lean, and a small proof exercise. It then shows how to translate your own file. air2lean generates definitions; you write the properties and proofs.
 
+For a worked memory-safety proof (no use after free, no double free, no leak, on every out-of-memory path) see [tutorials/memory-safety](tutorials/memory-safety/README.md) and [docs/proofs.md](docs/proofs.md#proving-memory-safety).
+
 ## How it works
 
 The Zig compiler does semantic analysis (`Sema`) and produces **AIR** (Analyzed Intermediate Representation). In AIR, `comptime` is already evaluated, generics are monomorphized, every type is known, and each safety check is explicit. A small compiler patch writes AIR as JSON. air2lean reads that JSON and writes one Lean definition per function.
@@ -158,12 +160,12 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 
 The supported subset includes checked, wrapping and saturating arithmetic; control flow and recursion; structs, enums, unions, optionals and error unions; pointers, slices and byte-level memory; heap allocation; floats and vectors; selected atomics, threads and std synchronization primitives. Inline asm is modeled as opaque functions with register operands on x86_64. See the [subset reference](PLAN.md#subset), [generated-code guide](docs/generated-code.md), and [std models](docs/std-models.md) for restrictions.
 
-Unsupported features include `threadlocal` and `extern` globals, std functions without a translation or model, detached threads and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
+Unsupported features include `threadlocal` globals, `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, detached threads and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
 
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
-| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` and `extern` globals |
+| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` globals; `extern` globals holding pointers, unions or errors |
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
 | enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
@@ -171,7 +173,7 @@ Unsupported features include `threadlocal` and `extern` globals, std functions w
 | atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Thread.detach`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
-| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual `bool` vector lane; integer or float vectors in memory whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`, for example) |
+| `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual lane of a `bool` vector or of a vector whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`); such vectors in memory outside a schema-12 LLVM-backend profile ([layouts](docs/vector-proofs.md#memory-layout)) |
 | single pointers `*T`, `?*T`, pointer aliasing (byte-level memory) | |
 | scalar nonoptional C/allowzero pointer null tests, casts and direct access ([fragment](docs/null-pointers.md)) | nullable-pointer storage/aggregates/optionals, volatile/null-bit/slice representations and nullable projections |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |

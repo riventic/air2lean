@@ -97,6 +97,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
 
+      # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
+      - name: Host and skipped-case accounting regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/host-accounting/test_accounting.py
+
       # Stub translator, Lake and audit; real build-guard and claims. No Lean, Lake or Zig.
       - name: Project check and reproducibility record regressions
         env:
@@ -155,6 +161,16 @@ jobs:
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
           python3 -B scripts/theorem-inventory.py check
+
+      # V03: independent (non-Lean) structural validation of every committed golden AIR file,
+      # then the stage trust report: each stage's class, premises, checkers and CI-run tests.
+      - name: Independent AIR export validation and trust report
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/export-validation/test_validate_air.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/export-validation/test_trust_report.py
+          python3 -B scripts/validate-air.py
+          python3 -B scripts/trust-report.py check
 
       # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
       - name: Float-semantics label regressions
@@ -367,7 +383,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Separation normalization regressions
         if: ${{ !matrix.mutate }}
@@ -431,6 +447,15 @@ jobs:
           tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 300 "$fuzz_dir/failures" 2>&1 \
             | tee "$fuzz_dir/fuzz.log"
 
+      # L12: explicit `ExternInit` external initial state, generated-client proofs and
+      # rejection of every absent/partly undefined global initializer. Hand-written AIR only.
+      - name: Global initialization and external initial state
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Sep
+          bash tests/roadmap/global-init/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
@@ -443,6 +468,24 @@ jobs:
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/blockers.log"
+      # L13: synthetic exporter-schema fixtures only; the real export check needs a patched
+      # compiler (docs/volatile-effects.md §Commands).
+      - name: Reject volatile and device effects
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
+      # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
+      # client proofs that reading them is `.unspecified`, and rejection of every other
+      # `undefined` operand. Hand-written AIR only.
+      - name: Undefined constant operands
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/undef-operands/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -456,6 +499,16 @@ jobs:
           python3 tests/roadmap/models/test_gate.py
           python3 -B tests/roadmap/models/test_external_contracts.py
           scripts/model-contracts.sh
+
+      # E03: selected environment-operation contract and its write-all client; the
+      # documentation check requires an operation-to-premise row and the not-claimed list.
+      - name: Environment-operation boundary
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B tests/roadmap/env-boundaries/test_env_boundaries.py -v
+          lake build ZigLean.Env
+          lake env lean tests/roadmap/env-boundaries/WriteAll.lean
 
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.
@@ -578,7 +631,7 @@ jobs:
           AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.Csl ZigLean.Sep
+          lake build ZigLean.Conc.Csl ZigLean.Conc.Transfer ZigLean.Sep
           python3 tests/roadmap/thread-tuples/guard-tests.py
           python3 tests/roadmap/thread-tuples/mutation-tests.py
           [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
@@ -619,6 +672,19 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Runtime.lean
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
+
+      # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
+      # encoding, the recorded aarch64-macos images, and the checker's backend gate.
+      - name: Vector memory layouts, compiler probe and checker controls
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.VecMem Air2Lean
+          observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
+          host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
+          lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
+          lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/vector-layouts/Checker.lean
 
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
@@ -691,6 +757,32 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # Q04: this version/target's row of the accounting table (exact matches only in the
+      # headline) and the README legacy-version claims checked against the summary actually run.
+      - name: Per-version differential accounting and support claims
+        if: ${{ matrix.full && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          summary=tests/diff/out/report.json
+          out="$RUNNER_TEMP/accounting"
+          python3 scripts/accounting.py publish --summary "$summary" \
+            --json "$out/accounting.json" --markdown "$out/accounting.md"
+          python3 scripts/accounting.py check --json "$out/accounting.json" --summary "$summary"
+          python3 scripts/accounting.py claims --summary "$summary"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$out/accounting.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # Kept even when the differential gate fails: an incomplete summary records why.
+      # `python3 scripts/accounting.py publish` consumes these across versions.
+      - name: Upload the differential summary
+        if: ${{ !cancelled() && matrix.full && !matrix.mutate }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
+          path: tests/diff/out/report.json
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Typed outcomes and bounded schedule regressions
         if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
@@ -726,8 +818,10 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           lake build Proofs
+          lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
+            lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
           fi
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
@@ -742,11 +836,12 @@ jobs:
           python3 scripts/float-semantics.py check-report "$RUNNER_TEMP/air2lean-assumptions.json"
 
       # Same premise tables over the kernel dependency graph of the audited translation.
+      # --strict: the committed source index must cover every kernel-derived premise (D03).
       - name: Map audited theorems to premise IDs
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         run: |
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
-            --output "$RUNNER_TEMP/air2lean-premises.json"
+            --output "$RUNNER_TEMP/air2lean-premises.json" --strict
 
       # A03: real generated asm wrappers under a test-only interpretation, five wrapper
       # mutants, and the harness kept out of the audited theorem dependencies.
@@ -790,6 +885,12 @@ jobs:
       - name: Tutorials
         if: ${{ !matrix.mutate }}
         run: python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
+
+      - name: Memory-safety tutorial
+        if: ${{ !matrix.mutate }}
+        run: |
+          lake env lean tutorials/memory-safety/Main.lean
+          lake env lean tutorials/memory-safety/Controls.lean
 
       - name: Integer bit operations regression and differential gate
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}

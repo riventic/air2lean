@@ -1,3 +1,4 @@
+import ZigLean.Float.Allowed
 import ZigLean.Float.RoundTrip
 import Proofs.Floatconv.Gen
 
@@ -97,3 +98,21 @@ theorem toByte_overflow_of_inf (x : Zig.F32) (h : x.isInf) : toByte x = throw .o
   | inf s => unfold Zig.Float.toInt; rw [hc]; simp [zig_unfold]
   | nan => rw [hc] at h; simp at h
   | finite _ _ _ => rw [hc] at h; simp at h
+
+/-- `toByte` (`@intFromFloat` to `u8`, safety on) has the same outcome on every allowed operand
+(`ZigLean/Float/Allowed.lean`): target variation of a NaN does not reach the integer. -/
+theorem toByte_allowed {x r : Zig.F32} (h : Zig.Float.Allowed x r) : toByte r = toByte x := by
+  unfold toByte
+  rw [Zig.Float.toInt_allowed _ _ _ h]
+
+/-- Illegal input stays explicit under target variation: `toByte` of every allowed result of an
+infinite model result (e.g. `1 / 0`) panics with `.overflow`. -/
+theorem toByte_allowed_overflow {x r : Zig.F32} (h : Zig.Float.Allowed x r) (hx : x.isInf) :
+    toByte r = throw .overflow := by
+  rw [toByte_allowed h, toByte_overflow_of_inf x hx]
+
+/-- `toByte` of every allowed result of a NaN — any sign or payload — throws `.unspecified`: no
+payload makes it succeed. -/
+theorem toByte_allowed_nan {x r : Zig.F32} (h : Zig.Float.Allowed x r) (hx : x.isNaN) :
+    toByte r = throw .unspecified :=
+  toByte_nan r (h.isNaN_of_isNaN hx)

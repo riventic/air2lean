@@ -39,6 +39,9 @@ elif [ "$1" = --run ] && [ "$2" = tests/roadmap/models/StdModels.lean ]; then
 elif [ "$1" = tests/roadmap/models/StdDependencies.lean ]; then
   echo "mock std-dependencies"
   [ "${MOCK_FAILURE:-}" != std-dependencies ] || exit 13
+elif [ "$1" = tests/roadmap/models/Callback.lean ]; then
+  echo "mock callback"
+  [ "${MOCK_FAILURE:-}" != callback ] || exit 14
 elif [ "$1" = --run ]; then
   echo "mock registry"
   [ "${MOCK_FAILURE:-}" != registry ] || exit 9
@@ -65,7 +68,7 @@ printf 'mock cli\n'
         executable = tools / name
         executable.write_text(text)
         executable.chmod(0o755)
-    for stage in ["", "build", "model", "registry", "std-models", "std-dependencies", "client", "cli"]:
+    for stage in ["", "build", "model", "registry", "std-models", "std-dependencies", "client", "callback", "cli"]:
         evidence = root / (stage or "success")
         env = dict(os.environ, PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
                    AIR2LEAN_MODEL_EVIDENCE=str(evidence), MOCK_FAILURE=stage)
@@ -80,8 +83,8 @@ printf 'mock cli\n'
             for artifact in ["tests/roadmap/models/Model.olean", "registry.json", "Generated.lean",
                              "model.log", "registry.log", "std-models.log", "std-dependencies.log", "client.log", "tuple-client.log", "collision-client.log", "cli.log",
                              "tests/roadmap/models/Fill.olean", "fill-model.log", "fill-client.log",
-                             "fill-contracts.json", "fill-assumed-contracts.json"]:
+                             "fill-contracts.json", "fill-assumed-contracts.json", "callback.log"]:
                 assert (evidence / artifact).is_file(), artifact
-            assert "ZigLean ZigLean.External ZigLean.Sep.Heap Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
+            assert "ZigLean ZigLean.External ZigLean.External.Callback ZigLean.Sep.Heap Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean" in (evidence / "build.log").read_text()
         assert not (repo / "tests").exists(), "gate wrote generated evidence into checkout"
 print("model contract gate mocks passed (no compiler executed)")

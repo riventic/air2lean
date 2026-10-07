@@ -1966,7 +1966,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match v with
       -- `undefined`: every byte of the value becomes undefined.
       | .undef _ => (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
-      | _ =>
+      -- Partly `undefined`: one store of the value's bytes, with the bytes of each `undefined`
+      -- item or field undefined (`undefByteRanges`; `Check.lean` rejects any other shape).
+      | v =>
+        if v.hasNestedUndef then
+          let ranges := ((fc.valTyId? ptr).bind (ptrChild fc.types)).bind
+            (undefByteRanges fc.types fc.layouts · v)
+          match ranges with
+          | some ranges =>
+            let bytes := ranges.foldl (init := s!"Zig.Enc.encode ({rv v} : {ty})") fun acc (off, len) =>
+              s!"(Zig.writeBytes ({acc}) {off} (Array.replicate {len} .undef))"
+            (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
+          | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
+        else
         let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
         if host != 0 then
           let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
@@ -2595,13 +2607,24 @@ structure ProgGlobal where
   align : Nat
   /-- A `var`: a writable block. Anything else is read-only (`Zig.BlockKind.constGlobal`). -/
   isVar : Bool := false
+  /-- An `extern` global: its `ExternInit` field and Lean type; `bytes` encode that field. -/
+  externField : Option (String × String) := none
+
+/-- The structure of the explicit external initial state that `mem0` takes (§Globals). -/
+def externInitName : String := "ExternInit"
+
+/-- Program names reserved for explicit external initial state, only if a global is `extern`. -/
+def externReservedNames (funcs : Array Func) : Array String :=
+  if funcs.any (·.globals.any (·.isExtern)) then #[externInitName] else #[]
 
 /-- The bytes of `term : ty`. -/
 def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 
-/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. -/
-def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
+/-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. An
+`extern` global (`externField = some field`) is the encoding of `ext.field`, never a default. -/
+def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := none) : String :=
   let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
+  if let some field := externField then fc.storageExpr g.ty (encodeTerm s!"ext.{field}" ty) else
   match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
   | some (.func ..) => "#[.undef]"
@@ -2610,8 +2633,9 @@ def FCtx.globalBytes (fc : FCtx) (g : Global) : String :=
 
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with
-the same type and value as another one shares its block. Named globals come first. -/
-def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
+the same type and value as another one shares its block. Named globals come first. An `extern`
+global gets an `ExternInit` field named after it (`prefix_` stripped), in block order. -/
+def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (prefix_ : String := "") :
     Array ProgGlobal × Array (String × Array Nat) := Id.run do
   let mut named : Array String := #[]
   for f in funcs do
@@ -2635,12 +2659,18 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) :
           unnamed := unnamed.push (bytes, (f.layouts[g.ty]?.bind (·.align)).getD 1)
         ids := ids.set! k (f.name, ids[k]!.2.set! j id)
   let mut out : Array ProgGlobal := #[]
+  let mut fields : Array String := typeCoreNames.push "mk"
   for n in named do
     let some (f, k) := funcs.zipIdx.find? fun (f, _) => f.globals.any (·.name == some n)
       | continue
     let some g := f.globals.find? (·.name == some n) | continue
-    out := out.push { label := n, bytes := (mkFc f ids[k]!.2).globalBytes g,
-                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst }
+    let fc := mkFc f ids[k]!.2
+    let externField := if g.isExtern then
+      some (freshName (plainName (mangleName prefix_ n)) fields) else none
+    if let some field := externField then fields := fields.push field
+    out := out.push { label := n, bytes := fc.globalBytes g externField,
+                      align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
+                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)) }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -2688,13 +2718,32 @@ def nameBytes (s : String) : String :=
   let bs := s.toUTF8.toList.map (s!"{·}")
   encodeTerm s!"#v[{", ".intercalate (bs ++ ["0"])}]" s!"Vector (BitVec 8) {bs.length + 1}"
 
-/-- `mem0`: the memory at program start, one block per global. -/
+/-- `mem0`: the memory at program start, one block per global. With an `extern` global, `mem0`
+takes the explicit external initial state `ext : ExternInit`, one field per `extern` global in
+block order: a proof from `mem0 ext` states its assumptions about external storage on `ext`. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
+  let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
-    s!"  -- {k}: {g.label}\n  ({g.bytes}, {g.align}, {if g.isVar then ".global" else ".constGlobal"})"
+    let source := match g.externField with
+      | some (field, _) => s!" (extern: initial value `ext.{field}`)"
+      | none => ""
+    s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
-  s!"/-- The memory at program start: block `k` is global `k`. -/\n\
-    def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+  let externs := gs.toList.zipIdx.filterMap fun (g, k) => g.externField.map fun (field, ty) =>
+    let access := if g.isVar then "`var`, writable" else "`const`, read-only"
+    s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
+  if externs.isEmpty then
+    s!"/-- The memory at program start: block `k` is global `k`. -/\n\
+      def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+  else
+    s!"/-- External initial state: the initial value of each `extern` global, which this program \
+      does not define. Fields follow block (initialization) order. Contract: the external \
+      definition holds a valid encoding of the field's type before the program starts; any \
+      other assumption about external storage is a hypothesis on this value. -/\n\
+      structure {externInitName} where\n{"\n".intercalate externs}\n\n\
+      /-- The memory at program start: block `k` is global `k`. Blocks are added in order; an \
+      `extern` block holds its `ext` field, never a default. -/\n\
+      def mem0 (ext : {externInitName}) : Zig.Mem := Zig.Mem.ofGlobals {body}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -2844,10 +2893,62 @@ def emitSpawnFallbacks (funcs : Array Func)
   emitSpawnFallbacksWithStorage funcs (descriptions.map fun (worker, name, args, kind) =>
     (worker, name, captureStorageArgs args, kind))
 
+/-- Whether a value of type `id` holds no pointer identity. Opaque runtime handles
+(allocators, `Io`, threads) and unknown types count as holding one. -/
+def pointerFree (types : Array Ty) (id : TyId) (fuel : Nat := types.size + 1) : Bool :=
+  match fuel with
+  | 0 => false
+  | fuel + 1 =>
+    match types[id]? with
+    | some (.int ..) | some (.float _) | some .bool | some .void | some .noreturn
+    | some (.errorSet _) | some (.enum ..) => true
+    | some (.array _ c _) | some (.vector _ c) | some (.optional c) => pointerFree types c fuel
+    | some (.errorUnion s p) => pointerFree types s fuel && pointerFree types p fuel
+    | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.all fun (_, c) => pointerFree types c fuel
+    | some (.tuple fs) => fs.all fun c => pointerFree types c fuel
+    | _ => false
+
+/-- The `Zig.Conc.Capture` constructor of a captured field (`ZigLean/Conc/Capture.lean`). -/
+inductive CaptureClass where
+  | value | ptr | slice | other
+  deriving BEq, Inhabited
+
+def captureClass (types : Array Ty) (id : TyId) : CaptureClass :=
+  match types[id]? with
+  | some (.ptr "slice" ..) => .slice
+  | some (.ptr ..) => .ptr
+  | _ => if pointerFree types id then .value else .other
+
+/-- `Tgt.captures`: every captured field in source order, as a `Zig.Conc.Capture`. The
+ownership obligation over it is `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`). -/
+def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
+  let arms := targets.toList.map fun (n, classes) =>
+    let binder (i : Nat) := if classes.size == 1 then "a" else s!"capture{i}"
+    let parts := classes.toList.zipIdx.map fun (c, i) =>
+      if c == .ptr || c == .slice then binder i else "_"
+    let pattern := match parts with
+      | [] => "_"
+      | [p] => p
+      | _ => s!"({String.intercalate ", " parts})"
+    let items := classes.toList.zipIdx.map fun (c, i) => match c with
+      | .value => ".value"
+      | .ptr => s!".ptr {binder i}"
+      | .slice => s!".slice {binder i}"
+      | .other => ".other"
+    s!"  | .{n} {pattern} => [{String.intercalate ", " items}]"
+  let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
+  String.intercalate "\n" (["/-- Each captured field in source order. A value is copied and carries no ownership;",
+    "a pointer or slice copies only its identity, so a spawn proof must hand over or share its",
+    "region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/",
+    s!"def Tgt.captures : Tgt → List Zig.Conc.Capture{if arms.isEmpty then " :=" else ""}"] ++ body)
+
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in
-source order, adapting every slice argument for a pure worker in the child thread. -/
+source order, adapting every slice argument for a pure worker in the child thread.
+`captureClasses` (by target index) classifies the fields for `Tgt.captures`; a missing entry
+classifies every field as `other`. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
-    (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat)) :
+    (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
+    (captureClasses : Array (Array CaptureClass) := #[]) :
     List String × List String :=
   let ctors := targets.toList.map fun (n, args, _) =>
     let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
@@ -2869,7 +2970,9 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
-  ([tgt] ++ (if extendedCapture then [obligation] else []), [dispatch])
+  let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
+    (n, captureClasses[i]?.getD (args.map fun _ => .other)))
+  ([tgt] ++ (if extendedCapture then [obligation, captures] else []), [dispatch])
 
 /-- Preserve the public helper for callers whose captures need ordinary dictionaries. -/
 def emitTgt (structNames : Array (String × String)) (extendedCapture : Bool)
@@ -3042,9 +3145,9 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let apiNames := if proofApi then funcs.flatMap (fun f =>
     if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
-    (if memFuncs.isEmpty then #[] else #["mem0"]) ++
+    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
-    (if extendedCapture then #["spawnInit"] else #[]) ++
+    (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
   let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
   let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
@@ -3056,7 +3159,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     | some site => emitModel model index site structNames
     | none => "").toList
   let mkFc (f : Func) (ids : Array Nat) := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs ids
-  let (globals, ids) := collectGlobals funcs mkFc
+  let (globals, ids) := collectGlobals funcs mkFc prefix_
   -- The tag names are blocks after the globals.
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
     fun (gs, defs) (_, lean, fields, exhaustive, bits) =>
@@ -3095,6 +3198,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
+      (targets.map fun (_, f, fields) => fields.map (captureClass f.types))
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs

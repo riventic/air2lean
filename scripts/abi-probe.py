@@ -16,8 +16,13 @@ NATIVE = {'x86_64-linux-gnu': ('Linux', 'linux', 'gnu', 'x86_64'),
           'aarch64-linux-gnu': ('Linux', 'linux', 'gnu', 'generic'),
           'aarch64-macos-none': ('Darwin', 'macos', 'none', 'apple_m1')}
 LAYOUTS = {'u9': [2, 2], 'u24': [4, 4], 'u40': [8, 8], 'u128': [16, 16],
-           'pointer': [8, 8], 'packed32': [4, 4], 'vector4': [16, 16], 'record': [16, 8]}
-VALUES = {'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
+           'pointer': [8, 8], 'packed32': [4, 4], 'vector4': [16, 16],
+           'vector_u9x4': [8, 8], 'vector_u24x3': [16, 16], 'vector_u40x2': [16, 16],
+           'vector_bool5': [1, 1], 'record': [16, 8]}
+# Bit-packed vector lanes (L09, tests/roadmap/vector-layouts): 0x0ffc01ff, 0x0aa801ff, 0x123456abcdef.
+VALUES = {'vector_u9_image': 268173823, 'vector_u9_lane_write': 178782719,
+          'vector_u24_image': 20016001699311,
+          'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
 OFFSETS = {'record_count': 4, 'record_pointer': 8}
 
 

@@ -1,0 +1,152 @@
+{
+  "format": 1,
+  "stages": [
+    {
+      "id": "sema",
+      "name": "Zig Sema (source to analyzed AIR)",
+      "components": ["zig-patch/versions.toml"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02"],
+      "summary": "The pinned upstream compiler's semantic analysis is believed to produce AIR that means what the Zig source means. Nothing relates source to AIR except bounded native/model differential tests.",
+      "evidence": ["scripts/diff.sh"]
+    },
+    {
+      "id": "exporter",
+      "name": "AIR JSON exporter patch",
+      "components": ["zig-patch/air-json/json.zig", "zig-patch/air-json/pointer-offset.zig"],
+      "class": "independently-checked-metadata",
+      "premises": ["TRU-02"],
+      "summary": "The exported structure is re-checked outside the Lean decoder: instruction ids, operand scoping, block/loop/dispatch targets, terminators, type-table/global references and the per-version tag set and unsupported markers of coverage/<version>.json. Operand values and the meaning of each tag remain trusted.",
+      "checks": [
+        {
+          "what": "independent structural validation of every committed golden AIR file",
+          "checker": "scripts/validate-air.py",
+          "test": "tests/roadmap/export-validation/test_validate_air.py",
+          "ci": ["python3 -B scripts/validate-air.py", "tests/roadmap/export-validation/test_validate_air.py"]
+        },
+        {
+          "what": "compiler-derived AIR tag/type inventory against checksum-pinned compiler sources",
+          "checker": "scripts/coverage.py",
+          "test": "tests/roadmap/inventory/test_inventory.py",
+          "ci": ["scripts/coverage.py check", "tests/roadmap/inventory/test_inventory.py"]
+        },
+        {
+          "what": "exported filename identity, re-export and collision contract",
+          "checker": "scripts/check-export-names.sh",
+          "test": "tests/roadmap/export-names/test_order_cli.py",
+          "ci": ["bash scripts/check-export-names.sh"]
+        }
+      ]
+    },
+    {
+      "id": "decode",
+      "name": "JSON decode and schema/profile validation",
+      "components": ["Air2Lean/Air/StrictJson.lean", "Air2Lean/Air/Json.lean", "Air2Lean/Air/Profile.lean"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02", "PRF-02"],
+      "summary": "Decoding is unproved Lean code. Its rejection policy (V05) is regression-tested; that the decoded value is the exported AIR is trusted. The independent validator checks the same input, not the decoder's output.",
+      "evidence": ["tests/roadmap/input-validation/test_cli.py", "tests/roadmap/input-validation/Validation.lean"]
+    },
+    {
+      "id": "canonicalization",
+      "name": "Canonicalization (reference validation, copy forwarding, renumbering)",
+      "components": ["Air2Lean/Air/Canon.lean"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02"],
+      "summary": "Rewrites are not proved to preserve meaning (V02 research). Evidence is golden Gen.lean comparison and mutation tests.",
+      "evidence": ["scripts/check.sh", "scripts/mutate.sh"]
+    },
+    {
+      "id": "normalization",
+      "name": "Per-version tag normalization",
+      "components": ["Air2Lean/Air/Normalize.lean", "Air2Lean/Air/Compat.lean"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02"],
+      "summary": "The mapping from verbatim per-version AIR tags to Op constructors is unproved. scripts/normalize-air.py only normalizes identities for golden comparison and is not a check of this stage.",
+      "evidence": ["scripts/check.sh", "coverage/0.16.0.json"]
+    },
+    {
+      "id": "checker",
+      "name": "Whole-program checker",
+      "components": ["Air2Lean/Check.lean"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02", "PRF-01", "PRF-02"],
+      "summary": "Type, layout, global and call restrictions are enforced by unproved Lean code; acceptance does not certify that the admitted program is in the modeled subset.",
+      "evidence": ["tests/roadmap/input-validation/test_cli.py"]
+    },
+    {
+      "id": "emitter",
+      "name": "Lean emitter (Gen.lean)",
+      "components": ["Air2Lean/Emit.lean"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-02"],
+      "summary": "Emission is not proved to preserve the canonical AIR. Evidence is golden Gen.lean comparison, mutation tests and bounded differential tests. Known gap: a store of a wholly `undefined` value to a local that stays a `Locals` field (not a stack block) is still emitted as the field type's `default` (`0`, `false`), so a later read observes a value instead of `.unspecified`; partly undefined constant operands and global initializers are explicit undefined bytes or rejected. The precise fix is pending on `codex/undef-local-stores`.",
+      "evidence": ["scripts/check.sh", "scripts/diff.sh", "scripts/mutate.sh"]
+    },
+    {
+      "id": "provenance",
+      "name": "Artifact provenance (source, patch, AIR, profile, Gen.lean, runtime, toolchain)",
+      "components": ["scripts/artifact-manifest.py"],
+      "class": "independently-checked-metadata",
+      "premises": ["TRU-02"],
+      "summary": "Hash links between the artifacts of one run are recomputed and staleness is named per link. Identity is checked; correspondence between the linked artifacts is not.",
+      "checks": [
+        {
+          "what": "chained manifest hashes and per-link staleness",
+          "checker": "scripts/artifact-manifest.py",
+          "test": "tests/roadmap/artifact-manifest/test_manifest.py",
+          "ci": ["tests/roadmap/artifact-manifest/test_manifest.py"]
+        }
+      ]
+    },
+    {
+      "id": "ziglean-semantics",
+      "name": "ZigLean runtime semantics (model fidelity)",
+      "components": ["ZigLean/Basic.lean", "ZigLean/Mem/Basic.lean", "ZigLean/Loop.lean"],
+      "class": "unverified-assumption",
+      "premises": ["SEM-01", "SEM-02", "SEM-03", "TRU-04"],
+      "summary": "The runtime definitions are the meaning given to generated code. That they match Zig's semantics is a model choice; opaque/extern/implemented_by bodies are reviewed, not proved.",
+      "evidence": ["assurance/policy.json", "docs/premises.md"]
+    },
+    {
+      "id": "theorems",
+      "name": "Theorems over generated modules and the ZigLean library",
+      "components": ["Proofs", "ZigLean"],
+      "class": "kernel-checked",
+      "premises": ["TRU-01", "TRU-04"],
+      "summary": "Every shipped theorem about the generated Lean module, and every runtime lemma it uses, is checked by the Lean kernel. The audited dependency closure may use only the standard axioms and reviewed opaques. This is preservation inside the model only.",
+      "checks": [
+        {
+          "what": "kernel build of Proofs, then dependency/axiom/opaque/extern audit of the checked environment",
+          "checker": "scripts/assumptions.sh",
+          "test": "tests/roadmap/assurance/test_policy.py",
+          "ci": ["lake build Proofs", "scripts/assumptions.sh --output", "tests/roadmap/assurance/check.sh"]
+        },
+        {
+          "what": "per-theorem premise derivation and index",
+          "checker": "scripts/premises.py",
+          "test": "tests/roadmap/premises/test_premises.py",
+          "ci": ["scripts/premises.py check", "tests/roadmap/premises/test_premises.py"]
+        }
+      ],
+      "evidence": ["scripts/no-sorry.sh", "assurance/policy.json"]
+    },
+    {
+      "id": "lean-kernel",
+      "name": "Lean kernel and toolchain",
+      "components": ["lean-toolchain"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-01"],
+      "summary": "The pinned Lean kernel and the three standard axioms are the trusted base of every kernel-checked statement."
+    },
+    {
+      "id": "native-backend",
+      "name": "Native backend, linker, OS and hardware",
+      "components": ["zig-patch/versions.toml"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-03", "PRF-02"],
+      "summary": "Proofs concern AIR before code generation. Native behavior is related to the model only by bounded differential runs and ABI-probe observations for named targets.",
+      "evidence": ["scripts/diff.sh", "scripts/abi-probe.py"]
+    }
+  ]
+}

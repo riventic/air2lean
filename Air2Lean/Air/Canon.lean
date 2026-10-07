@@ -201,6 +201,9 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
       users := users.insert u ((users.getD u #[]).push i)
   let isConstPtr (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with | some (.ptr _ c _) => c | _ => false
+  -- A volatile read is an observable device effect (L13), never a forwardable copy read.
+  let isVolatilePtr (ty : Option TyId) : Bool :=
+    ((ty.bind (f.layouts[·]?)).map (·.isVolatile)).getD false
   let pos := positions f.body
   -- Adjacent projection/load chains have no intervening write or call. This retains the
   -- value form for pure slice reads, while delayed or repeated reads stay at each load.
@@ -212,7 +215,7 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     match (users.getD p #[]).filter (!isDbgTag ·.tag) with
     | #[u] =>
       next[p]? == some u.id && u.args[0]? == some (.inst p) &&
-        !((u.ty.bind (f.layouts[·]?)).map (·.isVolatile)).getD false &&
+        !isVolatilePtr u.ty &&
         (u.tag == "load" || (u.tag != "slice_elem_ptr" && (projection? u).isSome &&
           adjacentRead u.id fuel))
     | _ => false
@@ -230,7 +233,7 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     if let #[s] := stores then
       if let some v := s.args[1]? then
         if (match v with | .undef _ => false | _ => true) &&
-            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty &&
+            rest.all (fun u => u.tag == "bitcast" && isConstPtr u.ty && !isVolatilePtr u.ty &&
               (a.ty.bind fun sourceTy => u.ty.map (samePointee f.types sourceTy)).getD false &&
               runsAfter pos s.id u.id) then
           copyVal := copyVal.insert a.id v
@@ -241,7 +244,7 @@ def forwardReadOnlyCopies (f : RawFunc) : RawFunc := Id.run do
     match i.tag, (i.args[0]? : Option Val) with
     | "bitcast", some (.inst a) => if copyVal.contains a then ptrs := ptrs.insert i.id
     | "slice_elem_ptr", _ =>
-      if !((i.ty.bind (f.layouts[·]?)).map (·.isVolatile)).getD false && adjacentRead i.id all.size then
+      if !isVolatilePtr i.ty && adjacentRead i.id all.size then
         ptrs := ptrs.insert i.id
     | _, some (.inst p) =>
       if i.tag != "slice_elem_ptr" && (projection? i).isSome && ptrs.contains p then

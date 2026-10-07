@@ -10,6 +10,7 @@ inductive Code where
   | structureFailure | typeFailure | globalFailure | memoryFailure | instructionFailure
   | constantFailure | signatureFailure | modelFailure | programFailure | profileFailure
   | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | prerequisiteSkipped
+  | volatileAccess
   deriving BEq, Repr
 
 def Code.text : Code → String
@@ -37,6 +38,7 @@ def Code.text : Code → String
   | .calleeBlocked => "CALLEE_BLOCKED"
   | .calleeAmbiguous => "CALLEE_AMBIGUOUS"
   | .prerequisiteSkipped => "PREREQUISITE_SKIPPED"
+  | .volatileAccess => "VOLATILE_ACCESS"
 
 inductive Phase where
   | cli | input | decode | canonicalize | normalize | check | program | profile

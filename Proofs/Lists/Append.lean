@@ -1,5 +1,6 @@
 import Proofs.Lists.Gen
 import ZigLean.Sep
+import ZigLean.Sep.Cost
 
 /-!
 # `ArrayListUnmanaged(u32).append`
@@ -12,6 +13,8 @@ no block for `cap = 0`).
   buffer is full, `ensureTotalCapacityPrecise` allocates a new block, copies the items with a
   `@memcpy` and frees the old block. The `@memcpy` alias check holds because the new block lies
   above every live block (`alloc_run`, `Mem.AddrBelow`).
+* `append_cost_run`: `append_run` with its allocation cost (`ZigLean/Sep/Cost.lean`). With
+  spare capacity, `append` makes no allocation request and retains no new block.
 
 The items pointer of a list with `cap = 0` points into a block with no bytes (`.empty` points
 into a constant global), so no assertion can state that its block exists; `append_run` takes it
@@ -306,7 +309,7 @@ theorem dec_u64 (v : BitVec 64) : Enc.decode (Enc.encode v) = (pure v : Result (
 theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪ hF)
     (hd : Heap.Disjoint h hF) (hst : m.Seq) (hlt : len.toNat < cap.toNat) :
     ∃ m', (array_list_Aligned_u32_null_addOneAssumeCapacity p).run m =
-        pure (ptr.elem 4 len, m') ∧ m'.Seq ∧ m'.blocks.size = m.blocks.size ∧
+        pure (ptr.elem 4 len, m') ∧ m'.Seq ∧ m'.blocks.size = m.blocks.size ∧ m.SameAllocs m' ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ hdr p ptr (len + 1) cap h' := by
   obtain ⟨A, S, K, hA, hK, hb⟩ := hh
   have hs := hdrBytes_size ptr len cap
@@ -357,7 +360,9 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
       (by omega) (by omega) dlen'
   obtain ⟨m₆, l₆, hm₆, hs₆, hb₆⟩ := bytesAt_load_run (a := 8) hb₄ hm₅ hs₅ q0 (by decide)
     (by omega) (by omega) dsl
-  refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], h₄, hd₄, hm₆,
+  have hc := (load_cost l₁).trans <| (load_cost l₂).trans <| (load_cost l₃).trans <|
+    (store_cost s₄).trans <| (load_cost l₅).trans (load_cost l₆)
+  refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], hc, h₄, hd₄, hm₆,
     A, S, K, hA, hK, hb₄⟩
   simp only [StateT.run] at l₁ l₂ l₃ s₄ l₅ l₆
   simp [array_list_Aligned_u32_null_addOneAssumeCapacity, zig_unfold, l₁, l₂, l₃, s₄, l₅, l₆,
@@ -590,7 +595,8 @@ theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : B
     (hok : ptrOk m ptr) (hlen : xs.length = len.toNat) (hle : len.toNat ≤ cap.toNat)
     (hc4 : 4 * cap.toNat < 2 ^ 64) :
     ∃ r m', (array_list_Aligned_u32_null_ensureTotalCapacity p a n).run m = pure (r, m') ∧
-      m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧ ∃ hH' hB', Heap.Disjoint hH' hB' ∧
+      m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧ (n.toNat ≤ cap.toNat → m.SameAllocs m') ∧
+      ∃ hH' hB', Heap.Disjoint hH' hB' ∧
       Heap.Disjoint (hH' ∪ hB') hF ∧ m'.heap = (hH' ∪ hB') ∪ hF ∧
       Ensured p ptr len cap n xs m' hH' hB' r := by
   have hh₀ := hh
@@ -606,11 +612,12 @@ theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : B
     (by omega) (by omega) dcap
   have hm₁' : m₁.heap = (hH ∪ hB) ∪ hF := hm₁.trans (hmH.symm.trans hm)
   have hz₁ : m.blocks.size = m₁.blocks.size := by rw [hb₁]
+  have c₁ := load_cost l₁
   simp only [StateT.run] at l₁
   by_cases hroom : n.toNat ≤ cap.toNat
   · have hge : Zig.ge false cap n = true := by simp [Zig.ge, Zig.le, BitVec.ule, hroom]
-    refine ⟨.ok (), m₁, ?_, hs₁, Nat.le_of_eq hz₁, hH, hB, dHB, hd, hm₁', ptr, cap, hh₀, hbf,
-      hroom, hc4, ptrOk_mono hok (Nat.le_of_eq hz₁)⟩
+    refine ⟨.ok (), m₁, ?_, hs₁, Nat.le_of_eq hz₁, fun _ => c₁, hH, hB, dHB, hd, hm₁', ptr, cap,
+      hh₀, hbf, hroom, hc4, ptrOk_mono hok (Nat.le_of_eq hz₁)⟩
     simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, hge]
   · have hge : Zig.ge false cap n = false := by simp [Zig.ge, Zig.le, BitVec.ule]; omega
     have hok₁ : ptrOk m₁ ptr := ptrOk_mono hok (Nat.le_of_eq hz₁)
@@ -624,7 +631,7 @@ theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : B
         · rw [addSat_toNat]; omega
       obtain ⟨r, m', hr, hs', hz', hH', hB', d₁, d₂, hm', hpost⟩ :=
         precise_run a g hh₀ hbf dHB hm₁' hd hs₁ hok₁ hlen hle (by omega)
-      refine ⟨r, m', ?_, hs', by omega, hH', hB', d₁, d₂, hm', ?_⟩
+      refine ⟨r, m', ?_, hs', by omega, fun h => absurd h hroom, hH', hB', d₁, d₂, hm', ?_⟩
       · simp only [StateT.run] at hr
         simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, hge, hg, hr]
       · cases r with
@@ -673,7 +680,8 @@ theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : B
         simp [array_list_Aligned_u32_null_growCapacity, zig_unfold, hr, hv]
       obtain ⟨r, m', hr, hs', hz', hH', hB', d₁, d₂, hm', hpost⟩ :=
         precise_run a g hh₀ hbf dHB hm₂' hd hs₂ hok₂ hlen hle (by omega)
-      refine ⟨r, m', ?_, hs', by rw [hz₁, ← hb₂]; omega, hH', hB', d₁, d₂, hm', ?_⟩
+      refine ⟨r, m', ?_, hs', by rw [hz₁, ← hb₂]; omega, fun h => absurd h hroom, hH', hB', d₁,
+        d₂, hm', ?_⟩
       · simp only [StateT.run] at hr
         simp [array_list_Aligned_u32_null_ensureTotalCapacity, zig_unfold, l₁, l₂, hge, hg, hr]
       · cases r with
@@ -689,11 +697,13 @@ def Appended (p ptr : Ptr) (cap : BitVec 64) (xs : List (BitVec 32)) (v : BitVec
   | .ok _ => ∃ ptr' cap', alist p ptr' cap' (xs ++ [v]) hL' ∧ ptrOk m' ptr'
   | .error e => e = "OutOfMemory" ∧ alist p ptr cap xs hL' ∧ ptrOk m' ptr
 
-/-- `ArrayListUnmanaged(u32).append`. -/
-theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL : Heap}
+/-- `ArrayListUnmanaged(u32).append`, and its allocation cost (`ZigLean/Sep/Cost.lean`): with
+spare capacity (`xs.length < cap`) it makes no allocation request and retains no new block. -/
+theorem append_cost_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL : Heap}
     (hl : alist p ptr cap xs hL) (hm : m.heap = hL ∪ hF) (hd : Heap.Disjoint hL hF)
     (hst : m.Seq) (hok : ptrOk m ptr) :
     ∃ r m', (array_list_Aligned_u32_null_append p a v).run m = pure (r, m') ∧ m'.Seq ∧
+      (xs.length < cap.toNat → m.SameAllocs m') ∧
       ∃ hL', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧ Appended p ptr cap xs v m' hL' r := by
   obtain ⟨hlc, hc4, hH, hB, dHB, rfl, hh, hbf⟩ := hl
   have hxl : xs.length < 2 ^ 64 := by omega
@@ -722,7 +732,8 @@ theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL :
   have hm₁' : m₁.heap = (hH ∪ hB) ∪ hF := hm₁.trans (hmH.symm.trans hm)
   have hok₁ : ptrOk m₁ ptr := ptrOk_mono hok (Nat.le_of_eq (by rw [hb₁]))
   have hno : ¬ 18446744073709551615 ≤ len.toNat := by omega
-  obtain ⟨r, m₂, he, hs₂, hz₂, hH₂, hB₂, d₁, d₂, hm₂, hpost⟩ := ensure_run (n := len + 1#64) a
+  have c₁ := load_cost l₁
+  obtain ⟨r, m₂, he, hs₂, hz₂, c₂, hH₂, hB₂, d₁, d₂, hm₂, hpost⟩ := ensure_run (n := len + 1#64) a
     hh₀ hbf dHB hm₁' hd hs₁ hok₁ hlen (by omega) hc4
   simp only [StateT.run] at l₁ he
   have hl1 : (len + 1#64).toNat = len.toNat + 1 := by
@@ -730,7 +741,8 @@ theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL :
   cases r with
   | error e =>
     obtain ⟨rfl, h1, h2, h3⟩ := hpost
-    refine ⟨.error "OutOfMemory", m₂, ?_, hs₂, hH₂ ∪ hB₂, d₂, hm₂, rfl,
+    refine ⟨.error "OutOfMemory", m₂, ?_, hs₂, fun h => c₁.trans (c₂ (by rw [hl1]; omega)),
+      hH₂ ∪ hB₂, d₂, hm₂, rfl,
       ⟨hlc, hc4, hH₂, hB₂, d₁, rfl, hL ▸ h1, h2⟩, h3⟩
     simp [array_list_Aligned_u32_null_append, array_list_Aligned_u32_null_addOne, zig_unfold, l₁,
       hno, he, Zig.unwrapErr]
@@ -740,7 +752,7 @@ theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL :
     have hc0 : cap'.toNat ≠ 0 := by omega
     obtain ⟨dHF₂, dBF₂⟩ := Heap.disjoint_union_left.mp d₂
     obtain ⟨vH, dvH, vB, dvB⟩ := heap3 hm₂ d₁ dHF₂ dBF₂
-    obtain ⟨m₃, a₃, hs₃, hz₃, hH₃, dH₃, hm₃, h3⟩ := addOneAssumeCapacity_run h1 vH dvH hs₂
+    obtain ⟨m₃, a₃, hs₃, hz₃, c₃, hH₃, dH₃, hm₃, h3⟩ := addOneAssumeCapacity_run h1 vH dvH hs₂
       (by omega)
     obtain ⟨hoff, A', bs, hA', hbsz, hit, hbuf⟩ : ptr'.off = 0 ∧ ∃ A bs, A % 4 = 0 ∧
         bs.size = 4 * cap'.toNat ∧ ItemsOk bs xs ∧ bytesAt ptr' A (4 * cap'.toNat) .heap bs hB₂ := by
@@ -754,7 +766,10 @@ theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL :
       (by decide) (by rw [hbsz, show Enc.size (BitVec 32) = 4 from rfl]; omega)
       (by simp [hoff]; omega) (by decide)
     obtain ⟨dB₄H, dB₄F⟩ := Heap.disjoint_union_right.mp dB₄
-    refine ⟨.ok (), m₄, ?_, hs₄, hH₃ ∪ hB₄, Heap.disjoint_union_left.mpr ⟨dH₃F, dB₄F⟩, ?_,
+    have c₄ := store_cost s₄
+    refine ⟨.ok (), m₄, ?_, hs₄,
+      fun h => c₁.trans ((c₂ (by rw [hl1]; omega)).trans (c₃.trans c₄)), hH₃ ∪ hB₄,
+      Heap.disjoint_union_left.mpr ⟨dH₃F, dB₄F⟩, ?_,
       ptr', cap', ⟨by simp; omega, h4c, hH₃, hB₄, dB₄H.symm, rfl, ?_, ?_⟩, ?_⟩
     · simp only [StateT.run] at a₃ s₄
       simp [array_list_Aligned_u32_null_append, array_list_Aligned_u32_null_addOne, zig_unfold,
@@ -782,6 +797,15 @@ theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL :
         rw [List.getElem_append_right (by omega)]
         simp [Array.extract_size]
     · exact ptrOk_mono hok' (Nat.le_of_eq (by rw [hz₄, hz₃]))
+
+/-- `ArrayListUnmanaged(u32).append`. -/
+theorem append_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} {hL : Heap}
+    (hl : alist p ptr cap xs hL) (hm : m.heap = hL ∪ hF) (hd : Heap.Disjoint hL hF)
+    (hst : m.Seq) (hok : ptrOk m ptr) :
+    ∃ r m', (array_list_Aligned_u32_null_append p a v).run m = pure (r, m') ∧ m'.Seq ∧
+      ∃ hL', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧ Appended p ptr cap xs v m' hL' r := by
+  obtain ⟨r, m', hr, hst', -, hpost⟩ := append_cost_run a v hl hm hd hst hok
+  exact ⟨r, m', hr, hst', hpost⟩
 
 end Ops
 
