@@ -94,6 +94,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
 
+      # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
+      - name: Host and skipped-case accounting regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/host-accounting/test_accounting.py
+
       # Stub translator, Lake and audit; real build-guard and claims. No Lean, Lake or Zig.
       - name: Project check and reproducibility record regressions
         env:
@@ -614,6 +620,32 @@ jobs:
           path: ${{ runner.temp }}/air-out
           if-no-files-found: ignore
           retention-days: 7
+
+      # Q04: this version/target's row of the accounting table (exact matches only in the
+      # headline) and the README legacy-version claims checked against the summary actually run.
+      - name: Per-version differential accounting and support claims
+        if: ${{ matrix.full && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          summary=tests/diff/out/report.json
+          out="$RUNNER_TEMP/accounting"
+          python3 scripts/accounting.py publish --summary "$summary" \
+            --json "$out/accounting.json" --markdown "$out/accounting.md"
+          python3 scripts/accounting.py check --json "$out/accounting.json" --summary "$summary"
+          python3 scripts/accounting.py claims --summary "$summary"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$out/accounting.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # Kept even when the differential gate fails: an incomplete summary records why.
+      # `python3 scripts/accounting.py publish` consumes these across versions.
+      - name: Upload the differential summary
+        if: ${{ !cancelled() && matrix.full && !matrix.mutate }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
+          path: tests/diff/out/report.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Typed outcomes and bounded schedule regressions
         if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
