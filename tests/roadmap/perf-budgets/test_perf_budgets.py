@@ -71,7 +71,7 @@ def kinds(findings):
 
 
 class CommittedBudgets(unittest.TestCase):
-    def test_committed_file_is_valid_and_honestly_pending(self):
+    def test_committed_file_is_valid(self):
         data = perf.load_json(perf.BUDGETS)
         self.assertEqual(perf.validate_budgets(data), [])
         ids = [workload["id"] for workload in data["workloads"]]
@@ -81,6 +81,9 @@ class CommittedBudgets(unittest.TestCase):
             self.assertTrue(workload["proof_modules"], workload["id"])
         if data["status"] == "pending":
             self.assertTrue(any(workload["budget"] is None for workload in data["workloads"]))
+        for workload in data["workloads"]:
+            if workload["budget"] is not None:
+                self.assertIs(workload["budget"]["output"]["matches_reference"], True, workload["id"])
 
     def test_validation_rejects_bad_documents(self):
         data = pending_budgets()
@@ -330,11 +333,14 @@ class Record(unittest.TestCase):
                              {"translate.cold", "translate.warm", *perf.INTERNAL_PHASES})
             self.assertEqual(result["phases"]["emit"]["seconds"], 5e-06)
             self.assertIs(result["output"]["matches_reference"], False)
+            # Same platform as the committed baseline, so only the reference check can refuse.
+            committed = perf.load_json(perf.BUDGETS)
+            committed["reference_platform"] = data["platform"]
             with self.assertRaisesRegex(ValueError, "differ from"):
-                perf.derive(perf.load_json(perf.BUDGETS), data, only=["basic"], allow_dirty=True)
+                perf.derive(committed, data, only=["basic"], allow_dirty=True)
             self.assertEqual(data["lean_num_threads"], "1")
             self.assertTrue(out.with_suffix(".log").is_file())
-            # A pending suite with one measured workload: the gate reports what is missing.
+            # One measured workload: the gate reports the missing ones.
             code, findings = perf.gate(perf.load_json(perf.BUDGETS), data, allow_pending=True)
             self.assertEqual(code, 1)
             self.assertIn("missing-workload", kinds(findings))

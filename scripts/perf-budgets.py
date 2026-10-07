@@ -291,7 +291,12 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
 
 def air_identity(path):
     """Version/schema/profile fields that the translator requires to agree across files."""
-    doc = load_json(path)
+    try:
+        doc = load_json(path)
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"unreadable AIR {path.name}: {error}") from error
+    if not isinstance(doc, dict):
+        raise RuntimeError(f"AIR {path.name} is not a JSON object")
     return (doc.get("zig_version"), doc.get("schema"),
             json.dumps(doc.get("profile"), sort_keys=True))
 
