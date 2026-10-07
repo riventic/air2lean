@@ -43,6 +43,7 @@
     "ZigLean.Loop": ["SEM-03"],
     "ZigLean.SimpAttr": ["TRU-01"],
     "ZigLean.Simp": ["TRU-01"],
+    "ZigLean.VersionGate": ["TRU-01"],
     "ZigLean.External": ["EXT-01"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Mem.Basic": ["SEM-02"],

@@ -2016,7 +2016,8 @@ theorem Inv.see {G : ThreadId → SGh X} {m : Mem} {t i jr : Nat} {e : BitVec 32
 
 -- `Condition.waitUncancelable` per translation (`ZigLean.VersionGate`): Zig 0.16.0 calls
 -- `waitInner(…, true)`, whose loops also hold the cancelable path; Zig 0.17.0 inlines the
--- uncancelable loops (`loop22`, `loop45`). Both prove the same `condWait_spec`.
+-- uncancelable loops (`loop22`, `loop45`). Each proves `condWait_spec_v*`; `condWait_spec` is the
+-- version-neutral statement.
 when_defined Io_Condition_waitInner
 
 section Wait
@@ -2228,7 +2229,7 @@ end Wait2
 
 /-- `Condition.wait` by the holder `t`, which saw no permit (`hz`) while no other thread waits
 at the condition (`hone`): it holds the mutex again, at the same place. -/
-theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
+theorem condWait_spec_v016 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
@@ -2485,7 +2486,7 @@ end Wait2017
 
 /-- `Condition.wait` by the holder `t`, which saw no permit (`hz`) while no other thread waits
 at the condition (`hone`): it holds the mutex again, at the same place. -/
-theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
+theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
@@ -2526,6 +2527,18 @@ theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (i
   exact WP.pure' ⟨hd₄, hc₄, hL₄, hi₄⟩
 
 end_when
+
+theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (io : Io)
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
+    (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
+    (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x) :
+    P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
+  first
+  | exact condWait_spec_v016 hP t pa hL x io G m d hi hz hone hwx hinS
+  | exact condWait_spec_v017 hP t pa hL x io G m d hi hz hone hwx hinS
 
 
 /-! ## `wait` and `post` -/

@@ -10,18 +10,21 @@ that a proof steps through (Zig 0.17.0's `Io.Condition.waitUncancelable` no long
 
 ```
 when_defined Io_Condition_waitInner
-  theorem condWait_spec ... -- steps through the 0.16.0 translation
+  theorem condWait_spec_v016 ... -- steps through the 0.16.0 translation
 end_when
 when_defined Io_Condition_waitUncancelable.loop22
-  theorem condWait_spec ... -- the same statement, through the 0.17.0 translation
+  theorem condWait_spec_v017 ... -- the same statement, through the 0.17.0 translation
 end_when
+theorem condWait_spec ... := by
+  first | exact condWait_spec_v016 ... | exact condWait_spec_v017 ...
 ```
 
 The commands of a block are elaborated only if the constant exists (resolved as an identifier
-at that point, with the open namespaces); otherwise they are parsed and skipped. Each variant
-must state the same theorem as the others, so that the files that use it do not depend on the
-version. A skipped block is not checked: `scripts/check.sh` with each version's patched compiler,
-followed by `lake build Proofs`, checks every variant.
+at that point, with the open namespaces); otherwise they are parsed and skipped. The variants
+have distinct names and state the same theorem; the version-neutral theorem after the blocks
+is the one other files use, so they do not depend on the version. A skipped block is not
+checked: `scripts/check.sh` with each version's patched compiler, followed by
+`lake build Proofs`, checks every variant.
 -/
 
 namespace Zig.VersionGate

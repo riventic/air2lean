@@ -1567,7 +1567,8 @@ theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).wai
 
 -- `Condition.waitUncancelable` per translation (`ZigLean.VersionGate`): Zig 0.16.0 calls
 -- `waitInner(…, true)`, whose loops also hold the cancelable path; Zig 0.17.0 inlines the
--- uncancelable loops (`loop22`, `loop45`). Both prove the same `condWait_spec`.
+-- uncancelable loops (`loop22`, `loop45`). Each proves `condWait_spec_v*`; `condWait_spec` is the
+-- version-neutral statement.
 when_defined Io_Condition_waitInner
 
 /-- The inner loop's invariant: `main` at `wt` with epoch 0 and the state value it read, or at
@@ -1837,7 +1838,7 @@ theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL :
 
 /-- `Condition.waitUncancelable` by `main`, which holds the mutex at `run` and read
 `ready = false`: it holds the mutex again at `cons`. -/
-theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+theorem condWait_spec_v016 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
     proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
@@ -2056,7 +2057,7 @@ theorem loop22_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals
 
 /-- `Condition.waitUncancelable` by `main`, which holds the mutex at `run` and read
 `ready = false`: it holds the mutex again at `cons`. -/
-theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+theorem condWait_spec_v017 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
     proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
@@ -2117,6 +2118,16 @@ theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : 
   exact WP.pure' ⟨hd₄, hc₆, hL₆, hi₇⟩
 
 end_when
+
+theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+    {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
+      G m d := by
+  first
+  | exact condWait_spec_v016 G m d io hL hR hY hi hc
+  | exact condWait_spec_v017 G m d io hL hR hY hi hc
 
 /-! ## `main`'s event wait -/
 
