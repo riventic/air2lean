@@ -3515,7 +3515,8 @@
           "ZigLean/Time.lean",
           "ZigLean/Union.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VersionGate.lean"
         ]
       },
       "emission": {
@@ -3791,7 +3792,8 @@
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VersionGate.lean"
         ]
       },
       "emission": {
@@ -7301,7 +7303,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VersionGate.lean"
         ]
       },
       "emission": {
@@ -7394,7 +7397,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VersionGate.lean"
         ]
       },
       "emission": {
@@ -7948,7 +7952,8 @@
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VersionGate.lean"
         ]
       },
       "emission": {
@@ -15531,15 +15536,15 @@
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "13a9d44527a4d7ad5bd451ec2bd6af31e97937a915d7f00400db79014f16ca8e",
-      "Air2Lean/Air/Canon.lean": "5e77a24793d030898f0366a042440e981e10dd025fe96f58833b85ba70fd8395",
+      "Air2Lean/Air/Canon.lean": "6c26a055bfb3b1994ac8ff71c03162739039513e177fd34df98edf847f7eab10",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
-      "Air2Lean/Air/Json.lean": "96360583a0a13ebbe87ac135acf58d218ef025de9091f22ecb24cbbca048cb0d",
+      "Air2Lean/Air/Json.lean": "03ec92765b65e3c2e001c3996cf04c0b30874bec6e93448c6a79774f37a9458c",
       "Air2Lean/Air/Normalize.lean": "f6019871a70629778d6ef72625f6a3b46c729f0f33f550b6bab6f3a1180e30f1",
-      "Air2Lean/Air/Op.lean": "c899a962d1b2f0e3f71fd63d647c079df30eef844762e4c82d8d03e3e2ecb71b",
+      "Air2Lean/Air/Op.lean": "7467498127498cff73dfc48f5c750a5e147718862bb9f9e5c0179822104a5a74",
       "Air2Lean/Air/Profile.lean": "9db989c6f3e5573de8e569fb67be73144d23aa88f7ebc69b790ca972888b2bbc",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
       "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
-      "Air2Lean/Check.lean": "3079625d66455d5d2c22abfe95dfa1188c2d5eed0ce6f5938836bfba29fe2ded",
+      "Air2Lean/Check.lean": "e498384f9be4cb0c4ee5daa089c3fb33f7824e018c51acb2206be2f7a50626dc",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
       "Air2Lean/Emit.lean": "8bc100238ff708e2183eb0725782c48bf642f57ee30adbc0e4957e560409fb98",
@@ -15627,7 +15632,8 @@
       "ZigLean/VC/Mem.lean": "1e5388f2b14b4cf9f59add62591847702ca99594c5ff6fc07a862551e1f13d27",
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
       "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
-      "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73"
+      "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73",
+      "ZigLean/VersionGate.lean": "4523e9160bbc8273c235796da86642a3583aea242126ef5f337b2da5e0e9e2f5"
     },
     "proof-sources": {
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
@@ -15656,7 +15662,7 @@
       "Proofs/Layout/Gen.lean": "e0a8f28a43219f93deb8f952bf44784208c919eb88fe51257531eeea877ba9f1",
       "Proofs/Layout/Mem.lean": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
       "Proofs/Layout/Proofs.lean": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
-      "Proofs/Lists/Append.lean": "d2531088b9228faad48d4ac6e653791d018d8424ceeeb125cbd5959929591443",
+      "Proofs/Lists/Append.lean": "2218a3734adced95d0e30d3cc659f46f537a0f1d0ef06a0595d11f1cfa5d0e30",
       "Proofs/Lists/Gen.lean": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d",
       "Proofs/Lists/Sep.lean": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
       "Proofs/Options/Gen.lean": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e",
@@ -15670,7 +15676,7 @@
       "Proofs/Slices/Proofs.lean": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
       "Proofs/Slices/Sep.lean": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
       "Proofs/Sync/Gen.lean": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630",
-      "Proofs/Sync/Handoff.lean": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
+      "Proofs/Sync/Handoff.lean": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
       "Proofs/Sync/Lock.lean": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
       "Proofs/Sync/Mutex.lean": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
       "Proofs/Sync/Proofs.lean": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
@@ -15678,7 +15684,7 @@
       "Proofs/Sync/RwLockContract.lean": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
       "Proofs/Sync/RwLockSnapshotPair.lean": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
       "Proofs/Sync/SemCounter.lean": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-      "Proofs/Sync/Semaphore.lean": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
+      "Proofs/Sync/Semaphore.lean": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c",
       "Proofs/Threads/Counter.lean": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
       "Proofs/Threads/Disjoint.lean": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
       "Proofs/Threads/Gen.lean": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6",
@@ -16214,6 +16220,7 @@
       "tests/golden/0.17.0/layout/air/layout.wordByte.json": "ef0cb460122a9e0d2c68479193d80ebc42c9c9c9c8ff3501f723531af536e8db",
       "tests/golden/0.17.0/layout/air/layout.wordHalf.json": "50d6a297cc7b6de066fe1b90a05fb5f9561b590efb964aab71e882dd31f5ee47",
       "tests/golden/0.17.0/layout/air/layout.writeTable.json": "3b41fc15a62283442e8042d54876b1f71b389fca84dbd413ee8b04e1be4fd251",
+      "tests/golden/0.17.0/lists/Gen.lean": "5b6609a92629c1b63b3e47dda53937fa2af774e75c1e1e71f5b77d81f086bfec",
       "tests/golden/0.17.0/lists/air/debug.SafetyLock.assertUnlocked.json": "23dcf7148d4f04824287522e9d9282f3d52cf52b677149a4fe7210faac3f3f0b",
       "tests/golden/0.17.0/lists/air/debug.SafetyLock.lock.json": "636e303b78aae5606f6d176539ffefaf454a325be53302ad7722e7fa3db9fd5c",
       "tests/golden/0.17.0/lists/air/debug.SafetyLock.unlock.json": "1c7aec4df8dabaa05d2d78b1f14e345ab2bc40d94626e3d6b8bf6fbb93e228cc",
@@ -16262,6 +16269,7 @@
       "tests/golden/0.17.0/slices/air/slices.sumMid.json": "2a6e2a6357feea61c7664a339ee9e8cbae951546ad48620ef9ebdb35245e4230",
       "tests/golden/0.17.0/slices/air/slices.sumSlice.json": "b102b464eebb121d0f3843b0e9f51fee6a7dcb04d2c5ec5fe67a439acad83ad3",
       "tests/golden/0.17.0/slices/air/slices.sumZ.json": "295c2fca4592b82c312ec7d0c012aec436a13a18f9a5dd3a162fbd6de7c11072",
+      "tests/golden/0.17.0/sync/Gen.lean": "ada512fb98e8b8db878e0c350301eb258f5579ab35a8f0b1df7fdd4193fd4d29",
       "tests/golden/0.17.0/sync/air/Io.Condition.signal.json": "d45f797b34cb3bff4c9d64237a997ed9ccc2c0800eace66581e827df398006e1",
       "tests/golden/0.17.0/sync/air/Io.Condition.waitUncancelable.json": "3f89f434f31440daa683f1cff65891960800b8daa5e53d6b383b4e39e2aa421c",
       "tests/golden/0.17.0/sync/air/Io.Event.set.json": "c305e053584925cc6cb9a50c9a6cfc082e5055d79b0efd08467ed3630661a61a",
@@ -16544,7 +16552,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "d64d6f8162507e65318eb44d42df1d027bb906da4dd130c4c93eb398772259ce",
       "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
-      "docs/std-models.md": "d20be06589c9ab87090497855fd22cdc69f41761c0ee59f3724582e653a3e5b7"
+      "docs/std-models.md": "c705141910d5b5582e47298ad41661f5ede0329f6b0b2abb22de1593ba47e133"
     }
   },
   "summary": {
