@@ -36,6 +36,7 @@
     "ZigLean.SimpAttr": ["TRU-01"],
     "ZigLean.Simp": ["TRU-01"],
     "ZigLean.External": ["EXT-01"],
+    "ZigLean.External.Callback": ["EXT-01"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
