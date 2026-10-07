@@ -72,9 +72,10 @@ class Workflow(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.repo = self.base / 'repo with spaces'
         (self.repo / 'scripts').mkdir(parents=True)
-        for name in ('translate.sh', 'doctor.sh', 'workflow-common.sh', 'safe-output.py'):
+        for name in ('translate.sh', 'doctor.sh', 'doctor.py', 'compat.py', 'workflow-common.sh', 'safe-output.py'):
             shutil.copy2(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
         shutil.copy2(ROOT / 'lean-toolchain', self.repo / 'lean-toolchain')
+        shutil.copy2(ROOT / 'compatibility.json', self.repo / 'compatibility.json')
         self.bin = self.base / 'fake tools'
         self.bin.mkdir()
         self.write_tool(self.bin / 'elan')
@@ -93,7 +94,8 @@ class Workflow(unittest.TestCase):
             self.env.pop(key, None)
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env['PATH'],
                         MOCK_REPO=str(self.repo), MOCK_LOG=str(self.log),
-                        AIR2LEAN_ZIG=str(self.bin / 'stock-zig'), TMPDIR=str(self.base))
+                        AIR2LEAN_ZIG=str(self.bin / 'stock-zig'), TMPDIR=str(self.base),
+                        AIR2LEAN_DOCKER=str(self.bin / 'no-docker'))
 
     def write_tool(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)

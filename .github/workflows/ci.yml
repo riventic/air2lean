@@ -138,6 +138,12 @@ jobs:
       - name: First-use workflow regressions
         run: python3 tests/usability/workflow.py
 
+      - name: Release compatibility metadata and doctor regressions
+        run: |
+          set -euo pipefail
+          python3 scripts/compat.py check
+          python3 -m unittest discover -s tests/roadmap/distribution -v
+
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
       # zig-patch/versions.toml's [ci.host-zig."<version>"] table.
