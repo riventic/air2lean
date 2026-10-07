@@ -62,6 +62,7 @@ Required top-level keys:
 | `roots` | Nonempty root records |
 | `limits` | Optional stricter resource limits |
 | `spawn_policy` | Optional `available` (default) or `fallible` spawn model |
+| `check` | Optional proof-checking budget for `check` (below) |
 
 `spawn_policy` selects the translator's spawn model for every root. Both omitted and
 explicit `available` manifests pass `--spawn-policy available`; `fallible` passes
@@ -78,7 +79,8 @@ New translation receipts record the effective policy and each translation's argv
 verify a fallible project. Verification still checks hashes and does not run proofs.
 
 Each root requires `id`, `function`, `air`, `namespace`, `prefix`, `contracts`, `goals`,
-`assumptions` and `exclusions`. AIR paths include the named function and its dependencies.
+`assumptions` and `exclusions`, and may name `generated`: the committed generated Lean
+module its contracts import (hashed like every other input; required by `check`). AIR paths include the named function and its dependencies.
 IDs are letters followed by letters, digits, underscores or hyphens. Namespaces are
 ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a theorem
 name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
@@ -191,18 +193,31 @@ Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`,
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
 contract file), `policy_violation` (audit `allowed` false or violations),
 `wrapper_or_unrelated`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
-`direct` requires the theorem declaration itself to depend on the generated root
+`direct` requires the conclusion of the theorem's statement (its kernel type after binders
+and hypotheses, the audit's `conclusion_dependencies`) to reference the generated root
 definition `namespace.(function without prefix)`, which must live in the hash-bound
-generated module. A theorem about a wrapper or a hand-written model that reaches the
-generated code only through other definitions or lemmas is `wrapper_or_unrelated`.
+generated module. Proof terms are not consulted: a theorem stated about a wrapper, a
+hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or_unrelated`
+even when its proof mentions the generated code. An audit without statement dependencies
+(an older extractor) leaves goals `unbound`. A weak conclusion that mentions the root (for
+example `root x = root x`) still binds, but each direct goal also records the
+`derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
+conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
+toward levels and absence claims only up to that derived strength (an unclassified
+conclusion, or an audit without conclusion shapes, derives none). Domains and preconditions
+remain review obligations. `tests/roadmap/assurance/StatementBinding.lean` holds a
+wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last binds
+(`tests/roadmap/coverage-report/test_coverage.py`), and its plain `Nat` equation derives no
+strength.
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
 `functionally_verified_partial`, `functionally_verified_total`.
 
 * `functionally_verified_*` requires passed preflight, `translated`, `compiled`, at least
-  one declared goal, every goal `direct`, and at least one `partial_correctness` or
-  `total_correctness` goal. `_total` additionally requires a direct `total_correctness`
-  goal; only that level sets `fully_functionally_verified`.
+  one declared goal, every goal `direct` with its declared strength no stronger than its
+  derived strength, and at least one `partial_correctness` or `total_correctness` goal.
+  `_total` additionally requires a direct `total_correctness` goal; only that level sets
+  `fully_functionally_verified`.
 * `proved_scoped`: translated, compiled and at least one direct goal, but the functional
   rule fails (missing/wrapper goals, or only `safety`, `resource_bound`, `correspondence`).
 * `tested_sampled`: translated, compiled and passing differential samples. Differential
@@ -211,11 +226,16 @@ Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `prove
   verification; `blockers` lists every unmet rule.
 
 Each root also reports `contract_domain` (declared domains, `review: declared_not_checked`),
-`theorem_strength` (declared and direct strengths; strengths are manifest declarations, not
-machine-classified statements), `assumptions` (declared manifest identifiers plus audited
+`theorem_strength` (declared, direct and claims.py-derived strengths of direct goals), `assumptions` (declared manifest identifiers plus audited
 axioms, opaque, extern and compiler-redirection dependencies of direct theorems) and
 `exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
-`not_attested` trust fields). `--require-level` exits 1 when any root is below the level;
+`not_attested` trust fields). `outcomes` counts the root's differential cases and
+exporter-marked unsupported AIR in the shared [outcome taxonomy](outcome-taxonomy.md);
+`absence_claims` reports `no-panic` and `guaranteed-return` as `proved`, `refused` or
+`not_proved`. Only a direct goal of matching strength proves one; a capped search, fuel-bounded
+no-result run, unspecified (including no-clock timer) or unsupported outcome, or an observed
+failure the claim denies, refuses it and adds a blocker, so the root cannot reach
+`functionally_verified_*`. Error returns never refuse `no-panic`. `--require-level` exits 1 when any root is below the level;
 diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
 publication as `report`.
 
@@ -226,4 +246,80 @@ correspondence, backend lowering or native adequacy (see the receipt's trust fie
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
+```
+
+## Reproducible project check
+
+`check` reproduces translation and proof checking from one committed manifest and writes
+a reproducibility record. Run it at the Lake project root (the manifest directory) with a
+built translator; it is the only project command that runs Lake.
+
+```sh
+python3 scripts/project.py check example-project.json \
+  --translator .lake/build/bin/air2lean --out "$RUNNER_TEMP/project-check"
+python3 scripts/project.py compare-records machine-a/record.json machine-b/record.json
+```
+
+Stages, in order; the first failure stops later stages, which stay `not_run`:
+
+| Stage | Action | Pass rule |
+|---|---|---|
+| `translate` | `translate` into `<out>/artifact`, then `verify` | every root translated; all hashes current |
+| `reproduce` | split each fresh `Gen.lean` and committed `generated` module with `scripts/normalize-generated.py` | fresh profile record agrees with the manifest profile and `float_semantics`; committed record absent or identical; bodies byte-identical |
+| `build` | `scripts/build-guard.py --phase proof -- lake build <contract modules>` | guard outcome `success` |
+| `audit` | `build-guard.py --phase check -- python3 scripts/assumptions.py --no-build --module <contract modules>` | completed report whose scope equals the contract modules |
+| goals | each declared goal's audited theorem (`theorem` or `namespace.theorem`) | `allowed` (below) |
+| `claims` | `scripts/claims.py check` on the audit | every declared strength within its type-derived strength |
+| `inputs_stable` | re-hash every manifest input | unchanged since the start |
+
+The audit covers whole contract modules, but only goal theorems are judged: a policy
+violation in another theorem of a contract module (audit status `fail`) does not fail the
+check. A goal is `allowed` only when its theorem lives in a declared contract module, has
+no audit policy violation, its root definition `namespace.(function without prefix)` is
+defined in the committed `generated` module, the conclusion of its audited statement
+references that definition (`references_root`, the same statement binding coverage uses),
+and every project assumption it depends on
+is named in the root's `assumptions` (which the manifest loader already restricts to
+`allowed_assumptions`). Project assumptions are non-standard axioms, dependency nodes
+missing from the audit graph, and dependencies with an audited `allowed-project-*` or
+`allowed-runtime-redirection` trust class; name each by its Lean declaration or its
+`module::name` policy key. Lean's three logical axioms and standard-library opaques,
+externs and redirections are listed as `standard_assumptions` without a manifest entry.
+Other goal rows are `missing`, `outside_contracts`, `policy_violation`,
+`unallowed_assumption`, `unbound` (the audit lacks statement dependencies),
+`wrapper_or_unrelated` (the conclusion does not name the root) or `unbound_generated`;
+the coverage binding rules above still decide verification levels.
+
+The optional `check` object bounds proof checking: `build_timeout_seconds` and
+`audit_timeout_seconds` (default 3600, maximum 21600) and the guard's sampled `rss_mib`
+(default 8192, maximum 65536). `--lock` selects the guard lock (default
+`AIR2LEAN_BUILD_LOCK`); `--build-guard`, `--assumptions-script` and `--claims-script`
+override the tools (tests use a stub audit). `lake` resolves from `PATH`.
+
+`--out` is a fresh directory published by rename after the record is written:
+`record.json`, `artifact/`, the guard reports and logs, `assumptions.json` and
+`claims.json`. A failed stage still publishes its record and exits 1; invalid
+configuration exits 2 and an interrupted run publishes nothing.
+
+`record.json` (`kind: air2lean-project-check-record`) has `status` (`reproduced` or
+`failed`), `failures`, a `reproducible` section and a `host` section. `reproducible`
+holds the manifest and every input hash, the budget, root modules, the hashes of
+`project.py`, `build-guard.py`, `assumptions.py`, `claims.py` and `normalize-generated.py`, the `lean-toolchain`
+pin, the float and spawn selections, and every stage result (generated hashes, header profiles and body hashes, guard
+outcome, audit policy hash and toolchain, per-goal assumptions and claims). `host` holds
+what legitimately differs between machines: platform, Python, Git revision and dirty
+state, translator path and hash, the Lake executable and pins from the guard report,
+timings and peak RSS. `compare-records` compares only the `reproducible` sections and
+exits 0 only when they are identical and both records are `reproduced`; it lists up to
+200 differing JSON paths.
+
+Scope: a matching pair of records shows that the same committed inputs translate to the
+same committed generated modules and that the same goal theorems check with the same
+allowed assumptions and strengths on both machines. It does not establish export, source
+correspondence or backend adequacy. Translator binaries are trusted per host, and Lake
+dependency revisions are covered only through `lake-manifest.json` when it is listed in
+`components`.
+
+```sh
+python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
 ```

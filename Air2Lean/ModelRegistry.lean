@@ -5,11 +5,19 @@ import Air2Lean.Air.Profile
 import Lean.Data.Json
 import Air2Lean.Air.StrictJson
 
-/-! Exact direct-call bindings, separate from the historical built-in recognition tables.
+/-! Exact direct-call project bindings. Built-in std models live in the single typed table of
+`Air2Lean/StdModels.lean`; a project binding cannot reuse one of its qualified names.
 The registry supplies identifiers, never executable Lean source fragments. A generated typed
 alias and contract obligation are checked by Lean after translation. -/
 namespace Air2Lean
 open Lean (Json)
+
+/-- Declared memory footprint: zero-based indices of pointer/slice parameters whose blocks a
+call may read (`reads`) or read and write (`writes`). -/
+structure ModelFootprint where
+  reads : Array Nat
+  writes : Array Nat
+  deriving BEq, Repr
 
 structure ModelBinding where
   symbol : String
@@ -24,6 +32,8 @@ structure ModelBinding where
   errors : Array String
   effects : String
   dependencies : Array String
+  /-- `none`: no declared footprint; only the contract's own `access`/`frame` apply. -/
+  footprint : Option ModelFootprint := none
 
 instance : Inhabited ModelBinding := ⟨{
   symbol := "", profile := {name := "", schema := 0, zigVersion := ""},
@@ -244,7 +254,7 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
   unless (← (← field j "schema").getNat?) == 1 do throw "unsupported model registry schema"
   (← (← field j "models").getArr?).mapM fun m => do
     keys m ["symbol", "profile", "signature", "import", "implementation", "contract", "trust",
-      "proof", "termination", "errors", "effects", "dependencies"]
+      "proof", "termination", "errors", "effects", "dependencies", "footprint"]
     let symbol ← str m "symbol"
     let p ← field m "profile"
     let schema ← (← field p "schema").getNat?
@@ -283,6 +293,25 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
         "illegal", "deadlock"].contains e do throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
+    let footprint ← match m.getObjVal? "footprint" with
+      | .error _ => pure none
+      | .ok fp => do
+        keys fp ["reads", "writes"]
+        let indices (k : String) : Except String (Array Nat) := do
+          let values ← (← (← field fp k).getArr?).mapM Json.getNat?
+          for (index, position) in values.zipIdx do
+            unless index < params.size do
+              throw s!"model registry: footprint {k} index {index} is not a parameter"
+            if (values.extract 0 position).contains index then
+              throw s!"model registry: duplicate footprint {k} index {index}"
+          pure values
+        let reads ← indices "reads"
+        let writes ← indices "writes"
+        if reads.any writes.contains then
+          throw "model registry: footprint index listed as both read and write"
+        if effects == "preserves" && !(reads.isEmpty && writes.isEmpty) then
+          throw "model registry: preserves binding cannot declare footprint accesses"
+        pure (some {reads, writes : ModelFootprint})
     pure {
       symbol := symbol
       profile := profile
@@ -296,7 +325,41 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
       effects := effects
       errors := errors
       dependencies := dependencies
+      footprint := footprint
     }
+
+/-- Each semantic dependency names another binding, a modelled built-in std model qualified
+for the binding's Zig version, or a project Lean declaration. Dependencies are unique, and
+those between bindings are acyclic. This checks the declared inventory, not an inferred
+proof-dependency closure. -/
+def checkDependencies (models : Array ModelBinding) : Except String Unit := do
+  let bindings := models.foldl (fun index m => index.insert m.symbol m) ({} : Std.HashMap String ModelBinding)
+  for m in models do
+    let mut seen : Std.HashSet String := {}
+    for d in m.dependencies do
+      if seen.contains d then throw s!"model '{m.symbol}': duplicate semantic dependency '{d}'"
+      seen := seen.insert d
+      if bindings.contains d then continue
+      match stdModel? d with
+      | some std =>
+        if let .rejected reason := std.kind then
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is outside the subset: {reason}"
+        unless std.qualifies m.profile.zigVersion do
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is not qualified for Zig {m.profile.zigVersion}"
+      | none =>
+        unless identifier d do
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is not a binding, built-in std model or Lean identifier"
+  -- Binding-to-binding edges: reject any cycle, including a self-dependency.
+  for m in models do
+    let mut frontier := m.dependencies.filter bindings.contains
+    let mut reached : Std.HashSet String := {}
+    while !frontier.isEmpty do
+      let d := frontier.back!
+      frontier := frontier.pop
+      if d == m.symbol then throw s!"model '{m.symbol}': cyclic semantic dependency"
+      unless reached.contains d do
+        reached := reached.insert d
+        frontier := frontier ++ ((bindings[d]?.map (·.dependencies)).getD #[]).filter bindings.contains
 
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
@@ -314,8 +377,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     if seen.contains m.symbol then throw s!"duplicate model symbol '{m.symbol}'"
     seen := seen.insert m.symbol
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
-    if functionNames.contains m.symbol || (allocFn? m.symbol).isSome ||
-        (threadFn? m.symbol).isSome || (rejectedThreadFn? m.symbol).isSome then
+    if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
@@ -328,6 +390,12 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
         completedShapes[site.functionIndex]!
       unless params == m.params && ret == m.ret do
         throw s!"{site.function.name}: model '{m.symbol}' has incompatible signature/layout"
+      if let some fp := m.footprint then
+        let ids ← argumentTypeIds site.values site.args
+        for index in fp.reads ++ fp.writes do
+          unless (match site.function.types[ids[index]!]? with | some (.ptr ..) => true | _ => false) do
+            throw s!"model '{m.symbol}': footprint parameter {index} is not a pointer or slice"
+  checkDependencies models
   unless (concFunctions funcs).isEmpty do
     throw "external model bindings currently require a sequential program"
 
@@ -341,8 +409,7 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (allocFn? name).isSome ||
-            (threadFn? name).isSome || (rejectedThreadFn? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),
@@ -362,7 +429,10 @@ def report (models : Array ModelBinding) : Json :=
       ("trust", .str (if m.proof.isSome then "proved-obligation" else "assumed")),
       ("proof", Lean.toJson m.proof), ("termination", .str m.termination),
       ("errors", Lean.toJson m.errors), ("effects", .str m.effects),
-      ("dependencies", Lean.toJson m.dependencies)]),
+      ("dependencies", Lean.toJson m.dependencies),
+      ("footprint", match m.footprint with
+        | some fp => Json.mkObj [("reads", Lean.toJson fp.reads), ("writes", Lean.toJson fp.writes)]
+        | none => .null)]),
     ("assumptions", Lean.toJson <| (models.filter (·.proof.isNone)).map (·.symbol))]
 end ModelRegistry
 end Air2Lean

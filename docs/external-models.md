@@ -4,8 +4,14 @@
 Lean models. This first API admits acyclic, fully checked signatures in sequential programs
 and uses `Zig.MemM` for every external model, including models that preserve memory. Unknown
 calls still fail. Indirect callbacks, noreturn calls, comptime worker targets and concurrent
-programs are outside this extension fragment. Historical allocator/thread recognition stays
-in its existing centralized tables; this API cannot override those models or translated AIR.
+programs are outside this extension fragment. Built-in allocator/thread/clock recognition is
+one typed table, `stdModels` in `Air2Lean/StdModels.lean`: each row is a qualified std name,
+its typed model (or rejection reason), its Zig-version qualification and its semantic
+dependencies (the `ZigLean` declarations its emitted term may use). The checker, emitter,
+memory/concurrency analysis, diagnostics and this registry all consult that table; adding a
+built-in model is one row plus its typed signature and emission cases, not a new name test.
+This API cannot override those models or translated AIR, and a translated AIR function that
+reuses a built-in std model name is rejected.
 
 Generate an authoring template from checked AIR first:
 
@@ -91,7 +97,66 @@ signature. Without bindings, output has only the existing profile header before 
 kernel checked. Kernel elaboration checks the obligation's type; imported axioms/dependencies
 must still be audited (for example with `#print axioms`) before claiming implementation
 verification. `dependencies` is the project's explicit semantic dependency inventory, not an
-automatically inferred proof-dependency closure.
+automatically inferred proof-dependency closure. Each entry must be unique and name another
+binding in the same registry, a modelled built-in std model qualified for the binding's Zig
+version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0), or
+a Lean identifier. A rejected std name (`Thread.detach`) and any cycle between bindings,
+including a self-dependency, are rejected before output is written.
+
+## Memory footprints (E01)
+
+An entry may add an optional `footprint`, bound to the same exact symbol and signature:
+
+```json
+"footprint": {"reads": [], "writes": [0]}
+```
+
+Each list holds zero-based parameter indices; every listed parameter must be a pointer or
+slice at every call site. Indices must be in range, unique, and not both read and written.
+`preserves` bindings cannot list any index. Unknown footprint keys are rejected. A declared
+footprint becomes part of the generated obligation:
+
+```lean
+def air2lean_model_0_footprint : Zig.External.Footprint (Args) where
+  reads := fun _ => []
+  writes := fun args => [Zig.External.Region.block args.1]
+theorem air2lean_model_0_evidence :
+    air2lean_model_0_contract.Holds ... ∧ air2lean_model_0_contract.Respects air2lean_model_0_footprint
+```
+
+`Contract.Respects` (in `ZigLean.External`) requires two things. Every access the contract
+permits must fall in a written region, or be a non-write access to a read region. The
+contract's frame must also leave every block outside the written regions unchanged. A
+footprint therefore excludes allocating or freeing other blocks; models that allocate or
+free declare no footprint. Clients use `Contract.frame_outside` (blocks outside the writes
+stay unchanged) and `Contract.accesses_within`. A `proof` must prove the conjunction.
+`assumed` bindings emit it as one axiom. The report's `footprint` field is `null` when
+none is declared.
+
+`tests/roadmap/models/Fill.lean` defines `fill(buf: []u8, value: u8)` with footprint
+`writes: [0]`, together with its proved evidence. Its client `client_fills_both` calls fill on
+two separate buffers. Using only the contract and footprint, it proves both buffers are
+filled: the first stays filled because the second call writes only its own block. The
+registry test generates `fillClient` from a registered binding and proves the same fact
+through the generated obligation (`FillGenerated.lean`). An assumed variant
+(`FillAssumedGenerated.lean`) also checks, but its theorem rests on the binding axiom.
+
+## Contract assumption report
+
+```sh
+lake env python3 scripts/external-contracts.py --check Generated.lean [...]
+```
+
+The script reads each file's `-- air2lean-models:` marker. It kernel checks the file with
+`#print axioms` on every `air2lean_model_<i>_evidence` and lists each used contract. A
+contract is `verified` only if its trust is `proved-obligation`, the file checks, and its
+evidence uses only `propext`, `Classical.choice` and `Quot.sound`. Every other contract is
+listed under `assumptions`, with a reason. That covers assumed axioms, unchecked runs
+(no `--check`), failed checks, and proofs that reach `sorryAx` or a project axiom.
+`--expect-assumptions=a,b` fails unless the assumption set is exactly that list. The model
+gate requires an empty list for the proved fill client and `project.fill` for the assumed one.
+A verified status still covers only the Lean model. Correspondence to the real foreign
+function remains EXT-01's environment premise.
 
 Compile project model modules and the generated output before treating the translation as
 usable proof evidence. Clients use `Contract.success` under the declared precondition and
@@ -109,6 +174,12 @@ AIR2LEAN_MODEL_EVIDENCE="$RUNNER_TEMP/model-contracts" scripts/model-contracts.s
 The CLI driver exercises exact signature/layout/profile checks, proved versus assumed
 obligations, mandatory fields, missing models and preservation of existing output on errors.
 Template mode produces JSON authoring data and intentionally does not certify program calls.
+`tests/roadmap/models/StdModels.lean` checks the built-in table (unique names, every typed
+model has a row, anonymous-instance lookup), rejection of a std call with an incompatible
+runtime signature, of an unqualified Zig version, of a translated function or project binding
+reusing a std name, of a same-name project binding with a different second call site, and the
+semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
+`ZigLean` umbrella and fails if any row's dependency is not a declaration there.
 
 The gate explicitly builds the `ZigLean` umbrella imported by generated source, compiles the
 fixture model into an isolated module search path, and retains generated source, the binding

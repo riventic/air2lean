@@ -88,6 +88,18 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 
+      # Synthetic diff summaries only; capped/timer/unsupported outcomes refuse absence claims.
+      - name: Outcome taxonomy regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
+
+      # Stub translator, Lake and audit; real build-guard and claims. No Lean, Lake or Zig.
+      - name: Project check and reproducibility record regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
+
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
@@ -112,6 +124,21 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v
           python3 scripts/float-semantics.py check
+
+      # Q07: synthetic inventories and stub runners; consumes coverage.py diff, runs no compiler.
+      - name: Upgrade qualification driver regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
+
+      # Q02: every register ID maps to negative tests and designated mutants; complete rows
+      # need both. The Python-side mutants run in memory against existing regressions.
+      - name: Mutation map and Python-side mutants
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
+          python3 -B scripts/mutation-map.py check
+          python3 -B tests/roadmap/mutation-map/mutants.py
 
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
@@ -162,6 +189,24 @@ jobs:
           set -euo pipefail
           python3 scripts/compat.py check
           python3 -m unittest discover -s tests/roadmap/distribution -v
+
+      # Offline fixture repositories (docs/release-record.md). The ledger check verifies each
+      # entry's reviewed revision and baseline hash; the shallow checkout fetches only those
+      # commits. Local CI snapshots have no origin or history: structure only there.
+      - name: Release record and review ledger regressions
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/roadmap/release-record -v
+          if git remote get-url origin >/dev/null 2>&1; then
+            read -r -a reviewed <<<"$(python3 scripts/release-record.py ledger --revisions)"
+            git fetch --no-tags --depth=1 origin "${reviewed[@]}"
+            python3 scripts/release-record.py ledger
+          else
+            python3 scripts/release-record.py ledger --allow-unfetched
+          fi
 
       # Bootstrap zig for zig-patch/build.sh: it needs a host `zig` of the exact target
       # version on PATH (the Zig compiler source builds with its own release). Pinned in
@@ -321,6 +366,7 @@ jobs:
           lake env lean --run tests/roadmap/diagnostics/RuntimeTags.lean 2>&1 | tee "$diagnostics_evidence_dir/runtime-tags.log"
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/blockers.log"
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -332,6 +378,7 @@ jobs:
           AIR2LEAN_MODEL_EVIDENCE: ${{ runner.temp }}/model-contracts
         run: |
           python3 tests/roadmap/models/test_gate.py
+          python3 -B tests/roadmap/models/test_external_contracts.py
           scripts/model-contracts.sh
 
       # This checks committed Flow artifacts only: no production checkout, Zig export,
@@ -641,6 +688,13 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
+
+      # Error returns satisfy a partial triple; every model failure constructor falsifies it.
+      - name: Outcome taxonomy Lean fixture
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
 
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}

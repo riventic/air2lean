@@ -8,8 +8,8 @@ The original roadmap asks for monotonic observations, deadlines, timeout and wak
 (C04), separate cancellation/spurious cleanup (C05), and explicit environment boundaries
 (E03). The existing scheduler has only unbounded wait/wake, queued waiters in Mem and no
 happens-before edge on wake. Threadsync.Deadline proves the no-timeout path for Zig15;
-it does not supply a clock theorem. Memory.threadFn? currently maps Timer/timedWait to
-noClock and leaves Io.futexWaitTimeout outside the admitted fragment.
+it does not supply a clock theorem. StdModels.stdModels currently maps Timer/timedWait to
+clock-free models and leaves Io.futexWaitTimeout outside the admitted fragment.
 
 Zig16 source corrects the suggested API: std.Thread.Futex.timedWait is absent from
 Thread.zig. The selected public entry is std.Io.futexWaitTimeout, whose timeout union

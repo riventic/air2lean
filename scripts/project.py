@@ -2,11 +2,14 @@
 """Bounded project preflight, translation, and hash-bound evidence (stdlib only)."""
 import argparse
 from contextlib import ExitStack
+import datetime
 import hashlib
+import importlib.util
 import json
 import math
 import os
 from pathlib import Path
+import platform
 import re
 import resource
 import signal
@@ -17,6 +20,18 @@ import sys
 import tempfile
 import time
 from typing import NamedTuple, Optional
+
+
+def _sibling(name):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
+    module = importlib.util.module_from_spec(spec)
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(module)
+    return module
+
+
+outcomes = _sibling('outcomes')
+claims = _sibling('claims')
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
@@ -151,7 +166,7 @@ def hash_bounded(path, cap, *, charge=None):
 def load_manifest(path):
     raw = read_bounded(path, LIMITS['max_file_bytes'])
     manifest = bounded_json(raw, LIMITS)
-    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits', 'spawn_policy'))
+    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits', 'spawn_policy', 'check'))
     if type(manifest['schema']) is not int or manifest['schema'] != SCHEMA:
         raise Invalid('unsupported manifest schema')
     limits = dict(LIMITS)
@@ -164,6 +179,7 @@ def load_manifest(path):
     if manifest['float_semantics'] not in ('ieee', 'compiler-rt'):
         raise Invalid('float_semantics must be ieee or compiler-rt')
     spawn_policy(manifest)
+    check_budget(manifest)
     strings(manifest['source_closure'], True)
     strings(manifest['allowed_assumptions'])
     obj(manifest['components'], ('compiler_patch', 'runtime', 'toolchain'))
@@ -178,7 +194,7 @@ def load_manifest(path):
         raise Invalid('input exceeds max_roots')
     ids = set()
     for root in manifest['roots']:
-        obj(root, ('id', 'function', 'air', 'namespace', 'prefix', 'contracts', 'goals', 'assumptions', 'exclusions'))
+        obj(root, ('id', 'function', 'air', 'namespace', 'prefix', 'contracts', 'goals', 'assumptions', 'exclusions'), ('generated',))
         if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]*', string(root['id'])) or root['id'] in ids:
             raise Invalid('invalid or duplicate root id')
         ids.add(root['id'])
@@ -189,6 +205,8 @@ def load_manifest(path):
             raise Invalid('prefix must be a string without NUL')
         for key in ('air', 'contracts', 'assumptions', 'exclusions'):
             strings(root[key], key == 'air')
+        if 'generated' in root:
+            string(root['generated'])
         if set(root['assumptions']) - set(manifest['allowed_assumptions']):
             raise Invalid(f'root {root["id"]} uses assumptions outside allowlist')
         if not isinstance(root['goals'], list):
@@ -259,6 +277,8 @@ def input_names(manifest):
     for root in manifest['roots']:
         names.update(root['air'])
         names.update(root['contracts'])
+        if 'generated' in root:
+            names.add(root['generated'])
     return names
 
 
@@ -544,6 +564,23 @@ def translate(manifest, limits, data, report, translator, staging):
             report['diagnostics'].append(diagnostic(result['code'], result['message'], root['id'], category='translator_failure'))
 
 
+def publish_translation(manifest, limits, data, report, translator, out):
+    """Translate into private staging; rename to the fresh `out` only when every root passed."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        raise Invalid('artifact already exists; choose a fresh directory')
+    with tempfile.TemporaryDirectory(prefix='.air2lean-', dir=out.parent) as temp:
+        staging = Path(temp) / 'artifact'
+        staging.mkdir()
+        translate(manifest, limits, data, report, translator, staging)
+        encoded = report_bytes(report, limits)
+        if not report['diagnostics']:
+            (staging / 'report.json').write_bytes(encoded)
+            if out.exists():
+                raise Invalid('artifact appeared during translation; refusing replacement')
+            os.rename(staging, out)
+    return encoded
+
 def report_bytes(report, limits):
     encoder = json.JSONEncoder(sort_keys=True, indent=2, ensure_ascii=False)
     maximum = limits['max_total_output_bytes']
@@ -745,13 +782,17 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
-def direct_reference(nodes, theorem, definition):
-    """A statement about the root names it, so its own declaration depends on it directly.
+def statement_reference(theorem, definition):
+    """A goal theorem must state its claim about the root: the generated definition must occur
+    in the conclusion of its kernel type, not only in hypotheses or the proof term.
 
-    Requiring a direct edge (not transitive reachability) rejects theorems about wrappers
-    or re-implementations that only reach the generated definition through other lemmas."""
-    deps = nodes.get(theorem, {}).get('dependencies')
-    return isinstance(deps, list) and definition in deps
+    The audit's declaration edges include the proof, so a wrapper-statement or `True`
+    theorem whose proof mentions the root would otherwise bind. Audits from extractors
+    without statement dependencies fail closed."""
+    deps = theorem.get('conclusion_dependencies')
+    if not isinstance(deps, list) or not isinstance(theorem.get('statement_dependencies'), list):
+        return None
+    return definition in deps
 
 
 def compiled_olean(bundle, module):
@@ -807,58 +848,116 @@ def bind_receipt(root, base, generated_sha, bundle, file_hashes):
             row.update(binding='outside_contracts', reason='theorem module is not a declared contract file')
         elif theorem.get('allowed') is not True or theorem.get('violations'):
             row.update(binding='policy_violation', reason='audited theorem violates dependency policy')
-        elif (not direct_reference(bundle['nodes'], name, definition)
-              or bundle['nodes'].get(definition, {}).get('module') not in gen_modules):
+        elif (states := statement_reference(theorem, definition)) is None:
+            row.update(binding='unbound', reason='receipt audit lacks statement dependencies; regenerate it with the current extractor')
+        elif not states or bundle['nodes'].get(definition, {}).get('module') not in gen_modules:
             row.update(binding='wrapper_or_unrelated',
-                       reason=f'theorem does not directly reference generated root definition {definition} in {gen_modules}')
+                       reason=f'theorem conclusion does not reference generated root definition {definition} in {gen_modules}')
         else:
-            row.update(binding='direct', reason='audited theorem depends on the hash-bound generated root definition',
+            row.update(binding='direct', reason='audited theorem states its conclusion about the hash-bound generated root definition',
                        audited_assumptions={k: sorted(theorem.get(k) or []) for k in
-                                            ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')})
+                                            ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
+                       **derived_claim(theorem))
         goals.append(row)
     return compiled, goals
 
 
+def derived_claim(theorem):
+    """scripts/claims.py's strength derived from the audited kernel conclusion shape.
+
+    An audit without a conclusion shape (older extractor) derives no strength."""
+    found = claims.claims_of(theorem['conclusion']) if 'conclusion' in theorem else frozenset()
+    return {'derived_strength': claims.derived_strength(found), 'claim_class': claims.claim_class(found)}
+
+
+def strength_supported(goal):
+    """A type-derivable declared strength counts only up to the derived strength.
+
+    Strengths claims.py cannot derive (resource_bound, correspondence) are never functional."""
+    declared, derived = goal['strength'], goal.get('derived_strength')
+    if declared not in claims.ORDERED:
+        return True
+    return derived is not None and claims.ORDERED[derived] >= claims.ORDERED[declared]
+
+
+def diff_summary(path):
+    """A complete schema-1 differential summary, or None."""
+    summary = load_evidence(path)
+    return summary if isinstance(summary, dict) and summary.get('schema') == 1 and summary.get('complete') is True else None
+
+
+def diff_cases(path, function):
+    """Case rows and skip reasons for an `example.function` root in a summary's case evidence."""
+    example, function = function.rsplit('.', 1)
+    rows, skipped = [], []
+    for line in read_bounded(Path(str(path) + '.jsonl'), 128 * 1024 * 1024).splitlines():
+        row = bounded_json(line, LIMITS)
+        if not isinstance(row, dict) or row.get('example') != example:
+            continue
+        if row.get('status') == 'skipped' and function in (row.get('functions') or []):
+            skipped.append(row.get('reason'))
+        elif row.get('function') == function and isinstance(row.get('status'), str):
+            rows.append(row)
+    return rows, skipped
+
+
 def diff_coverage(root, source_closure, file_hashes, summaries):
+    """(tested stage, exclusions, case rows read for this root)."""
     if '.' not in root['function']:
-        return stage('not_run', 'root function has no example.function form for differential binding'), []
-    example, function = root['function'].rsplit('.', 1)
-    counts, skipped = {}, []
+        return stage('not_run', 'root function has no example.function form for differential binding'), [], []
+    rows, skipped = [], []
     for path in summaries:
         try:
-            summary = load_evidence(path)
-            if not isinstance(summary, dict) or summary.get('schema') != 1 or summary.get('complete') is not True:
-                return stage('failed', f'differential summary {path.name} is incomplete or unsupported'), []
+            summary = diff_summary(path)
+            if summary is None:
+                return stage('failed', f'differential summary {path.name} is incomplete or unsupported'), [], []
             runner = summary.get('runner_runtime_sources')
             bound = [n for n in source_closure if n in file_hashes and isinstance(runner, dict) and n in runner]
             if not bound:
-                return stage('failed', f'differential summary {path.name} does not hash any declared source-closure file'), []
+                return stage('failed', f'differential summary {path.name} does not hash any declared source-closure file'), [], []
             stale = [n for n in bound if runner[n] != file_hashes[n]]
             if stale:
-                return stage('failed', f'stale differential evidence: source hash differs for {stale}'), []
-            for line in read_bounded(Path(str(path) + '.jsonl'), 128 * 1024 * 1024).splitlines():
-                row = bounded_json(line, LIMITS)
-                if not isinstance(row, dict) or row.get('example') != example:
-                    continue
-                if row.get('status') == 'skipped' and function in (row.get('functions') or []):
-                    skipped.append(row.get('reason'))
-                elif row.get('function') == function and isinstance(row.get('status'), str):
-                    counts[row['status']] = counts.get(row['status'], 0) + 1
+                return stage('failed', f'stale differential evidence: source hash differs for {stale}'), [], []
+            found, reasons = diff_cases(path, root['function'])
+            rows += found
+            skipped += reasons
         except (OSError, ValueError, UnicodeError) as error:
-            return stage('failed', f'differential evidence unreadable: {error}'), []
+            return stage('failed', f'differential evidence unreadable: {error}'), [], []
+    counts = {}
+    for row in rows:
+        counts[row['status']] = counts.get(row['status'], 0) + 1
     exclusions = [f'differential {s}: {counts[s]} sampled case(s)' for s in DIFF_EXCLUSIONS if counts.get(s)]
     exclusions += [f'differential example skipped: {r}' for r in skipped]
     total = sum(counts.values())
     if not total:
-        return stage('not_run', 'no differential cases recorded for this root function', counts=counts), exclusions
+        return stage('not_run', 'no differential cases recorded for this root function', counts=counts), exclusions, rows
     # Fail closed on statuses this reader does not know how to classify.
     failures = {s: n for s, n in counts.items() if s in DIFF_FAILURES or s not in DIFF_MATCHES + DIFF_EXCLUSIONS}
     if failures:
-        return stage('failed', f'differential failures: {failures}', counts=counts, scope='sampled'), exclusions
+        return stage('failed', f'differential failures: {failures}', counts=counts, scope='sampled'), exclusions, rows
     if not any(counts.get(s) for s in DIFF_MATCHES):
-        return stage('failed', 'no differential case matched; only exclusions recorded', counts=counts, scope='sampled'), exclusions
+        return stage('failed', 'no differential case matched; only exclusions recorded', counts=counts, scope='sampled'), exclusions, rows
     return stage('passed', 'all sampled differential cases matched or were classified exclusions',
-                 counts=counts, scope='sampled'), exclusions
+                 counts=counts, scope='sampled'), exclusions, rows
+
+
+def absence_claims(goals, counts):
+    """Absence claims backed by direct goals, refused when outcome evidence blocks them.
+
+    Sampled evidence never proves absence; it can only refuse a theorem-backed claim."""
+    result = {}
+    for claim in outcomes.ABSENCE_CLAIMS:
+        backing = sorted(g['theorem'] for g in goals
+                         if g['binding'] == 'direct' and strength_supported(g)
+                         and claim in outcomes.STRENGTH_ABSENCE.get(g['strength'], ()))
+        verdict = outcomes.absence(claim, counts)
+        if not backing:
+            status, reason = 'not_proved', 'no direct theorem goal asserts this claim; sampled evidence never proves absence'
+        else:
+            status = 'proved' if verdict['status'] == 'not_refuted' else 'refused'
+            reason = verdict['reason']
+        result[claim] = {'status': status, 'theorems': backing, 'blocking': verdict['blocking'], 'reason': reason}
+    return result
 
 
 def coverage_level(record):
@@ -874,10 +973,15 @@ def coverage_level(record):
         blockers.append('generated Lean not compiled by a current, hash-bound proof receipt')
     if not goals:
         blockers.append('no declared theorem goals')
+    blockers += [f'absence claim {v["reason"]}' for v in record['absence_claims'].values() if v['status'] == 'refused']
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
-    strengths = {g['strength'] for g in direct}
+    for goal in direct:
+        if not strength_supported(goal):
+            blockers.append(f'goal {goal["theorem"]}: declared {goal["strength"]} exceeds type-derived '
+                            f'{goal.get("derived_strength") or "no claim"} ({goal.get("claim_class") or "unclassified"} conclusion)')
+    strengths = {g['strength'] for g in direct if strength_supported(g)}
     if not strengths & set(FUNCTIONAL):
         blockers.append('no direct theorem has functional strength (partial/total correctness)')
     # Every functional precondition (preflight, translated, compiled, all goals direct) is a blocker above.
@@ -942,11 +1046,16 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                 stages['proved'] = stage('partial', f'{bound} of {len(goals)} declared goals are direct audited theorems', direct_goals=bound)
             else:
                 stages['proved'] = stage('failed', 'no declared goal is a direct audited theorem of the generated root', direct_goals=0)
-        diff_exclusions = []
+        diff_exclusions, rows = [], []
         if diffs:
-            stages['tested'], diff_exclusions = diff_coverage(root, manifest['source_closure'], file_hashes, diffs)
+            stages['tested'], diff_exclusions, rows = diff_coverage(root, manifest['source_closure'], file_hashes, diffs)
         else:
             stages['tested'] = stage('not_run', 'no differential summary supplied')
+        counts = outcomes.count(rows)
+        unsupported = evidence['outcomes']['unsupported_semantics']  # exporter-marked AIR instructions
+        if unsupported:
+            key = outcomes.Outcome.UNSUPPORTED.value
+            counts[key] = counts.get(key, 0) + unsupported
         audited = {}
         for goal in goals:
             for key, names in goal.get('audited_assumptions', {}).items():
@@ -959,22 +1068,32 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                   'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'review': 'declared_not_checked'} for g in root['goals']],
                   'theorem_strength': {'declared': sorted({g['strength'] for g in root['goals']}),
                                        'direct': sorted({g['strength'] for g in goals if g['binding'] == 'direct'}),
-                                       'source': 'manifest declaration; statements are not machine-classified'},
+                                       'derived': sorted({g['derived_strength'] for g in goals
+                                                          if g['binding'] == 'direct' and g.get('derived_strength')}),
+                                       'source': 'manifest declaration, counted only up to the strength scripts/claims.py '
+                                                 'derives from the audited kernel conclusion'},
                   'assumptions': {'declared': root['assumptions'], 'audited': audited},
-                  'exclusions': exclusions}
+                  'exclusions': exclusions, 'outcomes': counts, 'absence_claims': absence_claims(goals, counts)}
         record['level'], record['blockers'] = coverage_level(record)
         record['fully_functionally_verified'] = record['level'] == 'functionally_verified_total'
         roots.append(record)
     return {'schema': SCHEMA, 'kind': 'air2lean-coverage-report', 'manifest_sha256': report['manifest_sha256'],
             'levels': list(LEVELS), 'roots': roots, 'diagnostics': report['diagnostics'],
             'rules': ['Sampled differential tests never raise a root above tested_sampled.',
-                      'A theorem counts only when its own audited declaration (statement or proof term) directly references '
-                      'the generated root definition in a module byte-identical to the verified translation artifact; '
-                      'theorems reaching it only through wrappers or lemmas do not count. A wrapper statement whose proof '
-                      'term mentions the root still counts, so declared strength and domain remain review obligations.',
+                      'A theorem counts only when the conclusion of its audited statement (kernel type, not hypotheses '
+                      'or proof term) references the generated root definition in a module byte-identical to the verified '
+                      'translation artifact; wrapper or True statements do not count even when their proofs mention the root. '
+                      'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
+                      'from the audited conclusion head (Zig triples, Returns, exact-success equations); an unclassified '
+                      'conclusion such as `root x = root x` derives none. Domains and preconditions are not interpreted '
+                      'and remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
-                      'Stale receipts, source hash mismatches and stale differential evidence fail their stages.'],
+                      'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
+                      'An absence claim (no-panic, guaranteed-return) is proved only by a direct goal of matching '
+                      'strength. Capped searches, fuel-bounded no-result runs, unspecified (including no-clock timer) '
+                      'and unsupported outcomes, or an observed failure the claim denies, refuse it and block '
+                      'functional verification. Error returns are values and never refuse no-panic.'],
             'trust_scope': report['trust_scope']}
 
 
@@ -991,6 +1110,8 @@ def coverage_text(result):
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
+        lines.extend(f'  absence {claim}: {v["status"]}' + (f' {v["blocking"]}' if v['blocking'] else '')
+                     for claim, v in root['absence_claims'].items())
         lines.extend(f'  blocker: {b}' for b in root['blockers'])
     return '\n'.join(lines) + '\n'
 
@@ -1001,10 +1122,365 @@ def reject_input_overlap(out, manifest_path, manifest):
         raise Invalid('report destination overlaps an input file')
 
 
+# ---------------------------------------------------------------------------
+# Reproducible project check (I03). From one committed manifest: translate, require
+# byte-identical committed generated modules, build the contract modules with Lake under
+# scripts/build-guard.py, audit them with scripts/assumptions.py, bind the audit to the
+# declared goal theorems and their allowed assumptions, check declared strengths with
+# scripts/claims.py, and write a record whose `reproducible` section another qualified
+# machine must reproduce exactly (`compare-records`).
+
+CHECK_DEFAULTS = {'build_timeout_seconds': 3600, 'audit_timeout_seconds': 3600, 'rss_mib': 8192}
+CHECK_MAXIMA = {'build_timeout_seconds': 6 * 3600, 'audit_timeout_seconds': 6 * 3600, 'rss_mib': 64 * 1024}
+STANDARD_AXIOMS = ('Classical.choice', 'Quot.sound', 'propext')
+# Trust classes assigned by scripts/assumptions.py to project-policy dependencies. Standard
+# library opaques/externs/redirections are disclosed but need no manifest entry; unexpected
+# classes already make the audited theorem `allowed: false`.
+PROJECT_TRUST = frozenset({'allowed-project-axiom', 'allowed-project-opaque',
+                           'allowed-runtime-redirection', 'allowed-project-extern'})
+TRUST_FIELDS = ('trust_class', 'compiler_trust_class', 'extern_trust_class')
+CHECK_STAGES = ('translate', 'reproduce', 'build', 'audit', 'claims', 'inputs_stable')
+RECORD_KIND = 'air2lean-project-check-record'
+CHECK_TOOLS = {'project': Path(__file__).resolve()}
+CHECK_TOOLS.update({key: CHECK_TOOLS['project'].with_name(name) for key, name in
+                    (('build_guard', 'build-guard.py'), ('assumptions', 'assumptions.py'), ('claims', 'claims.py'),
+                     ('normalize', 'normalize-generated.py'))})
+
+
+def check_budget(manifest):
+    """Optional proof-checking budget: Lake build and audit timeouts, sampled RSS ceiling."""
+    supplied = manifest.get('check', {})
+    obj(supplied, (), CHECK_DEFAULTS)
+    budget = dict(CHECK_DEFAULTS)
+    for key, value in supplied.items():
+        if type(value) is not int or not 1 <= value <= CHECK_MAXIMA[key]:
+            raise Invalid(f'check.{key} must be an integer from 1 through {CHECK_MAXIMA[key]}')
+        budget[key] = value
+    return budget
+
+
+_NORMALIZE = None
+
+
+def normalize_generated():
+    """The generated-profile header parser shared with check.sh (scripts/normalize-generated.py)."""
+    global _NORMALIZE
+    if _NORMALIZE is None:
+        spec = importlib.util.spec_from_file_location('air2lean_normalize_generated', CHECK_TOOLS['normalize'])
+        module = importlib.util.module_from_spec(spec)
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(module)
+        _NORMALIZE = module
+    return _NORMALIZE
+
+
+def reproduced_body(split, manifest, profile, fresh, committed):
+    """Header profile and body hash when the fresh translation reproduces the committed module.
+
+    The fresh first-line profile record must agree with the manifest's profile artifact and
+    float semantics. A committed module may omit that record (legacy layout) or carry the
+    identical one; the remaining bytes must be identical either way."""
+    header, body = split(fresh)
+    committed_header, committed_body = split(committed)
+    if header is not None:
+        claimed = header['profile']
+        if not isinstance(profile, dict) or any(claimed.get(k) != v for k, v in profile.items()):
+            raise ValueError(f'generated profile record {claimed.get("name")}/{claimed.get("zig_version")} '
+                             'differs from the manifest profile')
+        if header['float_semantics'] != manifest['float_semantics']:
+            raise ValueError('generated float_semantics differs from the manifest')
+    if committed_header is not None and committed_header != header:
+        raise ValueError('committed profile record differs from the fresh translation')
+    if body != committed_body:
+        raise ValueError('generated definitions differ from the committed module')
+    return {'header_profile': header and header['profile'], 'committed_header': committed_header is not None,
+            'body_sha256': digest(body)}
+
+
+def check_modules(manifest):
+    """Contract and committed generated modules per root; every root must name both."""
+    modules = {}
+    for root in manifest['roots']:
+        if 'generated' not in root:
+            raise Invalid(f'check requires root {root["id"]} to declare its committed generated module')
+        names = {'generated': module_of(root['generated']),
+                 'contracts': [module_of(name) for name in root['contracts']]}
+        if not names['contracts'] or None in names['contracts'] or names['generated'] is None:
+            raise Invalid(f'root {root["id"]} needs Lean module paths for generated and at least one contract')
+        modules[root['id']] = names
+    return modules
+
+
+def run_guarded(tools, base, staging, name, phase, timeout, budget, lock, command):
+    """Run one Lake-backed stage under build-guard; the guard's JSON report is the evidence."""
+    report_path, log_path = staging / f'{name}-guard.json', staging / f'{name}.log'
+    argv = [sys.executable, str(tools['build_guard']), '--cwd', str(base), '--report', str(report_path),
+            '--log', str(log_path), '--profile', 'project-check', '--phase', phase,
+            '--timeout', str(timeout), '--rss-mib', str(budget['rss_mib']), '--log-bytes', str(16 * 1024 * 1024)]
+    argv += ['--lock', str(lock)] if lock else []
+    child = subprocess.Popen([*argv, '--', *command], cwd=base, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        _, stderr = child.communicate(timeout=timeout + 120)
+    except BaseException:
+        # The guard owns its workload's process tree: ask it to stop the tree, then wait.
+        child.send_signal(signal.SIGTERM)
+        try:
+            child.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait()
+        raise
+    try:
+        guard = json.loads(report_path.read_text())
+        result = {'outcome': guard['outcome'], 'exit_code': guard['exit_code']}
+    except (OSError, ValueError, KeyError, TypeError):
+        detail = stderr.decode('utf-8', errors='replace').strip()[-2000:]
+        return {'outcome': 'guard_error', 'exit_code': child.returncode, 'detail': detail}, {}
+    return result, guard
+
+
+def node_classes(node):
+    return sorted({node.get(k) for k in TRUST_FIELDS if node.get(k)}) if node else ['unresolved']
+
+
+def audit_goal(root, goal, theorems, nodes, modules):
+    """Bind one declared goal to its audited theorem and confirm its assumptions are allowed."""
+    name = next((n for n in (goal['theorem'], root['namespace'] + '.' + goal['theorem']) if n in theorems), None)
+    row = {'theorem': goal['theorem'], 'audited_theorem': name, 'strength': goal['strength']}
+    theorem = theorems.get(name)
+    if theorem is None:
+        return dict(row, status='missing', reason='goal theorem absent from the audit of the contract modules')
+    if theorem.get('module') not in modules['contracts']:
+        return dict(row, status='outside_contracts', reason=f'theorem module {theorem.get("module")} is not a declared contract')
+    if theorem.get('allowed') is not True or theorem.get('violations'):
+        return dict(row, status='policy_violation', violations=sorted(theorem.get('violations') or []),
+                    reason='audited theorem violates the assurance dependency policy')
+    used = set()
+    for key in ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections'):
+        used.update(theorem.get(key) or [])
+    standard, project = [], []
+    for dep in sorted(used):
+        node = nodes.get(dep)
+        classes = node_classes(node)
+        # Unknown nodes and non-standard axioms are never silently treated as standard.
+        if dep in STANDARD_AXIOMS or (node and node.get('kind') != 'axiom' and not set(classes) & PROJECT_TRUST):
+            standard.append(dep)
+        else:
+            project.append({'name': dep, 'classes': classes,
+                            'policy_key': f'{node["module"]}::{node.get("user_name", dep)}' if node else None})
+    declared = set(root['assumptions'])
+    unallowed = [p['name'] for p in project if not {p['name'], p['policy_key']} & declared]
+    definition = root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
+    row.update(standard_assumptions=standard, project_assumptions=project,
+               references_root=statement_reference(theorem, definition),
+               root_definition_module=nodes.get(definition, {}).get('module'))
+    if unallowed:
+        return dict(row, status='unallowed_assumption', unallowed=unallowed,
+                    reason='project assumptions absent from the root assumptions (and allowlist)')
+    if row['references_root'] is None:
+        return dict(row, status='unbound', reason='audit lacks statement dependencies; regenerate it with the current extractor')
+    if not row['references_root']:
+        return dict(row, status='wrapper_or_unrelated',
+                    reason=f'theorem conclusion does not reference generated root definition {definition}')
+    if row['root_definition_module'] != modules['generated']:
+        return dict(row, status='unbound_generated',
+                    reason=f'audited {definition} is not defined in the committed generated module {modules["generated"]}')
+    return dict(row, status='allowed', reason=None)
+
+
+def run_claims(tools, manifest_path, audit_path, staging):
+    out = staging / 'claims.json'
+    result = subprocess.run([sys.executable, str(tools['claims']), 'check', str(manifest_path),
+                             '--assurance', str(audit_path), '--output', str(out)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=600)
+    try:
+        claims = load_evidence(out)
+        goals = {f'{r["id"]}/{g["theorem"]}': {k: g.get(k) for k in ('status', 'declared_strength', 'derived_strength', 'claim_class', 'reason')}
+                 for r in claims['roots'] for g in r['goals']}
+    except (OSError, ValueError, UnicodeError, KeyError, TypeError):
+        return {'status': 'error', 'exit_code': result.returncode,
+                'reason': result.stderr.decode('utf-8', errors='replace').strip()[-2000:]}
+    return {'status': claims.get('status'), 'exit_code': result.returncode, 'goals': goals}
+
+
+def project_check(path, translator, staging, tools=None, lock=None):
+    """Run the whole check into `staging`; stage failures are recorded, not raised."""
+    tools = dict(CHECK_TOOLS, **(tools or {}))
+    started = time.monotonic()
+    manifest, limits, data, report = collect(path)
+    budget = check_budget(manifest)
+    modules = check_modules(manifest)
+    base = path.parent
+    failures = []
+    inputs = dict(report['files'])
+    toolchain = base / 'lean-toolchain'
+    reproducible = {'manifest_sha256': report['manifest_sha256'], 'inputs': inputs, 'check_budget': budget,
+                    'modules': modules,
+                    'scripts': {key: hash_bounded(tool, 64 * 1024 * 1024)[0] for key, tool in sorted(tools.items())},
+                    'lean_toolchain': toolchain.read_text().strip() if toolchain.is_file() else None,
+                    'float_semantics': manifest['float_semantics'], 'spawn_policy': spawn_policy(manifest),
+                    'stages': {name: {'status': 'not_run'} for name in CHECK_STAGES}, 'roots': []}
+    stages = reproducible['stages']
+    host = {'platform': {'system': platform.system(), 'machine': platform.machine(), 'release': platform.release()},
+            'python': platform.python_version(), 'git': report['git'], 'manifest': str(path),
+            'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    record = {'schema': SCHEMA, 'kind': RECORD_KIND, 'status': 'failed', 'failures': failures,
+              'reproducible': reproducible, 'host': host,
+              'note': 'compare-records compares only `reproducible`; `host` holds machine-specific '
+                      'evidence (translator and Lake binaries, paths, timing, Git state).'}
+
+    def finish():
+        host['elapsed_seconds'] = round(time.monotonic() - started, 3)
+        record['status'] = 'failed' if failures else 'reproduced'
+        return record
+
+    def translation_failed():
+        stages['translate'] = {'status': 'failed', 'codes': sorted({d['code'] for d in report['diagnostics']})}
+        failures.extend(f'translate {d["root"] or "project"}: {d["code"]}' for d in report['diagnostics'])
+        return finish()
+
+    if report['diagnostics']:
+        return translation_failed()
+    # 1. Translation into a hash-bound artifact, then re-verification of every recorded hash.
+    artifact = staging / 'artifact'
+    publish_translation(manifest, limits, data, report, translator, artifact)
+    host['translator'] = report.get('translator')
+    if report['diagnostics']:
+        return translation_failed()
+    try:
+        verify(path, artifact)
+    except (OSError, ValueError, UnicodeError) as error:
+        stages['translate'] = {'status': 'failed', 'codes': ['ARTIFACT_VERIFY'], 'reason': str(error)}
+        failures.append(f'translation artifact did not verify: {error}')
+        return finish()
+    generated = {root['id']: report['files'][f'generated/{root["id"]}/Gen.lean']['sha256'] for root in manifest['roots']}
+    stages['translate'] = {'status': 'passed', 'generated_sha256': generated}
+    # 2. The translation must reproduce the committed module that the contracts import.
+    # Only the first-line profile record may differ, and only by being absent from the committed file.
+    split = normalize_generated().split_generated
+    bodies, mismatched = {}, []
+    for root in manifest['roots']:
+        try:
+            bodies[root['id']] = reproduced_body(split, manifest, report['profile'],
+                                                 (artifact / root['id'] / 'Gen.lean').read_bytes(),
+                                                 (base / root['generated']).read_bytes())
+        except (OSError, ValueError, UnicodeError) as error:
+            mismatched.append(root['id'])
+            bodies[root['id']] = {'reason': str(error)}
+    stages['reproduce'] = {'status': 'failed' if mismatched else 'passed', 'mismatched_roots': mismatched,
+                           'roots': bodies}
+    if mismatched:
+        failures.append(f'fresh translation differs from committed generated module for {mismatched}')
+        return finish()
+    # 3. Build the contract modules (and their imports, including the generated modules).
+    contract_modules = sorted({m for names in modules.values() for m in names['contracts']})
+    stages['build'], guard = run_guarded(tools, base, staging, 'build', 'proof', budget['build_timeout_seconds'],
+                                         budget, lock, ['lake', 'build', *contract_modules])
+    stages['build']['status'] = 'passed' if stages['build']['outcome'] == 'success' else 'failed'
+    host['build'] = {k: guard.get(k) for k in ('tools', 'pins', 'workload_seconds', 'peak_sampled_rss_kib', 'log_sha256')}
+    if stages['build']['status'] != 'passed':
+        failures.append(f'lake build failed: {stages["build"]["outcome"]}')
+        return finish()
+    # 4. Audit the just-built contract modules. assumptions.py exits 1 when any audited
+    # theorem, possibly a non-goal one, violates policy; goal theorems are judged below.
+    audit_path = staging / 'assumptions.json'
+    audit_command = [sys.executable, str(tools['assumptions']), '--no-build', '--output', str(audit_path)]
+    for module in contract_modules:
+        audit_command += ['--module', module]
+    stages['audit'], guard = run_guarded(tools, base, staging, 'audit', 'check', budget['audit_timeout_seconds'],
+                                         budget, lock, audit_command)
+    host['audit'] = {k: guard.get(k) for k in ('workload_seconds', 'peak_sampled_rss_kib', 'log_sha256')}
+    try:
+        if stages['audit']['outcome'] not in ('success', 'child_failed') or stages['audit']['exit_code'] not in (0, 1):
+            raise Invalid(f'guard outcome {stages["audit"]["outcome"]}')
+        audit = load_evidence(audit_path)
+        if not isinstance(audit, dict) or audit.get('status') not in ('pass', 'fail') \
+                or not isinstance(audit.get('theorems'), list) or not isinstance(audit.get('nodes'), list):
+            raise Invalid('assurance report is not a completed audit')
+        if audit.get('modules') != contract_modules:
+            raise Invalid('assurance audit scope differs from the contract modules')
+    except (OSError, ValueError, UnicodeError) as error:
+        stages['audit'].update(status='failed', reason=str(error))
+        failures.append(f'assumption audit failed: {error}')
+        return finish()
+    nodes = {n['name']: n for n in audit['nodes'] if isinstance(n, dict) and isinstance(n.get('name'), str)}
+    theorems = {t['name']: t for t in audit['theorems'] if isinstance(t, dict) and isinstance(t.get('name'), str)}
+    stages['audit'].update(status='passed', audit_status=audit['status'], theorem_count=len(audit['theorems']),
+                           policy_sha256=audit.get('policy_sha256'), lean_toolchain=audit.get('lean_toolchain'))
+    for root in manifest['roots']:
+        goals = [audit_goal(root, goal, theorems, nodes, modules[root['id']]) for goal in root['goals']]
+        reproducible['roots'].append({'id': root['id'], 'goals': goals})
+        failures.extend(f'goal {root["id"]}/{g["theorem"]}: {g["status"]}' for g in goals if g['status'] != 'allowed')
+    if not any(root['goals'] for root in manifest['roots']):
+        failures.append('manifest declares no theorem goals')
+    # 5. Declared strengths may not exceed the strength derived from audited theorem types.
+    stages['claims'] = run_claims(tools, path, audit_path, staging)
+    if stages['claims']['status'] != 'pass':
+        failures.append(f'claim strength check: {stages["claims"]["status"]}')
+    # 6. Inputs (manifest, sources, contracts, committed generated modules) unchanged throughout.
+    after = collect(path)[3]['files']
+    changed = sorted(name for name in set(inputs) | set(after) if inputs.get(name) != after.get(name))
+    stages['inputs_stable'] = {'status': 'failed' if changed else 'passed', 'changed': changed}
+    if changed:
+        failures.append(f'inputs changed during check: {changed}')
+    return finish()
+
+
+def check_command(path, translator, out, tools=None, lock=None):
+    """Publish a fresh directory: artifact, guard reports and logs, audit, claims, record.json."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        raise Invalid('check output already exists; choose a fresh directory')
+    with tempfile.TemporaryDirectory(prefix='.air2lean-check-', dir=out.parent) as temp:
+        staging = Path(temp) / 'check'
+        staging.mkdir()
+        record = project_check(path, translator, staging, tools, lock)
+        encoded = report_bytes(record, LIMITS)
+        (staging / 'record.json').write_bytes(encoded)
+        if out.exists():
+            raise Invalid('check output appeared during the run; refusing replacement')
+        os.rename(staging, out)
+    return record, encoded
+
+
+def load_record(path):
+    record = load_evidence(path)
+    if not isinstance(record, dict) or record.get('schema') != SCHEMA or record.get('kind') != RECORD_KIND \
+            or not isinstance(record.get('reproducible'), dict) or not isinstance(record.get('host', {}), dict):
+        raise Invalid(f'{path} is not a schema-{SCHEMA} project check record')
+    return record
+
+
+def json_differences(left, right, where, found):
+    if len(found) >= 200:
+        return
+    if isinstance(left, dict) and isinstance(right, dict):
+        for key in sorted(set(left) | set(right)):
+            json_differences(left.get(key, '<absent>'), right.get(key, '<absent>'), f'{where}.{key}', found)
+    elif isinstance(left, list) and isinstance(right, list) and len(left) == len(right):
+        for index, (a, b) in enumerate(zip(left, right)):
+            json_differences(a, b, f'{where}[{index}]', found)
+    elif left != right:
+        found.append({'path': where, 'left': left, 'right': right})
+
+
+def compare_records(left_path, right_path):
+    left, right = load_record(left_path), load_record(right_path)
+    differences = []
+    json_differences(left['reproducible'], right['reproducible'], 'reproducible', differences)
+    statuses = {'left': left.get('status'), 'right': right.get('status')}
+    reproduced = not differences and all(s == 'reproduced' for s in statuses.values())
+    return {'schema': SCHEMA, 'kind': 'air2lean-project-record-comparison',
+            'status': 'reproduced' if reproduced else 'not_reproduced', 'record_status': statuses,
+            'differences': differences, 'differences_truncated': len(differences) >= 200,
+            'hosts': {'left': left.get('host', {}).get('platform'), 'right': right.get('host', {}).get('platform')}}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage'))
-    parser.add_argument('manifest', type=Path)
+    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage', 'check', 'compare-records'))
+    parser.add_argument('manifest', type=Path, help='project manifest; compare-records: first check record')
+    parser.add_argument('other', type=Path, nargs='?', help='compare-records: second check record')
     parser.add_argument('--out', type=Path)
     parser.add_argument('--translator', type=Path)
     parser.add_argument('--artifact', type=Path)
@@ -1014,11 +1490,30 @@ def main(argv=None):
     parser.add_argument('--diff', type=Path, action='append', default=[], help='coverage: diff-report summary JSON')
     parser.add_argument('--format', choices=('json', 'text'), default='json')
     parser.add_argument('--require-level', choices=LEVELS, help='coverage: exit 1 if any root is below this level')
+    parser.add_argument('--lock', type=Path, help='check: build-guard lock (default AIR2LEAN_BUILD_LOCK or the guard default)')
+    parser.add_argument('--build-guard', type=Path, default=CHECK_TOOLS['build_guard'], help='check: build guard script')
+    parser.add_argument('--assumptions-script', type=Path, default=CHECK_TOOLS['assumptions'], help='check: assurance audit script')
+    parser.add_argument('--claims-script', type=Path, default=CHECK_TOOLS['claims'], help='check: claim strength script')
     args = parser.parse_args(argv)
     def cancel(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, cancel)
     try:
+        if args.command == 'compare-records':
+            if not args.other:
+                raise Invalid('compare-records requires two check records')
+            result = compare_records(args.manifest.resolve(), args.other.resolve())
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if result['status'] == 'reproduced' else 1
+        if args.command == 'check':
+            if not args.out or not args.translator or args.overwrite:
+                raise Invalid('check requires --out, --translator and no --overwrite; use a fresh record directory')
+            tools = {'build_guard': args.build_guard.resolve(), 'assumptions': args.assumptions_script.resolve(),
+                     'claims': args.claims_script.resolve()}
+            record, encoded = check_command(args.manifest.resolve(), args.translator, args.out.resolve(), tools,
+                                            args.lock and args.lock.resolve())
+            print(encoded.decode('utf-8'), end='')
+            return 0 if record['status'] == 'reproduced' else 1
         if args.command == 'coverage':
             result = coverage(args.manifest.resolve(), args.artifact and args.artifact.resolve(),
                               args.receipt, args.receipt_verifier.resolve(), [d.resolve() for d in args.diff])
@@ -1040,20 +1535,7 @@ def main(argv=None):
         if args.command == 'translate':
             if not args.out or not args.translator or args.overwrite:
                 raise Invalid('translate requires --out, --translator and no --overwrite; use a fresh artifact directory')
-            args.out = args.out.resolve()
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            if args.out.exists():
-                raise Invalid('artifact already exists; choose a fresh directory')
-            with tempfile.TemporaryDirectory(prefix='.air2lean-', dir=args.out.parent) as temp:
-                staging = Path(temp) / 'artifact'
-                staging.mkdir()
-                translate(manifest, limits, data, report, args.translator, staging)
-                encoded = report_bytes(report, limits)
-                if not report['diagnostics']:
-                    (staging / 'report.json').write_bytes(encoded)
-                    if args.out.exists():
-                        raise Invalid('artifact appeared during translation; refusing replacement')
-                    os.rename(staging, args.out)
+            encoded = publish_translation(manifest, limits, data, report, args.translator, args.out.resolve())
         else:
             if args.out:
                 reject_input_overlap(args.out, args.manifest.resolve(), manifest)

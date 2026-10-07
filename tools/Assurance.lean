@@ -111,6 +111,13 @@ private def conclusionShape (depth : Nat) (e : Expr) : Json :=
     Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) e.appArg!])]
   else Json.mkObj [head]
 
+/-- Statement-only constants, read from the kernel type without the proof term or any
+unfolding: a proof that merely mentions a definition does not make the theorem about it.
+`conclusion_dependencies` drops binders and hypotheses as well. -/
+private def statementDependencies (type : Expr) : List (String × Json) :=
+  let names (e : Expr) := namesJson (e.getUsedConstants.qsort Name.lt)
+  [("statement_dependencies", names type), ("conclusion_dependencies", names (stripBinders type))]
+
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
 
 elab_rules : command
@@ -134,12 +141,12 @@ elab_rules : command
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
-      let conclusion := match env.checked.get.find? n with
-        | some c => conclusionShape 8 c.type
-        | none => Json.null
-      theorems := theorems.push <| Json.mkObj [
+      let (conclusion, statement) := match env.checked.get.find? n with
+        | some c => (conclusionShape 8 c.type, statementDependencies c.type)
+        | none => (Json.null, [])
+      theorems := theorems.push <| Json.mkObj <| [
         ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
-        ("axioms", namesJson axs), ("conclusion", conclusion)]
+        ("axioms", namesJson axs), ("conclusion", conclusion)] ++ statement
     let result := Json.mkObj [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),

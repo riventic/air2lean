@@ -50,6 +50,9 @@ structure FileResult where
   index : Option OperandTypes := none
   structureValid : Bool := false
   localPassed : Bool := false
+  /-- Individually normalized direct calls of a canonical function that is blocked before
+  full normalization. They contribute dependency edges only; no partial function is built. -/
+  blockedCalls : Array Inst := #[]
 
 def FileResult.toJson (u : FileResult) : Json := Json.mkObj [
   ("file", Lean.toJson u.file), ("function", Lean.toJson u.function),
@@ -72,15 +75,17 @@ Recognized runtime models do not need an AIR definition. -/
 def edges (units : Array FileResult) : Array Edge := Id.run do
   let mut result := #[]
   for u in units do
-    if u.structureValid then
-      if let some f := u.normalized then
-        for i in (u.operandIndex f).insts do
-          if let .call (.func callee false worker) _ := i.op then
-            if (allocFn? callee).isNone && (threadFn? callee).isNone then
-              result := result.push { caller := f.name, callee, instruction := i.id, file := u.file }
-            if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
-              if let some callee := worker then
-                result := result.push { caller := f.name, callee, instruction := i.id, file := u.file }
+    let source := if u.structureValid then
+        u.normalized.map fun f => (f.name, (u.operandIndex f).insts)
+      else u.function.map (·, u.blockedCalls)
+    if let some (caller, insts) := source then
+      for i in insts do
+        if let .call (.func callee false worker) _ := i.op then
+          if !modelledStdFn callee then
+            result := result.push { caller, callee, instruction := i.id, file := u.file }
+          if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
+            if let some callee := worker then
+              result := result.push { caller, callee, instruction := i.id, file := u.file }
   return result
 
 private def adjacency (graph : Array Edge) : Std.HashMap String (Array String) := Id.run do
@@ -121,6 +126,43 @@ private def boundary (file : String) (function : Option String) (code : Code)
     (phase : Phase) (category : Category) (message : String := "") : Diagnostic :=
   { file := some file, function, code, phase, category, message }
 
+/-- Explicit exporter and fast-math markers, reported with exported IDs before canonicalization. -/
+private def marked (i : Raw.RawInst) : Bool :=
+  i.tag.endsWith "_optimized" || i.unsupported
+
+/-- One instruction without its nested bodies; those are flattened and inspected separately. -/
+private def shallow (i : Raw.RawInst) : Raw.RawInst :=
+  { i with body := #[], thenBody := #[], elseBody := #[],
+           cases := i.cases.map fun c => { c with body := #[] } }
+
+/-- After the composed normalizer failed, normalize each canonical instruction on its own so
+one rejected tag cannot hide independent siblings. Only the version gate is unit-wide. Marked
+instructions were already reported. Successfully normalized direct calls are retained for
+dependency edges; no partial function, SSA value or replacement instruction is built. -/
+def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers : Bool)
+    (whole : Except String Func) (initial : Log) : Array Inst × Log := Id.run do
+  let name := some canonical.name
+  let context := boundary file name .normalizationFailure .normalize .validationFailure
+  if !supportedVersions.contains canonical.zigVersion then
+    return (#[], initial.record context whole)
+  let mut log := initial
+  let mut calls : Array Inst := #[]
+  let mut found := false
+  for raw in Raw.flatten canonical.body do
+    if marked raw then continue
+    match normalizeInst canonical.name (shallow raw) with
+    | .ok i => if let .call (.func ..) _ := i.op then calls := calls.push i
+    | .error message =>
+      found := true
+      log := log.add { context with
+        message
+        category := if (runtimeTagReason? raw.tag).isSome then .unsupportedSemantics else .validationFailure
+        anchor := { idSpace := .canonical, instruction := some raw.id }
+        firstErrorInUnit := true }
+  -- Defensive: never let an unexplained composed failure pass silently.
+  if !found && !hasMarkers then log := log.record context whole
+  return (calls, log)
+
 /-- Pure per-file boundary used by both the CLI and kernel-checked regressions. -/
 def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.run do
   let mut log := initial
@@ -139,10 +181,10 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     | log := log.record (boundary file name .airDecode .decode .validationFailure) decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
   let unit := { unit with function := some raw.name, decodedProfile := some raw.profile }
-  let mut marked := false
+  let mut hasMarkers := false
   for i in Raw.flatten raw.body do
-    if i.tag.endsWith "_optimized" || i.unsupported then
-      marked := true
+    if marked i then
+      hasMarkers := true
       let message := match runtimeTagReason? i.tag with
         | some reason => s!"{raw.name}: inst {i.id}: tag '{i.tag}': {reason}"
         | none => s!"instruction tag '{i.tag}' is explicitly unsupported"
@@ -150,15 +192,16 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
         (if i.tag.endsWith "_optimized" then .optimizedUnsupported else .exporterUnsupported)
         .normalize .unsupportedSemantics message) with
         anchor := { idSpace := .exported, instruction := some i.id } }
-  if marked then return (unit, log.add (skipped file name .check "fully_normalized_function"))
+  -- Markers do not stop canonicalization (its rewrites match specific supported tags); a
+  -- canonical failure stays its own fatal error. Unmarked siblings are normalized below.
   let rewritten := Raw.canonicalize raw
   let .ok canonical := rewritten
     | log := log.record (boundary file name .canonicalFailure .canonicalize .validationFailure) rewritten
       return (unit, log.add (skipped file name .check "canonicalized_AIR"))
   let normalized := normalizeCanonical canonical
   let .ok f := normalized
-    | log := log.record (boundary file name .normalizationFailure .normalize .validationFailure) normalized
-      return (unit, log.add (skipped file name .check "fully_normalized_function"))
+    | let (blockedCalls, collected) := collectNormalization file canonical hasMarkers normalized log
+      return ({ unit with blockedCalls }, collected.add (skipped file name .check "fully_normalized_function"))
   let before := log.observed
   let checked := collectFunctionChecksDetailed file f log
   log := checked.log

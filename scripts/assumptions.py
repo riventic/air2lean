@@ -205,6 +205,15 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None) -> dict:
                 raise ValueError(f"invalid axiom inventory entry: {axiom}")
             visited.add(axiom)
         theorem["dependencies"] = nodes[theorem["name"]]["dependencies"]
+        # Statement-only edges (kernel type; conclusion without binders/hypotheses) bind goals
+        # in `project.py coverage`. They are a subset of the declaration's own edges.
+        statement = theorem.get("statement_dependencies")
+        conclusion = theorem.get("conclusion_dependencies")
+        if statement is not None or conclusion is not None:
+            lists = isinstance(statement, list) and isinstance(conclusion, list)
+            if not (lists and all(isinstance(n, str) for n in statement + conclusion)
+                    and set(conclusion) <= set(statement) <= set(theorem["dependencies"])):
+                raise ValueError(f"invalid statement dependencies: {theorem['name']}")
         theorem["opaque_dependencies"] = sorted(n for n in visited if n in nodes and nodes[n]["kind"] == "opaque")
         theorem["compiler_redirections"] = sorted(n for n in visited if n in nodes and nodes[n].get("implemented_by"))
         theorem["extern_dependencies"] = sorted(n for n in visited if n in nodes and nodes[n].get("extern"))

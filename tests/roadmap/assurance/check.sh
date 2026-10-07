@@ -7,7 +7,7 @@ python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
 out=.lake/assurance/regressions
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/assurance
-for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels; do
+for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding; do
   lake env lean -o ".lake/build/lib/lean/tests/roadmap/assurance/$fixture.olean" \
     "tests/roadmap/assurance/$fixture.lean"
 done
@@ -30,6 +30,19 @@ for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection N
     --output "$out/$fixture.json" || status=$?
   [ "$status" = 1 ] || { echo "error: $fixture must fail policy (exit 1), got $status" >&2; exit 1; }
 done
+# Statement-only dependencies (I06 goal binding): the real extraction must match the
+# checked-in entries that tests/roadmap/coverage-report/test_coverage.py binds goals against.
+scripts/assumptions.sh --no-build --module tests.roadmap.assurance.StatementBinding \
+  --output "$out/statement-binding.json"
+python3 - "$out/statement-binding.json" <<'PY'
+import json, sys
+from pathlib import Path
+actual = json.loads(Path(sys.argv[1]).read_text())
+expected = json.loads(Path('tests/roadmap/coverage-report/statement-binding.json').read_text())
+fields = ('name', 'module', 'dependencies', 'statement_dependencies', 'conclusion_dependencies', 'conclusion')
+assert actual['status'] == 'pass', actual['violations']
+assert [{k: t[k] for k in fields} for t in actual['theorems']] == expected['theorems'], actual['theorems']
+PY
 # Float-semantics labels (docs/float-semantics.md): unlabeled, mislabeled and binary claims fail.
 python3 - "$out" <<'PY'
 import json, sys

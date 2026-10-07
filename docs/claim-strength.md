@@ -30,6 +30,15 @@ audited theorem, the theorem has assurance violations, the declared strength is
 strength exceeds the derived one in the order `safety < partial_correctness <
 total_correctness`. Malformed inputs and reports without conclusion shapes exit 2.
 
+`check --diff SUMMARY` (repeatable) adds differential outcome evidence for each
+`example.function` root, classified by the shared [outcome taxonomy](outcome-taxonomy.md).
+Every declared strength asserts `no-panic`; `total_correctness` also asserts
+`guaranteed-return`. A goal is rejected when its root's evidence includes a capped search,
+a fuel-bounded no-result run, an unspecified (including no-clock timer) or unsupported
+outcome, or an observed failure the claim denies. Error returns never reject a goal. Evidence
+can only reject: an incomplete summary exits 2, and clean evidence adds nothing to the
+type-derived strength.
+
 ## Vacuity
 
 A diverging program cannot satisfy a `TotalTriple` goal: `TotalTriple` demands an explicit

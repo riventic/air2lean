@@ -60,8 +60,23 @@ Unreadable-input errors precede readable-file checks. `files` is sorted by path.
 
 Strict JSON failures are distinct from explicit exporter-unsupported and optimized
 instruction markers. Each readable file is inspected independently. All explicit
-unsupported markers are reported with **exported** IDs. Successful canonicalization
-produces full normalized functions; structural validation gates further inspection.
+unsupported markers are reported with **exported** IDs. Markers no longer stop the
+unit: canonicalization still runs (a failure there stays its own fatal error). When the composed normalizer
+rejects a canonical function (or markers are present), each canonical instruction is
+normalized on its own, with nested bodies flattened and inspected separately, so
+every independently rejected instruction receives its own `NORMALIZATION_FAILURE`
+with a **canonical** ID. Known compiler-state/runtime-effect tags get category
+`unsupported_semantics`; other rejections (unknown tags, missing operands or fields)
+keep the generic `validation_failure` boundary, without message scraping. Only an
+unsupported `zig_version` remains one unit-wide normalization error. Successfully
+normalized direct calls of such a blocked function still contribute dependency edges,
+so its own missing or blocked callees are reported with chains. No partial function,
+SSA value or replacement instruction is built, and the check stage is still skipped
+(`fully_normalized_function`). Malformed input stays fatal and separate: strict JSON,
+AIR decode, canonicalization (duplicate IDs, dangling references, scopes) and
+normalized structure failures each yield one error for that unit plus skipped-check
+diagnostics. Successful canonicalization and normalization
+produce full normalized functions; structural validation gates further inspection.
 The collector then checks independent parameter/return types, globals, escaping
 allocations, constant-pointer uses, instructions in each branch, and call sites.
 An instruction whose result type fails validation receives a skipped-prerequisite
@@ -88,7 +103,7 @@ chains. A blocked function can retain its declared identity without any fabricat
 partial function, SSA value or replacement instruction.
 
 This is an initial I05 collector, with explicit limits. Parsing, canonicalization,
-normalization, normalized structural validation, a single instruction/constant/
+a single instruction's normalization, normalized structural validation, a single instruction/constant/
 global/signature validator, shared-definition checks and profile comparison can
 still return their first error within that unit. Generic boundary codes use
 `validation_failure`; they do not pretend to distinguish every malformed operand
@@ -116,7 +131,17 @@ Root validation commands after building the translator:
 lake env lean tests/roadmap/diagnostics/Collector.lean
 python3 tests/roadmap/diagnostics/test_cli.py .lake/build/bin/air2lean \
   --baseline /path/to/validated-v05/air2lean
+python3 tests/roadmap/blocker-collection/test_cli.py .lake/build/bin/air2lean
 ```
+
+The blocker-collection driver gives one unit four independent unsupported constructs
+(an exporter marker, nested and top-level runtime-effect tags, an unknown tag) plus a
+missing callee, and requires all five in one run. A five-file selection with blocked,
+check-failing, missing-leaf and supported units must report every blocker and its
+call-graph chain from one invocation, both directly and through
+`scripts/project-diagnostics.py check`. Malformed JSON, duplicate instruction IDs and a
+structurally invalid unit each remain exactly one fatal unit error (`JSON_SYNTAX`,
+`CANONICAL_FAILURE`, `STRUCTURE_FAILURE`) without suppressing sibling units.
 
 The CLI driver checks independent malformed files and exporter markers, both
 branches, missing/blocked/duplicate dependencies and cycles, deterministic bytes,
@@ -161,7 +186,7 @@ The structured collector retains its existing codes and exported instruction anc
 while using the same reasons for explicit exporter markers.
 
 The inventory selects these classifications only for tags present in each compiler's enum.
-Its `normalizer-rejected-compiler-state-or-effect` disposition is source-only rejection
+Its `rejected-compiler-state-or-effect` disposition is source-only rejection
 policy, with no admitted semantics, proof or compiler-generated fixture qualification.
 Synthetic regressions cover diagnostic routing; compiler fixture qualification remains
 pending. The older `vector_store_elem` tag (0.14/0.15) is rejected as a vector-memory

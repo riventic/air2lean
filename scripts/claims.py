@@ -113,7 +113,7 @@ def classify(report: dict) -> dict:
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
 
-def check_goal(goal: dict, theorems: dict) -> dict:
+def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -> dict:
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'domain': goal['domain']}
     theorem = theorems.get(goal['theorem'])
@@ -130,26 +130,53 @@ def check_goal(goal: dict, theorems: dict) -> dict:
     if derived is None or ORDERED[derived] < ORDERED[declared]:
         return {**result, 'status': 'rejected',
                 'reason': f'declared {declared} exceeds type-derived {derived or "no claim"}'}
+    # Outcome evidence can only refuse an absence claim the declared strength asserts.
+    for claim in OUTCOMES.STRENGTH_ABSENCE[declared] if outcome_counts is not None else ():
+        verdict = OUTCOMES.absence(claim, outcome_counts)
+        if verdict['status'] == 'refused':
+            return {**result, 'status': 'rejected', 'reason': verdict['reason'], 'blocking': verdict['blocking']}
     return {**result, 'status': 'accepted', 'reason': None}
 
 
-def _project():
-    spec = importlib.util.spec_from_file_location('project', Path(__file__).resolve().parent / 'project.py')
+def _sibling(name):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
     spec.loader.exec_module(module)
     return module
 
 
-def check(manifest_path: Path, report: dict) -> dict:
-    manifest = _project().load_manifest(manifest_path)[0]
+OUTCOMES = _sibling('outcomes')
+
+
+def root_outcomes(project, root: dict, diffs) -> dict | None:
+    """Outcome counts for an `example.function` root from differential case evidence."""
+    if not diffs or '.' not in root['function']:
+        return None
+    rows = []
+    for path in diffs:
+        if project.diff_summary(path) is None:
+            raise ValueError(f'differential summary {path} is incomplete or unsupported')
+        rows += project.diff_cases(path, root['function'])[0]
+    return OUTCOMES.count(rows)
+
+
+def check(manifest_path: Path, report: dict, diffs=()) -> dict:
+    project = _sibling('project')
+    manifest = project.load_manifest(manifest_path)[0]
     theorems = {t['name']: t for t in classify(report)['theorems']}
-    roots = [{'id': root['id'], 'goals': [check_goal(goal, theorems) for goal in root['goals']]}
-             for root in manifest['roots']]
+    roots = []
+    for root in manifest['roots']:
+        counts = root_outcomes(project, root, diffs)
+        roots.append({'id': root['id'], 'outcomes': counts,
+                      'goals': [check_goal(goal, theorems, counts) for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
             'scope': 'Strength is derived from conclusion head constants only. Preconditions and '
-                     'domains are not checked: an unsatisfiable precondition remains vacuous.'}
+                     'domains are not checked: an unsatisfiable precondition remains vacuous. '
+                     'Differential outcomes (when supplied) can only refuse absence claims: capped, '
+                     'fuel-bounded, unsupported or unspecified/timer outcomes and observed failures '
+                     'reject a goal; error returns do not. outcomes is null for roots without evidence.'}
 
 
 def main(argv=None) -> int:
@@ -158,13 +185,15 @@ def main(argv=None) -> int:
     report_cmd = sub.add_parser('report', help='classify every audited theorem')
     check_cmd = sub.add_parser('check', help='reject manifest goals stronger than their theorem types')
     check_cmd.add_argument('manifest', type=Path)
+    check_cmd.add_argument('--diff', type=Path, action='append', default=[],
+                           help='diff-report summary JSON; its outcomes can only refuse absence claims')
     for cmd in (report_cmd, check_cmd):
         cmd.add_argument('--assurance', type=Path, required=True, help='scripts/assumptions.py report')
         cmd.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
     try:
         report = json.loads(args.assurance.read_text())
-        result = classify(report) if args.command == 'report' else check(args.manifest, report)
+        result = classify(report) if args.command == 'report' else check(args.manifest, report, args.diff)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'claims error: {error}', file=sys.stderr)
         return 2

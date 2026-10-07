@@ -75,25 +75,25 @@ From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). 
 
 Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source inventory: it records no compiler execution, proof checking or support qualification ([docs/coverage.md](coverage.md)).
 
-| Zig | AIR tags | `conditional-pipeline-review-required` | `normalizer-rejected-compiler-state-or-effect` | `normalizer-rejected-fast-math` | `normalizer-unclassified-or-unknown` | `source-pipeline-candidate-unqualified` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
+| Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.16.0 | 214 | 5 | 10 | 19 | 16 | 164 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.15.2 | 212 | 5 | 8 | 19 | 16 | 164 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.14.1 | 207 | 2 | 7 | 19 | 15 | 164 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.16.0 | 214 | 164 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.15.2 | 212 | 164 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.14.1 | 207 | 160 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 88 requirements, 6 complete, 63 partial, 8 open, 11 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 88 requirements, 9 complete, 60 partial, 8 open, 11 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T04, T06 | T02 | T03, T05 |
-| L: Language and representation | — | L01, L02, L03, L04, L05, L06, L07, L08, L09, L10, L11, L12, L14 | L13 | — |
+| L: Language and representation | L01 | L02, L03, L04, L05, L06, L07, L08, L09, L10, L11, L12, L14 | L13 | — |
 | C: Concurrency | — | C01, C03, C04, C06, C11, C14 | C02, C05, C07, C08, C09 | C10, C12, C13 |
 | M: Memory and allocation | — | M01, M02, M03, M04, M06 | — | M05 |
 | F: Floats | F01 | F04, F05, F06 | — | F02, F03 |
 | A: Inline assembly | — | A01, A03 | — | A02 |
-| E: External boundaries | — | E01, E02, E03, E04 | — | — |
+| E: External boundaries | E01, E04 | E02, E03 | — | — |
 | P: Proof support | — | P01, P02, P03, P04, P05, P07, P08 | P06 | — |
 | I: Integration and tooling | I09 | I01, I02, I03, I04, I05, I06, I07, I08 | — | — |
 | V: Validation and trust | V04, V05 | V03, V06 | — | V01, V02 |

@@ -39,6 +39,14 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(report["theorems"][0]["violations"], ["sorryAx"])
         self.assertEqual(report["violations"][0]["trust_class"], "sorry")
 
+    def test_violation_transfers_through_dependencies(self):
+        # Not an axiom, so collectAxioms cannot report it: only the dependency closure can.
+        raw = self.raw(["imported"], [self.node("imported", "theorem", ["hidden"], module="Other.Hidden"),
+                                    self.node("hidden", "definition", module="Other.Hidden", unsafe=True)])
+        report = audit.apply_policy(raw, self.policy)
+        self.assertEqual(report["theorems"][0]["violations"], ["hidden"])
+        self.assertFalse(report["theorems"][0]["allowed"])
+
     def test_new_axiom_and_unused_axiom_fail(self):
         raw = self.raw([], [self.node("newAxiom", "axiom")])
         self.assertEqual(audit.apply_policy(raw, self.policy)["status"], "fail")
@@ -137,6 +145,17 @@ class PolicyTests(unittest.TestCase):
         external = self.node("unusedExternal", "definition", extern=[{
             "kind": "inline", "backend": "all", "target": "wrong_computation"}])
         self.assertEqual(audit.apply_policy(self.raw([], [external]), self.policy)["status"], "fail")
+
+    def test_statement_dependencies_pass_through_and_are_checked(self):
+        root = self.node("root", "definition")
+        raw = self.raw(["root", "True"], [root, self.node("True", "inductive", module="Init.Prelude")])
+        raw["theorems"][0].update(statement_dependencies=["True", "root"], conclusion_dependencies=["True"])
+        theorem = audit.apply_policy(raw, self.policy)["theorems"][0]
+        self.assertEqual((theorem["statement_dependencies"], theorem["conclusion_dependencies"]), (["True", "root"], ["True"]))
+        for statement, conclusion in ((["True"], ["root"]), (["unrelated"], []), (["True"], None), ("root", "root")):
+            raw["theorems"][0].update(statement_dependencies=statement, conclusion_dependencies=conclusion)
+            with self.assertRaisesRegex(ValueError, "statement dependencies"):
+                audit.apply_policy(raw, self.policy)
 
     def test_incomplete_graph_and_empty_scope_fail_closed(self):
         with self.assertRaises(ValueError):

@@ -5,7 +5,7 @@ A std function that an example calls is one of these:
 | Kind | How | Where |
 |---|---|---|
 | Translated | Its AIR is written and translated like user code, so the diff test checks it too. | its name prefix in `examples/<ex>/filter` |
-| Modelled | Not translated. A call to it is a call to a Lean model. | `Air2Lean/Memory.lean` (`allocFn?`), `ZigLean/Mem/Alloc.lean` |
+| Modelled | Not translated. A call to it is a call to a Lean model. | `Air2Lean/StdModels.lean` (`stdModels`), `ZigLean/Mem/Alloc.lean` |
 | Panic handler | A noreturn call: a `Zig.Error` constructor. | `panicErrorFor?` (`docs/generated-code.md` §Panics) |
 
 `Check.lean` rejects a call to a function that has no AIR file and no model.
@@ -79,7 +79,7 @@ profiles and final composed CI remain unqualified.
 
 ## Thread model
 
-`std.Thread.spawn`/`.join` are modelled, like the allocator. A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`) is a concurrent function: it returns `Zig.ConcM Tgt α` (`ZigLean/Conc/`, `docs/generated-code.md` §Atomics and threads). Its run is a tree: it ends with a result, or it stops at a sync op and goes on from the scheduler's response. The scheduler (`Zig.Sched.run dispatch fuel o main m0`, `ZigLean/Conc/Sched.lean`) runs all threads; they take turns only at sync ops. Plain code between two sync ops runs without a stop: a data race there is `.illegal`, so its order cannot change a result. `Thread.yield` and audited `std.atomic.spinLoopHint` instructions are scheduler opportunities with no fairness or progress guarantee; yield can return `error.SystemCannotYield` (`docs/progress-hints.md`). `Thread.detach` and `Io.futexWaitTimeout` are outside the subset and rejected at translation time (`Air2Lean/Memory.lean`'s `rejectedThreadFn?`), with the reason in the error message.
+`std.Thread.spawn`/`.join` are modelled, like the allocator. A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`) is a concurrent function: it returns `Zig.ConcM Tgt α` (`ZigLean/Conc/`, `docs/generated-code.md` §Atomics and threads). Its run is a tree: it ends with a result, or it stops at a sync op and goes on from the scheduler's response. The scheduler (`Zig.Sched.run dispatch fuel o main m0`, `ZigLean/Conc/Sched.lean`) runs all threads; they take turns only at sync ops. Plain code between two sync ops runs without a stop: a data race there is `.illegal`, so its order cannot change a result. `Thread.yield` and audited `std.atomic.spinLoopHint` instructions are scheduler opportunities with no fairness or progress guarantee; yield can return `error.SystemCannotYield` (`docs/progress-hints.md`). `Thread.detach` and `Io.futexWaitTimeout` are outside the subset and rejected at translation time (`Air2Lean/StdModels.lean`'s `stdModels`), with the reason in the error message.
 
 | Rule | |
 |---|---|

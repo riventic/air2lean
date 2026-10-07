@@ -396,8 +396,10 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 
 - Kind: environment.
 - Statement: A registered external call runs a project-supplied `Zig.MemM` model with a typed
-  `Zig.External.Contract` (termination, errors, effects). A `proved` entry is a theorem
-  obligation. Correspondence to the real foreign function is not claimed.
+  `Zig.External.Contract` (termination, errors, effects, optional parameter footprint via
+  `Contract.Respects`). A `proved` entry is a theorem obligation, and it is reported as verified
+  only when `scripts/external-contracts.py --check` shows standard axioms alone.
+  Correspondence to the real foreign function is not claimed.
 - Derived from: `ZigLean.External`.
 - Sources: [external-models.md](external-models.md).
 
@@ -405,7 +407,8 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 ### EXT-02 — Assumed contracts and project axioms
 
 - Kind: trusted.
-- Statement: A `trust: "assumed"` binding emits a named axiom for its obligation. Any
+- Statement: A `trust: "assumed"` binding emits a named axiom for its obligation and is listed
+  under `assumptions` by `scripts/external-contracts.py`. Any
   project `axiom` reached is a trusted premise and also fails the assurance gate unless it is
   allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
