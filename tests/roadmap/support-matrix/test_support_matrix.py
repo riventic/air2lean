@@ -71,7 +71,7 @@ class Committed(Scratch):
         doc = (ROOT/'docs/support-matrix.md').read_text()
         self.assertIn('| `threadsync` | — | yes | — |', doc)
         self.assertIn('| `asm` (x86_64 only) | yes | yes | — |', doc)
-        self.assertIn('| D: Documentation | D01 | D02, D03, D04 | — | — |', doc)
+        self.assertIn('| D: Documentation | D01, D02 | D03, D04 | — | — |', doc)
         # No complete requirement is listed as open work, and every register ID appears once.
         region = doc.split(MATRIX['begin']('matrix'))[1].split(MATRIX['end']('matrix'))[0]
         table = region.split('## Requirement register')[1]
@@ -94,8 +94,8 @@ class Stale(Scratch):
         self.assertIn('| `vectors` | yes | — | — |', (self.root/'docs/support-matrix.md').read_text())
 
     def test_register_status_change_is_stale(self):
-        self.edit('ROADMAP.md', '| D02 | Verify and close the current theorem inventory | partial |',
-                  '| D02 | Verify and close the current theorem inventory | complete |')
+        self.edit('ROADMAP.md', '| D03 | Assumption and contract reference | partial |',
+                  '| D03 | Assumption and contract reference | complete |')
         self.assertProblem('docs/support-matrix.md: generated region is stale')
         reg = MATRIX['register'](self.root)
         complete = sum(row['status'] == 'complete' for row in reg)

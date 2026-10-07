@@ -2639,6 +2639,7 @@
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
+          "ZigLean/Range.lean",
           "ZigLean/Union.lean",
           "ZigLean/Vec.lean"
         ]
@@ -2717,6 +2718,7 @@
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
+          "ZigLean/Range.lean",
           "ZigLean/Union.lean",
           "ZigLean/Vec.lean"
         ]
@@ -2780,6 +2782,7 @@
         "paths": [
           "ZigLean/Bit.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean"
         ]
@@ -2836,6 +2839,7 @@
         "paths": [
           "ZigLean/Bit.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean"
         ]
@@ -2890,6 +2894,7 @@
         "paths": [
           "ZigLean/Bit.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean"
         ]
@@ -2944,6 +2949,7 @@
         "paths": [
           "ZigLean/Bit.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean"
         ]
@@ -2998,6 +3004,7 @@
         "paths": [
           "ZigLean/Bit.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean"
         ]
@@ -3064,6 +3071,7 @@
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
+          "ZigLean/Range.lean",
           "ZigLean/Union.lean",
           "ZigLean/Vec.lean"
         ]
@@ -3145,6 +3153,7 @@
           "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Libm.lean",
@@ -3165,6 +3174,7 @@
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Automation.lean",
           "ZigLean/Sep/Loop.lean",
+          "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
@@ -3512,11 +3522,13 @@
           "ZigLean/Conc/Sched.lean",
           "ZigLean/Conc/Total.lean",
           "ZigLean/Conc/WeakCas.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Loop.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Loop.lean",
+          "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VC/Result.lean"
@@ -3552,6 +3564,7 @@
           "Proofs/Basic/Twt.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Errors/Proofs.lean",
+          "Proofs/Floats/Dot.lean",
           "Proofs/Floats/Gen.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Iogroup/Counter.lean",
@@ -3618,7 +3631,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Logic.lean",
-          "ZigLean/Sep/Loop.lean"
+          "ZigLean/Sep/Loop.lean",
+          "ZigLean/Sep/LoopTemplate.lean"
         ]
       },
       "emission": {
@@ -5110,6 +5124,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Float/Round.lean",
@@ -5396,6 +5411,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Float/Round.lean",
@@ -6481,6 +6497,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
@@ -6549,6 +6566,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
@@ -6706,7 +6724,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/LoopTemplate.lean"
+        ]
       },
       "emission": {
         "status": "erased-dispatch-arm",
@@ -8628,6 +8648,7 @@
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Lemmas.lean",
+          "ZigLean/Range.lean",
           "ZigLean/VC/Result.lean"
         ]
       },
@@ -8708,6 +8729,7 @@
           "ZigLean/Basic.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Lemmas.lean",
+          "ZigLean/Range.lean",
           "ZigLean/VC/Result.lean"
         ]
       },
@@ -9914,6 +9936,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Floats/Dot.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Lists/Append.lean",
           "Proofs/Slices/Proofs.lean",
@@ -13372,14 +13395,15 @@
       "Air2Lean/Air/Op.lean": "4858f1b08bc81540d3ab9dd65d844f2be8d301759fe9c774531f626373889576",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "687d2d9d5501971672ee4551d961605c49438db601de3f2bd0676cf055f07862",
+      "Air2Lean/Check.lean": "a2d508d8703446706e7d9d8ce31cd65990da563ab7be2142e939b29846963010",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
-      "Air2Lean/Emit.lean": "3a34bfcedd9109868b7a38ece7c297024cef74c99eefaf8512ed0af09f746ea1",
-      "Air2Lean/Main.lean": "0f07642fcb4e1f56fa48d85c3651e7ee1a855711f61ee9b4c57bbcf1be0c8441",
+      "Air2Lean/Emit.lean": "6d219af7ec7a1c7dc64c1a48c5144f61e1a371cb1a01ae09eefdb9f0a0727a6d",
+      "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
       "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
       "Air2Lean/ModelRegistry.lean": "62ee3c124d8e54023c0ac9e270d07a987475bef40feee7ce9d22e7a826a999c2",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
+      "Air2Lean/SourceMap.lean": "a71d35b7edcbae8c21c8d2a6061be75df48efd974a126fd94f4e1505f3bef9a9",
       "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
       "Air2Lean/TimedCheck.lean": "3c314ba61f3ecd87c57d3d8ed6576ea5e32f371abba606e40b11c30df218cccf",
       "Air2Lean/TimedEmit.lean": "4cf4239973fa4f8316b5417365e574717d6e98355ec340a1ac3e3326f51a301f",
@@ -13414,6 +13438,7 @@
       "ZigLean/Conc.lean": "ed1c36f3fe531da0375bbcc01bdd2ab11e7a54c24dd8ca2da259e1083c27cc39",
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
+      "ZigLean/Float/Error.lean": "d185a79a145a33bb3ccfd304544258d296b9e36e55010c4c5d347487e6deccb1",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
       "ZigLean/Float/Libm.lean": "ecc42f5218b1ca552f45a26d65b614f03e2b91a52cc47ed8cf01133530a2c452",
@@ -13433,6 +13458,7 @@
       "ZigLean/Mem.lean": "984464356198c9e326876be51ad994e401290d0fe92decdf93ba24529abbc6ad",
       "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
       "ZigLean/Permutation.lean": "46ea25243d11f31b66fcecc984a21b0843fe1366276d7abf69840107567c27e9",
+      "ZigLean/Range.lean": "5e186493f18715774e89e0794cadf759cf24af3b0dc854b578931ffd8db9602a",
       "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
       "ZigLean/Sep/Array/Reassemble.lean": "f98c475227121c4bd51111005eb8b9dacc061100a91817be373fa0e57be7fc36",
       "ZigLean/Sep/Array.lean": "b8fd8b72407b1486e8bbe841591c03a6decd258e0de3ac7b2ddd0d2967e936fd",
@@ -13442,6 +13468,7 @@
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
+      "ZigLean/Sep/LoopTemplate.lean": "a52975a351891ccb223e0f4c19392c1f03bc6d96d1614f9eb84912ff414e980b",
       "ZigLean/Sep/Remap.lean": "1da97587785b5a7273f01769642945deda6ee2b0f866d68bf7be8080469d9e46",
       "ZigLean/Sep/Sentinel.lean": "1a228a05437ea2f34d66cef7f44146a51f8e9f164ceeb6eb5107713a0c484e84",
       "ZigLean/Sep/Total.lean": "6959fbadcf627ba55a1f1bddf4989afd93867e7b6cd3cf795b0db266e6f3dc4e",
@@ -13476,6 +13503,7 @@
       "Proofs/Floatconv/Proofs.lean": "91e3d7e423ff603c0669683961ce20e4645079ed6a004d37d569469afb77ce97",
       "Proofs/Floatops/Gen.lean": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b",
       "Proofs/Floatops/Proofs.lean": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
+      "Proofs/Floats/Dot.lean": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
       "Proofs/Floats/Gen.lean": "8618fa7b0d2a78273a3129481e4ff4b9d853424ba380d071df58a79ab4ca7716",
       "Proofs/Floats/Proofs.lean": "9045ba75ef9a45663047fb63052315c15fca073239ade371c876b419bb290dfd",
       "Proofs/Iogroup/Counter.lean": "35d06213a4f2e21c26da998890a4756846e0a92222184caa84d02f34f551bb78",
@@ -13500,10 +13528,10 @@
       "Proofs/Sync/Handoff.lean": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
       "Proofs/Sync/Lock.lean": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
       "Proofs/Sync/Mutex.lean": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
-      "Proofs/Sync/Proofs.lean": "d4b6ba9592309de49b773a9f93d71338837e69472240ade363df6614cf1c75a9",
+      "Proofs/Sync/Proofs.lean": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
       "Proofs/Sync/RwLock.lean": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
-      "Proofs/Sync/RwLockContract.lean": "800a7aec6356a352e3697cce29a8507d0ed5f7cec3e5499e1e58abdacc58e075",
-      "Proofs/Sync/RwLockSnapshotPair.lean": "b06ca325e11aaf5340f31f11384dc7706626f23c2f1a64d3a8448592185d7213",
+      "Proofs/Sync/RwLockContract.lean": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
+      "Proofs/Sync/RwLockSnapshotPair.lean": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
       "Proofs/Sync/SemCounter.lean": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
       "Proofs/Sync/Semaphore.lean": "c886f8c22c29e2ef80ba7558eda43c433107ecf4a417f1a58eb918bcf58c935d",
       "Proofs/Threads/Counter.lean": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
@@ -13907,6 +13935,8 @@
       "tests/golden/0.16.0/slices/air/slices.subZ.json": "484c2adfa49ac84b47c10f5b33de6014bea4bfd518584c44b9feebe68eb6e123",
       "tests/golden/0.16.0/slices/air/slices.sumMid.json": "c6fb0dfd4c18484f2fb29358ccff1540ec10e67647404359eaafe2c66a358135",
       "tests/golden/0.16.0/slices/air/slices.sumZ.json": "af0692a9b681c27d72aae12084d10f8061e50674187f7d1fb5fd8c2553855923",
+      "tests/golden/0.16.0/sync/air-darwin/sync.rwLockRead.json": "789369262cc68fe86669537e80bc9b6082708d13ea24628abaa3e77ad7e25bec",
+      "tests/golden/0.16.0/sync/air-darwin/sync.rwLockSnapshotPair.json": "176ad019244d1e55974c812ba7ad63d0be0095b44c2223d8c6355e32ffdc1d7e",
       "tests/golden/0.16.0/sync/air-linux/sync.handoff.json": "8437112e35773b38b4790103fbe5bf42404ddb78371d59fd07201120fa5d2582",
       "tests/golden/0.16.0/sync/air-linux/sync.mutexCounter.json": "fa31145994cbefeb749133e1d13ca94d298a00d145674a096a8087b78f58e4f8",
       "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "ea3ddd9840a12738de5f094cc6e9d457cd3b2fefe8a5ec448e778f0dbee6e326",

@@ -755,7 +755,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.ptr "one" _ c) := cx.types[pty]? then
         if let some (.vector ..) := cx.types[c]? then
           cx.itemAccess line p
-    cx.knownSize line (ptrChild cx.types ty).get!
+    let some child := ptrChild cx.types ty
+      | cx.fail line "pointer arithmetic result is not a pointer"
+    cx.knownSize line child
     pure line
   | .memcpy dst src =>
     cx.rejectNullableProjection line dst
@@ -771,8 +773,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .slice p _ => cx.rejectNullableProjection line p; pure line
   | .arrayToSlice p =>
     cx.rejectNullableProjection line p
-    let _ ← cx.memPtrTy line p
-    pure line
+    let pty ← cx.memPtrTy line p
+    -- The emitted slice takes its length from the pointee (`FCtx.itemsOf`).
+    match (ptrChild cx.types pty).bind (cx.types[·]?) with
+    | some (.array ..) | some (.vector ..) => pure line
+    | _ => cx.fail line "`array_to_slice` operand is not a pointer to an array"
   | .call callee _ =>
     match callee with
     | .func name true .. =>
@@ -1610,9 +1615,14 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
     unless t < f.types.size do throw s!"{f.name}: signature has unknown type id {t}"
   let insts := index.insts
   let mut ids : Std.HashSet InstId := {}
+  -- Debug instructions bind no value: the emitter has no name for a reference to one.
+  let mut debugIds : Std.HashSet InstId := {}
   for i in insts do
     if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
     ids := ids.insert i.id
+    match i.op with
+    | .dbg .. | .line _ => debugIds := debugIds.insert i.id
+    | _ => pure ()
     unless i.ty < f.types.size do throw s!"{f.name}: inst {i.id}: unknown type id {i.ty}"
   let value (root : Val) (checkForm : Bool := true) : Except String Unit := do
     if let some t := root.constTy? then
@@ -1626,7 +1636,10 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
       if let some t := v.constTy? then
         unless t < f.types.size do throw s!"{f.name}: constant has unknown type id {t}"
       match v with
-      | .inst id => unless ids.contains id do throw s!"{f.name}: unknown instruction ref {id}"
+      | .inst id =>
+        unless ids.contains id do throw s!"{f.name}: unknown instruction ref {id}"
+        if debugIds.contains id then
+          throw s!"{f.name}: instruction ref {id} names a debug instruction, which has no value"
       | .ptrConst _ g _ =>
         unless g < f.globals.size do throw s!"{f.name}: pointer has unknown global id {g}"
       | .agg _ vs => todo := (vs.toList.map fun v => (v, depth + 1)) ++ todo

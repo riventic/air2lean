@@ -108,3 +108,32 @@ The probe checks the `sqrt` rows on the reference target (`tests/floatprobe/expe
 Zig gives no accuracy for `@sin` etc. The model declares each one as an `opaque` function per format: a proof cannot compute it or assume a property of it.
 
 The differential test runs the real functions: `tests/diff/libm/` builds a static library that calls the compiler_rt functions (`sin`, `sinf`, `__sinh`, `__sinx`, `sinq`, …) by their Zig names, and the Lean side calls it through `@[extern]`. A plain `@sin` in that library would be a call to the symbol `sin`, which the linker of the Lean executable can bind to the system libm. On x86_64-linux the harness links no libc, so its `@sin` is compiler_rt's too. compiler_rt computes f80 and f128 transcendental functions in f64.
+
+## Numerical bounds
+
+`ZigLean/Float/Error.lean` states error and range bounds on the model's exact `Rat` values
+(`Float.toRat?`). With `u = 2^-prec`, `η = 2^(emin − prec)` and the overflow bound `2^emax`
+(`FloatFmt.unitRoundoff`, `underflowError`, `overflowBound`; f64: `2^-53`, `2^-1075`, `2^1023`):
+
+| Theorem | Statement |
+|---|---|
+| `roundRat_error` | `|q| ≤ A < 2^emax`: rounding `q` gives a finite `r` with `|r − q| ≤ u·A + η` |
+| `add_error`, `mul_error` | finite operands, exact result of magnitude `≤ A < 2^emax`: the result is finite and within `u·A + η` |
+| `sumLeft_error` | the left fold `((init + t 0) + t 1) + …` (`Float.sumLeft`) with caller-supplied per-step magnitude and error bounds: every partial sum is finite and the result is within the error bound of the exact sum |
+| `sumLeft_error_uniform` | closed form for a zero start and terms `|t k| ≤ T`: with `c = T + η`, `ρ = 1 + u`, finite when `n·c·ρⁿ < 2^emax`, magnitude `≤ n·c·ρⁿ`, error `≤ n·(u·n·c·ρⁿ + η)` |
+| `sumLeft_isNaN` | one NaN term makes the fold NaN |
+| `lt_of_error`, `gt_of_error` | a comparison against a computed value equals the exact comparison when the exact value clears the threshold by more than the error bound |
+
+The rounding-only lemmas (`roundRat_error`, `roundRat_isSome`) are labeled `abstract-spec`, the
+lemmas about `+`, `*` and comparisons `ieee` (`assurance/float-semantics.json`). The overflow
+bound is conservative: magnitudes below `(2 − 2^-prec)·2^emax` also stay finite. The fold
+lemmas follow the evaluation order step by step and never reassociate a float sum. A
+precondition that fails can give infinity (overflow) or NaN (`inf − inf`); the theorems do not
+hold without it.
+
+`Proofs/Floats/Dot.lean` applies them to the translated `dot` (`examples/floats`): for `n`
+elements of magnitude at most `B` and `n·c·ρⁿ < 2^1023` (`c = B²(1 + u) + 2η`), `dot_error`
+proves that the result is finite, has magnitude at most `n·c·ρⁿ` and is within
+`n·(u·n·c·ρⁿ + η) + n·(u·B² + η)` of the exact dot product. `dot_isNaN` proves that a NaN
+element gives a NaN result, and `dot_pos_of_gap` proves that the result compares above `+0`
+when the exact value exceeds the error bound.

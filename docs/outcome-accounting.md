@@ -56,6 +56,8 @@ Input indices start at one; execution indices start at zero. Enumeration follows
 
 Summary coverage counters for observed matching and bounded enumeration, capped-scope accounting and the reduction statement are described in [schedule-caps.md](schedule-caps.md).
 
+Reproducible failure bundles, and the counterexample/unsolved distinction, are described in [counterexamples.md](counterexamples.md).
+
 Replay requires the complete recorded choice trace, including zero choices, and checks the returned typed kind, wire result and option counts. Missing, extra or out-of-range choices are rejected. An observed matching witness's shorter stored prefix is extended only by the original oracle's default zero choices, to its recorded option count. Capped/unmatched observations and truncated enumeration traces cannot serve as replay witnesses. The Python CLI binds current raw input bytes and runner/runtime source fingerprints before and after execution; stale inputs, source changes or mismatched replay results fail without publishing a new receipt. Receipts always record `qualified: false`. Rebuild the executable after changing generated modules or archives: these source fingerprints do not attest to its build or compiler.
 
 Summaries publish `exact_matches` separately from host differences, illegal/unspecified exclusions and caps. Selection records list each skipped function and `skipped_functions` counts them outside observed `case_count`. `proof_applicability` is explicitly `not_evaluated_by_differential_runner`; `proof_exclusions` lists each selected example's proof source scope as unevaluated. A source fingerprint, replay or exact differential match cannot establish theorem applicability. The separate kernel proof gates remain necessary.

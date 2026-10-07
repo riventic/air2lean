@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "zig_version": "0.15.2",
+ "name": "",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "ptr_sub",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 0
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1
+  }
+ ]
+}

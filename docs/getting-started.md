@@ -78,6 +78,8 @@ lake env lean tutorials/first-proof/Main.lean
 
 As a useful failure check, temporarily change the conclusion to `pure 1` while leaving the proof unchanged. Lean should reject it. Restore `pure 0` and check again. You have changed a property and seen the checker distinguish a true claim from a false one, without rebuilding a compiler.
 
+The solved exercise is [`tutorials/first-proof/Solution.lean`](../tutorials/first-proof/Solution.lean), and the `pure 1` variant is [`Negative.lean`](../tutorials/first-proof/Negative.lean).
+
 ## What you have established
 
 This proof covers the generated Lean definition for all inputs satisfying its assumption, not just a set of test cases. Relating it to compiled Zig also trusts Zig's semantic analysis, the AIR export patch, air2lean's translator, and the handwritten runtime model. Differential tests compare the two implementations on sampled inputs; they support that correspondence but do not prove the translator correct.
@@ -143,8 +145,35 @@ If translation reports no AIR files, check that the function is exported or refe
 
 ## Go further
 
+- [More tutorials](#more-tutorials) on mutable arrays, generic containers, external contracts, allocation failure and concurrent clients, each with an exercise, a negative control and its assumptions.
 - [Generated code and naming](generated-code.md): return values, memory, loops, and generated names.
 - [Memory and concurrency proofs](proofs.md): invariants, separation logic, and proofs over schedules.
 - [Supported subset](../PLAN.md#subset) and [std models](std-models.md): supported constructs and modeled library calls.
 - [Float semantics](floats.md): supported targets and version-specific behavior.
 - [Contributor checks](../README.md#before-a-pr): the full translation, differential-test, proof, regression, and mutation workflow. These are broader than the first proof above.
+
+## More tutorials
+
+Each directory under `tutorials/` has a README with the steps, an exercise (solved in
+`Solution.lean`), a negative control Lean must reject (`Negative.lean`) and an **Assumptions and
+remaining obligations** section listing the [premise IDs](premises.md) that
+[`docs/premise-index.md`](premise-index.md) derives for its `Main.lean`.
+
+| Tutorial | Proves | Builds |
+|---|---|---|
+| [first-proof](../tutorials/first-proof/README.md) | pure arithmetic: an on-time job has zero tardiness | `Proofs.Basic.Proofs` |
+| [mutable-arrays](../tutorials/mutable-arrays/README.md) | reversing a `[]u32` twice restores it | `Proofs.Slices.Sep` |
+| [generic-containers](../tutorials/generic-containers/README.md) | `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` | `Proofs.Lists.Append` |
+| [external-contracts](../tutorials/external-contracts/README.md) | a model, its contract and a client of the contract | `ZigLean.External` |
+| [allocation-failure](../tutorials/allocation-failure/README.md) | a failed `try a.create(Node)` leaves the heap unchanged | `Proofs.Lists.Sep` |
+| [concurrent-clients](../tutorials/concurrent-clients/README.md) | two threads under an `Io.Mutex` always return 4 | `Proofs.Sync.Mutex` |
+| [cross-target](../tutorials/cross-target/README.md) | documentation only: what is qualified per target profile | - |
+
+Check all of them (after building the listed modules) with:
+
+```sh
+lake build $(python3 scripts/tutorials.py modules)
+python3 scripts/tutorials.py check
+```
+
+`scripts/clean-env.sh` runs the same two commands in a fresh container.

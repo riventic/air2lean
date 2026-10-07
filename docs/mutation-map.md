@@ -53,8 +53,12 @@ and schema selection (`scripts/normalize-generated.py`), float-semantics selecti
 (`scripts/float-semantics.py`), release host metadata (`scripts/compat.py`), transfer of trust
 violations through theorem dependencies (`scripts/assumptions.py`), the ROADMAP header check
 (`scripts/support-matrix.py`), unclassified and stale-override inventory rows and rejected std
-model table rows (`scripts/coverage.py`), and non-standard evidence axioms in the external
-contract report (`scripts/external-contracts.py`). Each one replaces one exact anchor, compiles the result under the
+model table rows (`scripts/coverage.py`), non-standard evidence axioms in the external
+contract report (`scripts/external-contracts.py`), stale check results and over-broad schedule
+claims in the theorem inventory (`scripts/theorem-inventory.py`), probe profiles of another
+optimize mode (`scripts/build-modes.py`), automation limits classified as counterexamples
+(`scripts/counterexample.py`) and evidence from a CI job on another host
+(`scripts/target-matrix.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.

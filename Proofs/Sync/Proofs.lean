@@ -61,7 +61,7 @@ theorem wait_other_value :
 
 /-! ## Restricted snapshot race boundary
 
-The actual generated-client WP/result/safety candidates are imported above. Finite
+The actual generated-client WP/result/safety theorems are imported above. Finite
 looped client/lifetime/frame assertions execute in `tests/roadmap/rwlock-contracts/Runtime.lean`; the direct
 memory footprint negative below remains a kernel computation.
 -/

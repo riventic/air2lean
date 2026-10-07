@@ -76,9 +76,35 @@
         {
           "path": "tests/roadmap/global-payload-pointers/test_profiles.py",
           "anchor": "def test_llvm_request_rejected"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_profile_mode_mismatch"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_profile_backend_mismatch"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_qualified_without_evidence"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_fast_math_must_be_excluded"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_shipping_flags_drift"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "build-mode-profile-mode-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ]
     },
     "L01": {
       "categories": [],
@@ -852,15 +878,58 @@
       "mutants": []
     },
     "A03": {
-      "categories": [],
-      "negative_tests": [],
+      "categories": [
+        "operand-order",
+        "layout",
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/asm-wrappers/test_harness.py",
+          "anchor": "def test_rejects_unbound_or_reshaped_opaques"
+        },
+        {
+          "path": "tests/roadmap/asm-wrappers/test_harness.py",
+          "anchor": "def test_mutant_needs_named_wrapper_mismatch"
+        },
+        {
+          "path": "tests/roadmap/asm-wrappers/test_harness.py",
+          "anchor": "def test_detects_leaks"
+        }
+      ],
       "mutants": [
         {
           "name": "i",
           "path": "scripts/mutate.sh",
           "category": "other"
+        },
+        {
+          "name": "operand_order",
+          "path": "tests/roadmap/asm-wrappers/harness.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "result_placement",
+          "path": "tests/roadmap/asm-wrappers/harness.py",
+          "category": "layout"
+        },
+        {
+          "name": "single_result_placement",
+          "path": "tests/roadmap/asm-wrappers/harness.py",
+          "category": "layout"
+        },
+        {
+          "name": "store_dropped",
+          "path": "tests/roadmap/asm-wrappers/harness.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "store_misplaced",
+          "path": "tests/roadmap/asm-wrappers/harness.py",
+          "category": "layout"
         }
-      ]
+      ],
+      "note": "The five wrapper mutants run in tests/roadmap/asm-wrappers/harness.py (Lean, heavy job): each must elaborate and exit 1 with a MISMATCH wrapper line. test_harness.py checks the mutant shapes offline."
     },
     "E01": {
       "categories": [
@@ -940,7 +1009,16 @@
     },
     "P03": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/loop-tactics/Template.lean",
+          "anchor": "fail_if_success loop_template inv post"
+        },
+        {
+          "path": "tests/roadmap/loop-tactics/Template.lean",
+          "anchor": "fail_if_success zig_range"
+        }
+      ],
       "mutants": []
     },
     "P04": {
@@ -965,13 +1043,49 @@
     },
     "P07": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/stable-generation/test_fingerprints.py",
+          "anchor": "raise AssertionError('malformed sidecar accepted')"
+        },
+        {
+          "path": "tests/roadmap/stable-generation/test_cli.py",
+          "anchor": "--source-map-json changed generated Lean"
+        }
+      ],
       "mutants": []
     },
     "P08": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/counterexamples/test_counterexample.py",
+          "anchor": "def test_unreplayed_failure_is_only_a_candidate"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_counterexample.py",
+          "anchor": "def test_search_timeout_is_unsolved"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_counterexample.py",
+          "anchor": "def test_prefix_capped_failure_cannot_be_replayed"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_counterexample.py",
+          "anchor": "def test_verdict_table_never_calls_an_automation_limit_a_bug"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_counterexample.py",
+          "anchor": "def test_capped_case_is_unsolved_and_stale_case_rejected"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "counterexample-automation-limit-is-bug",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I01": {
       "categories": [],
@@ -1134,7 +1248,24 @@
     },
     "Q01": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/fuzz/regressions/seed-582/case.json",
+          "anchor": "Check.lean rejects operand references to debug instructions"
+        },
+        {
+          "path": "tests/roadmap/fuzz/regressions/seed-6199/case.json",
+          "anchor": "Check.lean rejects pointer arithmetic whose result type is not a pointer"
+        },
+        {
+          "path": "tests/roadmap/fuzz/regressions/seed-6547/case.json",
+          "anchor": "Check.lean rejects array_to_slice of a pointer whose pointee is not an array"
+        },
+        {
+          "path": "tests/roadmap/fuzz/test_fuzz.py",
+          "anchor": "def test_typecheck_rejects_invalid_programs"
+        }
+      ],
       "mutants": []
     },
     "Q02": {
@@ -1179,8 +1310,31 @@
     },
     "Q05": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/target-matrix/test_target_matrix.py",
+          "anchor": "def test_linux_job_compiling_the_darwin_golden_cannot_back_a_darwin_path"
+        },
+        {
+          "path": "tests/roadmap/target-matrix/test_target_matrix.py",
+          "anchor": "def test_restricted_job_without_diff_is_not_native_execution"
+        },
+        {
+          "path": "tests/roadmap/target-matrix/test_target_matrix.py",
+          "anchor": "def test_proof_check_cannot_be_waived"
+        },
+        {
+          "path": "tests/roadmap/target-matrix/test_target_matrix.py",
+          "anchor": "def test_declaring_wasm_without_a_native_host_fails"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "target-matrix-foreign-host-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "Q06": {
       "categories": [],
@@ -1220,8 +1374,48 @@
     },
     "D02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_edited_proof_or_translation_is_stale"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_failed_run_is_no_result"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_narrow_theorem_labeled_all_schedules_in_docs"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_doc_comment_claim_on_narrow_theorem"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_all_schedules_scope_needs_the_statement"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_unlisted_proved_example"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_record_rejects_a_foreign_log"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "theorem-inventory-stale-proof-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "theorem-inventory-narrow-claim-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "D03": {
       "categories": [],
@@ -1235,7 +1429,20 @@
     },
     "D04": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/tutorials/test_tutorials.py",
+          "anchor": "def test_missing_negative_control"
+        },
+        {
+          "path": "tests/roadmap/tutorials/test_tutorials.py",
+          "anchor": "def test_missing_expected_error"
+        },
+        {
+          "path": "tests/roadmap/tutorials/test_tutorials.py",
+          "anchor": "def test_negative_controls_are_excluded_from_premises"
+        }
+      ],
       "mutants": []
     }
   }
