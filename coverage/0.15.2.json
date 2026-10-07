@@ -16070,6 +16070,8 @@
       "tests/golden/0.16.0/slices/air/slices.subZ.json": "484c2adfa49ac84b47c10f5b33de6014bea4bfd518584c44b9feebe68eb6e123",
       "tests/golden/0.16.0/slices/air/slices.sumMid.json": "c6fb0dfd4c18484f2fb29358ccff1540ec10e67647404359eaafe2c66a358135",
       "tests/golden/0.16.0/slices/air/slices.sumZ.json": "af0692a9b681c27d72aae12084d10f8061e50674187f7d1fb5fd8c2553855923",
+      "tests/golden/0.16.0/sync/air-darwin/sync.rwLockRead.json": "789369262cc68fe86669537e80bc9b6082708d13ea24628abaa3e77ad7e25bec",
+      "tests/golden/0.16.0/sync/air-darwin/sync.rwLockSnapshotPair.json": "176ad019244d1e55974c812ba7ad63d0be0095b44c2223d8c6355e32ffdc1d7e",
       "tests/golden/0.16.0/sync/air-linux/sync.handoff.json": "8437112e35773b38b4790103fbe5bf42404ddb78371d59fd07201120fa5d2582",
       "tests/golden/0.16.0/sync/air-linux/sync.mutexCounter.json": "fa31145994cbefeb749133e1d13ca94d298a00d145674a096a8087b78f58e4f8",
       "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "ea3ddd9840a12738de5f094cc6e9d457cd3b2fefe8a5ec448e778f0dbee6e326",
