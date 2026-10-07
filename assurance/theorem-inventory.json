@@ -79,11 +79,46 @@
       "domain": "`Triple` for every allocator and linked list: no bytes owned after it (every node freed)"
     },
     {
+      "name": "Lists.push_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple emp` for every allocator, list head and value (one thread: `Mem.Seq`): `push` returns, with a new node or `error.OutOfMemory` and no bytes"
+    },
+    {
+      "name": "Lists.reverse_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple` for every linked list `list hd xs` (one thread: `Mem.Seq`): `reverse` returns the list in the other order"
+    },
+    {
+      "name": "Lists.freeAll_total",
+      "module": "Proofs.Lists.Sep",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`TotalTriple` for every allocator and linked list (one thread: `Mem.Seq`): `freeAll` returns and no bytes are owned after it (every node freed)"
+    },
+    {
       "name": "Lists.append_run",
       "module": "Proofs.Lists.Append",
       "example": "lists",
       "scope": "sequential",
       "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append`: for every allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
+    },
+    {
+      "name": "Lists.linkedAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, linked list `LList hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
+    },
+    {
+      "name": "Lists.arrayAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, `ArrayListUnmanaged(u32)` `AList p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
       "name": "cmp64_spec",
@@ -224,6 +259,13 @@
       "example": "iogroup",
       "scope": "all-schedules",
       "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_reclaim",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), a completed run ends with every task joined (`joinedAll 0`) and the three read shares of `io` returned before its free (`Reclaimed`); partial correctness, no termination or fairness"
     },
     {
       "name": "Threadsync.MutexCounter.mutexCounter_spec",

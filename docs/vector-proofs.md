@@ -75,7 +75,8 @@ in-memory bytes of 14 vectors (`u9`, `i9`, `u12`, `u4`, `u1`, `u24`, `u40`, `f80
 byte-lane controls), each before and after a store through a lane pointer `&v[i]`.
 `tests/roadmap/vector-layouts/Model.lean` prints the same lines from `Enc.encode` and requires
 them to be equal, line for line. Stock Zig 0.16.0 (`-fllvm`, aarch64-macos, Apple M1) gave
-`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast gave identical output, and stock Zig
+`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast gave identical output (layout evidence
+only; ReleaseFast stays unqualified, [build-modes.md](build-modes.md)), and stock Zig
 0.15.2 gave the same images. The probe also builds for baseline x86_64-linux-gnu and
 aarch64-linux-gnu; CI runs it on its x86_64-linux host and compares that output too. The Linux ABI
 probe (`tests/roadmap/abi-probes/probe.zig`, `scripts/abi-probe.py`) adds the layouts of
