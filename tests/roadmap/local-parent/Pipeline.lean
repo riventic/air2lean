@@ -119,7 +119,7 @@ def main (args : List String) : IO Unit := do
       ("exhaustive", .bool true), ("fields", .arr #[obj [("name", .str "x"), ("value", .str "0")],
         obj [("name", .str "y"), ("value", .str "1")]])])
   reject (bad (parent 20 11 0) union) matching
-  let bits := types.set! 5 (((types[5]!).setObjVal! "host_size" (num 4)).setObjVal! "bit_offset" (num 0))
+  let bits := types.set! 5 ((((types[5]!).setObjVal! "host_size" (num 4)).setObjVal! "bit_offset" (num 0)).setObjVal! "vector_index" .null)
   reject (bad (parent 20 11 0) bits) matching
   let mismatch := types.set! 5 ((types[5]!).setObjVal! "child" (num 1))
   reject (bad (parent 20 11 0) mismatch) matching

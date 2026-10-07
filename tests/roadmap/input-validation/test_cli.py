@@ -90,6 +90,88 @@ def global_(name, ty, value, const=False):
     return dict(name=name, ty=ty, const=const, threadlocal=False, extern=False, init=value)
 
 
+MISSING = object()
+LANE_ERROR = "a pointer to a vector lane (vector_index) is outside the subset"
+UNVERIFIED_ERROR = "is a bit-pointer without `vector_index` in the AIR file"
+
+
+def bit_pointer(child, host_size, bit_offset, vector_index=MISSING):
+    """`*align(2:bit_offset:host_size[:vector_index]) child`; MISSING: an older export."""
+    entry = dict(k="ptr", size="one", const=False, child=child, ptr_align=2, volatile=False,
+                 allowzero=False, sentinel=False, host_size=host_size, bit_offset=bit_offset,
+                 abi_size=8, abi_align=8)
+    if vector_index is not MISSING:
+        entry["vector_index"] = vector_index
+    return entry
+
+
+def diagnose(binary, document, marker):
+    with tempfile.TemporaryDirectory(prefix="air2lean-input-validation-diag-") as directory:
+        air = Path(directory) / "air"
+        air.mkdir()
+        (air / "0.json").write_text(json.dumps(document))
+        result = subprocess.run([str(binary), "--diagnostics-json", str(air)], text=True,
+                                capture_output=True, check=False, timeout=10)
+        assert result.returncode != 0, (marker, result.stdout)
+        assert marker in result.stdout, (marker, result.stdout, result.stderr)
+    return 1
+
+
+def lane_pointers(binary):
+    """`&v[2]` of a `@Vector(4, u9)` is `*align(2:0:4:2) u9`: lane count 4 as host_size. Without
+    `vector_index` it has the shape of a packed field pointer into a 4-byte host integer."""
+    checks = 0
+    u9 = integer(9)
+    u9["abi_size"] = u9["abi_align"] = 2
+
+    def param(vector_index):
+        return function("laneParam", [u9, bit_pointer(0, 4, 0, vector_index), NORETURN], [1], 0, [
+            inst(0, "arg", 1, param=0), inst(1, "load", 0, [dict(inst=0)]),
+            inst(2, "ret", 2, [dict(inst=1)])])
+
+    def loaded(vector_index):
+        holder = dict(k="ptr", size="one", const=True, child=1, ptr_align=8, volatile=False,
+                      allowzero=False, sentinel=False, host_size=0, abi_size=8, abi_align=8)
+        return function("laneLoaded", [u9, bit_pointer(0, 4, 0, vector_index), holder, NORETURN], [2], 0, [
+            inst(0, "arg", 2, param=0), inst(1, "load", 1, [dict(inst=0)]),
+            inst(2, "load", 0, [dict(inst=1)]), inst(3, "ret", 3, [dict(inst=2)])])
+
+    # (a) A lane pointer parameter: an explicit lane index (or 0.14.1/0.15.2 "runtime") is
+    # rejected as a lane pointer; an older export without the field is rejected as unverifiable.
+    for index in (2, 0, "runtime"):
+        checks += run(binary, [param(index)], LANE_ERROR)
+    checks += run(binary, [param(MISSING)], "laneParam: near line 0: a parameter " + UNVERIFIED_ERROR)
+    # (c) The same pointer loaded from memory: rejected at the load, whichever export.
+    checks += run(binary, [loaded(2)], LANE_ERROR)
+    checks += run(binary, [loaded(MISSING)], "a value not made by a packed `struct_field_ptr` " + UNVERIFIED_ERROR)
+    # The collecting `--diagnostics-json` checker applies the same rules.
+    for document, marker in ((param(MISSING), UNVERIFIED_ERROR), (loaded(MISSING), UNVERIFIED_ERROR),
+                             (loaded(2), LANE_ERROR)):
+        checks += diagnose(binary, document, marker)
+    # A malformed field is rejected, not read as absent.
+    for bad in ("2", -1, True):
+        checks += run(binary, [param(bad)], "vector_index must be null, a lane index or \"runtime\"")
+    # (b) A packed field pointer: `vector_index: null` (current exporter) is a packed field
+    # pointer, also as a parameter or loaded value.
+    checks += run(binary, [param(None)])
+    checks += run(binary, [loaded(None)])
+    # Exact retained packed-struct goldens (no `vector_index`): their bit-pointers are all made by
+    # `struct_field_ptr` of a packed struct, and stay accepted.
+    root = Path(__file__).resolve().parents[3]
+    for name in ("layout/air/layout.bumpPair.json", "0.15.2/layout/air/layout.bumpPair.json",
+                 "0.14.1/layout/air/layout.isOk.json", "sync/air/Io.Condition.signal.json"):
+        golden = json.loads((root / "tests/golden" / name).read_text())
+        assert any(t.get("host_size", 0) and "vector_index" not in t for t in golden["types"]), name
+        checks += run(binary, [golden])
+    # The same golden function: a bit-pointer it did not make by `struct_field_ptr` is rejected.
+    golden = json.loads((root / "tests/golden/layout/air/layout.bumpPair.json").read_text())
+    bit_types = [k for k, t in enumerate(golden["types"]) if t.get("host_size", 0)]
+    projection = next(i for i in golden["body"] if i["ty"] in bit_types)
+    projection["tag"], projection["args"] = "bitcast", [dict(inst=0)]
+    checks += run(binary, [golden], "a value not made by a packed `struct_field_ptr` " + UNVERIFIED_ERROR)
+    return checks
+
+
 def main():
     binary = Path(sys.argv[1]).resolve(strict=True)
     checks = run(binary, [CALLER, TARGET])
@@ -342,6 +424,7 @@ def main():
             packed["body"][0]["args"][0]["val"] = ".{ .x = " + value + " }"
             checks += run(binary, [packed],
                           f"packed: packed field x value {value} does not fit its integer type")
+    checks += lane_pointers(binary)
     mutate = copy.deepcopy(TARGET)
     mutate["types"][1]["bits"] = 65536
     checks += run(binary, [mutate], "65535-bit limit")

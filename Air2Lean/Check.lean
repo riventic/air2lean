@@ -137,6 +137,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
+    if l.isLanePtr then
+      throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside the subset"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -398,6 +400,31 @@ def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String 
   let pty ← cx.memPtrTy line ptr
   checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
 
+/-- Is `ty` a bit-pointer type whose AIR file has no `vector_index`? -/
+def unverifiedBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
+  (layouts[ty]?.getD {}).unverifiedBitPtr
+
+/-- The rejection of an unverified bit-pointer that the function did not make. An export without
+`vector_index` gives a lane pointer (`*align(2:0:4:2) u9`) the same type entry as a packed field
+pointer, so only a `struct_field_ptr` of a packed struct or union is known to be a packed field
+pointer: a parameter, a constant, or any other instruction result (a load, a call, a cast) is
+rejected. -/
+def unverifiedBitPtrError (fnName : String) (line : Nat) (what : String) : String :=
+  s!"{fnName}: near line {line}: {what} is a bit-pointer without `vector_index` in the AIR file; \
+    it may point to a vector lane (only a packed field pointer made by `struct_field_ptr` is \
+    accepted; re-export with the current exporter)"
+
+/-- The rule of `unverifiedBitPtrError` for the result of `op`, of type `ty`. -/
+def CheckCtx.checkBitPtrSource (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  unless unverifiedBitPtrTy cx.layouts ty do return
+  if let .fieldPtr base _ := op then
+    if let some c := (cx.valTy? base).bind (ptrChild cx.types) then
+      match cx.types[c]? with
+      | some (.struct _ "packed" _) | some (.union _ "packed" _ _) => return
+      | _ => pure ()
+  throw (unverifiedBitPtrError cx.fnName line "a value not made by a packed `struct_field_ptr`")
+
 /-- The item type of the slice, many-pointer or array pointer type `pty`. -/
 def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   match types[pty]? with
@@ -609,6 +636,7 @@ mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
+  cx.checkBitPtrSource line inst.ty inst.op
   checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
 
 partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
@@ -1526,11 +1554,25 @@ partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
       recur e
     | _ => pure ()
 
+/-- An unverified bit-pointer parameter (`unverifiedBitPtrError`). -/
+private def checkBitPtrParam (f : Func) (p : TyId) : Except String Unit :=
+  if unverifiedBitPtrTy f.layouts p then throw (unverifiedBitPtrError f.name 0 "a parameter")
+  else pure ()
+
+/-- An unverified bit-pointer constant operand (`unverifiedBitPtrError`). -/
+private def checkBitPtrConstant (f : Func) (v : Val) : Except String Unit :=
+  match v.constTy? with
+  | some vty =>
+    if unverifiedBitPtrTy f.layouts vty then throw (unverifiedBitPtrError f.name 0 "a constant")
+    else pure ()
+  | none => pure ()
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
   validateTypeGraph f.name f.types
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
+    checkBitPtrParam f p
   checkTy f.name f.types f.layouts 0 f.ret
   -- An `extern` or `packed` union is its bytes, also as a value: the model must encode it.
   for (t, id) in f.types.zipIdx do
@@ -1562,6 +1604,7 @@ def check (f : Func) : Except String Unit := do
         unless checkedConstTypes.contains vty do
           checkTy f.name f.types f.layouts 0 vty
           checkedConstTypes := checkedConstTypes.insert vty
+      checkBitPtrConstant f v
       checkNullConstants f.name f.types f.layouts v
       checkPointerConstant f v
         (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
@@ -2328,6 +2371,8 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
     if typeCheck.toOption.isNone then
       log := log.add { (Diagnostics.skipped file (some f.name) .check "instruction_result_type") with anchor }
+    else
+      log := log.record (checkDiagnostic file f .instructionFailure anchor) (cx.checkBitPtrSource line i.ty i.op)
     -- L13: a volatile access has its own stable code; it supersedes the generic check.
     let volatileCheck := cx.checkVolatile line i.ty i.op
     log := log.record { (checkDiagnostic file f .volatileAccess anchor) with
@@ -2372,6 +2417,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for p in f.params ++ #[f.ret] do
     log := log.record (checkDiagnostic file f .typeFailure { idSpace := .canonical, typeId := some p })
       (checkTy f.name f.types f.layouts 0 p)
+  for p in f.params do
+    log := log.record (checkDiagnostic file f .typeFailure { idSpace := .canonical, typeId := some p })
+      (checkBitPtrParam f p)
   for (t, id) in f.types.zipIdx do
     if let .union _ _ none _ := t then
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
@@ -2400,6 +2448,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     for v in valueOperands i.op ++ ptrOperands i.op do
       let result := do
         checkNullConstants f.name f.types f.layouts v
+        checkBitPtrConstant f v
         checkPointerConstant f v
           (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
           (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
