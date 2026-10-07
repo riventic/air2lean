@@ -377,6 +377,85 @@ theorem op128_spec (sel : BitVec 8) (hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 
       unfold op128; generalize Zig.Float.maxChk a b = x; rcases x with _ | _ | _ <;> rfl
     | n + 26, h => omega
 
+/-! ### `f128` division and `@sqrt` per Zig version (F05) -/
+
+/-- The compiler-rt helper profile of an `f128` translation (`docs/floats.md` §Per-version
+differences): `legacy` is Zig 0.14.1 and 0.15.2, `v016` is Zig 0.16.0. -/
+inductive F128Rt where
+  | legacy
+  | v016
+  deriving DecidableEq, Repr
+
+/-- `f128` `/` of a profile. `legacy`: IEEE `Float.div` with a nonzero subnormal quotient
+flushed to a signed zero (`Zig.Float.divRt_eq_div_of_not_subnormal`,
+`Zig.Float.divRt_of_subnormal`). `v016`: IEEE `Float.div` for a NaN, infinite or zero operand
+(`Zig.Float.divRt016_eq_div_of_special`) and for operands whose binary exponents differ by at
+least −16381 (`Zig.Float.divRt016_eq_div_of_exp`); else the port of `divtf3.zig`'s subnormal
+path. -/
+def F128Rt.div : F128Rt → Zig.F128 → Zig.F128 → Zig.F128
+  | .legacy => Zig.Float.divRt
+  | .v016 => Zig.Float.divRt016
+
+/-- `f128` `@sqrt` of a profile. `legacy`: the `f64` root, extended back
+(`Zig.Float.sqrtF128ViaF64`; IEEE `Float.sqrt` for a NaN, infinite or zero operand:
+`Zig.sqrtF128ViaF64_eq_sqrt_of_special`). `v016`: IEEE `Float.sqrt`. -/
+def F128Rt.sqrt : F128Rt → Zig.F128 → Zig.F128
+  | .legacy => Zig.Float.sqrtF128ViaF64
+  | .v016 => Zig.Float.sqrt
+
+/-- The `f128` op that `sel` picks for a profile: `opSpec`, except the division family and
+`@sqrt` (`sel` 3, 5, 6, 9), which use the profile's helpers. -/
+def opSpec128 (rt : F128Rt) (sel : BitVec 8) (a b c : Zig.F128) : Zig.Result Zig.F128 :=
+  match sel.toNat with
+  | 3 => pure (rt.div a b)
+  | 5 => pure (Zig.Float.trunc (rt.div a b))
+  | 6 => pure (Zig.Float.floor (rt.div a b))
+  | 9 => pure (rt.sqrt a)
+  | _ => opSpec sel a b c
+
+/-- The profile of the translation in `Gen.lean`: an alternative elaborates only when `op128`'s
+division and `@sqrt` selectors are that profile's helpers, checked by `rfl`. The 0.16.0
+translation gives `v016`, the 0.14.1 and 0.15.2 translations give `legacy`; any other
+translation fails to elaborate. -/
+def op128Profile : F128Rt := by
+  first
+  | exact (fun (_ : ∀ a b c, op128 3 a b c = pure (Zig.Float.divRt016 a b))
+        (_ : ∀ a b c, op128 9 a b c = pure (Zig.Float.sqrt a)) => F128Rt.v016)
+      (fun _ _ _ => rfl) (fun _ _ _ => rfl)
+  | exact (fun (_ : ∀ a b c, op128 3 a b c = pure (Zig.Float.divRt a b))
+        (_ : ∀ a b c, op128 9 a b c = pure (Zig.Float.sqrtF128ViaF64 a)) => F128Rt.legacy)
+      (fun _ _ _ => rfl) (fun _ _ _ => rfl)
+
+theorem opSpec128_of_ne (rt : F128Rt) {sel : BitVec 8}
+    (hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9) (a b c : Zig.F128) :
+    opSpec128 rt sel a b c = opSpec sel a b c := by
+  have hne : ∀ k : BitVec 8, sel ≠ k → sel.toNat ≠ k.toNat := fun k hk h =>
+    hk (BitVec.eq_of_toNat_eq h)
+  have h3 := hne 3 hs.1
+  have h5 := hne 5 hs.2.1
+  have h6 := hne 6 hs.2.2.1
+  have h9 := hne 9 hs.2.2.2
+  unfold opSpec128
+  split <;> simp_all
+
+/-- `f128`, every selector: `op128` is `opSpec128` of the translation's profile. With
+`op128Profile = .v016` (0.16.0) division is `Zig.Float.divRt016` and `@sqrt` is IEEE; with
+`.legacy` (0.14.1, 0.15.2) division is `Zig.Float.divRt` and `@sqrt` is
+`Zig.Float.sqrtF128ViaF64`. -/
+theorem op128_spec_full (sel : BitVec 8) (a b c : Zig.Float .f128) :
+    op128 sel a b c = opSpec128 op128Profile sel a b c := by
+  by_cases hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9
+  · rw [op128_spec sel hs, opSpec128_of_ne _ hs]
+  · by_cases h3 : sel = 3
+    · subst h3; rfl
+    by_cases h5 : sel = 5
+    · subst h5; rfl
+    by_cases h6 : sel = 6
+    · subst h6; rfl
+    by_cases h9 : sel = 9
+    · subst h9; rfl
+    exact absurd ⟨h3, h5, h6, h9⟩ hs
+
 /-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics); the
 safety check panics if it is not a whole number, so a NaN quotient panics too. -/
 theorem divExact64_spec (a b : Zig.F64) :
