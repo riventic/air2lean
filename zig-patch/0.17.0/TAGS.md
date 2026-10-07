@@ -95,7 +95,7 @@ on aarch64-macos:
 | `f128` `abi_align` is 8, not 16 (aarch64-macos host). | `floatconv` (`f16ToF128`, `f80ToF64`), `floatops` (`op128`, `op80`) |
 | std changes: `Io.Condition.wait` goes through `waitTimeout`; `waitUncancelable` inlines more; `Io.Condition.waitInner` is gone. | `sync` |
 
-Every exported example's differing files are in `tests/golden/0.17.0/<ex>/air/`. `asm`, `lists`
-and `threadsync` do not compile on 0.17.0 yet (example sources, not the exporter): `asm` uses the
-x86_64 clobber `cc` (the host is aarch64; CI exports it on x86_64), `lists` uses the removed
-`Allocator.dupeZ`, `threadsync` uses `Thread.Mutex`/`Thread.WaitGroup`, which 0.17.0 removed.
+Every exported example's differing files are in `tests/golden/0.17.0/<ex>/air/`. `threadsync`
+does not compile on 0.17.0 (it uses `Thread.Mutex`/`Thread.WaitGroup`, which 0.16.0 already
+removed). `lists` calls `dupeSentinel` instead of the removed `Allocator.dupeZ` on 0.17.0, and `asm`
+uses the x86_64 clobber `cc`, so it is exported on x86_64 only (CI).
