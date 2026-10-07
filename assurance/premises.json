@@ -9,6 +9,7 @@
   },
   "import_roots": ["tests/diff"],
   "generated_imports": {
+    "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
     "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean."
   },

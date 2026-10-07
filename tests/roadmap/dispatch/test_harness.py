@@ -75,11 +75,14 @@ class HarnessTests(unittest.TestCase):
                 "modify fun s => { s with dispatchValue1 := p0 }")
             (directory/"nested.lean").write_text("| dispatch2 (v : BitVec 8)\n"
                 "| dispatch3 (v : BitVec 8)\npure (.dispatch3 (0 : BitVec 8))")
+            (directory/"nestedExit.lean").write_text("| br3 (v : BitVec 8)\n| dispatch4 (v : BitVec 8)\n"
+                "| dispatch7 (v : BitVec 8)\npure (.br3 (55 : BitVec 8))")
             (directory/"blockCapture.lean").write_text("pure (.ret i1)")
             outputs = list(mutations.mutants(directory))
             self.assertEqual([name for name,_ in outputs],
-                ["dropped_selector","wrong_initial","wrong_target","dropped_capture"])
+                ["dropped_selector","wrong_initial","wrong_target","wrong_exit","dropped_capture"])
             self.assertIn("pure (.dispatch2 (2 : BitVec 8))", outputs[2][1])
+            self.assertIn("pure (.dispatch4 (1 : BitVec 8))", outputs[3][1])
             with self.assertRaises(AssertionError): mutations.changed_once("absent", "missing", "x")
             with self.assertRaises(AssertionError): mutations.changed_once("x x", "x", "y")
             output = directory/"mutants"
@@ -88,7 +91,7 @@ class HarnessTests(unittest.TestCase):
             with patch.object(sys, "argv", argv), patch.object(mutations.subprocess, "run",
                     return_value=rejected) as run, patch("builtins.print"):
                 mutations.main()
-            self.assertEqual(run.call_count, 4)
+            self.assertEqual(run.call_count, 5)
             for call, (name, _) in zip(run.call_args_list, outputs):
                 self.assertEqual(call.args[0], ["lake", "env", "lean", "-R", str(output),
                     str(output/(name+".lean"))])
@@ -182,7 +185,7 @@ class ModeTests(unittest.TestCase):
 if [ "${3:-}" = "--run" ]; then
   output="${@: -1}"
   mkdir -p "$output"
-  for name in step fixedCapture blockCapture nested crossed ranges boolLoop fieldCollision plainExit blockDispatch; do
+  for name in step fixedCapture blockCapture nested crossed ranges boolLoop fieldCollision plainExit blockDispatch nestedExit innerValue countdown; do
     printf '// mocked generated source\n' > "$output/$name.lean"
   done
 fi
@@ -234,7 +237,8 @@ printf '// mocked translation\n' > "$2"
                 self.assertEqual(any("Proofs.lean" in line for line in lines), synthetic)
                 self.assertEqual(any("Emitter.lean" in line for line in lines), synthetic)
                 self.assertEqual(any("mutations.py" in line for line in lines), synthetic)
-                self.assertEqual(sum("/generated/" in line and line.startswith("lake env lean -R") for line in lines), 10 if synthetic else 0)
+                self.assertEqual(sum("/generated/" in line and line.startswith("lake env lean -R") for line in lines), 13 if synthetic else 0)
+                self.assertEqual(any(line == "lake env lean tests/roadmap/dispatch/CountdownProof.lean" for line in lines), synthetic)
                 self.assertEqual(sum(line == "zig version" for line in lines), 2 if native_run else 0)
                 for marker in ("zig test", "zig build-obj", "python3 tests/roadmap/dispatch/native_checks.py", "translator "):
                     self.assertEqual(any(line.startswith(marker) for line in lines), native_run)

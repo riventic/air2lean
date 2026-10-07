@@ -108,9 +108,62 @@ private def blockDispatch : Json := file "blockDispatch" #[0]
     #[case_ #[lit 0] #[inst 30 "block" 3 #[] [("body", .arr #[dispatch 40 20 (lit 1)])],
       ret 50 (lit 7)], case_ #[lit 1] #[ret 60 (lit 44)]] #[ret 70 (lit 9)]]
 
+private def ptrTypes : Json :=
+  .arr (baseTypes.push (obj [("k", toJson "ptr"), ("size", toJson "one"), ("const", toJson false),
+    ("child", num 0)]))
+private def br (id target : Nat) (v : Json) : Json := inst id "br" 3 #[v] [("target", num target)]
+
+/-- Legal exits from a nested dispatch loop: an inner `cond_br` inside a noreturn block either
+breaks out of both loop-switches to the enclosing value block or continues the outer one; another
+inner case returns directly; the inner else continues the inner loop-switch. -/
+private def nestedExit : Json := file "nestedExit" #[0, 0, 1]
+  #[arg 10 0, arg 11 1, inst 12 "arg" 1 #[] [("param", num 2)],
+    inst 20 "block" 0 #[] [("body", .arr #[switch_ 30 (ref 10)
+      #[case_ #[lit 0] #[inst 40 "block" 3 #[] [("body", .arr #[switch_ 50 (ref 11)
+          #[case_ #[lit 0] #[inst 60 "cond_br" 3 #[ref 12]
+              [("then", .arr #[br 61 20 (lit 55)]), ("else", .arr #[dispatch 62 30 (lit 1)])]],
+            case_ #[lit 1] #[ret 70 (lit 66)]]
+          #[dispatch 80 50 (lit 0)]])]],
+        case_ #[lit 1] #[br 90 20 (lit 11)]]
+      #[ret 95 (lit 99)]])],
+    ret 100 (ref 20)]
+
+/-- An inner loop-switch result leaves through a block inside the outer case and becomes the
+outer replacement selector; the outer target still reads the original captured argument. -/
+private def innerValue : Json := file "innerValue" #[0, 0]
+  #[arg 10 0, arg 11 1, switch_ 20 (ref 10)
+    #[case_ #[lit 0] #[inst 30 "block" 0 #[] [("body", .arr #[switch_ 40 (ref 11)
+        #[case_ #[lit 0] #[br 50 30 (lit 5)]] #[dispatch 60 40 (lit 0)]])],
+        dispatch 70 20 (ref 30)],
+      case_ #[lit 5] #[ret 80 (ref 11)]] #[ret 90 (lit 99)]]
+
+/-- A terminating two-level state machine with Sema-style memory captures: the inner loop-switch
+counts `remaining` down, adding two to `acc` per step, then continues the outer `done` state. -/
+private def countdown : Json := (file "countdown" #[0]
+  #[arg 10 0, inst 11 "alloc" 5, inst 12 "store" 2 #[ref 11, ref 10],
+    inst 13 "alloc" 5, inst 14 "store" 2 #[ref 13, lit 0],
+    switch_ 20 (lit 0)
+      #[case_ #[lit 0] #[inst 30 "load" 0 #[ref 11], switch_ 40 (ref 30)
+          #[case_ #[lit 0] #[dispatch 50 20 (lit 1)]]
+          #[inst 60 "load" 0 #[ref 11], inst 61 "sub_wrap" 0 #[ref 60, lit 1],
+            inst 62 "store" 2 #[ref 11, ref 61], inst 63 "load" 0 #[ref 13],
+            inst 64 "add_wrap" 0 #[ref 63, lit 2], inst 65 "store" 2 #[ref 13, ref 64],
+            dispatch 66 40 (ref 61)]],
+        case_ #[lit 1] #[inst 70 "load" 0 #[ref 13], ret 80 (ref 70)]]
+      #[ret 90 (lit 99)]])
+  |>.setObjVal! "types" ptrTypes
+
 private def malformed (target : Nat) : Json := file "badTarget" #[0]
   #[arg 10 0, inst 11 "block" 2 #[] [("body", .arr #[switch_ 20 (ref 10)
     #[case_ #[lit 0] #[dispatch 30 target (lit 1)]] #[ret 40 (lit 7)]])]]
+
+/-- A nested dispatch loop whose inner exit `jump` is checked against its lexical scope:
+outer loop-switch 20, ordinary loop 25, inner loop-switch 30, and sibling loop-switch 50. -/
+private def nestedJump (jump : Json) : Json := file "nestedJump" #[0, 0]
+  #[arg 10 0, arg 11 1, switch_ 20 (ref 10)
+    #[case_ #[lit 0] #[inst 25 "loop" 3 #[] [("body", .arr #[switch_ 30 (ref 11)
+        #[case_ #[lit 0] #[jump]] #[dispatch 45 30 (lit 0)]])]],
+      case_ #[lit 1] #[switch_ 50 (ref 11) #[] #[ret 55 (lit 1)]]] #[ret 60 (lit 9)]]
 
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Emitter.lean OUTPUT_DIR")
@@ -136,6 +189,21 @@ def main (args : List String) : IO Unit := do
     "example : successful (Dispatch.plainExit.map BitVec.toNat) = some 38 := by native_decide"
   writeCase dir "blockDispatch" blockDispatch
     "example : successful ((Dispatch.blockDispatch 0).map BitVec.toNat) = some 44 := by native_decide"
+  writeCase dir "nestedExit" nestedExit
+    "example : successful ((Dispatch.nestedExit 0 0 true).map BitVec.toNat) = some 55 := by native_decide\nexample : successful ((Dispatch.nestedExit 0 0 false).map BitVec.toNat) = some 11 := by native_decide\nexample : successful ((Dispatch.nestedExit 0 1 true).map BitVec.toNat) = some 66 := by native_decide\nexample : successful ((Dispatch.nestedExit 0 7 true).map BitVec.toNat) = some 55 := by native_decide\nexample : successful ((Dispatch.nestedExit 0 7 false).map BitVec.toNat) = some 11 := by native_decide\nexample : successful ((Dispatch.nestedExit 1 0 true).map BitVec.toNat) = some 11 := by native_decide\nexample : successful ((Dispatch.nestedExit 4 1 false).map BitVec.toNat) = some 99 := by native_decide"
+  writeCase dir "innerValue" innerValue
+    "example : successful ((Dispatch.innerValue 0 3).map BitVec.toNat) = some 3 := by native_decide\nexample : successful ((Dispatch.innerValue 0 0).map BitVec.toNat) = some 0 := by native_decide\nexample : successful ((Dispatch.innerValue 5 9).map BitVec.toNat) = some 9 := by native_decide\nexample : successful ((Dispatch.innerValue 1 9).map BitVec.toNat) = some 99 := by native_decide"
+  writeCase dir "countdown" countdown
+    "example : successful ((Dispatch.countdown 0).map BitVec.toNat) = some 0 := by native_decide\nexample : successful ((Dispatch.countdown 3).map BitVec.toNat) = some 6 := by native_decide\nexample : successful ((Dispatch.countdown 200).map BitVec.toNat) = some 144 := by native_decide"
+  -- Nested legal targets are accepted; every other kind of target in the same position fails.
+  discard <| accept (nestedJump (dispatch 40 20 (lit 1)))
+  discard <| accept (nestedJump (dispatch 40 30 (lit 1)))
+  for target in [25, 50, 40, 10, 999] do
+    reject (nestedJump (dispatch 40 target (lit 1))) s!"target {target} is not an enclosing loop-switch"
+  for target in [20, 30, 50] do
+    reject (nestedJump (br 40 target (lit 1))) s!"target {target} is not an enclosing block"
+  reject (nestedJump (inst 40 "repeat" 3 #[] [("target", num 30)])) "target 30 is not an enclosing loop"
+  reject (nestedJump (inst 40 "switch_dispatch" 3 #[lit 1])) "missing target"
   reject (malformed 11) "not an enclosing loop-switch"
   reject (malformed 10) "not an enclosing loop-switch"
   reject (malformed 999) "not an enclosing loop-switch"

@@ -42,7 +42,11 @@ range over all locals, including the selector. `Zig.loop_dispatch_spec` provides
 rule when a target-specific `Exit → Option Selector` function recognizes repeating exits.
 It is derived from `loop_spec`; it adds no runtime primitive or logical assumption. The
 kernel proof fixture maintains a fixed capture and decreases the selector on each own-target
-dispatch. Memory and concurrency translations reuse the existing generic loop semantics;
+dispatch. `tests/roadmap/dispatch/CountdownProof.lean` applies `Zig.loop_spec` twice to the
+*generated* nested `countdown` machine: the inner loop's measure is its selector, with
+`acc + 2 * remaining` invariant; the outer loop's measure is its remaining state transitions.
+`countdown_spec` proves that every input terminates with `2 * n`. Memory and concurrency
+translations reuse the existing generic loop semantics;
 the existing memory/concurrency loop proof rules remain applicable.
 
 Run the serial gate under the project's compiler resource guard:
@@ -63,11 +67,17 @@ requires both stock native execution and a fresh locked exporter dump. It verifi
 the source actually produces both AIR tags and distinct nested dispatch targets, translates
 that dump, and elaborates checks against the source's expected results. The synthetic cases
 cover inner/outer jumps, an ordinary-loop/block exit, fixed SSA and block-result captures,
-ranges/else, booleans, and selector-field name collisions. Malformed scopes, operand types,
-arity, and sibling-case SSA values are rejected. Four generated-code semantic mutants must
+ranges/else, booleans, and selector-field name collisions. Nested legal exits cover an inner
+`cond_br` in a noreturn block that breaks out of both loop-switches or continues the outer
+one, a return from inside the inner loop, an inner loop result consumed as the outer
+replacement selector, and a two-level state machine with Sema-style memory captures.
+Malformed scopes, operand types, arity, and sibling-case SSA values are rejected. In a nested
+position, a dispatch to an enclosing ordinary loop, a sibling-case loop-switch, itself, a
+non-control instruction, or an absent ID is rejected, and so are a `br` to a loop-switch or
+sibling, a `repeat` to a loop-switch, and a missing target. Five generated-code semantic mutants must
 fail only with located Lean `native_decide` false-assertion diagnostics and exit status 1:
 a lost replacement selector, wrong initial selector, wrong
-nested target, and dropped captured value. They run serially with bounded per-mutant timeouts.
+nested target, a two-level break redirected to the outer continue, and a dropped captured value. They run serially with bounded per-mutant timeouts.
 The native source adds enum selection and mutable tagged-union capture coverage. Its real
 AIR also exercises noreturn blocks that dispatch outward without an own-target branch.
 Set `AIR2LEAN_DISPATCH_KEEP_WORK=1` to retain the fresh temporary AIR and generated sources
