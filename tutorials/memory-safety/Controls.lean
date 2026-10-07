@@ -31,9 +31,11 @@ the live heap after it is exactly the live heap before it. -/
 def SafeNoLeak {α : Type} (c : MemM α) : Prop :=
   ∀ m : Mem, m.Seq → ∃ r m', c.run m = pure (r, m') ∧ m'.heap = m.heap
 
-/-- The next allocation of 16 bytes (`create(Node)`) succeeds under `m`'s policy. -/
+/-- The next allocation of 16 bytes (`create(Node)`) succeeds under `m`'s policy: no legacy
+index, cap or listed failure, and neither the failure oracle nor the budget denies it. -/
 def Room (m : Mem) : Prop :=
-  ¬(m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < 16 ∨ m.allocs ∈ m.allocPolicy.failures)
+  ¬(m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < 16 ∨ m.allocs ∈ m.allocPolicy.failures) ∧
+    m.oracleDenies 16 = false
 
 /-! ## The wrong clients -/
 
@@ -60,8 +62,9 @@ def forgetFree (a : Allocator) (v : BitVec 32) : MemM (Except ErrName Unit) := d
 /-- With room for the allocation, `create(Node)` succeeds. -/
 theorem create_ok (a : Allocator) {m : Mem} (hc : Room m) :
     ∃ p m', (a.create 16 8).run m = pure (.ok p, m') := by
-  simp only [Room, not_or] at hc
-  simp [Allocator.create, allocBytes, rawAlloc, alloc, zig_unfold, hc, set, StateT.set,
+  obtain ⟨hc, ho⟩ := hc
+  simp only [not_or] at hc
+  simp [Allocator.create, allocBytes, rawAlloc, alloc, zig_unfold, hc, ho, set, StateT.set,
     MonadStateOf.set, StateT.get]
   exact ⟨_, _, rfl⟩
 

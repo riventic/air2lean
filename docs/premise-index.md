@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2163 theorems in 124 files.
+2164 theorems in 124 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -19,14 +19,14 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1162 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1163 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 111 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 760 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 967 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 968 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
 | [ORD-01](premises.md#ord-01) | 956 | RC11 approximation for atomics |
 | [ORD-02](premises.md#ord-02) | 956 | No load buffering in compiled code |
@@ -39,14 +39,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2042 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1701 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2163 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2322,6 +2322,7 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
 | `IdleLoop.Client.Inv.grow` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `IdleLoop.Client.Inv.cur` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `IdleLoop.Client.Inv.record` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `IdleLoop.Client.plainLe_flag` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `IdleLoop.Client.loc_flag` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `IdleLoop.Client.flag_locIdx_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `IdleLoop.Client.Inv.setLoc` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
