@@ -88,7 +88,7 @@ class TrustReport(unittest.TestCase):
                            "CI command 'python3 never-run.py' is not in")
         # A test that exists but no CI command (or script it names) runs.
         self.assertProblem(lambda d: stage(d, 'provenance')['checks'][0].update(
-            test='tests/roadmap/abi-probes/test_probe.py'), 'test_probe.py is not run by CI')
+            test='tests/roadmap/byte-permutation/test_portable.py'), 'test_portable.py is not run by CI')
 
     def test_test_reached_through_ci_script(self):
         # check-export-names.sh is named by CI and runs test_order_cli.py.
