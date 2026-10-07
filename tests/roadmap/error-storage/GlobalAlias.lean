@@ -93,9 +93,9 @@ def main : IO Unit := do
   let bigLayouts := layouts.push {size := some 2048, align := some 2, offsets := (Array.range 1024).map (· * 2)}
   let bigGlobal := global big (.agg big (Array.replicate 1024 (.err 0 "Alpha")))
   reject {exact with name := "folded_alias.budget", types := bigTypes, layouts := bigLayouts, globals := #[bigGlobal], body := #[{id := 0, ty := 0, op := .load (.ptrConst 7 0 2046)}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "unresolved subobject/layout"
-  let hostView := {loadAt "bitHostView" structGlobal 8 0 with layouts := layouts.set! 8 {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 4, bitOffset := 16}}
+  let hostView := {loadAt "bitHostView" structGlobal 8 0 with layouts := layouts.set! 8 {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 4, bitOffset := 16, vectorIndexExported := true}}
   reject hostView "overlaps symbolic error bytes"
-  accept {loadAt "bitHostGuard" structGlobal 8 0 with layouts := layouts.set! 8 {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 2, bitOffset := 0}}
+  accept {loadAt "bitHostGuard" structGlobal 8 0 with layouts := layouts.set! 8 {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 2, bitOffset := 0, vectorIndexExported := true}}
   let mixedItems := {base "mixedSymbolicItems" afterGlobal with ret := 0, body := #[ {id := 0, ty := 0, op := .ptrElemVal (.ptrConst 13 0 0) (.int 17 1)}, {id := 1, ty := 4, op := .ret (.inst 0)}]}
   reject mixedItems "escaping, arithmetic"
   reject {base "aggregateCall" structGlobal with body := #[ {id := 0, ty := 1, op := .call (.func "unresolved" false none) #[.ptrConst 9 0 0]}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
@@ -257,7 +257,7 @@ def main : IO Unit := do
     "unresolved or cyclic symbolic storage provenance"
   reject { codeAddress with name := "folded_alias.opaqueBacking", ret := opaquePtr, globals := #[{ codeGlobal with ty := opaqueTy, init := some (.undef opaqueTy) }], body := #[{id := 0, ty := 4, op := .ret (.ptrConst opaquePtr 0 0)}] }
     "type 'opaque' is outside the subset"
-  reject { codeAddress with name := "folded_alias.codeBitPointer", layouts := codeLayouts.set! codePtr { pointer 1 with hostSize := 1 } }
+  reject { codeAddress with name := "folded_alias.codeBitPointer", layouts := codeLayouts.set! codePtr { pointer 1 with hostSize := 1, vectorIndexExported := true } }
     "unresolved or cyclic symbolic storage provenance"
   reject { codeAddress with name := "folded_alias.codeWrongGlobal", body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 99 0)}] }
     "unknown global id 99"

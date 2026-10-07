@@ -166,7 +166,7 @@ def main (args : List String) : IO Unit := do
       inst 1 "ret" 1 #[ref 0]])
   require ((checkProgram #[returningDefaultPanic]).toOption.isNone)
     "default panic name bypassed the noreturn-only model boundary"
-  let bitPtr := (ptrTy "one" 0).setObjVal! "host_size" (num 1)
+  let bitPtr := ((ptrTy "one" 0).setObjVal! "host_size" (num 1)).setObjVal! "vector_index" .null
   reject (file "missingOffset" #[intTy 4, bitPtr, nrTy] #[1] 0
     #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "load" 0 #[ref 0],
       inst 2 "ret" 2 #[ref 1]]) "bit pointer without offset"
