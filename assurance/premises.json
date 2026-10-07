@@ -114,7 +114,7 @@
     {"premise": "ALC-03", "scope": "closure", "pattern": "(?:^|\\.)remap|Remap(?!Mode)"},
     {"premise": "ALC-04", "scope": "closure", "pattern": "allocSentinel|freeSentinel"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
-    {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC"},
+    {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC|spawnLimit|spawnAdmits|assignment(?:Count|Outcome|ChoiceC)"},
     {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Await|Concurrent|Cancel)C"},
     {"premise": "THR-05", "scope": "closure", "pattern": "[Ff]utex"},
     {"premise": "THR-06", "scope": "closure", "pattern": "osUnfairLock|DarwinImpl"},

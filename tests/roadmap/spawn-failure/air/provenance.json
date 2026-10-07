@@ -1,0 +1,21 @@
+{
+  "source_sha256": "ddba1b3c8cbed7c9d047ab9574dc711294dcec98aa06f4a948270a3ddb16c376",
+  "air": {
+    "zig_version": "0.16.0",
+    "schema": 12,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+  "stock_compiler_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+  "qualification": "Retained fresh AIR of a passed --full spawn-failure qualification (Zig 0.16.0); every file hash below equals that report's artifact record. Re-export and refresh this record when spawn_failure.zig changes.",
+  "air_sha256": {
+    "spawn_failure.groupAsync.json": "07e39fd33543837cd9992fd04f87c8b89a9bebaa748ba66e6540dc94eec92e1d",
+    "spawn_failure.groupConcurrent.json": "e8f244961bb9cf9a47c8a2dab806be1428b68e18b9736cbd432ac56932411a35",
+    "spawn_failure.threadCatch.json": "5efaebf94d58dd7ea3f3778527f775c84f7bd1761edfacae594ab59db4a79b06",
+    "spawn_failure.threadPair.json": "4c6dc60eefa0dce5418922ea42865ce866fadd28ac7107a50ff8d654d52b5188",
+    "spawn_failure.writeWorker.json": "1fd20eaea27eb164eedcff644df6ce39b36f014cf18dfe752a588312f21413f2"
+  }
+}

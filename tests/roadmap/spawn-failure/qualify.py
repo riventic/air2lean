@@ -5,6 +5,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import runpy
 import shutil
 from pathlib import Path
@@ -129,6 +130,48 @@ def project_integration(gate, destination, air, profile, translator, direct):
     finally:
         receipt.write_bytes(original)
     return generated["fallible"]
+
+UNTRUSTED = ("sorry", "admit", "native_decide", "axiom")
+PROOFS = ("Group", "Pair")
+
+def checked_air():
+    """The retained fresh 0.16.0 AIR of spawn_failure.zig, bound to its source and hashes."""
+    air = FIXTURE / "air/0.16.0"
+    record = json.loads((FIXTURE / "air/provenance.json").read_text())
+    if digest(FIXTURE / "spawn_failure.zig") != record["source_sha256"]:
+        raise ValueError("stale checked spawn-failure AIR: source changed; re-export and refresh provenance")
+    found = {p.name: digest(p) for p in sorted(air.glob("*.json"))}
+    if found != record["air_sha256"]:
+        raise ValueError("checked spawn-failure AIR inventory or hashes differ from provenance")
+    return air
+
+def checked_proofs(gate, destination, lean, translator):
+    """Retranslate the checked AIR, require the checked Gen body, and kernel-check the proofs."""
+    air = checked_air()
+    work = destination / "proofs"
+    (work / "SpawnFailure").mkdir(parents=True)
+    generated = work / "SpawnFailure/Gen.lean"
+    gate.run("checked-translate", [str(translator), str(air), "-o", str(generated), "--namespace",
+             "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"])
+    receipt = destination / "checked-generated-receipt.json"
+    HELPERS["write_report"](generated, air, receipt)
+    HELPERS["compare"](FIXTURE / "SpawnFailure/Gen.lean", generated, receipt)
+    for name in PROOFS + ("Budget",):
+        text = (FIXTURE / "SpawnFailure" / (name + ".lean")).read_text()
+        for number, line in enumerate(text.splitlines(), 1):
+            if any(re.search(r"\b" + word + r"\b", line) for word in UNTRUSTED):
+                raise ValueError(f"SpawnFailure/{name}.lean:{number}: untrusted declaration")
+    env = dict(os.environ)
+    env["LEAN_PATH"] = str(work) + ((":" + env["LEAN_PATH"]) if env.get("LEAN_PATH") else "")
+    gate.run("checked-gen-kernel", lean + ["-R", str(work), "-o", str(work / "SpawnFailure/Gen.olean"),
+             str(generated)], env=env, timeout=1800)
+    for name in PROOFS:
+        gate.run("proof-" + name.lower(), lean + ["-R", str(FIXTURE), "-o",
+                 str(work / "SpawnFailure" / (name + ".olean")),
+                 str(FIXTURE / "SpawnFailure" / (name + ".lean"))], env=env, timeout=3600)
+    gate.run("budget-executions", lean + ["-R", str(FIXTURE), "--run",
+             str(FIXTURE / "SpawnFailure/Budget.lean")], env=env, timeout=1800,
+             marker="spawn budget executions passed")
 
 def source_paths():
     paths = [ROOT / "Air2Lean.lean", ROOT / "ZigLean.lean", ROOT / "lean-toolchain"]
@@ -351,7 +394,8 @@ def qualify(mode, destination):
         report["lean_sha256"] = digest(lean_binary)
         report["lean_version"] = gate.run("lean-version", lean + ["--version"]).strip()
         report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
-        gate.run("proof-modules", ["lake", "build", "ZigLean", "ZigLean.Conc.SpawnLemmas", "ZigLean.Conc.Csl"])
+        gate.run("proof-modules", ["lake", "build", "ZigLean", "ZigLean.Conc.SpawnLemmas", "ZigLean.Conc.Csl",
+                                   "ZigLean.Conc.Transfer"], timeout=3600)
         gate.run("resource-boundary", lean + ["--run", str(FIXTURE / "Boundary.lean")],
                  marker="audited spawn resource boundary passed")
         gate.run("kernel-runtime", lean + ["--run", str(FIXTURE / "Runtime.lean")],
@@ -369,6 +413,7 @@ def qualify(mode, destination):
         gate.run("invalid-policy", [str(translator), str(generated), "-o", str(destination / "invalid.lean"),
                  "--namespace", "Invalid", "--spawn-policy", "unknown"], expected=1,
                  marker="invalid --spawn-policy")
+        checked_proofs(gate, destination, lean, translator)
         if mode == "--full":
             version = os.environ["AIR2LEAN_SPAWN_VERSION"]
             if version not in ("0.15.2", "0.16.0"):
@@ -422,6 +467,10 @@ def qualify(mode, destination):
             gate.run("translate", [str(translator), str(air), "-o", str(raw), "--namespace", "SpawnFailure",
                      "--prefix", "spawn_failure.", "--spawn-policy", "fallible"])
             generated_receipt(raw, air, destination / "fallible-generated-receipt.json")
+            if version == "0.16.0":
+                # The checked proofs are about this body: fresh AIR must still translate to it.
+                HELPERS["compare"](FIXTURE / "SpawnFailure/Gen.lean", raw,
+                                   destination / "fallible-generated-receipt.json")
             source = raw.read_text()
             required = [HEADER, "Zig.spawnWithPolicyC .fallible"]
             if version == "0.16.0":
