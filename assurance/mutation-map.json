@@ -1,0 +1,1173 @@
+{
+  "schema": "air2lean-mutation-map/1",
+  "description": "Q02: register ID -> negative tests and designated mutants (docs/mutation-map.md). Checked by scripts/mutation-map.py check.",
+  "requirements": {
+    "T01": {
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/profiles/test_golden_pipeline.py",
+          "anchor": "def test_unknown_profile_name_is_rejected"
+        },
+        {
+          "path": "tests/roadmap/profiles/test_golden_pipeline.py",
+          "anchor": "def test_legacy_schema_selects_legacy_profile"
+        },
+        {
+          "path": "tests/roadmap/profiles/test_golden_pipeline.py",
+          "anchor": "def test_mixed_inputs_and_missing_header_fail"
+        },
+        {
+          "path": "tests/roadmap/profiles/test_cli.py",
+          "anchor": "run(binary, [malformed], error=\"profile\")"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "profile-legacy-schema-misrouted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        },
+        {
+          "name": "profile-name-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ]
+    },
+    "T02": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "T03": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "T04": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/abi-probes/test_probe.py",
+          "anchor": "def test_profiles_fail_closed"
+        }
+      ],
+      "mutants": []
+    },
+    "T05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "T06": {
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/global-payload-pointers/test_profiles.py",
+          "anchor": "def test_llvm_request_rejected"
+        }
+      ],
+      "mutants": []
+    },
+    "L01": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "def test_optional_compiler_file_requires_exact_case"
+        }
+      ],
+      "mutants": []
+    },
+    "L02": {
+      "categories": [
+        "operand-order"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/bitops/Runtime.lean",
+          "anchor": "| some (.error .illegal) => true"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "clz_is_ctz",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ctz_is_clz",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "population_is_zero",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "signed_shift_is_unsigned",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "overflow_flag_inverted",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "oversized_shift_allowed",
+          "path": "tests/roadmap/bitops/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "a",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "q",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ],
+      "note": "clz/ctz swaps exchange operations, not operands: operand order has no designated mutant yet."
+    },
+    "L03": {
+      "categories": [
+        "forwarding"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/dispatch/test_harness.py",
+          "anchor": "def test_wrong_release_and_missing_nested_target_fail"
+        },
+        {
+          "path": "tests/roadmap/dispatch/Proofs.lean",
+          "anchor": "next (.foreign n) = none"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "dropped_selector",
+          "path": "tests/roadmap/dispatch/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "dropped_capture",
+          "path": "tests/roadmap/dispatch/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "wrong_initial",
+          "path": "tests/roadmap/dispatch/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "wrong_target",
+          "path": "tests/roadmap/dispatch/mutations.py",
+          "category": "other"
+        }
+      ]
+    },
+    "L04": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/try-pointers/test_mutation.py",
+          "anchor": "def test_missing_or_ambiguous_mutation_site_fails"
+        },
+        {
+          "path": "tests/roadmap/try-pointers/test_artifacts.py",
+          "anchor": "def test_fresh_air_missing_inventory_or_record_request_fails"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "payload8-success-offset",
+          "path": "tests/roadmap/try-pointers/mutate-offset.py",
+          "category": "layout",
+          "anchor": "v2.add 1"
+        }
+      ]
+    },
+    "L05": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/null-pointers/test_classify_mutant.py",
+          "anchor": "def test_missing_refutation"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "ptrIsNull-inverted",
+          "path": "tests/roadmap/null-pointers/classify_mutant.py",
+          "category": "other",
+          "anchor": "nullableMutation"
+        }
+      ]
+    },
+    "L06": {
+      "categories": [
+        "forwarding",
+        "layout",
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/global-payload-pointers/test_profiles.py",
+          "anchor": "def test_type_indices_rejected"
+        },
+        {
+          "path": "tests/roadmap/global-payload-pointers/test_mutations.py",
+          "anchor": "def test_named_assertions_only"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "forget-parent",
+          "path": "tests/roadmap/global-payload-pointers/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "forget-payload",
+          "path": "tests/roadmap/global-payload-pointers/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "wrap-offset",
+          "path": "tests/roadmap/global-payload-pointers/mutations.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "unbounded",
+          "path": "tests/roadmap/global-payload-pointers/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "wrong_global",
+          "path": "tests/roadmap/global-payload-pointers/generated-mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "missing_small_payload_offset",
+          "path": "tests/roadmap/global-payload-pointers/generated-mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "forget_parent",
+          "path": "tests/roadmap/global-payload-pointers/generated-mutations.py",
+          "category": "layout"
+        }
+      ]
+    },
+    "L07": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "L08": {
+      "categories": [
+        "layout",
+        "operand-order"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/byte-permutation/test_portable.py",
+          "anchor": "def test_asymmetric_runtime_assertions"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "byte_index_off_by_one",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "lane_order_reversed",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "reverse_is_identity",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "swap_is_identity",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "swap_reverses_bits",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "reverse_negates_bits",
+          "path": "tests/roadmap/byte-permutation/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "m",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        },
+        {
+          "name": "o",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        },
+        {
+          "name": "p",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        },
+        {
+          "name": "t",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        }
+      ]
+    },
+    "L09": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "j",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "u",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        }
+      ]
+    },
+    "L10": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/error-storage/Runtime.lean",
+          "anchor": "unless got = expected do throw"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "swap_indices",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "collapse_names",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "standalone_accepts_zero",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "foreign_domain",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "other"
+        }
+      ]
+    },
+    "L11": {
+      "categories": [
+        "forwarding"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/local-parent/test_harness.py",
+          "anchor": "def test_missing_parent_and_nested_recovery_fail"
+        },
+        {
+          "path": "tests/roadmap/local-parent/Proofs.lean",
+          "anchor": "#[.field 1 1 2] = none := rfl"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "wrong_parent_field",
+          "path": "tests/roadmap/local-parent/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "lost_outer_alias",
+          "path": "tests/roadmap/local-parent/mutations.py",
+          "category": "forwarding"
+        }
+      ]
+    },
+    "L12": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "n",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "r",
+          "path": "scripts/mutate.sh",
+          "category": "layout"
+        }
+      ]
+    },
+    "L13": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "L14": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "c",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "e",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "C01": {
+      "categories": [
+        "operand-order",
+        "invariant-transfer"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/thread-tuples/guard-tests.py",
+          "anchor": "('mode','build_mode','Debug')"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "tuple-capture-order",
+          "path": "tests/roadmap/thread-tuples/check.sh",
+          "category": "operand-order",
+          "anchor": "worker capture0 capture2 capture1"
+        },
+        {
+          "name": "ab",
+          "path": "scripts/mutate.sh",
+          "category": "invariant-transfer"
+        }
+      ]
+    },
+    "C02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C04": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/deadline-futex/Guard.lean",
+          "anchor": "Timed.admitted (.call (.func \"unselected\" true none) #[]) = false"
+        }
+      ],
+      "mutants": []
+    },
+    "C05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C06": {
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/spawn-failure/harness-tests.py",
+          "anchor": "def test_fresh_schema_endian_inventory_and_profile_fail_closed"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "ae",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "C07": {
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "af",
+          "path": "scripts/mutate.sh",
+          "category": "invariant-transfer"
+        }
+      ]
+    },
+    "C08": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C09": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C10": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C11": {
+      "categories": [
+        "operand-order"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/weak-cas/Runtime.lean",
+          "anchor": "private def failureAcquire"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "v",
+          "path": "scripts/mutate.sh",
+          "category": "operand-order"
+        },
+        {
+          "name": "ad",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "spurious-failure-removed",
+          "path": "tests/roadmap/weak-cas/Mutation.lean",
+          "category": "other",
+          "anchor": "C11_ASSERTION: spurious failure branch removed"
+        }
+      ]
+    },
+    "C12": {
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "k",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "l",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "w",
+          "path": "scripts/mutate.sh",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "x",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "aa",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "C13": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "C14": {
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/rwlock-contracts/Runtime.lean",
+          "anchor": "| some (.error .illegal) => true"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "y",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "ac",
+          "path": "scripts/mutate.sh",
+          "category": "invariant-transfer"
+        }
+      ]
+    },
+    "M01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "M02": {
+      "categories": [
+        "failure-cleanup",
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/resize-remap/Check.lean",
+          "anchor": "failed remap changed bytes, capacity or lifetime"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "failure-mutates-old",
+          "path": "tests/roadmap/resize-remap/mutations.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "in-place-wrong-length",
+          "path": "tests/roadmap/resize-remap/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "in-place-frame-overlap",
+          "path": "tests/roadmap/resize-remap/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "copy-lost-prefix-and-defined-suffix",
+          "path": "tests/roadmap/resize-remap/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "moved-old-stays-live",
+          "path": "tests/roadmap/resize-remap/mutations.py",
+          "category": "other"
+        }
+      ]
+    },
+    "M03": {
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/allocation-policy/fixture.zig",
+          "anchor": "return error.PolicyOrCleanupMismatch"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "omit-live-removal",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "ignore-failure-trace",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ignore-request-cap",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "h",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "M04": {
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/byte-sentinel/Check.lean",
+          "anchor": "| .error _ => pure false"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "omit-extra-byte",
+          "path": "tests/roadmap/byte-sentinel/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "wrong-sentinel-offset",
+          "path": "tests/roadmap/byte-sentinel/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "s",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "M05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "M06": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "F01": {
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/float-semantics/test_labels.py",
+          "anchor": "def test_compiler_rt_label_needs_compiler_rt_translation"
+        },
+        {
+          "path": "tests/roadmap/float-semantics/test_labels.py",
+          "anchor": "def test_unlabeled_theorems_fail"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "float-args-selection-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        },
+        {
+          "name": "float-header-selection-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ]
+    },
+    "F02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "F03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "F04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "F05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "F06": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "d",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "A01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "A02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "A03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": [
+        {
+          "name": "i",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "E01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "E02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "E03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "E04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P05": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_diverging_program_cannot_be_declared_total"
+        }
+      ],
+      "mutants": []
+    },
+    "P06": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P07": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "P08": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "I06": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_sampled_tests_only_are_not_functional"
+        }
+      ],
+      "mutants": []
+    },
+    "I07": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/artifact-manifest/test_manifest.py",
+          "anchor": "def test_profile_mismatch_between_air_and_generated"
+        }
+      ],
+      "mutants": []
+    },
+    "I08": {
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/safe-output/test_safe_output.py",
+          "anchor": "def test_interrupt_mid_write_keeps_prior_and_no_partial"
+        }
+      ],
+      "mutants": []
+    },
+    "I09": {
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/distribution/test_compat.py",
+          "anchor": "def test_hosts_default_and_linux_only_rule"
+        },
+        {
+          "path": "tests/roadmap/distribution/test_compat.py",
+          "anchor": "def test_malformed_inputs_fail_closed"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "compat-unknown-host-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ]
+    },
+    "V01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "V02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "V03": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "V04": {
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_violation_transfers_through_dependencies"
+        },
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_transitive_hidden_sorry"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "audit-dependency-violation-not-transferred",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        }
+      ]
+    },
+    "V05": {
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/profiles/test_golden_pipeline.py",
+          "anchor": "def test_future_schema_fails_closed"
+        },
+        {
+          "path": "tests/roadmap/input-validation/test_cli.py",
+          "anchor": "\"incompatible result type\""
+        }
+      ],
+      "mutants": [
+        {
+          "name": "profile-future-schema-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ]
+    },
+    "V06": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/outcome-accounting/test_report.py",
+          "anchor": "def test_pointer_fragment_remains_mismatch_not_setup_failure"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "b",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "z",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "Q01": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "Q02": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/mutation-map/test_mutation_map.py",
+          "anchor": "def test_complete_row_without_mutant_fails"
+        },
+        {
+          "path": "tests/roadmap/mutation-map/test_mutation_map.py",
+          "anchor": "def test_crashing_mutant_is_not_a_kill"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "f",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "g",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ]
+    },
+    "Q03": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/schedule-caps/test_exploration.py",
+          "anchor": "def test_one_capped_case_disqualifies_otherwise_matching_scope"
+        }
+      ],
+      "mutants": []
+    },
+    "Q04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "Q05": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "Q06": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/perf-budgets/test_perf_budgets.py",
+          "anchor": "def test_time_regression"
+        }
+      ],
+      "mutants": []
+    },
+    "Q07": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "Q08": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "D01": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/support-matrix/test_support_matrix.py",
+          "anchor": "def test_register_status_change_is_stale"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "support-matrix-header-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
+    },
+    "D02": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    },
+    "D03": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_undefined_premise_fails"
+        }
+      ],
+      "mutants": []
+    },
+    "D04": {
+      "categories": [],
+      "negative_tests": [],
+      "mutants": []
+    }
+  }
+}

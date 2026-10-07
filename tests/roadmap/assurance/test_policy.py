@@ -39,6 +39,14 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(report["theorems"][0]["violations"], ["sorryAx"])
         self.assertEqual(report["violations"][0]["trust_class"], "sorry")
 
+    def test_violation_transfers_through_dependencies(self):
+        # Not an axiom, so collectAxioms cannot report it: only the dependency closure can.
+        raw = self.raw(["imported"], [self.node("imported", "theorem", ["hidden"], module="Other.Hidden"),
+                                    self.node("hidden", "definition", module="Other.Hidden", unsafe=True)])
+        report = audit.apply_policy(raw, self.policy)
+        self.assertEqual(report["theorems"][0]["violations"], ["hidden"])
+        self.assertFalse(report["theorems"][0]["allowed"])
+
     def test_new_axiom_and_unused_axiom_fail(self):
         raw = self.raw([], [self.node("newAxiom", "axiom")])
         self.assertEqual(audit.apply_policy(raw, self.policy)["status"], "fail")
