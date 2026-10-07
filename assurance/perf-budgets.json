@@ -1,8 +1,10 @@
 {
   "schema": "air2lean-perf-budgets/1",
-  "status": "pending",
-  "note": "No real-module baseline is recorded yet; see docs/perf-budgets.md for the serial recording command.",
-  "reference_platform": null,
+  "status": "recorded",
+  "reference_platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
   "tolerance": {
     "translator": {
       "time_ratio": 2.0,
@@ -36,7 +38,68 @@
         "Proofs.Basic.Proofs",
         "Proofs.Basic.Twt"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 8551,
+          "sha256": "8c357a713cda2ef7ab44e65c7260b53c2f35e01d623844c60b6bcf1dd4809a5e",
+          "matches_reference": true,
+          "functions": 8,
+          "input_bytes": 30825
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000156,
+            "max_seconds": 0.25
+          },
+          "elaborate": {
+            "baseline_seconds": 2.1613,
+            "max_seconds": 12.161,
+            "baseline_peak_rss_kib": 573600,
+            "max_peak_rss_kib": 835744
+          },
+          "emit": {
+            "baseline_seconds": 0.000389,
+            "max_seconds": 0.25
+          },
+          "normalize": {
+            "baseline_seconds": 0.000328,
+            "max_seconds": 0.25
+          },
+          "parse": {
+            "baseline_seconds": 0.000476,
+            "max_seconds": 0.25
+          },
+          "proof.cold": {
+            "baseline_seconds": 2.5226,
+            "max_seconds": 12.523,
+            "baseline_peak_rss_kib": 603520,
+            "max_peak_rss_kib": 865664
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1627,
+            "max_seconds": 10.163,
+            "baseline_peak_rss_kib": 59696,
+            "max_peak_rss_kib": 321840
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0418,
+            "max_seconds": 0.292,
+            "baseline_peak_rss_kib": 39984,
+            "max_peak_rss_kib": 105520
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0208,
+            "max_seconds": 0.271,
+            "baseline_peak_rss_kib": 40016,
+            "max_peak_rss_kib": 105552
+          }
+        }
+      }
     },
     {
       "id": "slices",
@@ -55,7 +118,68 @@
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 26141,
+          "sha256": "728c7c9367cfc18ffcfdb884ab22223af99c3fef1238166afa2e18c378395cd5",
+          "matches_reference": true,
+          "functions": 22,
+          "input_bytes": 103606
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000401,
+            "max_seconds": 0.25
+          },
+          "elaborate": {
+            "baseline_seconds": 1.1761,
+            "max_seconds": 11.176,
+            "baseline_peak_rss_kib": 605776,
+            "max_peak_rss_kib": 867920
+          },
+          "emit": {
+            "baseline_seconds": 0.000995,
+            "max_seconds": 0.251
+          },
+          "normalize": {
+            "baseline_seconds": 0.00092,
+            "max_seconds": 0.251
+          },
+          "parse": {
+            "baseline_seconds": 0.001714,
+            "max_seconds": 0.252
+          },
+          "proof.cold": {
+            "baseline_seconds": 7.0495,
+            "max_seconds": 17.05,
+            "baseline_peak_rss_kib": 650208,
+            "max_peak_rss_kib": 912352
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1571,
+            "max_seconds": 10.157,
+            "baseline_peak_rss_kib": 59264,
+            "max_peak_rss_kib": 321408
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.1543,
+            "max_seconds": 0.404,
+            "baseline_peak_rss_kib": 40848,
+            "max_peak_rss_kib": 106384
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0303,
+            "max_seconds": 0.28,
+            "baseline_peak_rss_kib": 40960,
+            "max_peak_rss_kib": 106496
+          }
+        }
+      }
     },
     {
       "id": "layout",
@@ -73,7 +197,68 @@
         "Proofs.Layout.Mem",
         "Proofs.Layout.Proofs"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 44715,
+          "sha256": "de01b0986a4fb7eb67b5adabaf39745c49d2388f70bf6bcca2f2a7d0bde8ed79",
+          "matches_reference": true,
+          "functions": 51,
+          "input_bytes": 152578
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000635,
+            "max_seconds": 0.251
+          },
+          "elaborate": {
+            "baseline_seconds": 1.5225,
+            "max_seconds": 11.523,
+            "baseline_peak_rss_kib": 651680,
+            "max_peak_rss_kib": 913824
+          },
+          "emit": {
+            "baseline_seconds": 0.001838,
+            "max_seconds": 0.252
+          },
+          "normalize": {
+            "baseline_seconds": 0.001067,
+            "max_seconds": 0.251
+          },
+          "parse": {
+            "baseline_seconds": 0.002559,
+            "max_seconds": 0.253
+          },
+          "proof.cold": {
+            "baseline_seconds": 3.8747,
+            "max_seconds": 13.875,
+            "baseline_peak_rss_kib": 726640,
+            "max_peak_rss_kib": 988784
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1679,
+            "max_seconds": 10.168,
+            "baseline_peak_rss_kib": 59568,
+            "max_peak_rss_kib": 321712
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0346,
+            "max_seconds": 0.285,
+            "baseline_peak_rss_kib": 41664,
+            "max_peak_rss_kib": 107200
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0337,
+            "max_seconds": 0.284,
+            "baseline_peak_rss_kib": 41680,
+            "max_peak_rss_kib": 107216
+          }
+        }
+      }
     },
     {
       "id": "vectors",
@@ -91,7 +276,68 @@
         "Proofs.Vectors.Gen",
         "Proofs.Vectors.Proofs"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 16462,
+          "sha256": "1de574b05714f5c711f33f4d6a4689d5ffa181e79cb578315b59b4529c9ca99b",
+          "matches_reference": true,
+          "functions": 31,
+          "input_bytes": 40335
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000231,
+            "max_seconds": 0.25
+          },
+          "elaborate": {
+            "baseline_seconds": 0.7942,
+            "max_seconds": 10.794,
+            "baseline_peak_rss_kib": 591008,
+            "max_peak_rss_kib": 853152
+          },
+          "emit": {
+            "baseline_seconds": 0.000589,
+            "max_seconds": 0.251
+          },
+          "normalize": {
+            "baseline_seconds": 0.000428,
+            "max_seconds": 0.25
+          },
+          "parse": {
+            "baseline_seconds": 0.000815,
+            "max_seconds": 0.251
+          },
+          "proof.cold": {
+            "baseline_seconds": 1.9604,
+            "max_seconds": 11.96,
+            "baseline_peak_rss_kib": 624320,
+            "max_peak_rss_kib": 886464
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1512,
+            "max_seconds": 10.151,
+            "baseline_peak_rss_kib": 59152,
+            "max_peak_rss_kib": 321296
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.1532,
+            "max_seconds": 0.403,
+            "baseline_peak_rss_kib": 40208,
+            "max_peak_rss_kib": 105744
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0277,
+            "max_seconds": 0.278,
+            "baseline_peak_rss_kib": 40256,
+            "max_peak_rss_kib": 105792
+          }
+        }
+      }
     },
     {
       "id": "variants",
@@ -108,7 +354,68 @@
         "Proofs.Variants.Gen",
         "Proofs.Variants.Proofs"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 14239,
+          "sha256": "7165949cfe024967ca3364843372822a00321988db129dc2accd67d46e4e8fe6",
+          "matches_reference": true,
+          "functions": 12,
+          "input_bytes": 45958
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000242,
+            "max_seconds": 0.25
+          },
+          "elaborate": {
+            "baseline_seconds": 0.5975,
+            "max_seconds": 10.598,
+            "baseline_peak_rss_kib": 586992,
+            "max_peak_rss_kib": 849136
+          },
+          "emit": {
+            "baseline_seconds": 0.000925,
+            "max_seconds": 0.251
+          },
+          "normalize": {
+            "baseline_seconds": 0.000479,
+            "max_seconds": 0.25
+          },
+          "parse": {
+            "baseline_seconds": 0.000756,
+            "max_seconds": 0.251
+          },
+          "proof.cold": {
+            "baseline_seconds": 1.4133,
+            "max_seconds": 11.413,
+            "baseline_peak_rss_kib": 622032,
+            "max_peak_rss_kib": 884176
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1572,
+            "max_seconds": 10.157,
+            "baseline_peak_rss_kib": 59328,
+            "max_peak_rss_kib": 321472
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0254,
+            "max_seconds": 0.275,
+            "baseline_peak_rss_kib": 40224,
+            "max_peak_rss_kib": 105760
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0253,
+            "max_seconds": 0.275,
+            "baseline_peak_rss_kib": 40304,
+            "max_peak_rss_kib": 105840
+          }
+        }
+      }
     },
     {
       "id": "floatops",
@@ -128,7 +435,68 @@
         "Proofs.Floatops.Gen",
         "Proofs.Floatops.Proofs"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 38224,
+          "sha256": "f5a10ed33ccbb5b18ec98e75ff8e25b42a24362108563e0c62134e629d40b33c",
+          "matches_reference": true,
+          "functions": 7,
+          "input_bytes": 103361
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000265,
+            "max_seconds": 0.25
+          },
+          "elaborate": {
+            "baseline_seconds": 0.7004,
+            "max_seconds": 10.7,
+            "baseline_peak_rss_kib": 584896,
+            "max_peak_rss_kib": 847040
+          },
+          "emit": {
+            "baseline_seconds": 0.002322,
+            "max_seconds": 0.252
+          },
+          "normalize": {
+            "baseline_seconds": 0.000763,
+            "max_seconds": 0.251
+          },
+          "parse": {
+            "baseline_seconds": 0.00127,
+            "max_seconds": 0.251
+          },
+          "proof.cold": {
+            "baseline_seconds": 1.9347,
+            "max_seconds": 11.935,
+            "baseline_peak_rss_kib": 690128,
+            "max_peak_rss_kib": 952272
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1535,
+            "max_seconds": 10.153,
+            "baseline_peak_rss_kib": 58976,
+            "max_peak_rss_kib": 321120
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0284,
+            "max_seconds": 0.278,
+            "baseline_peak_rss_kib": 40512,
+            "max_peak_rss_kib": 106048
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0282,
+            "max_seconds": 0.278,
+            "baseline_peak_rss_kib": 40528,
+            "max_peak_rss_kib": 106064
+          }
+        }
+      }
     },
     {
       "id": "threadsync",
@@ -149,7 +517,68 @@
         "Proofs.Threadsync.Mutex",
         "Proofs.Threadsync.WaitGroup"
       ],
-      "budget": null
+      "budget": {
+        "recorded": {
+          "revision": "31373d63dfc91ba72875589d6f16f25f09a75375",
+          "recorded_at": "2026-10-07T08:28:26+00:00",
+          "translator_sha256": "0943d35b43beaf7fc9798f9ac8b36ef435a6bd6207c18fddeac0dcdfc34afca3"
+        },
+        "output": {
+          "bytes": 53846,
+          "sha256": "94162cf5788055fe1fc523c1c21fd0bf685e3de9cbc4aee833424f934f9cf8f2",
+          "matches_reference": true,
+          "functions": 28,
+          "input_bytes": 285454
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000882,
+            "max_seconds": 0.251
+          },
+          "elaborate": {
+            "baseline_seconds": 1.5752,
+            "max_seconds": 11.575,
+            "baseline_peak_rss_kib": 655024,
+            "max_peak_rss_kib": 917168
+          },
+          "emit": {
+            "baseline_seconds": 0.002061,
+            "max_seconds": 0.252
+          },
+          "normalize": {
+            "baseline_seconds": 0.001752,
+            "max_seconds": 0.252
+          },
+          "parse": {
+            "baseline_seconds": 0.003856,
+            "max_seconds": 0.254
+          },
+          "proof.cold": {
+            "baseline_seconds": 29.904,
+            "max_seconds": 44.856,
+            "baseline_peak_rss_kib": 2180176,
+            "max_peak_rss_kib": 2834228
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1666,
+            "max_seconds": 10.167,
+            "baseline_peak_rss_kib": 60128,
+            "max_peak_rss_kib": 322272
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0436,
+            "max_seconds": 0.294,
+            "baseline_peak_rss_kib": 43168,
+            "max_peak_rss_kib": 108704
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0421,
+            "max_seconds": 0.292,
+            "baseline_peak_rss_kib": 43136,
+            "max_peak_rss_kib": 108672
+          }
+        }
+      }
     }
   ]
 }
