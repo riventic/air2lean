@@ -386,7 +386,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
   than SEM-03 and only cover their stated finite clients.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Conc.Total`.
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Conc.Total`.
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 ## External models

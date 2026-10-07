@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1734 theorems in 79 files.
+1754 theorems in 81 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 493 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
@@ -35,15 +35,15 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1016 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1337 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 785 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 1025 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1348 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 794 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 28 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 4 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1734 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1754 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 809 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 809 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 
 ## `Proofs/Asm/Proofs.lean`
@@ -2035,6 +2035,40 @@ File premises: TRU-01
 | `example@L19` | TRU-01 |
 | `example@L20` | TRU-01 |
 | `example@L21` | TRU-01 |
+
+## `tests/roadmap/loop-tactics/Queue.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `Lists.Queue.lseg_snoc` | SEM-02, TRU-01 |
+| `Lists.Queue.lseg_none` | SEM-02, TRU-01 |
+| `Lists.Queue.sum_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L130` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/loop-tactics/Template.lean`
+
+File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `LoopTemplateTest.countdown_step` | SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L44` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L51` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L57` | SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L65` | SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L79` | TRU-01 |
+| `example@L83` | SEM-01, TRU-01 |
+| `example@L86` | TRU-01 |
+| `example@L89` | TRU-01 |
+| `example@L92` | TRU-01 |
+| `example@L95` | TRU-01 |
+| `example@L99` | SEM-01, TRU-01 |
+| `example@L104` | TRU-01 |
+| `example@L109` | SEM-01, TRU-01 |
 
 ## `tests/roadmap/models/Model.lean`
 
