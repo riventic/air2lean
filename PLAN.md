@@ -95,7 +95,7 @@ The former T-series follow-ups now map to register IDs:
 
 | Former item | Register | Remaining scope |
 |---|---|---|
-| T6 (docs, release tag) | D01, Q08 | D01: keep README, PLAN, CLI help and the generated matrix in agreement. Q08: release record, gates and review ledger for one exact source/profile state. |
+| T6 (docs, release tag) | Q08 | Q08: release record, gates and review ledger for one exact source/profile state. |
 | T7 (theorem inventory) | D02, F05 | D02: a current check result and precise domain for each listed theorem against its version/target translation: the `floatops` selector theorems (`opN_spec`, `divExact64_spec`), the `Mem.Seq` invariant with `lists.append` (`append_run`), and the threaded clients; a one-step or one-schedule theorem is not labeled all-schedules. F05: `op128_spec` excludes the `f128` division-family and `@sqrt` selectors, which differ by version. |
 
 Earlier T7 clauses whose proofs exist (`vectors.checkedAdd`, [docs/vector-proofs.md](docs/vector-proofs.md); `sync.semaphoreCounter`; `sync.rwLockRead`; 0.15.2 `Thread.Mutex` on macOS) are historical; their current check results belong to D02.

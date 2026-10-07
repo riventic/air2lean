@@ -71,7 +71,7 @@ class Committed(Scratch):
         doc = (ROOT/'docs/support-matrix.md').read_text()
         self.assertIn('| `threadsync` | — | yes | — |', doc)
         self.assertIn('| `asm` (x86_64 only) | yes | yes | — |', doc)
-        self.assertIn('| D: Documentation | — | D01, D02, D03, D04 | — | — |', doc)
+        self.assertIn('| D: Documentation | D01 | D02, D03, D04 | — | — |', doc)
         # No complete requirement is listed as open work, and every register ID appears once.
         region = doc.split(MATRIX['begin']('matrix'))[1].split(MATRIX['end']('matrix'))[0]
         table = region.split('## Requirement register')[1]
@@ -94,8 +94,8 @@ class Stale(Scratch):
         self.assertIn('| `vectors` | yes | — | — |', (self.root/'docs/support-matrix.md').read_text())
 
     def test_register_status_change_is_stale(self):
-        self.edit('ROADMAP.md', '| D01 | Reconcile stale milestones | partial |',
-                  '| D01 | Reconcile stale milestones | complete |')
+        self.edit('ROADMAP.md', '| D02 | Verify and close the current theorem inventory | partial |',
+                  '| D02 | Verify and close the current theorem inventory | complete |')
         self.assertProblem('docs/support-matrix.md: generated region is stale')
         reg = MATRIX['register'](self.root)
         complete = sum(row['status'] == 'complete' for row in reg)
@@ -145,7 +145,11 @@ class Agreement(Scratch):
         self.assertIn('help does not name Zig 0.17.0', output)
 
     def test_default_scripts_must_agree(self):
-        self.edit('scripts/doctor.sh', 'AIR2LEAN_ZIG_VERSION:-0.16.0', 'AIR2LEAN_ZIG_VERSION:-0.15.2')
+        self.edit('scripts/mutate.sh', 'AIR2LEAN_ZIG_VERSION:-0.16.0', 'AIR2LEAN_ZIG_VERSION:-0.15.2')
+        self.assertProblem('default Zig versions disagree', code=2)
+
+    def test_release_metadata_default_must_agree(self):
+        self.edit('compatibility.json', '"default": "0.16.0"', '"default": "0.15.2"')
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_ci_example_list_must_match_selection(self):

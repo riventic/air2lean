@@ -20,14 +20,15 @@ GENERATOR = 'scripts/support-matrix.py'
 # Every committed input; tests copy exactly these into a scratch root.
 SOURCES = [
     'README.md', 'PLAN.md', 'ROADMAP.md', 'docs/support-matrix.md',
-    'scripts/example-selection.sh', 'scripts/check.sh', 'scripts/doctor.sh',
+    'scripts/example-selection.sh', 'scripts/check.sh', 'compatibility.json',
     'scripts/mutate.sh', 'scripts/translate.sh', 'zig-patch/versions.toml',
     'Air2Lean/Air/Normalize.lean', 'Air2Lean/Main.lean', 'Air2Lean/Diagnose.lean',
     '.github/workflows/ci.yml',
 ]
 SOURCE_GLOBS = ['coverage/*.json', 'examples/*/zig-versions']
-DEFAULT_SCRIPTS = ['scripts/check.sh', 'scripts/doctor.sh', 'scripts/mutate.sh',
-                   'scripts/translate.sh']
+DEFAULT_SCRIPTS = ['scripts/check.sh', 'scripts/mutate.sh', 'scripts/translate.sh']
+# scripts/doctor.sh delegates to scripts/doctor.py, whose default is the release metadata's.
+DEFAULT_METADATA = 'compatibility.json'
 STATUSES = ['complete', 'partial', 'open', 'research']
 AREAS = collections.OrderedDict([
     ('T', 'Targets and profiles'), ('L', 'Language and representation'),
@@ -81,6 +82,10 @@ def default_version(root):
         m = re.search(r'^zig_version=\$\{AIR2LEAN_ZIG_VERSION:-([^}]+)\}', read(root, rel), re.M)
         if not m: raise Stale(f'{rel}: default AIR2LEAN_ZIG_VERSION not found')
         found[rel] = m.group(1)
+    try:
+        found[DEFAULT_METADATA] = json.loads(read(root, DEFAULT_METADATA))['zig']['default']
+    except (ValueError, KeyError, TypeError):
+        raise Stale(f'{DEFAULT_METADATA}: zig.default not found')
     if len(set(found.values())) != 1:
         raise Stale(f'default Zig versions disagree: {found}')
     return next(iter(found.values()))

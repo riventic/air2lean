@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1720 theorems in 78 files.
+1734 theorems in 79 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -35,13 +35,13 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1013 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1323 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 782 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 12 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 1016 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1337 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 785 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 4 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1720 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1734 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -1885,6 +1885,27 @@ File premises: ALC-01, ALC-02, ALC-04, SEM-02, TRU-01
 | `example@L29` | ALC-01, ALC-02, ALC-04, SEM-02, TRU-01 |
 | `example@L34` | SEM-02, TRU-01 |
 | `example@L40` | ALC-01, ALC-02, ALC-04, SEM-02, TRU-01 |
+
+## `tests/roadmap/claims/Fixture.lean`
+
+File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `ClaimFixture.diverge_partial` | SEM-02, SEM-03, TRU-01 |
+| `ClaimFixture.diverge_not_total` | SEM-02, SEM-04, TRU-01 |
+| `ClaimFixture.ret_total` | SEM-02, SEM-04, TRU-01 |
+| `ClaimFixture.ret_returns` | SEM-02, SEM-04, TRU-01 |
+| `ClaimFixture.ret_partial` | SEM-02, SEM-03, SEM-04, TRU-01 |
+| `ClaimFixture.ret_run` | SEM-02, TRU-01 |
+| `ClaimFixture.panic_run` | SEM-01, SEM-02, TRU-01 |
+| `ClaimFixture.ret_some` | SEM-02, TRU-01 |
+| `ClaimFixture.panic_some` | SEM-01, SEM-02, TRU-01 |
+| `ClaimFixture.panic_pure` | SEM-01, SEM-02, TRU-01 |
+| `ClaimFixture.ret_pure_ok` | SEM-02, TRU-01 |
+| `ClaimFixture.premise_total` | SEM-02, SEM-04, TRU-01 |
+| `ClaimFixture.wrapped_total` | SEM-02, SEM-04, TRU-01 |
+| `ClaimFixture.partial_and_returns` | SEM-02, SEM-03, SEM-04, TRU-01 |
 
 ## `tests/roadmap/deadline-futex/AtomicKernel.lean`
 
