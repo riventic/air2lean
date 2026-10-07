@@ -5,6 +5,7 @@
 smaller under `json_size`/byte length, so each shrinker terminates. The predicate receives a
 candidate and returns True when the failure of interest still reproduces.
 """
+import copy
 import json
 import re
 
@@ -48,29 +49,30 @@ def json_size(value):
     return (len(text), text)
 
 
-def _get(value, path):
+def get_path(value, path):
     for key in path:
         value = value[key]
     return value
 
 
-def _set(value, path, new):
+def with_path(value, path, new):
+    """A deep copy of `value` with the node at `path` replaced by `new`."""
     if not path:
         return new
-    copy = json.loads(json.dumps(value))
-    parent = _get(copy, path[:-1])
-    parent[path[-1]] = new
-    return copy
+    result = copy.deepcopy(value)
+    get_path(result, path[:-1])[path[-1]] = new
+    return result
 
 
-def _paths(value, path=()):
-    yield path
+def nodes(value, path=()):
+    """Every (path, node) of a JSON-shaped tree, preorder."""
+    yield path, value
     if isinstance(value, dict):
-        for key in value:
-            yield from _paths(value[key], path + (key,))
+        for key, child in value.items():
+            yield from nodes(child, path + (key,))
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            yield from _paths(child, path + (index,))
+            yield from nodes(child, path + (index,))
 
 
 def _simpler(node):
@@ -104,9 +106,9 @@ def shrink_json(value, still_fails, budget=20000):
     changed = True
     while changed:
         changed = False
-        for path in list(_paths(current)):
+        for path, _ in list(nodes(current)):
             try:
-                node = _get(current, path)
+                node = get_path(current, path)
             except (KeyError, IndexError, TypeError):
                 continue
             if isinstance(node, (dict, list)) and len(node) > 0:
@@ -118,15 +120,15 @@ def shrink_json(value, still_fails, budget=20000):
                     keys = list(range(len(node)))
                     def rebuild(sub, node=node):
                         return [node[k] for k in sub]
-                kept = ddmin(keys, lambda sub: test(_set(current, path, rebuild(sub))))
+                kept = ddmin(keys, lambda sub: test(with_path(current, path, rebuild(sub))))
                 if len(kept) < len(keys):
-                    current = _set(current, path, rebuild(kept))
+                    current = with_path(current, path, rebuild(kept))
                     changed = True
                     break
             for candidate in _simpler(node):
                 if json_size(candidate) >= json_size(node):
                     continue
-                trial = _set(current, path, candidate)
+                trial = with_path(current, path, candidate)
                 if test(trial):
                     current = trial
                     changed = True

@@ -33,7 +33,7 @@ class DeltaDebugging(unittest.TestCase):
         doc = {"a": [1, 2, {"bad": 7, "x": "long string"}], "b": "y", "c": {"d": [None, True]}}
 
         def fails(value):
-            return any(isinstance(n, dict) and n.get("bad") == 7 for _, n in air_fuzz._nodes(value))
+            return any(isinstance(n, dict) and n.get("bad") == 7 for _, n in shrink.nodes(value))
 
         self.assertEqual(shrink.shrink_json(doc, fails), {"bad": 7})
 
@@ -99,7 +99,7 @@ class AirFuzz(unittest.TestCase):
                     doc = json.loads(data)
                 except ValueError:
                     continue
-                if any(isinstance(n, dict) and n.get("tag") == "bad" for _, n in air_fuzz._nodes(doc)):
+                if any(isinstance(n, dict) and n.get("tag") == "bad" for _, n in shrink.nodes(doc)):
                     return "emit:placeholder", {}
             return None, {}
 

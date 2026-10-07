@@ -65,9 +65,13 @@ case "${1:-}" in
       if [ -z "$stage" ]; then echo "seed $seed: ok"; continue; fi
       failed=1
       echo "seed $seed: $stage failed; shrinking (logs in $case_dir)"
-      python3 "$here/zig_gen.py" shrink "$case_dir/program.json" \
-        --command "bash $here/check.sh --reproduces {dir} $stage" "$out/shrunk-$seed"
-      first_failure "$out/shrunk-$seed" >/dev/null || true
+      # A failure that does not reproduce (flaky) is reported, not fatal to the remaining seeds.
+      if python3 "$here/zig_gen.py" shrink "$case_dir/program.json" \
+          --command "bash $here/check.sh --reproduces {dir} $stage" "$out/shrunk-$seed"; then
+        first_failure "$out/shrunk-$seed" >/dev/null || true
+      else
+        echo "seed $seed: $stage failure did not reproduce for shrinking"
+      fi
     done
     exit "$failed"
     ;;

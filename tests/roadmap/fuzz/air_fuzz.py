@@ -20,7 +20,6 @@ input that keeps the same failure signature.
 import argparse
 import copy
 import json
-import os
 from pathlib import Path
 import random
 import re
@@ -30,7 +29,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from shrink import ddmin, shrink_bytes, shrink_json  # noqa: E402
+from shrink import ddmin, nodes, shrink_bytes, shrink_json  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
@@ -113,16 +112,6 @@ WEIRD = [None, True, False, -1, 0, 1, 2 ** 31, 2 ** 32, 2 ** 63, 2 ** 64, -(2 **
          {"func": "", "noreturn": True}, {"global": 0, "off": -8}]
 
 
-def _nodes(value, path=()):
-    yield path, value
-    if isinstance(value, dict):
-        for key in value:
-            yield from _nodes(value[key], path + (key,))
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from _nodes(child, path + (index,))
-
-
 def _replace(doc, path, new):
     if not path:
         return new
@@ -135,8 +124,8 @@ def _replace(doc, path, new):
 
 def _structural(rng, doc, corpus, vocab):
     tags, kinds, keys = vocab
-    nodes = list(_nodes(doc))
-    path, node = rng.choice(nodes)
+    tree = list(nodes(doc))
+    path, node = rng.choice(tree)
     op = rng.randrange(10)
     if op == 0 and path:  # delete a key / element
         parent = doc
@@ -148,13 +137,13 @@ def _structural(rng, doc, corpus, vocab):
         new = copy.deepcopy(rng.choice(WEIRD))
         return _replace(doc, path, new), f"replace {list(path)} with {json.dumps(new)}"
     if op == 2:
-        ints = [(p, v) for p, v in nodes if isinstance(v, int) and not isinstance(v, bool)]
+        ints = [(p, v) for p, v in tree if isinstance(v, int) and not isinstance(v, bool)]
         if ints:
             path, value = rng.choice(ints)
             new = rng.choice([value + 1, value - 1, -value - 1, value + 1000, 0, 2 ** 32 + value])
             return _replace(doc, path, new), f"int {list(path)} {value}->{new}"
     if op == 3:
-        tagged = [(p, v) for p, v in nodes if isinstance(v, dict) and ("tag" in v or "k" in v)]
+        tagged = [(p, v) for p, v in tree if isinstance(v, dict) and ("tag" in v or "k" in v)]
         if tagged:
             path, value = rng.choice(tagged)
             field = "tag" if "tag" in value else "k"
@@ -162,7 +151,7 @@ def _structural(rng, doc, corpus, vocab):
             value[field] = new
             return doc, f"{field} {list(path)} -> {new}"
     if op == 4:
-        lists = [(p, v) for p, v in nodes if isinstance(v, list) and v]
+        lists = [(p, v) for p, v in tree if isinstance(v, list) and v]
         if lists:
             path, value = rng.choice(lists)
             i, j = rng.randrange(len(value)), rng.randrange(len(value))
@@ -176,7 +165,7 @@ def _structural(rng, doc, corpus, vocab):
             return doc, f"list {list(path)} op{action} {i} {j}"
     if op == 5:  # splice a subtree from the corpus
         _, donor_docs = rng.choice(corpus)
-        _, donor = rng.choice(list(_nodes(rng.choice(donor_docs))))
+        _, donor = rng.choice(list(nodes(rng.choice(donor_docs))))
         return _replace(doc, path, copy.deepcopy(donor)), f"splice into {list(path)}"
     if op == 6 and isinstance(node, dict):
         key = rng.choice(keys + ["fuzz_extra"])
@@ -397,7 +386,9 @@ def save_regression(directory, seed, kind, files, description):
     for k, data in enumerate(files):
         (case / f"{k:02d}.json").write_bytes(data)
     (case / "case.json").write_text(json.dumps(
-        {"seed": seed, "original_failure": kind, "generator": description}, indent=1) + "\n")
+        # expected_exit stays null until a fix decides the outcome; test_fuzz.py rejects null.
+        {"seed": seed, "original_failure": kind, "expected_exit": None, "generator": description},
+        indent=1) + "\n")
     return case
 
 

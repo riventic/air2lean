@@ -24,6 +24,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from shrink import get_path as _get, nodes as _nodes, with_path as _set  # noqa: E402
+
 INPUTS = [(0, 0), (1, 2), (4294967295, 7), (305419896, 2863311530)]
 SCALARS = ("u32", "i32", "u8")
 BITS = {"u32": 32, "i32": 32, "u8": 8}
@@ -42,10 +45,6 @@ def wrap(ty, v):
     if ty == "i32" and v >= 1 << 31:
         v -= 1 << 32
     return v
-
-
-def to_u32(ty, v):
-    return v & 0xFFFFFFFF
 
 
 # --- generator ---------------------------------------------------------------------------
@@ -820,9 +819,7 @@ def _var_types(program):
     for f in program["funcs"]:
         for name, ty in f["params"]:
             types[name] = ty
-    for f in program["funcs"]:
-        walk(f["body"])
-    # Pointer declarations may precede nothing else; resolve chained lookups once more.
+    # Source order declares every pointer target before the pointer.
     for f in program["funcs"]:
         walk(f["body"])
     return types
@@ -836,7 +833,7 @@ def evaluate(program):
         status, value = machine.call("work", [a, b])
         assert status == "ok"
         for g in program["globals"]:
-            value ^= to_u32(g["ty"], machine.globals[g["name"]][0])
+            value ^= machine.globals[g["name"]][0] & 0xFFFFFFFF
         results.append(value)
     return results
 
@@ -931,12 +928,7 @@ class Renderer:
         return arg[1] if arg[0] == "pvar" else f"&{arg[1]}"
 
     def block(self, stmts, indent, refs):
-        out = []
-        pad = "    " * indent
-        for k, s in enumerate(stmts):
-            rest = stmts[k + 1:]
-            out.extend(self.stmt(s, indent, refs, rest))
-        return out or []
+        return [line for s in stmts for line in self.stmt(s, indent, refs)]
 
     def _uses(self, name, refs):
         return [how for n, how in refs if n == name]
@@ -950,7 +942,7 @@ class Renderer:
             lines.append(f"{pad}_ = {name};")
         return lines
 
-    def stmt(self, s, indent, refs, rest):
+    def stmt(self, s, indent, refs):
         pad = "    " * indent
         tag = s[0]
         if tag == "let":
@@ -1114,29 +1106,6 @@ def _is_block(node):
 STMT_TAGS = {"let", "set", "store", "helper", "ptr", "let_union", "set_union", "if", "while",
              "switch", "switch_union", "defer", "errdefer", "return", "fail", "break"}
 EXPR_TAGS = {"lit", "var", "deref", "cmp", "not", "bin", "shr", "mod", "cast", "call", "catch"}
-
-
-def _get(node, path):
-    for key in path:
-        node = node[key]
-    return node
-
-
-def _set(program, path, value):
-    copy_ = copy.deepcopy(program)
-    parent = _get(copy_, path[:-1])
-    parent[path[-1]] = value
-    return copy_
-
-
-def _nodes(node, path=()):
-    yield path, node
-    if isinstance(node, dict):
-        for key, child in node.items():
-            yield from _nodes(child, path + (key,))
-    elif isinstance(node, list):
-        for k, child in enumerate(node):
-            yield from _nodes(child, path + (k,))
 
 
 def _expr_type(program, path, var_types):

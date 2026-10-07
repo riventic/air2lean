@@ -32,7 +32,7 @@ failure kind and be strictly smaller, so the result is 1-minimal for these steps
 `--save DIR` writes each shrunk case as `seed-<N>/NN.json` plus `case.json`.
 
 Committed reproducers live in `tests/roadmap/fuzz/regressions/`. Each `case.json` records
-the seed, the original failure kind, the fix and `expected_exit`; `air_fuzz.py replay
+the seed, the original failure kind, the fix and `expected_exit` (written as null by `--save`; set it when committing the fix); `air_fuzz.py replay
 BINARY` requires every case to pass the oracle with that exit status. Seeds 0–9999 found
 three failure classes, each now rejected by the checker before emission:
 
