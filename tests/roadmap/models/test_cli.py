@@ -56,6 +56,14 @@ def main(executable):
         report = json.loads(marker.split(": ", 1)[1])
         assert report["assumptions"] == []
         assert "theorem air2lean_model_0_evidence" in text and "def client (p0 : BitVec 8) : Zig.MemM" in text
+        # Qualified std models and Lean declarations are admitted semantic dependencies.
+        dependent = copy.deepcopy(data)
+        dependent["models"][0]["dependencies"] = ["mem.Allocator.allocSentinel", "RegistryExample.identity"]
+        write(dependent)
+        invoke(["--model-registry", str(registry)])
+        dependent_report = json.loads(out.read_text().split("-- air2lean-models: ")[1].splitlines()[0])
+        assert dependent_report["bindings"][0]["dependencies"] == dependent["models"][0]["dependencies"]
+        write(data)
         registry_symlink = tmp / "registry-link.json"
         registry_symlink.symlink_to(registry)
         invoke(["--model-registry", str(registry_symlink)])
@@ -82,7 +90,11 @@ def main(executable):
                            ("termination", "unspecified", "unsupported termination"),
                            ("effects", "empty", "unsupported effects"), ("errors", ["Bad"], "unknown safety error"),
                            ("implementation", "X; axiom injected : False", "invalid Lean identifier"),
-                           ("signature", {"params": [], "return": None}, "incompatible signature/layout")]:
+                           ("signature", {"params": [], "return": None}, "incompatible signature/layout"),
+                           ("symbol", "mem.Allocator.create", "conflicts with translated AIR or a built-in model"),
+                           ("dependencies", ["Thread.detach"], "is outside the subset"),
+                           ("dependencies", ["project.identity"], "cyclic semantic dependency"),
+                           ("dependencies", ["Zig.x", "Zig.x"], "duplicate semantic dependency")]:
             bad = copy.deepcopy(data)
             bad["models"][0][key] = value
             fail(bad, diagnostic)

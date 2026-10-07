@@ -81,7 +81,7 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
     if let some (caller, insts) := source then
       for i in insts do
         if let .call (.func callee false worker) _ := i.op then
-          if (allocFn? callee).isNone && (threadFn? callee).isNone then
+          if !modelledStdFn callee then
             result := result.push { caller, callee, instruction := i.id, file := u.file }
           if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
             if let some callee := worker then

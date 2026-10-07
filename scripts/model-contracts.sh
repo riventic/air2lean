@@ -9,12 +9,14 @@ model_evidence=$(cd "$model_evidence" && pwd)
 export AIR2LEAN_MODEL_EVIDENCE="$model_evidence"
 
 # Generated source imports the ZigLean umbrella, so its .olean is a required prerequisite.
-lake build ZigLean ZigLean.External Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean   2>&1 | tee "$model_evidence/build.log"
+lake build ZigLean ZigLean.External Air2Lean.StdModels Air2Lean.ModelRegistry Air2Lean.Check Air2Lean.Emit air2lean   2>&1 | tee "$model_evidence/build.log"
 lake env bash -euo pipefail -c '
   export LEAN_PATH="$AIR2LEAN_MODEL_EVIDENCE:${LEAN_PATH:-}"
   lean -o "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Model.olean"     tests/roadmap/models/Model.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/model.log"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/tests/roadmap/models/Model.olean"
   lean --run tests/roadmap/models/Registry.lean "$AIR2LEAN_MODEL_EVIDENCE"     2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/registry.log"
+  lean --run tests/roadmap/models/StdModels.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/std-models.log"
+  lean tests/roadmap/models/StdDependencies.lean 2>&1 | tee "$AIR2LEAN_MODEL_EVIDENCE/std-dependencies.log"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/registry.json"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/Generated.lean"
   test -s "$AIR2LEAN_MODEL_EVIDENCE/TupleGenerated.lean"

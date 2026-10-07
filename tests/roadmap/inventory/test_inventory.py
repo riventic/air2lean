@@ -331,20 +331,19 @@ end
         self.assertEqual(coverage.normalizer(sample), {'add': ['arith'], 'add_safe': ['arith'], 'try': ['try'], 'assembly': ['asm']})
 
     def test_model_recognition_is_not_verification(self):
-        sample = '''def allocFn? (name : String) := none
-/-- Synthetic recognized model section. -/
-def threadFn? (name : String) :=
-  if name == "time.Timer.read" then some .noClock else none
-/-- Synthetic rejected model section. -/
-def rejectedThreadFn? (name : String) :=
-  if name == "Thread.yield" then some "unsupported" else none
+        sample = '''def stdModels : Array StdModel := #[
+  threadModel "time.Timer.read" .timerRead #["callRC"],
+  { symbol := "Thread.yield",
+    kind := .rejected "unsupported" }]
+
+def unrelated := "Thread.join"
 '''
         entries = coverage.model_inventory(sample)
         self.assertEqual([(row['name'], row['disposition']) for row in entries], [
             ('time.Timer.read', 'recognized-model-boundary'),
             ('Thread.yield', 'translation-rejected')])
         self.assertTrue(all('source-only' in row['qualification'] for row in entries))
-        current = coverage.model_inventory((ROOT/'Air2Lean/Memory.lean').read_text())
+        current = coverage.model_inventory((ROOT/'Air2Lean/StdModels.lean').read_text())
         self.assertTrue(current)
         self.assertTrue(all('source-only' in row['qualification'] for row in current))
 

@@ -5,7 +5,8 @@ import Air2Lean.Air.Profile
 import Lean.Data.Json
 import Air2Lean.Air.StrictJson
 
-/-! Exact direct-call bindings, separate from the historical built-in recognition tables.
+/-! Exact direct-call project bindings. Built-in std models live in the single typed table of
+`Air2Lean/StdModels.lean`; a project binding cannot reuse one of its qualified names.
 The registry supplies identifiers, never executable Lean source fragments. A generated typed
 alias and contract obligation are checked by Lean after translation. -/
 namespace Air2Lean
@@ -298,6 +299,39 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
       dependencies := dependencies
     }
 
+/-- Each semantic dependency names another binding, a modelled built-in std model qualified
+for the binding's Zig version, or a project Lean declaration. Dependencies are unique, and
+those between bindings are acyclic. This checks the declared inventory, not an inferred
+proof-dependency closure. -/
+def checkDependencies (models : Array ModelBinding) : Except String Unit := do
+  let bindings := models.foldl (fun index m => index.insert m.symbol m) ({} : Std.HashMap String ModelBinding)
+  for m in models do
+    let mut seen : Std.HashSet String := {}
+    for d in m.dependencies do
+      if seen.contains d then throw s!"model '{m.symbol}': duplicate semantic dependency '{d}'"
+      seen := seen.insert d
+      if bindings.contains d then continue
+      match stdModel? d with
+      | some std =>
+        if let .rejected reason := std.kind then
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is outside the subset: {reason}"
+        unless std.qualifies m.profile.zigVersion do
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is not qualified for Zig {m.profile.zigVersion}"
+      | none =>
+        unless identifier d do
+          throw s!"model '{m.symbol}': semantic dependency '{d}' is not a binding, built-in std model or Lean identifier"
+  -- Binding-to-binding edges: reject any cycle, including a self-dependency.
+  for m in models do
+    let mut frontier := m.dependencies.filter bindings.contains
+    let mut reached : Std.HashSet String := {}
+    while !frontier.isEmpty do
+      let d := frontier.back!
+      frontier := frontier.pop
+      if d == m.symbol then throw s!"model '{m.symbol}': cyclic semantic dependency"
+      unless reached.contains d do
+        reached := reached.insert d
+        frontier := frontier ++ ((bindings[d]?.map (·.dependencies)).getD #[]).filter bindings.contains
+
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
@@ -314,8 +348,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     if seen.contains m.symbol then throw s!"duplicate model symbol '{m.symbol}'"
     seen := seen.insert m.symbol
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
-    if functionNames.contains m.symbol || (allocFn? m.symbol).isSome ||
-        (threadFn? m.symbol).isSome || (rejectedThreadFn? m.symbol).isSome then
+    if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
@@ -328,6 +361,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
         completedShapes[site.functionIndex]!
       unless params == m.params && ret == m.ret do
         throw s!"{site.function.name}: model '{m.symbol}' has incompatible signature/layout"
+  checkDependencies models
   unless (concFunctions funcs).isEmpty do
     throw "external model bindings currently require a sequential program"
 
@@ -341,8 +375,7 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (allocFn? name).isSome ||
-            (threadFn? name).isSome || (rejectedThreadFn? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),
