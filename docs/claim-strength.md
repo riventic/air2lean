@@ -4,15 +4,16 @@
 (`scripts/assumptions.py`, see `docs/assumptions-audit.md`). The extractor in
 `tools/Assurance.lean` records each theorem's `conclusion`: the kernel type with binders and
 hypotheses stripped. No definition is unfolded, and only an equation's right-hand side is
-expanded (through `Option.some`). Theorem names, comments and manifest labels are not inputs.
+expanded (through `Option.some` and `Pure.pure`, whose monad is recorded: `pure` in `Option`
+can wrap a safety error). Theorem names, comments and manifest labels are not inputs.
 
 | Conclusion head (exact kernel name) | Claims | Derived strength |
 |---|---|---|
 | `Zig.Triple`, `Zig.TTriple` | no-panic, correct-if-returned | `partial_correctness` |
 | `Zig.Returns` | no-panic, guaranteed-return | `safety` |
 | `Zig.TotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Eq` with right side `Pure.pure _` or `Option.some (Except.ok _)` | all three (exact result) | `total_correctness` |
-| anything else (`Not`, `And`, `Exists`, `Iff`, wrapper definitions, `Eq` to `ite`/`throw`) | none | none |
+| `Eq` with right side `pure _` in `Zig.Result`, `Zig.MemM`, `Zig.MM` or `Zig.M`, or `some (Except.ok _)` / `pure (Except.ok _)` in `Option` | all three (exact result) | `total_correctness` |
+| anything else (`Not`, `And`, `Exists`, `Iff`, wrapper definitions, `Eq` to `ite`/`throw`, `pure` in another monad) | none | none |
 
 Partial triples are false on a safety error but are satisfied by divergence, so they state
 no-panic and correct-if-returned only. `Returns` has a trivial postcondition, so it is a

@@ -49,6 +49,13 @@ theorem ret_some (m : Mem) :
 theorem panic_some (m : Mem) :
     ((throw Error.panic : MemM Unit).run m).run = some (.error Error.panic) := rfl
 
+/-- `pure` in `Option` is `some`: wrapping a safety error it states a panic, not a return. -/
+theorem panic_pure (m : Mem) :
+    ((throw Error.panic : MemM Unit).run m).run = pure (Except.error Error.panic) := rfl
+
+theorem ret_pure_ok (m : Mem) :
+    ((pure 7 : MemM Nat).run m).run = pure (Except.ok (7, m)) := rfl
+
 /-- Premises do not change the conclusion's head constant. -/
 theorem premise_total (P : Assn) (v : Nat) (_h : 0 < v) :
     TotalTriple P (pure v : MemM Nat) (fun _ => P) := ret_total P v

@@ -29,11 +29,13 @@ HEAD_CLAIMS = {
     # Result existence only; its postcondition is trivial.
     'Zig.Returns': {NO_PANIC, GUARANTEED_RETURN},
 }
-# `lhs = pure v` and `lhs = some (.ok v)` state an exact successful result.
+# `lhs = pure v` in these monads and `lhs = some (.ok v)` state an exact successful result.
 EXACT_SUCCESS = {NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN}
+# `pure` in each of these is a success of the `Zig.Result` (`ExceptT Error Option`) layer.
+# `pure` in `Option` is `some` and needs an `Except.ok` value; other monads are not classified.
+SUCCESS_MONADS = {'Zig.Result', 'Zig.MemM', 'Zig.MM', 'Zig.M'}
 
 ORDERED = {'safety': 1, 'partial_correctness': 2, 'total_correctness': 3}
-STRENGTHS = (*ORDERED, 'resource_bound', 'correspondence')
 
 
 def _head(shape) -> str | None:
@@ -48,19 +50,25 @@ def _args(shape) -> list:
     return args if isinstance(args, list) else []
 
 
+def _exact_success(value) -> bool:
+    """Whether an equation's right-hand side is a successful result."""
+    head, args = _head(value), _args(value)
+    if head == 'Pure.pure' and len(args) == 2:
+        monad, inner = _head(args[0]), args[1]
+        if monad in SUCCESS_MONADS:
+            return True
+        head, args = ('Option.some', [inner]) if monad == 'Option' else (None, [])
+    return head == 'Option.some' and len(args) == 1 and _head(args[0]) == 'Except.ok'
+
+
 def claims_of(conclusion) -> frozenset[str]:
     """Claims supported by a conclusion shape; unknown shapes support none."""
     head = _head(conclusion)
     if head in HEAD_CLAIMS:
         return frozenset(HEAD_CLAIMS[head])
-    if head == 'Eq':
-        args = _args(conclusion)
-        rhs = args[0] if len(args) == 1 else None
-        if _head(rhs) == 'Pure.pure':
-            return frozenset(EXACT_SUCCESS)
-        inner = _args(rhs)
-        if _head(rhs) == 'Option.some' and len(inner) == 1 and _head(inner[0]) == 'Except.ok':
-            return frozenset(EXACT_SUCCESS)
+    args = _args(conclusion)
+    if head == 'Eq' and len(args) == 1 and _exact_success(args[0]):
+        return frozenset(EXACT_SUCCESS)
     return frozenset()
 
 
@@ -136,9 +144,8 @@ def _project():
 def check(manifest_path: Path, report: dict) -> dict:
     manifest = _project().load_manifest(manifest_path)[0]
     theorems = {t['name']: t for t in classify(report)['theorems']}
-    roots = []
-    for root in manifest['roots']:
-        roots.append({'id': root['id'], 'goals': [check_goal(goal, theorems) for goal in root['goals']]})
+    roots = [{'id': root['id'], 'goals': [check_goal(goal, theorems) for goal in root['goals']]}
+             for root in manifest['roots']]
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
             'scope': 'Strength is derived from conclusion head constants only. Preconditions and '

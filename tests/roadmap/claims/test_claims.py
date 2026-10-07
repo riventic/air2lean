@@ -27,17 +27,27 @@ EXPECTED = {
     'ClaimFixture.ret_returns': ('guaranteed-return', 'safety'),
     'ClaimFixture.ret_run': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_some': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.ret_pure_ok': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.panic_run': ('unclassified', None),
     'ClaimFixture.panic_some': ('unclassified', None),
+    'ClaimFixture.panic_pure': ('unclassified', None),
     'ClaimFixture.diverge_not_total': ('unclassified', None),
     'ClaimFixture.wrapped_total': ('unclassified', None),
     'ClaimFixture.partial_and_returns': ('unclassified', None),
 }
 
 
+def classified(report):
+    return {t['name']: t for t in claims.classify(report)['theorems']}
+
+
+def pure(monad, value):
+    return {'head': 'Pure.pure', 'args': [{'head': monad}, value]}
+
+
 class ClassifyTests(unittest.TestCase):
     def test_fixture_classification_from_types(self):
-        theorems = {t['name']: t for t in claims.classify(FIXTURE)['theorems']}
+        theorems = classified(FIXTURE)
         self.assertEqual(set(theorems), set(EXPECTED))
         for name, (klass, strength) in EXPECTED.items():
             with self.subTest(name=name):
@@ -45,7 +55,7 @@ class ClassifyTests(unittest.TestCase):
                                  (klass, strength))
 
     def test_three_claims_are_distinct(self):
-        theorems = {t['name']: t for t in claims.classify(FIXTURE)['theorems']}
+        theorems = classified(FIXTURE)
         self.assertEqual(theorems['ClaimFixture.diverge_partial']['claims'], ['no-panic', 'correct-if-returned'])
         self.assertEqual(theorems['ClaimFixture.ret_returns']['claims'], ['no-panic', 'guaranteed-return'])
         self.assertEqual(theorems['ClaimFixture.ret_total']['claims'],
@@ -56,7 +66,7 @@ class ClassifyTests(unittest.TestCase):
         for theorem in report['theorems']:
             if theorem['name'] == 'ClaimFixture.diverge_partial':
                 theorem['name'] = 'ClaimFixture.total_correctness_guaranteed_return'
-        theorems = {t['name']: t for t in claims.classify(report)['theorems']}
+        theorems = classified(report)
         self.assertEqual(theorems['ClaimFixture.total_correctness_guaranteed_return']['derived_strength'],
                          'partial_correctness')
 
@@ -69,7 +79,12 @@ class ClassifyTests(unittest.TestCase):
         for shape in (None, 3, {}, {'head': None}, {'head': 'Eq'}, {'head': 'Eq', 'args': 'x'},
                       {'head': 'Eq', 'args': [{'head': 'Option.some'}]},
                       {'head': 'Eq', 'args': [{'head': 'Option.some', 'args': [{'head': 'Except.error'}]}]},
-                      {'head': 'Eq', 'args': [{'head': 'Pure.pure'}, {'head': 'Pure.pure'}]}):
+                      {'head': 'Eq', 'args': [{'head': 'Pure.pure'}, {'head': 'Pure.pure'}]},
+                      # `pure` without its monad, in `Option` around an error, or in an unknown monad.
+                      {'head': 'Eq', 'args': [{'head': 'Pure.pure'}]},
+                      {'head': 'Eq', 'args': [pure('Option', {'head': 'Except.error'})]},
+                      {'head': 'Eq', 'args': [pure('Option', {'head': None})]},
+                      {'head': 'Eq', 'args': [pure('Id', {'head': 'Prod.mk'})]}):
             self.assertEqual(claims.claims_of(shape), frozenset(), shape)
 
     def test_old_or_failed_reports_are_rejected(self):
@@ -141,6 +156,7 @@ class ManifestTests(unittest.TestCase):
                                ('ClaimFixture.partial_and_returns', 'total_correctness'),
                                ('ClaimFixture.panic_run', 'safety'),
                                ('ClaimFixture.panic_some', 'safety'),
+                               ('ClaimFixture.panic_pure', 'safety'),
                                ('ClaimFixture.diverge_not_total', 'safety'),
                                ('ClaimFixture.ret_total', 'resource_bound'),
                                ('ClaimFixture.ret_total', 'correspondence')]:

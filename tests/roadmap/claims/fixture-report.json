@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "status": "pass",
-  "theorem_count": 12,
+  "theorem_count": 14,
   "theorems": [
     {
       "name": "ClaimFixture.diverge_not_total",
@@ -16,6 +16,27 @@
       "module": "tests.roadmap.claims.Fixture",
       "conclusion": {
         "head": "Zig.Triple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.panic_pure",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "args": [
+              {
+                "head": "Option"
+              },
+              {
+                "head": "Except.error"
+              }
+            ],
+            "head": "Pure.pure"
+          }
+        ],
+        "head": "Eq"
       },
       "allowed": true
     },
@@ -75,6 +96,27 @@
       "allowed": true
     },
     {
+      "name": "ClaimFixture.ret_pure_ok",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "args": [
+          {
+            "args": [
+              {
+                "head": "Option"
+              },
+              {
+                "head": "Except.ok"
+              }
+            ],
+            "head": "Pure.pure"
+          }
+        ],
+        "head": "Eq"
+      },
+      "allowed": true
+    },
+    {
       "name": "ClaimFixture.ret_returns",
       "module": "tests.roadmap.claims.Fixture",
       "conclusion": {
@@ -88,6 +130,14 @@
       "conclusion": {
         "args": [
           {
+            "args": [
+              {
+                "head": "Zig.Result"
+              },
+              {
+                "head": "Prod.mk"
+              }
+            ],
             "head": "Pure.pure"
           }
         ],

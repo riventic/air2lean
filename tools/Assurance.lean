@@ -88,12 +88,17 @@ private def headJson (e : Expr) : Json :=
   | .const n _ => toJson n.toString
   | _ => Json.null
 
-/-- Value shape on an equation's right-hand side: only `Option.some` is peeled. -/
+/-- Value shape on an equation's right-hand side. `Option.some` is peeled to its value;
+`Pure.pure` to its monad and value, since `pure` in `Option` can wrap an error. -/
 private partial def valueShape (depth : Nat) (e : Expr) : Json :=
   let e := e.consumeMData
   let head := ("head", headJson e)
-  if depth != 0 && e.isAppOfArity ``Option.some 2 then
+  if depth == 0 then Json.mkObj [head]
+  else if e.isAppOfArity ``Option.some 2 then
     Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) e.appArg!])]
+  else if e.isAppOfArity ``Pure.pure 4 then
+    Json.mkObj [head, ("args", Json.arr #[Json.mkObj [("head", headJson (e.getArg! 0))],
+      valueShape (depth - 1) e.appArg!])]
   else Json.mkObj [head]
 
 /-- Raw conclusion shape for claim classification; policy is applied in `scripts/claims.py`.
