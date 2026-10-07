@@ -1,4 +1,5 @@
-//! Version compat shim for Zig 0.15.2 vs 0.16.0 — the only file in tests/diff/ and
+//! Version compat shim for Zig 0.15.2 vs 0.16.0 (and 0.17.0's type reflection, at the end) —
+//! the only file in tests/diff/ and
 //! tests/floatprobe/ with a Zig-version or OS switch; every other file there imports this and
 //! stays version-agnostic. 0.16.0 removed std.posix's process layer (fork/pipe/write/waitpid/
 //! dup2/exit/abort/close — `read` and `std.posix.{W,errno,system,fd_t,STDERR_FILENO}` are
@@ -171,4 +172,34 @@ pub const StdoutWriter = FileT.Writer;
 pub fn stdoutWriter(buffer: []u8) StdoutWriter {
     if (v16) return std.Io.File.stdout().writer(ioCtx(), buffer);
     return std.fs.File.stdout().writer(buffer);
+}
+
+// -- types (0.17.0) -------------------------------------------------------------------------
+
+/// True from 0.17.0 onward: `@typeInfo` struct info is struct-of-arrays (`field_names`,
+/// `field_types`) instead of one `fields` array, and `std.meta.Int` is gone.
+const v17 = builtin.zig_version.minor >= 17;
+
+/// The unsigned integer type with `@bitSizeOf(T)` bits: `std.meta.Int(.unsigned, …)` before
+/// 0.17.0, which removed it for `@Int` (a builtin that 0.15.2 does not parse).
+pub fn Bits(comptime T: type) type {
+    return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);
+}
+
+/// The number of fields of the struct (or tuple) `T`.
+pub fn fieldCount(comptime T: type) usize {
+    const s = @typeInfo(T).@"struct";
+    return if (v17) s.field_names.len else s.fields.len;
+}
+
+/// The name of field `i` of the struct (or tuple) `T`.
+pub fn fieldName(comptime T: type, comptime i: usize) [:0]const u8 {
+    const s = @typeInfo(T).@"struct";
+    return if (v17) s.field_names[i] else s.fields[i].name;
+}
+
+/// The type of field `i` of the struct (or tuple) `T`.
+pub fn FieldType(comptime T: type, comptime i: usize) type {
+    const s = @typeInfo(T).@"struct";
+    return if (v17) s.field_types[i] else s.fields[i].type;
 }

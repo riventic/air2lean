@@ -12,7 +12,7 @@ A std function that an example calls is one of these:
 
 ## `examples/<ex>/filter`
 
-One name prefix per line. `scripts/check.sh` writes the AIR of every function whose name starts with `<ex>.` or with one of these prefixes (`ZIG_AIR_JSON_FILTER`, a comma list). A prefix names the instance: `array_list.Aligned(u32,null).` translates the `ArrayListUnmanaged(u32)` methods, and not the instances that std's own debug code uses.
+One name prefix per line. `scripts/check.sh` writes the AIR of every function whose name starts with `<ex>.` or with one of these prefixes (`ZIG_AIR_JSON_FILTER`, a comma list). A prefix names the instance: `array_list.Aligned(u32,null).` translates the `ArrayListUnmanaged(u32)` methods, and not the instances that std's own debug code uses. `examples/<ex>/filter-<version>` adds prefixes for one Zig version only: 0.17.0's `ArrayListUnmanaged` calls `debug.SafetyLock` (its new `pointer_stability` field), which 0.16.0's std debug code also has but the 0.16.0 translation does not call.
 
 ## Allocator model
 
@@ -132,3 +132,22 @@ The checker compares types across the caller and worker's separate AIR type tabl
 ## Versions
 
 The std code differs between Zig versions: 0.15.2's `growCapacity` has a loop, 0.16.0's does not. So an example with translated std code has a translation per version (`tests/golden/<version>/<ex>/Gen.lean`), and the proofs hold for each of them (CI builds `Proofs/` after `check.sh` writes that version's translation). 0.14.1 does not run `lists`: its `ArrayListUnmanaged` is a different type (`ArrayListAlignedUnmanaged`).
+
+### Zig 0.17.0 audit
+
+A row without explicit versions in `stdModels` covers 0.14.1, 0.15.2 and 0.16.0 (`baseZigVersions`). A later Zig is fail-closed: a row covers it only if it lists it. For 0.17.0, each modelled function's `lib/std` source was compared with 0.16.0's (stock release tarballs):
+
+| Row | 0.17.0 | Reason |
+|---|---|---|
+| `mem.Allocator.create` | qualified | Now calls the inline `createAdvancedWithRetAddr(T, null, …)`: same size, alignment and result type `*T`. |
+| `mem.Allocator.destroy`, `.alloc`, `.alignedAlloc`, `.dupe` | qualified | Unchanged (`allocBytesWithAlignment` is renamed `allocBytesAligned`, an internal callee). |
+| `mem.Allocator.free` | qualified | Unchanged for slices. A new `*[N]T` argument form is rejected by the slice signature check. |
+| `mem.Allocator.remap` | qualified | Unchanged for slices without a sentinel; the result type is now `?Slice(AbsorbSentinel(T))`, which differs only for a sentinel slice (already rejected) or the new `*[N]T` argument (rejected by the signature check). |
+| `mem.Allocator.allocSentinel` | not qualified | std source unchanged, but the row's gate (`tests/roadmap/byte-sentinel`, exporter `sentinel_byte`) is qualified on 0.16.0 only. |
+| `Thread.spawn`, `.join`, `.yield`, `atomic.spinLoopHint` | qualified | Unchanged (0.17.0's `Thread.zig` changes are other targets, `setName`/`getName` and `@enumFromInt` → `@fromBackingInt` on Windows). |
+| `Io.futexWait`, `.futexWaitUncancelable`, `.futexWake` | qualified | `@intFromEnum` → `@backingInt` for an enum value: the same bits. |
+| `Io.Group.async`, `.concurrent`, `.await`, `.cancel` | qualified | Documentation only: a task may run as late as `await`/`cancel`, which the thread model already allows. |
+| `Thread.Futex.*`, `Thread.Mutex.DarwinImpl.*`, `time.Timer.*`, `Thread.spinLoopHint` | not qualified | Not in 0.16.0's or 0.17.0's std. |
+| `Io.futexWaitTimeout`, `Thread.detach` | rejected | A rejection holds in every version. |
+
+`mem.Allocator.dupeZ` (translated from its AIR for `lists`) is gone in 0.17.0; `examples/lists` calls `dupeSentinel(u8, xs, 0)` there. New 0.17.0 std pieces are not modelled: `Io.Semaphore.waitTimeout` (a clock, like `Io.futexWaitTimeout`), `std.heap.SafeAllocator` and `std.heap.BufferFirstAllocator` (allocator implementations behind the `Allocator` vtable). The fallible spawn and `Io.Group` policies (`checkFallibleSpawnCalls`, `Air2Lean/Check.lean`) are still audited for 0.16.0 and older only.

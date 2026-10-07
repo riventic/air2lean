@@ -12,7 +12,7 @@ fn rt(comptime T: type, x: T) T {
     return p.*;
 }
 
-fn bits(comptime T: type, x: T) std.meta.Int(.unsigned, @bitSizeOf(T)) {
+fn bits(comptime T: type, x: T) compat.Bits(T) {
     return @bitCast(x);
 }
 

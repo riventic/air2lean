@@ -607,7 +607,7 @@ fn genSumDigits(rng: std.Random) !void {
 // 2^53, and u128 has no exact JSON number representation at all).
 
 fn floatBits(comptime T: type) type {
-    return std.meta.Int(.unsigned, @bitSizeOf(T));
+    return compat.Bits(T);
 }
 
 fn toBits(comptime T: type, x: T) floatBits(T) {

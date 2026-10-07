@@ -9,6 +9,15 @@ fn rt(comptime T: type, value: T) T {
     const pointer: *volatile T = &storage;
     return pointer.*;
 }
+/// `builtin.mode` in the 0.16.0 tag spelling (`ReleaseSafe`), which scripts/abi-probe.py expects:
+/// Zig 0.17.0 renamed the tags (`safe`) and kept the old names as declarations.
+fn modeName() []const u8 {
+    const Mode = @TypeOf(builtin.mode);
+    inline for (.{ "Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall" }) |name| {
+        if (builtin.mode == @field(Mode, name)) return name;
+    }
+    unreachable;
+}
 fn layout(out: *std.Io.Writer, comptime name: []const u8, comptime T: type) !void {
     try out.print("layout {s} {d} {d}\n", .{ name, @sizeOf(T), @alignOf(T) });
 }
@@ -21,7 +30,7 @@ pub fn main() !void {
         @tagName(builtin.cpu.arch.endian()),
     });
     try out.print("meta backend {s}\nmeta mode {s}\nmeta cpu {s}\nmeta zig {s}\n", .{
-        @tagName(builtin.zig_backend), @tagName(builtin.mode), builtin.cpu.model.name,
+        @tagName(builtin.zig_backend), modeName(), builtin.cpu.model.name,
         builtin.zig_version_string,
     });
     try out.print("meta pointer_bits {d}\n", .{@bitSizeOf(usize)});

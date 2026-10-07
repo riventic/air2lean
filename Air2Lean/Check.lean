@@ -1927,7 +1927,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
     unless model.qualifies f.zigVersion do
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.qualifiedVersions.toList}"
   if let some fn := allocFn? callee then
     count (if fn == .create then 1 else if fn == .remap then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"

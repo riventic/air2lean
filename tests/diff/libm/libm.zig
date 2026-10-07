@@ -30,31 +30,37 @@ const crt = @import("crt");
 
 const v16 = @import("builtin").zig_version.minor >= 16;
 
+/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.0 removed it
+/// (for `@Int`, which 0.15.2 does not parse).
+fn FloatBits(comptime T: type) type {
+    return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);
+}
+
 // See the module doc comment: 0.16.0's compiler_rt/sin.zig does not mark f80's `sinx` `pub`.
 extern fn __sinx(f80) callconv(.c) f80;
 
 fn narrow(comptime T: type, x: u64, comptime f: fn (T) callconv(.c) T) u64 {
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     const arg: T = @bitCast(@as(Bits, @truncate(x)));
     const rbits: Bits = @bitCast(f(arg));
     return rbits;
 }
 
 fn wideBits(comptime T: type, hi: u64, lo: u64) T {
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     const combined: u128 = (@as(u128, hi) << 64) | @as(u128, lo);
     const bits: Bits = @truncate(combined);
     return @bitCast(bits);
 }
 
 fn wideHi(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T) u64 {
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     const rbits: Bits = @bitCast(f(wideBits(T, hi, lo)));
     return @truncate(@as(u128, rbits) >> 64);
 }
 
 fn wideLo(comptime T: type, hi: u64, lo: u64, comptime f: fn (T) callconv(.c) T) u64 {
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     const rbits: Bits = @bitCast(f(wideBits(T, hi, lo)));
     return @truncate(rbits);
 }
