@@ -45,7 +45,7 @@ theorem grant_iff {x : Ptr} {ax : Nat} {w : BitVec 32} {h : Heap} :
       subst e3; subst e4; simp; rfl
     have e2 : h₂ = Heap.empty := h2'
     subst e2
-    simpa using h1
+    simpa [Capture.cells, transfer, Transfer.cells] using h1
   · intro hk
     refine ⟨?_, fun c hc => ?_⟩
     · have := Capture.cellsOf_cons (mode := transfer x ax w) (c := .ptr x) (cs := [.value])
@@ -265,10 +265,10 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto v).init tgt g) (u : Thre
           · exact ⟨h', d', hd', by rw [upd_ne _ _ hku]; exact hk⟩
         have hnone : ∀ k, (∀ j, k ≤ j → G j = .none) →
             ∀ j, k ≤ j → upd G u (.kid hQ x ax w true) j = .none := by
-          intro k hk j hj
+          intro k hk j hkj
           by_cases hju : j = u
-          · subst hju; have := hk j hj; rw [hgu] at this; cases this
-          · rw [upd_ne _ _ hju]; exact hk j hj
+          · subst hju; have := hk j hkj; rw [hgu] at this; cases this
+          · rw [upd_ne _ _ hju]; exact hk j hkj
         have hrec : ∀ k jn, KidRec m k jn → KidRec m' k jn := by
           intro k jn hr; unfold KidRec; rw [hs.threads]; exact hr
         have hdone : ∀ k, IsKid v B G k (some true) → k ≠ u := by
@@ -447,7 +447,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
       · rw [upd_ne _ _ h0] at hu
         by_cases h1 : u = 1
         · subst h1; rw [upd_self] at hu; cases hu
-          exact sep_lift.mpr ⟨⟨hl0, hAl⟩, by simpa using hLa⟩
+          exact sep_lift.mpr ⟨⟨hl0, hAl⟩, by simpa [flagA] using hLa⟩
         · rw [upd_ne _ _ h1, hn₆ u (by unfold ThreadId at *; omega)] at hu; cases hu
     · refine ⟨by rw [hth₇]; simp [hsz₆], ?_, ⟨hL, false, .inl rfl, by simp [upd, B]⟩,
         fun u hu => ?_⟩
@@ -515,7 +515,6 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
       have : i = 1 := by omega
       subst this
       rw [ht₁₂, ht₁₁, hth₁₀, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₉]; decide)]
-      rfl
   -- The second spawn succeeds: child 2 gets `right`.
   subst hc0
   simp only [spawnOutcomeC, ↓reduceIte]
@@ -554,7 +553,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
       · rw [upd_ne _ _ h0] at hu
         by_cases h2 : u = 2
         · subst h2; rw [upd_self] at hu; cases hu
-          exact sep_lift.mpr ⟨⟨hr0, hAr⟩, by simpa using hRa⟩
+          exact sep_lift.mpr ⟨⟨hr0, hAr⟩, by simpa [flagA] using hRa⟩
         · rw [upd_ne _ _ h2] at hu; exact hi₉.kids u _ _ _ _ _ hu
     · refine ⟨by rw [hth₁₀]; simp [hsz₉], ?_, ?_, ?_, ⟨hR, false, .inl rfl, by simp [upd, B]⟩,
         fun u hu => ?_⟩
@@ -656,7 +655,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
     · rw [hsz₁₄] at hlt
       rcases (by omega : i = 1 ∨ i = 2) with rfl | rfl
       · rw [hth₁₄, Array.getElem?_setIfInBounds_ne (by decide)]; exact r1₁₃
-      · rw [hth₁₄, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₃]; decide)]; rfl
+      · rw [hth₁₄, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₃]; decide)]
   -- `left +% right`.
   simp only [StateT.run_pure, pure_bind, StateT.run_bind]
   refine WP.bind (WP.liftM_upd ((TTriple.loadAt (p := s1) (A := Al) (S := 4) (K := .stack)
