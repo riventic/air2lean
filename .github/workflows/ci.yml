@@ -768,6 +768,7 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           lake build Proofs
+          lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
           fi
