@@ -105,9 +105,13 @@ class PolicyTests(unittest.TestCase):
         libm = self.node("Zig.Float.libm", "opaque", module="ZigLean.Float.Libm",
                          implemented_by="_private.ZigLean.Float.Libm.0.Zig.Float.libmImpl")
         raw = self.raw([libm["name"]], [libm])
-        self.assertEqual(audit.apply_policy(raw, self.policy)["status"], "pass")
-        libm["implemented_by"] = "_private.ZigLean.Float.Libm.1.Zig.Float.libmImpl"
+        # The fixture reaches the float model, so it also needs a float-semantics label.
         self.assertEqual(audit.apply_policy(raw, self.policy)["status"], "fail")
+        labels = audit.float_semantics().load_registry(root=ROOT)
+        labels["theorems"]["Proofs.Fixture::fixture"] = {"semantics": "ieee", "correspondence": "model"}
+        self.assertEqual(audit.apply_policy(raw, self.policy, labels)["status"], "pass")
+        libm["implemented_by"] = "_private.ZigLean.Float.Libm.1.Zig.Float.libmImpl"
+        self.assertEqual(audit.apply_policy(raw, self.policy, labels)["status"], "fail")
 
     def test_unknown_imported_redirection_fails(self):
         redirected = self.node("redirected", "definition", module="TestOnly.Import", implemented_by="replacement")

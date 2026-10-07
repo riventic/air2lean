@@ -133,7 +133,10 @@ boundaries and allowed assumptions remain in `audit.json`. Ordinary theorem hypo
 and property domains require reading the theorem and its reviewed documentation.
 
 This is evidence about generated Lean and its checked environment. The receipt states
-`source_correspondence: not_attested` and `native_adequacy: not_attested`. It does not
+`source_correspondence: not_attested` and `native_adequacy: not_attested`. Receipt schema 2
+also carries `float_semantics`: the audit's label summary plus each stated numerical theorem's
+label (`ieee`, `compiler-rt@<versions>` or `abstract-spec`), with
+`binary_correspondence: not_claimed` (`docs/float-semantics.md`). It does not
 prove original Zig export, normalization/emission preservation, backend lowering,
 shipping native binaries, foreign behavior, fairness, termination or exhaustive testing.
 A scoped audit is not an all-shipped audit, and one selected translation does not qualify

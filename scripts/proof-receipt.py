@@ -25,7 +25,8 @@ MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
-          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh')
+          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
+          'assurance/float-semantics.json', 'scripts/float-semantics.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 
 
@@ -328,6 +329,8 @@ def audit_ok(plan, audit):
     recalculated = auditor.apply_policy(audit, policy)
     for key in recalculated:
         demand(audit.get(key) == recalculated[key], 'audit graph/policy mismatch: ' + key)
+    demand(recalculated['float_semantics']['binary_correspondence'] == 'not_claimed',
+           'audit claims binary correspondence for a numerical theorem')
     demand(audit['policy_sha256'] == fingerprint(policy_path)['sha256']
            and audit['lean_toolchain'] == read_file(ROOT / 'lean-toolchain', 4096).decode().strip(),
            'audit policy/toolchain mismatch')
@@ -389,6 +392,13 @@ def evidence_matches(rows, paths):
                'guard identity mismatch: ' + actual['path'])
 
 
+def float_labels(audit):
+    """Receipt copy of the audit's float-semantics summary plus each stated theorem's label."""
+    labels = {t['name']: t['float_semantics']['label'] for t in audit['theorems']
+              if t.get('float_semantics', {}).get('scope') == 'stated'}
+    return dict(audit['float_semantics'], theorems=dict(sorted(labels.items())))
+
+
 def seal(attempt):
     attempt = physical(attempt)
     plan = plan_for(attempt)
@@ -420,10 +430,13 @@ def seal(attempt):
            and before == after['context'] == context(plan), 'source context stale')
     demand(after['compiled'] == compiled(plan) and after['profiles'] == profiles(), 'compiled/profile context stale')
     audit_ok(plan, audit)
-    write_new(attempt / 'receipt.json', {'schema': 1, 'status': 'audited', 'authentication': 'not_attested',
+    # The audit's float-semantics summary (recomputed by audit_ok) states which semantics the
+    # numerical theorems concern; it never claims binary/native correspondence.
+    write_new(attempt / 'receipt.json', {'schema': 2, 'status': 'audited', 'authentication': 'not_attested',
               'proof_scope': 'selected compiled Lean theorem dependency policy only',
               'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
               'attempt': str(attempt), 'theorem_count': audit['theorem_count'],
+              'float_semantics': float_labels(audit),
               'artifacts': inventory([attempt / n for n in ('plan.json', *OUTPUTS, 'guard.json', 'guard.log')])})
 
 
@@ -431,8 +444,8 @@ def verify(attempt):
     attempt = physical(attempt)
     receipt = load(attempt / 'receipt.json')
     demand(set(receipt) == {'schema', 'status', 'authentication', 'proof_scope', 'source_correspondence',
-                          'native_adequacy', 'attempt', 'theorem_count', 'artifacts'} and
-           type(receipt['schema']) is int and receipt['schema'] == 1 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
+                          'native_adequacy', 'attempt', 'theorem_count', 'float_semantics', 'artifacts'} and
+           type(receipt['schema']) is int and receipt['schema'] == 2 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
            and receipt['authentication'] == receipt['source_correspondence'] == receipt['native_adequacy'] == 'not_attested'
            and receipt['proof_scope'] == 'selected compiled Lean theorem dependency policy only',
            'invalid receipt')
@@ -440,6 +453,9 @@ def verify(attempt):
            'receipt artifacts changed')
     plan, after, audit = plan_for(attempt), load(attempt / 'after.json'), load(attempt / 'audit.json')
     demand(type(receipt['theorem_count']) is int and receipt['theorem_count'] == audit['theorem_count'], 'receipt theorem count mismatch')
+    demand(isinstance(receipt['float_semantics'], dict) and receipt['float_semantics'] == float_labels(audit)
+           and receipt['float_semantics'].get('binary_correspondence') == 'not_claimed',
+           'receipt float-semantics labels differ from the audit or claim binary correspondence')
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
     audit_ok(plan, audit)
