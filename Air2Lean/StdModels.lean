@@ -85,15 +85,15 @@ private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
   { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
 /-- The one table of built-in std models. Rows without 0.17.0 are 0.17.0-unqualified on purpose
-(`docs/std-models.md` §Zig 0.17.0 audit): `allocSentinel` has only 0.16.0 gate evidence; the
-`Thread.Futex`, `Thread.Mutex.DarwinImpl`, `time.Timer` and `Thread.spinLoopHint` rows name std
-declarations that 0.16.0 and 0.17.0 no longer have. -/
+(`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.16.0 and 0.17.0 no
+longer have. -/
 def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.create" .create #["create"] through017,
   allocModel "mem.Allocator.destroy" .destroy #["destroy"] through017,
   allocModel "mem.Allocator.alloc" .alloc #["alloc"] through017,
   allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"] through017,
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0"],
+  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0", "0.17.0"],
   allocModel "mem.Allocator.free" .free #["free", "freeSentinel"] through017,
   allocModel "mem.Allocator.dupe" .dupe #["dupe"] through017,
   allocModel "mem.Allocator.remap" .remap #["remap"] through017,

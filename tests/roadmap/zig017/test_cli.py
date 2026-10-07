@@ -187,10 +187,18 @@ def as_version(doc, version):
     return doc
 
 
+def selectable(example, version):
+    """`scripts/example-selection.sh`'s version rule (no `zig-versions` file: every version)."""
+    versions = ROOT / "examples" / example / "zig-versions"
+    return not versions.exists() or version in versions.read_text().split()
+
+
 def upgrades(binary):
-    compared = 0
-    for example in sorted(p.name for p in (ROOT / "tests/golden").iterdir() if (p / "air").is_dir()):
+    compared = skipped = 0
+    for example in sorted(p.name for p in (ROOT / "examples").iterdir() if p.is_dir()):
         files = golden_set(example)
+        if not files:
+            continue
         args_file = ROOT / "examples" / example / "translate.args"
         extra = args_file.read_text().split() if args_file.exists() else []
         namespace = example[0].upper() + example[1:]
@@ -211,13 +219,18 @@ def upgrades(binary):
                 # The relabelled set is outside the translator's 0.16.0 scope; 0.17.0 must agree.
                 assert new_rc == old_rc, (example, old_err, new_err)
                 continue
+            if new_rc != 0 and not selectable(example, "0.17.0") and "qualified Zig" in new_err:
+                # A 0.17.0-unselected example whose std models are not qualified for 0.17.0
+                # (threadsync: 0.15.2's Thread.Futex): the version table rejects it, as intended.
+                skipped += 1
+                continue
             assert new_rc == 0, (example, new_err)
             old_head, _, old_body = old.partition("\n")
             new_head, _, new_body = new.partition("\n")
             assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.0"'), example
             assert new_body == old_body, f"{example}: 0.17.0 spelling changed the translation"
             compared += 1
-    assert compared >= 19, f"only {compared} examples translated"
+    assert compared + skipped >= 19 and compared >= 18, f"only {compared} examples translated"
     return compared
 
 

@@ -66,9 +66,10 @@ def main : IO Unit := do
   let qualifies (symbol version : String) : Bool := ((stdModel? symbol).map (·.qualifies version)).getD false
   for v in baseZigVersions do
     require (qualifies "Thread.Futex.wait" v && qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
-  for symbol in #["mem.Allocator.dupe", "Thread.spawn", "Io.futexWait", "Io.Group.await"] do
+  for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
+      "Io.Group.await"] do
     require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
-  for symbol in #["mem.Allocator.allocSentinel", "Thread.Futex.wait", "time.Timer.read"] do
+  for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
     require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
   require (qualifies "Thread.detach" "0.17.0") "a rejection holds in every version"
   expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])

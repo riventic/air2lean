@@ -158,13 +158,9 @@ def main (args : List String) : IO Unit := do
   | .error message =>
     require (hasText message "unsupported zig_version '0.99.0'")
       "unsupported version fixture failed for an unrelated reason"
-  -- 0.17.0 is a supported AIR version, but its std spawn path is not audited.
-  let unaudited ← checked #[spawner "0.17.0" "Thread.spawn", worker "0.17.0"]
-  match checkFallibleSpawnCalls unaudited with
-  | .ok _ => throw (IO.userError "unaudited version was accepted")
-  | .error message =>
-    require (hasText message "requires an audited Zig version")
-      "unaudited version fixture failed for an unrelated reason"
+  -- 0.17.0's std spawn path is audited (unchanged `Thread.spawn`/`SpawnConfig`, docs/std-models.md).
+  let audited017 ← checked #[spawner "0.17.0" "Thread.spawn", worker "0.17.0"]
+  require (checkFallibleSpawnCalls audited017 |>.toOption.isSome) "audited 0.17.0 spawn rejected"
   for (callee, label, op) in #[("Io.Group.async", "async", "groupAsyncWithPolicyC"),
       ("Io.Group.concurrent", "concurrent", "groupConcurrentWithPolicyC")] do
     let fs ← checked #[spawner "0.16.0" callee, worker "0.16.0"]

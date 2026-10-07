@@ -2034,7 +2034,7 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
       if let .call (.func name _ _) args := i.op then
         if let some kind := threadFn? name then
           if kind.spawnArgs?.isSome then
-            unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+            unless #["0.14.1", "0.15.2", "0.16.0", "0.17.0"].contains f.zigVersion do
               throw s!"{f.name}: fallible spawn requires an audited Zig version"
             if kind == .spawn then
               let some (Val.agg ty fields) := (args[0]? : Option Val)
@@ -2052,8 +2052,8 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
               let .optNull _ := fields[1]!
                 | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
             else
-              unless f.zigVersion == "0.16.0" do
-                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+              unless f.zigVersion == "0.16.0" || f.zigVersion == "0.17.0" do
+                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0 or 0.17.0"
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
