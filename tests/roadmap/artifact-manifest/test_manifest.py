@@ -77,6 +77,9 @@ class ManifestTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
         self.git('init', '-q')
+        # No detached auto-gc/maintenance: it can still be writing objects/ when tearDown removes the repo.
+        for key, value in (('gc.auto', '0'), ('maintenance.auto', 'false'), ('core.fsmonitor', 'false')):
+            self.git('config', key, value)
         self.commit('fixture')
         self.manifest = self.base / 'manifest.json'
 
