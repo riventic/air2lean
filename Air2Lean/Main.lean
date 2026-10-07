@@ -3,6 +3,7 @@ import Air2Lean.Check
 import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
+import Air2Lean.SourceMap
 
 /-!
 # CLI
@@ -18,13 +19,15 @@ file, or a function outside the checked subset.
 
 `--timing-json <path>` additionally writes per-phase monotonic wall times after a successful
 run (`docs/perf-budgets.md`). It only observes the stages; the Lean output is unchanged.
+`--source-map-json <path>` likewise writes a per-function source map and canonical bodies
+for semantic fingerprints (`docs/stable-generation.md`, `Air2Lean/SourceMap.lean`).
 -/
 
 namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
@@ -43,6 +46,7 @@ def help : String :=
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
+  "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -67,6 +71,8 @@ structure Args where
   proofApi : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
+  /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
+  sourceMapJson : Option String := none
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -102,7 +108,11 @@ private partial def parseArgsGo (args : List String)
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     if a.timingJson.isSome then .error s!"duplicate --timing-json\n{usage}"
     else .ok { a with timingJson := some v }
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] =>
+  | "--source-map-json" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.sourceMapJson.isSome then .error s!"duplicate --source-map-json\n{usage}"
+    else .ok { a with sourceMapJson := some v }
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
@@ -117,6 +127,11 @@ def parseArgs (args : List String) : Except String Args := do
     throw "--model-registry-template cannot be combined with --spawn-policy fallible"
   if a.timingJson == some a.outPath.toString then
     throw s!"--timing-json must not name the -o output '{a.outPath}'\n{usage}"
+  if let some path := a.sourceMapJson then
+    if path == a.outPath.toString || a.timingJson == some path then
+      throw s!"--source-map-json must not name the -o output or the --timing-json report\n{usage}"
+    if a.registryTemplate then
+      throw "--source-map-json cannot be combined with --model-registry-template"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -255,10 +270,13 @@ private def run (args : List String) : IO UInt32 := do
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
-            let (src, emitNs) ← timed fun _ => "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-              (if models.isEmpty then "" else
-                "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
-              emit emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
+            let ((src, declNames), emitNs) ← timed fun _ =>
+              let (body, declNames) :=
+                emitWithNames emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
+              ("-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+                (if models.isEmpty then "" else
+                  "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
+                declNames)
             times := { times with emit := emitNs }
             let writeStart ← IO.monoNanosNow
             try IO.FS.writeFile a.outPath src catch e =>
@@ -266,6 +284,28 @@ private def run (args : List String) : IO UInt32 := do
             times := { times with write := (← IO.monoNanosNow) - writeStart }
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
+            if let some path := a.sourceMapJson then
+              -- Path order matches `funcs`: every file reached emission. Records follow
+              -- the same identity order as emission.
+              let entries := ((emissionKeys.zip (jsonPaths.zip (originalNames.zip (rewrittenTexts.zip funcs)))).qsort
+                (fun x y => decide (x.1 < y.1))).map (·.2)
+              let declOf : Std.HashMap String String := declNames.foldl (fun m (k, v) => m.insert k v) {}
+              let records ← entries.mapM fun (airPath, airName, text, f) => do
+                let doc ← match StrictJson.parse text with
+                  | .ok doc => pure doc
+                  | .error e => throw (IO.userError s!"{airPath}: {e}")
+                let definition := declOf.getD f.name f.name
+                let api := if a.proofApi && (proofApiFacts f).isSome then
+                  some (proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold") else none
+                pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
+              let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
+              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v1"),
+                ("namespace", .str a.ns), ("metadata", metadata),
+                ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
+                  ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
+                ("functions", .arr records)]
+              try IO.FS.writeFile path (sidecar.compress ++ "\n") catch e =>
+                throw (IO.userError s!"writing source map {path}: {e}")
             pure 0
 
 def main (args : List String) : IO UInt32 := do
