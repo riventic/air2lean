@@ -55,6 +55,10 @@ inductive Byte where
   | part (m : Nat) (b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
+/-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
+`Mem.allocators`. -/
+abbrev AllocId := Nat
+
 inductive BlockKind where
   | stack
   | heap
@@ -62,6 +66,10 @@ inductive BlockKind where
   /-- A `const` global, a string literal or a function: read-only. A write to it (through
   `@constCast`) throws `.illegal`. -/
   | constGlobal
+  /-- A block that the allocator `a` made: an arena or a fixed buffer (`Mem.allocators[a]`,
+  `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
+  free through one allocator of a block that another one made throws `.illegal`. -/
+  | owned (a : AllocId)
   deriving DecidableEq, Repr
 
 structure Block where
@@ -220,6 +228,26 @@ instance : Repr AllocPolicy where
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
 
+/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). -/
+inductive OwnedPolicy where
+  /-- `std.heap.ArenaAllocator` over the model's `std.mem.Allocator`. -/
+  | arena
+  /-- `std.heap.FixedBufferAllocator` over a buffer of `cap` bytes at address `base`. -/
+  | fixedBuffer (base cap : Nat)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The state of an allocator with an identity. -/
+structure OwnedAlloc where
+  policy : OwnedPolicy
+  /-- `false` after `ArenaAllocator.deinit`: every later use throws `.illegal`. -/
+  live : Bool := true
+  /-- `FixedBufferAllocator.end_index`. -/
+  used : Nat := 0
+  /-- The buffer index of the first byte of each block of a fixed buffer, for its
+  `isLastAllocation`. -/
+  starts : List (BlockId × Nat) := []
+  deriving DecidableEq, Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -252,6 +280,8 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
+  /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
+  allocators : Array OwnedAlloc := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

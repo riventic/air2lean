@@ -80,7 +80,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
@@ -193,6 +193,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   the whole live heap block allocated with that alignment. A violation is `.illegal`.
 - Derived from: `ZigLean.Sep.RawAlloc`; tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
+
+<a id="alc-07"></a>
+### ALC-07 — Allocator identity, arena and fixed-buffer policies
+
+- Kind: environment.
+- Statement: `Mem.allocators[a]` is allocator `a`; its blocks have kind `.owned a`. A free,
+  destroy or remap through one allocator of another's block is `.illegal`. An arena request is
+  an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
+  arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
+  bytes back only for its last allocation. Owned blocks get fresh model addresses; growing
+  remap fails; reset records no race-check access. The translator does not route
+  `std.heap` arena or fixed-buffer calls.
+- Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
+  `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
+- Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 
 ## Thread creation and scheduling
 

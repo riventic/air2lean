@@ -34,8 +34,9 @@ the list into `fails`. `allocDenied_asOracle` and `rawAlloc_asOracle` (`ZigLean/
 prove that every `usize` request gets the same decision, outcome and memory apart from
 the policy field. `rawAlloc_eq` characterizes every `rawAlloc` run: it either fails after
 only counting the attempt, or allocates a new heap block. Policies do not qualify native malloc, a
-custom allocator's policy, successful resize, address reuse or multiple allocator
-identities. Those remain separate M01/M02/M05 work.
+custom allocator's policy, successful resize or address reuse. Those remain separate M02/M05
+work. Allocator identities, arenas and fixed buffers (M01) are in
+[allocator-identity.md](allocator-identity.md); arena requests use this policy.
 
 `rawAlloc_run` and existing `create_run`/separation triples now quantify over the policy
 as part of arbitrary initial memory. `releaseAttempt_run` and `releaseAttempts_run` state
