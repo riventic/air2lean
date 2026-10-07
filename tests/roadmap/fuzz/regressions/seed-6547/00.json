@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "zig_version": "0.15.2",
+ "name": "",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "array_to_slice",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 0
+  }
+ ]
+}
