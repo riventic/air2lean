@@ -32,6 +32,8 @@ A gate is `passed` only with evidence for the recorded commit:
 
 - GitHub Actions run JSON: `headSha` must equal the revision, the run must be completed and
   come from the same workflow name, and every job must be a matrix row at that revision.
+  The run's event must be `push` or `workflow_dispatch`. A `pull_request` run tests a merge
+  with the base branch, not the head commit, so it is rejected.
   A step that ran even though its condition is false at the revision rejects the run, because
   it came from another workflow. Only step conclusion `success` passes; `skipped`, `failure`
   and `cancelled` fail a required gate.

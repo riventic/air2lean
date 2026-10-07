@@ -113,7 +113,7 @@ class Repo(unittest.TestCase):
 
     def run_json(self, jobs, sha=None, **extra):
         data = dict({'databaseId': 1, 'headSha': sha or self.head, 'status': 'completed', 'conclusion': 'success',
-                     'workflowName': 'CI', 'url': 'https://example.invalid/run/1', 'jobs': [
+                     'event': 'push', 'workflowName': 'CI', 'url': 'https://example.invalid/run/1', 'jobs': [
                          {'name': name, 'steps': [{'name': step, 'conclusion': conclusion}
                                                   for step, conclusion in steps.items()]}
                          for name, steps in jobs.items()]}, **extra)
@@ -159,7 +159,7 @@ class PlanTests(Repo):
         self.assertNotIn('Install elan', plan['commands'])
 
     def test_unsupported_workflow_syntax_fails_closed(self):
-        for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
+        for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'x: |+\n  kept\n', 'x: | # note\n  y\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
             with self.subTest(bad=bad), self.assertRaises(rr.ReleaseError):
                 rr.parse_workflow_yaml(bad)
 
@@ -197,6 +197,8 @@ class RecordTests(Repo):
             self.record(github_runs=[self.passing_run(sha=self.reviewed)])
         with self.assertRaisesRegex(rr.ReleaseError, 'not completed'):
             self.record(github_runs=[self.run_json({}, status='in_progress')])
+        with self.assertRaisesRegex(rr.ReleaseError, 'pull_request run'):
+            self.record(github_runs=[self.run_json({}, event='pull_request')])
 
     def test_missing_gates_make_record_incomplete_until_declared_unavailable(self):
         only_full = self.run_json({FULL: {'Unit': 'success', 'Full only': 'success', 'Mutation check': 'skipped'}})

@@ -77,7 +77,8 @@ def _scalar(text, where):
         if end < 0 or (rest and not rest.startswith('#')) or (text[0] == '"' and '\\' in text[1:end]):
             raise ReleaseError('%s: unsupported quoted scalar' % where)
         return text[1:end]
-    if text[:1] in ('&', '*', '!', '>', '{', '%', '@', '`'):
+    # `|` here is a block scalar with a comment, indentation or keep indicator: unsupported.
+    if text[:1] in ('&', '*', '!', '>', '|', '{', '%', '@', '`'):
         raise ReleaseError('%s: unsupported YAML syntax %r' % (where, text))
     if text.startswith('['):
         if not text.endswith(']'):
@@ -227,7 +228,8 @@ def build_plan(root, revision):
             if step['name'] not in commands:
                 continue
             try:
-                applies = 'if' not in step or bool(expression(str(step['if']), context))
+                condition = step.get('if', True)
+                applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
             except (ValueError, IndexError) as error:
                 raise ReleaseError('%s: step %r: unsupported condition: %s' % (WORKFLOW, step['name'], error))
             (gates if applies else skipped).append(step['name'])
@@ -255,12 +257,16 @@ def github_evidence(path, revision, plan):
         data = json.loads(raw)
     except ValueError as error:
         raise ReleaseError('%s: invalid run JSON: %s' % (path, error))
-    missing = [k for k in ('databaseId', 'headSha', 'status', 'workflowName', 'jobs') if k not in data]
+    missing = [k for k in ('databaseId', 'headSha', 'status', 'event', 'workflowName', 'jobs') if k not in data]
     if missing:
         raise ReleaseError('%s: run JSON lacks %s (use gh run view --json ...,jobs)' % (path, ', '.join(missing)))
     if data['headSha'] != revision:
         raise ReleaseError('%s: run %s is for %s, not the recorded revision %s'
                            % (path, data['databaseId'], data['headSha'], revision))
+    if data['event'] not in ('push', 'workflow_dispatch'):
+        # pull_request runs test a merge with the base branch, not the head commit itself.
+        raise ReleaseError('%s: run %s is a %s run; it did not test %s itself'
+                           % (path, data['databaseId'], data['event'], revision))
     if data['status'] != 'completed':
         raise ReleaseError('%s: run %s is %s, not completed' % (path, data['databaseId'], data['status']))
     if data['workflowName'] != plan['workflow_name']:
