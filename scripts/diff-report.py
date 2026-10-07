@@ -5,6 +5,7 @@ from collections import Counter
 from enum import Enum
 import math
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -202,6 +203,8 @@ def observation(line, legacy, side):
             raise Invalid('inconsistent search status')
         if search['status'] == 'bounded' and not search['saw_no_result']:
             raise Invalid('bounded search lacks no-result observation')
+        if search['status'] == 'capped' and search['runs'] != search['cap']:
+            raise Invalid('capped search did not exhaust its run cap')
         if kind == Kind.SEARCH_CAP and search['status'] != 'capped':
             raise Invalid('cap observation lacks capped search')
     elif kind == Kind.SEARCH_CAP:
@@ -228,7 +231,17 @@ def same_value(native, model):
     return len(native.get('bufs', [])) == len(model.get('bufs', [])) and all(
         buffer_match(z,l) for z,l in zip(native.get('bufs', []), model.get('bufs', [])))
 
-def legacy_bucket(native, model, host, values_match=None):
+MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH)
+
+def capped_search(search):
+    return bool(search) and search['status'] == 'capped'
+
+def legacy_bucket(native, model, host, values_match=None, search=None):
+    bucket=_legacy_bucket(native,model,host,values_match)
+    # A capped search never contributes a legacy agreement counter.
+    return 'capped' if capped_search(search) and bucket in {'ok','fail_match'} else bucket
+
+def _legacy_bucket(native, model, host, values_match=None):
     if values_match is None:values_match=same_value(native,model)
     if values_match: return 'ok'
     if model.get('fail') in {'Zig.Error.illegal','Zig.Error.unspecified'}: return 'unspecified'
@@ -237,6 +250,11 @@ def legacy_bucket(native, model, host, values_match=None):
     return 'host' if host else 'mismatch'
 
 def classify(native, model, nkind, mkind, search, host=False, values_match=None):
+    status=_classify(native,model,nkind,mkind,search,host,values_match)
+    # Truncated exploration is never demonstrated correspondence, whatever it observed.
+    return Status.SEARCH_CAP if status in MATCHES and capped_search(search) else status
+
+def _classify(native, model, nkind, mkind, search, host=False, values_match=None):
     if Kind.INPUT_FAILURE in (nkind,mkind): return Status.INPUT_FAILURE
     if Kind.NATIVE_HARNESS_FAILURE in (nkind,mkind): return Status.NATIVE_HARNESS_FAILURE
     if values_match is None:values_match=same_value(native,model)
@@ -251,6 +269,113 @@ def classify(native, model, nkind, mkind, search, host=False, values_match=None)
     if nkind == Kind.NATIVE_SIGNAL: return Status.MISMATCH
     if host: return Status.HOST
     return Status.MISMATCH
+
+SEARCH_STATUSES = ('witness','exhausted','bounded','capped')
+REDUCTION = {'technique':'none','soundness':'not_proved',
+             'note':'every explored schedule is executed; partial-order/symmetry reduction proofs are out of scope (research)'}
+
+class Exploration:
+    """Schedule coverage accounting. Observed-result matching (per-case search metadata) and
+    bounded enumeration (schedules.py receipts) are kept in separate counters."""
+    def __init__(self):
+        self.observed={'searched_cases':0,'unsearched_cases':0,'schedules_explored':0,'max_runs':0,
+                       'status_counts':{s:0 for s in SEARCH_STATUSES},'saw_no_result_cases':0,
+                       'replayable_witnesses':0,'fuel':set(),'cap':set()}
+        self.enumeration={'receipts':0,'schedules_explored':0,'complete':0,'truncated':0,
+                          'node_cap_reached':0,'prefix_cap_reached':0,'saw_no_result':0,
+                          'replay_seeds':0,'replays':0,'fuel':set(),'node_cap':set(),'prefix_cap':set()}
+        self.scopes={};self.capped_cases=[];self.receipts=[]
+
+    def scope(self, ex, fn):
+        return self.scopes.setdefault((ex,fn),{'example':ex,'function':fn,'cases':0,'exact_matches':0,
+            'observed':{'searched_cases':0,'schedules_explored':0,'capped':0,'bounded':0},
+            'enumeration':{'receipts':0,'schedules_explored':0,'complete':0,'truncated':0}})
+
+    def case(self, ex, fn, index, status, search):
+        scope=self.scope(ex,fn);scope['cases']+=1;scope['exact_matches']+=status in MATCHES
+        if not search:
+            self.observed['unsearched_cases']+=1;return
+        o=self.observed;o['searched_cases']+=1;o['schedules_explored']+=search['runs']
+        o['max_runs']=max(o['max_runs'],search['runs']);o['status_counts'][search['status']]+=1
+        o['saw_no_result_cases']+=search['saw_no_result'];o['replayable_witnesses']+=search['status']=='witness'
+        o['fuel'].add(search['fuel']);o['cap'].add(search['cap'])
+        s=scope['observed'];s['searched_cases']+=1;s['schedules_explored']+=search['runs']
+        s['capped']+=search['status']=='capped';s['bounded']+=search['status']=='bounded' or search['saw_no_result']
+        if search['status']=='capped':
+            self.capped_cases.append({'example':ex,'function':fn,'input_index':index,'status':status.value,
+                                      'runs':search['runs'],'cap':search['cap'],'fuel':search['fuel']})
+
+    def receipt(self, path, receipt):
+        request,result=receipt['request'],receipt['result']
+        if request['mode']=='replay':
+            self.enumeration['replays']+=1;return
+        e=self.enumeration;e['receipts']+=1;e['schedules_explored']+=result['runs']
+        for key in ('node_cap_reached','prefix_cap_reached','saw_no_result','truncated'):e[key]+=result[key]
+        e['complete']+=result['exploration_complete']
+        for key in ('fuel','node_cap','prefix_cap'):e[key].add(request[key])
+        seeds=[i for i,entry in enumerate(result['executions']) if entry['trace_complete']]
+        e['replay_seeds']+=len(seeds)
+        s=self.scope(request['example'],request['function'])['enumeration']
+        s['receipts']+=1;s['schedules_explored']+=result['runs']
+        s['complete']+=result['exploration_complete'];s['truncated']+=result['truncated']
+        self.receipts.append({'path':str(path),'sha256':hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+            'example':request['example'],'function':request['function'],'input_index':receipt['input_index'],
+            'fuel':request['fuel'],'node_cap':request['node_cap'],'prefix_cap':request['prefix_cap'],
+            'runs':result['runs'],'truncated':result['truncated'],'node_cap_reached':result['node_cap_reached'],
+            'prefix_cap_reached':result['prefix_cap_reached'],'exploration_complete':result['exploration_complete'],
+            'distinct_outcomes':len(result['outcomes']),'replay_seed_indices':seeds})
+
+    def summary(self):
+        scopes=[]
+        for key in sorted(self.scopes):
+            scope=self.scopes[key];blockers=[]
+            if scope['observed']['capped']:blockers.append('search_cap')
+            if scope['enumeration']['truncated']:blockers.append('enumeration_truncated')
+            if scope['observed']['bounded']:blockers.append('bounded_no_result')
+            if scope['cases']==0 or scope['exact_matches']!=scope['cases']:blockers.append('non_matching_cases')
+            capped=bool(scope['observed']['capped'] or scope['enumeration']['truncated'])
+            scope.update(capped=capped,counts_as_correspondence=not blockers,qualified=False,
+                         blockers=blockers+['proof_applicability_not_evaluated'])
+            scopes.append(scope)
+        if any(s['capped'] and s['counts_as_correspondence'] for s in scopes):raise Invalid('capped scope counted as correspondence')
+        sets=lambda d:{k:sorted(v) if isinstance(v,set) else v for k,v in d.items()}
+        return {'qualified':False,'reduction':REDUCTION,
+                'observed_matching':sets(self.observed),'bounded_enumeration':sets(self.enumeration),
+                'correspondence_scopes':sum(s['counts_as_correspondence'] for s in scopes),
+                'capped_scopes':sum(s['capped'] for s in scopes),'capped_cases':self.capped_cases,
+                'enumeration_receipts':self.receipts,'scopes':scopes}
+
+def load_schedule_cli():
+    spec=importlib.util.spec_from_file_location('air2lean_schedules',Path(__file__).with_name('schedules.py'))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+def schedule_receipt(root, path, examples, sources):
+    """Validate one schedules.py receipt against the current source/input context."""
+    cli=load_schedule_cli()
+    try:
+        receipt=cli.read_json(path)
+        cli.bound_context(receipt,sources)
+        request=receipt.get('request')
+        if type(request) is not dict or request.get('example') not in examples:raise Invalid('schedule receipt outside selected examples')
+        cli.validate_response(receipt.get('result'),request)
+        raw,digest=cli.current_input(root,request['example'],request['function'],receipt.get('input_index'))
+    except cli.REPORT.Invalid as exc:
+        raise Invalid(f'schedule receipt {path}: {exc}') from exc
+    if digest!=receipt.get('input_sha256') or not json_equal(raw,request.get('input')):
+        raise Invalid(f'schedule receipt {path}: stale input')
+    return receipt
+
+def headline(summary):
+    x=summary['schedule_exploration'];o=x['observed_matching'];e=x['bounded_enumeration'];c=o['status_counts']
+    return (f"SCHEDULES: observed searched={o['searched_cases']} unsearched={o['unsearched_cases']} runs={o['schedules_explored']}"
+            f" witness={c['witness']} exhausted={c['exhausted']} bounded={c['bounded']} capped={c['capped']}"
+            f" fuel={o['fuel']} cap={o['cap']}"
+            f" | enumeration receipts={e['receipts']} runs={e['schedules_explored']} complete={e['complete']}"
+            f" truncated={e['truncated']} replay_seeds={e['replay_seeds']} replays={e['replays']}"
+            f" fuel={e['fuel']} node_cap={e['node_cap']} prefix_cap={e['prefix_cap']}"
+            f" | correspondence_scopes={x['correspondence_scopes']} capped_scopes={x['capped_scopes']}"
+            f" reduction={x['reduction']['technique']} qualified=false")
 
 def pins(path):
     result = {}
@@ -313,9 +438,12 @@ def source_hashes(root):
         result[str(path.relative_to(root))]=digest.hexdigest()
     return result
 
-def compare(root, examples, version, host, summary):
+def compare(root, examples, version, host, summary, schedule_receipts=()):
     if not examples or len(set(examples))!=len(examples) or any(not IDENT.fullmatch(ex) for ex in examples):
         raise Invalid('invalid selected examples')
+    sources=source_hashes(root);exploration=Exploration()
+    if len(schedule_receipts)>MAX_CASES or len(set(schedule_receipts))!=len(schedule_receipts):raise Invalid('invalid schedule receipt list')
+    for path in schedule_receipts:exploration.receipt(path,schedule_receipt(root,Path(path),examples,sources))
     report_path=Path(str(summary)+'.jsonl')
     report_path.parent.mkdir(parents=True,exist_ok=True)
     totals=Counter();legacy_totals=Counter();violations=[];eligible=0;case_count=0;written=0
@@ -352,12 +480,13 @@ def compare(root, examples, version, host, summary):
                     nkind,_=observation(zmeta,native,'native');mkind,search=observation(lmeta,model,'model')
                     values_match=same_value(native,model)
                     status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match)
-                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match)
+                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search)
                     incomplete_search |= bool(search and (search['status'] in {'capped','bounded'} or search['saw_no_result']))
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
                     eligible+=status==Status.MISMATCH
+                    exploration.case(ex,fn,count,status,search)
                     row={'schema':SCHEMA,'example':ex,'function':fn,'input_index':count,
                          'input_sha256':hashlib.sha256(raw.encode()).hexdigest(),'native_kind':nkind.value,'model_kind':mkind.value,
                          'native_sha256':hashlib.sha256(zline.encode()).hexdigest(),'model_sha256':hashlib.sha256(lline.encode()).hexdigest(),
@@ -379,8 +508,9 @@ def compare(root, examples, version, host, summary):
                          'proof_applicability':'not_evaluated_by_differential_runner',
                          'proof_exclusions':[{'example':ex,'reason':'proof_applicability_not_evaluated','sources':sorted(str(p.relative_to(root)) for p in (root/'Proofs'/(ex[0].upper()+ex[1:])).glob('*.lean'))} for ex in examples],
                          'counts':dict(totals),'legacy_counts':dict(legacy_totals),
+                         'schedule_exploration':exploration.summary(),
                          'pin_violations':violations,'mutation_eligible':0 if setup_failures else eligible,
-                         'setup_failures':setup_failures,'cases_path':str(report_path),'runner_runtime_sources':source_hashes(root)})
+                         'setup_failures':setup_failures,'cases_path':str(report_path),'runner_runtime_sources':sources})
     return 1 if setup_failures or totals[Status.MISMATCH.value] or legacy_totals['mismatch'] or violations else 0
 
 def failure_observations(root, examples):
@@ -411,6 +541,7 @@ def main():
     parser.add_argument('--version',default='unavailable')
     parser.add_argument('--host',default='unavailable')
     parser.add_argument('--phase',default='setup')
+    parser.add_argument('--schedule-receipts',default='',help='space-separated scripts/schedules.py receipts')
     args=parser.parse_args()
     try:
         if args.action=='init':
@@ -434,7 +565,8 @@ def main():
             value=result.get('mutation_eligible')
             if type(value) is not int or value<0:raise Invalid('invalid mutation accounting')
             print(value);return 0
-        return compare(args.root,args.examples.split(),args.version,args.host,args.summary)
+        code=compare(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split())
+        print(headline(read_summary(args.summary)));return code
     except (Invalid,OSError,UnicodeError,RecursionError) as exc:
         if args.action!='eligible':summary_failure(args.summary,args.phase,str(exc),Failure.UNSUPPORTED if isinstance(exc,Unsupported) else Failure.SETUP)
         parser.exit(2,str(exc)+'\n')
