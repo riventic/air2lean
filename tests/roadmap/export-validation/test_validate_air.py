@@ -165,6 +165,12 @@ class ValidateAir(unittest.TestCase):
         self.assertFinding(self.mutate(lambda d: d.update(zig_version='0.99.0')), 'no coverage inventory')
         self.assertFinding(self.mutate(lambda d: d.update(schema=13)), 'unsupported schema 13')
 
+    def test_malformed_shapes_are_findings_not_crashes(self):
+        self.assertFinding(self.mutate(lambda d: find(d['body'], 13).update(id=[13])), 'is not a natural number')
+        self.assertFinding(self.mutate(lambda d: find(d['body'], 15)['args'].__setitem__(0, {'inst': [1]})),
+                           'malformed AIR shape')
+        self.assertFinding(self.mutate(lambda d: d.update(types={'k': 'int'})), 'types: missing or not a list')
+
     def test_duplicate_json_key(self):
         text = json.dumps(BASE)
         self.assertFinding(text.replace('"ret": 1', '"ret": 1, "ret": 1', 1), "duplicate JSON key 'ret'")

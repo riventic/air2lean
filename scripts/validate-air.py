@@ -212,14 +212,18 @@ class Validator:
             ident, tag = inst.get('id'), inst.get('tag')
             if not is_nat(ident):
                 self.error(here, f'instruction id {ident!r} is not a natural number')
+                ident = None  # an unusable id is neither defined nor a valid target
             elif ident in seen:
                 self.error(here, f'duplicate instruction id {ident}')
-            seen.add(ident)
+            if ident is not None:
+                seen.add(ident)
             here = f'{where}[{n}] (id {ident}, {tag})'
             self.tag(here, inst)
+            if not isinstance(tag, str):
+                tag = ''
             if 'ty' in inst:
                 self.type_id(f'{here}.ty', inst['ty'])
-            elif not str(tag).startswith('inferred_alloc'):
+            elif not tag.startswith('inferred_alloc'):
                 self.error(here, 'instruction without a result type')
             for label, ref in self.operands(inst):
                 self.operand(f'{here}.{label}', ref, available)
@@ -248,9 +252,10 @@ class Validator:
             last = n == len(body) - 1
             if last and not noreturn:
                 self.error(here, 'body does not end in a noreturn terminator')
-            if noreturn and not last and not str(tag).startswith('call'):
+            if noreturn and not last and not tag.startswith('call'):
                 self.error(here, 'noreturn instruction before the end of its body')
-            available.add(ident)
+            if ident is not None:
+                available.add(ident)
 
     def tag(self, where, inst):
         tag = inst.get('tag')
@@ -317,7 +322,11 @@ def validate_text(text, coverage_dir=ROOT / 'coverage', cache=None):
     inventory = load_inventory(coverage_dir, version, cache) if isinstance(version, str) else None
     if inventory is None:
         return [f'zig_version: no coverage inventory for {version!r}']
-    return Validator(doc, inventory).run()
+    try:
+        return Validator(doc, inventory).run()
+    except (TypeError, AttributeError, KeyError) as error:
+        # Wrong JSON shapes (an object where a list belongs, a list as an id) are findings.
+        return [f'malformed AIR shape: {type(error).__name__}: {error}']
 
 
 def committed_air(root=ROOT):

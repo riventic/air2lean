@@ -77,6 +77,11 @@ class TrustReport(unittest.TestCase):
                            "missing file 'tests/nope.py'")
         self.assertProblem(lambda d: stage(d, 'decode')['components'].append('Air2Lean/Nope.lean'),
                            "missing file 'Air2Lean/Nope.lean'")
+        # Citations must stay inside the checkout.
+        self.assertProblem(lambda d: stage(d, 'decode')['components'].append(str(ROOT / 'lean-toolchain')),
+                           'missing file')
+        self.assertProblem(lambda d: stage(d, 'decode')['components'].append('scripts/../lean-toolchain'),
+                           "missing file 'scripts/../lean-toolchain'")
 
     def test_check_must_run_in_ci(self):
         self.assertProblem(lambda d: stage(d, 'exporter')['checks'][0].update(ci=['python3 never-run.py']),

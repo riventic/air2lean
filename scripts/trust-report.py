@@ -44,7 +44,8 @@ def validate(data, root=ROOT):
     seen, cited = set(), set()
 
     def exists(where, rel):
-        if not isinstance(rel, str) or not rel or not (root / rel).exists():
+        if (not isinstance(rel, str) or not rel or Path(rel).is_absolute() or '..' in Path(rel).parts
+                or not (root / rel).exists()):
             problems.append(f'{where}: missing file {rel!r}')
             return False
         return True
