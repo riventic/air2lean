@@ -31,6 +31,8 @@ cmp "$work/BitCastReal/Gen.lean" "$dir/BitCastReal/Gen.lean"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$work" -o "$work/BitCastReal/Gen.olean" "$work/BitCastReal/Gen.lean"
 lake env lean -R "$dir" --run "$dir/BitCastReal/Runtime.lean"
-lake env lean "$dir/Semantics.lean"
+semantics=$(lake env lean "$dir/Semantics.lean")
+printf '%s\n' "$semantics"
+if grep -q sorryAx <<<"$semantics"; then echo 'ZigLean.BitCast lemma depends on sorry' >&2; exit 1; fi
 lake env lean --run "$dir/Pipeline.lean" "$work/Synthetic.lean"
 lake env lean --run "$work/Synthetic.lean"

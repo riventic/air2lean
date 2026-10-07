@@ -681,8 +681,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
     -- ≤0.16 memory rules below.
     if let some aty := sourceTy then
-      if logicalBitCastVersion cx.zigVersion && aty != ty &&
-          (logicalBitCastTy cx.types aty || logicalBitCastTy cx.types ty) then
+      if logicalBitCastApplies cx.zigVersion cx.types aty ty then
         match logicalBitCastShapes cx.types aty ty with
         | .ok _ => return line
         | .error e => cx.fail line e

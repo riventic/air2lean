@@ -20,7 +20,7 @@ namespace Air2Lean
 /-- Zig 0.17.0 and later: `@bitCast` is defined on the logical bit order. -/
 def logicalBitCastVersion (zigVersion : String) : Bool :=
   match zigVersion.splitOn "." with
-  | ["0", minor, _] => (minor.toNat?.getD 0) ≥ 17
+  | "0" :: minor :: _ => (minor.toNat?.getD 0) ≥ 17
   | _ => false
 
 /-- How a type in a 0.17 `@bitCast` becomes, and is made from, its logical bits. -/
@@ -51,6 +51,11 @@ def logicalBitCastTy (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.array ..) | some (.vector ..) | some (.enum ..) | some .void => true
   | _ => false
+
+/-- A `bitcast` from `src` to `dst` in a `zigVersion` function takes the logical-order path. -/
+def logicalBitCastApplies (zigVersion : String) (types : Array Ty) (src dst : TyId) : Bool :=
+  logicalBitCastVersion zigVersion && src != dst &&
+    (logicalBitCastTy types src || logicalBitCastTy types dst)
 
 /-- The stable diagnostic of a 0.17 `@bitCast` the model does not translate. -/
 def logicalBitCastFailure (what : String) : String :=

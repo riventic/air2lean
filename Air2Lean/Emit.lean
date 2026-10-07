@@ -843,8 +843,7 @@ enum or `void` on either side (the existing `bitcast` rules then apply). An exha
 result checks the tag (`Zig.enumOf`: `invalidEnumValue`, the check of 0.17's `bit_cast_safe`). -/
 def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : Option String := do
   let src ← fc.valTyId? a
-  unless logicalBitCastVersion fc.zigVersion && src != dst &&
-      (logicalBitCastTy fc.types src || logicalBitCastTy fc.types dst) do none
+  unless logicalBitCastApplies fc.zigVersion fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
   -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
   -- (`enumIntCast`) is already this cast, so 0.16 and 0.17 translations stay identical.

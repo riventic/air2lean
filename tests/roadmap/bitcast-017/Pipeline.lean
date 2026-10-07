@@ -4,11 +4,11 @@ import Air2Lean.Emit
 
 /-! Zig 0.17 `@bitCast` (logical bit order) through the parser, checker and emitter.
 
-Each fixture is one function `fn (x: Src) Dst { return @bitCast(x); }`. The AIR files are
-written in the 0.16.0 tag vocabulary (the normalizer does not accept 0.17.0 input yet; its tags
-are Track Z3's) and the normalized `Func` is relabelled `zig_version = "0.17.0"`, the same way
-`tests/roadmap/spawn-failure/Boundary.lean` probes version gates. `bit_cast`/`bit_cast_safe`
-normalize to the same `.bitcast` op (docs/bitcast-semantics.md §AIR).
+Each fixture is one function `fn (x: Src) Dst { return @bitCast(x); }`, written in the
+canonical (0.16.0) tag vocabulary. The normalized `Func` is relabelled with each `zig_version`
+under test, which isolates the version gate of `Check.lean`/`Emit.lean` from the tag decoding.
+Canon renames 0.17's `bit_cast`/`bit_cast_safe` to the same canonical `bitcast`; real 0.17.0 AIR
+is covered by `BitCastReal/` (docs/bitcast-semantics.md §What the translator does).
 
 Usage: `lean --run Pipeline.lean OUT.lean` checks every accept/reject verdict and diagnostic,
 then writes the emitted 0.17 module plus a `main` that compares each function's result with the
