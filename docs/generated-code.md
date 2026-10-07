@@ -482,3 +482,7 @@ if lake env lean /tmp/Generated.changed.client.lean; then exit 1; fi
 The CLI driver checks renumbered AIR and an unrelated generic instance, then a
 semantic mutation. Neither this driver nor synthetic report tests are qualification
 evidence until the actual translator and kernel checks have completed.
+
+For every emitted function, including calls, memory and recursion,
+`--source-map-json` writes source maps and call-graph semantic fingerprints to a
+sidecar. Generated Lean is unchanged. See `docs/stable-generation.md`.

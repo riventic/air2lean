@@ -100,6 +100,9 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
+      - name: Semantic fingerprint classification regressions
+        run: python3 -I -B tests/roadmap/stable-generation/test_fingerprints.py
+
       # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
       - name: Theorem premise reference and index
         run: |
@@ -235,6 +238,11 @@ jobs:
       - name: Translator timing flag preservation
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
+
+      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
+      - name: Source maps and semantic fingerprints on golden AIR
+        if: ${{ !matrix.mutate }}
+        run: python3 -I -B tests/roadmap/stable-generation/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
