@@ -6,6 +6,8 @@ The translator retains every field of the Zig argument tuple in source order. Em
 
 `ThreadTuples/Proofs.lean` kernel-checks the actual generated dispatcher for zero and four-field captures, plus the full captured target passed to `Tgt.spawnInit` (generated for programs with an empty or multi-field capture). A protocol records the captured tuple and the child private heap. Its fork theorems use `Owned.fork` with an explicit disjoint split of the parent's heap. The mixed-worker grant separates both ordinary output cells; the atomic-worker grant transfers its ordinary output and requires its private heap to be disjoint from the shared atomic resource. Sharing an atomic pointer requires a global invariant; capturing a pointer alone supplies no exclusive permission. The proofs introduce no additional axioms.
 
+The generated `Tgt.captures` classifies every captured field from its AIR type. Here the classes are `[.value, .ptr out, .value, .ptr other]` for `mixedWorker` and `[.ptr out, .ptr shared, .value, .value]` for `atomicWorker`. `ownedProtocol mode` requires each child's private heap to satisfy the generated per-argument obligation `Capture.grant mode target.captures` (`ZigLean/Conc/Transfer.lean`). `atomic_spawn` covers a value + pointer + atomic tuple: the output cell is handed over (`Transfer.owned`), the atomic is `Transfer.shared` and disjoint from the child, and the copied values add nothing. `mixed_spawn` hands over two disjoint output cells. `worker_join` regains the joined child's whole part. Two negative theorems show that, when a pointer's mode is `owned`, the obligation cannot be discharged if the caller does not own that pointer's region. Marking a pointer `shared` hands the child no cells. Any access through that pointer must then be justified by the global invariant. `reused_output_rejected` covers an output cell already held by another thread, and `unowned_output_rejected` covers a parent with an empty part.
+
 `Pipeline.lean` exercises all three spawn boundaries (`Thread.spawn`, `Io.Group.async`, `Io.Group.concurrent`) with zero, one, and four arguments; rejects wrong arity, an incompatible middle field, a non-tuple capture, and unsupported worker results; and checks const/alignment qualification across different local AIR type tables. It emits and kernel-checks the legacy scalar constructor without the new alias, three ordered fields, a nested tuple retained as one argument, and two independently converted pure-worker slices. A mutation swaps the second and third fields of a same-width tuple. The worker performs checked subtraction of the second and third arguments, so the mutation changes its error behavior even though the worker result is discarded; the dispatcher equality must stop proving.
 
 ## Qualification and provenance
@@ -44,9 +46,12 @@ both its default compiler invocation and an absolute `AIR2LEAN_LEAN` override wi
 `LEAN_PATH` unset. These adapter checks establish export/translation/elaboration, not native
 execution of that separate source fixture.
 
-The checked `ThreadTuples/Gen.lean` has 398 lines and SHA-256
-`61b61e629d96f44c62d7a40c585451bbcea121d4e14f5bacbd661ce4446ecc0a`.
-It was regenerated from the unchanged checked AIR with the current dispatcher destructuring:
+The checked `ThreadTuples/Gen.lean` has 408 lines and SHA-256
+`f22be91d3ac491009510dc3a9136e76ec0dd462d7cac79da78520daf1a474169`.
+It was regenerated from the unchanged checked AIR with the current dispatcher destructuring
+and the generated `Tgt.captures` classification. The only change from the previous
+semantic body (398 lines) is the added `Tgt.captures` definition. The validated profile
+header line is omitted, as before:
 
 ```sh
 .lake/build/bin/air2lean tests/roadmap/thread-tuples/air/0.16.0 \
@@ -82,7 +87,11 @@ Linux CI and Zig 0.14.1/0.15.2 live export/native qualification remain pending.
 
 This is partial C01 qualification of the accepted spawn boundaries and their explicit
 ownership obligations. Capturing an ordinary pointer grants no ownership; the fork proof
-requires disjoint child heaps, while shared atomics require a global invariant. Sixteen
+requires disjoint child heaps, while shared atomics require a global invariant. The generated
+per-argument obligation decomposes only top-level pointer and slice fields. Aggregates that
+embed pointers are `other`, and a protocol built on `Capture.grant` cannot discharge them.
+A protocol may still use `Tgt.spawnInit` directly; `Capture.grant` does not force a client
+to use it. Sixteen
 schedules are finite samples, and the kernel ownership proofs do not establish general
 lifecycle behavior or native weak-memory adequacy. No detached-thread, TLS, or foreign-memory
 qualification is claimed.

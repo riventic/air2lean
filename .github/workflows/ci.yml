@@ -502,7 +502,7 @@ jobs:
           AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.Csl ZigLean.Sep
+          lake build ZigLean.Conc.Csl ZigLean.Conc.Transfer ZigLean.Sep
           python3 tests/roadmap/thread-tuples/guard-tests.py
           python3 tests/roadmap/thread-tuples/mutation-tests.py
           [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]

@@ -233,12 +233,31 @@ def main (args : List String) : IO Unit := do
   let alignedSource := emit aligned "TupleAlignedSlices" ""
   require ((alignedSource.splitOn "Zig.readSlice (BitVec 64) 1 a").length == 2)
     "dispatcher used first capture alignment instead of worker alignment"
+  -- Per-argument ownership classes: values carry none; pointers and slices must be granted.
+  require ((sliceSource.splitOn "| .sliceWorker (_, capture1, capture2) => [.value, .slice capture1, .slice capture2]").length == 2)
+    "slice captures were not classified for ownership transfer"
+  require ((singleSource.splitOn "Tgt.captures").length == 1)
+    "legacy one-field program gained a capture classification"
+  let classes := emitTgtCaptures #[("zero", #[]), ("one", #[.ptr]), ("val", #[.value]),
+    ("mix", #[.other, .slice, .value])]
+  for line in ["  | .zero _ => []", "  | .one a => [.ptr a]", "  | .val _ => [.value]",
+      "  | .mix (_, capture1, _) => [.other, .slice capture1, .value]"] do
+    require ((classes.splitOn line).length == 2) s!"capture classification lost: {line}"
+  let types : Array Ty := #[.int false 8, .ptr "one" false 0, .struct "Plain" "auto" #[("x", 0)],
+    .struct "Holder" "auto" #[("p", 1)], .optional 1, .allocator, .ptr "slice" true 0,
+    .tuple #[0, 2], .array 4 1 false, .io]
+  for (id, expected) in [(0, CaptureClass.value), (1, .ptr), (2, .value), (3, .other), (4, .other),
+      (5, .other), (6, .slice), (7, .value), (8, .other), (9, .other)] do
+    require (captureClass types id == expected) s!"type {id} has the wrong capture class"
   let proof := "\nexample (a b c : BitVec 8) : TuplePipeline.dispatch (.worker (a, b, c)) = discard (Zig.ConcM.liftMem (StateT.lift (TuplePipeline.worker a b c))) := by rfl\n" ++
-    "example {γ : Type} (P : Zig.Conc.Proto TuplePipeline.Tgt γ) (a b c : BitVec 8) (g : γ) : TuplePipeline.Tgt.spawnInit P (.worker (a, b, c)) g = P.init (.worker (a, b, c)) g := by rfl\n"
+    "example {γ : Type} (P : Zig.Conc.Proto TuplePipeline.Tgt γ) (a b c : BitVec 8) (g : γ) : TuplePipeline.Tgt.spawnInit P (.worker (a, b, c)) g = P.init (.worker (a, b, c)) g := by rfl\n" ++
+    "example (a b c : BitVec 8) : TuplePipeline.Tgt.captures (.worker (a, b, c)) = [.value, .value, .value] := rfl\n"
   IO.FS.writeFile output (generated ++ proof)
   IO.FS.writeFile (output ++ ".nested.lean") (nestedSource ++
-    "\nexample (first : BitVec 8 × BitVec 16) (second : BitVec 8) : TupleNested.dispatch (.worker (first, second)) = discard (Zig.ConcM.liftMem (StateT.lift (TupleNested.worker first second))) := by rfl\n")
-  IO.FS.writeFile (output ++ ".slices.lean") sliceSource
+    "\nexample (first : BitVec 8 × BitVec 16) (second : BitVec 8) : TupleNested.dispatch (.worker (first, second)) = discard (Zig.ConcM.liftMem (StateT.lift (TupleNested.worker first second))) := by rfl\n" ++
+    "example (first : BitVec 8 × BitVec 16) (second : BitVec 8) : TupleNested.Tgt.captures (.worker (first, second)) = [.value, .value] := rfl\n")
+  IO.FS.writeFile (output ++ ".slices.lean") (sliceSource ++
+    "\nexample (a : BitVec 8) (s t : Zig.Slice) : TupleSlices.Tgt.captures (.sliceWorker (a, s, t)) = [.value, .slice s, .slice t] := rfl\n")
   IO.FS.writeFile (output ++ ".single.lean") (singleSource ++
     "\nexample (a : BitVec 8) : TupleSingle.dispatch (.worker a) = discard (Zig.ConcM.liftMem (StateT.lift (TupleSingle.worker a))) := by rfl\n")
   IO.FS.writeFile (output ++ ".mutable-slices.lean") mutableSliceSource

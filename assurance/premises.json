@@ -51,6 +51,8 @@
     "ZigLean.Conc.Logic": ["THR-08"],
     "ZigLean.Conc.Own": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Csl": ["THR-08"],
+    "ZigLean.Conc.Capture": ["THR-01"],
+    "ZigLean.Conc.Transfer": ["THR-08"],
     "ZigLean.Conc.Lemmas": ["THR-08"],
     "ZigLean.Conc.Lock": ["THR-08", "THR-05"],
     "ZigLean.Conc.LockRules": ["THR-08", "THR-05"],
