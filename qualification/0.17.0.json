@@ -3,10 +3,10 @@
   "from": "0.16.0",
   "to": "0.17.0",
   "inputs": {
-    "before_sha256": "372da204c7b825df93729334e596f523188cef3191634d2366da887e957a4975",
-    "after_sha256": "4e59afe81578c9339fc420acb5adba342f8fab9396e5caa6b0af259610f64ada"
+    "before_sha256": "746299f0e602a481d0566d8e9fe8c49b772973658a801d135751022665533cbb",
+    "after_sha256": "2f18a6b9f4fff5d6649cbd9332836b4e0acb08aca2455fc7f95bd4a4aa13d983"
   },
-  "impact_sha256": "b7b1a39c19d9e47567c4d07c380046e0eec9011f0175dc2d1e40c1d73b94b40e",
+  "impact_sha256": "31da9402a03859da29e06d5f24ee0056e5237c65fd1b708c1d2441242132b33c",
   "impact": {
     "from": "0.16.0",
     "to": "0.17.0",
@@ -151,6 +151,7 @@
       "error_name",
       "exp",
       "exp2",
+      "field_parent_ptr",
       "float_from_int",
       "floor",
       "fpext",
@@ -399,6 +400,7 @@
           "error_name",
           "exp",
           "exp2",
+          "field_parent_ptr",
           "float_from_int",
           "floor",
           "fpext",
@@ -1458,6 +1460,19 @@
       "requires_evidence": false
     }
   ],
-  "results": {},
-  "plan_sha256": "39e65f1438556783466e6afed4c05405204963723864a47860801989f0223f73"
+  "results": {
+    "support:constants:spirv_type": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Z1 (Claude Opus 5.5, for Konstantin Rolf)",
+      "decision": "accepted",
+      "evidence": [
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "spirv_type is created only by Sema.zirReifySpirvType after its SPIR-V target check; @SpirvType fails on x86_64-linux and aarch64-macos with the patched 0.17.0 compiler (TAGS.md, SPIR-V types).",
+      "recorded_at": "2026-10-07T12:26:23+00:00",
+      "git_head": "429c82f1629ebb0a075b568dd74491c0e2507c40"
+    }
+  },
+  "plan_sha256": "436644fa6d0d5b41da9f5eb7e987cd7f0095e9adfb166babc017fd8f77d63b23"
 }

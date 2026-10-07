@@ -29,13 +29,15 @@ Universe: 214 → 224 tags (16 added, 6 removed). Renames appear as remove + add
 | — | `spirv_runtime_array_len` (985) | SPIR-V only; unreachable on supported targets. | none (stays rejected) | Z1 |
 | `splat` (731) | `splat` (786) | Result may now be an array, including a sentinel array, not only a vector. | translator (`Check` must reject or model array splat) | Z3 |
 
-Inventory dispositions for 0.17.0 against the unchanged exporter: every added tag is
-`rejected-exporter-unsupported` (fallback unsupported marker), except `div_ceil_optimized`,
-which is `rejected-fast-math`. There are no `unclassified-forbidden` rows. The summary is 158
-emitted-unqualified, 31 rejected-exporter-unsupported, 20 rejected-fast-math, 10
-rejected-compiler-state-or-effect and 5 erased-at-emission. This disposition is computed from
-source. **The current `json.zig` does not compile against 0.17** (see the exporter list below),
-so Z1 must regenerate the inventory after porting.
+Inventory dispositions for 0.17.0 with the ported exporter (Z1, `zig-patch/0.17.0/TAGS.md`):
+the 14 added tags the exporter decodes (`agg_field_val`, `array_to_vector`, `bit_cast`,
+`bit_cast_safe`, `div_ceil`, `error_cast`, `error_from_int`, `int_cast`, `int_cast_safe`,
+`int_from_error`, `int_from_ptr`, `ptr_cast`, `ptr_from_int`, `union_from_enum`) are
+`rejected-unknown-tag` until `Normalize.lean` maps them; `spirv_runtime_array_len` stays
+`rejected-exporter-unsupported` and `div_ceil_optimized` `rejected-fast-math`. There are no
+`unclassified-forbidden` rows. The summary is 158 emitted-unqualified, 14 rejected-unknown-tag,
+17 rejected-exporter-unsupported, 20 rejected-fast-math, 10 rejected-compiler-state-or-effect and
+5 erased-at-emission. This disposition is computed from source.
 
 **Data layout changes (`Air.Inst.Data`, Air.zig 1299–1344).** `arg.ty`, `ty_op.ty`, `ty_pl.ty`
 and `ty_nav.ty` are now `Type`, not `Inst.Ref`/`InternPool.Index`. `typeOfIndex` returns them
@@ -63,6 +65,12 @@ authority.
 - `@intFromEnum`/`@enumFromInt`, `std.fmt.bufPrint`/`allocPrint` and `std.builtin` still
   compile but are deprecated. `Type`/`Value`/`Zcu`/`InternPool` removed no other pub function the
   exporter calls.
+- Found by the build (done, `zig-patch/0.17.0/TAGS.md`): `Value.fmtValue`/`Type.fmt` take a
+  `*Zcu`; `Type.containerTypeName` returns `{ name, fqn }`; `std.lang.Optimize` tags are
+  `debug`/`safe`/`fast`/`small` (`profile.build_mode` keeps the `-O` names); `build.zig` needs
+  `-Dversion-string` on a tarball tree; `&v[i]` is a `ptr_cast` to a lane pointer whose lane is
+  only in the type, now exported as `vector_index` (translator: reject or model it, never read
+  it as a bit-pointer).
 - Hook: the 0.16 `hook.patch` context does not apply. `analyzeFuncBodyInner(func_index, reason)`
   is at `Zcu/PerThread.zig` 2297, after new tracy lines, and the preceding log line is now
   `"analyzeFuncBody {f}"`. LLVM major is 22 (`cmake/Findllvm.cmake` 20).

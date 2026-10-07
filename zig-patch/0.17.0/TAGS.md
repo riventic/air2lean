@@ -38,6 +38,23 @@ these dumps. `splat` keeps its name but may now produce an array.
 - An empty exhaustive enum is backed by `noreturn`: its type entry has `"tag"` pointing at a
   `noreturn` type.
 
+## SPIR-V types (`spirv_type`, `spirv_runtime_array_len`)
+
+0.17.0 adds the InternPool key `spirv_type` (`std.lang.Type.spirv`) and the AIR tag
+`spirv_runtime_array_len`. Their one source is `@SpirvType`: `InternPool.getReifiedSpirvType` has
+a single caller, `Sema.zirReifySpirvType`, which fails first unless the target is SPIR-V
+(`Sema.zig` 20849). So neither is reachable on a supported target (x86_64-linux, aarch64-macos).
+Fixture, with the patched compiler:
+
+```sh
+# spirv.zig: const T = @SpirvType(.sampler); export fn f(x: u32) u32 { _ = @sizeOf(T); return x; }
+zig-air-0.17.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -target x86_64-linux spirv.zig
+# error: builtin @SpirvType is only available when targeting SPIR-V; targeted CPU architecture is x86_64
+```
+
+(the same for `-target aarch64-macos`). Were one exported, the type would be a `"k": "other"`
+entry and the tag `"unsupported": true`, both rejected by the translator.
+
 ## Exporter port
 
 `zig-patch/air-json/json.zig` is shared by every version; its `Compat` section has the 0.17.0
