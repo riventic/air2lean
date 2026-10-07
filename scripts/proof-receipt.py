@@ -447,6 +447,8 @@ def verify(attempt):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ('manifest', 'check-manifest'):
+        return helper('artifact-manifest').manifest_main(sys.argv[1:])  # Loaded only when used.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'worker', 'seal', 'verify'))
     parser.add_argument('attempt', type=Path)

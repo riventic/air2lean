@@ -5,6 +5,8 @@ compiled Lean theorem inventory, dependency policy, source bytes, generated defi
 compiled artifacts, tools and bounded execution report. It extends the existing
 [assumption audit](assumptions-audit.md) and [build guard](build-budgets.md).
 It does not change either tool's proof or process-control semantics.
+To chain a receipt to source, AIR, compiler patch, runtime and profile identities, record an
+[artifact manifest](artifact-manifest.md) with `--receipt`; receipt schema 1 is unchanged.
 
 The receipt is not signed or authenticated. Its executor, source tree, installed Lean
 library, Lake dependency validation and environment extractor are trusted local inputs.
