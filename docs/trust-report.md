@@ -106,7 +106,7 @@ Type, layout, global and call restrictions are enforced by unproved Lean code; a
 
 ### Lean emitter (Gen.lean)
 
-Emission is not proved to preserve the canonical AIR. Evidence is golden Gen.lean comparison, mutation tests and bounded differential tests. Known gap: a store of a wholly `undefined` value to a local that stays a `Locals` field (not a stack block) is still emitted as the field type's `default` (`0`, `false`), so a later read observes a value instead of `.unspecified`; partly undefined constant operands and global initializers are explicit undefined bytes or rejected. The precise fix is pending on `codex/undef-local-stores`.
+Emission is not proved to preserve the canonical AIR. Evidence is golden Gen.lean comparison, mutation tests and bounded differential tests. Undefined values stay explicit: a store of `undefined` to a local is either a dead store (overwritten before any read) or the local becomes a byte local (`Zig.Bytes T`) whose undefined bytes read as `.unspecified`; partly undefined constant operands and global initializers are explicit undefined bytes or rejected (tests/roadmap/undef-locals, tests/roadmap/undef-operands).
 
 - Components: `Air2Lean/Emit.lean`
 - Premises: [TRU-02](premises.md#tru-02)
