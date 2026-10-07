@@ -141,13 +141,15 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ALC-02 — Allocation failure and request-cap policy
 
 - Kind: environment.
-- Statement: `Mem.allocPolicy` (per-request `maxBytes`, finite failure indices) and the legacy
-  `Mem.failAt` decide `OutOfMemory`. Theorems over arbitrary `Mem` quantify over every
-  policy; a theorem that fixes initial memory fixes the policy. The cap is not a resource
-  guarantee of the host.
+- Statement: `Mem.allocPolicy` (per-request `maxBytes`, finite failure indices, an arbitrary
+  failure oracle `fails` and an optional live-heap `budget`) and the legacy `Mem.failAt`
+  decide `OutOfMemory`. The default has no fixed cap; the differential harness selects its
+  1 MiB cap explicitly. Theorems over arbitrary `Mem` quantify over every policy; a theorem
+  that fixes initial memory fixes the policy. Neither cap nor budget is a resource guarantee
+  of the host.
 - Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
-  `releaseAttempt`. The `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct
-  update) do not select it.
+  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`, `releaseAttempt`. The
+  `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 
 <a id="alc-03"></a>

@@ -111,7 +111,7 @@
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
-    {"premise": "ALC-02", "scope": "closure", "pattern": "(?:^|\\.)[Aa]llocPolicy\\.(?:maxBytes|failures)$|releaseAttempt"},
+    {"premise": "ALC-02", "scope": "closure", "pattern": "(?:^|\\.)[Aa]llocPolicy\\.(?:maxBytes|failures|fails|budget)$|releaseAttempt"},
     {"premise": "ALC-03", "scope": "closure", "pattern": "(?:^|\\.)remap|Remap(?!Mode)"},
     {"premise": "ALC-04", "scope": "closure", "pattern": "allocSentinel|freeSentinel"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
