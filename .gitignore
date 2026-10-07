@@ -10,6 +10,8 @@ zig-out/
 # air2lean
 tests/diff/out/
 zig-air-*/
+# zig-patch/build.sh staging, retained previous installs and writer locks
+.zig-air-*/
 
 # Generated external-contract regression artifacts
 tests/roadmap/models/Generated.lean
