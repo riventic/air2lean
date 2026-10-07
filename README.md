@@ -33,6 +33,8 @@ Lake uses the Lean version pinned in `lean-toolchain`; the first build downloads
 
 The [getting-started guide](docs/getting-started.md) walks through the Zig source, generated Lean, and a small proof exercise. It then shows how to translate your own file. air2lean generates definitions; you write the properties and proofs.
 
+For a worked memory-safety proof (no use after free, no double free, no leak, on every out-of-memory path) see [tutorials/memory-safety](tutorials/memory-safety/README.md) and [docs/proofs.md](docs/proofs.md#proving-memory-safety).
+
 ## How it works
 
 The Zig compiler does semantic analysis (`Sema`) and produces **AIR** (Analyzed Intermediate Representation). In AIR, `comptime` is already evaluated, generics are monomorphized, every type is known, and each safety check is explicit. A small compiler patch writes AIR as JSON. air2lean reads that JSON and writes one Lean definition per function.

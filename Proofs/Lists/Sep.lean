@@ -1,5 +1,6 @@
 import Proofs.Lists.Gen
 import ZigLean.Sep
+import ZigLean.Sep.Total
 
 /-!
 # Separation-logic proofs about `examples/lists/lists.zig`
@@ -10,6 +11,10 @@ at offset 8, 4 bytes of padding. `list hd xs`: the nodes from `hd` hold the item
 * `push_spec`: `push` gives a new node, or `error.OutOfMemory` and no bytes.
 * `reverse_spec`: `reverse` turns the list into the list of the items in the other order.
 * `freeAll_spec`: after `freeAll`, the function owns no bytes: every node is freed.
+
+Each is the partial form (`Triple.toPartial`) of a total one (`push_total`, `reverse_total`,
+`freeAll_total`): the run returns, so a client can compose them into a total triple
+(`tutorials/memory-safety`).
 -/
 
 namespace Lists
@@ -161,10 +166,11 @@ theorem reverse_step (xs : List (BitVec 32)) (hF : Heap) (s : reverseLocals) (n 
         hn' ∪ h₁, hr, Heap.disjoint_union_left.mpr ⟨dn'r, d1r⟩, rfl,
         ⟨p, s.prev, rfl, hn', h₁, dn'1, rfl, hnode', hl₁⟩, hrest⟩
 
-/-- `reverse` turns the list at `hd` into the list of the items in the other order. -/
-theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
-    Triple (list hd xs) (reverse hd) (fun r => list r xs.reverse) := by
-  apply Triple.of_run
+/-- `reverse` turns the list at `hd` into the list of the items in the other order. It
+returns. -/
+theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
+    TotalTriple (list hd xs) (reverse hd) (fun r => list r xs.reverse) := by
+  apply TotalTriple.of_run
   intro m hP hF hdj hm hl hst
   obtain ⟨e, s', m', h', hr, hd', hm', ⟨he, hpost⟩, hst'⟩ :=
     loop_sep_ghost reverse.loop6 reverse.again6 (revInv xs)
@@ -177,14 +183,19 @@ theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
   simp only [StateT.run] at hr
   simp [reverse, zig_unfold, hr, he]
 
+theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
+    Triple (list hd xs) (reverse hd) (fun r => list r xs.reverse) :=
+  (reverse_total hd xs).toPartial
+
 /-- What `push` returns: a new node in front of `q`, or `error.OutOfMemory` and no bytes. -/
 def pushed (v : BitVec 32) (q : Option Ptr) : Except ErrName Ptr → Assn
   | .ok p => node p v q
   | .error e => ⌜e = "OutOfMemory"⌝
 
-theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
-    Triple emp (push a q v) (pushed v q) := by
-  apply Triple.of_run
+/-- `push` returns, with a new node or `error.OutOfMemory`, for every allocation policy. -/
+theorem push_total (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
+    TotalTriple emp (push a q v) (pushed v q) := by
+  apply TotalTriple.of_run
   intro m hP hF hd hm hp hst
   have hP0 : hP = Heap.empty := hp
   subst hP0
@@ -211,6 +222,10 @@ theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
     refine ⟨.ok p, m₃, h₃, ?_, hd₃, hm₃, ⟨h0, A, hA, hb₃⟩, hst₃⟩
     simp only [StateT.run] at hs₁ hs₂
     simp [push, zig_unfold, hc, Zig.store, hs₁, hs₂]
+
+theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
+    Triple emp (push a q v) (pushed v q) :=
+  (push_total a q v).toPartial
 
 /-- The invariant of `freeAll`: `p` is a list of `n` items. -/
 def freeInv (s : freeAllLocals) (n : Nat) : Assn := fun h => ∃ zs, zs.length = n ∧ list s.p zs h
@@ -242,10 +257,11 @@ theorem freeAll_step (a : Allocator) (hF : Heap) (s : freeAllLocals) (n : Nat) (
     · simp only [freeAll.again5, ↓reduceIte]
       exact ⟨zs.length, by simp at hn; omega, zs, rfl, hrest⟩
 
-/-- `freeAll` frees every node of the list: after it, the function owns no bytes. -/
-theorem freeAll_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
-    Triple (list hd xs) (freeAll a hd) (fun _ => emp) := by
-  apply Triple.of_run
+/-- `freeAll` frees every node of the list: after it, the function owns no bytes. It
+returns. -/
+theorem freeAll_total (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
+    TotalTriple (list hd xs) (freeAll a hd) (fun _ => emp) := by
+  apply TotalTriple.of_run
   intro m hP hF hdj hm hl hst
   obtain ⟨e, s', m', h', hr, hd', hm', ⟨he, hpost⟩, hst'⟩ :=
     loop_sep_ghost (freeAll.loop5 a) freeAll.again5 freeInv (fun e _ h => e = .br4 ∧ emp h) hF
@@ -254,5 +270,9 @@ theorem freeAll_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
   refine ⟨(), m', h', ?_, hd', hm', hpost, hst'⟩
   simp only [StateT.run] at hr
   simp [freeAll, zig_unfold, hr, he]
+
+theorem freeAll_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
+    Triple (list hd xs) (freeAll a hd) (fun _ => emp) :=
+  (freeAll_total a hd xs).toPartial
 
 end Lists
