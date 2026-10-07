@@ -88,14 +88,17 @@ private def boolLoop : Json := (file "boolLoop" #[]
     #[case_ #[obj [("ty", num 1), ("val", toJson "false")]]
       #[dispatch 30 20 (obj [("ty", num 1), ("val", toJson "true")])]] #[ret 40 (lit 31)]])
 
+private def ptrTypes : Json :=
+  .arr (baseTypes.push (obj [("k", toJson "ptr"), ("size", toJson "one"), ("const", toJson false),
+    ("child", num 0)]))
+
 /-- Selector-field spelling must not collide with a dbg-named source local. -/
 private def fieldCollision : Json := (file "fieldCollision" #[0]
   #[arg 10 0, inst 11 "alloc" 5, inst 12 "dbg_var_ptr" 2 #[ref 11] [("name", toJson "dispatchValue3")],
     inst 13 "store" 2 #[ref 11, ref 10],
     switch_ 20 (lit 0) #[case_ #[lit 0] #[dispatch 30 20 (lit 1)],
       case_ #[lit 1] #[inst 40 "load" 0 #[ref 11], ret 50 (ref 40)]] #[ret 60 (lit 9)]])
-  |>.setObjVal! "types" (.arr (baseTypes.push
-    (obj [("k", toJson "ptr"), ("size", toJson "one"), ("const", toJson false), ("child", num 0)])))
+  |>.setObjVal! "types" ptrTypes
 
 /-- An ordinary loop can leave an enclosing block without owning any repeat exit. -/
 private def plainExit : Json := file "plainExit" #[]
@@ -108,9 +111,6 @@ private def blockDispatch : Json := file "blockDispatch" #[0]
     #[case_ #[lit 0] #[inst 30 "block" 3 #[] [("body", .arr #[dispatch 40 20 (lit 1)])],
       ret 50 (lit 7)], case_ #[lit 1] #[ret 60 (lit 44)]] #[ret 70 (lit 9)]]
 
-private def ptrTypes : Json :=
-  .arr (baseTypes.push (obj [("k", toJson "ptr"), ("size", toJson "one"), ("const", toJson false),
-    ("child", num 0)]))
 private def br (id target : Nat) (v : Json) : Json := inst id "br" 3 #[v] [("target", num target)]
 
 /-- Legal exits from a nested dispatch loop: an inner `cond_br` inside a noreturn block either
