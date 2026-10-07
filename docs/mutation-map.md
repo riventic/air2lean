@@ -51,8 +51,10 @@ checker reads text only; it does not show that a mutant is killed.
 `tests/roadmap/mutation-map/mutants.py` holds mutants for checks that are Python code: profile
 and schema selection (`scripts/normalize-generated.py`), float-semantics selection
 (`scripts/float-semantics.py`), release host metadata (`scripts/compat.py`), transfer of trust
-violations through theorem dependencies (`scripts/assumptions.py`) and the ROADMAP header check
-(`scripts/support-matrix.py`). Each one replaces one exact anchor, compiles the result under the
+violations through theorem dependencies (`scripts/assumptions.py`), the ROADMAP header check
+(`scripts/support-matrix.py`), unclassified and stale-override inventory rows and rejected std
+model table rows (`scripts/coverage.py`), and non-standard evidence axioms in the external
+contract report (`scripts/external-contracts.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.

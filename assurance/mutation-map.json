@@ -86,9 +86,32 @@
         {
           "path": "tests/roadmap/inventory/test_inventory.py",
           "anchor": "def test_optional_compiler_file_requires_exact_case"
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "def test_disposition_problems_fail_closed"
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "def test_stale_override_is_forbidden"
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "A renamed AIR tag and payload-only changes both fail the fingerprint gate."
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "inventory-forbidden-row-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inventory-stale-override-applied",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "L02": {
       "categories": [
@@ -840,9 +863,27 @@
       ]
     },
     "E01": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "invariant-transfer"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/models/test_external_contracts.py",
+          "anchor": "def test_nonstandard_axioms_stay_assumptions"
+        },
+        {
+          "path": "tests/roadmap/models/test_external_contracts.py",
+          "anchor": "def test_failed_or_missing_kernel_check_never_verifies"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "contract-nonstandard-axiom-verified",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        }
+      ],
+      "note": "Registry footprint/contract rejections are Lean-side (tests/roadmap/models, scripts/model-contracts.sh) without a designated mutant; the mutant covers the assumption report."
     },
     "E02": {
       "categories": [],
@@ -856,8 +897,36 @@
     },
     "E04": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "translated function conflicts with built-in std model"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "has incompatible signature/layout"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "cyclic semantic dependency"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "is not qualified for Zig 0.15.2"
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "def test_model_recognition_is_not_verification"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "std-model-rejected-row-recognized",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet."
     },
     "P01": {
       "categories": [],

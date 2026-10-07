@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 PROFILES = 'tests/roadmap/profiles/test_golden_pipeline.py'
 FLOATS = 'tests/roadmap/float-semantics/test_labels.py'
+INVENTORY = 'tests/roadmap/inventory/test_inventory.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -65,6 +66,25 @@ MUTANTS = {
         'scripts/support-matrix.py', "    if header not in read(root, 'ROADMAP.md'):",
         '    if False:', 'tests/roadmap/support-matrix/test_support_matrix.py', 'MATRIX',
         ('Stale.test_register_status_change_is_stale',)),
+    # L01: an inventory row left as the unclassified placeholder must fail generate/check.
+    'inventory-forbidden-row-accepted': (
+        'scripts/coverage.py', " or row['disposition'] == FORBIDDEN:", ':',
+        INVENTORY, 'coverage', ('InventoryTests.test_disposition_problems_fail_closed',)),
+    # L01: a reviewed override whose mechanical premise changed must become unclassified.
+    'inventory-stale-override-applied': (
+        'scripts/coverage.py', "    elif override['replaces'] == row['disposition']:\n", '    elif True:\n',
+        INVENTORY, 'coverage', ('InventoryTests.test_stale_override_is_forbidden',)),
+    # E04: a rejected row of the std model table must not be inventoried as a recognized model.
+    'std-model-rejected-row-recognized': (
+        'scripts/coverage.py',
+        "'disposition': 'translation-rejected' if fn == 'rejectedThreadFn?' else 'recognized-model-boundary'",
+        "'disposition': 'recognized-model-boundary'",
+        INVENTORY, 'coverage', ('InventoryTests.test_model_recognition_is_not_verification',)),
+    # E01: a proved contract whose evidence uses a non-standard axiom stays an assumption.
+    'contract-nonstandard-axiom-verified': (
+        'scripts/external-contracts.py', '    extra = sorted(set(axioms) - STANDARD_AXIOMS)\n', '    extra = []\n',
+        'tests/roadmap/models/test_external_contracts.py', 'contracts',
+        ('ContractReportTests.test_nonstandard_axioms_stay_assumptions',)),
 }
 
 
