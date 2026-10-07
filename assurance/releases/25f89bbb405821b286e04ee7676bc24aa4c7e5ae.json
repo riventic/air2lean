@@ -1,0 +1,4402 @@
+{
+  "schema": "air2lean-release-record/1",
+  "revision": "25f89bbb405821b286e04ee7676bc24aa4c7e5ae",
+  "tree": "clean",
+  "profile": {
+    "workflow": ".github/workflows/ci.yml",
+    "workflow_name": "CI",
+    "workflow_blob": "c0e27a58b76af0e4a49151b63a79fdad9a9143d1",
+    "local_ci_steps_blob": "b4ef3ee20f2277dc343f5e1fe3555bd9a9c3892c",
+    "compatibility_blob": "384d0a866b82ba3bfabef62fe02fcb585fff0652",
+    "translation": {
+      "target": "x86_64-linux",
+      "cpu": "baseline",
+      "optimize": "ReleaseSafe",
+      "error_tracing": false
+    },
+    "zig_default": "0.16.0"
+  },
+  "jobs": [
+    {
+      "name": "test (0.16.0, true, false)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": true,
+        "mutate": false
+      },
+      "reproduce": "scripts/local-ci.sh full 0.16.0",
+      "not_applicable": [
+        "Build threadsync proofs (macOS translation)",
+        "Mutation check"
+      ]
+    },
+    {
+      "name": "test (0.15.2, true, false)",
+      "matrix": {
+        "zig": "0.15.2",
+        "examples": "",
+        "full": true,
+        "mutate": false
+      },
+      "reproduce": "scripts/local-ci.sh full 0.15.2",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Release record and review ledger regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "Integer bit operations regression and differential gate",
+        "Local-place parent pointer regressions",
+        "Weak CAS safety qualification",
+        "Mutation check",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "matrix": {
+        "zig": "0.14.1",
+        "examples": "basic recursion options floatops floats errors variants pointers layout",
+        "full": false,
+        "mutate": false
+      },
+      "reproduce": "scripts/local-ci.sh full 0.14.1",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Stable scalar proof API regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Typed outcomes and bounded schedule regressions",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "Integer bit operations regression and differential gate",
+        "Local-place parent pointer regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Mutation check",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.16.0, false, true, 1)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": false,
+        "mutate": true,
+        "shard": 1
+      },
+      "reproduce": "scripts/local-ci.sh mutations",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Check compiler-derived coverage inventory",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Translator timing flag preservation",
+        "Stable scalar proof API regressions",
+        "Public exporter filename qualification",
+        "Build optional separation proof tools",
+        "Separation normalization regressions",
+        "Separation client regressions",
+        "Explicit array framing regressions",
+        "Memory-backed array reassembly and generated clients",
+        "Total correctness regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Progress hint qualification",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Golden AIR, translate, build, differential test",
+        "Typed outcomes and bounded schedule regressions",
+        "Build proofs",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "First-proof tutorial",
+        "Integer bit operations regression and differential gate",
+        "Build optional verification conditions",
+        "Result verification condition regressions",
+        "Memory verification condition regressions",
+        "Verification condition client regressions",
+        "Loop-switch dispatch regressions",
+        "Local-place parent pointer regressions",
+        "Review regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.16.0, false, true, 2)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": false,
+        "mutate": true,
+        "shard": 2
+      },
+      "reproduce": "scripts/local-ci.sh mutations",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Check compiler-derived coverage inventory",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Translator timing flag preservation",
+        "Stable scalar proof API regressions",
+        "Public exporter filename qualification",
+        "Build optional separation proof tools",
+        "Separation normalization regressions",
+        "Separation client regressions",
+        "Explicit array framing regressions",
+        "Memory-backed array reassembly and generated clients",
+        "Total correctness regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Progress hint qualification",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Golden AIR, translate, build, differential test",
+        "Typed outcomes and bounded schedule regressions",
+        "Build proofs",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "First-proof tutorial",
+        "Integer bit operations regression and differential gate",
+        "Build optional verification conditions",
+        "Result verification condition regressions",
+        "Memory verification condition regressions",
+        "Verification condition client regressions",
+        "Loop-switch dispatch regressions",
+        "Local-place parent pointer regressions",
+        "Review regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.16.0, false, true, 3)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": false,
+        "mutate": true,
+        "shard": 3
+      },
+      "reproduce": "scripts/local-ci.sh mutations",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Check compiler-derived coverage inventory",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Translator timing flag preservation",
+        "Stable scalar proof API regressions",
+        "Public exporter filename qualification",
+        "Build optional separation proof tools",
+        "Separation normalization regressions",
+        "Separation client regressions",
+        "Explicit array framing regressions",
+        "Memory-backed array reassembly and generated clients",
+        "Total correctness regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Progress hint qualification",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Golden AIR, translate, build, differential test",
+        "Typed outcomes and bounded schedule regressions",
+        "Build proofs",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "First-proof tutorial",
+        "Integer bit operations regression and differential gate",
+        "Build optional verification conditions",
+        "Result verification condition regressions",
+        "Memory verification condition regressions",
+        "Verification condition client regressions",
+        "Loop-switch dispatch regressions",
+        "Local-place parent pointer regressions",
+        "Review regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.16.0, false, true, 4)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": false,
+        "mutate": true,
+        "shard": 4
+      },
+      "reproduce": "scripts/local-ci.sh mutations",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Check compiler-derived coverage inventory",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Translator timing flag preservation",
+        "Stable scalar proof API regressions",
+        "Public exporter filename qualification",
+        "Build optional separation proof tools",
+        "Separation normalization regressions",
+        "Separation client regressions",
+        "Explicit array framing regressions",
+        "Memory-backed array reassembly and generated clients",
+        "Total correctness regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Progress hint qualification",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Golden AIR, translate, build, differential test",
+        "Typed outcomes and bounded schedule regressions",
+        "Build proofs",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "First-proof tutorial",
+        "Integer bit operations regression and differential gate",
+        "Build optional verification conditions",
+        "Result verification condition regressions",
+        "Memory verification condition regressions",
+        "Verification condition client regressions",
+        "Loop-switch dispatch regressions",
+        "Local-place parent pointer regressions",
+        "Review regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Revision-bound theorem audit receipt"
+      ]
+    },
+    {
+      "name": "test (0.16.0, false, true, 5)",
+      "matrix": {
+        "zig": "0.16.0",
+        "examples": "",
+        "full": false,
+        "mutate": true,
+        "shard": 5
+      },
+      "reproduce": "scripts/local-ci.sh mutations",
+      "not_applicable": [
+        "Support matrix is current and consistent",
+        "Check compiler-derived coverage inventory",
+        "Release record and review ledger regressions",
+        "Float target probe",
+        "Translator timing flag preservation",
+        "Stable scalar proof API regressions",
+        "Public exporter filename qualification",
+        "Build optional separation proof tools",
+        "Separation normalization regressions",
+        "Separation client regressions",
+        "Explicit array framing regressions",
+        "Memory-backed array reassembly and generated clients",
+        "Total correctness regressions",
+        "Validate AIR input and whole-program signatures",
+        "Validate check-only diagnostic collection",
+        "External model contracts",
+        "Flow timestamp artifact-only proofs and provenance guards",
+        "Progress hint qualification",
+        "Finite progress kernel contracts",
+        "Project manifest regressions and example translation",
+        "Nullable mutation classifier regressions",
+        "Scalar nullable pointer source and semantic gate",
+        "Byte sentinel allocation source, ownership and kernel mutations",
+        "Allocation policy proofs, correspondence and semantic mutations",
+        "Thread tuple source and ownership gate",
+        "Fallible thread assignment and group fallback gate",
+        "Finite symbolic error-storage model and checker controls",
+        "Global payload source, generated clients and semantic mutations",
+        "Pointer try ownership, native and fresh source regressions",
+        "Golden AIR, translate, build, differential test",
+        "Typed outcomes and bounded schedule regressions",
+        "Build proofs",
+        "Audit theorem dependencies and assumptions",
+        "Map audited theorems to premise IDs",
+        "Assurance environment regressions",
+        "Claim strength regressions",
+        "Outcome taxonomy Lean fixture",
+        "First-proof tutorial",
+        "Integer bit operations regression and differential gate",
+        "Build optional verification conditions",
+        "Result verification condition regressions",
+        "Memory verification condition regressions",
+        "Verification condition client regressions",
+        "Loop-switch dispatch regressions",
+        "Local-place parent pointer regressions",
+        "Review regressions",
+        "Weak CAS safety qualification",
+        "Check for sorry/admit/native_decide",
+        "Build threadsync proofs (macOS translation)",
+        "Revision-bound theorem audit receipt"
+      ]
+    }
+  ],
+  "commands": {
+    "Offline compiler inventory regressions": {
+      "run": "python3 tests/roadmap/inventory/test_inventory.py"
+    },
+    "Schedule exploration cap accounting regressions": {
+      "run": "python3 -I -B tests/roadmap/schedule-caps/test_exploration.py"
+    },
+    "Local Lake cache hygiene regressions": {
+      "run": "python3 tests/roadmap/local-ci/test_cache.py"
+    },
+    "Verification coverage report regressions": {
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v"
+    },
+    "Outcome taxonomy regressions": {
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py"
+    },
+    "Project check and reproducibility record regressions": {
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v"
+    },
+    "Support matrix is current and consistent": {
+      "if": "${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "run": "python3 scripts/support-matrix.py check\npython3 -m unittest discover -s tests/roadmap/support-matrix -v\n"
+    },
+    "Artifact manifest provenance regressions": {
+      "run": "PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py"
+    },
+    "Theorem premise reference and index": {
+      "run": "python3 -B tests/roadmap/premises/test_premises.py\npython3 -B scripts/premises.py check\n"
+    },
+    "Float-semantics label regressions": {
+      "run": "set -euo pipefail\nPYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/float-semantics -v\npython3 scripts/float-semantics.py check\n"
+    },
+    "Upgrade qualification driver regressions": {
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "python3 tests/roadmap/upgrade-qualification/test_qualify.py"
+    },
+    "Mutation map and Python-side mutants": {
+      "run": "set -euo pipefail\nPYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v\npython3 -B scripts/mutation-map.py check\npython3 -B tests/roadmap/mutation-map/mutants.py\n"
+    },
+    "Check compiler-derived coverage inventory": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nsource_temp=$(mktemp -d \"$RUNNER_TEMP/air-inventory.XXXXXX\")\ntrap 'rm -rf \"$source_temp\"' EXIT\nurl=$(zig-patch/toml-get.sh '[\"${{ matrix.zig }}\"]' url)\nsha256=$(zig-patch/toml-get.sh '[\"${{ matrix.zig }}\"]' sha256)\ncurl -fL --output \"$source_temp/source.tar.xz\" \"$url\"\necho \"$sha256  $source_temp/source.tar.xz\" | sha256sum -c -\nmkdir \"$source_temp/source\"\ntar -xJf \"$source_temp/source.tar.xz\" -C \"$source_temp/source\" --strip-components=1\npython3 scripts/coverage.py check --version '${{ matrix.zig }}' \\\n  --source \"$source_temp/source\" --os linux --inventory 'coverage/${{ matrix.zig }}.json'\n"
+    },
+    "Shell check regressions": {
+      "run": "scripts/review-checks.sh"
+    },
+    "Build guard offline regressions": {
+      "run": "set -euo pipefail\npython3 tests/roadmap/build-budgets/test_guard.py 2>&1 | tee \"$RUNNER_TEMP/build-guard-tests.log\"\n"
+    },
+    "Safe output and cancellation regressions": {
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "set -euo pipefail\npython3 -m unittest discover -s tests/roadmap/safe-output -p 'test_*.py' -v 2>&1 \\\n  | tee \"$RUNNER_TEMP/safe-output-tests.log\"\n"
+    },
+    "Performance budget gate regressions": {
+      "run": "set -euo pipefail\npython3 tests/roadmap/perf-budgets/test_perf_budgets.py\npython3 scripts/perf-budgets.py validate\n"
+    },
+    "First-use workflow regressions": {
+      "run": "python3 tests/usability/workflow.py"
+    },
+    "Release compatibility metadata and doctor regressions": {
+      "run": "set -euo pipefail\npython3 scripts/compat.py check\npython3 -m unittest discover -s tests/roadmap/distribution -v\n"
+    },
+    "Release record and review ledger regressions": {
+      "if": "${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "set -euo pipefail\npython3 -m unittest discover -s tests/roadmap/release-record -v\nif git remote get-url origin >/dev/null 2>&1; then\n  read -r -a reviewed <<<\"$(python3 scripts/release-record.py ledger --revisions)\"\n  git fetch --no-tags --depth=1 origin \"${reviewed[@]}\"\n  python3 scripts/release-record.py ledger\nelse\n  python3 scripts/release-record.py ledger --allow-unfetched\nfi\n"
+    },
+    "Float target probe": {
+      "if": "matrix.full",
+      "run": "scripts/floatprobe.sh"
+    },
+    "Prune absent-source Lake modules": {
+      "run": "python3 scripts/local-ci-steps.py --prune-cache"
+    },
+    "Build runtime library + translator": {
+      "run": "lake build"
+    },
+    "Translator timing flag preservation": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean \"$PWD/.lake/build/bin/air2lean\""
+    },
+    "Stable scalar proof API regressions": {
+      "if": "${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "run": "set -euo pipefail\nproof_api_dir=\"$RUNNER_TEMP/proof-api\"\nmkdir -p \"$proof_api_dir/tmp\"\nexport TMPDIR=\"$proof_api_dir/tmp\"\npython3 -I -B tests/roadmap/proof-api/test_report.py 2>&1 | tee \"$proof_api_dir/report.log\"\npython3 -I -B tests/roadmap/proof-api/test_cli.py \"$PWD/.lake/build/bin/air2lean\" \\\n  --retain \"$proof_api_dir/Generated.lean\" 2>&1 | tee \"$proof_api_dir/cli.log\"\nfor client in Generated.client Generated.renumbered.client Generated.unrelated.client; do\n  lake env lean \"$proof_api_dir/$client.lean\" 2>&1 | tee \"$proof_api_dir/$client.log\"\ndone\nmutation_status=0\nlake env lean \"$proof_api_dir/Generated.changed.client.lean\" \\\n  > \"$proof_api_dir/mutation.log\" 2>&1 || mutation_status=$?\ncat \"$proof_api_dir/mutation.log\"\ntest \"$mutation_status\" -eq 1\ngrep -Fq 'not definitionally equal' \"$proof_api_dir/mutation.log\"\n"
+    },
+    "Public exporter filename qualification": {
+      "if": "${{ !matrix.mutate }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig"
+      },
+      "run": "bash scripts/check-export-names.sh"
+    },
+    "Build optional separation proof tools": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nmkdir -p \"$RUNNER_TEMP/proof-tools\"\nlake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble Proofs.Slices.Gen 2>&1 | tee \"$RUNNER_TEMP/proof-tools/build.log\"\n"
+    },
+    "Separation normalization regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/proof-tools/Normalize.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/Normalize.log\"\n"
+    },
+    "Separation client regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/Clients.log\"\n"
+    },
+    "Explicit array framing regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/proof-tools/Array.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/Array.log\"\n"
+    },
+    "Memory-backed array reassembly and generated clients": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/Reassemble.log\"\nlake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/ArrayClients.log\"\n"
+    },
+    "Total correctness regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee \"$RUNNER_TEMP/proof-tools/Total.log\"\n"
+    },
+    "Validate AIR input and whole-program signatures": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}",
+      "run": "set -euo pipefail\nevidence_dir=\"$RUNNER_TEMP/input-validation\"\nmkdir -p \"$evidence_dir/tmp\"\nexport TMPDIR=\"$evidence_dir/tmp\"\nlake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee \"$evidence_dir/api.log\"\npython3 tests/roadmap/input-validation/test_cli.py \"$PWD/.lake/build/bin/air2lean\" 2>&1 | tee \"$evidence_dir/cli.log\"\n"
+    },
+    "Validate check-only diagnostic collection": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}",
+      "run": "set -euo pipefail\ndiagnostics_evidence_dir=\"$RUNNER_TEMP/diagnostics\"\nmkdir -p \"$diagnostics_evidence_dir/tmp\"\nexport TMPDIR=\"$diagnostics_evidence_dir/tmp\"\nlake env lean tests/roadmap/diagnostics/Collector.lean 2>&1 | tee \"$diagnostics_evidence_dir/collector.log\"\nlake env lean --run tests/roadmap/diagnostics/RuntimeTags.lean 2>&1 | tee \"$diagnostics_evidence_dir/runtime-tags.log\"\npython3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee \"$diagnostics_evidence_dir/harness.log\"\npython3 tests/roadmap/diagnostics/test_cli.py \"$PWD/.lake/build/bin/air2lean\" 2>&1 | tee \"$diagnostics_evidence_dir/cli.log\"\nPYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py \"$PWD/.lake/build/bin/air2lean\" 2>&1 | tee \"$diagnostics_evidence_dir/blockers.log\"\n"
+    },
+    "First-use CLI diagnostics": {
+      "run": "python3 tests/usability/cli.py"
+    },
+    "External model contracts": {
+      "if": "${{ !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_MODEL_EVIDENCE": "${{ runner.temp }}/model-contracts"
+      },
+      "run": "python3 tests/roadmap/models/test_gate.py\npython3 -B tests/roadmap/models/test_external_contracts.py\nscripts/model-contracts.sh\n"
+    },
+    "Flow timestamp artifact-only proofs and provenance guards": {
+      "if": "matrix.full && matrix.zig == '0.16.0'",
+      "env": {
+        "TMPDIR": "${{ runner.temp }}",
+        "FLOW_TIME_SOURCE": "${{ runner.temp }}/absent-flow-checkout/time.zig"
+      },
+      "run": "set -euo pipefail\npython3 tests/roadmap/flow-time/test_provenance.py\nif ! command -v rg >/dev/null 2>&1; then\n  sudo apt-get update\n  sudo apt-get install --no-install-recommends -y ripgrep\nfi\nbash scripts/flow-time.sh --check-artifacts\n"
+    },
+    "Progress hint qualification": {
+      "if": "${{ !matrix.mutate }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_PROGRESS_ARTIFACT_DIR": "${{ runner.temp }}/progress-qualification"
+      },
+      "run": "if [ '${{ matrix.zig }}' = '0.16.0' ]; then\n  scripts/progress-hints.sh full\nelse\n  scripts/progress-hints.sh\nfi\n"
+    },
+    "Finite progress kernel contracts": {
+      "if": "${{ matrix.full && !matrix.mutate }}",
+      "run": "lake env lean tests/roadmap/progress/Total.lean"
+    },
+    "Project manifest regressions and example translation": {
+      "if": "matrix.full && matrix.zig == '0.16.0'",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "set -euo pipefail\npython3 -m unittest discover -s tests/roadmap/project -v\n# Consumer mocks need no diagnostic producer; actual integration requires PR 78.\npython3 -m unittest discover -s tests/roadmap/project-diagnostics -v\nwork=\"$(mktemp -d \"${RUNNER_TEMP}/air2lean-project.XXXXXX\")\"\npython3 scripts/project.py translate example-project.json \\\n  --translator .lake/build/bin/air2lean --out \"$work/artifact\" \\\n  > \"$work/translation.json\"\npython3 scripts/project.py verify example-project.json \\\n  --artifact \"$work/artifact\" > \"$work/verification.json\"\ncat \"$work/verification.json\"\npython3 scripts/project-diagnostics.py check example-project.json \\\n  --translator .lake/build/bin/air2lean --out \"$work/diagnostics.json\" \\\n  > \"$work/diagnostics-stdout.json\"\ncmp \"$work/diagnostics.json\" \"$work/diagnostics-stdout.json\"\npython3 - \"$work/diagnostics.json\" <<'PY_CHECK'\nimport json, sys\nwith open(sys.argv[1], encoding='utf-8') as stream:\n    report = json.load(stream)\nassert report['schema'] == 1 and report['kind'] == 'air2lean-project-diagnostics'\nassert report['status'] == 'checked' and report['complete'] and not report['truncated']\nassert report['proof_status'] == 'not_run' and report['runtime_outcomes'] == 'not_observed'\nassert report['source_correspondence'] == 'not_attested'\nassert report['producer_protocol']['qualification'] == 'not_attested_by_adapter'\nassert report['root_checks'] and all(\n    root['status'] == 'checked' and root['producer']['status'] == 'checked'\n    for root in report['root_checks'])\nPY_CHECK\n"
+    },
+    "Nullable mutation classifier regressions": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "run": "python3 -B tests/roadmap/null-pointers/test_classify_mutant.py"
+    },
+    "Scalar nullable pointer source and semantic gate": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_NULL_ZIG_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_NULL_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_NULL_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_NULL_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean"
+      },
+      "run": "tests/roadmap/null-pointers/check.sh"
+    },
+    "Byte sentinel allocation source, ownership and kernel mutations": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_SENTINEL_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_SENTINEL_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_SENTINEL_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean"
+      },
+      "run": "python3 -B tests/roadmap/byte-sentinel/static.py\nbash tests/roadmap/byte-sentinel/check.sh\n"
+    },
+    "Allocation policy proofs, correspondence and semantic mutations": {
+      "if": "matrix.full",
+      "env": {
+        "AIR2LEAN_ALLOCATION_REPORT_DIR": "${{ runner.temp }}/allocation-policy-${{ matrix.zig }}"
+      },
+      "run": "set -euo pipefail\nmkdir -p \"$AIR2LEAN_ALLOCATION_REPORT_DIR\"\ncp docs/allocation-policy-report.json \"$AIR2LEAN_ALLOCATION_REPORT_DIR/source-qualification-status.json\"\npython3 tests/roadmap/allocation-policy/static.py 2>&1 | tee \"$AIR2LEAN_ALLOCATION_REPORT_DIR/static.log\"\nbash tests/roadmap/allocation-policy/check.sh 2>&1 | tee \"$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log\"\npython3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee \"$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log\"\n"
+    },
+    "Thread tuple source and ownership gate": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean",
+        "AIR2LEAN_TUPLE_ZIG_VERSION": "${{ matrix.zig }}"
+      },
+      "run": "set -euo pipefail\nlake build ZigLean.Conc.Csl ZigLean.Sep\npython3 tests/roadmap/thread-tuples/guard-tests.py\npython3 tests/roadmap/thread-tuples/mutation-tests.py\n[ \"$(\"$AIR2LEAN_ZIG_AIR\" version)\" = \"$AIR2LEAN_TUPLE_ZIG_VERSION\" ]\n[ \"$(\"$AIR2LEAN_ZIG_NATIVE\" version)\" = \"$AIR2LEAN_TUPLE_ZIG_VERSION\" ]\nwork=$(mktemp -d \"$RUNNER_TEMP/thread-tuples.XXXXXX\")\ntrap 'rm -rf \"$work\"' EXIT\nbash tests/roadmap/thread-tuples/check.sh --export \"$work/air\"\n\"$AIR2LEAN_TRANSLATOR\" \"$work/air\" -o \"$work/Gen.lean\" --namespace ThreadTuples --prefix thread_tuples.\npython3 scripts/normalize-generated.py report \"$work/Gen.lean\" \"$work/air\" \"$work/generated-report.json\"\npython3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean \"$work/Gen.lean\" \"$work/generated-report.json\"\nlake env lean -R \"$work\" \"$work/Gen.lean\"\nbash tests/roadmap/thread-tuples/check.sh --native\nbash tests/roadmap/thread-tuples/check.sh --check-artifacts\nbash tests/roadmap/thread-tuples/check.sh --adapter-contract \"$work/adapter-contract\"\n"
+    },
+    "Fallible thread assignment and group fallback gate": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean",
+        "AIR2LEAN_SPAWN_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_SPAWN_ARTIFACT_DIR": "${{ runner.temp }}/spawn-failure"
+      },
+      "run": "set -euo pipefail\npython3 tests/roadmap/spawn-failure/harness-tests.py\nbash tests/roadmap/spawn-failure/check.sh --full\n"
+    },
+    "Finite symbolic error-storage model and checker controls": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}",
+      "run": "set -euo pipefail\nstorage_evidence_dir=\"$RUNNER_TEMP/error-storage-controls\"\nmkdir -p \"$storage_evidence_dir\"\nlake build ZigLean.Mem.Lemmas ZigLean.Sep.Try ZigLean.Sep.Discard\nlake env lean --run tests/roadmap/error-storage/Qualifier.lean\nlake env lean --run tests/roadmap/error-storage/GlobalAlias.lean\nlake env lean --run tests/roadmap/error-storage/Runtime.lean\nlake env lean --run tests/roadmap/error-storage/Pipeline.lean \"$storage_evidence_dir/Synthetic.lean\"\nlake env lean -R \"$storage_evidence_dir\" \"$storage_evidence_dir/Synthetic.lean\"\n"
+    },
+    "Global payload source, generated clients and semantic mutations": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_ZIG_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_ZIG_BACKEND": "stage2_x86_64"
+      },
+      "run": "set -euo pipefail\nlake build ZigLean Air2Lean air2lean\nlake env lean tests/roadmap/global-payload-pointers/ExceptEq.lean\npython3 -m unittest discover -s tests/roadmap/global-payload-pointers -v\nexport AIR2LEAN_LEAN=$(lake env which lean)\nexport LEAN_PATH=$(lake env printenv LEAN_PATH)\nbash tests/roadmap/global-payload-pointers/check.sh --kernel\nbash tests/roadmap/global-payload-pointers/check.sh --native\nfresh=$(mktemp -d \"$RUNNER_TEMP/air2lean-global-payload-source.XXXXXX\")\ntrap 'rm -rf \"$fresh\"' EXIT\nbash tests/roadmap/global-payload-pointers/check.sh --export \"$fresh/air\"\nbash tests/roadmap/global-payload-pointers/check.sh --export-reject \"$fresh/reject-air\"\n.lake/build/bin/air2lean \"$fresh/air\" -o \"$fresh/Gen.lean\" --namespace GlobalPayload --prefix global_payloads.\npython3 scripts/normalize-generated.py report \"$fresh/Gen.lean\" \"$fresh/air\" \"$fresh/generated-report.json\"\nAIR2LEAN_GLOBAL_ACTUAL_GEN=\"$fresh/Gen.lean\" AIR2LEAN_GLOBAL_CLIENT_OUT=\"$fresh/clients\" \\\n  bash tests/roadmap/global-payload-pointers/check-generated.sh\n"
+    },
+    "Pointer try ownership, native and fresh source regressions": {
+      "if": "${{ !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG_NATIVE": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "set -euo pipefail\nlake build ZigLean.Sep.Try ZigLean.Sep.Discard\npython3 -m unittest discover -s tests/roadmap/try-pointers -v\nbash tests/roadmap/try-pointers/check.sh --check-artifacts\nbash tests/roadmap/try-pointers/check.sh --native\nfresh=$(mktemp -d \"$RUNNER_TEMP/air2lean-pointer-try-source.XXXXXX\")\ntrap 'rm -rf \"$fresh\"' EXIT\nbash tests/roadmap/try-pointers/check.sh --export \"$fresh/air\"\npython3 tests/roadmap/try-pointers/check-artifacts.py --fresh-air \"$fresh/air\"\n\"$AIR2LEAN_TRANSLATOR\" \"$fresh/air\" -o \"$fresh/Gen.lean\" \\\n  --namespace TryPointers --prefix try_pointers.\npython3 scripts/normalize-generated.py report \"$fresh/Gen.lean\" \"$fresh/air\" \"$fresh/generated-report.json\"\npython3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean \"$fresh/Gen.lean\" \"$fresh/generated-report.json\"\n"
+    },
+    "Golden AIR, translate, build, differential test": {
+      "if": "${{ !matrix.mutate }}",
+      "env": {
+        "AIR2LEAN_CI": "1",
+        "AIR2LEAN_ZIG_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_DIFF": "${{ matrix.full && '1' || '0' }}",
+        "AIR2LEAN_OUT_DIR": "${{ runner.temp }}/air-out"
+      },
+      "run": "scripts/check.sh"
+    },
+    "Typed outcomes and bounded schedule regressions": {
+      "if": "${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}",
+      "run": "python3 -I -B tests/roadmap/outcome-accounting/test_report.py\npython3 -I -B tests/roadmap/outcome-accounting/test_schedules.py\n# Relink against this version's archive produced by the differential gate.\nrm -f tests/diff/.lake/build/bin/schedules\n(cd tests/diff && lake build schedules)\n(cd tests/diff && lake env lean ../roadmap/outcome-accounting/Check.lean)\n(cd tests/diff && lake env lean ../roadmap/outcome-accounting/Search.lean)\n(cd tests/diff && lake env lean ../roadmap/outcome-accounting/Schedule.lean)\npython3 scripts/schedules.py enumerate --example atomics --function mpRelAcq \\\n  --fuel 1000 --node-cap 4 --prefix-cap 128 --output \"$RUNNER_TEMP/schedules.json\"\npython3 scripts/schedules.py replay --receipt \"$RUNNER_TEMP/schedules.json\" \\\n  --output \"$RUNNER_TEMP/schedule-replay.json\"\n# Separate observed/enumeration coverage; the summary keeps qualified=false.\npython3 scripts/diff-report.py compare --summary \"$RUNNER_TEMP/schedule-report.json\" \\\n  --root \"$PWD\" --examples atomics --version \"${{ matrix.zig }}\" --host \"$(uname -s)-$(uname -m)\" \\\n  --schedule-receipts \"$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json\"\npython3 scripts/schedules.py replay --summary tests/diff/out/report.json \\\n  --example threads --function claimOnce --output \"$RUNNER_TEMP/witness-replay.json\"\nzig build-exe -OReleaseSafe -lc --dep common \\\n  -Mroot=tests/roadmap/outcome-accounting/Native.zig \\\n  -Mcommon=tests/diff/common.zig -femit-bin=\"$RUNNER_TEMP/outcome-native\"\npython3 tests/roadmap/outcome-accounting/test_native.py \"$RUNNER_TEMP/outcome-native\"\npython3 tests/roadmap/outcome-accounting/test_parent_oom.py \"$(command -v zig)\"\n"
+    },
+    "Build proofs": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "lake build Proofs\nif [ \"${{ matrix.full }}\" = \"true\" ] && [ \"${{ matrix.zig }}\" = \"0.16.0\" ]; then\n  lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean\nfi\n"
+    },
+    "Audit theorem dependencies and assumptions": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1"
+      },
+      "run": "rm -f \"$RUNNER_TEMP/air2lean-assumptions.json\"\nscripts/assumptions.sh --output \"$RUNNER_TEMP/air2lean-assumptions.json\"\npython3 scripts/float-semantics.py check-report \"$RUNNER_TEMP/air2lean-assumptions.json\"\n"
+    },
+    "Map audited theorems to premise IDs": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "run": "python3 -B scripts/premises.py compiled --assurance \"$RUNNER_TEMP/air2lean-assumptions.json\" \\\n  --output \"$RUNNER_TEMP/air2lean-premises.json\"\n"
+    },
+    "Assurance environment regressions": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1"
+      },
+      "run": "set -euo pipefail\nPYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_receipt.py\nPYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_check.py\nPYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_ci_stash.py\ntests/roadmap/assurance/check.sh\n"
+    },
+    "Claim strength regressions": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "run": "tests/roadmap/claims/check.sh"
+    },
+    "Outcome taxonomy Lean fixture": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1"
+      },
+      "run": "lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean"
+    },
+    "First-proof tutorial": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "lake env lean tutorials/first-proof/Main.lean"
+    },
+    "Integer bit operations regression and differential gate": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-0.16.0/bin/zig",
+        "AIR2LEAN_ZIG": "zig",
+        "AIR2LEAN_BITOPS_OUT_DIR": "${{ runner.temp }}/air2lean-bitops"
+      },
+      "run": "tests/roadmap/bitops/check.sh"
+    },
+    "Build optional verification conditions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nmkdir -p \"$RUNNER_TEMP/vcs\"\nlake build ZigLean.VC Proofs.Pointers.Gen 2>&1 | tee \"$RUNNER_TEMP/vcs/build.log\"\n"
+    },
+    "Result verification condition regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee \"$RUNNER_TEMP/vcs/Result.log\"\n"
+    },
+    "Memory verification condition regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee \"$RUNNER_TEMP/vcs/Memory.log\"\n"
+    },
+    "Verification condition client regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "run": "set -euo pipefail\nlake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee \"$RUNNER_TEMP/vcs/Clients.log\"\n"
+    },
+    "Loop-switch dispatch regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1",
+        "AIR2LEAN_DISPATCH_ZIG_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_DISPATCH_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_DISPATCH_ZIG_STOCK": "zig"
+      },
+      "run": "if [ \"$AIR2LEAN_DISPATCH_ZIG_VERSION\" = \"0.16.0\" ]; then\n  tests/roadmap/dispatch/check.sh\nelse\n  tests/roadmap/dispatch/check.sh --native-only\nfi\n"
+    },
+    "Local-place parent pointer regressions": {
+      "if": "${{ !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "env": {
+        "LEAN_NUM_THREADS": "1",
+        "AIR2LEAN_LOCAL_PARENT_ZIG_VERSION": "${{ matrix.zig }}",
+        "AIR2LEAN_LOCAL_PARENT_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_LOCAL_PARENT_ZIG_STOCK": "zig"
+      },
+      "run": "bash tests/roadmap/local-parent/check.sh"
+    },
+    "Review regressions": {
+      "if": "${{ !matrix.mutate }}",
+      "env": {
+        "AIR2LEAN_REVIEW_ZIG14": "${{ matrix.zig == '0.14.1' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}",
+        "AIR2LEAN_REVIEW_ZIG15": "${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}",
+        "AIR2LEAN_REVIEW_ZIG16": "${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}",
+        "AIR2LEAN_REVIEW_TRANSLATOR": "${{ github.workspace }}/.lake/build/bin/air2lean"
+      },
+      "run": "scripts/review.sh"
+    },
+    "Weak CAS safety qualification": {
+      "if": "${{ !matrix.mutate && matrix.zig == '0.16.0' }}",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_ZIG": "${{ github.workspace }}/host-zig/zig",
+        "AIR2LEAN_WEAK_CAS_ARTIFACT_DIR": "${{ runner.temp }}/weak-cas-qualification"
+      },
+      "run": "scripts/weak-cas.sh full"
+    },
+    "Check for sorry/admit/native_decide": {
+      "if": "matrix.full",
+      "run": "scripts/no-sorry.sh"
+    },
+    "Build threadsync proofs (macOS translation)": {
+      "if": "${{ !matrix.mutate && matrix.zig == '0.15.2' }}",
+      "run": "cp Proofs/Threadsync/Gen.lean \"$RUNNER_TEMP/Gen-linux.lean\"\ncp tests/golden/0.15.2/threadsync/Gen-darwin.lean Proofs/Threadsync/Gen.lean\nlake build Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff\ncp \"$RUNNER_TEMP/Gen-linux.lean\" Proofs/Threadsync/Gen.lean\n"
+    },
+    "Mutation check": {
+      "if": "matrix.mutate",
+      "env": {
+        "AIR2LEAN_ZIG_AIR": "zig-air-${{ matrix.zig }}/bin/zig",
+        "AIR2LEAN_MUTATION_SHARD": "${{ matrix.shard }}",
+        "AIR2LEAN_MUTATION_SHARDS": "5"
+      },
+      "run": "scripts/mutate.sh"
+    },
+    "Revision-bound theorem audit receipt": {
+      "if": "${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate && runner.os == 'Linux' }}",
+      "run": "set -euo pipefail\nrepo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')\ncd \"$repo_root\"\ntemp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' \"$RUNNER_TEMP\")\nlean_executable=$(elan which lean)\nlean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' \"$lean_executable\")\nguard=\"$repo_root/scripts/build-guard.py\"\nguard_sha=$(python3 -c 'import hashlib,sys; from pathlib import Path; print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())' \"$guard\")\nreceipt_parent=$(mktemp -d \"$temp_root/proof-receipt.XXXXXX\")\nexport AIR2LEAN_BUILD_LOCK=\"$temp_root/air2lean-build.lock\"\nexport PYTHONDONTWRITEBYTECODE=1\n# BEGIN proof receipt compiler stash\ncompiler_stash=$(mktemp -d \"$temp_root/proof-receipt-compilers.XXXXXX\")\nrestore_receipt_compilers() {\n  original_status=$?\n  trap - EXIT\n  restore_failed=0\n  for compiler in host-zig zig-air-0.16.0; do\n    if [ -e \"$compiler_stash/$compiler\" ] || [ -L \"$compiler_stash/$compiler\" ]; then\n      if [ -e \"$repo_root/$compiler\" ] || [ -L \"$repo_root/$compiler\" ]; then\n        echo \"proof receipt compiler restore collision: $repo_root/$compiler; retained $compiler_stash/$compiler\" >&2\n        restore_failed=1\n      elif ! mv -T --no-clobber -- \"$compiler_stash/$compiler\" \"$repo_root/$compiler\"; then\n        echo \"proof receipt compiler restore failed: $compiler_stash/$compiler\" >&2\n        restore_failed=1\n      elif [ -e \"$compiler_stash/$compiler\" ] || [ -L \"$compiler_stash/$compiler\" ]; then\n        echo \"proof receipt compiler restore skipped; retained $compiler_stash/$compiler\" >&2\n        restore_failed=1\n      fi\n    fi\n  done\n  if [ \"$original_status\" -eq 0 ] && [ \"$restore_failed\" -ne 0 ]; then original_status=2; fi\n  exit \"$original_status\"\n}\n# Install before validation or either move; a partial setup also restores owned roots.\ntrap restore_receipt_compilers EXIT\npython3 - \"$repo_root\" \"$compiler_stash\" <<'PYSTASH'\nfrom pathlib import Path\nimport subprocess, sys\nroot, stash = map(Path, sys.argv[1:])\nif root.resolve(strict=True) != root or stash.resolve(strict=True) != stash or stash.is_relative_to(root):\n    raise SystemExit('proof receipt compiler stash requires physical paths outside the checkout')\nnames = ('host-zig', 'zig-air-0.16.0')\ntracked = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--', *names],\n                         check=True, stdout=subprocess.PIPE, timeout=5).stdout\nif tracked:\n    raise SystemExit('proof receipt compiler roots contain tracked files')\nfor name in names:\n    path = root / name\n    if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:\n        raise SystemExit('proof receipt compiler root must be a physical directory: ' + str(path))\nPYSTASH\nfor compiler in host-zig zig-air-0.16.0; do\n  mv -T --no-clobber -- \"$repo_root/$compiler\" \"$compiler_stash/$compiler\"\n  if [ -e \"$repo_root/$compiler\" ] || [ -L \"$repo_root/$compiler\" ]; then\n    echo \"proof receipt compiler stash move incomplete: $repo_root/$compiler\" >&2\n    exit 2\n  fi\ndone\n# END proof receipt compiler stash\nbash tests/roadmap/proof-receipts/check.sh \\\n  --guard \"$guard\" --guard-sha256 \"$guard_sha\" \\\n  \"$receipt_parent/attempt\" \"$lean_toolchain\" ci-linux-0.16-all-shipped\n"
+    }
+  },
+  "evidence": [
+    {
+      "kind": "github-actions",
+      "run_id": 37611729563,
+      "url": "https://github.com/riventic/air2lean/actions/runs/37611729563",
+      "head_sha": "25f89bbb405821b286e04ee7676bc24aa4c7e5ae",
+      "head_branch": "main",
+      "event": "push",
+      "conclusion": "success",
+      "jobs": [
+        "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+        "test (0.15.2, true, false)",
+        "test (0.16.0, false, true, 1)",
+        "test (0.16.0, false, true, 2)",
+        "test (0.16.0, false, true, 3)",
+        "test (0.16.0, false, true, 4)",
+        "test (0.16.0, false, true, 5)",
+        "test (0.16.0, true, false)"
+      ],
+      "file_sha256": "ab63b885563a6db980d8795489ce1d6d445e689c7e8f31434c35b2bbba01f519"
+    }
+  ],
+  "gates": [
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Support matrix is current and consistent",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Check compiler-derived coverage inventory",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Release record and review ledger regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Float target probe",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Translator timing flag preservation",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Stable scalar proof API regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Public exporter filename qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Build optional separation proof tools",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Separation normalization regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Separation client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Explicit array framing regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Memory-backed array reassembly and generated clients",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Total correctness regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Validate AIR input and whole-program signatures",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Validate check-only diagnostic collection",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "External model contracts",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Flow timestamp artifact-only proofs and provenance guards",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Progress hint qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Finite progress kernel contracts",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Project manifest regressions and example translation",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Nullable mutation classifier regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Scalar nullable pointer source and semantic gate",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Byte sentinel allocation source, ownership and kernel mutations",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Allocation policy proofs, correspondence and semantic mutations",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Thread tuple source and ownership gate",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Fallible thread assignment and group fallback gate",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Finite symbolic error-storage model and checker controls",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Global payload source, generated clients and semantic mutations",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Pointer try ownership, native and fresh source regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Golden AIR, translate, build, differential test",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Typed outcomes and bounded schedule regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Build proofs",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Audit theorem dependencies and assumptions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Map audited theorems to premise IDs",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Assurance environment regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Claim strength regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Outcome taxonomy Lean fixture",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "First-proof tutorial",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Integer bit operations regression and differential gate",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Build optional verification conditions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Result verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Memory verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Verification condition client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Loop-switch dispatch regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Local-place parent pointer regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Review regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Weak CAS safety qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Check for sorry/admit/native_decide",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, true, false)",
+      "step": "Revision-bound theorem audit receipt",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Check compiler-derived coverage inventory",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Float target probe",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Translator timing flag preservation",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Stable scalar proof API regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Public exporter filename qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build optional separation proof tools",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Separation normalization regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Separation client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Explicit array framing regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Memory-backed array reassembly and generated clients",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Total correctness regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Progress hint qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Finite progress kernel contracts",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Allocation policy proofs, correspondence and semantic mutations",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Golden AIR, translate, build, differential test",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Typed outcomes and bounded schedule regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build proofs",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "First-proof tutorial",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build optional verification conditions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Result verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Memory verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Verification condition client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Loop-switch dispatch regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Review regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Check for sorry/admit/native_decide",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.15.2, true, false)",
+      "step": "Build threadsync proofs (macOS translation)",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Check compiler-derived coverage inventory",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Translator timing flag preservation",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Public exporter filename qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Build optional separation proof tools",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Separation normalization regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Separation client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Explicit array framing regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Memory-backed array reassembly and generated clients",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Total correctness regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Progress hint qualification",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Golden AIR, translate, build, differential test",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Build proofs",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "First-proof tutorial",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Build optional verification conditions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Result verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Memory verification condition regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Verification condition client regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Loop-switch dispatch regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.14.1, basic recursion options floatops floats errors variants pointers layout, false, false)",
+      "step": "Review regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 1)",
+      "step": "Mutation check",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 2)",
+      "step": "Mutation check",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 3)",
+      "step": "Mutation check",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 4)",
+      "step": "Mutation check",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Offline compiler inventory regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Schedule exploration cap accounting regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Local Lake cache hygiene regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Verification coverage report regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Outcome taxonomy regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Project check and reproducibility record regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Artifact manifest provenance regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Theorem premise reference and index",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Float-semantics label regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Upgrade qualification driver regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Mutation map and Python-side mutants",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Shell check regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Build guard offline regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Safe output and cancellation regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Performance budget gate regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "First-use workflow regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Release compatibility metadata and doctor regressions",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Prune absent-source Lake modules",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Build runtime library + translator",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "First-use CLI diagnostics",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    },
+    {
+      "job": "test (0.16.0, false, true, 5)",
+      "step": "Mutation check",
+      "evidence": [
+        0
+      ],
+      "details": [
+        "GitHub step conclusion: success"
+      ],
+      "status": "passed"
+    }
+  ],
+  "unavailable": [],
+  "review": {
+    "ledger": "REVIEW_COVERAGE.tsv",
+    "ledger_blob": "2d0d9151cd7ede3397d0db6ddee4692ed70b05e7",
+    "reviewed_revisions": {
+      "5a849265f4a38d6bd05aec81aa270b6c81d11b5d": 838
+    },
+    "entries": 838,
+    "changed_since_review": [
+      ".github/workflows/ci.yml",
+      ".gitignore",
+      "Air2Lean/Air/Anon.lean",
+      "Air2Lean/Air/Canon.lean",
+      "Air2Lean/Air/Json.lean",
+      "Air2Lean/Air/Normalize.lean",
+      "Air2Lean/Air/Op.lean",
+      "Air2Lean/Check.lean",
+      "Air2Lean/Emit.lean",
+      "Air2Lean/Main.lean",
+      "Air2Lean/Memory.lean",
+      "PLAN.md",
+      "Proofs/Asm/Gen.lean",
+      "Proofs/Asm/Proofs.lean",
+      "Proofs/Atomics/Gen.lean",
+      "Proofs/Atomics/MessagePassing.lean",
+      "Proofs/Atomics/Stack.lean",
+      "Proofs/Floatconv/Gen.lean",
+      "Proofs/Floatconv/Proofs.lean",
+      "Proofs/Floatops/Gen.lean",
+      "Proofs/Floatops/Proofs.lean",
+      "Proofs/Iogroup/Counter.lean",
+      "Proofs/Iogroup/Gen.lean",
+      "Proofs/Layout/Gen.lean",
+      "Proofs/Layout/Mem.lean",
+      "Proofs/Lists/Append.lean",
+      "Proofs/Pointers/Proofs.lean",
+      "Proofs/Slices/Proofs.lean",
+      "Proofs/Sync/Gen.lean",
+      "Proofs/Sync/Handoff.lean",
+      "Proofs/Sync/Mutex.lean",
+      "Proofs/Sync/Proofs.lean",
+      "Proofs/Sync/SemCounter.lean",
+      "Proofs/Sync/Semaphore.lean",
+      "Proofs/Threads/Counter.lean",
+      "Proofs/Threads/Disjoint.lean",
+      "Proofs/Threads/Gen.lean",
+      "Proofs/Threadsync/Gen.lean",
+      "Proofs/Threadsync/Handoff.lean",
+      "Proofs/Threadsync/Mutex.lean",
+      "Proofs/Threadsync/WaitGroup.lean",
+      "Proofs/Variants/Proofs.lean",
+      "Proofs/Vectors/Proofs.lean",
+      "README.md",
+      "ZigLean.lean",
+      "ZigLean/Basic.lean",
+      "ZigLean/Conc.lean",
+      "ZigLean/Conc/Basic.lean",
+      "ZigLean/Conc/Call.lean",
+      "ZigLean/Conc/Lemmas.lean",
+      "ZigLean/Conc/LockRules.lean",
+      "ZigLean/Conc/Logic.lean",
+      "ZigLean/Conc/Sched.lean",
+      "ZigLean/Conc/Word.lean",
+      "ZigLean/Float/CompilerRt.lean",
+      "ZigLean/Float/Ops.lean",
+      "ZigLean/Loop.lean",
+      "ZigLean/Mem.lean",
+      "ZigLean/Mem/Alloc.lean",
+      "ZigLean/Mem/Basic.lean",
+      "ZigLean/Mem/Enc.lean",
+      "ZigLean/Mem/Lemmas.lean",
+      "ZigLean/Mem/Thread.lean",
+      "ZigLean/Sep.lean",
+      "ZigLean/Sep/Alloc.lean",
+      "ZigLean/Sep/Triple.lean",
+      "docs/air-json.md",
+      "docs/floats.md",
+      "docs/generated-code.md",
+      "docs/proofs.md",
+      "docs/std-models.md",
+      "examples/asm/asm.zig",
+      "examples/atomics/atomics.zig",
+      "examples/iogroup/iogroup.zig",
+      "examples/sync/sync.zig",
+      "examples/threads/threads.zig",
+      "examples/threadsync/threadsync.zig",
+      "lakefile.toml",
+      "scripts/check.sh",
+      "scripts/diff.sh",
+      "scripts/floatprobe.sh",
+      "scripts/mutate.sh",
+      "tests/diff/Diff.lean",
+      "tests/diff/common.zig",
+      "tests/diff/floatconv/inputs/f80ToF64.jsonl",
+      "tests/diff/floatops/inputs/cmp64.jsonl",
+      "tests/diff/floatops/inputs/divExact64.jsonl",
+      "tests/diff/floatops/inputs/op128.jsonl",
+      "tests/diff/floatops/inputs/op16.jsonl",
+      "tests/diff/floatops/inputs/op32.jsonl",
+      "tests/diff/floatops/inputs/op64.jsonl",
+      "tests/diff/floatops/inputs/op80.jsonl",
+      "tests/diff/floatops/unspecified.txt",
+      "tests/diff/floats/inputs/hypot2.jsonl",
+      "tests/diff/gen_inputs.zig",
+      "tests/diff/lakefile.toml",
+      "tests/diff/lists/harness.zig",
+      "tests/diff/lists/inputs/sumRange.jsonl",
+      "tests/diff/sync/harness.zig",
+      "tests/diff/vectors/inputs/vDiv.jsonl",
+      "tests/diff/vectors/inputs/vMod.jsonl",
+      "tests/diff/vectors/unspecified.txt",
+      "tests/golden/0.14.1/layout/Gen.lean",
+      "tests/golden/0.15.2/atomics/Gen.lean",
+      "tests/golden/0.15.2/atomics/air-linux/atomics.sbRelaxed.json",
+      "tests/golden/0.15.2/atomics/air-linux/atomics.stackPush.json",
+      "tests/golden/0.15.2/atomics/air-linux/atomics.twoPlusTwoW.json",
+      "tests/golden/0.15.2/atomics/air/atomics.sbRelaxed.json",
+      "tests/golden/0.15.2/atomics/air/atomics.stackPush.json",
+      "tests/golden/0.15.2/atomics/air/atomics.twoPlusTwoW.json",
+      "tests/golden/0.15.2/floatops/Gen.lean",
+      "tests/golden/0.15.2/layout/Gen.lean",
+      "tests/golden/0.15.2/threads/Gen.lean",
+      "tests/golden/0.15.2/threads/air-linux/threads.claimOnce.json",
+      "tests/golden/0.15.2/threads/air-linux/threads.disjoint.json",
+      "tests/golden/0.15.2/threads/air-linux/threads.parallelCounter.json",
+      "tests/golden/0.15.2/threads/air-linux/threads.race.json",
+      "tests/golden/0.15.2/threads/air-linux/threads.xchgRace.json",
+      "tests/golden/0.15.2/threads/air/threads.claimOnce.json",
+      "tests/golden/0.15.2/threads/air/threads.disjoint.json",
+      "tests/golden/0.15.2/threads/air/threads.parallelCounter.json",
+      "tests/golden/0.15.2/threads/air/threads.race.json",
+      "tests/golden/0.15.2/threads/air/threads.xchgRace.json",
+      "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
+      "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wake__anon_11680.json",
+      "tests/golden/0.15.2/threadsync/air-linux/threadsync.waitGroup.json",
+      "tests/golden/0.16.0/atomics/air-linux/atomics.sbRelaxed.json",
+      "tests/golden/0.16.0/atomics/air-linux/atomics.stackPush.json",
+      "tests/golden/0.16.0/atomics/air-linux/atomics.twoPlusTwoW.json",
+      "tests/golden/0.16.0/lists/air/mem.Allocator.dupeSentinel__anon_N.json",
+      "tests/golden/0.16.0/slices/air/slices.subZ.json",
+      "tests/golden/0.16.0/slices/air/slices.sumZ.json",
+      "tests/golden/0.16.0/sync/air-linux/sync.handoff.json",
+      "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json",
+      "tests/golden/0.16.0/sync/air-linux/sync.semaphoreCounter.json",
+      "tests/golden/0.16.0/threads/air-linux/threads.claimOnce.json",
+      "tests/golden/0.16.0/threads/air-linux/threads.disjoint.json",
+      "tests/golden/0.16.0/threads/air-linux/threads.parallelCounter.json",
+      "tests/golden/0.16.0/threads/air-linux/threads.race.json",
+      "tests/golden/0.16.0/threads/air-linux/threads.xchgRace.json",
+      "tests/golden/asm/air/asm.divmod.json",
+      "tests/golden/atomics/air/atomics.sbRelaxed.json",
+      "tests/golden/atomics/air/atomics.stackPush.json",
+      "tests/golden/atomics/air/atomics.twoPlusTwoW.json",
+      "tests/golden/iogroup/air/iogroup.groupConcurrent.json",
+      "tests/golden/sync/air/Io.Condition.waitInner.json",
+      "tests/golden/sync/air/sync.handoff.json",
+      "tests/golden/sync/air/sync.rwLockRead.json",
+      "tests/golden/sync/air/sync.semaphoreCounter.json",
+      "tests/golden/threads/air/threads.claimOnce.json",
+      "tests/golden/threads/air/threads.disjoint.json",
+      "tests/golden/threads/air/threads.parallelCounter.json",
+      "tests/golden/threads/air/threads.race.json",
+      "tests/golden/threads/air/threads.xchgRace.json",
+      "tests/golden/threadsync/air/threadsync.waitGroup.json",
+      "zig-patch/0.14.1/TAGS.md",
+      "zig-patch/0.16.0/TAGS.md",
+      "zig-patch/README.md",
+      "zig-patch/air-json/json.zig",
+      "zig-patch/build.sh",
+      "zig-patch/lock.sh"
+    ],
+    "not_in_ledger": [
+      "Air2Lean/Air/Compat.lean",
+      "Air2Lean/Air/Profile.lean",
+      "Air2Lean/Air/StrictJson.lean",
+      "Air2Lean/Diagnose.lean",
+      "Air2Lean/Diagnostic.lean",
+      "Air2Lean/ModelRegistry.lean",
+      "Air2Lean/ProofApi.lean",
+      "Air2Lean/StdModels.lean",
+      "Air2Lean/TimedCheck.lean",
+      "Air2Lean/TimedEmit.lean",
+      "Dockerfile.clean-env",
+      "Dockerfile.local-ci",
+      "Proofs/Sync/RwLock.lean",
+      "Proofs/Sync/RwLockContract.lean",
+      "Proofs/Sync/RwLockSnapshotPair.lean",
+      "Proofs/Vectors/CheckedAdd.lean",
+      "REVIEW_COVERAGE.tsv",
+      "REVIEW_STRATEGY.md",
+      "ROADMAP.md",
+      "ZigLean/Bit.lean",
+      "ZigLean/Conc/Progress.lean",
+      "ZigLean/Conc/Spawn.lean",
+      "ZigLean/Conc/SpawnLemmas.lean",
+      "ZigLean/Conc/TimedBody.lean",
+      "ZigLean/Conc/TimedCall.lean",
+      "ZigLean/Conc/TimedClient.lean",
+      "ZigLean/Conc/TimedCompare.lean",
+      "ZigLean/Conc/TimedSched.lean",
+      "ZigLean/Conc/Total.lean",
+      "ZigLean/Conc/WeakCas.lean",
+      "ZigLean/Conc/WeakCasLemmas.lean",
+      "ZigLean/Conc/WeakWord.lean",
+      "ZigLean/External.lean",
+      "ZigLean/Mem/Null.lean",
+      "ZigLean/Permutation.lean",
+      "ZigLean/Sep/Array.lean",
+      "ZigLean/Sep/Array/Reassemble.lean",
+      "ZigLean/Sep/Automation.lean",
+      "ZigLean/Sep/Discard.lean",
+      "ZigLean/Sep/Remap.lean",
+      "ZigLean/Sep/Sentinel.lean",
+      "ZigLean/Sep/Total.lean",
+      "ZigLean/Sep/Try.lean",
+      "ZigLean/Time.lean",
+      "ZigLean/VC.lean",
+      "ZigLean/VC/Mem.lean",
+      "ZigLean/VC/Result.lean",
+      "assurance/float-semantics.json",
+      "assurance/mutation-map.json",
+      "assurance/perf-budgets.json",
+      "assurance/policy.json",
+      "assurance/premises.json",
+      "case-studies/flow-time/FlowTime/Gen.lean",
+      "case-studies/flow-time/FlowTime/Proofs.lean",
+      "case-studies/flow-time/README.md",
+      "case-studies/flow-time/air/flow_time.timestamp32.json",
+      "case-studies/flow-time/air/flow_time.timestamp64.json",
+      "case-studies/flow-time/check-source.py",
+      "case-studies/flow-time/flow_time.zig",
+      "case-studies/flow-time/provenance.json",
+      "compatibility.json",
+      "coverage/0.14.1.json",
+      "coverage/0.15.2.json",
+      "coverage/0.16.0.json",
+      "docs/allocation-policy-report.json",
+      "docs/allocation-policy.md",
+      "docs/artifact-manifest.md",
+      "docs/assumptions-audit.md",
+      "docs/bitops.md",
+      "docs/build-budgets.md",
+      "docs/byte-permutation.md",
+      "docs/claim-strength.md",
+      "docs/coverage.md",
+      "docs/deadline-atomic-compare.md",
+      "docs/deadline-futex-design.md",
+      "docs/deadline-handoff.md",
+      "docs/deadline-runtime.md",
+      "docs/deadline-translator-scope.md",
+      "docs/diagnostics.md",
+      "docs/distribution.md",
+      "docs/export-names.md",
+      "docs/external-models.md",
+      "docs/float-semantics.md",
+      "docs/getting-started.md",
+      "docs/input-validation.md",
+      "docs/loop-dispatch.md",
+      "docs/mutation-map.md",
+      "docs/null-pointers.md",
+      "docs/outcome-accounting.md",
+      "docs/outcome-taxonomy.md",
+      "docs/perf-budgets.md",
+      "docs/premise-index.md",
+      "docs/premises.md",
+      "docs/profiles.md",
+      "docs/progress-hints.md",
+      "docs/project-diagnostics.md",
+      "docs/project-workflow.md",
+      "docs/proof-receipts.md",
+      "docs/proof-tools.md",
+      "docs/release-record.md",
+      "docs/rwlock-contracts.md",
+      "docs/safe-output.md",
+      "docs/schedule-caps.md",
+      "docs/spawn-failure.md",
+      "docs/support-matrix.md",
+      "docs/vcs.md",
+      "docs/vector-proofs.md",
+      "docs/weak-cas.md",
+      "example-project.json",
+      "examples/asm/zig-versions",
+      "examples/atomics/zig-versions",
+      "examples/floatconv/zig-versions",
+      "examples/lists/zig-versions",
+      "examples/slices/zig-versions",
+      "examples/threads/zig-versions",
+      "examples/vectors/zig-versions",
+      "remaining-acceptance.md",
+      "scripts/abi-probe.py",
+      "scripts/artifact-manifest.py",
+      "scripts/assumptions.py",
+      "scripts/assumptions.sh",
+      "scripts/build-guard.py",
+      "scripts/check-export-names.sh",
+      "scripts/claims.py",
+      "scripts/clean-env.sh",
+      "scripts/compat.py",
+      "scripts/coverage.py",
+      "scripts/diff-report.py",
+      "scripts/doctor.py",
+      "scripts/doctor.sh",
+      "scripts/example-selection.sh",
+      "scripts/external-contracts.py",
+      "scripts/float-semantics.py",
+      "scripts/flow-time.sh",
+      "scripts/local-ci-steps.py",
+      "scripts/local-ci.sh",
+      "scripts/model-contracts.sh",
+      "scripts/mutation-map.py",
+      "scripts/normalize-air.py",
+      "scripts/normalize-generated.py",
+      "scripts/outcomes.py",
+      "scripts/panic-policy.tsv",
+      "scripts/perf-budgets.py",
+      "scripts/premises.py",
+      "scripts/progress-hints.sh",
+      "scripts/project-diagnostics.py",
+      "scripts/project.py",
+      "scripts/proof-receipt.py",
+      "scripts/qualify-upgrade.py",
+      "scripts/release-record.py",
+      "scripts/review-checks.sh",
+      "scripts/review.sh",
+      "scripts/safe-output.py",
+      "scripts/schedules.py",
+      "scripts/support-matrix.py",
+      "scripts/translate.sh",
+      "scripts/weak-cas.sh",
+      "scripts/workflow-common.sh",
+      "tests/asm_early_clobber.py",
+      "tests/diff/Concurrent.lean",
+      "tests/diff/Outcome.lean",
+      "tests/diff/ScheduleSearch.lean",
+      "tests/diff/ScheduleSearchTest.lean",
+      "tests/diff/Schedules.lean",
+      "tests/diff/sync/inputs/rwLockSnapshotPair.jsonl",
+      "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wake__anon_11357.json",
+      "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.signal.json",
+      "tests/golden/0.16.0/floatops/air/floatops.divExact64.json",
+      "tests/golden/0.16.0/lists/air/lists.dupeZLen.json",
+      "tests/golden/0.16.0/lists/air/mem.Allocator.dupeZ__anon_N.json",
+      "tests/golden/0.16.0/slices/air/slices.colorName.json",
+      "tests/golden/0.16.0/slices/air/slices.failName.json",
+      "tests/golden/0.16.0/sync/air-linux/sync.rwLockSnapshotPair.json",
+      "tests/review/AllProofs.lean",
+      "tests/review/Concurrency.lean",
+      "tests/review/Emitter.lean",
+      "tests/review/ErrorUnionAlignment.lean",
+      "tests/review/ErrorUnionGenerated.lean",
+      "tests/review/ErrorUnionLayoutCheck.lean",
+      "tests/review/ErrorUnionMutationOracle.lean",
+      "tests/review/ErrorUnionZeroGenerated.lean",
+      "tests/review/Floats.lean",
+      "tests/review/Memory.lean",
+      "tests/review/Parser.lean",
+      "tests/review/emitter.sh",
+      "tests/review/error_union_alignment.sh",
+      "tests/review/error_union_alignment.zig",
+      "tests/review/error_union_mutations.py",
+      "tests/review/error_union_zero_array.zig",
+      "tests/review/exporter-checks.sh",
+      "tests/review/exporter.zig",
+      "tests/review/inputs.py",
+      "tests/review/regenerate.sh",
+      "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseFast.json",
+      "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseSafe.json",
+      "tests/roadmap/abi-probes/probe.zig",
+      "tests/roadmap/abi-probes/test_probe.py",
+      "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseFast.json",
+      "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json",
+      "tests/roadmap/allocation-policy/Check.lean",
+      "tests/roadmap/allocation-policy/check.sh",
+      "tests/roadmap/allocation-policy/compare.py",
+      "tests/roadmap/allocation-policy/fixture.zig",
+      "tests/roadmap/allocation-policy/mutations.py",
+      "tests/roadmap/allocation-policy/static.py",
+      "tests/roadmap/artifact-manifest/test_manifest.py",
+      "tests/roadmap/assurance/CompilerRedirection.lean",
+      "tests/roadmap/assurance/ExternDefinition.lean",
+      "tests/roadmap/assurance/FloatLabels.lean",
+      "tests/roadmap/assurance/Good.lean",
+      "tests/roadmap/assurance/HiddenDependency.lean",
+      "tests/roadmap/assurance/HiddenWrapper.lean",
+      "tests/roadmap/assurance/NativeProof.lean",
+      "tests/roadmap/assurance/ProjectAxiom.lean",
+      "tests/roadmap/assurance/StatementBinding.lean",
+      "tests/roadmap/assurance/UnexpectedOpaque.lean",
+      "tests/roadmap/assurance/check.sh",
+      "tests/roadmap/assurance/test_policy.py",
+      "tests/roadmap/assurance/test_tool_cache.py",
+      "tests/roadmap/bitops/Cases.lean",
+      "tests/roadmap/bitops/DiffMain.lean.inc",
+      "tests/roadmap/bitops/README.md",
+      "tests/roadmap/bitops/Runtime.lean",
+      "tests/roadmap/bitops/bitops.zig",
+      "tests/roadmap/bitops/check.sh",
+      "tests/roadmap/bitops/classify_mutant.py",
+      "tests/roadmap/bitops/manifest.py",
+      "tests/roadmap/bitops/mutations.py",
+      "tests/roadmap/bitops/native.zig",
+      "tests/roadmap/bitops/qualified/0.16.0/Gen.lean",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.cardinality.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.clearLowest.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.counts8.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.countsNarrow.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.countsOne.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.countsSigned8.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.firstSet.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.leadingLanes.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.populationLanes.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftLanes.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftNarrow.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSigned8.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+      "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+      "tests/roadmap/bitops/qualified/0.16.0/lean.txt",
+      "tests/roadmap/bitops/qualified/0.16.0/manifest.json",
+      "tests/roadmap/bitops/qualified/0.16.0/native.txt",
+      "tests/roadmap/bitops/test_classifier.py",
+      "tests/roadmap/blocker-collection/test_cli.py",
+      "tests/roadmap/build-budgets/test_guard.py",
+      "tests/roadmap/byte-permutation/Cases.lean",
+      "tests/roadmap/byte-permutation/Contracts.lean",
+      "tests/roadmap/byte-permutation/DiffMain.lean.inc",
+      "tests/roadmap/byte-permutation/README.md",
+      "tests/roadmap/byte-permutation/Runtime.lean",
+      "tests/roadmap/byte-permutation/byte_permutation.zig",
+      "tests/roadmap/byte-permutation/check.sh",
+      "tests/roadmap/byte-permutation/check_exports.py",
+      "tests/roadmap/byte-permutation/manifest.py",
+      "tests/roadmap/byte-permutation/mutations.py",
+      "tests/roadmap/byte-permutation/native.zig",
+      "tests/roadmap/byte-permutation/test_portable.py",
+      "tests/roadmap/byte-sentinel/Check.lean",
+      "tests/roadmap/byte-sentinel/Pipeline.lean",
+      "tests/roadmap/byte-sentinel/README.md",
+      "tests/roadmap/byte-sentinel/Runner.lean",
+      "tests/roadmap/byte-sentinel/check.sh",
+      "tests/roadmap/byte-sentinel/mutations.py",
+      "tests/roadmap/byte-sentinel/native.zig",
+      "tests/roadmap/byte-sentinel/overflow.zig",
+      "tests/roadmap/byte-sentinel/source.zig",
+      "tests/roadmap/byte-sentinel/static.py",
+      "tests/roadmap/claims/Fixture.lean",
+      "tests/roadmap/claims/check.sh",
+      "tests/roadmap/claims/fixture-report.json",
+      "tests/roadmap/claims/test_claims.py",
+      "tests/roadmap/coverage-report/statement-binding.json",
+      "tests/roadmap/coverage-report/test_coverage.py",
+      "tests/roadmap/deadline-futex/Adapter.lean",
+      "tests/roadmap/deadline-futex/AtomicKernel.lean",
+      "tests/roadmap/deadline-futex/Client.lean",
+      "tests/roadmap/deadline-futex/Generated.lean",
+      "tests/roadmap/deadline-futex/Guard.lean",
+      "tests/roadmap/deadline-futex/Kernel.lean",
+      "tests/roadmap/deadline-futex/Runtime.lean",
+      "tests/roadmap/deadline-futex/RuntimeAtomic.lean",
+      "tests/roadmap/deadline-futex/Translate.lean",
+      "tests/roadmap/deadline-futex/foundation-qualified-v4.json",
+      "tests/roadmap/deadline-futex/native-mock.zig",
+      "tests/roadmap/deadline-futex/native.zig",
+      "tests/roadmap/deadline-futex/probe.zig",
+      "tests/roadmap/deadline-futex/root-atomic-runtime.py",
+      "tests/roadmap/deadline-futex/root-probe.sh",
+      "tests/roadmap/deadline-futex/root-runtime.py",
+      "tests/roadmap/deadline-futex/root-selected.sh",
+      "tests/roadmap/deadline-futex/test_atomic_recipe.py",
+      "tests/roadmap/deadline-futex/test_runtime_recipe.py",
+      "tests/roadmap/diagnostics/Collector.lean",
+      "tests/roadmap/diagnostics/RuntimeTags.lean",
+      "tests/roadmap/diagnostics/test_cli.py",
+      "tests/roadmap/dispatch/Emitter.lean",
+      "tests/roadmap/dispatch/Proofs.lean",
+      "tests/roadmap/dispatch/check.sh",
+      "tests/roadmap/dispatch/mutations.py",
+      "tests/roadmap/dispatch/native_checks.py",
+      "tests/roadmap/dispatch/source.zig",
+      "tests/roadmap/dispatch/test_harness.py",
+      "tests/roadmap/distribution/test_compat.py",
+      "tests/roadmap/distribution/test_doctor.py",
+      "tests/roadmap/error-storage/DiffMain.lean.inc",
+      "tests/roadmap/error-storage/GlobalAlias.lean",
+      "tests/roadmap/error-storage/Pipeline.lean",
+      "tests/roadmap/error-storage/Qualifier.lean",
+      "tests/roadmap/error-storage/README.md",
+      "tests/roadmap/error-storage/Runtime.lean",
+      "tests/roadmap/error-storage/check.sh",
+      "tests/roadmap/error-storage/classify_mutant.py",
+      "tests/roadmap/error-storage/error_storage.zig",
+      "tests/roadmap/error-storage/mutations.py",
+      "tests/roadmap/error-storage/native.zig",
+      "tests/roadmap/error-storage/patch-observations.py",
+      "tests/roadmap/export-names/Order.lean",
+      "tests/roadmap/export-names/check_dump.py",
+      "tests/roadmap/export-names/expected-names.json",
+      "tests/roadmap/export-names/export_names.zig",
+      "tests/roadmap/export-names/test_offline.py",
+      "tests/roadmap/export-names/test_order_cli.py",
+      "tests/roadmap/float-semantics/test_labels.py",
+      "tests/roadmap/flow-time/boundaries.zig",
+      "tests/roadmap/flow-time/compare-air.py",
+      "tests/roadmap/flow-time/test_compat.py",
+      "tests/roadmap/flow-time/test_provenance.py",
+      "tests/roadmap/global-payload-pointers/.gitignore",
+      "tests/roadmap/global-payload-pointers/ExceptEq.lean",
+      "tests/roadmap/global-payload-pointers/GeneratedProofs.lean",
+      "tests/roadmap/global-payload-pointers/GeneratedRuntime.lean",
+      "tests/roadmap/global-payload-pointers/Model.lean",
+      "tests/roadmap/global-payload-pointers/README.md",
+      "tests/roadmap/global-payload-pointers/check-export.py",
+      "tests/roadmap/global-payload-pointers/check-generated.sh",
+      "tests/roadmap/global-payload-pointers/check.sh",
+      "tests/roadmap/global-payload-pointers/generated-mutations.py",
+      "tests/roadmap/global-payload-pointers/global_payloads.zig",
+      "tests/roadmap/global-payload-pointers/mutations.py",
+      "tests/roadmap/global-payload-pointers/native-abi-boundary.json",
+      "tests/roadmap/global-payload-pointers/reject.zig",
+      "tests/roadmap/global-payload-pointers/storage.zig",
+      "tests/roadmap/global-payload-pointers/test_mutations.py",
+      "tests/roadmap/global-payload-pointers/test_profiles.py",
+      "tests/roadmap/input-validation/Validation.lean",
+      "tests/roadmap/input-validation/test_cli.py",
+      "tests/roadmap/inventory/test_inventory.py",
+      "tests/roadmap/local-ci/test_cache.py",
+      "tests/roadmap/local-parent/Pipeline.lean",
+      "tests/roadmap/local-parent/Proofs.lean",
+      "tests/roadmap/local-parent/README.md",
+      "tests/roadmap/local-parent/check.sh",
+      "tests/roadmap/local-parent/mutations.py",
+      "tests/roadmap/local-parent/native_checks.py",
+      "tests/roadmap/local-parent/source.zig",
+      "tests/roadmap/local-parent/test_harness.py",
+      "tests/roadmap/models/Fill.lean",
+      "tests/roadmap/models/Model.lean",
+      "tests/roadmap/models/Registry.lean",
+      "tests/roadmap/models/StdDependencies.lean",
+      "tests/roadmap/models/StdModels.lean",
+      "tests/roadmap/models/client.json",
+      "tests/roadmap/models/test_cli.py",
+      "tests/roadmap/models/test_cli_helpers.py",
+      "tests/roadmap/models/test_external_contracts.py",
+      "tests/roadmap/models/test_gate.py",
+      "tests/roadmap/models/tuple-client.json",
+      "tests/roadmap/mutation-map/mutants.py",
+      "tests/roadmap/mutation-map/test_mutation_map.py",
+      "tests/roadmap/null-pointers/Generate.lean",
+      "tests/roadmap/null-pointers/Runner.lean",
+      "tests/roadmap/null-pointers/check.sh",
+      "tests/roadmap/null-pointers/classify_mutant.py",
+      "tests/roadmap/null-pointers/nullpointers.zig",
+      "tests/roadmap/null-pointers/reject.zig",
+      "tests/roadmap/null-pointers/test_classify_mutant.py",
+      "tests/roadmap/outcome-accounting/Check.lean",
+      "tests/roadmap/outcome-accounting/Native.zig",
+      "tests/roadmap/outcome-accounting/ParentOOM.zig",
+      "tests/roadmap/outcome-accounting/Schedule.lean",
+      "tests/roadmap/outcome-accounting/Search.lean",
+      "tests/roadmap/outcome-accounting/test_native.py",
+      "tests/roadmap/outcome-accounting/test_parent_oom.py",
+      "tests/roadmap/outcome-accounting/test_report.py",
+      "tests/roadmap/outcome-accounting/test_schedules.py",
+      "tests/roadmap/outcome-taxonomy/Taxonomy.lean",
+      "tests/roadmap/outcome-taxonomy/test_taxonomy.py",
+      "tests/roadmap/perf-budgets/test_perf_budgets.py",
+      "tests/roadmap/perf-budgets/timing_cli.py",
+      "tests/roadmap/premises/test_premises.py",
+      "tests/roadmap/profiles/Profiles.lean",
+      "tests/roadmap/profiles/current.json",
+      "tests/roadmap/profiles/legacy.json",
+      "tests/roadmap/profiles/test_cli.py",
+      "tests/roadmap/profiles/test_golden_pipeline.py",
+      "tests/roadmap/progress/Participation.lean",
+      "tests/roadmap/progress/Pipeline.lean",
+      "tests/roadmap/progress/Runtime.lean",
+      "tests/roadmap/progress/Total.lean",
+      "tests/roadmap/progress/finite.zig",
+      "tests/roadmap/progress/progress.zig",
+      "tests/roadmap/progress/qualify.py",
+      "tests/roadmap/project-check/test_check.py",
+      "tests/roadmap/project-diagnostics/test_project_diagnostics.py",
+      "tests/roadmap/project/legacy-profile.json",
+      "tests/roadmap/project/test_project.py",
+      "tests/roadmap/proof-api/test_cli.py",
+      "tests/roadmap/proof-api/test_report.py",
+      "tests/roadmap/proof-receipts/check.sh",
+      "tests/roadmap/proof-receipts/test_check.py",
+      "tests/roadmap/proof-receipts/test_ci_stash.py",
+      "tests/roadmap/proof-receipts/test_receipt.py",
+      "tests/roadmap/proof-tools/Array.lean",
+      "tests/roadmap/proof-tools/ArrayClients.lean",
+      "tests/roadmap/proof-tools/Clients.lean",
+      "tests/roadmap/proof-tools/Normalize.lean",
+      "tests/roadmap/proof-tools/Reassemble.lean",
+      "tests/roadmap/proof-tools/Total.lean",
+      "tests/roadmap/release-record/fixtures/ci-d9dfa68.yml",
+      "tests/roadmap/release-record/fixtures/run-37551078044.json",
+      "tests/roadmap/release-record/test_release_record.py",
+      "tests/roadmap/resize-remap/Check.lean",
+      "tests/roadmap/resize-remap/Kernel.lean",
+      "tests/roadmap/resize-remap/README.md",
+      "tests/roadmap/resize-remap/Runner.lean",
+      "tests/roadmap/resize-remap/check.sh",
+      "tests/roadmap/resize-remap/mutations.py",
+      "tests/roadmap/resize-remap/native.zig",
+      "tests/roadmap/resize-remap/source.zig",
+      "tests/roadmap/rwlock-contracts/Runtime.lean",
+      "tests/roadmap/safe-output/test_safe_output.py",
+      "tests/roadmap/schedule-caps/test_exploration.py",
+      "tests/roadmap/spawn-failure/Boundary.lean",
+      "tests/roadmap/spawn-failure/Pipeline.lean",
+      "tests/roadmap/spawn-failure/Runtime.lean",
+      "tests/roadmap/spawn-failure/api-audit.json",
+      "tests/roadmap/spawn-failure/check.sh",
+      "tests/roadmap/spawn-failure/filter",
+      "tests/roadmap/spawn-failure/harness-tests.py",
+      "tests/roadmap/spawn-failure/native.zig",
+      "tests/roadmap/spawn-failure/qualify.py",
+      "tests/roadmap/spawn-failure/source-group.lean",
+      "tests/roadmap/spawn-failure/source-runtime.lean",
+      "tests/roadmap/spawn-failure/spawn_failure.zig",
+      "tests/roadmap/spawn-failure/test_project_integration.py",
+      "tests/roadmap/support-matrix/test_support_matrix.py",
+      "tests/roadmap/thread-tuples/Pipeline.lean",
+      "tests/roadmap/thread-tuples/README.md",
+      "tests/roadmap/thread-tuples/ThreadTuples/Gen.lean",
+      "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
+      "tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean",
+      "tests/roadmap/thread-tuples/adapter-contract.zig",
+      "tests/roadmap/thread-tuples/air/0.16.0/atomic.Value(u32).init.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.ZeroWorker(u8).run.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicShared.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicWorker.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.copied.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.copyWorker.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.empty.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.genericEmpty.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.groupMixed.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.mixed.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.mixedWorker.json",
+      "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.zeroWorker.json",
+      "tests/roadmap/thread-tuples/check-artifacts.py",
+      "tests/roadmap/thread-tuples/check-export.py",
+      "tests/roadmap/thread-tuples/check.sh",
+      "tests/roadmap/thread-tuples/classify_mutant.py",
+      "tests/roadmap/thread-tuples/filter",
+      "tests/roadmap/thread-tuples/guard-tests.py",
+      "tests/roadmap/thread-tuples/mutation-tests.py",
+      "tests/roadmap/thread-tuples/native.zig",
+      "tests/roadmap/thread-tuples/provenance.json",
+      "tests/roadmap/thread-tuples/thread_tuples.zig",
+      "tests/roadmap/try-pointers/CacheContexts.lean",
+      "tests/roadmap/try-pointers/Pipeline.lean",
+      "tests/roadmap/try-pointers/README.md",
+      "tests/roadmap/try-pointers/TryPointers/Gen.lean",
+      "tests/roadmap/try-pointers/TryPointers/Proofs.lean",
+      "tests/roadmap/try-pointers/TryPointers/Runtime.lean",
+      "tests/roadmap/try-pointers/air/0.16.0/try_pointers.cleanup.json",
+      "tests/roadmap/try-pointers/air/0.16.0/try_pointers.coldPayload.json",
+      "tests/roadmap/try-pointers/air/0.16.0/try_pointers.payload64.json",
+      "tests/roadmap/try-pointers/air/0.16.0/try_pointers.payload8.json",
+      "tests/roadmap/try-pointers/air/0.16.0/try_pointers.writeAlias.json",
+      "tests/roadmap/try-pointers/check-artifacts.py",
+      "tests/roadmap/try-pointers/check.sh",
+      "tests/roadmap/try-pointers/emitter-integration.json",
+      "tests/roadmap/try-pointers/integration-qualification.json",
+      "tests/roadmap/try-pointers/mutate-offset.py",
+      "tests/roadmap/try-pointers/origin/TryPointers/Gen.lean",
+      "tests/roadmap/try-pointers/provenance.json",
+      "tests/roadmap/try-pointers/test_artifacts.py",
+      "tests/roadmap/try-pointers/test_mutation.py",
+      "tests/roadmap/try-pointers/test_retained_gate.py",
+      "tests/roadmap/try-pointers/try_pointers.zig",
+      "tests/roadmap/upgrade-qualification/test_qualify.py",
+      "tests/roadmap/vcs/Clients.lean",
+      "tests/roadmap/vcs/Memory.lean",
+      "tests/roadmap/vcs/Result.lean",
+      "tests/roadmap/weak-cas/Harness.py",
+      "tests/roadmap/weak-cas/Mutation.lean",
+      "tests/roadmap/weak-cas/MutationHarness.py",
+      "tests/roadmap/weak-cas/Pipeline.lean",
+      "tests/roadmap/weak-cas/Preparation.lean",
+      "tests/roadmap/weak-cas/Runtime.lean",
+      "tests/roadmap/weak-cas/SourceCheck.lean.in",
+      "tests/roadmap/weak-cas/generated-origins.json",
+      "tests/roadmap/weak-cas/native.zig",
+      "tests/roadmap/weak-cas/qualify.py",
+      "tests/roadmap/weak-cas/weakcas.zig",
+      "tests/spawn_cleanup.py",
+      "tests/usability/cli.py",
+      "tests/usability/workflow.py",
+      "tools/Assurance.lean",
+      "tutorials/first-proof/Main.lean",
+      "zig-patch/air-json/pointer-offset.zig"
+    ]
+  },
+  "summary": {
+    "passed": 259,
+    "failed": 0,
+    "missing": 0,
+    "unavailable": 0
+  },
+  "status": "complete"
+}

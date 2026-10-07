@@ -71,6 +71,20 @@ structure only. The record's `review` section lists the reviewed revisions,
 `changed_since_review` (ledger paths whose content differs at the release revision) and
 `not_in_ledger` (tracked paths without a ledger entry) as known exclusions.
 
+## Published records
+
+Records are committed as `assurance/releases/<revision>.json`. `verify` reads the gate profile
+from the record's revision in Git, so it runs from any later checkout that contains that commit:
+`python3 scripts/release-record.py verify assurance/releases/<revision>.json`.
+
+- `25f89bbb405821b286e04ee7676bc24aa4c7e5ae`: first release record, built from push CI run
+  [37611729563](https://github.com/riventic/air2lean/actions/runs/37611729563) in a clean clone.
+  It is `complete`: 259 gates passed, 0 failed, 0 missing, 0 unavailable, so no unavailable
+  checks were declared. The review section names reviewed revision
+  `5a849265f4a38d6bd05aec81aa270b6c81d11b5d` (838 entries), with 161 paths changed since review
+  and 524 tracked paths not in the ledger listed as exclusions.
+  Reproduce with `record --github-run` on that run's JSON from a clean checkout of the revision.
+
 ## Limits
 
 The record covers the CI workflow's `test` and `macos` jobs only; any other job fails the
