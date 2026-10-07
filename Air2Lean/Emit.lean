@@ -990,6 +990,13 @@ def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
   | .enum .. | .bool | .struct _ "packed" _ => true
   | _ => false
 
+/-- An atomic op through `ptr` on a pointer (`*T`, `?*T`): the pointer op (`Zig.atomicLoadPtrC`,
+…, `ZigLean/Conc/PtrAtomic.lean`), whose message keeps the pointer's block. -/
+def FCtx.atomicPtr (fc : FCtx) (ptr : Val) : Bool :=
+  match fc.valTy ptr with
+  | .ptr _ _ c => atomicPtrPointee fc.types fc.layouts c
+  | _ => false
+
 /-- The Lean type of the value that the pointer `v` points to. -/
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
@@ -1990,11 +1997,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
     let o := orderTerm order
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    let expr := if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .atomicStore ptr v order =>
-    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
+    let f := if fc.atomicPtr ptr then s!"Zig.atomicStorePtrC (α := {fc.pointeeTy ptr})"
+      else if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
     (env, some s!"{f} {orderTerm order} {fc.ptrAlign ptr} {rv ptr} {rv v}")
   | .atomicRmw op order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
@@ -2005,11 +2014,15 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let opTerm := s!"Zig.RmwOp.{opName}"
     let signed := if fc.tySigned inst.ty then "true" else "false"
     let o := orderTerm order
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+    -- `Check.lean` admits only `.Xchg` on a pointer.
+    let expr := if fc.atomicPtr ptr then s!"Zig.atomicXchgPtrC (α := {fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
       else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmpxchg weak ptr expected new succ fail =>
-    let f := if fc.atomicTyped ptr then
+    let f := if fc.atomicPtr ptr then
+        if weak then s!"Zig.cmpxchgWeakPtrC (α := {fc.pointeeTy ptr})" else s!"Zig.cmpxchgPtrC (α := {fc.pointeeTy ptr})"
+      else if fc.atomicTyped ptr then
         if weak then "Zig.cmpxchgWeakAsC" else "Zig.cmpxchgAsC"
       else if weak then "Zig.cmpxchgWeakC" else "Zig.cmpxchgC"
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
