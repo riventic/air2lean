@@ -98,12 +98,15 @@ namespace Zig.LoopTemplateTactic
 
 open Lean Elab Tactic Meta
 
-def applyTemplate (inv post : Term) : TacticM Unit := do
-  evalTactic (← `(tactic| first
-    | refine Zig.TotalTriple.loop_template $inv $post ?step ?entry ?exit
-    | refine Zig.Triple.loop_template $inv $post ?step ?entry ?exit
-    | fail "loop_template: the goal is not a TotalTriple or Triple about (Zig.loop body again).run s"))
-  let goals ← getGoals
+/-- Apply the template to the main goal; returns the remaining premises (other goals untouched). -/
+def applyTemplate (inv post : Term) : TacticM (List MVarId) := do
+  let g :: others ← getGoals | throwError "loop_template: no goals"
+  let rule ← match (← whnfR (← g.getType)).getAppFn.constName? with
+    | some ``Zig.TotalTriple => pure (mkIdent ``Zig.TotalTriple.loop_template)
+    | some ``Zig.Triple => pure (mkIdent ``Zig.Triple.loop_template)
+    | _ => throwError "loop_template: the goal is not a TotalTriple or Triple about \
+        (Zig.loop body again).run s"
+  let goals ← evalTacticAt (← `(tactic| refine $rule $inv $post ?step ?entry ?exit)) g
   -- Plain tags, so `case step` and the report name the premises without macro scopes.
   for g in goals do
     g.setTag (← g.getTag).eraseMacroScopes
@@ -118,11 +121,11 @@ def applyTemplate (inv post : Term) : TacticM Unit := do
       | _ => rest := rest ++ ((← observing? (evalTacticAt (← `(tactic| dsimp only)) g)).getD [g]).toArray
     else
       rest := rest.push g
-  setGoals rest.toList
+  setGoals (rest.toList ++ others)
+  return rest.toList
 
 /-- The remaining goals, one line each: `tag : type`. -/
-def reportPremises : TacticM Unit := do
-  let goals ← getGoals
+def reportPremises (goals : List MVarId) : TacticM Unit := do
   let lines ← goals.mapM fun g => do
     let d ← g.getDecl
     return m!"{d.userName} : {← instantiateMVars d.type}"
@@ -132,10 +135,9 @@ def reportPremises : TacticM Unit := do
 end Zig.LoopTemplateTactic
 
 /-- Apply the invariant/measure template; leaves the named goals `step`, `entry`, `exit`. -/
-elab "loop_template " inv:term:max post:term:max : tactic =>
-  Zig.LoopTemplateTactic.applyTemplate inv post
+elab "loop_template " inv:term:max post:term:max : tactic => do
+  discard <| Zig.LoopTemplateTactic.applyTemplate inv post
 
 /-- `loop_template`, reporting the remaining premises with their types. -/
 elab "loop_template? " inv:term:max post:term:max : tactic => do
-  Zig.LoopTemplateTactic.applyTemplate inv post
-  Zig.LoopTemplateTactic.reportPremises
+  Zig.LoopTemplateTactic.reportPremises (← Zig.LoopTemplateTactic.applyTemplate inv post)

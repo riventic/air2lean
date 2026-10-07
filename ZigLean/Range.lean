@@ -55,8 +55,6 @@ theorem toNat_ofInt_natCast {k : Nat} (h : k < 2 ^ n) :
     (BitVec.ofInt n (k : Int)).toNat = k := by
   rw [BitVec.ofInt_natCast]; exact toNat_ofNat_of_lt h
 
-theorem val_unsigned (a : BitVec n) : val false a = (a.toNat : Int) := rfl
-
 /-! ## Checked arithmetic that cannot fail in range -/
 
 theorem add_unsigned_of_lt {a b : BitVec n} (h : a.toNat + b.toNat < 2 ^ n) :
@@ -97,7 +95,7 @@ theorem sum_toNat_le {w : Nat} (l : List (BitVec w)) :
     (l.map BitVec.toNat).sum ≤ l.length * (2 ^ w - 1) :=
   sum_map_le_mul l _ _ fun x _ => Nat.le_sub_one_of_lt x.isLt
 
-/-- A sum of fewer than `2 ^ k` values of width `w` fits in width `w + k`. -/
+/-- A sum of at most `2 ^ k` values of width `w` fits in width `w + k`. -/
 theorem sum_toNat_lt {w k : Nat} (l : List (BitVec w)) (h : l.length ≤ 2 ^ k) :
     (l.map BitVec.toNat).sum < 2 ^ (w + k) := by
   have hw : 2 ^ w - 1 < 2 ^ w := Nat.sub_lt (Nat.two_pow_pos w) Nat.one_pos
