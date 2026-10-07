@@ -62,6 +62,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
+| Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
@@ -291,6 +292,31 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   oracle. `NoCancellation` is an explicit premise. No OS clock correspondence is claimed.
 - Derived from: `ZigLean.Time`, `ZigLean.Conc.Timed*`; tokens `TimedSched`, `AwakeEnvironment`, `NoCancellation`.
 - Sources: [deadline-runtime.md](deadline-runtime.md), [deadline-futex-design.md](deadline-futex-design.md).
+
+## Environment operations
+
+<a id="env-01"></a>
+### ENV-01 — Selected handle read/write/close contract
+
+- Kind: environment.
+- Statement: `Zig.Env.Ops` returns every read, write, open-handle and close result as a
+  function of an arbitrary state, and theorems quantify over it. `Zig.Env.Contract` is the only
+  assumption: on an open handle, a nonempty write accepts `0 < n ≤ len` bytes or returns an
+  allowed enumerated `IoError`; reads return at most the requested bytes; reads and writes
+  keep the open set; `close` releases exactly its handle. Closed-handle behavior is
+  unconstrained. No OS, CPython or browser host correspondence is claimed.
+- Derived from: `ZigLean.Env`.
+- Sources: [env-boundaries.md](env-boundaries.md), `tests/roadmap/env-boundaries/WriteAll.lean`.
+
+<a id="env-02"></a>
+### ENV-02 — Distinct monotonic and wall clock observations
+
+- Kind: environment.
+- Statement: `Zig.Env.Ops.monotonicNow` and `wallNow` are separate state observations. No
+  `Zig.Env` operation decreases the monotonic one. The wall clock has no ordering and may
+  decrease. Neither is related to an OS clock or to `Zig.Time.AwakeEnvironment` (TMR-02).
+- Derived from: tokens `monotonicNow`, `wallNow`.
+- Sources: [env-boundaries.md](env-boundaries.md#operations).
 
 ## Opaque math and floats
 
