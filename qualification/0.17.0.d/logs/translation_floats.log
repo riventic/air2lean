@@ -1,0 +1,222 @@
+== floats: dumping AIR ==
+== floats: validating profiles and translating to Lean ==
+⚠ [19/54] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+== floats: checking against golden (tests/golden/floats/air, then tests/golden/0.17.0/floats/air, then tests/golden/0.17.0/floats/air-darwin) ==
+== building Lean ==
+⚠ [7/40] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [10/40] Replayed ZigLean.Permutation
+warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+⚠ [13/40] Replayed ZigLean.Mem.Thread
+warning: ZigLean/Mem/Thread.lean:150:24: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:171:25: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:271:24: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:324:28: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [15/40] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:86:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:89:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [23/40] Replayed ZigLean.Mem.Lemmas
+warning: ZigLean/Mem/Lemmas.lean:616:8: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:636:10: This simp argument is unused:
+  h x rfl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:643:55: This simp argument is unused:
+  e.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:654:57: This simp argument is unused:
+  x.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [24/40] Replayed ZigLean.Conc.Lemmas
+warning: ZigLean/Conc/Lemmas.lean:1416:61: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [40/40] Built Proofs.Floats.Gen (464ms)
+Build completed successfully (40 jobs).
+== differential testing ==
+== building zig harnesses ==
+== building libm ==
+== libm self-check ==
+libm self-check: 320/320 matched, 0 mismatched
+== building asm archive ==
+== building + running lean side ==
+⚠ [8/58] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [11/58] Replayed ZigLean.Permutation
+warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+⚠ [14/58] Replayed ZigLean.Mem.Thread
+warning: ZigLean/Mem/Thread.lean:150:24: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:171:25: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:271:24: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:324:28: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [16/58] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:86:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:89:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [24/58] Replayed ZigLean.Mem.Lemmas
+warning: ZigLean/Mem/Lemmas.lean:616:8: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:636:10: This simp argument is unused:
+  h x rfl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:643:55: This simp argument is unused:
+  e.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:654:57: This simp argument is unused:
+  x.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [25/58] Replayed ZigLean.Conc.Lemmas
+warning: ZigLean/Conc/Lemmas.lean:1416:61: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [44/58] Replayed Proofs.Threadsync.Gen
+warning: Proofs/Threadsync/Gen.lean:352:10: Variable name `i12` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _i12
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Proofs/Threadsync/Gen.lean:363:14: Variable name `v14` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _v14
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+✔ [57/133] Built Proofs.Floatops.Gen (939ms)
+⚠ [131/133] Built Diff (1.2s)
+warning: Diff.lean:100:17: declaration uses `sorry`
+warning: Diff.lean:101:17: declaration uses `sorry`
+warning: Diff.lean:102:17: declaration uses `sorry`
+warning: Diff.lean:103:17: declaration uses `sorry`
+✔ [133/133] Built difftest:exe (489ms)
+Build completed successfully (133 jobs).
+schedule search regressions passed
+== comparing ==
+floats.celsius: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+floats.clamp: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+floats.dot: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+floats.hypot2: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+floats.isNan: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+floats.lerp: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+TOTAL floats: ok=1800 fail_match=0 unspecified=0 capped=0 mismatch=0
+TOTAL: ok=1800 fail_match=0 unspecified=0 capped=0 mismatch=0
+SCHEDULES: observed searched=0 unsearched=1800 runs=0 witness=0 exhausted=0 bounded=0 capped=0 fuel=[] cap=[] | enumeration receipts=0 runs=0 complete=0 truncated=0 replay_seeds=0 replays=0 fuel=[] node_cap=[] prefix_cap=[] | correspondence_scopes=6 capped_scopes=0 reduction=none qualified=false
