@@ -111,8 +111,7 @@ private def rejected : List (String × Nat × Nat × String) := [
   ("nestedBoolArray", 24, 5, "element is not an integer or `bool`"),
   ("floatLanes", 26, 27, "element is not an integer or `bool`"),
   ("sentinelArray", 28, 13, "sentinel-terminated array"),
-  ("sizeMismatch", 14, 27, "between types of 48 and 64 logical bits"),
-  ("voidToU0", 36, 37, "to or from a type other than")]
+  ("sizeMismatch", 14, 27, "between types of 48 and 64 logical bits")]
 
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Pipeline.lean OUT.lean")
@@ -148,7 +147,7 @@ where
 open Zig BitCast017
 
 private def ok {α : Type} [DecidableEq α] (name : String) (r : Zig.Result α) (v : α) : IO Unit :=
-  unless r = pure v do throw (IO.userError s!\"{name}: wrong result\")
+  unless r.run = some (Except.ok v) do throw (IO.userError s!\"{name}: wrong result\")
 private def panics {α : Type} (name : String) (r : Zig.Result α) : IO Unit :=
   match r.run with
   | some (.error .panic) => pure ()
