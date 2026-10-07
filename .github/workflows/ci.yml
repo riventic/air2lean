@@ -88,6 +88,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 
+      # Synthetic diff summaries only; capped/timer/unsupported outcomes refuse absence claims.
+      - name: Outcome taxonomy regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
+
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
@@ -641,6 +647,13 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
+
+      # Error returns satisfy a partial triple; every model failure constructor falsifies it.
+      - name: Outcome taxonomy Lean fixture
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
 
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}

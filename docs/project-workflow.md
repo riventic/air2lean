@@ -215,7 +215,13 @@ Each root also reports `contract_domain` (declared domains, `review: declared_no
 machine-classified statements), `assumptions` (declared manifest identifiers plus audited
 axioms, opaque, extern and compiler-redirection dependencies of direct theorems) and
 `exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
-`not_attested` trust fields). `--require-level` exits 1 when any root is below the level;
+`not_attested` trust fields). `outcomes` counts the root's differential cases and
+exporter-marked unsupported AIR in the shared [outcome taxonomy](outcome-taxonomy.md);
+`absence_claims` reports `no-panic` and `guaranteed-return` as `proved`, `refused` or
+`not_proved`. Only a direct goal of matching strength proves one; a capped search, fuel-bounded
+no-result run, unspecified (including no-clock timer) or unsupported outcome, or an observed
+failure the claim denies, refuses it and adds a blocker, so the root cannot reach
+`functionally_verified_*`. Error returns never refuse `no-panic`. `--require-level` exits 1 when any root is below the level;
 diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
 publication as `report`.
 

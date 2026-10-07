@@ -18,6 +18,18 @@ import tempfile
 import time
 from typing import NamedTuple, Optional
 
+
+def _sibling(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
+    module = importlib.util.module_from_spec(spec)
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(module)
+    return module
+
+
+outcomes = _sibling('outcomes')
+
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
 OUTCOMES = ('exact_match', 'host_difference', 'undefined_behavior', 'unspecified_behavior',
@@ -819,46 +831,83 @@ def bind_receipt(root, base, generated_sha, bundle, file_hashes):
     return compiled, goals
 
 
+def diff_summary(path):
+    """A complete schema-1 differential summary, or None."""
+    summary = load_evidence(path)
+    return summary if isinstance(summary, dict) and summary.get('schema') == 1 and summary.get('complete') is True else None
+
+
+def diff_cases(path, function):
+    """Case rows and skip reasons for an `example.function` root in a summary's case evidence."""
+    example, function = function.rsplit('.', 1)
+    rows, skipped = [], []
+    for line in read_bounded(Path(str(path) + '.jsonl'), 128 * 1024 * 1024).splitlines():
+        row = bounded_json(line, LIMITS)
+        if not isinstance(row, dict) or row.get('example') != example:
+            continue
+        if row.get('status') == 'skipped' and function in (row.get('functions') or []):
+            skipped.append(row.get('reason'))
+        elif row.get('function') == function and isinstance(row.get('status'), str):
+            rows.append(row)
+    return rows, skipped
+
+
 def diff_coverage(root, source_closure, file_hashes, summaries):
+    """(tested stage, exclusions, case rows read for this root)."""
     if '.' not in root['function']:
-        return stage('not_run', 'root function has no example.function form for differential binding'), []
-    example, function = root['function'].rsplit('.', 1)
-    counts, skipped = {}, []
+        return stage('not_run', 'root function has no example.function form for differential binding'), [], []
+    rows, skipped = [], []
     for path in summaries:
         try:
-            summary = load_evidence(path)
-            if not isinstance(summary, dict) or summary.get('schema') != 1 or summary.get('complete') is not True:
-                return stage('failed', f'differential summary {path.name} is incomplete or unsupported'), []
+            summary = diff_summary(path)
+            if summary is None:
+                return stage('failed', f'differential summary {path.name} is incomplete or unsupported'), [], []
             runner = summary.get('runner_runtime_sources')
             bound = [n for n in source_closure if n in file_hashes and isinstance(runner, dict) and n in runner]
             if not bound:
-                return stage('failed', f'differential summary {path.name} does not hash any declared source-closure file'), []
+                return stage('failed', f'differential summary {path.name} does not hash any declared source-closure file'), [], []
             stale = [n for n in bound if runner[n] != file_hashes[n]]
             if stale:
-                return stage('failed', f'stale differential evidence: source hash differs for {stale}'), []
-            for line in read_bounded(Path(str(path) + '.jsonl'), 128 * 1024 * 1024).splitlines():
-                row = bounded_json(line, LIMITS)
-                if not isinstance(row, dict) or row.get('example') != example:
-                    continue
-                if row.get('status') == 'skipped' and function in (row.get('functions') or []):
-                    skipped.append(row.get('reason'))
-                elif row.get('function') == function and isinstance(row.get('status'), str):
-                    counts[row['status']] = counts.get(row['status'], 0) + 1
+                return stage('failed', f'stale differential evidence: source hash differs for {stale}'), [], []
+            found, reasons = diff_cases(path, root['function'])
+            rows += found
+            skipped += reasons
         except (OSError, ValueError, UnicodeError) as error:
-            return stage('failed', f'differential evidence unreadable: {error}'), []
+            return stage('failed', f'differential evidence unreadable: {error}'), [], []
+    counts = {}
+    for row in rows:
+        counts[row['status']] = counts.get(row['status'], 0) + 1
     exclusions = [f'differential {s}: {counts[s]} sampled case(s)' for s in DIFF_EXCLUSIONS if counts.get(s)]
     exclusions += [f'differential example skipped: {r}' for r in skipped]
     total = sum(counts.values())
     if not total:
-        return stage('not_run', 'no differential cases recorded for this root function', counts=counts), exclusions
+        return stage('not_run', 'no differential cases recorded for this root function', counts=counts), exclusions, rows
     # Fail closed on statuses this reader does not know how to classify.
     failures = {s: n for s, n in counts.items() if s in DIFF_FAILURES or s not in DIFF_MATCHES + DIFF_EXCLUSIONS}
     if failures:
-        return stage('failed', f'differential failures: {failures}', counts=counts, scope='sampled'), exclusions
+        return stage('failed', f'differential failures: {failures}', counts=counts, scope='sampled'), exclusions, rows
     if not any(counts.get(s) for s in DIFF_MATCHES):
-        return stage('failed', 'no differential case matched; only exclusions recorded', counts=counts, scope='sampled'), exclusions
+        return stage('failed', 'no differential case matched; only exclusions recorded', counts=counts, scope='sampled'), exclusions, rows
     return stage('passed', 'all sampled differential cases matched or were classified exclusions',
-                 counts=counts, scope='sampled'), exclusions
+                 counts=counts, scope='sampled'), exclusions, rows
+
+
+def absence_claims(goals, counts):
+    """Absence claims backed by direct goals, refused when outcome evidence blocks them.
+
+    Sampled evidence never proves absence; it can only refuse a theorem-backed claim."""
+    result = {}
+    for claim in outcomes.ABSENCE_CLAIMS:
+        backing = sorted(g['theorem'] for g in goals
+                         if g['binding'] == 'direct' and claim in outcomes.STRENGTH_ABSENCE.get(g['strength'], ()))
+        verdict = outcomes.absence(claim, counts)
+        if not backing:
+            status, reason = 'not_proved', 'no direct theorem goal asserts this claim; sampled evidence never proves absence'
+        else:
+            status = 'proved' if verdict['status'] == 'not_refuted' else 'refused'
+            reason = verdict['reason']
+        result[claim] = {'status': status, 'theorems': backing, 'blocking': verdict['blocking'], 'reason': reason}
+    return result
 
 
 def coverage_level(record):
@@ -874,6 +923,7 @@ def coverage_level(record):
         blockers.append('generated Lean not compiled by a current, hash-bound proof receipt')
     if not goals:
         blockers.append('no declared theorem goals')
+    blockers += [f'absence claim {v["reason"]}' for v in record['absence_claims'].values() if v['status'] == 'refused']
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
@@ -942,11 +992,16 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                 stages['proved'] = stage('partial', f'{bound} of {len(goals)} declared goals are direct audited theorems', direct_goals=bound)
             else:
                 stages['proved'] = stage('failed', 'no declared goal is a direct audited theorem of the generated root', direct_goals=0)
-        diff_exclusions = []
+        diff_exclusions, rows = [], []
         if diffs:
-            stages['tested'], diff_exclusions = diff_coverage(root, manifest['source_closure'], file_hashes, diffs)
+            stages['tested'], diff_exclusions, rows = diff_coverage(root, manifest['source_closure'], file_hashes, diffs)
         else:
             stages['tested'] = stage('not_run', 'no differential summary supplied')
+        counts = outcomes.count(rows)
+        unsupported = evidence['outcomes']['unsupported_semantics']  # exporter-marked AIR instructions
+        if unsupported:
+            key = outcomes.Outcome.UNSUPPORTED.value
+            counts[key] = counts.get(key, 0) + unsupported
         audited = {}
         for goal in goals:
             for key, names in goal.get('audited_assumptions', {}).items():
@@ -961,7 +1016,7 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                                        'direct': sorted({g['strength'] for g in goals if g['binding'] == 'direct'}),
                                        'source': 'manifest declaration; statements are not machine-classified'},
                   'assumptions': {'declared': root['assumptions'], 'audited': audited},
-                  'exclusions': exclusions}
+                  'exclusions': exclusions, 'outcomes': counts, 'absence_claims': absence_claims(goals, counts)}
         record['level'], record['blockers'] = coverage_level(record)
         record['fully_functionally_verified'] = record['level'] == 'functionally_verified_total'
         roots.append(record)
@@ -974,7 +1029,11 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                       'term mentions the root still counts, so declared strength and domain remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
-                      'Stale receipts, source hash mismatches and stale differential evidence fail their stages.'],
+                      'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
+                      'An absence claim (no-panic, guaranteed-return) is proved only by a direct goal of matching '
+                      'strength. Capped searches, fuel-bounded no-result runs, unspecified (including no-clock timer) '
+                      'and unsupported outcomes, or an observed failure the claim denies, refuse it and block '
+                      'functional verification. Error returns are values and never refuse no-panic.'],
             'trust_scope': report['trust_scope']}
 
 
@@ -991,6 +1050,8 @@ def coverage_text(result):
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
+        lines.extend(f'  absence {claim}: {v["status"]}' + (f' {v["blocking"]}' if v['blocking'] else '')
+                     for claim, v in root['absence_claims'].items())
         lines.extend(f'  blocker: {b}' for b in root['blockers'])
     return '\n'.join(lines) + '\n'
 
