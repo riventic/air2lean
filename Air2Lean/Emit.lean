@@ -846,6 +846,11 @@ def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : 
   unless logicalBitCastVersion fc.zigVersion && src != dst &&
       (logicalBitCastTy fc.types src || logicalBitCastTy fc.types dst) do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
+  -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
+  -- (`enumIntCast`) is already this cast, so 0.16 and 0.17 translations stay identical.
+  let tagOf (t : TyId) : Option Ty := match fc.tyOfId t with
+    | .enum _ tag _ _ => some (fc.tyOfId tag) | _ => none
+  if tagOf src == some (fc.tyOfId dst) || tagOf dst == some (fc.tyOfId src) then none
   let dstTy := fc.emitTyOf dst
   let toBits (v : String) : String := match s with
     | .int _ => s!"pure ({v})"

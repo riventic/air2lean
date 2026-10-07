@@ -198,6 +198,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
 | `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
+| `@bitCast` with an array, vector or enum side (Zig 0.17.0 only: logical bit order, [bitcast-semantics.md](bitcast-semantics.md)) | `bit_cast`/`bit_cast_safe` (canonical `bitcast`) | `Zig.BitCast.ofLanes`/`toLanes`/`ofBools`/`toBools`, enum tag bits with `Zig.enumOf`; ≤0.16 rejects these aggregate casts |
 | `f(x)`, `f: *const fn` | `call` of an instruction | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |
 
 A local-place `@fieldParentPtr` recovers the original local allocation and its enclosing

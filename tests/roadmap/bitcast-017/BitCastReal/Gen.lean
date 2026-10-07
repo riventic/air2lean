@@ -83,7 +83,7 @@ inductive intToEnumExit where
 
 def intToEnum (p0 : BitVec 8) : Zig.Result (E) := do
   let e ← ((do
-    let i1 ← (Zig.enumOf (E.ofInt? (Zig.val false (p0))) : Zig.Result (E))
+    let i1 ← Zig.enumOf (E.ofInt? (Zig.val false p0))
     pure (.ret i1)) : Zig.M intToEnumLocals intToEnumExit).run' (default : intToEnumLocals)
   match e with
   | .ret v => pure v
