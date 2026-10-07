@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observe a bounded Linux native ABI fragment; never widen translator support."""
+"""Observe a bounded native ABI fragment; never widen translator support."""
 import argparse
 import hashlib
 import json
@@ -10,7 +10,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ('tests/roadmap/abi-probes/probe.zig', 'tests/diff/compat.zig')
-TARGETS = ('x86_64-linux-gnu', 'aarch64-linux-gnu')
+TARGETS = ('x86_64-linux-gnu', 'aarch64-linux-gnu')  # the paired Linux relation
+# triple -> (platform.system() that executes it, builtin os, builtin abi, baseline CPU model)
+NATIVE = {'x86_64-linux-gnu': ('Linux', 'linux', 'gnu', 'x86_64'),
+          'aarch64-linux-gnu': ('Linux', 'linux', 'gnu', 'generic'),
+          'aarch64-macos-none': ('Darwin', 'macos', 'none', 'apple_m1')}
 LAYOUTS = {'u9': [2, 2], 'u24': [4, 4], 'u40': [8, 8], 'u128': [16, 16],
            'pointer': [8, 8], 'packed32': [4, 4], 'vector4': [16, 16], 'record': [16, 8]}
 VALUES = {'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
@@ -27,9 +31,9 @@ def profile_check(profile):
                 'error_layout', 'error_tracing', 'export_stage'}
     if not isinstance(profile, dict) or set(profile) != required:
         raise ValueError('expected an exact schema-12 raw source profile')
-    if (profile['name'] != 'abi64-le-v1' or profile['target_triple'] not in TARGETS
+    if (profile['name'] != 'abi64-le-v1' or profile['target_triple'] not in NATIVE
             or type(profile['pointer_bits']) is not int or profile['pointer_bits'] != 64
-            or profile['endian'] != 'little' or profile['abi'] != 'gnu'
+            or profile['endian'] != 'little' or profile['abi'] != NATIVE[profile['target_triple']][2]
             or profile['backend'] != 'stage2_llvm' or profile['zig_version'] != '0.16.0'
             or profile['build_mode'] not in ('ReleaseSafe', 'ReleaseFast')
             or profile['export_stage'] != 'analyzed-air'
@@ -37,8 +41,7 @@ def profile_check(profile):
             or type(profile['error_set_bits']) is not int or profile['error_set_bits'] != 16
             or type(profile['error_tracing']) is not bool):
         raise ValueError('unsupported source profile, backend, mode, endian or width')
-    expected_cpu = 'x86_64' if profile['target_triple'].startswith('x86_64') else 'generic'
-    if (profile['cpu'] != expected_cpu or not isinstance(profile['features'], list)
+    if (profile['cpu'] != NATIVE[profile['target_triple']][3] or not isinstance(profile['features'], list)
             or any(not isinstance(value, str) for value in profile['features'])
             or not profile['features'] or any(not value for value in profile['features'])
             or profile['features'] != sorted(set(profile['features']))):
@@ -61,7 +64,8 @@ def observations(text, profile):
                 raise ValueError('invalid scalar observation')
             data[kind][name] = value[0] if kind == 'meta' else int(value[0])
     arch = profile['target_triple'].split('-')[0]
-    expected_meta = {'arch': arch, 'os': 'linux', 'abi': 'gnu', 'endian': 'little',
+    _, os_tag, abi_tag, _ = NATIVE[profile['target_triple']]
+    expected_meta = {'arch': arch, 'os': os_tag, 'abi': abi_tag, 'endian': 'little',
                      'backend': profile['backend'], 'mode': profile['build_mode'],
                      'cpu': profile['cpu'], 'zig': profile['zig_version'], 'pointer_bits': '64', 'error_set_bits': '16',
                      'error_tracing': str(profile['error_tracing']).lower()}
@@ -73,8 +77,10 @@ def observations(text, profile):
 
 def run(zig, profile):
     profile_check(profile)
-    if platform.system() != 'Linux':
-        raise ValueError('actual probe execution requires a Linux validation environment')
+    system = NATIVE[profile['target_triple']][0]
+    if platform.system() != system:
+        raise ValueError(f"actual probe execution of {profile['target_triple']} "
+                         f"requires a {system} execution environment")
     compiler = Path(zig).resolve(strict=True)
     if not compiler.is_file():
         raise ValueError('stock compiler must be a physical executable file')

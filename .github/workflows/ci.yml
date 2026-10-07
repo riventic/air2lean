@@ -111,6 +111,18 @@ jobs:
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
 
+      # Offline (Q05): each version x host x target x profile path that compatibility.json
+      # declares maps to native execution, target probe and proof steps of a CI job on that
+      # host; foreign-golden compilation does not count (docs/target-matrix.md).
+      - name: Declared target matrix is natively backed
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/roadmap/target-matrix -v
+          python3 scripts/target-matrix.py check
+
       # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
@@ -906,3 +918,149 @@ jobs:
           bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
+
+  # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
+  # (assurance/target-matrix.json, docs/target-matrix.md). One job without a matrix, since
+  # macOS runner concurrency is limited; each evidence step binds AIR2LEAN_ZIG_VERSION.
+  # WASM is not a declared target (T02/T05).
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Stock aarch64-macos releases bootstrap zig-patch/build.sh and build the native
+      # probes/harnesses. sha256 from https://ziglang.org/download/index.json
+      # ("<version>" -> "aarch64-macos".shasum), confirmed by downloading and hashing each.
+      - name: Install stock zig (aarch64-macos)
+        run: |
+          set -euo pipefail
+          install_zig() {
+            curl -fL --output "$RUNNER_TEMP/zig-$1.tar.xz" \
+              "https://ziglang.org/download/$1/zig-aarch64-macos-$1.tar.xz"
+            echo "$2  $RUNNER_TEMP/zig-$1.tar.xz" | shasum -a 256 -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$1"
+            tar -xJf "$RUNNER_TEMP/zig-$1.tar.xz" -C "$RUNNER_TEMP/host-zig-$1" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$1/zig" version)" = "$1" ]
+          }
+          install_zig 0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
+          install_zig 0.15.2 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
+
+      # Builds and executes probe.zig for aarch64-macos-none (docs/profiles.md).
+      - name: macOS ABI target probe (0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/abi-probes/test_probe.py
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+              --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
+          done
+
+      - name: Cache patched zig 0.16.0 (macOS)
+        id: cache-zig-air-16
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-0.16.0/
+          key: zig-air-macos-arm64-0.16.0-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.16.0/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      - name: Cache patched zig 0.15.2 (macOS)
+        id: cache-zig-air-15
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-0.15.2/
+          key: zig-air-macos-arm64-0.15.2-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.15.2/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      # One retry per version, as in the Linux job.
+      - name: Build patched zig (macOS)
+        if: steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          for v in 0.16.0 0.15.2; do
+            if [ ! -x "zig-air-$v/bin/zig" ]; then
+              PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+                || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+            fi
+          done
+
+      # zig-patch/versions.toml [ci.elan] pins elan v4.2.4's Linux asset; this is the same
+      # release's aarch64-apple-darwin asset (sha256 = the release asset digest, confirmed).
+      - name: Install elan (macOS)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-apple-darwin.tar.gz
+          echo "7ad829861392c718dfebde3a83b5c8508df47be02af68894b094b0b3952616e5  $RUNNER_TEMP/elan.tar.gz" \
+            | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (macOS root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (macOS tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-macos-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator (macOS)
+        run: lake build
+
+      # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
+      # overrides, translated, built and differentially tested against native Zig (host-listed
+      # float differences count as `host`, scripts/diff.sh). Rewrites Proofs/<Ex>/Gen.lean.
+      - name: macOS golden AIR, translate, differential test (0.16.0)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
+        run: scripts/check.sh
+
+      - name: macOS proofs (0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: lake build Proofs
+
+      - name: Restore committed translations (0.16.0)
+        run: git checkout -- Proofs
+
+      # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects
+      # tests/golden/0.15.2/threadsync/Gen-darwin.lean and the proofs build against it natively.
+      - name: macOS golden AIR, translate, differential test (0.15.2)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
+        run: scripts/check.sh
+
+      - name: macOS proofs (0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: lake build Proofs
+
+      # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
+      - name: Upload the dumped Darwin AIR
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-macos-arm64
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7

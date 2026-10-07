@@ -153,6 +153,11 @@ cannot produce a report. The runtime rejects discrepancies in target, endian,
 pointer width, backend, CPU/features, mode, error-set width and tracing. Per-mode status:
 [build-modes.md](build-modes.md).
 
+Two more profile inputs select baseline `aarch64-macos-none` (CPU `apple_m1`) in
+ReleaseSafe and ReleaseFast. They execute only on a Darwin host; the CI `macos` job
+observes both ([target-matrix.md](target-matrix.md)). A macOS report stays outside the
+paired Linux `compare` relation.
+
 ```sh
 python3 scripts/abi-probe.py observe --zig /absolute/path/to/stock/zig \
   --profile tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json \
