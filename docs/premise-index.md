@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1767 theorems in 82 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -16,32 +16,32 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1016 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 688 | Futex model |
+| [THR-05](premises.md#thr-05) | 703 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
 | [THR-08](premises.md#thr-08) | 901 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 759 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 759 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 760 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 760 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
-| [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
+| [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 55 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 21 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
 | [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
+| [SEM-02](premises.md#sem-02) | 1358 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1767 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -1906,6 +1906,28 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `ClaimFixture.premise_total` | SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.wrapped_total` | SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.partial_and_returns` | SEM-02, SEM-03, SEM-04, TRU-01 |
+
+## `tests/roadmap/deadline-cases/Contracts.lean`
+
+File premises: THR-01, THR-05, ORD-01, ORD-02, TMR-02, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `DeadlineCaseContracts.not_woken` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.begin_at_or_after_deadline` | THR-01, THR-05, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.begin_boundary` | THR-01, THR-05, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.begin_before_deadline` | THR-01, THR-05, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.begin_mismatch_first` | THR-01, THR-05, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.timeout_enabled_iff` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.timeout_not_early` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.wake_registration` | THR-01, THR-05, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.observe_enables_timeout` | THR-01, THR-05, ORD-01, ORD-02, TMR-02, SEM-02, TRU-01 |
+| `DeadlineCaseContracts.wake_before_timeout` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.wake_at_timeout_enabled` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.wake_at_timeout_indistinguishable` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.real_deadline_rejected` | THR-01, THR-05, TMR-02, TRU-01 |
+| `DeadlineCaseContracts.real_duration_rejected` | THR-01, THR-05, TMR-02, TRU-01 |
+| `example@L142` | THR-01, THR-05, TMR-02, TRU-01 |
 
 ## `tests/roadmap/deadline-futex/AtomicKernel.lean`
 

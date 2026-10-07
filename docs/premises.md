@@ -290,7 +290,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   timed scheduler lets mismatch, wake, timeout and spurious returns compete through an
   oracle. `NoCancellation` is an explicit premise. No OS clock correspondence is claimed.
 - Derived from: `ZigLean.Time`, `ZigLean.Conc.Timed*`; tokens `TimedSched`, `AwakeEnvironment`, `NoCancellation`.
-- Sources: [deadline-runtime.md](deadline-runtime.md), [deadline-futex-design.md](deadline-futex-design.md).
+- Sources: [deadline-runtime.md](deadline-runtime.md), [deadline-futex-design.md](deadline-futex-design.md), [deadline-cases.md](deadline-cases.md).
 
 ## Opaque math and floats
 
