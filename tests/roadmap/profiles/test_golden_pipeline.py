@@ -47,6 +47,25 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(report["metadata"]["profile"]["name"], "abi64-le-v1")
         self.assertEqual(report["air"][0]["sha256"], hashlib.sha256(self.input.read_bytes()).hexdigest())
 
+    def test_legacy_schema_selects_legacy_profile(self):
+        try:
+            profile = HELPER["profile_for_air"](LEGACY)
+        except ValueError as error:
+            self.fail(f"schema-11 AIR was not routed to the legacy profile: {error}")
+        self.assertEqual((profile["name"], profile["schema"]), ("legacy-abi64-le", 11))
+
+    def test_unknown_profile_name_is_rejected(self):
+        changed = copy.deepcopy(CURRENT)
+        changed["profile"]["name"] = "abi64-le-v2"
+        with self.assertRaisesRegex(ValueError, "incompatible target profile"):
+            HELPER["profile_for_air"](changed)
+
+    def test_future_schema_fails_closed(self):
+        changed = copy.deepcopy(CURRENT)
+        changed["schema"] = 13
+        with self.assertRaisesRegex(ValueError, "unsupported AIR schema"):
+            HELPER["profile_for_air"](changed)
+
     def test_legacy_generated_body_compares_but_output_keeps_header(self):
         baseline = self.directory / "baseline.lean"
         baseline.write_bytes(BODY)

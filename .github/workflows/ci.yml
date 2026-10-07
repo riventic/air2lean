@@ -119,6 +119,15 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
 
+      # Q02: every register ID maps to negative tests and designated mutants; complete rows
+      # need both. The Python-side mutants run in memory against existing regressions.
+      - name: Mutation map and Python-side mutants
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
+          python3 -B scripts/mutation-map.py check
+          python3 -B tests/roadmap/mutation-map/mutants.py
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
