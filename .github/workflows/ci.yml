@@ -383,7 +383,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Separation normalization regressions
         if: ${{ !matrix.mutate }}
@@ -409,6 +409,13 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
+
+      - name: Symbolic-execution step regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/proof-tools/Steps.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Steps.log"
+          lake env lean tests/roadmap/proof-tools/StepClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/StepClients.log"
 
       - name: Total correctness regressions
         if: ${{ !matrix.mutate }}

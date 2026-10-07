@@ -104,6 +104,7 @@
     "ZigLean.Sep.Sentinel": ["ALC-04"],
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
+    "ZigLean.Sep.Step": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Result": ["SEM-03"]

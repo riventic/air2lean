@@ -5,15 +5,15 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1983 theorems in 109 files.
+2002 theorems in 110 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 576 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 66 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 66 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 67 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 67 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
 | [THR-01](premises.md#thr-01) | 1042 | Interleaving scheduler and partial-correctness meaning |
@@ -35,14 +35,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1863 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1541 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 918 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 1882 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1560 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 935 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 67 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1983 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2002 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -564,13 +564,17 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `Lists.node_val_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.node_set_next_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.node_free_run` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
+| `Lists.node_next_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `Lists.node_set_next_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `Lists.node_free_total` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-04, TRU-01 |
+| `Lists.list_cons_eq` | SEM-01, SEM-02, TRU-01 |
 | `Lists.focus_mid` | SEM-01, SEM-02, TRU-01 |
-| `Lists.reverse_step` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.push_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.push_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
@@ -658,7 +662,7 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Slices/Sep.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -666,8 +670,8 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | `bump_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `copyWithin_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `fill_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Handoff.lean`
 
@@ -2397,7 +2401,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 |---|---|
 | `generated_at_array` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `generated_bumpAt_array` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `example@L94` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L36` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/proof-tools/Clients.lean`
 
@@ -2450,6 +2454,28 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `example@L88` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `example@L95` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `example@L104` | SEM-01, SEM-02, SEM-03, TRU-01 |
+
+## `tests/roadmap/proof-tools/Steps.lean`
+
+File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L15` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L22` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L29` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L36` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L45` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L53` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L62` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L71` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L80` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L100` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L107` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L115` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L123` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L131` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `steps_axioms` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 
 ## `tests/roadmap/proof-tools/Total.lean`
 
@@ -2781,16 +2807,16 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 
 ## `tutorials/mutable-arrays/Main.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `MutableArrays.reverse_twice` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `MutableArrays.reverse_twice` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/mutable-arrays/Solution.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `MutableArrays.reverse_one` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `MutableArrays.reverse_one` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |

@@ -18,17 +18,21 @@ ordinary theorems over the existing rules (`bind`, `frame`, `conseq`, `lift`, `e
   address is `q.elem size i`), frames the rest, applies the load/store lemma and continues with
   `f v` (`sep_unfold [e, …]` is run on the continuation). Array bounds are tried with
   `assumption`/`omega`; an unproved bound remains a goal after the continuation.
-* `sep_step using rule [e, …]` does the same with a caller-supplied triple for the command
+* `sep_step [e, …] using rule` does the same with a caller-supplied triple for the command
   (a function contract or a representation lemma); the rule's pure facts and existentials
-  are introduced with `sep_intro`.
+  are introduced with `sep_intro`. `sep_steps [e, …] using r₁, …` repeats the step while a
+  built-in rule or one of the `rᵢ` applies.
 * `sep_intro x hx …` moves pure facts `⌜φ⌝` and existentials `Assn.ex` out of the
-  precondition into the context; an equation `x = e` with a local `x` is substituted.
-* `sep_ret` closes `Triple P (pure v) Q` by normalization when `P` and `Q v` are equal up to
-  associativity, commutativity and `emp`, and otherwise leaves `∀ h, P h → Q v h`.
+  precondition into the context; an unnamed equation `x = e` with a local `x` is substituted.
+* `sep_ret w …` closes `Triple P (pure v) Q`: existentials of `Q v` take the witnesses, pure
+  atoms become goals (`rfl`/`assumption` are tried), and the spatial rest must equal `P` up to
+  associativity, commutativity and `emp`. Otherwise it leaves `∀ h, P h → Q v h`.
+  `sep_close hp w …` is the same entailment step for a goal `Q h` with `hp : P h`.
 * `sep_split p k` splits `arr p xs` in the precondition at `k` (`arr_split`).
 
 Frame inference matches atoms by definitional equality, as `sep_frame` does. The tactics do
-not choose invariants, measures or existential witnesses; that remains the caller's proof.
+not choose invariants, measures, ranges or existential witnesses; that remains the caller's
+proof.
 -/
 
 namespace Zig
