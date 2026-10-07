@@ -23,7 +23,10 @@
       ],
       "conclusion_dependencies": [
         "True"
-      ]
+      ],
+      "conclusion": {
+        "head": "True"
+      }
     },
     {
       "name": "StatementFixture.root_spec",
@@ -58,7 +61,15 @@
         "HAdd.hAdd",
         "OfNat.ofNat",
         "StatementFixture.root"
-      ]
+      ],
+      "conclusion": {
+        "head": "Eq",
+        "args": [
+          {
+            "head": "HAdd.hAdd"
+          }
+        ]
+      }
     },
     {
       "name": "StatementFixture.trivial_spec",
@@ -78,7 +89,10 @@
       ],
       "conclusion_dependencies": [
         "True"
-      ]
+      ],
+      "conclusion": {
+        "head": "True"
+      }
     },
     {
       "name": "StatementFixture.wrapper_spec",
@@ -114,7 +128,15 @@
         "HAdd.hAdd",
         "OfNat.ofNat",
         "StatementFixture.wrapper"
-      ]
+      ],
+      "conclusion": {
+        "head": "Eq",
+        "args": [
+          {
+            "head": "HAdd.hAdd"
+          }
+        ]
+      }
     }
   ]
 }

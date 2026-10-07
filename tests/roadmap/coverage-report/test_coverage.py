@@ -65,6 +65,8 @@ class CoverageTests(unittest.TestCase):
         # Statement-only dependencies per theorem: (statement, conclusion). Unlisted theorems state
         # their conclusion about every non-axiom declaration they depend on.
         self.statements = {}
+        # Kernel conclusion shapes per theorem; unlisted theorems conclude a Zig.TotalTriple.
+        self.conclusions = {}
         self.generated_sha = sha(GENERATED)
         self.write_receipt()
         self.diff = self.base / 'diff.json'
@@ -85,7 +87,8 @@ class CoverageTests(unittest.TestCase):
         def statement(node):
             default = [d for d in node['dependencies'] if d != 'propext']
             deps, conclusion = self.statements.get(node['name'], (default, default))
-            return {'statement_dependencies': deps, 'conclusion_dependencies': conclusion}
+            return {'statement_dependencies': deps, 'conclusion_dependencies': conclusion,
+                    'conclusion': self.conclusions.get(node['name'], {'head': 'Zig.TotalTriple', 'args': []})}
         theorems = [{'name': n['name'], 'module': n['module'], 'axioms': ['propext'], 'opaque_dependencies': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
                      **statement(n)} for n in self.nodes if n['kind'] == 'theorem']
@@ -159,6 +162,7 @@ class CoverageTests(unittest.TestCase):
             self.nodes.append({'name': theorem['name'], 'module': 'contract', 'kind': 'theorem',
                                'dependencies': theorem['dependencies']})
             self.statements[theorem['name']] = (theorem['statement_dependencies'], theorem['conclusion_dependencies'])
+            self.conclusions[theorem['name']] = theorem['conclusion']
         self.write_receipt()
         self.manifest['roots'][0]['namespace'] = 'StatementFixture'
         self.manifest['roots'][0]['goals'] = [{'theorem': g, 'strength': 'total_correctness', 'domain': 'all'} for g in goals]
@@ -184,7 +188,55 @@ class CoverageTests(unittest.TestCase):
                 self.assertNotFunctional(root)
         root = self.use_statement_fixture('root_spec')
         self.assertEqual(root['goals'][0]['binding'], 'direct')
+        # `root x = x + 1` is about the root but is no Zig triple or exact-success equation:
+        # claims.py derives no strength, so the declared total_correctness is not credited.
+        self.assertEqual((root['goals'][0]['derived_strength'], root['goals'][0]['claim_class']), (None, 'unclassified'))
+        self.assertEqual(root['level'], 'proved_scoped')
+        self.assertNotFunctional(root)
+        self.conclusions['StatementFixture.root_spec'] = {'head': 'Zig.TotalTriple', 'args': []}
+        self.write_receipt()
+        root = self.run_coverage()
         self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+
+    def test_trivial_conclusion_cannot_reach_functional_levels(self):
+        # `Example.root x = Example.root x`: binds by statement (the conclusion names the root)
+        # but claims.py leaves the reflexive equation unclassified.
+        self.conclusions['Example.root_spec'] = {'head': 'Eq', 'args': [{'head': 'Example.root'}]}
+        self.write_receipt()
+        for strength in ('total_correctness', 'partial_correctness', 'safety'):
+            with self.subTest(strength=strength):
+                self.manifest['roots'][0]['goals'][0]['strength'] = strength
+                self.save()
+                self.rebuild_artifact()
+                root = self.run_coverage()
+                goal = root['goals'][0]
+                self.assertEqual((goal['binding'], goal['derived_strength'], goal['claim_class']),
+                                 ('direct', None, 'unclassified'))
+                self.assertEqual(root['level'], 'proved_scoped')
+                self.assertNotFunctional(root)
+                self.assertTrue(any('exceeds type-derived no claim' in b for b in root['blockers']), root['blockers'])
+                self.assertEqual(root['theorem_strength']['derived'], [])
+                self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
+                                 {'no-panic': 'not_proved', 'guaranteed-return': 'not_proved'})
+        # A partial triple cannot be credited as total correctness; it still counts as partial.
+        self.conclusions['Example.root_spec'] = {'head': 'Zig.Triple', 'args': []}
+        self.write_receipt()
+        self.manifest['roots'][0]['goals'][0]['strength'] = 'total_correctness'
+        self.save()
+        self.rebuild_artifact()
+        root = self.run_coverage()
+        self.assertEqual(root['level'], 'proved_scoped')
+        self.assertTrue(any('exceeds type-derived partial_correctness' in b for b in root['blockers']), root['blockers'])
+        self.manifest['roots'][0]['goals'][0]['strength'] = 'partial_correctness'
+        self.save()
+        self.rebuild_artifact()
+        self.assertEqual(self.run_coverage()['level'], 'functionally_verified_partial')
+        # An audit from an extractor without conclusion shapes derives nothing.
+        audit = json.loads((self.attempt / 'audit.json').read_text())
+        for theorem in audit['theorems']:
+            del theorem['conclusion']
+        (self.attempt / 'audit.json').write_text(json.dumps(audit))
+        self.assertEqual(self.run_coverage()['level'], 'proved_scoped')
 
     def test_audit_without_statement_dependencies_fails_closed(self):
         audit = json.loads((self.attempt / 'audit.json').read_text())
@@ -351,7 +403,7 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual(root['outcomes'].get('unsupported_semantics'), 1, root['outcomes'])
         self.assertNotEqual(root['absence_claims']['no-panic']['status'], 'proved')
-        self.assertEqual(project.absence_claims([{'theorem': 't', 'binding': 'direct', 'strength': 'safety'}],
+        self.assertEqual(project.absence_claims([{'theorem': 't', 'binding': 'direct', 'strength': 'safety', 'derived_strength': 'safety'}],
                                                 root['outcomes'])['no-panic']['status'], 'refused')
 
     def test_symlinked_contract_binds_by_tracked_path(self):

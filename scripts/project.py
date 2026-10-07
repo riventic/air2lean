@@ -31,6 +31,7 @@ def _sibling(name):
 
 
 outcomes = _sibling('outcomes')
+claims = _sibling('claims')
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
@@ -855,9 +856,28 @@ def bind_receipt(root, base, generated_sha, bundle, file_hashes):
         else:
             row.update(binding='direct', reason='audited theorem states its conclusion about the hash-bound generated root definition',
                        audited_assumptions={k: sorted(theorem.get(k) or []) for k in
-                                            ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')})
+                                            ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
+                       **derived_claim(theorem))
         goals.append(row)
     return compiled, goals
+
+
+def derived_claim(theorem):
+    """scripts/claims.py's strength derived from the audited kernel conclusion shape.
+
+    An audit without a conclusion shape (older extractor) derives no strength."""
+    found = claims.claims_of(theorem['conclusion']) if 'conclusion' in theorem else frozenset()
+    return {'derived_strength': claims.derived_strength(found), 'claim_class': claims.claim_class(found)}
+
+
+def strength_supported(goal):
+    """A type-derivable declared strength counts only up to the derived strength.
+
+    Strengths claims.py cannot derive (resource_bound, correspondence) are never functional."""
+    declared, derived = goal['strength'], goal.get('derived_strength')
+    if declared not in claims.ORDERED:
+        return True
+    return derived is not None and claims.ORDERED[derived] >= claims.ORDERED[declared]
 
 
 def diff_summary(path):
@@ -928,7 +948,8 @@ def absence_claims(goals, counts):
     result = {}
     for claim in outcomes.ABSENCE_CLAIMS:
         backing = sorted(g['theorem'] for g in goals
-                         if g['binding'] == 'direct' and claim in outcomes.STRENGTH_ABSENCE.get(g['strength'], ()))
+                         if g['binding'] == 'direct' and strength_supported(g)
+                         and claim in outcomes.STRENGTH_ABSENCE.get(g['strength'], ()))
         verdict = outcomes.absence(claim, counts)
         if not backing:
             status, reason = 'not_proved', 'no direct theorem goal asserts this claim; sampled evidence never proves absence'
@@ -956,7 +977,11 @@ def coverage_level(record):
     for goal in goals:
         if goal['binding'] != 'direct':
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
-    strengths = {g['strength'] for g in direct}
+    for goal in direct:
+        if not strength_supported(goal):
+            blockers.append(f'goal {goal["theorem"]}: declared {goal["strength"]} exceeds type-derived '
+                            f'{goal.get("derived_strength") or "no claim"} ({goal.get("claim_class") or "unclassified"} conclusion)')
+    strengths = {g['strength'] for g in direct if strength_supported(g)}
     if not strengths & set(FUNCTIONAL):
         blockers.append('no direct theorem has functional strength (partial/total correctness)')
     # Every functional precondition (preflight, translated, compiled, all goals direct) is a blocker above.
@@ -1043,7 +1068,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                   'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'review': 'declared_not_checked'} for g in root['goals']],
                   'theorem_strength': {'declared': sorted({g['strength'] for g in root['goals']}),
                                        'direct': sorted({g['strength'] for g in goals if g['binding'] == 'direct'}),
-                                       'source': 'manifest declaration; statements are not machine-classified'},
+                                       'derived': sorted({g['derived_strength'] for g in goals
+                                                          if g['binding'] == 'direct' and g.get('derived_strength')}),
+                                       'source': 'manifest declaration, counted only up to the strength scripts/claims.py '
+                                                 'derives from the audited kernel conclusion'},
                   'assumptions': {'declared': root['assumptions'], 'audited': audited},
                   'exclusions': exclusions, 'outcomes': counts, 'absence_claims': absence_claims(goals, counts)}
         record['level'], record['blockers'] = coverage_level(record)
@@ -1055,7 +1083,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                       'A theorem counts only when the conclusion of its audited statement (kernel type, not hypotheses '
                       'or proof term) references the generated root definition in a module byte-identical to the verified '
                       'translation artifact; wrapper or True statements do not count even when their proofs mention the root. '
-                      'Statements are not otherwise interpreted, so declared strength and domain remain review obligations.',
+                      'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
+                      'from the audited conclusion head (Zig triples, Returns, exact-success equations); an unclassified '
+                      'conclusion such as `root x = root x` derives none. Domains and preconditions are not interpreted '
+                      'and remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',

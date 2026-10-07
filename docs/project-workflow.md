@@ -199,19 +199,25 @@ definition `namespace.(function without prefix)`, which must live in the hash-bo
 generated module. Proof terms are not consulted: a theorem stated about a wrapper, a
 hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or_unrelated`
 even when its proof mentions the generated code. An audit without statement dependencies
-(an older extractor) leaves goals `unbound`. Statements are not otherwise interpreted, so a
-weak conclusion that mentions the root (for example `root x = root x`) still binds; declared
-strength and domain remain review obligations. `tests/roadmap/assurance/StatementBinding.lean`
-holds a wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last
-binds (`tests/roadmap/coverage-report/test_coverage.py`).
+(an older extractor) leaves goals `unbound`. A weak conclusion that mentions the root (for
+example `root x = root x`) still binds, but each direct goal also records the
+`derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
+conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
+toward levels and absence claims only up to that derived strength (an unclassified
+conclusion, or an audit without conclusion shapes, derives none). Domains and preconditions
+remain review obligations. `tests/roadmap/assurance/StatementBinding.lean` holds a
+wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last binds
+(`tests/roadmap/coverage-report/test_coverage.py`), and its plain `Nat` equation derives no
+strength.
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
 `functionally_verified_partial`, `functionally_verified_total`.
 
 * `functionally_verified_*` requires passed preflight, `translated`, `compiled`, at least
-  one declared goal, every goal `direct`, and at least one `partial_correctness` or
-  `total_correctness` goal. `_total` additionally requires a direct `total_correctness`
-  goal; only that level sets `fully_functionally_verified`.
+  one declared goal, every goal `direct` with its declared strength no stronger than its
+  derived strength, and at least one `partial_correctness` or `total_correctness` goal.
+  `_total` additionally requires a direct `total_correctness` goal; only that level sets
+  `fully_functionally_verified`.
 * `proved_scoped`: translated, compiled and at least one direct goal, but the functional
   rule fails (missing/wrapper goals, or only `safety`, `resource_bound`, `correspondence`).
 * `tested_sampled`: translated, compiled and passing differential samples. Differential
@@ -220,8 +226,7 @@ Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `prove
   verification; `blockers` lists every unmet rule.
 
 Each root also reports `contract_domain` (declared domains, `review: declared_not_checked`),
-`theorem_strength` (declared and direct strengths; strengths are manifest declarations, not
-machine-classified statements), `assumptions` (declared manifest identifiers plus audited
+`theorem_strength` (declared, direct and claims.py-derived strengths of direct goals), `assumptions` (declared manifest identifiers plus audited
 axioms, opaque, extern and compiler-redirection dependencies of direct theorems) and
 `exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
 `not_attested` trust fields). `outcomes` counts the root's differential cases and
