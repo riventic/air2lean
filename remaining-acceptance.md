@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 11 complete, 58 partial, 8 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 14 complete, 57 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -56,6 +56,8 @@ Classification: partial.
 
 typed scalar and applicable vector semantics, emission and bitvector lemmas. Acceptance: zero, maximum values, signed/unsigned boundaries, narrow widths and shift boundaries are covered; tests exercise production-style bitset code.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): width-generic bit-operation lemmas in ZigLean/Bit.lean (exact counts at every width, sign-boundary/all-ones counts, Log2Int validity, zero-count and shift rules, the `x & (x -% 1)` measure); runtime and checker cases for u16-u128, i128, u24, u40, i7 and vector lanes, including representable but illegal shift counts; IntegerBitSet/ArrayBitSet client proofs and generated firstSet/clearLowest/cardinality fixtures; operand-order mutants. Remaining: native differential qualification of the wide cases on every version and target.
+
 ## L03 — Loop switch and switch dispatch
 
 Classification: partial.
@@ -98,6 +100,8 @@ Classification: partial.
 
 target-qualified lane stride, padding, packed bool addressing and element access metadata. Acceptance: memory round trips and lane writes preserve unrelated lanes; vector layout matches compiler probes.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): bit-packed `@Vector(n, uW/iW/fW)` memory layout as the LLVM backend lays it out (`Vec.packedEnc`); ZigLean/VecMem.lean proves the integer round trip at any width, LawfulEnc of the packed encodings and lane-write frames on lanes, on the image and through memory; the checker admits non-byte or ABI-padded lanes only for stage2_llvm profiles; stock Zig 0.16.0 probe images (aarch64-macos, CI x86_64-linux) match the model line for line. Remaining: lane pointers into bit-packed vectors, bool-lane pointers and other backends stay rejected.
+
 ## L10 — Error values and error layouts
 
 Classification: partial.
@@ -116,11 +120,15 @@ Classification: partial.
 
 explicit initial-state parameters or contracts for external storage; qualified initialization and mutable-global ownership. Acceptance: generated proofs expose external initial-state assumptions and initialization order. No absent value is silently replaced with a default.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): a pointer-, union- and error-free named extern global becomes a field of a generated `ExternInit` and `mem0` takes `(ext : ExternInit)`; other externs are rejected; wholly undefined globals stay explicit undefined bytes; partly undefined global initializers, previously read as 0/false, are rejected (soundness fix); generated-client proofs over `mem0 ext`. Partly undefined constant operands are explicit undefined bytes or rejected (soundness fix). Remaining: TLS, pointer-bearing externs, source/native correspondence of extern storage, and wholly undefined stores to Locals fields (still defaulted).
+
 ## L13 — Volatile and device effects
 
-Classification: open.
+Classification: partial.
 
 audit exporter metadata for volatile accesses; define observable effects, ordering and environmental changes, or reject device-facing use explicitly. Acceptance: device reads/writes cannot be treated as pure repeatable memory operations without a stated contract.
+
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): the exporter's per-pointer `volatile` flag is audited (present on every committed pointer type for 0.14.1/0.15.2/0.16.0); the checker rejects every volatile load/store/atomic/item/memcpy/memset/pointer-state access, qualifier-dropping derivations and volatile std-model arguments with VOLATILE_ACCESS, and canonicalization no longer forwards a copy read through a volatile pointer; a model-registry binding naming the volatile parameter in its footprint is the only declared contract. Remaining: a modelled device-effect semantics (observable effects, ordering); the real-export check needs a patched compiler.
 
 ## L14 — Other compiler control and runtime features
 
@@ -133,6 +141,8 @@ decide which tags are meaningful at the export stage, which should be lowered fi
 Classification: partial.
 
 zero-argument and multi-argument targets, with per-argument value copying and pointer ownership transfer. Acceptance: mixed value/pointer tuples dispatch correctly and their ownership obligations are generated.
+
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): `Tgt.captures` is generated for empty or multi-field captures and classifies every captured field from its AIR type as a copied value, pointer, slice or other; ZigLean.Conc.Capture (runtime) and ZigLean.Conc.Transfer (CSL fork/join and unowned-region lemmas); the thread-tuples proofs discharge the per-argument obligations for value+pointer+atomic and value+pointer workers and prove two negative cases. Remaining: slice and other captures beyond the proved fixtures; general ownership inference.
 
 ## C02 — Thread-local storage
 
@@ -246,9 +256,11 @@ state when proofs are address-independent; qualify address reuse, stale integer 
 
 ## M06 — Shared reads and reclamation proof interfaces
 
-Classification: partial.
+Classification: complete.
 
 qualified read sharing/permissions and selected safe-reclamation rules, such as an explicit join-before-free protocol. Add more complex schemes only for a real use case. Acceptance: multiple readers can share a region under a checked contract; freeing it requires all relevant access rights to end.
+
+Completed in [PRPRB4](https://github.com/riventic/air2lean/pull/PRB4): ZigLean/Conc/Share.lean is a reusable read-share contract (`ReadShared`) over footprints and vector clocks with split rules (share out, spawn hands a share, reads keep it), a join/recombination rule (after every reader is joined the joiner owns the region alone) and reclamation rules (std's poisoning free races with an outstanding read share and throws `.illegal`; a read after free is a use after free). The translated groupCounter's three Io.Group tasks read-share `io`; `groupCounter_reclaim` proves for every fuel and oracle that main frees it only after all readers joined. Kernel two-reader checks and heap/stack early-free mutants of the generated client are rejected with `.illegal`.
 
 ## F01 — Verified target profile selection
 
@@ -275,6 +287,8 @@ define the allowed behaviors for each selected mode and flag, including NaN/inf/
 Classification: partial.
 
 target-specific exact semantics or sets of allowed results where specified. Distinguish valid target variation from actual illegal behavior. Acceptance: useful proofs can tolerate permitted variation without pretending to know NaN payloads; invalid inputs remain explicit.
+
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): ZigLean/Float/Allowed.lean: `Float.Allowed` (the exact result, or any NaN when the model's result is a NaN), `MinAllowed`/`MaxAllowed` for the f32/f64 signed-zero @min/@max case and the lifted `AllowedSpec`; the model is sound for the relation, classification/comparisons/arithmetic are payload-independent, and @intFromFloat errors stay errors on every allowed operand; clients in Proofs/Floats (isNan, clamp) and Proofs/Floatconv (toByte). Remaining: target-exact NaN payload and f80/compiler-rt variation contracts for the other operations.
 
 ## F05 — Complete version-specific f128 proofs
 
@@ -328,11 +342,15 @@ Classification: partial.
 
 callback result, state mutation, ownership, reentrancy and cancellation rules. Handle captured context pointers explicitly. Acceptance: evaluator/observer clients can use contracts rather than translating every external callback body; unknown callbacks cannot be given empty effects.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): ZigLean.External.Callback: `CallbackContract` over an explicit context pointer with a fixed context/re-entry footprint, reentrancy and cancellation flags, a borrowed-context lifetime rule, `Contract.comap` and a dispatch model whose unknown-target arm never succeeds; forEach/evaluate clients are proved from the contract alone, a concrete callback on the E01 fill contract, and uncontracted/havoc callbacks get no effects. Remaining: binding translated function-pointer call sites to contracts; concurrent/async callbacks.
+
 ## E03 — IO operating system and foreign API boundaries
 
 Classification: partial.
 
 a selected environment-operation interface for handles, reads/writes, partial success, errors and cleanup. For production, start with clocks and the narrow Python/WASM boundary contracts actually used. Acceptance: environment-dependent behavior is parameterized and documented; no claim covers CPython, browser host imports or the OS without an explicit boundary.
+
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): opt-in ZigLean.Env: `Ops` (monotonic/wall clocks, isOpen, read, write, close) over an arbitrary state with a contract for partial-write progress, enumerated errors, handle framing, close release and monotonic time (ENV-01/ENV-02); writeAllClose is proved to write all bytes or return the first error and close the handle exactly once, with a scripted-oracle instance whose wall clock runs backwards. Remaining: binding translated std I/O to the boundary; no OS/foreign interface qualification (CPython, browser host imports and the OS are not claimed).
 
 ## E04 — Model extension API
 
@@ -370,6 +388,8 @@ Classification: partial.
 
 representation predicates and reusable contracts for selected arrays, lists, queues, maps and locks. Separate representation preservation from client functional properties. Acceptance: two clients reuse one verified container implementation; a representation-preserving change does not require rewriting every client proof.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): `Lists.SeqImpl` (a representation predicate and an abstract add contract) is instantiated for the generated linked-list `push` and `ArrayListUnmanaged(u32).append`; interface-only clients (addAll, addEvens) are proved once and reused for both containers. Remaining: queues, maps and general ADTs, other element types, removal operations.
+
 ## P05 — Total correctness interfaces
 
 Classification: partial.
@@ -380,9 +400,11 @@ Bounded progress ([PR111](https://github.com/riventic/air2lean/pull/111)): Seque
 
 ## P06 — Resource and complexity proofs
 
-Classification: open.
+Classification: partial.
 
 ghost counters or a qualified step/allocation cost semantics. Prove queue capacity, retained allocations and algorithmic operation bounds. Acceptance: a queue operation has a checked bound under explicit capacity premises. Do not equate model steps with measured CPU time without a separate calibration argument.
+
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): ZigLean/Sep/Cost.lean: retained heap blocks (`Mem.liveHeap`), the allocator's request count, instrumentation lemmas for every successful load/store/create/destroy and `LoopRuns`, an exact loop-body count with exact/bound rules; Proofs/Lists/Cost.lean proves exact allocation and loop-step counts for the generated lists code and capacity-premise bounds for sum, pushAll and `ArrayListUnmanaged.append` (no allocation request with spare capacity). Counts are model counts (SEM-05), not time or native memory. Remaining: a queue-operation bound (no ring-buffer example), failing/diverging runs, concurrent cost.
 
 ## P07 — Proof-friendly and stable generation
 
@@ -486,6 +508,8 @@ Classification: partial.
 
 identify those remaining trusted stages, add independent export validation, and investigate source/IR or IR/binary correspondence for the selected subset. Acceptance: the trust report distinguishes kernel-checked preservation, independently checked metadata and unverified compiler/export/backend assumptions.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): scripts/trust-report.py renders docs/trust-report.md from assurance/trust-stages.json and classifies every pipeline stage as kernel-checked, independently-checked-metadata or unverified-assumption; check fails on a stale report, a missing stage or class, an uncited premise, a missing checker/test or a check CI does not run. scripts/validate-air.py re-checks exported AIR JSON without the Lean decoder (ids, operand scoping, targets, terminators, type/global references, value-type cycles, per-version tag set); every committed golden AIR file passes. Known gap recorded: wholly undefined stores to Locals fields are still defaulted. Remaining: compiler/export/backend semantic preservation is unproved; decode, canonicalization, normalization, checker and emitter remain unverified assumptions.
+
 ## V04 — Theorem dependency and assumption auditing
 
 Classification: complete.
@@ -536,6 +560,8 @@ Classification: partial.
 
 publish exact matches, host differences, undefined/unspecified cases, capped searches, skipped functions and proof exclusions separately by version/target. Acceptance: headline totals cannot include excluded cases as successful comparisons. Legacy-version support claims match the actual matrix.
 
+Bounded progress ([PRPRB4](https://github.com/riventic/air2lean/pull/PRB4)): scripts/accounting.py publishes one per-version/target table from diff-report summaries with separate exact/host/illegal/unspecified/capped/bounded/mismatch/setup columns, skipped examples/functions and proof exclusions; the headline is exact matches only and check fails when a total absorbs an excluded category; claims cross-checks README legacy-version claims against the CI matrix and each summary's selection; CI full jobs publish/check their row and upload the summary. The original Outcome-scope Zig0.16 report (87,064 cases, 85,987 exact matches, 497 illegal, 580 unspecified, zero setup failures or mismatches, qualified=false) is unchanged and is not a new full-run total. Remaining: a published cross-version table assembled from CI artifacts; proof applicability is unevaluated.
+
 ## Q05 — Cross-target continuous integration
 
 Classification: partial.
@@ -562,11 +588,11 @@ Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scrip
 
 ## Q08 — Review and release evidence
 
-Classification: partial.
+Classification: complete.
 
 preserve review coverage, resolve confirmed findings, run release gates against one exact source/profile state and publish the results with known exclusions. Acceptance: the release record includes reproducible commands, successful gates and explicit unavailable checks; the review ledger identifies the reviewed revisions.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/release-record.py enumerates the CI matrix gates of one clean revision, ingests GitHub Actions run JSON (pull_request runs rejected) or local-ci results naming that exact commit, records explicitly unavailable checks with reasons and verifies published records; REVIEW_COVERAGE.tsv carries a reviewed_revision column checked against each baseline. Remaining: publish the first release record from a main push run.
+Completed in [PR121](https://github.com/riventic/air2lean/pull/121): the first release record, assurance/releases/25f89bbb405821b286e04ee7676bc24aa4c7e5ae.json, is published from a main push run: 259 gates passed with reproducible commands and no unavailable checks; REVIEW_COVERAGE.tsv names each reviewed revision and `release-record.py ledger` verifies it. [PRPRB4](https://github.com/riventic/air2lean/pull/PRB4) maps negative tests and killed pull-request-run, masked-failure and missing-reviewed-revision mutants.
 
 ## D01 — Reconcile stale milestones
 
@@ -588,11 +614,11 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## D03 — Assumption and contract reference
 
-Classification: partial.
+Classification: complete.
 
 one indexed reference for target profiles, allocator policies, thread creation, memory ordering, timers, opaque math, assembly and compiler trust; link each theorem/report to the premises it uses. Acceptance: a reader can determine what a proof means without searching every runtime module.
 
-Bounded progress ([PR115](https://github.com/riventic/air2lean/pull/115)): docs/premises.md indexes stable premise IDs (PRF/ALC/THR/ORD/TMR/MTH/ASM/SEM/EXT/TRU) and links reports to them; scripts/premises.py maps all Proofs/roadmap/tutorial/case-study theorems in docs/premise-index.md and fails on stale/undefined/unmapped entries; kernel-graph (compiled) mode runs in CI. Remaining: review of compiled-mode source gaps.
+Completed in [PRPRB4](https://github.com/riventic/air2lean/pull/PRB4): every source gap of `premises.py compiled` on the real 0.16.0 audit was reviewed and closed with general resolver and implication rules (441 theorems with gaps before, 0 after); `compiled --strict` passes on the real audit and runs in CI. Negative tests and two Python mutants (hidden source gap, unmapped runtime module) are in the mutation map.
 
 ## D04 — Tutorials and supported model extension examples
 
