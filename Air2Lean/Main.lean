@@ -4,6 +4,7 @@ import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
 import Air2Lean.SourceMap
+import Air2Lean.ModuleSplit
 
 /-!
 # CLI
@@ -21,13 +22,15 @@ file, or a function outside the checked subset.
 run (`docs/perf-budgets.md`). It only observes the stages; the Lean output is unchanged.
 `--source-map-json <path>` likewise writes a per-function source map and canonical bodies
 for semantic fingerprints (`docs/stable-generation.md`, `Air2Lean/SourceMap.lean`).
+`--split-modules <Root>` writes the same declarations as one module per call group under
+`<out>/` plus an umbrella `-o` module (`docs/modular-output.md`, `Air2Lean/ModuleSplit.lean`).
 -/
 
 namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
@@ -47,6 +50,8 @@ def help : String :=
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
+  "  --split-modules <Module>     Write one module per call group; -o is the umbrella <Module>.\n" ++
+  "                               See docs/modular-output.md.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -73,6 +78,8 @@ structure Args where
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
   sourceMapJson : Option String := none
+  /-- `--split-modules`: the umbrella module name (`docs/modular-output.md`). -/
+  splitModules : Option String := none
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -112,7 +119,11 @@ private partial def parseArgsGo (args : List String)
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     if a.sourceMapJson.isSome then .error s!"duplicate --source-map-json\n{usage}"
     else .ok { a with sourceMapJson := some v }
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] =>
+  | "--split-modules" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.splitModules.isSome then .error s!"duplicate --split-modules\n{usage}"
+    else .ok { a with splitModules := some v }
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] | ["--split-modules"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
@@ -132,6 +143,14 @@ def parseArgs (args : List String) : Except String Args := do
       throw s!"--source-map-json must not name the -o output or the --timing-json report\n{usage}"
     if a.registryTemplate then
       throw "--source-map-json cannot be combined with --model-registry-template"
+  if let some root := a.splitModules then
+    if a.registryTemplate then
+      throw "--split-modules cannot be combined with --model-registry-template"
+    unless ModuleSplit.validRoot root do
+      throw s!"invalid --split-modules '{root}': use a dot-separated module name, such as Proofs.Ex.Gen\n{usage}"
+    -- The parts import each other by module name, so the umbrella must sit at that module's path.
+    unless a.outPath.toString.endsWith (root.replace "." "/" ++ ".lean") do
+      throw s!"--split-modules {root} needs -o ending in {root.replace "." "/"}.lean\n{usage}"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -270,17 +289,30 @@ private def run (args : List String) : IO UInt32 := do
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
-            let ((src, declNames), emitNs) ← timed fun _ =>
-              let (body, declNames) :=
-                emitWithNames emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
-              ("-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-                (if models.isEmpty then "" else
-                  "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
-                declNames)
+            let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+              (if models.isEmpty then "" else
+                "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n")
+            let ((src, parts), emitNs) ← timed fun _ =>
+              let parts :=
+                emitParts emissionFuncs a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
+              (header ++ parts.render a.ns, parts)
+            let declNames := parts.declNames
             times := { times with emit := emitNs }
             let writeStart ← IO.monoNanosNow
-            try IO.FS.writeFile a.outPath src catch e =>
-              throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+            match a.splitModules with
+            | none =>
+              try IO.FS.writeFile a.outPath src catch e =>
+                throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+            | some root =>
+              -- The same parts as `src`, one module per call group (`Air2Lean/ModuleSplit.lean`).
+              let stem := (a.outPath.fileName.getD "").dropEnd ".lean".length |>.toString
+              let base := a.outPath.parent.getD "."
+              let mods := ModuleSplit.modules parts a.ns root stem header
+              ModuleSplit.write (base / stem) base mods
+              let manifest := ModuleSplit.manifest a.ns root metadata mods
+              let manifestPath := base / s!"{stem}.modules.json"
+              try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
+                throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
             times := { times with write := (← IO.monoNanosNow) - writeStart }
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
