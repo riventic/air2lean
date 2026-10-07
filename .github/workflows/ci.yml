@@ -79,6 +79,9 @@ jobs:
       - name: Schedule exploration cap accounting regressions
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
 
+      - name: Counterexample bundle regressions
+        run: python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
+
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
 
@@ -643,6 +646,8 @@ jobs:
             --schedule-receipts "$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json"
           python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
+          # P08: the relaxed message-passing race replays; limits stay unsolved.
+          python3 -I -B tests/roadmap/counterexamples/test_e2e.py tests/diff/.lake/build/bin/schedules
           zig build-exe -OReleaseSafe -lc --dep common \
             -Mroot=tests/roadmap/outcome-accounting/Native.zig \
             -Mcommon=tests/diff/common.zig -femit-bin="$RUNNER_TEMP/outcome-native"

@@ -31,6 +31,10 @@ REPORT = load_report()
 LIMIT = 64 * 1024 * 1024
 
 
+class Timeout(REPORT.Invalid):
+    """The model process exceeded its wall-clock budget: an automation limit, never a program verdict."""
+
+
 def nat(value, limit, name):
     if type(value) is not int or not 0 <= value <= limit:
         raise REPORT.Invalid(f'invalid {name}')
@@ -99,7 +103,7 @@ def invoke(binary, request, timeout):
                 deadline = time.monotonic() + timeout
                 while selector.get_map():
                     remaining = deadline - time.monotonic()
-                    if remaining <= 0: raise REPORT.Invalid('schedule command timed out')
+                    if remaining <= 0: raise Timeout('schedule command timed out')
                     for key, _ in selector.select(min(remaining, 0.1)):
                         chunk = key.fileobj.read1(65536)
                         if not chunk:
@@ -108,7 +112,7 @@ def invoke(binary, request, timeout):
                             if len(output) + len(chunk) > LIMIT: raise REPORT.Invalid('response exceeds 64 MiB')
                             output.extend(chunk)
                 try: status = process.wait(timeout=max(0.001, deadline-time.monotonic()))
-                except subprocess.TimeoutExpired: raise REPORT.Invalid('schedule command timed out')
+                except subprocess.TimeoutExpired: raise Timeout('schedule command timed out')
         finally:
             if process.poll() is None: process.kill()
             process.wait()
