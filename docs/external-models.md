@@ -4,8 +4,14 @@
 Lean models. This first API admits acyclic, fully checked signatures in sequential programs
 and uses `Zig.MemM` for every external model, including models that preserve memory. Unknown
 calls still fail. Indirect callbacks, noreturn calls, comptime worker targets and concurrent
-programs are outside this extension fragment. Historical allocator/thread recognition stays
-in its existing centralized tables; this API cannot override those models or translated AIR.
+programs are outside this extension fragment. Built-in allocator/thread/clock recognition is
+one typed table, `stdModels` in `Air2Lean/StdModels.lean`: each row is a qualified std name,
+its typed model (or rejection reason), its Zig-version qualification and its semantic
+dependencies (the `ZigLean` declarations its emitted term may use). The checker, emitter,
+memory/concurrency analysis, diagnostics and this registry all consult that table; adding a
+built-in model is one row plus its typed signature and emission cases, not a new name test.
+This API cannot override those models or translated AIR, and a translated AIR function that
+reuses a built-in std model name is rejected.
 
 Generate an authoring template from checked AIR first:
 
@@ -91,7 +97,11 @@ signature. Without bindings, output has only the existing profile header before 
 kernel checked. Kernel elaboration checks the obligation's type; imported axioms/dependencies
 must still be audited (for example with `#print axioms`) before claiming implementation
 verification. `dependencies` is the project's explicit semantic dependency inventory, not an
-automatically inferred proof-dependency closure.
+automatically inferred proof-dependency closure. Each entry must be unique and name another
+binding in the same registry, a modelled built-in std model qualified for the binding's Zig
+version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0), or
+a Lean identifier. A rejected std name (`Thread.detach`) and any cycle between bindings,
+including a self-dependency, are rejected before output is written.
 
 Compile project model modules and the generated output before treating the translation as
 usable proof evidence. Clients use `Contract.success` under the declared precondition and
@@ -109,6 +119,12 @@ AIR2LEAN_MODEL_EVIDENCE="$RUNNER_TEMP/model-contracts" scripts/model-contracts.s
 The CLI driver exercises exact signature/layout/profile checks, proved versus assumed
 obligations, mandatory fields, missing models and preservation of existing output on errors.
 Template mode produces JSON authoring data and intentionally does not certify program calls.
+`tests/roadmap/models/StdModels.lean` checks the built-in table (unique names, every typed
+model has a row, anonymous-instance lookup), rejection of a std call with an incompatible
+runtime signature, of an unqualified Zig version, of a translated function or project binding
+reusing a std name, of a same-name project binding with a different second call site, and the
+semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
+`ZigLean` umbrella and fails if any row's dependency is not a declaration there.
 
 The gate explicitly builds the `ZigLean` umbrella imported by generated source, compiles the
 fixture model into an isolated module search path, and retains generated source, the binding

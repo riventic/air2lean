@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import Air2Lean.Air.Op
+import Air2Lean.StdModels
 
 /-!
 # Memory analysis
@@ -221,78 +222,6 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
   | some (.ptr "slice" true c) => !hasPtr types c
   | _ => !hasPtr types id
 
-/-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
-inductive AllocFn where
-  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap
-  deriving BEq, Repr
-
-/-- The allocator function that the function `name` is an instance of
-(`mem.Allocator.<fn>__anon_<n>`). -/
-def allocFn? (name : String) : Option AllocFn :=
-  match (name.splitOn "__anon_").head! with
-  | "mem.Allocator.create" => some .create
-  | "mem.Allocator.destroy" => some .destroy
-  | "mem.Allocator.alloc" => some .alloc
-  | "mem.Allocator.alignedAlloc" => some .alignedAlloc
-  | "mem.Allocator.allocSentinel" => some .allocSentinel
-  | "mem.Allocator.free" => some .free
-  | "mem.Allocator.dupe" => some .dupe
-  | "mem.Allocator.remap" => some .remap
-  | _ => none
-
-/-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
-inductive ThreadFn where
-  | spawn | join
-  /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
-  | yield | spinLoopHint
-  /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
-  | futexWait | futexWaitU | futexWake
-  /-- `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2). -/
-  | threadFutexWait | threadFutexWake
-  /-- `Thread.Mutex.DarwinImpl.lock`, `.unlock`, `.tryLock` (0.15.2 on macOS): each is one call of
-  `os_unfair_lock_*`, a C function (the exporter does not name an `extern` function). -/
-  | osLock | osUnlock | osTryLock
-  /-- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`: a clock, which the model
-  does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
-  `.unspecified` at run time (the diff test pins that count), not a rejection. -/
-  | noClock
-  /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
-  | groupAsync | groupConcurrent | groupAwait | groupCancel
-  deriving BEq, Repr
-
-/-- The `Thread` function that the function `name` is an instance of
-(`Thread.spawn__anon_<n>`, `Thread.join`). -/
-def threadFn? (name : String) : Option ThreadFn :=
-  match (name.splitOn "__anon_").head! with
-  | "Thread.spawn" => some .spawn
-  | "Thread.join" => some .join
-  | "Thread.yield" => some .yield
-  | "atomic.spinLoopHint" | "Thread.spinLoopHint" => some .spinLoopHint
-  | "Io.futexWait" => some .futexWait
-  | "Io.futexWaitUncancelable" => some .futexWaitU
-  | "Io.futexWake" => some .futexWake
-  | "Thread.Futex.wait" => some .threadFutexWait
-  | "Thread.Futex.wake" => some .threadFutexWake
-  | "Thread.Mutex.DarwinImpl.lock" => some .osLock
-  | "Thread.Mutex.DarwinImpl.unlock" => some .osUnlock
-  | "Thread.Mutex.DarwinImpl.tryLock" => some .osTryLock
-  | "time.Timer.start" | "time.Timer.read" | "Thread.Futex.timedWait" => some .noClock
-  | "Io.Group.async" => some .groupAsync
-  | "Io.Group.concurrent" => some .groupConcurrent
-  | "Io.Group.await" => some .groupAwait
-  | "Io.Group.cancel" => some .groupCancel
-  | _ => none
-
-/-- A thread or sync primitive outside the fork-join subset (`docs/std-models.md` §Thread
-model): `Check.lean` rejects a call to one of these, with this reason. -/
-def rejectedThreadFn? (name : String) : Option String :=
-  let base := (name.splitOn "__anon_").head!
-  if base == "Io.futexWaitTimeout" then
-    some "Io.futexWaitTimeout is outside the model: it has no clock"
-  else if base == "Thread.detach" then
-    some "Thread.detach is outside the fork-join subset: every spawned thread must be joined"
-  else none
-
 /-- Audited operand-free spin instructions emitted by `std.atomic.spinLoopHint` on
 x86/x86_64 (and RISC-V with Zihintpause) and aarch64. Exact volatile instructions only:
 other assembly keeps its opaque semantics. This is an extra scheduling opportunity, not a
@@ -308,7 +237,7 @@ def memoryOp (op : Op) : Bool :=
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
-  | .call (.func name ..) _ => (allocFn? name).isSome || (threadFn? name).isSome
+  | .call (.func name ..) _ => modelledStdFn name
   | _ => false
 
 /-- A constant that points into memory. -/

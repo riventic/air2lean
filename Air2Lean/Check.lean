@@ -1925,6 +1925,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       | _ => c
     require (packedBits f.types child == some 32) "32-bit futex pointee"
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
+  if let some model := stdModel? callee then
+    unless model.qualifies f.zigVersion do
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
   if let some fn := allocFn? callee then
     count (if fn == .create then 1 else if fn == .remap then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
@@ -1956,7 +1959,6 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       let some dstChild := payload.bind (ptrChild f.types) | fail "slice result"
       require (compatibleType f f srcChild dstChild) "slice item type"
     if fn == .allocSentinel then
-      require (f.zigVersion == "0.16.0") "allocSentinel qualified Zig 0.16.0"
       let some (.errorUnion _ p) := result | fail "error-union slice result"
       let some (.ptr "slice" false child) := f.types[p]?
         | fail "mutable byte sentinel slice result"
@@ -1997,18 +1999,16 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 1
       require (receiver 0 "Thread.Mutex.DarwinImpl") "lock pointer argument"
       require (if fn == .osTryLock then result == some .bool else unit) "result"
-    | .noClock =>
-      let base := (callee.splitOn "__anon_").head!
-      if base == "time.Timer.start" then
-        count 0
-        require (match errorPayload with | some (.struct "time.Timer" ..) => true | _ => false) "Timer result"
-      else if base == "time.Timer.read" then
-        count 1
-        require (receiver 0 "time.Timer" && isSize result) "Timer pointer/u64"
-      else
-        count 3
-        checkFutex 0 1
-        require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
+    | .timerStart =>
+      count 0
+      require (match errorPayload with | some (.struct "time.Timer" ..) => true | _ => false) "Timer result"
+    | .timerRead =>
+      count 1
+      require (receiver 0 "time.Timer" && isSize result) "Timer pointer/u64"
+    | .futexTimedWait =>
+      count 3
+      checkFutex 0 1
+      require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
@@ -2066,7 +2066,8 @@ def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
-function or has a model (`allocFn?`, `threadFn?`). -/
+function or has a built-in std model (`stdModel?`, `Air2Lean/StdModels.lean`); a translated
+function cannot reuse the qualified name of a built-in std model. -/
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
     (profile : Option BuildProfile := none)
     (selectedCallees : Array String := #[]) : Except String Unit := do
@@ -2078,7 +2079,10 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let targets := referenceTargets (fnRefs funcs)
   let mem := memoryFunctions funcs (models.map (·.symbol) ++ selectedCallees)
   let mut functionNames : Std.HashMap String Nat := {}
-  for (f, fileIndex) in funcs.zipIdx do functionNames := functionNames.insert f.name fileIndex
+  for (f, fileIndex) in funcs.zipIdx do
+    if let some model := stdModel? f.name then
+      throw s!"{f.name}: translated function conflicts with built-in std model '{model.symbol}' (narrow the example's `filter`, docs/std-models.md)"
+    functionNames := functionNames.insert f.name fileIndex
   let lookupFunction (name : String) : Option (Nat × Func) := do
     let index ← functionNames[name]?
     let target ← funcs[index]?
@@ -2099,7 +2103,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             if noreturn then throw s!"{f.name}: progress hint '{callee}' cannot be noreturn"
       if let .call (.func callee false spawnFn) args := i.op then
         checkModelSignature f callee args i.ty index
-        if (allocFn? callee).isNone && (threadFn? callee).isNone then
+        if !modelledStdFn callee then
           if let some (targetIndex, target) := lookupFunction callee then
             signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
         if let some kind := threadFn? callee then
@@ -2113,7 +2117,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
-          unless (allocFn? callee).isSome || (threadFn? callee).isSome do
+          unless modelledStdFn callee do
             throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
@@ -2286,7 +2290,7 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
     | .call (.func callee false worker) args =>
       log := log.record { diagnostic with code := .modelFailure }
         (checkModelSignature f callee args i.ty index)
-      if (allocFn? callee).isNone && (threadFn? callee).isNone then
+      if !modelledStdFn callee then
         if let some target := snapshot.unique callee then
           log := log.record diagnostic (checkCallSignature f target i args index)
       if let some kind := threadFn? callee then

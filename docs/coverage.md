@@ -95,8 +95,8 @@ compiler execution, differential agreement, proof checking or preservation claim
   unclassified if no such marker exists. No base names are hardcoded as
   supported. This does not qualify pointer provenance, fields or layouts.
 * **Models:** names recognized/rejected by `allocFn?`, `threadFn?` and
-  `rejectedThreadFn?` are extracted from `Memory.lean`, with its anonymous-instance
-  recognition rule. Recognition is a model boundary, not verification. Timer
+  `rejectedThreadFn?` are extracted from the single `stdModels` table in
+  `StdModels.lean`, with its anonymous-instance recognition rule. Recognition is a model boundary, not verification. Timer
   recognition, for example, retains the documented unspecified clock behavior.
   Contracts, target/version restrictions and spawn/allocator assumptions remain
   in `docs/std-models.md` and the checker.

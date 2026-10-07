@@ -264,14 +264,21 @@ def golden_paths(version, os_name):
     return sorted(selected)
 
 
+# Table row pattern -> legacy recognizer label kept in coverage JSON.
+MODEL_ROWS = (('allocFn?', r'^  allocModel "([^"\n]+)"'),
+              ('threadFn?', r'^  threadModel "([^"\n]+)"'),
+              ('rejectedThreadFn?', r'symbol := "([^"\n]+)",\s*kind := \.rejected'))
+
+
 def model_inventory(text):
+    """Rows of the single built-in std model table (Air2Lean/StdModels.lean `stdModels`)."""
+    start = text.index('def stdModels')
+    end = text.find('\n\n', start)
+    table = text[start:] if end < 0 else text[start:end]
     entries = []
-    for fn in ('allocFn?', 'threadFn?', 'rejectedThreadFn?'):
-        start = text.index('def '+fn)
-        end = text.find('\n/--', start)
-        section = text[start:end if end >= 0 else len(text)]
-        for name in sorted(set(re.findall(r'"((?:mem\.Allocator|Thread|Io|time)\.[^"\n]+)"', section))):
-            if ' ' not in name:
+    for fn, pattern in MODEL_ROWS:
+        for name in sorted(set(re.findall(pattern, table, re.M))):
+            if re.match(r'(?:mem\.Allocator|Thread|Io|time)\.', name) and ' ' not in name:
                 entries.append({'name': name, 'recognizer': fn,
                                 'disposition': 'translation-rejected' if fn == 'rejectedThreadFn?' else 'recognized-model-boundary',
                                 'qualification': 'source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review'})
@@ -415,7 +422,7 @@ def generate(version, source, os_name='linux'):
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics'],
-              'model-boundaries': ['Air2Lean/Memory.lean', 'docs/std-models.md']}
+              'model-boundaries': ['Air2Lean/StdModels.lean', 'Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():
         project_hashes[scope] = project_source_hashes(roots, cache)
@@ -423,7 +430,7 @@ def generate(version, source, os_name='linux'):
             'evidence_level': 'source-inventory; no compiler execution, proof checking or support qualification',
             'compiler_source_sha256': fingerprints, 'universe': universe,
             'tags': tags, 'types': type_rows, 'constants': constants, 'pointer_bases': bases,
-            'models': model_inventory(cache.text(ROOT/'Air2Lean/Memory.lean')),
+            'models': model_inventory(cache.text(ROOT/'Air2Lean/StdModels.lean')),
             'project_source_sha256': project_hashes,
             'summary': dict(Counter(row['disposition'] for row in tags))}
 
