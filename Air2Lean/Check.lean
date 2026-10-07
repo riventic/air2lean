@@ -5,6 +5,7 @@ import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
+import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
 
 /-!

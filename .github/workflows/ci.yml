@@ -673,6 +673,15 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
 
+      # L10: error-code widths. Width-quantified proofs (proof-only module) and the
+      # hand-written 16/8/10/17-bit fixtures; only the default width has native evidence.
+      - name: Error-code widths (--error-limit) proofs, fixtures and rejections
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
+          bash tests/roadmap/error-width/check.sh
+
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate.
       - name: Vector memory layouts, compiler probe and checker controls
