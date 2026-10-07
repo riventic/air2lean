@@ -367,6 +367,14 @@ jobs:
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/blockers.log"
+      # L13: synthetic exporter-schema fixtures only; the real export check needs a patched
+      # compiler (docs/volatile-effects.md §Commands).
+      - name: Reject volatile and device effects
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 

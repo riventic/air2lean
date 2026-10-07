@@ -186,6 +186,27 @@ def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool
   | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
   | _ => false
 
+/-- A pointer type whose exported `volatile` flag is set. -/
+def volatilePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr ..) => (layouts[id]?.map (·.isVolatile)).getD false
+  | _ => false
+
+/-- Some type reachable from `root` (fields, payloads, pointees) is a volatile pointer.
+Cycles are visited once; unknown type ids are conservatively volatile. -/
+def containsVolatilePtr (types : Array Ty) (layouts : Array Layout) (root : TyId) : Bool := Id.run do
+  let mut pending := #[root]
+  let mut seen : Std.HashSet TyId := {}
+  while !pending.isEmpty do
+    let id := pending.back!
+    pending := pending.pop
+    if seen.contains id then continue
+    seen := seen.insert id
+    let some ty := types[id]? | return true
+    if volatilePtrTy types layouts id then return true
+    pending := pending ++ childTys ty
+  return false
+
 inductive Val where
   | inst (id : InstId)
   /-- An integer constant. `ty` is an `int` type, or a packed struct (its backing integer). -/

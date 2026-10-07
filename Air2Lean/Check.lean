@@ -521,6 +521,57 @@ def tryErrorBodyExits (body : Array Inst) : Bool :=
   let flow := (summarizeTryErrors body {}).1
   flow.valid && flow.branches.isEmpty
 
+/-- Volatile and device effects (L13). A volatile access is an observable effect that may
+read or change device state, so it is never an ordinary repeatable memory operation. The
+memory model has no such effect: every volatile load, store, atomic, item access, `@memcpy`,
+`@memset`, pointer-state test/set and asm lvalue output is rejected. So is dropping `volatile`
+in a pointer cast and passing a volatile pointer to a built-in std model. Forming, casting to,
+comparing, passing and returning a volatile pointer value remains supported: it is address
+metadata only. The only declared contract is a project model registry binding whose
+volatile pointer parameter is in its `footprint.writes` (`ModelRegistry.check`). -/
+def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let guidance := "volatile accesses are device-facing effects outside the memory model, \
+    not repeatable memory operations; move the access into a function bound by a project model \
+    registry entry that lists the volatile pointer parameter in `footprint.writes` \
+    (docs/volatile-effects.md)"
+  let accesses : Array (Val × String) := match op with
+    | .load p | .retLoad p | .ptrElemVal p _ | .sliceElemVal p _ => #[(p, "load")]
+    | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
+    | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
+      #[(p, "atomic access")]
+    | .memcpy dst src => #[(dst, "store"), (src, "load")]
+    | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
+    | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
+    | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
+    | _ => #[]
+  for (p, kind) in accesses do
+    if let some pty := cx.valTy? p then
+      if volatilePtrTy cx.types cx.layouts pty then
+        cx.fail line s!"volatile {kind} through pointer type {pty}: {guidance}"
+  -- Derivations must keep the qualifier: a result without a volatile pointer (a `@volatileCast`
+  -- away, `@intFromPtr`) would let a later device access look like an ordinary one.
+  let derived? : Option Val := match op with
+    | .bitcast p | .fieldPtr p _ | .fieldParentPtr p _ | .elemPtr p _ | .ptrAdd _ p _
+    | .slice p _ | .slicePtr p | .arrayToSlice p | .sliceFieldPtr _ p | .optPayloadPtr _ p
+    | .errPayloadPtr _ p | .wrapOptional p => some p
+    | _ => none
+  if let some p := derived? then
+    if let some pty := cx.valTy? p then
+      let keeps := volatilePtrTy cx.types cx.layouts ty || match cx.types[ty]? with
+        | some (.optional c) => volatilePtrTy cx.types cx.layouts c
+        | _ => false
+      if volatilePtrTy cx.types cx.layouts pty && !keeps then
+        cx.fail line s!"volatile pointer type {pty} becomes type {ty} without `volatile`, which \
+          would make device accesses ordinary memory accesses: {guidance}"
+  if let .call (.func name ..) args := op then
+    if (stdModel? name).isSome then
+      for a in args do
+        if let some aty := cx.valTy? a then
+          if containsVolatilePtr cx.types cx.layouts aty then
+            cx.fail line s!"built-in std model '{name}' has no volatile contract (argument \
+              type {aty}): {guidance}"
+
 /-- Scalar or vector integer shape: lane count, signedness and element width. -/
 def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
   match cx.types[t]? with
@@ -542,6 +593,7 @@ partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String
 partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
+  cx.checkVolatile line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -2174,6 +2226,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     log := log.record (checkDiagnostic file f .typeFailure { anchor with typeId := some i.ty }) typeCheck
     if typeCheck.toOption.isNone then
       log := log.add { (Diagnostics.skipped file (some f.name) .check "instruction_result_type") with anchor }
+    -- L13: a volatile access has its own stable code; it supersedes the generic check.
+    let volatileCheck := cx.checkVolatile line i.ty i.op
+    log := log.record { (checkDiagnostic file f .volatileAccess anchor) with
+      category := .unsupportedSemantics } volatileCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2187,7 +2243,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
