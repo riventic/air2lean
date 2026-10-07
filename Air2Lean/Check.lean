@@ -337,6 +337,65 @@ def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (field
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
+/-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
+
+/-- Up to 0.16.0, `@bitCast` reinterprets the in-memory representation. Zig 0.17.0 changed it
+to the logical bit order; the representation-cast and optional-pointer cast rules below apply
+to the listed versions only. -/
+def memoryBitCastVersion (zigVersion : String) : Bool :=
+  #["0.14.1", "0.15.2", "0.16.0"].contains zigVersion
+
+/-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
+an `extern` struct, an `extern` union. -/
+def reprAggregate (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.array _ _ false) | some (.struct _ "extern" _) | some (.union _ "extern" none _) => true
+  | _ => false
+
+/-- A single (non-slice) pointer type that cannot hold address zero, and its optional. -/
+def singlePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size != "slice" && !nullablePtrTy types layouts id
+  | _ => false
+
+def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.optional c) => singlePtrTy types layouts c
+  | _ => false
+
+/-- Zig 0.16.0's `Type.bitSize` of a type with a guaranteed in-memory layout (`src/Type.zig`):
+an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
+@bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
+for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
+storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out. -/
+partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
+  let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
+  match ← types[id]? with
+  | .int _ bits | .float bits => pure bits
+  | .bool => pure 1
+  | .enum _ tag _ _ => reprBitSize types layouts tag
+  | .struct _ "packed" _ => packedBits types id
+  | .ptr .. => if singlePtrTy types layouts id then pure 64 else none
+  | .optional _ => if optSinglePtrTy types layouts id then pure 64 else none
+  | .struct _ "extern" fields =>
+    for (_, t) in fields do let _ ← reprBitSize types layouts t
+    abiBits
+  | .union _ "extern" none fields =>
+    for (_, t) in fields do let _ ← reprBitSize types layouts t
+    abiBits
+  | .array len child false =>
+    let eb ← reprBitSize types layouts child
+    let es ← layouts[child]?.bind (·.size)
+    pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
+  | _ => none
+
+/-- A ≤0.16 `@bitCast` from `src` to `dst` that the representation cast (`Zig.reprCast`)
+translates: different types, an array, `extern` struct or `extern` union on at least one side.
+The checker then requires both sides to have a `reprBitSize` and equal ones. -/
+def reprCastApplies (zigVersion : String) (types : Array Ty) (src dst : TyId) : Bool :=
+  memoryBitCastVersion zigVersion && src != dst &&
+    (reprAggregate types src || reprAggregate types dst)
+
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
     (id : TyId) : Except String Unit := do
@@ -371,6 +430,9 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
+  /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
+  (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
+  zigVersion : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -746,25 +808,56 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
-    -- (`?*T`) is `Option Zig.Ptr` in the model: a bitcast to another optional pointer (a
-    -- `@constCast`) is a no-op, and one from a pointer is Lean's coercion `Zig.Ptr → Option
-    -- Zig.Ptr`. Any other bitcast to or from it would need an unwrap/wrap `Emit.lean` does not
-    -- have.
+    -- (`?*T`) is `Option Zig.Ptr` in the model, null = `none` = address 0: a bitcast to another
+    -- optional pointer (a `@constCast`) is a no-op, and one from a pointer is Lean's coercion
+    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`memoryBitCastVersion`) three more
+    -- casts have explicit rules (`ZigLean/Mem/Repr.lean`): `?*T` → `*U` unwraps and requires
+    -- non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` gives 0 for null (`Zig.optPtrAddr`), and
+    -- `usize` → `?*T` gives null for 0 (`Zig.optPtrFromAddr`). Any other bitcast to or from an
+    -- optional pointer is rejected.
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
+      let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
+      let memCast := memoryBitCastVersion cx.zigVersion
       if isOptPtr ty && nullablePtrTy cx.types cx.layouts aty then
         cx.fail line "casting a C/allowzero pointer to an optional pointer needs explicit null wrapping and is outside the qualified pointer fragment"
-      if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
+      let unwrapRule := memCast && optSinglePtrTy cx.types cx.layouts aty &&
+        (singlePtrTy cx.types cx.layouts ty || isUsize ty)
+      let fromAddrRule := memCast && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
+      if (isOptPtr aty && !isOptPtr ty && !unwrapRule) ||
+          (isOptPtr ty && !isOptPtr aty && !isPtr aty && !fromAddrRule) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
       -- A packed struct or union is a bitcast of its backing integer only (`Zig.Packed`,
-      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). A bitcast of
-      -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
-      -- (`@ptrCast`), it is a load of other bytes.
+      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). Up to 0.16.0 an
+      -- array, `extern` struct or `extern` union is a representation cast (`Zig.reprCast`):
+      -- encode, then decode the other type from the same bytes, padding bytes undefined.
+      if reprCastApplies cx.zigVersion cx.types aty ty then
+        let side (t : TyId) : Bool := match cx.types[t]? with
+          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _) => true
+          | _ => reprAggregate cx.types t
+        unless side aty && side ty do
+          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct \
+            or `extern` union and a type other than an integer, float, `bool`, packed struct, \
+            array, `extern` struct or `extern` union is outside the subset"
+        let some abits := reprBitSize cx.types cx.layouts aty
+          | cx.fail line "a Zig ≤0.16 representation `@bitCast` of a type without a guaranteed \
+              in-memory layout (an `auto` struct, tuple, tagged union, packed union, slice, \
+              vector, sentinel array or error storage, at any depth) is outside the subset"
+        let some bbits := reprBitSize cx.types cx.layouts ty
+          | cx.fail line "a Zig ≤0.16 representation `@bitCast` to a type without a guaranteed \
+              in-memory layout (an `auto` struct, tuple, tagged union, packed union, slice, \
+              vector, sentinel array or error storage, at any depth) is outside the subset"
+        unless abits == bbits do
+          cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
+            {bbits} bits (`@bitSizeOf`) is outside the subset"
+        checkMemTy fnName cx.types cx.layouts line aty
+        checkMemTy fnName cx.types cx.layouts line ty
+        return line
       let kind (t : TyId) : String := match cx.types[t]? with
         | some (.struct _ "packed" _) | some (.union _ "packed" none _) => "packed"
         | some (.struct ..) | some (.array ..) | some (.union ..) | some (.tuple _) => "agg"
@@ -1572,7 +1665,8 @@ def check (f : Func) : Except String Unit := do
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
-                         localRoots, localPaths := localPlacePaths f.types f.layouts insts }
+                         localRoots, localPaths := localPlacePaths f.types f.layouts insts,
+                         zigVersion := f.zigVersion }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -2409,7 +2503,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     instTys := insts.map fun i => (i.id, i.ty)
     places
     localRoots
-    localPaths := localPlacePaths f.types f.layouts insts }
+    localPaths := localPlacePaths f.types f.layouts insts
+    zigVersion := f.zigVersion }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/
