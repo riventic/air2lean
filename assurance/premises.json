@@ -31,6 +31,7 @@
     "ZigLean.Packed": ["SEM-01", "SEM-02"],
     "ZigLean.Union": ["SEM-01", "SEM-02"],
     "ZigLean.Vec": ["SEM-01"],
+    "ZigLean.VecMem": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
     "ZigLean.Loop": ["SEM-03"],
     "ZigLean.SimpAttr": ["TRU-01"],

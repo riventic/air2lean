@@ -221,6 +221,14 @@ def unionLayout (ts ta ps pa : Nat) : Nat × Nat × Nat × Nat :=
   if ta ≥ pa then (0, Zig.alignUp ts pa, Zig.alignUp (Zig.alignUp ts pa + ps) ta, ta)
   else (Zig.alignUp ps ta, 0, Zig.alignUp (Zig.alignUp ps ta + ts) pa, pa)
 
+/-- An integer or float lane type whose bits fill its ABI size (`u8`, `u32`, `f64`): a vector of
+it is its lanes at a byte stride on every backend. Other lanes (`u9`, `u24`, `f80`) are
+bit-packed (`Zig.Vec.packedEnc`). -/
+def byteStridedLane (types : Array Ty) (lane : TyId) : Bool :=
+  match types[lane]? with
+  | some (.int _ bits) | some (.float bits) => bits != 0 && bits == 8 * Zig.intSize bits
+  | _ => false
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
@@ -259,9 +267,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c
-      unless bits != 0 && bits == 8 * s do
-        throw "a vector in memory with non-byte-width or ABI-padded lanes is outside the subset"
-      pure (Zig.vecLayout len s, Zig.vecLayout len s)
+      if bits == 0 then throw "a vector of zero-bit lanes in memory is outside the subset"
+      -- The size check compares the rest with the exporter's.
+      if byteStridedLane types c then return (Zig.vecLayout len s, Zig.vecLayout len s)
+      -- Non-byte (`u9`) or ABI-padded (`u24`, `u40`, `f80`) lanes: bit-packed (`Zig.Vec.packedEnc`),
+      -- as observed for the LLVM backend only.
+      unless (layouts[id]?.map (·.packedLanes)).getD false do
+        throw "a vector in memory with non-byte-width or ABI-padded lanes needs a schema-12 \
+          profile with the LLVM backend (stage2_llvm), whose bit-packed lane layout the model \
+          encodes"
+      pure (Zig.packedVecLayout len bits, Zig.packedVecLayout len bits)
     | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
     | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
@@ -422,6 +437,11 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
       if cx.types[e]? == some .bool then
         cx.fail line "a pointer to a lane of a `bool` vector is outside the subset (the lane is a \
           bit, and the AIR file has no lane index)"
+      -- A bit-packed lane (`u9`, `u24`, `f80`) is not an item at a byte stride.
+      unless byteStridedLane cx.types e do
+        cx.fail line "a pointer to a lane of a vector whose lanes are not byte-strided (non-byte \
+          width or ABI padding) is outside the subset (the lane is a bit field, and the AIR file \
+          has no lane index)"
       checkMemTy cx.fnName cx.types cx.layouts line c
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"

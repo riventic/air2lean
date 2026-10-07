@@ -162,9 +162,11 @@ python3 -B tests/roadmap/abi-probes/test_probe.py
 ```
 
 The explicit bounded contract records u9/u24/u40/u128 ABI size/alignment, pointer
-size/alignment, a packed u32 backing layout, a four-lane u32 vector, and offsets
-in an extern record. Volatile-backed native operations observe u24 wrapping,
-packed bit encoding, vector addition and a pointer load. Only these listed layouts,
+size/alignment, a packed u32 backing layout, a four-lane u32 vector, bit-packed
+`@Vector(4, u9)`, `@Vector(3, u24)`, `@Vector(2, u40)` and `@Vector(5, bool)`, and
+offsets in an extern record. Volatile-backed native operations observe u24 wrapping,
+packed bit encoding, vector addition, the memory images of a u9 vector before and
+after a lane store and of a u24 vector, and a pointer load. Only these listed layouts,
 offsets and integer outputs form the exact paired observation relation. Each run
 binds probe/compat source bytes, the stock compiler executable, generated binary,
 command and source profile. No expected native report is committed: actual outputs

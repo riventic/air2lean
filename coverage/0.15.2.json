@@ -2954,7 +2954,8 @@
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3037,7 +3038,8 @@
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3394,7 +3396,8 @@
           "ZigLean/Packed.lean",
           "ZigLean/Permutation.lean",
           "ZigLean/Union.lean",
-          "ZigLean/Vec.lean"
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -3502,7 +3505,9 @@
           "ZigLean/Time.lean",
           "ZigLean/Union.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -8903,7 +8908,9 @@
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/Vec.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -9598,7 +9605,8 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -9718,7 +9726,8 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -15503,11 +15512,11 @@
       "Air2Lean/Air/Canon.lean": "62da68668d098d2092457059a145b9f0aa9423014502007dfaecc683b019a9a2",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "d06cd34259e1b885898ffeffc7fde47ab3be9fd24ac373afd0e5c856e0f6de5f",
-      "Air2Lean/Air/Normalize.lean": "81d972865a2fa910418c82932816550d5e094669e571c210cca6327cb2aabfe7",
-      "Air2Lean/Air/Op.lean": "4858f1b08bc81540d3ab9dd65d844f2be8d301759fe9c774531f626373889576",
+      "Air2Lean/Air/Normalize.lean": "d4c50aa0e246efd95daf6d7842a4b77f8b89e5f518b9e6fd33707ec91834bdac",
+      "Air2Lean/Air/Op.lean": "de8b03ac79dc24bcc5dd0e091fb2b364b639b27b471513e4f53acc74f9f4a3be",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "687d2d9d5501971672ee4551d961605c49438db601de3f2bd0676cf055f07862",
+      "Air2Lean/Check.lean": "12a4a02ad9abdc38a3b7dbd8b08d371282e2b4cab48b888be6b106485b9912f1",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "b58886688350f7433da2012a5f10a3864ba383fac7fdb3a653ec849527edf545",
       "Air2Lean/Emit.lean": "3a34bfcedd9109868b7a38ece7c297024cef74c99eefaf8512ed0af09f746ea1",
@@ -15590,7 +15599,8 @@
       "ZigLean/VC/Mem.lean": "1e5388f2b14b4cf9f59add62591847702ca99594c5ff6fc07a862551e1f13d27",
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
       "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
-      "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73"
+      "ZigLean/Vec.lean": "ebfdd75cea4aa5aef1d06a08a2944a5668b7768f17041e82baacf0bc92b6d91d",
+      "ZigLean/VecMem.lean": "200e10875363a5e7b79943083a31776e6908bf06d2d1171abd33c2ee7cd7bbdd"
     },
     "proof-sources": {
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",

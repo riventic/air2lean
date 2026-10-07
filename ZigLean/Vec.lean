@@ -26,10 +26,13 @@ structure Vec (α : Type) (n : Nat) where
   lanes : Vector α n
   deriving Repr, Inhabited, BEq
 
-/-- `n * Enc.size α`, rounded up to a power of 2: the ABI size and alignment
-(`Check.lean`'s `modelLayout`). -/
+/-- `n * Enc.size α`, rounded up to a power of 2: the ABI size and alignment of a vector whose
+lanes fill whole bytes (`packedVecLayout n (8 * elemSize)`). -/
 def vecLayout (n elemSize : Nat) : Nat := ceilPow2 (n * elemSize)
 
+/-- A vector over an arbitrary encodable lane type: the lanes one after the other, each
+`Enc.size α` bytes. The lane types that the translator emits (`BitVec w`, `Float fmt`, `Bool`)
+use the higher-priority bit-packed instances below. -/
 instance {α : Type} {n : Nat} [Enc α] : Enc (Vec α n) where
   size := vecLayout n (Enc.size α)
   align := vecLayout n (Enc.size α)
@@ -39,8 +42,55 @@ instance {α : Type} {n : Nat} [Enc α] : Enc (Vec α n) where
       (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
     if h : xs.size = n then pure ⟨⟨xs, h⟩⟩ else throw .unspecified
 
+/-! ## Bit-packed lanes (`docs/vector-proofs.md` §Memory layout)
+
+With the LLVM backend (`stage2_llvm`), a vector in memory is the integer of its
+`n * w` lane bits: lane `i` occupies bits `[i * w, (i + 1) * w)`, where `w` is the lane's
+`@bitSizeOf` (not its ABI size), and the ABI size and alignment are both `⌈n * w / 8⌉` rounded
+up to a power of 2 (Zig's `Type.abiSize`/`abiAlignment`, observed by
+`tests/roadmap/vector-layouts/probe.zig`). For lanes that fill whole bytes (`u8`, `u32`, `f64`,
+…) this is the lanes one after the other; for `u9`, `u24`, `u40` or `f80` the lanes are not
+byte-aligned and the scalar ABI padding (`@sizeOf(u24) = 4`) is absent. `Check.lean`'s
+`modelLayout` admits the non-byte case only for an AIR file whose profile names that backend. -/
+
+/-- The ABI size and alignment of `@Vector(n, T)` with `@bitSizeOf(T) = w` (LLVM backend). -/
+def packedVecLayout (n w : Nat) : Nat := ceilPow2 ((n * w + 7) / 8)
+
+/-- The packed integer of lanes of `w` bits: the first lane in the low bits. -/
+def packLanes {w : Nat} : List (BitVec w) → Nat
+  | [] => 0
+  | x :: xs => x.toNat + 2 ^ w * packLanes xs
+
+/-- Lane `i` of the packed integer `x`: bits `[i * w, (i + 1) * w)`. -/
+def laneOf (w x i : Nat) : BitVec w := BitVec.ofNat w (x >>> (i * w))
+
+/-- The `n * w`-bit integer that holds the lanes of `v`, through each lane's bits `toBits`. -/
+def Vec.packBits {α : Type} {n : Nat} (w : Nat) (toBits : α → BitVec w) (v : Vec α n) :
+    BitVec (n * w) :=
+  BitVec.ofNat (n * w) (packLanes (v.lanes.toList.map toBits))
+
+/-- The encoding of a vector whose lanes are `w` bits wide: the bytes of `Vec.packBits`
+(`intBytes`, little-endian, the bits above `n * w` in its last byte are padding), then undefined
+padding bytes up to `packedVecLayout`. A decode reads the `n * w`-bit integer (`intOfBytes`, as a
+load of `uN`) and splits it into lanes. -/
+@[reducible] def Vec.packedEnc {α : Type} (n w : Nat) (toBits : α → BitVec w) (ofBits : BitVec w → α) :
+    Enc (Vec α n) where
+  size := packedVecLayout n w
+  align := packedVecLayout n w
+  encode v := padTo (packedVecLayout n w) (intBytes (v.packBits w toBits))
+  decode bs := do
+    let x ← intOfBytes (n * w) bs
+    pure ⟨Vector.ofFn fun i => ofBits (laneOf w x.toNat i)⟩
+
+/-- `@Vector(n, uW)`/`@Vector(n, iW)` in memory: bit-packed `W`-bit lanes. -/
+instance (priority := high) {w n : Nat} : Enc (Vec (BitVec w) n) := Vec.packedEnc n w id id
+
+/-- `@Vector(n, fW)` in memory: bit-packed lanes of the float's bits (`f80`: 80-bit stride). -/
+instance (priority := high) {fmt : FloatFmt} {n : Nat} : Enc (Vec (Float fmt) n) :=
+  Vec.packedEnc n fmt.width Float.bits Float.mk
+
 /-- The ABI size and alignment of `@Vector(n, bool)`: its lanes are bits, so `⌈n / 8⌉` bytes,
-rounded up to a power of 2 (`Check.lean`'s `modelLayout`). -/
+rounded up to a power of 2 (`packedVecLayout n 1`, `Check.lean`'s `modelLayout`). -/
 def boolVecLayout (n : Nat) : Nat := ceilPow2 ((n + 7) / 8)
 
 /-- `@Vector(n, bool)` in memory: lane `i` is bit `i`, as the `uN` of its `n` bits (`intBytes`:
@@ -56,6 +106,10 @@ instance (priority := high) {n : Nat} : Enc (Vec Bool n) where
 
 /-- A vector with every lane `a` (`splat`). -/
 def Vec.splat {α : Type} {n : Nat} (a : α) : Vec α n := ⟨Vector.replicate n a⟩
+
+/-- Lane `i` replaced by `x`: the value that a write of one lane leaves in memory. -/
+def Vec.set {α : Type} {n : Nat} (v : Vec α n) (i : Fin n) (x : α) : Vec α n :=
+  ⟨v.lanes.set i x⟩
 
 /-- Lane-wise unary op. -/
 def Vec.map {α β : Type} {n : Nat} (f : α → β) (v : Vec α n) : Vec β n := ⟨v.lanes.map f⟩

@@ -104,19 +104,24 @@ order rather than a lane-independent scalar sum (`Proofs/Vectors/Proofs.lean`'s 
 Sema writes the safety checks of a vector op (division by zero, overflow) as a `cmp_vector` and
 a `reduce` of the `bool` vector, before the op.
 
-In memory, a vector of integers or floats is its lanes, as an array, with the size rounded up
-to a power of 2 (`vecLayout`). This representation requires a nonzero lane width equal to
-`8 * Enc.size T`: every lane occupies whole bytes with no scalar ABI padding. The checker
-rejects full-vector and vector-lane memory accesses for other widths, including non-byte
-integers such as `u9`, ABI-padded integers such as `u24` and `u40`, and `f80`. Value-only
-vectors of these types still support the lane-wise operations above.
+In memory, a vector of integers or floats whose lane width is `8 * Enc.size T` (`u8`, `u32`,
+`f64`, …) is its lanes, as an array, with the size rounded up to a power of 2 (`vecLayout`); every
+backend lays these bytes out alike. A vector whose lanes have a non-byte width (`u9`) or scalar
+ABI padding (`u24`, `u40`, `f80`) is bit-packed by the LLVM backend: lane `i` is bits
+`[i * w, (i + 1) * w)` of one `n * w`-bit little-endian integer (`w = @bitSizeOf(T)`), with size and
+alignment `⌈n * w / 8⌉` rounded up to a power of 2 (`packedVecLayout`, `Vec.packedEnc`; observed by
+`tests/roadmap/vector-layouts/probe.zig`). The checker admits such a vector in memory only for an
+AIR file whose schema-12 profile names `stage2_llvm` (other backends, and legacy profiles without
+a backend, are rejected), and never a lane pointer into it. Value-only vectors of every lane type
+still support the lane-wise operations above.
 
 A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
 size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
 are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
-A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of an integer or float vector is
-an item pointer, as for an array. A lane pointer of a `bool` vector is outside the subset: the
-lane is a bit, and the AIR file has no lane index (the pointer type's `vector_index`).
+A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of a byte-strided integer or float
+vector is an item pointer, as for an array. A lane pointer of a `bool` vector or of a bit-packed
+vector is outside the subset: the lane is a bit field, and the AIR file has no lane index (the
+pointer type's `vector_index`).
 
 ### Places
 
