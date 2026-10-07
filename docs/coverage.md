@@ -215,7 +215,7 @@ python3 scripts/qualify-upgrade.py check qualification/0.16.0.json \
 
 | Obligation | When | Discharged by |
 | --- | --- | --- |
-| `support:<category>:<name>` | a tag, type or pointer-base disposition is new or ranks higher (an unknown disposition counts as expansion; narrowing does not) | accepted review with evidence |
+| `support:<category>:<name>` | a tag, type, constant or pointer-base disposition is new or ranks higher: names from `coverage.py`'s `DISPOSITIONS` (or an inventory's embedded `dispositions`) rank 0 when rejected, unreachable or unclassified and 1 otherwise (an unknown disposition counts as expansion; narrowing does not) | accepted review with evidence |
 | `model:<name>`, `model-boundary` | std model recognition or boundary sources (Memory.lean, std-models.md, selected std files) changed | accepted review with evidence |
 | `universe:<category>`, `evidence:tags`, `compiler-sources` | universe additions/removals, changed tag rows, changed compiler fingerprints | accepted review |
 | `probe:float`, `probe:layout:<profile>` | version or compiler change, or probe sources changed | `run` (`floatprobe.sh`, `abi-probe.py observe` per profile) |

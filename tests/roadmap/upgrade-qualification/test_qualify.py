@@ -139,6 +139,46 @@ class PlanTests(Base):
         self.assertIn('support:types:int', self.ids(record))
         self.assertIn('support:pointer_bases:nav', self.ids(record))
 
+    def test_l01_dispositions_rank_from_coverage_vocabulary(self):
+        known, forbidden = q.vocabulary()
+        self.assertIn('emitted-unqualified', known['tags'])
+        # Every L01 name is known: none ranks as an unknown (always-expansion) disposition.
+        for category, names in known.items():
+            for name in names:
+                self.assertIsNotNone(q.rank(category, name, known, forbidden), (category, name))
+        golden = ['tests/golden/0.16.0/basic/air/basic.f.json']
+
+        def plan_tags(before, after):
+            return self.ids(self.plan(inventory(tags=[tag('add', before, golden)]),
+                                      inventory(tags=[tag('add', after, golden)]))[1])
+        # Rejection -> emitted is an expansion; between rejections or between supported forms is not.
+        self.assertIn('support:tags:add', plan_tags('rejected-unknown-tag', 'emitted-unqualified'))
+        self.assertIn('support:tags:add', plan_tags(forbidden, 'erased-at-emission'))
+        for before, after in (('rejected-unknown-tag', 'unreachable-at-export'),
+                              ('rejected-exporter-unsupported', 'rejected-compiler-state-or-effect'),
+                              ('emitted-unqualified', 'erased-at-emission'),
+                              ('emitted-unqualified', 'rejected-fast-math'),
+                              (CANDIDATE, 'emitted-unqualified'),  # legacy inventory -> L01 names
+                              (REJECTED, 'rejected-unknown-tag')):
+            self.assertNotIn('support:tags:add', plan_tags(before, after), (before, after))
+        # A vocabulary the inventories embed (a newer coverage.py) is honoured.
+        before, after = inventory(tags=[tag('add', REJECTED, golden)]), inventory(tags=[tag('add', 'rejected-new-kind', golden)])
+        after['dispositions'] = {'tags': {'rejected-new-kind': 'synthetic'}}
+        self.assertNotIn('support:tags:add', self.ids(self.plan(before, after)[1]))
+
+    def test_committed_inventory_has_no_self_expansion(self):
+        current = json.loads((ROOT / 'coverage/0.16.0.json').read_text())
+        self.assertEqual(q.support_expansions(current, current), [])
+        # Against itself with every row downgraded to rejected, only supported rows are expansions.
+        downgraded = copy.deepcopy(current)
+        for category in ('tags', 'types', 'constants', 'pointer_bases'):
+            for row in downgraded[category]:
+                row['disposition'] = 'unreachable-at-export' if category != 'pointer_bases' else 'rejected-unsupported-pointer-base'
+        found = q.support_expansions(downgraded, current)
+        known, forbidden = q.vocabulary(current)
+        self.assertTrue(found)
+        self.assertTrue(all(q.rank(r['category'], r['to'], known, forbidden) == 1 for r in found))
+
     def test_model_change_requires_reviews_and_all_examples(self):
         models = [{'name': 'mem.Allocator.alloc', 'recognizer': 'allocFn2?', 'disposition': 'recognized-model-boundary'}]
         _, record, _ = self.plan(inventory(), inventory(models=models))

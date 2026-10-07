@@ -18,6 +18,7 @@ import argparse
 from collections import Counter
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -29,8 +30,11 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'air2lean-upgrade-qualification/1'
 # Support rank per inventory disposition. A higher rank in the new inventory is a support
-# expansion; a disposition missing here (new or renamed) is treated as one too.
-RANKS = {
+# expansion; a disposition outside the vocabulary (new or renamed) is treated as one too.
+# The vocabulary is coverage.py's DISPOSITIONS plus any `dispositions` table embedded in the
+# compared inventories; a name ranks 0 (no support) when it is a rejection, unreachable or
+# the unclassified placeholder, otherwise 1. LEGACY_RANKS covers pre-disposition inventories.
+LEGACY_RANKS = {
     'tags': {'normalizer-rejected-compiler-state-or-effect': 0, 'normalizer-rejected-fast-math': 0,
              'normalizer-unclassified-or-unknown': 0, 'conditional-pipeline-review-required': 1,
              'source-pipeline-candidate-unqualified': 2},
@@ -38,7 +42,8 @@ RANKS = {
     'pointer_bases': {'exporter-fallback-unsupported-marker-review': 0,
                       'exporter-explicit-arm-conditional-review': 1},
 }
-ROW_KEYS = {'tags': 'tag', 'types': 'name', 'pointer_bases': 'name'}
+NO_SUPPORT = ('unreachable-at-export',)
+ROW_KEYS = {'tags': 'tag', 'types': 'name', 'constants': 'name', 'pointer_bases': 'name'}
 REVIEW_DECISIONS = ('accepted', 'rejected')
 STATIC_FIELDS = ('id', 'kind', 'reason', 'scope', 'command', 'env', 'requires_evidence')
 PLACEHOLDER = re.compile(r'\{(zig|out)\}')
@@ -61,13 +66,39 @@ def impact_report(before, after, coverage=ROOT / 'scripts/coverage.py'):
     return json.loads(proc.stdout)
 
 
-def rank(category, disposition):
-    return RANKS[category].get(disposition)
+def coverage_vocabulary(coverage=ROOT / 'scripts/coverage.py'):
+    """coverage.py's disposition vocabulary per category and its unclassified placeholder."""
+    spec = importlib.util.spec_from_file_location('air2lean_coverage', coverage)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {c: set(names) for c, names in module.DISPOSITIONS.items()}, module.FORBIDDEN
+
+
+def vocabulary(*inventories, coverage=ROOT / 'scripts/coverage.py'):
+    known, forbidden = coverage_vocabulary(coverage)
+    for inventory in inventories:
+        for category, names in (inventory.get('dispositions') or {}).items():
+            if isinstance(names, dict):
+                known.setdefault(category, set()).update(names)
+    return known, forbidden
+
+
+def rank(category, disposition, known, forbidden):
+    legacy = LEGACY_RANKS.get(category, {})
+    if disposition in legacy:
+        return legacy[disposition]
+    if disposition is None or disposition not in known.get(category, ()):
+        return None
+    if (disposition == forbidden or disposition in NO_SUPPORT or disposition.startswith('rejected-')
+            or disposition.endswith('-rejected')):
+        return 0
+    return 1
 
 
 def support_expansions(before, after):
     """Rows whose disposition is new or ranks higher; unknown dispositions count as expansion."""
     found = []
+    known, forbidden = vocabulary(before, after)
     def first(rows, key):  # coverage.py diff also keys duplicate rows by their first occurrence
         result = {}
         for row in rows:
@@ -79,7 +110,7 @@ def support_expansions(before, after):
         for name, new in first(after.get(category, []), key).items():
             if name in old and old[name] == new:
                 continue
-            old_rank, new_rank = rank(category, old.get(name)), rank(category, new)
+            old_rank, new_rank = (rank(category, d, known, forbidden) for d in (old.get(name), new))
             if new_rank is None or new_rank > 0 and (old_rank is None or new_rank > old_rank):
                 found.append({'category': category, 'name': name, 'from': old.get(name), 'to': new})
     return found
