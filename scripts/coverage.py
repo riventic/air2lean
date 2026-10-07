@@ -296,10 +296,15 @@ def exact_file(path):
                                        for child in path.parent.iterdir())
 
 
+TYPE_FILES = ('lib/std/builtin.zig', 'lib/std/lang.zig')
+
+
 def compiler_inventory(source, cache=None):
     cache = cache if cache is not None else SourceCache()
+    # Zig 0.17 moved std.builtin's language types (including Type) to std.lang.
+    type_file = next((relative for relative in TYPE_FILES if exact_file(source / relative)), TYPE_FILES[0])
     specs = [('air_tags', 'src/Air.zig', 'Tag', 'enum'),
-             ('types', 'lib/std/builtin.zig', 'Type', 'union'),
+             ('types', type_file, 'Type', 'union'),
              ('intern_keys', 'src/InternPool.zig', 'Key', 'union'),
              ('pointer_bases', 'src/InternPool.zig', 'BaseAddr', 'union')]
     out, hashes = {}, {}
@@ -669,7 +674,7 @@ def changes(before, after):
     report['compiler_source_changes'] = [p for p in sorted(set(old_compiler) | set(new_compiler)) if old_compiler.get(p) != new_compiler.get(p)]
     report['compiler_sources_changed'] = bool(report['compiler_source_changes'])
     report['model_recognition_changed'] = before['models'] != after['models']
-    report['model_boundary_changed'] = report['model_recognition_changed'] or bool(report['source_changes'].get('model-boundaries')) or any(p.startswith('lib/std/') and p != 'lib/std/builtin.zig' for p in report['compiler_source_changes'])
+    report['model_boundary_changed'] = report['model_recognition_changed'] or bool(report['source_changes'].get('model-boundaries')) or any(p.startswith('lib/std/') and p not in TYPE_FILES for p in report['compiler_source_changes'])
     def first_rows(rows):
         result = {}
         for row in rows:
