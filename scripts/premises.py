@@ -17,13 +17,15 @@ from pathlib import Path
 import re
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
 ID_RE = re.compile(r"\b[A-Z]{3}-\d{2}\b")
 HEADING_RE = re.compile(r"^### ([A-Z]{3}-\d{2}) — (\S.*)$")
 KINDS = {"environment", "trusted", "meaning"}
 FIELDS = ("Kind", "Statement", "Derived from", "Sources")
-STANDARD_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 EXTERNAL_IMPORTS = ("Lean", "Init", "Std", "Lake")
 DECL_KW = {"def", "theorem", "lemma", "abbrev", "instance", "structure", "inductive",
            "class", "opaque", "axiom", "example"}
@@ -134,6 +136,15 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
 
 # ----------------------------------------------------------------------------- Lean source
 
+def is_runtime(module: str) -> bool:
+    return module == "ZigLean" or module.startswith("ZigLean.")
+
+
+def profile_header(text: str) -> str:
+    first = text.split("\n", 1)[0]
+    return first if first.startswith(PROFILE_MARKER) else ""
+
+
 def strip_comments(text: str) -> str:
     """Blank comments and string contents, preserving line structure."""
     out = []
@@ -221,7 +232,7 @@ class LeanFile:
 
     @property
     def runtime(self) -> bool:
-        return self.module == "ZigLean" or self.module.startswith("ZigLean.")
+        return is_runtime(self.module)
 
     @property
     def generated(self) -> bool:
@@ -234,12 +245,11 @@ def module_name(rel: Path) -> str:
 
 def parse_file(path: Path, root: Path) -> LeanFile:
     raw = path.read_text()
-    first = raw.split("\n", 1)[0]
     text = strip_comments(raw)
     rel = path.relative_to(root)
     lean = LeanFile(path, rel.as_posix(), module_name(rel),
                     [m.group(1) for m in re.finditer(r"^import\s+(\S+)", text, re.M)],
-                    first if first.startswith(PROFILE_MARKER) else "")
+                    profile_header(raw))
     items: list[list] = []  # [keyword, first line, lines]
     for number, line in enumerate(text.split("\n"), 1):
         if line and not line[0].isspace():
@@ -313,15 +323,19 @@ class Repository:
     files: dict[str, LeanFile]
     table: dict[str, list[Decl]]
     errors: list[str]
+    _visible: dict[str, set[str]] = field(default_factory=dict)
 
     def visible(self, lean: LeanFile) -> set[str]:
-        seen, pending = set(), [lean]
-        while pending:
-            current = pending.pop()
-            if current.rel not in seen:
-                seen.add(current.rel)
-                pending.extend(current.resolved_imports)
-        return seen
+        """Files reachable through `lean`'s transitive imports (cached per file)."""
+        if lean.rel not in self._visible:
+            seen, pending = set(), [lean]
+            while pending:
+                current = pending.pop()
+                if current.rel not in seen:
+                    seen.add(current.rel)
+                    pending.extend(current.resolved_imports)
+            self._visible[lean.rel] = seen
+        return self._visible[lean.rel]
 
 
 def lean_files(directory: Path):
@@ -403,9 +417,11 @@ def prefixes(parts: tuple[str, ...]) -> list[str]:
     return [".".join(parts[:i]) for i in range(len(parts), -1, -1)]
 
 
-def resolve(repo: Repository, decl: Decl, visible: set[str]) -> list[Decl]:
+def resolve(repo: Repository, decl: Decl) -> list[Decl]:
+    """Declarations named by `decl`, resolved against its own file's imports."""
     if decl.targets is not None:
         return decl.targets
+    visible = repo.visible(decl.file)
     bases = prefixes(decl.namespaces)
     for opened in decl.opens:
         bases += [f"{b}.{opened}" if b else opened for b in prefixes(decl.namespaces)]
@@ -459,7 +475,7 @@ def apply_rules(config: dict, via: dict, tokens, scope: str) -> None:
             via.setdefault(rule["premise"], []).append(f"{scope} token {hits[0]}")
 
 
-def derive(repo: Repository, theorem: Decl, visible: set[str]) -> dict[str, list[str]]:
+def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     config = repo.config
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
     seen, pending, tokens = {id(theorem)}, [theorem], set()
@@ -468,7 +484,7 @@ def derive(repo: Repository, theorem: Decl, visible: set[str]) -> dict[str, list
     while pending:
         current = pending.pop()
         tokens |= current.tokens
-        for target in resolve(repo, current, visible):
+        for target in resolve(repo, current):
             if target.file.runtime:
                 runtime.add(target.file.module)
                 continue
@@ -485,7 +501,7 @@ def derive(repo: Repository, theorem: Decl, visible: set[str]) -> dict[str, list
             via.setdefault(premise, []).append(f"runtime module {module}")
     apply_rules(config, via, tokens, "closure")
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
-    gate = any(repo.files[rel].gate_generated for rel in visible)
+    gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
         profile, reason = profile_premises(config, repo.files[rel])
         for premise in [*config["generated_premises"], *profile]:
@@ -517,7 +533,6 @@ def build_index(repo: Repository) -> tuple[list[dict], list[str]]:
         theorems = [d for d in lean.decls if d.kind in {"theorem", "lemma", "example"}]
         if not theorems:
             continue
-        visible = repo.visible(lean)
         names = set()
         for theorem in theorems:
             if theorem.kind == "example":
@@ -529,7 +544,7 @@ def build_index(repo: Repository) -> tuple[list[dict], list[str]]:
                 errors.append(f"{rel}:{theorem.line}: duplicate theorem {theorem.name}")
             names.add(theorem.name)
             try:
-                via = derive(repo, theorem, visible)
+                via = derive(repo, theorem)
             except ValueError as error:
                 errors.append(str(error))
                 continue
@@ -617,18 +632,21 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
-    by_name: dict[str, set] = {}
-    for entry in source or ():
-        by_name.setdefault(entry["theorem"], set()).update(entry["premises"])
+    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
+    # source comparison use the user-facing name so module paths cannot trigger token rules.
+    def user(name: str) -> str:
+        return nodes[name].get("user_name", name) if name in nodes else name
 
-    def runtime(module: str) -> bool:
-        return module == "ZigLean" or module.startswith("ZigLean.")
+    by_name: dict[tuple[str, str], set] = {}
+    for entry in source or ():
+        key = (module_name(Path(entry["file"])), entry["theorem"])
+        by_name.setdefault(key, set()).update(entry["premises"])
 
     def external(module: str) -> bool:
         return module.split(".")[0] in EXTERNAL_IMPORTS
 
     for theorem in report["theorems"]:
-        if runtime(theorem["module"]):
+        if is_runtime(theorem["module"]):
             skipped += 1
             continue
         via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
@@ -641,14 +659,16 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             node = nodes.get(name)
             if node is None:
                 raise ValueError(f"incomplete declaration graph: {name}")
+            if node["kind"] == "unresolved":
+                errors.append(f"{theorem['name']}: dependency {name} is unresolved in the checked environment")
             module = node["module"]
-            if runtime(module):
+            if is_runtime(module):
                 modules.add(module)
-                names.add(name)
+                names.add(user(name))
                 continue
             if external(module):
                 continue
-            names.add(name)
+            names.add(user(name))
             if node["kind"] == "axiom" and name not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
                     via.setdefault(premise, []).append(f"axiom {name}")
@@ -666,14 +686,12 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 via.setdefault(premise, []).append(f"runtime module {module}")
         apply_rules(config, via, names, "closure")
         # The graph does not separate type from proof edges: statement rules see all direct edges.
-        apply_rules(config, via, set(nodes[theorem["name"]]["dependencies"]), "statement")
+        apply_rules(config, via, {user(n) for n in nodes[theorem["name"]]["dependencies"]}, "statement")
         for module in sorted(generated):
             if module not in profiles:
                 path = root / Path(*module.split(".")).with_suffix(".lean")
-                header = ""
                 if path.is_file():
-                    first = path.read_text().split("\n", 1)[0]
-                    header = first if first.startswith(PROFILE_MARKER) else ""
+                    header = profile_header(path.read_text())
                     profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
                 else:
                     profiles[module] = ([config["profiles"]["gate-time"]], "generated module not in repository")
@@ -684,8 +702,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         entry = {"name": theorem["name"], "module": theorem["module"],
                  "premises": sorted(via, key=premise_key)}
         if source is not None:
-            short = theorem["name"]
-            known = by_name.get(short)
+            known = by_name.get((theorem["module"], user(theorem["name"])))
             if known is not None:
                 entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)
         theorems.append(entry)
@@ -719,8 +736,7 @@ def main(argv: list[str] | None = None) -> int:
             config = load_config(root / CONFIG)
             _, entries = check(root)
             report = compiled(json.loads(args.assurance.read_text()), root, config, entries)
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(report, indent=2) + "\n")
+            write_report(args.output, report)
             for error in report["errors"]:
                 print(f"  {error}", file=sys.stderr)
             print(f"premises {report['status']}: {report['theorem_count']} compiled theorems, "
@@ -741,8 +757,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {pid}: {'; '.join(dict.fromkeys(entry['via'][pid]))}")
         return 0
     if command == "json":
-        args.output.write_text(json.dumps([{k: e[k] for k in ("file", "theorem", "line", "premises")}
-                                           for e in entries], indent=2) + "\n")
+        write_report(args.output, [{k: e[k] for k in ("file", "theorem", "line", "premises")} for e in entries])
     for error in errors:
         print(f"  {error}", file=sys.stderr)
     status = "fail" if errors else "pass"

@@ -305,10 +305,29 @@ class CompiledTests(unittest.TestCase):
         self.assertIn("EXT-02", result["theorems"][0]["premises"])
 
     def test_compiled_source_gaps(self):
-        source = [{"theorem": "wrap_spec", "premises": ["TRU-01"]}]
+        source = [{"file": "Proofs/Asm/Proofs.lean", "theorem": "wrap_spec", "premises": ["TRU-01"]},
+                  {"file": "tests/roadmap/x/Other.lean", "theorem": "wrap_spec", "premises": ["ASM-01"]}]
         result = premises.compiled(self.report(), self.fixture.root, self.config, source)
         self.assertEqual(result["source_gap_count"], 1)
+        # A same-named theorem in another module does not mask the gap.
         self.assertIn("ASM-01", result["theorems"][0]["source_gaps"])
+
+    def test_compiled_private_names_use_user_name(self):
+        self.config["rules"].append({"premise": "THR-01", "scope": "closure", "pattern": "Futex",
+                                     "regex": premises.re.compile("Futex")})
+        report = self.report("_private.Proofs.Futex.Proofs.0.helper")
+        report["nodes"].append(dict(self.node("_private.Proofs.Futex.Proofs.0.helper", "Proofs.Futex.Proofs"),
+                                    user_name="helper"))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        # The module path inside the private prefix must not trigger a token rule.
+        self.assertNotIn("THR-01", result["theorems"][0]["premises"])
+
+    def test_compiled_unresolved_dependency_fails(self):
+        report = self.report("Gone.decl")
+        report["nodes"].append(self.node("Gone.decl", "", "unresolved"))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("wrap_spec: dependency Gone.decl is unresolved in the checked environment", result["errors"])
 
     def test_compiled_rejects_error_report(self):
         with self.assertRaises(ValueError):
