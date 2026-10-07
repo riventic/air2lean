@@ -1966,7 +1966,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match v with
       -- `undefined`: every byte of the value becomes undefined.
       | .undef _ => (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
-      | _ =>
+      -- Partly `undefined`: one store of the value's bytes, with the bytes of each `undefined`
+      -- item or field undefined (`undefByteRanges`; `Check.lean` rejects any other shape).
+      | v =>
+        if v.hasNestedUndef then
+          let ranges := ((fc.valTyId? ptr).bind (ptrChild fc.types)).bind
+            (undefByteRanges fc.types fc.layouts · v)
+          match ranges with
+          | some ranges =>
+            let bytes := ranges.foldl (init := s!"Zig.Enc.encode ({rv v} : {ty})") fun acc (off, len) =>
+              s!"(Zig.writeBytes ({acc}) {off} (Array.replicate {len} .undef))"
+            (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
+          | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
+        else
         let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
         if host != 0 then
           let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0

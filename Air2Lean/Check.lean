@@ -972,6 +972,44 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+/-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
+later read could observe. A store writes undefined bytes: a wholly `undefined` value
+(`Zig.storeUndef`) and a partly `undefined` one, whose undefined items and fields at any depth
+(`undefByteRanges`) are undefined bytes of the one store. Its place becomes a stack block
+(`escapingAllocs`). `memset` of a wholly `undefined` item writes undefined bytes. Every other
+`undefined` operand (a call argument, a return or block result, an `aggregate_init` element,
+an arithmetic, `select` or atomic operand, a partly `undefined` `memset` item, an `undefined`
+`shuffle` lane) has no explicit form in a value and is outside the subset, except
+`Thread.spawn`'s `SpawnConfig`, which the model does not read. `tyOf` is the operand's type. -/
+def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Except String Unit := do
+  let fail {α : Type} (what : String) : Except String α :=
+    throw s!"{f.name}: inst {i.id}: {what} is outside the subset (`undefined` is never read as \
+      a default; only a store or `memset` writes it, as undefined bytes)"
+  let hasUndef (v : Val) : Bool := match v with
+    | .undef _ => true
+    | v => v.hasNestedUndef
+  let (written, rest) : Option Val × Array Val := match i.op with
+    | .store p v => (some v, #[p])
+    | .memset p v => (some v, #[p])
+    -- `Thread.spawn`'s `SpawnConfig` is not a value of the model (`FCtx.threadCall`); the
+    -- fallible policy reads its fields and rejects an `undefined` one.
+    | .call callee@(.func name ..) args =>
+      (none, #[callee] ++ if threadFn? name == some .spawn then args.extract 1 else args)
+    | op => (none, valueOperands op ++ ptrOperands op)
+  if rest.any hasUndef then fail "an `undefined` operand"
+  if let .shuffle _ _ mask := i.op then
+    if mask.any (· matches .undef) then fail "an `undefined` `shuffle` lane"
+  let some v := written | return
+  unless v.hasNestedUndef do return
+  if let .memset .. := i.op then fail "a `memset` of a partly `undefined` item"
+  let some pty := (rest[0]?).bind tyOf | fail "a store of a partly `undefined` value"
+  if (f.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
+    fail "a store of a partly `undefined` value to a packed struct field"
+  let some child := ptrChild f.types pty | fail "a store of a partly `undefined` value"
+  if (undefByteRanges f.types f.layouts child v).isNone then
+    fail "a store of a value with an `undefined` part under an optional, error union, union, \
+      slice, vector or packed struct"
+
 /-- A shared budget proves absence of embedded pointer capabilities, including
 inactive optional payload types. Unknown types, cycles and exhausted work fail closed. -/
 private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Option Nat := do
@@ -1385,18 +1423,6 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
     if pa > ga then throw (alignment pa ga)
 
-/-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
-default (`0`, `false`), so a partly undefined global initializer fails closed. -/
-partial def Val.hasNestedUndef (v : Val) : Bool :=
-  let undefOrNested (v : Val) : Bool := match v with
-    | .undef _ => true
-    | v => v.hasNestedUndef
-  match v with
-  | .agg _ elems => elems.any undefOrNested
-  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => undefOrNested v
-  | .sliceConst _ p l => undefOrNested p || undefOrNested l
-  | _ => false
-
 /-- An `extern` global has no initial value in the program: `mem0` takes it as an explicit
 field of `ExternInit` (`docs/generated-code.md` §Globals). Only a named, pointer-free and
 error-free type whose bytes the model encodes qualifies. -/
@@ -1506,6 +1532,9 @@ def check (f : Func) : Except String Unit := do
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     checkErrorGlobalInstruction errorGlobals f insts i
+    checkUndefOperands f (fun v => match v with
+      | .inst id => (insts.find? (·.id == id)).map (·.ty)
+      | v => v.constTy?) i
     for v in valueOperands i.op ++ ptrOperands i.op do
       if let some vty := v.constTy? then
         unless checkedConstTypes.contains vty do
@@ -2342,6 +2371,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for i in insts do
     log := log.record (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
+    log := log.record { (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) with category := .unsupportedSemantics }
+      (checkUndefOperands f index.valTy? i)
     for v in valueOperands i.op ++ ptrOperands i.op do
       let result := do
         checkNullConstants f.name f.types f.layouts v

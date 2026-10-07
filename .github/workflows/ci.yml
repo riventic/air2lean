@@ -476,6 +476,16 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
+      # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
+      # client proofs that reading them is `.unspecified`, and rejection of every other
+      # `undefined` operand. Hand-written AIR only.
+      - name: Undefined constant operands
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/undef-operands/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
