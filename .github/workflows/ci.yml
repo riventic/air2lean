@@ -79,6 +79,14 @@ jobs:
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
 
+      # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
+      # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
+      - name: Support matrix is current and consistent
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          python3 scripts/support-matrix.py check
+          python3 -m unittest discover -s tests/roadmap/support-matrix -v
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
