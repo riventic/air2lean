@@ -21,3 +21,5 @@ memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
 panic	panic
+unexpectedErrorCode	panic
+loadUninstantiableType	panic

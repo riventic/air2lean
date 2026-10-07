@@ -136,6 +136,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
+    -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
+    if l.vectorIndex.isSome then
+      throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside the subset"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -553,6 +556,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | t => t
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
+    pure line
+  | .splat _ =>
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    unless (cx.types[ty]? matches some (.vector ..)) do
+      cx.fail line "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset"
     pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"

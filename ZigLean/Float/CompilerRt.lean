@@ -400,6 +400,9 @@ def Float.divTruncRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.tru
 /-- `@divFloor` in `compiler-rt` mode: division, rounded once (`Float.divRt`), then floored. -/
 def Float.divFloorRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.divRt a b)
 
+/-- `@divCeil` in `compiler-rt` mode: division, rounded once (`Float.divRt`), then ceiled. -/
+def Float.divCeilRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.divRt a b)
+
 /-! ## `f128` division, Zig 0.16.0 (`divtf3.zig`)
 
 0.16.0's `__divtf3` no longer flushes a subnormal quotient. It rounds the 113-bit quotient `q`
@@ -491,6 +494,11 @@ def Float.divTruncRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
 /-- `@divFloor` in `compiler-rt` mode on Zig 0.16.0. -/
 def Float.divFloorRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   Float.floor (Float.divRt016 a b)
+
+/-- `@divCeil` in `compiler-rt` mode from Zig 0.16.0 (`@divCeil` itself is 0.17.0's; 0.17.0's
+`divtf3.zig` keeps 0.16.0's algorithm). -/
+def Float.divCeilRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  Float.ceil (Float.divRt016 a b)
 
 /-- `@mulAdd` in `compiler-rt` mode, guarded against group C on any operand — the same guard as
 `Float.fmaChk` (`Ops.lean`), around `Float.fmaRt` instead of `Float.fma`. -/

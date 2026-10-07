@@ -244,7 +244,8 @@ def parseTy (j : Json) : Except String Ty := do
   | other => throw s!"unknown type kind: {other}"
 
 /-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
-`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`. -/
+`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`,
+`vector_index`. -/
 def parseLayout (j : Json) : Except String Layout := do
   let nat? (k : String) : Except String (Option Nat) :=
     match optField j k with
@@ -272,7 +273,7 @@ def parseLayout (j : Json) : Except String Layout := do
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel", sentinelByte,
            isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize,
-           bitOffset := bitOffset.getD 0 }
+           bitOffset := bitOffset.getD 0, vectorIndex := ← nat? "vector_index" }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -682,6 +683,9 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
+  -- Zig 0.17.0 removed the `i0` type; one in a 0.17.0 file is a malformed export.
+  if zigVersion == "0.17.0" && types.any (· matches .int true 0) then
+    throw s!"{name}: type i0 does not exist in Zig 0.17.0"
   validateTypeGraph name types
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
