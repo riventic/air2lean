@@ -96,6 +96,10 @@ jobs:
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
 
+      # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
+      - name: Artifact manifest provenance regressions
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
