@@ -145,6 +145,20 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | Ops | `Ok.load` (reads write `j`, at least each write that happened before the thread: `Word.Floor`; an acquire adopts its release clock), `Ok.rmw` (reads the newest write and adds one: `rmwEnt`), `Ok.cas` (an RMW of the newest write, or a read of write `j` with another value). In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`, `Ok.cas_noErr`). |
 | Other steps | A step that keeps the word (`Word.Keep`, same writes: `hist_keep`): a step of the lock's code (`keep_lockStep`), a step of a thread on its own part (`keep_stepIn`), a spawn, a join, a plain read, an op at another word (`keep_op`). An op at a word keeps the lock's invariant (`Lock.Inv.wordOp`). |
 
+## Proving memory safety
+
+[`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
+client builds a list with the generated `push`, `reverse` and `freeAll` of
+`examples/lists`, then frees it. The tutorial proves three properties, for every input and
+every allocation-failure pattern. **No use after free, double free or invalid free**: the run
+returns, so it never throws `.illegal`, which every dead access and every bad free throws.
+**No leak**: the live heap after the run equals the live heap before it, also when a `push`
+fails midway and the client frees the partial list. **Values**: on success the list holds
+the items. The proofs are total triples (`TotalTriple`) from `emp` with the caller's whole
+heap as the frame, so an empty post-condition means exact heap equality. Negative controls
+(a double free, a read after free, a missing free) are proved to throw `.illegal` or to
+change the heap.
+
 ## Proved examples
 
 | File | Theorems |
@@ -164,7 +178,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
-| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed) |
+| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
 | `Proofs/Lists/Append.lean` | `append_run` (`ArrayListUnmanaged(u32).append`: `xs ++ [v]`, or `error.OutOfMemory` and the same list; a new buffer when the old one is full) |
 
 `Proofs/Lists/Append.lean` proves `append` of `ArrayListUnmanaged(u32)` as a `*_run` lemma (`append_run`): the list `xs ++ [v]`, or `error.OutOfMemory` and the same list. When the buffer is full, `ensureTotalCapacityPrecise` allocates a new block, checks that the old and the new items do not overlap (`@memcpy`), copies them and frees the old block. The check holds because the new block lies above every live block (`alloc_run`'s last fact, from `Mem.AddrBelow`). The list's items pointer with capacity 0 points into a block of 0 bytes, which no assertion can state; `append_run` takes it as a fact about the memory (`ptrOk`) and gives it back. The proof holds for the 0.15.2 and the 0.16.0 translations: a `first` with a guard (a definition only the 0.15.2 translation has) picks the loads of each.

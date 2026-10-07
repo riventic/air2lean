@@ -700,6 +700,12 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: lake env lean tutorials/first-proof/Main.lean
 
+      - name: Memory-safety tutorial
+        if: ${{ !matrix.mutate }}
+        run: |
+          lake env lean tutorials/memory-safety/Main.lean
+          lake env lean tutorials/memory-safety/Negative.lean
+
       - name: Integer bit operations regression and differential gate
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
