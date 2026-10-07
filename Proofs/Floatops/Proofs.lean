@@ -445,23 +445,28 @@ theorem opSpec128_of_ne (rt : F128Rt) {sel : BitVec 8}
   unfold opSpec128
   split <;> simp_all
 
+/-- A selector is outside the division family and `@sqrt`, or one of them. -/
+theorem sel_cases128 (sel : BitVec 8) :
+    (sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9) ∨ sel = 3 ∨ sel = 5 ∨ sel = 6 ∨ sel = 9 := by
+  by_cases h3 : sel = 3
+  · exact .inr (.inl h3)
+  by_cases h5 : sel = 5
+  · exact .inr (.inr (.inl h5))
+  by_cases h6 : sel = 6
+  · exact .inr (.inr (.inr (.inl h6)))
+  by_cases h9 : sel = 9
+  · exact .inr (.inr (.inr (.inr h9)))
+  exact .inl ⟨h3, h5, h6, h9⟩
+
 /-- `f128`, every selector: `op128` is `opSpec128` of the translation's profile. With
 `op128Profile = .v016` (0.16.0) division is `Zig.Float.divRt016` and `@sqrt` is IEEE; with
 `.legacy` (0.14.1, 0.15.2) division is `Zig.Float.divRt` and `@sqrt` is
 `Zig.Float.sqrtF128ViaF64`. -/
 theorem op128_spec_full (sel : BitVec 8) (a b c : Zig.Float .f128) :
     op128 sel a b c = opSpec128 op128Profile sel a b c := by
-  by_cases hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9
+  rcases sel_cases128 sel with hs | rfl | rfl | rfl | rfl
   · rw [op128_spec sel hs, opSpec128_of_ne _ hs]
-  · by_cases h3 : sel = 3
-    · subst h3; rfl
-    by_cases h5 : sel = 5
-    · subst h5; rfl
-    by_cases h6 : sel = 6
-    · subst h6; rfl
-    by_cases h9 : sel = 9
-    · subst h9; rfl
-    exact absurd ⟨h3, h5, h6, h9⟩ hs
+  all_goals rfl
 
 /-- `f128` on every Zig version: with a NaN, infinite or zero `a` (no finite class with a
 nonzero mantissa) every selector is `opSpec`, i.e. IEEE division and `@sqrt`; with such a `b`
@@ -477,22 +482,16 @@ theorem op128_eq_opSpec_of_special (sel : BitVec 8) (a b c : Zig.Float .f128)
     · exact Zig.Float.divRt_eq_div_of_special h'
     · exact Zig.Float.divRt016_eq_div_of_special h'
   rw [op128_spec_full]
-  by_cases hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9
+  rcases sel_cases128 sel with hs | rfl | rfl | rfl | rfl
   · exact opSpec128_of_ne _ hs a b c
-  by_cases h3 : sel = 3
-  · subst h3; show pure _ = pure _; rw [hdiv]
-  by_cases h5 : sel = 5
-  · subst h5; show pure _ = pure _; rw [hdiv]
-  by_cases h6 : sel = 6
-  · subst h6; show pure _ = pure _; rw [hdiv]
-  by_cases h9 : sel = 9
-  · subst h9
-    have ha := h.resolve_right (fun hb => hb.2 rfl)
+  · show pure _ = pure _; rw [hdiv]
+  · show pure _ = pure _; rw [hdiv]
+  · show pure _ = pure _; rw [hdiv]
+  · have ha := h.resolve_right (fun hb => hb.2 rfl)
     show pure _ = pure _
     cases op128Profile
     · exact congrArg pure (Zig.sqrtF128ViaF64_eq_sqrt_of_special ha)
     · rfl
-  exact absurd ⟨h3, h5, h6, h9⟩ hs
 
 /-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics); the
 safety check panics if it is not a whole number, so a NaN quotient panics too. -/

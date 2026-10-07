@@ -120,7 +120,7 @@ The model is one set of defs. Where a Zig version gives a different result, the 
 
 The probe checks the `sqrt` rows on the reference target (`tests/floatprobe/expected.0.16.0.txt`); the diff test (`floatops`, `compiler-rt` mode) checks the division rows.
 
-What each row computes, proved on the model over the whole domain:
+What each row computes in the model. Each "Equal to IEEE" and "Elsewhere" cell that names a theorem is proved; the other cells are the helper's own definition:
 
 | Helper | Versions | Equal to IEEE (`Float.div`/`Float.sqrt`) | Elsewhere |
 |---|---|---|---|

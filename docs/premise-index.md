@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1986 theorems in 109 files.
+1987 theorems in 109 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -42,7 +42,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1986 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1987 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 916 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 916 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
@@ -334,6 +334,7 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 | `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-04 |
+| `sel_cases128` | TRU-01 |
 | `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `divExact64_spec` | PRF-01, MTH-01, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03 |
