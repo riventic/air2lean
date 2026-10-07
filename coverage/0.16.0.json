@@ -15787,7 +15787,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "bdd16652ca93d0bb44e420892c2ba29e19c9ba7bcd2290f350ad864805a26fd9",
+      "scripts/coverage.py": "382913e8a76166e709c2a6d943555dd01e4d6ec7e47ccfa8a25b597ec068a15f",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
