@@ -131,6 +131,46 @@ dependency reports. It detects source changes in these areas; it does not invent
 probe results or theorem dependency results from hashes. Q07 remains a release
 qualification process requiring those actual results.
 
+## Upgrade qualification
+
+`scripts/qualify-upgrade.py` turns the change-impact report into a qualification
+record of explicit obligations and gates on their results:
+
+```sh
+python3 scripts/qualify-upgrade.py plan coverage/0.15.2.json coverage/0.16.0.json \
+  --output qualification/0.16.0.json
+python3 scripts/qualify-upgrade.py commands qualification/0.16.0.json   # list, run nothing
+AIR2LEAN_ZIG=/path/to/stock/zig python3 scripts/qualify-upgrade.py run qualification/0.16.0.json
+python3 scripts/qualify-upgrade.py record qualification/0.16.0.json model-boundary \
+  --reviewer NAME --decision accepted --evidence docs/std-models.md
+python3 scripts/qualify-upgrade.py check qualification/0.16.0.json \
+  --before coverage/0.15.2.json --after coverage/0.16.0.json
+```
+
+`plan` runs `coverage.py diff` and derives the obligations:
+
+| Obligation | When | Discharged by |
+| --- | --- | --- |
+| `support:<category>:<name>` | a tag, type or pointer-base disposition is new or ranks higher (an unknown disposition counts as expansion; narrowing does not) | accepted review with evidence |
+| `model:<name>`, `model-boundary` | std model recognition or boundary sources (Memory.lean, std-models.md, selected std files) changed | accepted review with evidence |
+| `universe:<category>`, `evidence:tags`, `compiler-sources` | universe additions/removals, changed tag rows, changed compiler fingerprints | accepted review |
+| `probe:float`, `probe:layout:<profile>` | version or compiler change, or probe sources changed | `run` (`floatprobe.sh`, `abi-probe.py observe` per profile) |
+| `translation:<example>` | every example on a version, compiler, translator, runtime or model change; otherwise examples whose goldens contain changed tags | `run` (`AIR2LEAN_CI=1 check.sh` per example, includes the differential test) |
+| `proofs:<example>` | affected examples, changed proof sources, runtime model or version change | `run` (`assumptions.py --module ...`, kernel dependency audit per example) |
+
+`run` executes pending command obligations from the repository root, writes a log per
+obligation under `<record>.d/logs/` and records the exit code, log hash and Git HEAD after
+each one, so an interrupted run resumes; passed obligations rerun only with `--rerun`.
+`record` stores a review decision (`--reviewer`, `--decision accepted|rejected`) or an
+externally produced result (`--status pass|fail --evidence ...`, e.g. a CI run). `check`
+fails when an obligation has no result or a failing one, a review is not accepted, a support
+expansion or model change has no review evidence, a run log is missing or edited, the
+obligation list was edited after `plan` (digest), or, with `--before/--after`, the plan is
+stale for those inventories. Comparing each new dependency audit with the previous release's
+audit is part of the `proofs:` obligation; the driver records the audit, it does not diff it.
+`tests/roadmap/upgrade-qualification/` covers the driver on synthetic inventories with stub
+runners; a real `run` builds Zig probes, translations, differential tests and proofs.
+
 The offline synthetic tests cover nested syntax, escaped identifiers, malformed
 input rejection, all four compiler universes, unknown AIR tags, rename impact,
 fingerprint-only changes, Zig escapes, shared/version/OS overlays, new pointer
