@@ -169,7 +169,8 @@ theorem Vec.packedEnc_lawful {α : Type} (n w : Nat) (toBits : α → BitVec w)
 instance {w n : Nat} : LawfulEnc (Vec (BitVec w) n) :=
   Vec.packedEnc_lawful n w id id fun _ => rfl
 
-instance {fmt : FloatFmt} {n : Nat} : LawfulEnc (Vec (Float fmt) n) :=
+/-- The packed encoding of a float vector round-trips its lanes' IEEE bit patterns. -/
+@[instance] theorem Vec.lawfulEnc_float {fmt : FloatFmt} {n : Nat} : LawfulEnc (Vec (Float fmt) n) :=
   Vec.packedEnc_lawful n fmt.width Float.bits Float.mk fun _ => rfl
 
 /-! ## Lane writes -/

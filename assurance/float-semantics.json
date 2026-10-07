@@ -1160,6 +1160,10 @@
     "ZigLean.Float.RoundTrip::Zig.transfer_le": {
       "semantics": "abstract-spec",
       "correspondence": "model"
+    },
+    "ZigLean.VecMem::Zig.Vec.lawfulEnc_float": {
+      "semantics": "ieee",
+      "correspondence": "model"
     }
   },
   "non_numerical": {},

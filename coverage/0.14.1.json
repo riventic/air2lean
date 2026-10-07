@@ -13557,7 +13557,7 @@
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
       "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
       "ZigLean/Vec.lean": "ebfdd75cea4aa5aef1d06a08a2944a5668b7768f17041e82baacf0bc92b6d91d",
-      "ZigLean/VecMem.lean": "200e10875363a5e7b79943083a31776e6908bf06d2d1171abd33c2ee7cd7bbdd"
+      "ZigLean/VecMem.lean": "c20b6386f4b1a9eb15775b694dac5ca6a9a5be8448c43b2c6590d8794ac78ee5"
     },
     "proof-sources": {
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
