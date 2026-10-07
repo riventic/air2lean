@@ -13623,7 +13623,7 @@
       "ZigLean/Sep/Assert.lean": "6ec6646b84bea7e51c0c2be4bc7a77c50d9ff494c678697437eee27f4385353b",
       "ZigLean/Sep/Automation.lean": "ff228307070154c1771636dc7e961ef060a46a55ca66065d38d4f789e2c29d0e",
       "ZigLean/Sep/Block.lean": "a29b916e3566d4bd3e3e3f9b7405dae6d2fad50913f1a35003279df5d159eebf",
-      "ZigLean/Sep/Cost.lean": "4ca0d34c7644cda2ae4f18e80f228f180ca51ac73edf7996b2bb3521f0a1187c",
+      "ZigLean/Sep/Cost.lean": "235013742dfe49a1ca51e99282e7bfb22d48e83f40e10888fc8bbbfc26fe88bd",
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
