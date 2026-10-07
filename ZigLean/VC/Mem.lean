@@ -19,6 +19,11 @@ inductive MemProgram : Type → Type 1 where
   | read {T : Type} [Enc T] (pointer : Ptr) (alignment : Nat) (old : T) : MemProgram T
   | write {T : Type} [Enc T] [LawfulEnc T]
       (pointer : Ptr) (alignment : Nat) (old value : T) : MemProgram Unit
+  /-- A ghost-free load: its VC asks for some owned cell value instead of an annotation. -/
+  | load {T : Type} [Enc T] (pointer : Ptr) (alignment : Nat) : MemProgram T
+  /-- A ghost-free store: its VC asks for ownership of some previous cell value. -/
+  | store {T : Type} [Enc T] [LawfulEnc T] (pointer : Ptr) (alignment : Nat) (value : T) :
+      MemProgram Unit
   | lift {α : Type} (program : ResultProgram α) : MemProgram α
   | call {α : Type} (label : String) (action : MemM α) (pre : Assn) (post : α → Assn)
       (checked : Triple pre action post) : MemProgram α
@@ -31,6 +36,8 @@ def eval {α : Type} : MemProgram α → MemM α
   | .ret value => pure value
   | @read T enc pointer alignment _ => @Zig.load T enc alignment pointer
   | @write T enc _ pointer alignment _ value => @Zig.store T enc alignment pointer value
+  | @load T enc pointer alignment => @Zig.load T enc alignment pointer
+  | @store T enc _ pointer alignment value => @Zig.store T enc alignment pointer value
   | .lift program => StateT.lift program.eval
   | .call _ action _ _ _ => action
   | .bind first next => eval first >>= fun value => eval (next value)
@@ -45,6 +52,13 @@ def vc {α : Type} (program : MemProgram α) (post : α → Assn) : Assn :=
   | @write T enc _ pointer alignment old value =>
       letI : Enc T := enc
       fun h => 0 < Enc.size T ∧ pts pointer alignment old h ∧
+        ∀ h', pts pointer alignment value h' → post () h'
+  | @load T enc pointer alignment =>
+      letI : Enc T := enc
+      fun h => 0 < Enc.size T ∧ ∃ old : T, pts pointer alignment old h ∧ post old h
+  | @store T enc _ pointer alignment value =>
+      letI : Enc T := enc
+      fun h => 0 < Enc.size T ∧ (∃ old : T, pts pointer alignment old h) ∧
         ∀ h', pts pointer alignment value h' → post () h'
   | .lift program => fun h => program.vc (fun value => post value h)
   | .call _ _ pre summary _ => fun h =>
@@ -69,6 +83,20 @@ theorem sound {α : Type} (program : MemProgram α) :
     apply Triple.of_run
     intro m hP hF hd hm hp hs
     obtain ⟨m', hr, hs', h', hd', hm', hp'⟩ := pts_store_run hp.2.1 hm hd hp.1 hs value
+    exact ⟨(), m', h', hr, hd', hm', hp.2.2 h' hp', hs'⟩
+  | load pointer alignment =>
+    intro post
+    apply Triple.of_run
+    intro m hP hF hd hm hp hs
+    obtain ⟨old, hpts, hpost⟩ := hp.2
+    obtain ⟨m', hr, hm', hs'⟩ := pts_load_run hpts hm hp.1 hs
+    exact ⟨old, m', hP, hr, hd, hm', hpost, hs'⟩
+  | store pointer alignment value =>
+    intro post
+    apply Triple.of_run
+    intro m hP hF hd hm hp hs
+    obtain ⟨old, hpts⟩ := hp.2.1
+    obtain ⟨m', hr, hs', h', hd', hm', hp'⟩ := pts_store_run hpts hm hd hp.1 hs value
     exact ⟨(), m', h', hr, hd', hm', hp.2.2 h' hp', hs'⟩
   | lift program =>
     intro post

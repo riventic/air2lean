@@ -335,7 +335,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/VC/Extract.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -3546,6 +3548,7 @@
           "ZigLean/Sep/Triple.lean",
           "ZigLean/Time.lean",
           "ZigLean/Union.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VC/Result.lean"
         ]
@@ -4067,6 +4070,7 @@
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Total.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VC/Result.lean"
         ]
@@ -4670,8 +4674,11 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
+          "ZigLean/VC/ContractAttr.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -4861,8 +4868,11 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
+          "ZigLean/VC/ContractAttr.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -4937,8 +4947,11 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
+          "ZigLean/VC/ContractAttr.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -5013,8 +5026,11 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
+          "ZigLean/VC/ContractAttr.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -7381,7 +7397,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VC/Extract.lean"
         ]
       },
       "emission": {
@@ -7480,7 +7497,8 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
-          "ZigLean/Sep/Try.lean"
+          "ZigLean/Sep/Try.lean",
+          "ZigLean/VC/Extract.lean"
         ]
       },
       "emission": {
@@ -7634,7 +7652,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Sep/LoopTemplate.lean"
+          "ZigLean/Sep/LoopTemplate.lean",
+          "ZigLean/VC/Extract.lean"
         ]
       },
       "emission": {
@@ -8686,7 +8705,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Basic.lean"
+          "ZigLean/Basic.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -8741,7 +8761,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Basic.lean"
+          "ZigLean/Basic.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -9026,7 +9047,9 @@
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Extract.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -9254,8 +9277,10 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -9341,8 +9366,10 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
+          "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Mem.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -9743,7 +9770,9 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Extract.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -9869,7 +9898,9 @@
           "ZigLean/Sep/Sentinel.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VC/Mem.lean"
+          "ZigLean/VC/Extract.lean",
+          "ZigLean/VC/Mem.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -10302,7 +10333,9 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Range.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Extract.lean",
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -10391,7 +10424,9 @@
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Lemmas.lean",
           "ZigLean/Range.lean",
-          "ZigLean/VC/Result.lean"
+          "ZigLean/VC/Extract.lean",
+          "ZigLean/VC/Result.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -10527,7 +10562,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Basic.lean"
+          "ZigLean/Basic.lean",
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -15906,9 +15942,12 @@
       "ZigLean/SimpAttr.lean": "5ea0f23219da196ee7d29ebdc07358a2ba2f4cdcf1261b40dd6a01635338f1b1",
       "ZigLean/Time.lean": "dde394fe1482a009839be9b5a874597890358075df8c6feaf17a86a50e5aab96",
       "ZigLean/Union.lean": "c86c9f834b81eb16b866faa577c2a9ac29980b51f4fe67d638aebf65191f5060",
-      "ZigLean/VC/Mem.lean": "1e5388f2b14b4cf9f59add62591847702ca99594c5ff6fc07a862551e1f13d27",
+      "ZigLean/VC/ContractAttr.lean": "60dfedb4b3ea956a1082954a8ed838ad1f3b52349b62ccbddb917bfb271d4ee3",
+      "ZigLean/VC/Extract.lean": "d944dd987fb4820f2c1c40b03ddcdcfe3302e68cf0444ceafabd549401e88667",
+      "ZigLean/VC/Mem.lean": "32d60613d7bfcdebe42858229b7ad947cb8fbfad52361a5fa370824c8acfa586",
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
-      "ZigLean/VC.lean": "7349d071929567af87ff3d00c06c97c68d9b1efdfc8c24d686932bbe9bdd359a",
+      "ZigLean/VC/Rules.lean": "b98ee572612fca5d931404cd4f3b9fb3bfbbb4b90fa7cd4bc1bd60757ac6a0cf",
+      "ZigLean/VC.lean": "c72724d1a0aff5e96ba7960386299b0ac6611949eadb1af4dfbe7c84f7d8dde3",
       "ZigLean/Vec.lean": "80bfbc25b66ad7ca250a31fb60cdf5a21e30372de4de8c7f7c7dab6316d73c73"
     },
     "proof-sources": {
