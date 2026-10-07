@@ -814,9 +814,43 @@
       "mutants": []
     },
     "M06": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "invariant-transfer",
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "anchor": "theorem twoReaders_one_outstanding_rejected"
+        },
+        {
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "anchor": "theorem twoReaders_none_returned_rejected"
+        },
+        {
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "anchor": "theorem read_after_free_rejected"
+        },
+        {
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "anchor": "heap free with outstanding read shares was not rejected with illegal on every sample"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "heap-free-before-readers-joined",
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "category": "invariant-transfer",
+          "anchor": "require ((runs (variant true true {})).all illegal)"
+        },
+        {
+          "name": "stack-free-before-readers-joined",
+          "path": "tests/roadmap/shared-reclamation/Runtime.lean",
+          "category": "failure-cleanup",
+          "anchor": "require ((runs (variant false true {})).all illegal)"
+        }
+      ],
+      "note": "The two mutants are the translated groupCounter with the Counter block freed before Group.await (heap: poisoning free; stack). Runtime.lean (CI: rwlock/shared-reclamation runtime step) requires .illegal on every sampled schedule; the kernel theorems reject a free with an outstanding read share and a read after free."
     },
     "F01": {
       "categories": [
@@ -1374,9 +1408,49 @@
       "mutants": []
     },
     "Q08": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/release-record/test_release_record.py",
+          "anchor": "def test_evidence_for_another_revision_is_refused"
+        },
+        {
+          "path": "tests/roadmap/release-record/test_release_record.py",
+          "anchor": "def test_failures_and_skips_are_never_passed_or_hidden"
+        },
+        {
+          "path": "tests/roadmap/release-record/test_release_record.py",
+          "anchor": "def test_dirty_tree_is_refused"
+        },
+        {
+          "path": "tests/roadmap/release-record/test_release_record.py",
+          "anchor": "def test_gate_claimed_without_evidence_fails_verification"
+        },
+        {
+          "path": "tests/roadmap/release-record/test_release_record.py",
+          "anchor": "def test_entry_without_reviewed_revision_fails"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "release-record-pull-request-run-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "release-record-failure-masked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "release-ledger-revision-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "Published record: assurance/releases/25f89bbb405821b286e04ee7676bc24aa4c7e5ae.json (259 gates passed)."
     },
     "D01": {
       "categories": [],
@@ -1440,14 +1514,44 @@
       ]
     },
     "D03": {
-      "categories": [],
+      "categories": [
+        "invariant-transfer"
+      ],
       "negative_tests": [
         {
           "path": "tests/roadmap/premises/test_premises.py",
           "anchor": "def test_undefined_premise_fails"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_unmapped_runtime_module_fails"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_source_gaps"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_unmapped_module_and_axiom"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_unresolved_dependency_fails"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "premises-compiled-source-gap-hidden",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-compiled-runtime-module-unmapped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        }
+      ],
+      "note": "A premise reached through the kernel dependency graph must transfer to the source index (compiled --strict) and every reached runtime module must map to premises; both mutants run in mutants.py."
     },
     "D04": {
       "categories": [],
