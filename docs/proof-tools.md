@@ -101,6 +101,8 @@ bind, existential/pure-precondition rules, load/store, array store, and
 strictly decreases on each repeat, through the existing `loop_sep_ghost` theorem.
 It does not provide concurrency termination or a general recursive-call rule.
 This is an honest total/partial interface and a bounded contribution to P05.
+Reports classify theorems over these interfaces by their kernel types, not by labels
+(`docs/claim-strength.md`).
 
 The regression files in `tests/roadmap/proof-tools/` check AC normalization,
 unit/duplicate handling, rejected framing, array mutation with inferred frames,

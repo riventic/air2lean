@@ -582,6 +582,14 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_ci_stash.py
           tests/roadmap/assurance/check.sh
 
+      # Claim strength is derived from extracted theorem types; overstated goals are rejected.
+      - name: Claim strength regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: tests/roadmap/claims/check.sh
+
       - name: First-proof tutorial
         if: ${{ !matrix.mutate }}
         run: lake env lean tutorials/first-proof/Main.lean
