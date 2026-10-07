@@ -115,6 +115,14 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
+      # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
+      - name: Asm wrapper harness offline regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s tests/roadmap/asm-wrappers -v
+          python3 tests/roadmap/asm-wrappers/audit.py
+
       # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
       - name: Theorem premise reference and index
         run: |
@@ -681,6 +689,17 @@ jobs:
         run: |
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
             --output "$RUNNER_TEMP/air2lean-premises.json"
+
+      # A03: real generated asm wrappers under a test-only interpretation, five wrapper
+      # mutants, and the harness kept out of the audited theorem dependencies.
+      - name: Generated asm wrappers, interpretation and mutations
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/asm-wrappers/harness.py --work "$RUNNER_TEMP/asm-wrappers"
+          python3 tests/roadmap/asm-wrappers/audit.py --assurance "$RUNNER_TEMP/air2lean-assumptions.json"
 
       - name: Assurance environment regressions
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}

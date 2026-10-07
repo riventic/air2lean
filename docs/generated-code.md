@@ -361,6 +361,8 @@ Wiring an already-imported opaque to an `@[extern]` archive function needs `@[cs
 
 `@[csimp]` only redirects references *compiled after* the theorem — `Asm.bswap32` (and `lzcnt64`, `popcnt64`) are compiled once, inside `Proofs/Asm/Gen.lean`, long before `Diff.lean`'s theorems exist, so a call through the generated wrapper never sees the swap and stays on the opaque's `Inhabited`-default placeholder. `Diff.lean`'s `runBswap32`/`runLzcnt64`/`runPopcnt64` call `Asm.airAsm_*` directly instead, bypassing the wrapper: those calls compile after the theorems, so the swap applies.
 
+The wrappers themselves (operand order, result placement, lvalue-output stores) are covered by [tests/roadmap/asm-wrappers](../tests/roadmap/asm-wrappers/README.md). It runs the unchanged generated wrapper text against a test-only x86_64 register-machine interpretation bound to each opaque by its translator hash, with wrapper mutants and an audit that keeps the harness out of theorem dependencies.
+
 Mutation (i) (`scripts/mutate.sh`) mutates this archive (`air2lean_asm_bswap32` returns its input unchanged), not a Lean file: there is no Lean-side equation to mutate for an opaque, so this is the only way to confirm the comparison against `examples/asm/asm.zig`'s real inline asm is live, not vacuous.
 
 ## Differential test
