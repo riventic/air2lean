@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1828 theorems in 98 files.
+1838 theorems in 99 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -41,10 +41,12 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-04](premises.md#sem-04) | 28 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1828 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1838 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 856 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 856 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
+| [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
+| [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
 ## `Proofs/Asm/Proofs.lean`
 
@@ -2011,6 +2013,23 @@ File premises: SEM-01, SEM-03, TRU-01
 | `DispatchProof.terminates` | SEM-01, SEM-03, TRU-01 |
 | `example@L55` | TRU-01 |
 | `example@L56` | TRU-01 |
+
+## `tests/roadmap/env-boundaries/WriteAll.lean`
+
+File premises: TRU-01, ENV-01, ENV-02
+
+| Theorem | Premises |
+|---|---|
+| `Zig.Env.Client.OnlyWrites.cons` | TRU-01, ENV-01 |
+| `Zig.Env.Client.OnlyWrites.not_closed` | TRU-01, ENV-01 |
+| `Zig.Env.Client.writeAll_spec` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.writeAllClose_spec` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.mem_allErrors` | TRU-01, ENV-01 |
+| `Zig.Env.Client.scripted_contract` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.scripted_wall_runs_backwards` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_partial` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_error` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_closed` | TRU-01, ENV-01, ENV-02 |
 
 ## `tests/roadmap/error-storage/Runtime.lean`
 

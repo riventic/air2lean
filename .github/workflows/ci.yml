@@ -473,6 +473,16 @@ jobs:
           python3 -B tests/roadmap/models/test_external_contracts.py
           scripts/model-contracts.sh
 
+      # E03: selected environment-operation contract and its write-all client; the
+      # documentation check requires an operation-to-premise row and the not-claimed list.
+      - name: Environment-operation boundary
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B tests/roadmap/env-boundaries/test_env_boundaries.py -v
+          lake build ZigLean.Env
+          lake env lean tests/roadmap/env-boundaries/WriteAll.lean
+
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.
       - name: Flow timestamp artifact-only proofs and provenance guards
