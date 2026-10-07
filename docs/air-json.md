@@ -168,3 +168,16 @@ Schema 6. One entry per global that a pointer constant points into, in the order
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
+
+## Independent validation (V03)
+
+`scripts/validate-air.py` re-checks exported AIR without the Lean decoder: strict JSON, unique
+instruction IDs, operands that resolve to an earlier instruction of an enclosing body, no
+instruction references inside constants, `br`/`repeat`/`switch_dispatch` targets that name an
+enclosing block/loop/loop-switch, nonempty bodies ending in a `noreturn` terminator (a
+`noreturn` call may precede it), type-table, parameter, global and child-type references,
+acyclic value types, and tags and `"unsupported"` markers that match
+`coverage/<zig_version>.json`. With no arguments it checks every committed golden AIR file;
+CI runs it with `tests/roadmap/export-validation/test_validate_air.py`. Passing is a
+structural fact about the export, not a semantic one (TRU-02). See the
+[trust report](trust-report.md).

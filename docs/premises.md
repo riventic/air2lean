@@ -435,7 +435,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   The evidence is golden comparisons, structural checks, mutation tests and bounded
   native/model differential tests.
 - Derived from: a reached generated module.
-- Sources: [generated-code.md](generated-code.md), [profiles.md](profiles.md#golden-comparisons-and-check-receipts), [air-json.md](air-json.md).
+- Sources: [generated-code.md](generated-code.md), [profiles.md](profiles.md#golden-comparisons-and-check-receipts), [air-json.md](air-json.md), [trust-report.md](trust-report.md).
 
 <a id="tru-03"></a>
 ### TRU-03 — Backend lowering and native execution

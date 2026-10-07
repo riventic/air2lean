@@ -1064,7 +1064,20 @@
     },
     "V03": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/export-validation/test_validate_air.py",
+          "anchor": "def test_reference_out_of_inner_scope"
+        },
+        {
+          "path": "tests/roadmap/export-validation/test_validate_air.py",
+          "anchor": "def test_unsupported_marker_matches_inventory"
+        },
+        {
+          "path": "tests/roadmap/export-validation/test_trust_report.py",
+          "anchor": "def test_uncited_trust_premise"
+        }
+      ],
       "mutants": []
     },
     "V04": {
