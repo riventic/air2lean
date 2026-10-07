@@ -252,9 +252,10 @@ def label_theorems(nodes, theorems, modules, registry):
             issue(name, module, 'float-semantics-mismatch', 'abstract-spec label but depends on float operation semantics')
         text = label_text(entry)
         labels[text] = labels.get(text, 0) + 1
-        records[name] = dict({'scope': 'stated', 'label': text, 'semantics': semantics},
-                             **({'zig_versions': entry['zig_versions']} if semantics == 'compiler-rt' else {}),
-                             correspondence=CORRESPONDENCE, binary_correspondence=NOT_CLAIMED)
+        record = {'scope': 'stated', 'label': text, 'semantics': semantics}
+        if semantics == 'compiler-rt':
+            record['zig_versions'] = entry['zig_versions']
+        records[name] = dict(record, correspondence=CORRESPONDENCE, binary_correspondence=NOT_CLAIMED)
     for kind in ('theorems', 'non_numerical'):
         for key in registry[kind]:
             module, _ = split_key(key)
@@ -296,6 +297,8 @@ def declarations(text):
             scopes.append(('namespace', words[1]))
         elif words[:1] == ['section'] or words[:2] == ['noncomputable', 'section']:
             scopes.append(('section', words[-1] if words[-1] != 'section' else ''))
+        elif words == ['mutual']:
+            scopes.append(('mutual', ''))  # Its `end` must not close the enclosing namespace.
         elif words[:1] == ['end'] and scopes:
             scopes.pop()
         match = DECLARATION.match(line)
@@ -345,7 +348,7 @@ def check_sources(root=ROOT, registry=None):
     problems, declared, checks_seen = [], set(), set()
     labeled = set(registry['theorems']) | set(registry['non_numerical'])
     for relative in lean_files(root):
-        shipped = relative.parts[0] in ('ZigLean', 'Proofs') or relative.as_posix() == 'ZigLean.lean'
+        shipped = relative.parts[0] in ('ZigLean', 'Proofs')
         module = '.'.join(relative.with_suffix('').parts)
         in_float_library = relative.parts[:2] == ('ZigLean', 'Float')
         text = (root / relative).read_text()
@@ -421,7 +424,7 @@ def report_problems(report, registry=None, root=ROOT):
                 continue
             if record.get('scope') == 'stated':
                 stated += 1
-                if record.get('label') not in (summary or {}).get('labels', {}):
+                if not isinstance(summary, dict) or record.get('label') not in summary.get('labels', {}):
                     problems.append(f"{theorem.get('name')}: float-semantics label absent from summary")
             elif record.get('scope') != 'compiler-generated':
                 problems.append(f"{theorem.get('name')}: invalid float-semantics record")

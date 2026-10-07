@@ -154,6 +154,11 @@ class SourceTests(unittest.TestCase):
         write(self.root / 'Proofs/Ex/More.lean', 'theorem added (x : Zig.F32) : x = x := rfl\n')
         self.assertEqual(self.problems(), ['Proofs.Ex.More::added: numerical theorem lacks a float-semantics label'])
 
+    def test_mutual_end_keeps_namespace(self):
+        write(self.root / 'Proofs/Ex/Mutual.lean', 'namespace Ex\n\nmutual\ndef a : Nat := 0\nend\n\n'
+              'theorem after (x : Zig.F32) : x = x := rfl\n\nend Ex\n')
+        self.assertEqual(self.problems(), ['Proofs.Ex.Mutual::Ex.after: numerical theorem lacks a float-semantics label'])
+
     def test_unlisted_or_inconsistent_checks_fail(self):
         write(self.root / 'tests/other/Rt.lean', 'example : Zig.Float.mulRt (1 : Zig.F128) 1 = 1 := by native_decide\n')
         self.assertEqual(len(self.problems()), 1)

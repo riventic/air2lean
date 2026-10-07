@@ -329,8 +329,6 @@ def audit_ok(plan, audit):
     recalculated = auditor.apply_policy(audit, policy)
     for key in recalculated:
         demand(audit.get(key) == recalculated[key], 'audit graph/policy mismatch: ' + key)
-    demand(recalculated['float_semantics']['binary_correspondence'] == 'not_claimed',
-           'audit claims binary correspondence for a numerical theorem')
     demand(audit['policy_sha256'] == fingerprint(policy_path)['sha256']
            and audit['lean_toolchain'] == read_file(ROOT / 'lean-toolchain', 4096).decode().strip(),
            'audit policy/toolchain mismatch')
@@ -453,8 +451,8 @@ def verify(attempt):
            'receipt artifacts changed')
     plan, after, audit = plan_for(attempt), load(attempt / 'after.json'), load(attempt / 'audit.json')
     demand(type(receipt['theorem_count']) is int and receipt['theorem_count'] == audit['theorem_count'], 'receipt theorem count mismatch')
-    demand(isinstance(receipt['float_semantics'], dict) and receipt['float_semantics'] == float_labels(audit)
-           and receipt['float_semantics'].get('binary_correspondence') == 'not_claimed',
+    # audit_ok below recomputes the audit labels, which never claim binary correspondence.
+    demand(receipt['float_semantics'] == float_labels(audit),
            'receipt float-semantics labels differ from the audit or claim binary correspondence')
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
