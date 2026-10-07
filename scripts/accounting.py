@@ -40,9 +40,8 @@ REPORT = load('air2lean_diff_report', 'diff-report.py')
 MATRIX = load('air2lean_support_matrix', 'support-matrix.py')
 S = REPORT.Status
 # Each comparison status lands in exactly one column; `skipped` rows are selections, not cases.
-COLUMN = {
-    S.VALUE_MATCH: 'exact_matches', S.ERROR_RETURN_MATCH: 'exact_matches',
-    S.PANIC_MATCH: 'exact_matches', S.HOST: 'host_differences', S.ILLEGAL: 'illegal',
+COLUMN = {status: 'exact_matches' for status in REPORT.MATCHES} | {
+    S.HOST: 'host_differences', S.ILLEGAL: 'illegal',
     S.UNSPECIFIED: 'unspecified', S.SEARCH_CAP: 'capped_searches',
     S.BOUNDED_NO_RESULT: 'bounded_no_result', S.MISMATCH: 'mismatches',
     S.INPUT_FAILURE: 'setup_failures', S.NATIVE_HARNESS_FAILURE: 'setup_failures',
@@ -99,8 +98,9 @@ def summary_row(path):
             raise Problem(f'{where}: unknown comparison status {status!r}')
         row[COLUMN[known[status]]] += count(n, f'{where}: counts[{status}]')
     row['cases'] = count(data.get('case_count'), f'{where}: case_count')
-    if sum(row[c] for c in PARTITION) != row['cases']:
-        raise Problem(f'{where}: status counts sum to {sum(row[c] for c in PARTITION)}, '
+    observed = sum(row[c] for c in PARTITION)
+    if observed != row['cases']:
+        raise Problem(f'{where}: status counts sum to {observed}, '
                       f'case_count is {row["cases"]}')
     # The producer's own headline must not absorb any excluded status.
     if count(data.get('exact_matches'), f'{where}: exact_matches') != row['exact_matches']:
