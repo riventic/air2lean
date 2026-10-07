@@ -1,0 +1,152 @@
+{
+  "schema": "air2lean-perf-budgets/1",
+  "status": "pending",
+  "note": "No real-module baseline is recorded yet; see docs/perf-budgets.md for the serial recording command.",
+  "zig_version": "0.16.0",
+  "reference_platform": null,
+  "tolerance": {
+    "translator": {
+      "time_ratio": 2.0,
+      "time_slack_seconds": 0.25,
+      "rss_ratio": 1.5,
+      "rss_slack_kib": 65536
+    },
+    "lean": {
+      "time_ratio": 1.5,
+      "time_slack_seconds": 10.0,
+      "rss_ratio": 1.3,
+      "rss_slack_kib": 262144
+    }
+  },
+  "workloads": [
+    {
+      "id": "basic",
+      "description": "small scalar/arith functions with several proof modules",
+      "air": [
+        "tests/golden/basic/air",
+        "tests/golden/0.16.0/basic/air"
+      ],
+      "namespace": "Basic",
+      "prefix": "basic.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Basic/Gen.lean",
+      "proof_modules": [
+        "Proofs.Basic.Arith",
+        "Proofs.Basic.Common",
+        "Proofs.Basic.Gen",
+        "Proofs.Basic.Proofs",
+        "Proofs.Basic.Twt"
+      ],
+      "budget": null
+    },
+    {
+      "id": "slices",
+      "description": "slice/pointer memory model with separation proofs",
+      "air": [
+        "tests/golden/slices/air",
+        "tests/golden/0.16.0/slices/air"
+      ],
+      "namespace": "Slices",
+      "prefix": "slices.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Slices/Gen.lean",
+      "proof_modules": [
+        "Proofs.Slices.Gen",
+        "Proofs.Slices.Proofs",
+        "Proofs.Slices.Sep"
+      ],
+      "budget": null
+    },
+    {
+      "id": "layout",
+      "description": "largest AIR set (51 files): structs, error unions, layout",
+      "air": [
+        "tests/golden/layout/air"
+      ],
+      "namespace": "Layout",
+      "prefix": "layout.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Layout/Gen.lean",
+      "proof_modules": [
+        "Proofs.Layout.Gen",
+        "Proofs.Layout.Mem",
+        "Proofs.Layout.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "vectors",
+      "description": "SIMD vector lanes (31 files)",
+      "air": [
+        "tests/golden/vectors/air"
+      ],
+      "namespace": "Vectors",
+      "prefix": "vectors.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Vectors/Gen.lean",
+      "proof_modules": [
+        "Proofs.Vectors.CheckedAdd",
+        "Proofs.Vectors.Gen",
+        "Proofs.Vectors.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "variants",
+      "description": "tagged unions and optionals",
+      "air": [
+        "tests/golden/variants/air",
+        "tests/golden/0.16.0/variants/air"
+      ],
+      "namespace": "Variants",
+      "prefix": "variants.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Variants/Gen.lean",
+      "proof_modules": [
+        "Proofs.Variants.Gen",
+        "Proofs.Variants.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "floatops",
+      "description": "floating point with compiler-rt semantics",
+      "air": [
+        "tests/golden/floatops/air",
+        "tests/golden/0.16.0/floatops/air"
+      ],
+      "namespace": "Floatops",
+      "prefix": "floatops.",
+      "translate_args": [
+        "--float-semantics",
+        "compiler-rt"
+      ],
+      "committed_gen": "Proofs/Floatops/Gen.lean",
+      "proof_modules": [
+        "Proofs.Floatops.Gen",
+        "Proofs.Floatops.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "threadsync",
+      "description": "threads, mutex/wait-group models and concurrency proofs (28 files)",
+      "air": [
+        "tests/golden/threadsync/air"
+      ],
+      "namespace": "Threadsync",
+      "prefix": "threadsync.",
+      "translate_args": [],
+      "committed_gen": "Proofs/Threadsync/Gen.lean",
+      "proof_modules": [
+        "Proofs.Threadsync.Deadline",
+        "Proofs.Threadsync.Gen",
+        "Proofs.Threadsync.Handoff",
+        "Proofs.Threadsync.Lock",
+        "Proofs.Threadsync.Mutex",
+        "Proofs.Threadsync.WaitGroup"
+      ],
+      "budget": null
+    }
+  ]
+}

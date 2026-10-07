@@ -125,9 +125,7 @@ locks and logs; no Zig/Lean/Lake/elan invocation or compiler-version probe runs.
 CI runs these tests before toolchain installation and saves their output under
 `RUNNER_TEMP` without adding an upload step.
 
-This supplies measurement/coordination infrastructure for Q06. It does not
-qualify translation or proof-performance budgets on real modules, attribute
-time inside a compiler pipeline, compare a regression baseline, or demonstrate
-preservation of an optimization. Record representative per-phase workloads,
-inputs, emitted output and cold/warm runs under agreed budgets before making
-those claims.
+This supplies measurement/coordination infrastructure for Q06. The real-module
+workload suite, per-phase translator timing, baseline derivation and regression
+gate are in `docs/perf-budgets.md`; run that recorder once under this guard. Its
+budgets remain pending until a serial measurement is recorded and committed.

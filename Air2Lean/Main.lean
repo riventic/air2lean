@@ -15,13 +15,16 @@ file (`Air2Lean/Emit.lean`) importing `ZigLean`, under `namespace <Ns>`. Before 
 
 Exits 1 with a message on any error at any stage: a bad flag, an unparsable/unsupported AIR
 file, or a function outside the checked subset.
+
+`--timing-json <path>` additionally writes per-phase monotonic wall times after a successful
+run (`docs/perf-budgets.md`). It only observes the stages; the Lean output is unchanged.
 -/
 
 namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096]"
 
 def help : String :=
@@ -34,6 +37,7 @@ def help : String :=
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
   "  --spawn-policy <policy>      available (default) or fallible; see docs/spawn-failure.md.\n" ++
   "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++
@@ -54,6 +58,8 @@ structure Args where
   modelRegistry : Option String
   registryTemplate : Bool := false
   proofApi : Bool := false
+  /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
+  timingJson : Option String := none
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -85,7 +91,11 @@ private partial def parseArgsGo (args : List String)
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with proofApi := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] =>
+  | "--timing-json" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.timingJson.isSome then .error s!"duplicate --timing-json\n{usage}"
+    else .ok { a with timingJson := some v }
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
@@ -115,6 +125,36 @@ def processRaw (raw : Raw.RawFunc) : Except String Func := do
 def processOne (contents : String) : Except String Func := do
   processRaw (← Raw.parseFile contents)
 
+/-- Evaluate one pure stage between two monotonic clock reads; returns elapsed nanoseconds.
+Observation only: the value is exactly `fn ()`. -/
+@[noinline] private def timed (fn : Unit → α) : IO (α × Nat) := do
+  let start ← IO.monoNanosNow
+  let value ← IO.lazyPure fn
+  let stop ← IO.monoNanosNow
+  pure (value, stop - start)
+
+/-- Per-phase totals for `--timing-json` (nanoseconds, summed over AIR files). -/
+structure PhaseTimes where
+  read : Nat := 0
+  renumber : Nat := 0
+  parse : Nat := 0
+  normalize : Nat := 0
+  check : Nat := 0
+  emit : Nat := 0
+  write : Nat := 0
+
+private def writeTiming (path : String) (t : PhaseTimes) (files functions inputBytes outputBytes : Nat) :
+    IO Unit := do
+  let ns (n : Nat) : Lean.Json := Lean.toJson n
+  let report := Lean.Json.mkObj [("schema", .str "air2lean-timing/1"),
+    ("files", ns files), ("functions", ns functions),
+    ("input_bytes", ns inputBytes), ("output_bytes", ns outputBytes),
+    ("phases_ns", Lean.Json.mkObj [("read", ns t.read), ("renumber", ns t.renumber),
+      ("parse", ns t.parse), ("normalize", ns t.normalize), ("check", ns t.check),
+      ("emit", ns t.emit), ("write", ns t.write)])]
+  try IO.FS.writeFile path (report.compress ++ "\n") catch e =>
+    throw (IO.userError s!"writing timing report {path}: {e}")
+
 def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
   pure 1
@@ -133,6 +173,8 @@ private def run (args : List String) : IO UInt32 := do
         "Export AIR with the patched Zig compiler first, or use scripts/translate.sh.\n" ++
         "Check the dump filter and make functions reachable with export fn or comptime references.")
     else
+      let mut times : PhaseTimes := {}
+      let readStart ← IO.monoNanosNow
       let texts ← jsonPaths.mapM fun path => do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
@@ -143,30 +185,45 @@ private def run (args : List String) : IO UInt32 := do
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
+      times := { times with read := (← IO.monoNanosNow) - readStart }
       -- Preserve the historical <full name>.json emission order even when storage
       -- uses hashes or project staging names. Cache before anonymous renumbering.
-      let (originalNames, rewrittenTexts) := Anon.renumberAllWithNames texts
+      let ((originalNames, rewrittenTexts), renumberNs) ← timed fun _ => Anon.renumberAllWithNames texts
+      times := { times with renumber := renumberNs }
       let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
-          match Raw.parseFile contents with
+          -- Same stage order as `processRaw` (preflight, normalize, check), timed separately.
+          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents
+          times := { times with parse := times.parse + parseNs }
+          match parsed with
           | .error e => err := some s!"{path}: {e}"
           | .ok raw =>
             profiles := profiles.push raw.profile
-            match (do
+            let (normalized, normalizeNs) ← timed fun _ => (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              processRaw raw : Except String Func) with
+              normalize raw : Except String Func)
+            times := { times with normalize := times.normalize + normalizeNs }
+            match normalized with
             | .error e => err := some s!"{path}: {e}"
-            | .ok f => funcs := funcs.push f
-      let checked : Except String Unit := do
+            | .ok f =>
+              let (checkedOne, checkNs) ← timed fun _ => check f
+              times := { times with check := times.check + checkNs }
+              match checkedOne with
+              | .error e => err := some s!"{path}: {e}"
+              | .ok () => funcs := funcs.push f
+      let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
         if !a.registryTemplate then
           checkProgram funcs models profiles[0]?
           if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
+        : Except String Unit)
+      times := { times with check := times.check + programNs }
+      let inputBytes := texts.foldl (fun n text => n + text.utf8ByteSize) 0
       match checked with
       | .error e => die e
       | .ok () =>
@@ -178,6 +235,8 @@ private def run (args : List String) : IO UInt32 := do
             | .error error => die error
             | .ok template =>
               IO.FS.writeFile a.outPath (template.pretty ++ "\n")
+              if let some path := a.timingJson then
+                writeTiming path times jsonPaths.size funcs.size inputBytes 0
               pure 0
           else
             -- Reads and every validation guard retain their original path order.
@@ -187,12 +246,17 @@ private def run (args : List String) : IO UInt32 := do
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
-            let src := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+            let (src, emitNs) ← timed fun _ => "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
               emit emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
+            times := { times with emit := emitNs }
+            let writeStart ← IO.monoNanosNow
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+            times := { times with write := (← IO.monoNanosNow) - writeStart }
+            if let some path := a.timingJson then
+              writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
             pure 0
 
 def main (args : List String) : IO UInt32 := do
