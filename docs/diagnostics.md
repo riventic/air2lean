@@ -47,10 +47,16 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
+
+`VOLATILE_ACCESS` (phase `check`, category `unsupported_semantics`, canonical
+instruction anchor) marks a volatile load, store, atomic or item access, a dropped
+`volatile` qualifier, or a volatile argument to a built-in std model
+([volatile-effects.md](volatile-effects.md)). It replaces the generic
+`INSTRUCTION_FAILURE` check of that instruction.
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
 number of blockers in the inputs. Dependency reporting stops once truncated.

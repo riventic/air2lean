@@ -134,6 +134,12 @@ stay unchanged) and `Contract.accesses_within`. A `proof` must prove the conjunc
 `assumed` bindings emit it as one axiom. The report's `footprint` field is `null` when
 none is declared.
 
+**Volatile parameters (L13).** A binding is the only declared contract for a device access
+([volatile-effects.md](volatile-effects.md)). Every direct volatile pointer parameter must be
+listed in `footprint.writes`, because a device read can change device state. A volatile pointer
+nested inside a parameter (a field, a payload or a pointee) is rejected. Volatile pointers in the
+return type are allowed; the caller's accesses through them are checked.
+
 `tests/roadmap/models/Fill.lean` defines `fill(buf: []u8, value: u8)` with footprint
 `writes: [0]`, together with its proved evidence. Its client `client_fills_both` calls fill on
 two separate buffers. Using only the contract and footprint, it proves both buffers are

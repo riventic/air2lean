@@ -351,7 +351,7 @@ opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec
 
 A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
 
-`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see."
+`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
 
 ### Differential-test implementation
 
