@@ -40,6 +40,11 @@ def byteBits (n i : Nat) (trunc : Bool) : Byte → Option (BitVec 8)
   | .int x => if !trunc ∧ n - 8 * i < 8 ∧ 2 ^ (n - 8 * i) ≤ x.toNat then none else some x
   | .part m x =>
     if n - 8 * i ≤ m ∧ (trunc ∨ x.toNat < 2 ^ (n - 8 * i)) then some x else none
+  | .mask d x =>
+    -- The integer's bits in this byte must be defined; a defined bit above it must be 0.
+    let need := if n - 8 * i < 8 then 2 ^ (n - 8 * i) - 1 else 255
+    if d.toNat &&& need = need ∧ (trunc ∨ 8 ≤ n - 8 * i ∨ x.toNat < 2 ^ (n - 8 * i)) then some x
+    else none
   | _ => none
 
 /-- The integer in the first `(n + 7) / 8` bytes. An undefined bit, a pointer byte, an error

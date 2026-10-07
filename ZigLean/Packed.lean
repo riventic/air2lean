@@ -13,7 +13,9 @@ union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does.
 
 In memory a packed struct is its backing integer (the instance's `Enc`). A bit-pointer
 (`&p.field`, `*align(a:o:h) T`) points to the host integer (`h` bytes); `loadBits`/`storeBits`
-read and write the field's `n` bits at bit `o` of it.
+read and write the field's `n` bits at bit `o` of it, with defined-bit masks (§Defined bits);
+`storeUndefBits` makes them undefined. `ZigLean/PackedLemmas.lean` proves the frame: the other
+bits keep their state.
 -/
 
 namespace Zig
@@ -26,6 +28,11 @@ class Packed (α : Type) (n : outParam Nat) where
 instance {n : Nat} : Packed (BitVec n) n where
   toBits v := v
   ofBits v := v
+
+/-- A float field: its bits (`@bitCast`). -/
+instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
+  toBits v := v.bits
+  ofBits b := ⟨b⟩
 
 instance : Packed Bool 1 where
   toBits b := if b then 1#1 else 0#1
@@ -49,36 +56,101 @@ def Packed.set {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat)
   let mask : BitVec w := ((BitVec.allOnes n).setWidth w) <<< o
   (host &&& ~~~mask) ||| (((Packed.toBits v).setWidth w) <<< o)
 
-/-- The host integer of a bit-pointer, from its `hostSize` bytes at `p`. A packed struct whose
-backing integer is not `8 * hostSize` bits has undefined padding bits in its last byte
-(`Byte.part`, `intBytes`): they read as 0, because an access reads or writes only the field's
-bits, the bits below `fieldEnd`. A field bit that is undefined throws `.unspecified`. Also the
-last byte's kind, to write it back the same way. -/
-def loadHost (hostSize align fieldEnd : Nat) (p : Ptr) :
-    MemM (BitVec (8 * hostSize) × Option Nat) := do
-  let bs ← loadBytes p (Enc.size (BitVec (8 * hostSize))) align
-  let last := match (bs[hostSize - 1]? : Option Byte) with | some (.part m _) => some m | _ => none
-  if let some m := last then
-    if 8 * (hostSize - 1) + m < fieldEnd then throw .unspecified
-  let bs := bs.modify (hostSize - 1) fun | .part _ x => .int x | b => b
-  let host ← intOfBytes (8 * hostSize) bs
-  pure (host, last)
+/-! ## Defined bits
 
-/-- A load through a bit-pointer: the host integer is `hostSize` bytes at `p`. -/
+A bit-pointer access reads and writes the field's bits only. Each host byte is a defined-bit
+mask and a value (`Byte.defBits`): `.int` all, `.undef` none, `.part m` the low `m` bits,
+`.mask d` the bits of `d`. A store sets the field's bits of each byte (`Byte.writeBits`) and
+keeps every other bit as it was, defined or not: an undefined neighbour field stays undefined
+bit by bit, and `undefined` stored to a field makes only the field's bits undefined. A load needs
+only the field's bits to be defined (`readBits`). -/
+
+/-- The low `m` bits of a byte. -/
+def lowMask8 (m : Nat) : BitVec 8 := BitVec.ofNat 8 (2 ^ m - 1)
+
+/-- A byte as its defined-bit mask and its value (0 in undefined bits); `none` for a pointer
+or error byte, which has no integer bits. -/
+def Byte.defBits : Byte → Option (BitVec 8 × BitVec 8)
+  | .undef => some (0, 0)
+  | .int x => some (BitVec.allOnes 8, x)
+  | .part m x => some (lowMask8 m, x &&& lowMask8 m)
+  | .mask d x => some (d, x &&& d)
+  | _ => none
+
+/-- The byte with the defined bits `d` and the values `x` there, in its canonical form:
+`.int`, `.undef`, `.part m` for the low `m` bits, else `.mask`. -/
+def Byte.ofDefBits (d x : BitVec 8) : Byte :=
+  if d = BitVec.allOnes 8 then .int x
+  else if d = 0 then .undef
+  else match [1, 2, 3, 4, 5, 6, 7].find? (lowMask8 · = d) with
+    | some m => .part m (x &&& d)
+    | none => .mask d (x &&& d)
+
+/-- Bit `k` of a byte: `some b` if it is defined, `none` if it is undefined or the byte has no
+integer bits (a pointer or error byte). -/
+def Byte.bit (b : Byte) (k : Nat) : Option Bool :=
+  match b.defBits with
+  | some (d, x) => if d.getLsbD k then some (x.getLsbD k) else none
+  | none => none
+
+/-- `b` with the bits in `f` replaced: by the bits of `v` (`some v`), or undefined (`none`).
+The other bits keep their state; a byte without bits in `f` is unchanged. A pointer or error
+byte that a field overlaps keeps no other defined bits. -/
+def Byte.writeBits (f : BitVec 8) (v : Option (BitVec 8)) (b : Byte) : Byte :=
+  if f = 0 then b else
+  let (d, x) := b.defBits.getD (0, 0)
+  match v with
+  | some v => Byte.ofDefBits (d ||| f) ((x &&& ~~~f) ||| (v &&& f))
+  | none => Byte.ofDefBits (d &&& ~~~f) (x &&& ~~~f)
+
+/-- The bits of byte `i` of the host that belong to the `n`-bit field at bit `o`. -/
+def fieldMaskByte (o n i : Nat) : BitVec 8 := BitVec.ofNat 8 (((2 ^ n - 1) <<< o) >>> (8 * i))
+
+/-- Byte `i` of the host with `v` at bit `o` (the field's bits, `fieldMaskByte`, matter). -/
+def fieldValByte {n : Nat} (v : BitVec n) (o i : Nat) : BitVec 8 :=
+  BitVec.ofNat 8 ((v.toNat <<< o) >>> (8 * i))
+
+/-- The host bytes `bs` with the `n`-bit field at bit `o` replaced by `v` (`some`) or made
+undefined (`none`), byte by byte. -/
+def writeField {n : Nat} (bs : Array Byte) (o : Nat) (v : Option (BitVec n)) : Array Byte :=
+  (bs.toList.mapIdx fun i b => b.writeBits (fieldMaskByte o n i) (v.map (fieldValByte · o i))).toArray
+
+/-- Bit `j` of the host bytes `bs` (`Byte.bit`); `none` past the end. -/
+def hostBit (bs : Array Byte) (j : Nat) : Option Bool :=
+  match bs[j / 8]? with
+  | some b => b.bit (j % 8)
+  | none => none
+
+/-- The `n` bits at bit `o` of the host bytes `bs`; `none` if one of them is not defined. -/
+def readBits (bs : Array Byte) (o : Nat) : (n : Nat) → Option (BitVec n)
+  | 0 => some 0#0
+  | n + 1 => do
+    let hi ← hostBit bs (o + n)
+    let lo ← readBits bs o n
+    pure (BitVec.cons hi lo)
+
+/-- A load through a bit-pointer: the host integer is the `hostSize` bytes at `p` (the
+exporter's `host_size`, which can be less than the ABI size of the integer: `(bits + 7) / 8`
+on LLVM). The whole host is read (provenance, bounds, alignment, races); only the field's bits
+must be defined, else `.unspecified`. -/
 def loadBits (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr) :
     MemM α := do
-  let (host, _) ← loadHost hostSize align (bitOffset + n) p
-  Packed.ofBits? (host.extractLsb' bitOffset n)
+  let bs ← loadBytes p hostSize align
+  match readBits bs bitOffset n with
+  | some b => Packed.ofBits? b
+  | none => throw .unspecified
 
-/-- A store through a bit-pointer: read the host integer, replace the field's bits, write it
-back. Undefined padding bits in the last byte stay undefined. -/
+/-- A store through a bit-pointer: read the host, replace the field's bits, write it back.
+Every other bit keeps its state (`writeField`), defined or undefined. -/
 def storeBits {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr)
     (v : α) : MemM Unit := do
-  let (host, last) ← loadHost hostSize align (bitOffset + n) p
-  let bs := Enc.encode (Packed.set host bitOffset v)
-  let bs := match last, (bs[hostSize - 1]? : Option Byte) with
-    | some m, some (.int x) => bs.set! (hostSize - 1) (.part m (x &&& BitVec.ofNat 8 (2 ^ m - 1)))
-    | _, _ => bs
-  storeBytes p align bs
+  let bs ← loadBytes p hostSize align
+  storeBytes p align (writeField bs bitOffset (some (Packed.toBits v)))
+
+/-- A store of `undefined` through a bit-pointer: the field's `n` bits become undefined, bit by
+bit; every other bit keeps its state. -/
+def storeUndefBits (n hostSize align bitOffset : Nat) (p : Ptr) : MemM Unit := do
+  let bs ← loadBytes p hostSize align
+  storeBytes p align (writeField bs bitOffset (none : Option (BitVec n)))
 
 end Zig
