@@ -195,8 +195,8 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
 |---|---|---|---|
 | Runtime `@bitCast`/`@fromBackingInt` to an exhaustive enum panics `invalid_enum_value` on an unnamed value (`bit_cast_safe`). | Sema.zig 9495–9497, 9631–9633; Legalize.zig 2163 | Same panic as `@enumFromInt` (`invalidEnumValue`, `panic-policy.tsv`). Translator check required (see (c)). | Z3 |
 | `@divCeil`: `divide_by_zero`, `integer_overflow` (signed `minInt / -1`). | Sema.zig 14320–14323 | Reuse the existing `divFloor` checks. | Z3 |
-| New simple panic `load_uninstantiable_type` → `std.debug.panic.loadUninstantiableType` (`simple_panic.zig` 161). It fires on a runtime load of a no-possible-value type. | Zcu.zig `SimplePanicId`; Sema.zig 31111 | Not in `scripts/panic-policy.tsv`. A call is rejected until mapped. | Z3 |
-| `@errorCast` safety now calls `panic.unexpectedErrorCode(err)` with the error operand (was `invalid_error_code` simple panic). | Sema.zig 21667–21690; `simple_panic.zig` 85 | Not in `panic-policy.tsv`. A call is rejected until mapped. `Check` already restricts error-set casts (error-storage rules). | Z3 |
+| New simple panic `load_uninstantiable_type` → `std.debug.panic.loadUninstantiableType` (`simple_panic.zig` 161). It fires on a runtime load of a no-possible-value type. | Zcu.zig `SimplePanicId`; Sema.zig 31111 | Mapped to `.panic` (`scripts/panic-policy.tsv`, `Air2Lean/Air/Op.lean`, `tests/diff/common.zig`). | Z3 |
+| `@errorCast` safety now calls `panic.unexpectedErrorCode(err)` with the error operand (was `invalid_error_code` simple panic). | Sema.zig 21667–21690; `simple_panic.zig` 85 | Mapped to `.panic` (`scripts/panic-policy.tsv`). `Check` already restricts error-set casts (error-storage rules). | Z3 |
 | Empty exhaustive enums are `noreturn`-backed and uninstantiable. | type_resolution.zig 1411 | See (b). | Z3 |
 | `mem.eql`/`findDiff` no longer short-circuit equal float slices (NaN). | release notes | Only if translated std code reaches it. None today. | — |
 
