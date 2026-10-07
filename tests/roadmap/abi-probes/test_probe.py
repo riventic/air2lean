@@ -20,7 +20,8 @@ def profile(target='x86_64-linux-gnu', mode='ReleaseSafe'):
 
 
 def text(p):
-    rows = {'meta': {'arch': p['target_triple'].split('-')[0], 'os': 'linux', 'abi': 'gnu',
+    _, os_tag, abi_tag, _ = abi.NATIVE[p['target_triple']]
+    rows = {'meta': {'arch': p['target_triple'].split('-')[0], 'os': os_tag, 'abi': abi_tag,
                     'endian': 'little', 'backend': p['backend'], 'mode': p['build_mode'],
                     'cpu': p['cpu'], 'zig': '0.16.0', 'pointer_bits': '64',
                     'error_set_bits': '16', 'error_tracing': str(p['error_tracing']).lower()},
@@ -80,6 +81,35 @@ class ContractTests(unittest.TestCase):
             self.assertIn('compiler stderr truncated after 4096 bytes', str(caught.exception))
             self.assertLess(len(str(caught.exception)), 4300)
             self.assertIs(caught.exception.__cause__, failure)
+
+    def test_macos_profile_binds_its_own_os_abi_and_cpu(self):
+        for mode in ('ReleaseSafe', 'ReleaseFast'):
+            p = profile('aarch64-macos-none', mode)
+            abi.profile_check(p)
+            abi.observations(text(p), p)
+            linux_meta = text(p).replace('meta os macos', 'meta os linux')
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                abi.observations(linux_meta, p)
+        for key, value in [('abi', 'gnu'), ('cpu', 'generic'), ('target_triple', 'aarch64-macos-gnu')]:
+            p = profile('aarch64-macos-none'); p[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                abi.profile_check(p)
+
+    def test_macos_profile_never_executes_on_another_system(self):
+        with patch.object(abi.platform, 'system', return_value='Linux'), \
+                patch.object(abi.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'requires a Darwin execution environment'):
+                abi.run('/nonexistent/zig', profile('aarch64-macos-none'))
+        launch.assert_not_called()
+        with patch.object(abi.platform, 'system', return_value='Darwin'), \
+                patch.object(abi.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'requires a Linux execution environment'):
+                abi.run('/nonexistent/zig', profile())
+        launch.assert_not_called()
+
+    def test_macos_report_is_outside_the_linux_pair(self):
+        with self.assertRaises(ValueError):
+            abi.compare(report('x86_64-linux-gnu'), report('aarch64-macos-none'))
 
     def test_pair_is_only_an_observation_relation(self):
         left, right = report(abi.TARGETS[0]), report(abi.TARGETS[1])
