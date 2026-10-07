@@ -196,7 +196,7 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
 
 - **Z1 exporter:**
   - Port `json.zig`: Compat range, `v16` → `≥16` std.Io branches, `Compat.vNN`-gated arms for
-    the removed/renamed tags, and arms for the 13 new `ty_op` tags plus `agg_field_val` and
+    the removed/renamed tags, and arms for the 12 new `ty_op` tags plus `agg_field_val` and
     `div_ceil`.
   - Fix `ty_pl.ty` (already a `Type`) and `intTagType` → `backingIntType`.
   - Write the 0.17 hook against `PerThread.zig` 2297. Pin LLVM 22.

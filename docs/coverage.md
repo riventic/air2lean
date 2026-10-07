@@ -20,8 +20,8 @@ It never substitutes a README or exporter tag list for missing compiler sources.
 
 Pass a source root containing `src/Air.zig`, `src/InternPool.zig` and
 `lib/std/builtin.zig` (`lib/std/lang.zig` from 0.17.0, where `std.builtin.Type` moved
-to `std.lang.Type`; with neither file the command fails). A patched source checkout is usable: the fingerprint will
-record that exact checkout. The release label is supplied by the caller; source
+to `std.lang.Type`; with neither file the command fails). A patched source checkout
+is usable: the fingerprint will record that exact checkout. The release label is supplied by the caller; source
 fingerprints, rather than a compiler `--version` process, establish snapshot
 identity. Review source provenance before publishing an inventory.
 
