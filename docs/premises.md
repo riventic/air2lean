@@ -439,6 +439,17 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Conc.Total`.
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
+<a id="sem-05"></a>
+### SEM-05 — Model step and allocation counts are not time or memory measurements
+
+- Kind: meaning.
+- Statement: `Mem.allocs`, `Mem.liveHeap` and `LoopRuns` counts are counts in the model.
+  They count allocation requests, live `.heap` blocks and loop-body runs of successful runs.
+  A count does not measure CPU time, instruction count, cache behavior or native allocator
+  memory use. Relating one to those needs a separate calibration argument.
+- Derived from: `ZigLean.Sep.Cost`.
+- Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+
 ## External models
 
 <a id="ext-01"></a>
