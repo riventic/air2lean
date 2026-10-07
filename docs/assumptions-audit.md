@@ -130,7 +130,11 @@ An opaque declaration can have a checked value. Opacity alone is not a logical a
 its trust class records a reviewed boundary rather than inventing an axiom. Theorem types
 retain ordinary hypotheses about assembly, allocations, scheduling, and other semantic
 premises. This gate inventories constants and axioms, not a semantic interpretation or
-human-readable enumeration of all local hypotheses.
+human-readable enumeration of all local hypotheses. The semantic premises (profile,
+allocator, scheduler, ordering, timer, float, assembly and trust) have stable IDs in
+[premises.md](premises.md). [premise-index.md](premise-index.md) maps each theorem to
+those IDs. `scripts/premises.py compiled --assurance <this report>` derives the same
+mapping from this report's dependency graph.
 
 The audit demonstrates that the selected compiled theorem inventory obeys the explicit
 dependency policy. It does not prove Zig export, AIR normalization/emission, backend

@@ -100,6 +100,12 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
+      # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
+      - name: Theorem premise reference and index
+        run: |
+          python3 -B tests/roadmap/premises/test_premises.py
+          python3 -B scripts/premises.py check
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
@@ -590,6 +596,13 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
           scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
+
+      # Same premise tables over the kernel dependency graph of the audited translation.
+      - name: Map audited theorems to premise IDs
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        run: |
+          python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
+            --output "$RUNNER_TEMP/air2lean-premises.json"
 
       - name: Assurance environment regressions
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}

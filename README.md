@@ -49,6 +49,7 @@ foo.zig ──patched zig──▶ *.json ──air2lean──▶ Gen.lean ─�
 | Translator | `Air2Lean/` (parser, per-version normalizer, subset checker, emitter) |
 | Runtime semantics + lemmas | `ZigLean/` (floats: `ZigLean/Float/`, [docs/floats.md](docs/floats.md); separation logic: `ZigLean/Sep/`, [docs/proofs.md](docs/proofs.md)) |
 | Generated code, proofs | `Proofs/<Ex>/`: `Gen.lean` (generated, [naming rules](docs/generated-code.md)) and the proofs |
+| Premises of each theorem | [docs/premises.md](docs/premises.md) (IDs), [docs/premise-index.md](docs/premise-index.md) (per theorem), `scripts/premises.py` |
 | Differential tests | `tests/diff/`, `scripts/diff.sh` |
 
 ## Example
