@@ -44,7 +44,7 @@ Classification: complete.
 
 compare every supported compiler's tags against exporter decoding, normalization, semantic definitions, emission, tests and proof rules. Record unsupported types and constants as well. Acceptance: every tag has a named disposition. CI detects a new or renamed tag. The inventory is generated from compiler sources rather than inferred from README tables.
 
-Completed in [batch 2 PR](https://github.com/riventic/air2lean/pulls): Compiler-derived inventories for 0.14.1/0.15.2/0.16.0 give every AIR tag, type tag, intern key and pointer base a named disposition derived from exporter/Compat branches, normalizeOp gates, emitter dispatch and Check/Json rejections plus a reviewed override table; CI fails on new/renamed tags or any unclassified row. Semantics/proof columns remain symbol indices.
+Completed in [PR119](https://github.com/riventic/air2lean/pull/119): Compiler-derived inventories for 0.14.1/0.15.2/0.16.0 give every AIR tag, type tag, intern key and pointer base a named disposition derived from exporter/Compat branches, normalizeOp gates, emitter dispatch and Check/Json rejections plus a reviewed override table; CI fails on new/renamed tags or any unclassified row. Semantics/proof columns remain symbol indices.
 
 Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
@@ -310,7 +310,7 @@ Classification: complete.
 
 typed pre/postconditions, memory footprints, error/termination behavior and trusted/proved status, bound to an exact symbol/signature. Acceptance: a client proves its behavior from the declared contract; the report lists the contract as an assumption unless its implementation is verified.
 
-Completed in [batch 2 PR](https://github.com/riventic/air2lean/pulls): Exact-symbol/signature registry contracts with typed pre/post, errors, termination, effects, validated pointer/slice block footprints (Contract.Respects) and proved/assumed trust; scripts/external-contracts.py lists each used contract as an assumption unless its proved evidence kernel-checks with standard axioms only; Fill client proves frame preservation from the contract, also through the generated binding.
+Completed in [PR119](https://github.com/riventic/air2lean/pull/119): Exact-symbol/signature registry contracts with typed pre/post, errors, termination, effects, validated pointer/slice block footprints (Contract.Respects) and proved/assumed trust; scripts/external-contracts.py lists each used contract as an assumption unless its proved evidence kernel-checks with standard axioms only; Fill client proves frame preservation from the contract, also through the generated binding.
 
 Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
@@ -332,7 +332,7 @@ Classification: complete.
 
 a typed registry for qualified standard-library and project models, with signature/layout checks, version/profile constraints and semantic dependencies. Acceptance: adding a model does not require scattering name tests through the pipeline; a same-name incompatible function is rejected.
 
-Completed in [batch 2 PR](https://github.com/riventic/air2lean/pulls): Single typed std model table (Air2Lean/StdModels.lean) consulted by Check/Emit/Memory/Diagnose/registry with per-row version qualification and ZigLean semantic dependencies; translated/project functions reusing a std name and same-name incompatible signatures are rejected; project dependencies checked (binding/qualified std/Lean ident, unique, acyclic).
+Completed in [PR119](https://github.com/riventic/air2lean/pull/119): Single typed std model table (Air2Lean/StdModels.lean) consulted by Check/Emit/Memory/Diagnose/registry with per-row version qualification and ZigLean semantic dependencies; translated/project functions reusing a std name and same-name incompatible signatures are rejected; project dependencies checked (binding/qualified std/Lean ident, unique, acyclic).
 
 Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
@@ -404,7 +404,7 @@ Classification: partial.
 
 a versioned manifest for roots, targets, contracts, models, theorem goals, resource limits and allowed assumptions. Acceptance: one committed manifest reproduces translation and proof checking on another qualified machine.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): project.py check translates every root, requires the fresh translation to reproduce the committed generated modules (profile record validated), builds the contracts and audits goal theorems under build-guard budgets, checks statement binding, allowed assumptions and claims.py strength, and writes a reproducibility record; compare-records compares the machine-independent sections. A single-machine real check of example-project.json reproduced: translate/reproduce/build/audit/goal/claims all passed. Remaining: second-machine compare-records.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): project.py check translates every root, requires the fresh translation to reproduce the committed generated modules (profile record validated), builds the contracts and audits goal theorems under build-guard budgets, checks statement binding, allowed assumptions and claims.py strength, and writes a reproducibility record; compare-records compares the machine-independent sections. A single-machine real check of example-project.json reproduced: translate/reproduce/build/audit/goal/claims all passed. Remaining: second-machine compare-records.
 
 ## I04 — Modular output and incremental checking
 
@@ -418,7 +418,7 @@ Classification: partial.
 
 collect independent blockers, stable diagnostic codes, source spans, dependency chains and JSON output. Keep fatal malformed-input errors separate from unsupported features. Acceptance: a coverage command reports every independent blocker in a project without requiring one edit-and-retry cycle per error.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): Markers no longer stop canonicalization: after a composed normalization failure each canonical instruction is normalized on its own, so every independently rejected instruction of a unit is reported in one run; runtime-effect tags are unsupported_semantics, malformed input stays one fatal unit error, and blocked units contribute dependency chains through their directly normalized calls. Remaining: no source spans; canonicalization of malformed input, checkProgram and profile validation still stop at their first error; explicit caps.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): Markers no longer stop canonicalization: after a composed normalization failure each canonical instruction is normalized on its own, so every independently rejected instruction of a unit is reported in one run; runtime-effect tags are unsupported_semantics, malformed input stays one fatal unit error, and blocked units contribute dependency chains through their directly normalized calls. Remaining: no source spans; canonicalization of malformed input, checkProgram and profile validation still stop at their first error; explicit caps.
 
 ## I06 — Verification coverage reports
 
@@ -428,7 +428,7 @@ per-root status for analyzed, exported, translated, compiled, differentially tes
 
 Bounded progress ([PR110](https://github.com/riventic/air2lean/pull/110)): project.py coverage joins manifest roots with verified artifacts, current receipts/audits and typed diff summaries into per-root status, domain, declared vs bound strength, assumptions and exclusions; sampled tests, stale receipts and hash mismatches cannot reach functional levels. Remaining: goal binding uses proof-term dependencies, so a wrapper-statement theorem whose proof mentions the root still binds directly; analyzed/exported lack evidence sources; no end-to-end real-receipt run.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): Goals bind by statement: the conclusion of the audited kernel type (not hypotheses or proof term) must reference the generated root, and audits without statement dependencies fail closed; declared safety/partial/total strengths count only up to the strength claims.py derives from the conclusion, so a trivial `root x = root x` cannot reach functional levels. Remaining: trivial-conclusion interpretation beyond derived strength, analyzed/exported evidence, a real-receipt run.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): Goals bind by statement: the conclusion of the audited kernel type (not hypotheses or proof term) must reference the generated root, and audits without statement dependencies fail closed; declared safety/partial/total strengths count only up to the strength claims.py derives from the conclusion, so a trivial `root x = root x` cannot reach functional levels. Remaining: trivial-conclusion interpretation beyond derived strength, analyzed/exported evidence, a real-receipt run.
 
 ## I07 — Provenance and artifact manifests
 
@@ -490,7 +490,7 @@ Classification: partial.
 
 make nondeterministic valid outcomes, undefined behavior, unsupported semantics, deadlock, divergence and test-search caps distinct in reports and contracts. Acceptance: no unsupported timer or capped schedule search is reported as proved absence of a failure; error returns stay distinct from model panics.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): scripts/outcomes.py maps typed differential observations onto one taxonomy (valid, nondeterministic_valid, error_return, panic, illegal/unspecified including no-clock timers, unsupported_semantics, deadlock, divergence/fuel, search_cap); claims.py check --diff and project.py coverage refuse no-panic/guaranteed-return absence claims whose evidence has a capped, fuel-bounded, unsupported or unspecified/timer outcome or a denied failure, and error returns never refuse no-panic; a Lean fixture keeps error returns apart from model failures. Remaining: timer outcomes are indistinguishable from other unspecified outcomes; taxonomy in contracts beyond these reports, separate from correspondence.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/outcomes.py maps typed differential observations onto one taxonomy (valid, nondeterministic_valid, error_return, panic, illegal/unspecified including no-clock timers, unsupported_semantics, deadlock, divergence/fuel, search_cap); claims.py check --diff and project.py coverage refuse no-panic/guaranteed-return absence claims whose evidence has a capped, fuel-bounded, unsupported or unspecified/timer outcome or a denied failure, and error returns never refuse no-panic; a Lean fixture keeps error returns apart from model failures. Remaining: timer outcomes are indistinguishable from other unspecified outcomes; taxonomy in contracts beyond these reports, separate from correspondence.
 
 ## Q01 — Generated program and parser fuzzing
 
@@ -504,7 +504,7 @@ Classification: partial.
 
 coverage mapped to each register item and meaningful mutants for forwarding, layout, operand order, failure cleanup, profile selection and invariant transfer. Acceptance: a feature cannot close on positive examples alone; its negative tests and designated mutants detect the wrong behavior.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): assurance/mutation-map.json maps every register ID to negative tests and designated mutants by category; scripts/mutation-map.py check fails any complete row lacking negative tests or a designated mutant per declared category, and any unmapped mutant; in-memory Python-side mutants (tests/roadmap/mutation-map/mutants.py) are killed only by assertion failures of named regressions. The checker proves designated Lean/Zig mutants exist, not that they are killed. Remaining: negative tests and designated mutants for partial rows, kill evidence for Lean/Zig mutants, and mutants beyond mutate.sh and the Python-side set.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): assurance/mutation-map.json maps every register ID to negative tests and designated mutants by category; scripts/mutation-map.py check fails any complete row lacking negative tests or a designated mutant per declared category, and any unmapped mutant; in-memory Python-side mutants (tests/roadmap/mutation-map/mutants.py) are killed only by assertion failures of named regressions. The checker proves designated Lean/Zig mutants exist, not that they are killed. Remaining: negative tests and designated mutants for partial rows, kill evidence for Lean/Zig mutants, and mutants beyond mutate.sh and the Python-side set.
 
 ## Q03 — Concurrent schedule exploration
 
@@ -540,7 +540,7 @@ Classification: partial.
 
 compare AIR tag/type lists, layout and float probes, std model boundaries, changed translations and theorem dependencies for every upgrade. Acceptance: an upgrade cannot expand support or change a model silently; affected proofs and target tests are rerun and documented.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): scripts/qualify-upgrade.py turns coverage.py's inventory diff into an obligation record (support-expansion reviews ranked by coverage.py's disposition vocabulary, std-model, universe and compiler-source reviews, float/layout probes, affected example translations and proof dependency audits), runs command obligations with per-obligation logs, and check fails on missing/failing results, unaccepted or evidence-free support/model reviews, edited logs or stale plans. Remaining: qualify an actual compiler/model upgrade through it and publish the record.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/qualify-upgrade.py turns coverage.py's inventory diff into an obligation record (support-expansion reviews ranked by coverage.py's disposition vocabulary, std-model, universe and compiler-source reviews, float/layout probes, affected example translations and proof dependency audits), runs command obligations with per-obligation logs, and check fails on missing/failing results, unaccepted or evidence-free support/model reviews, edited logs or stale plans. Remaining: qualify an actual compiler/model upgrade through it and publish the record.
 
 ## Q08 — Review and release evidence
 
@@ -548,7 +548,7 @@ Classification: partial.
 
 preserve review coverage, resolve confirmed findings, run release gates against one exact source/profile state and publish the results with known exclusions. Acceptance: the release record includes reproducible commands, successful gates and explicit unavailable checks; the review ledger identifies the reviewed revisions.
 
-Bounded progress ([batch 2 PR](https://github.com/riventic/air2lean/pulls)): scripts/release-record.py enumerates the CI matrix gates of one clean revision, ingests GitHub Actions run JSON (pull_request runs rejected) or local-ci results naming that exact commit, records explicitly unavailable checks with reasons and verifies published records; REVIEW_COVERAGE.tsv carries a reviewed_revision column checked against each baseline. Remaining: publish the first release record from a main push run.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/release-record.py enumerates the CI matrix gates of one clean revision, ingests GitHub Actions run JSON (pull_request runs rejected) or local-ci results naming that exact commit, records explicitly unavailable checks with reasons and verifies published records; REVIEW_COVERAGE.tsv carries a reviewed_revision column checked against each baseline. Remaining: publish the first release record from a main push run.
 
 ## D01 — Reconcile stale milestones
 
