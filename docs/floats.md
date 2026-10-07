@@ -78,6 +78,23 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 - `@bitCast` of a NaN to an integer throws `.unspecified`.
 - The diff test prints every NaN as `"nan"`.
 
+### Allowed results
+
+`ZigLean/Float/Allowed.lean` states which results the target may give in place of the model's, so a proof can cover all of them instead of the model's one choice:
+
+| Relation | The target may return |
+|---|---|
+| `Float.Allowed x r` (`x` = the model's result) | `x` not NaN: exactly `x`, bit for bit (incl. the sign of a zero and an f80 pseudo-denormal's encoding). `x` NaN: any NaN — sign, payload and, for f80, encoding (incl. unnormals and pseudo-NaNs) unconstrained |
+| `Float.MinAllowed a b r`, `Float.MaxAllowed a b r` | group D (`Float.zeroSignVaries a b`: f32/f64, `+0` and `−0`): `+0` or `−0`. Otherwise `Float.Allowed` of `Float.min a b` / `Float.max a b` |
+
+`Float.AllowedSpec c P`: `c` succeeds and `P r` holds for every `r` with `Float.Allowed x r`, where `x` is the model's result. Proof tools:
+
+- Soundness: the model's result is allowed (`Float.Allowed.refl`, `Float.min_allowed`, `Float.max_allowed`, also in the group D case), and so is every value `Float.minChk`/`Float.maxChk` return (`Float.minChk_allowed`).
+- Payload independence: allowed results classify alike (`Float.Allowed.classify_eq`), so `isNaN`, `toRat?`, the comparisons, `Float.add`/`mul`/`div`, `Float.sqrt` and the unguarded `Float.conv` give the same result on every one of them (`Float.Allowed.lt_eq`, `add_eq`, …). The group C guards read bits, not just the class: `Float.convChk` f128→f80 throws for a NaN whose payload lies in the low 49 bits, and the f80 `Chk` guards throw for an unnormal or pseudo-NaN. So a guarded op on an allowed NaN may be `.unspecified` where the model's canonical NaN is not. Group D: every allowed `@min`/`@max` result `== +0` (`Float.MinAllowed.eq_zero`).
+- Errors are not variation: `@intFromFloat` has the same outcome on every allowed operand (`Float.toInt_allowed`). Out of range or ±inf with the safety check stays `.overflow` (illegal behavior), and a NaN of any payload stays `.unspecified`.
+
+Clients: `isNan_allowed`, `isNan_zero_div_zero`, `clamp_allowed` (`Proofs/Floats`); `toByte_allowed_overflow`, `toByte_allowed_nan` (`Proofs/Floatconv`). Generated code still calls the deterministic model and the `Chk` guards; the relation is for proofs only.
+
 ### f80
 
 `f80` has an explicit integer bit. Encodings that IEEE formats do not have:
