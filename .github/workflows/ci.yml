@@ -162,6 +162,16 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
           python3 -B scripts/theorem-inventory.py check
 
+      # V03: independent (non-Lean) structural validation of every committed golden AIR file,
+      # then the stage trust report: each stage's class, premises, checkers and CI-run tests.
+      - name: Independent AIR export validation and trust report
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/export-validation/test_validate_air.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/export-validation/test_trust_report.py
+          python3 -B scripts/validate-air.py
+          python3 -B scripts/trust-report.py check
+
       # Every numerical theorem states IEEE, compiler-rt@<versions> or abstract-spec semantics.
       - name: Float-semantics label regressions
         run: |
