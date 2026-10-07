@@ -66,7 +66,7 @@ float_status() {
   || { echo 'error: binary-correspondence label must be rejected' >&2; exit 1; }
 [ "$(float_status --float-semantics "$out/float-ieee.json" --output "$out/float-labeled.json")" = 0 ] \
   || { echo 'error: labeled float theorem must pass' >&2; exit 1; }
-python3 scripts/float-semantics.py check-report "$out/float-labeled.json"
+python3 scripts/float-semantics.py check-report --float-semantics "$out/float-ieee.json" "$out/float-labeled.json"
 python3 - "$out" <<'PY'
 import json, sys
 from pathlib import Path

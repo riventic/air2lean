@@ -456,12 +456,14 @@ def main(argv=None):
     reports = sub.add_parser('check-report', help='reject unlabeled or binary-claiming reports/receipts')
     reports.add_argument('reports', nargs='+', type=Path)
     reports.add_argument('--root', type=Path, default=ROOT)
+    reports.add_argument('--float-semantics', type=Path, dest='registry',
+                         help='label registry the reports were audited with (default: assurance/float-semantics.json)')
     args = parser.parse_args(argv)
     try:
         if args.action == 'check':
             problems = check_sources(args.root)
         else:
-            registry = load_registry(root=args.root)
+            registry = load_registry(args.registry, root=args.root)
             problems = []
             for path in args.reports:
                 report = json.loads(path.read_text(), object_pairs_hook=pairs)
