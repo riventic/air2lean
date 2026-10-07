@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 3 complete, 66 partial, 8 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 6 complete, 63 partial, 8 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -246,9 +246,11 @@ qualified read sharing/permissions and selected safe-reclamation rules, such as 
 
 ## F01 — Verified target profile selection
 
-Classification: partial.
+Classification: complete.
 
-target-driven selection or an explicit semantic choice recorded in generated code and reports; reject an unsupported binary-correspondence claim. Acceptance: every numerical theorem states whether it concerns IEEE behavior, a specific compiler-rt implementation or an abstract numerical specification.
+Completed in [PR117](https://github.com/riventic/air2lean/pull/117): Explicit IEEE/compiler-rt choice recorded in generated profile; every numerical theorem labeled ieee / compiler-rt@<versions> / abstract-spec (assurance/float-semantics.json), checked against the compiled dependency graph by the assumption audit (full audit: 191 labeled, none missing) and carried into schema-2 proof receipts; binary/native correspondence claims rejected. No automatic shipping-binary equivalence.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## F02 — Transcendental specifications
 
@@ -352,6 +354,8 @@ Classification: partial.
 
 distinct total-correctness and partial-correctness interfaces, plus exact result-existence obligations and resource-bounded variants where useful. Acceptance: reports distinguish no-panic, correct-if-returned and guaranteed-return claims. A diverging program cannot satisfy a total-correctness goal vacuously.
 
+Bounded progress ([PR111](https://github.com/riventic/air2lean/pull/111)): Sequential Returns/TotalTriple interface; reports classify each audited theorem as no-panic / correct-if-returned / guaranteed-return from its kernel type and reject overstated manifest goals; divergence cannot satisfy TotalTriple. Resource-bounded variants and concurrent termination absent.
+
 ## P06 — Resource and complexity proofs
 
 Classification: open.
@@ -406,11 +410,15 @@ Classification: partial.
 
 per-root status for analyzed, exported, translated, compiled, differentially tested and proved; contract domain, theorem strength, assumptions and exclusions. Acceptance: a function with only a wrapper theorem or sampled tests is not counted as fully functionally verified.
 
+Bounded progress ([PR110](https://github.com/riventic/air2lean/pull/110)): project.py coverage joins manifest roots with verified artifacts, current receipts/audits and typed diff summaries into per-root status, domain, declared vs bound strength, assumptions and exclusions; sampled tests, stale receipts and hash mismatches cannot reach functional levels. Remaining: goal binding uses proof-term dependencies, so a wrapper-statement theorem whose proof mentions the root still binds directly; analyzed/exported lack evidence sources; no end-to-end real-receipt run.
+
 ## I07 — Provenance and artifact manifests
 
 Classification: partial.
 
 hashes for source closure, AIR, generated Lean, compiler patch, runtime semantics, toolchain and build profile, plus theorem names and dirty-tree provenance. Acceptance: a reviewer can identify exactly what was proved and detect stale generated files or proofs for another source/profile.
+
+Bounded progress ([PR112](https://github.com/riventic/air2lean/pull/112)): Chained artifact manifest hashes source closure, compiler patch/pin, AIR, validated profile, translator, Gen.lean, runtime, toolchain, proofs, theorem names and optional receipt, with sealed dirty-tree provenance and per-link staleness/--expect checks. Remaining: a genuine receipt-chained manifest on a fresh schema-12 export, and native-binary identity.
 
 ## I08 — Safe output and execution controls
 
@@ -418,11 +426,15 @@ Classification: partial.
 
 atomic output publication, explicit overwrite behavior, bounded input size/depth, compiler/proof timeouts and cancellation that preserves prior verified artifacts. Acceptance: failed generation or interrupted checking cannot leave a partial file presented as a current verified artifact.
 
+Bounded progress ([PR113](https://github.com/riventic/air2lean/pull/113)): Atomic fsync+rename/no-clobber publication with explicit overwrite policy for translate.sh, check.sh, proof receipts and project artifacts; per-stage timeouts and INT/TERM/HUP cancellation stop the stage process group and preserve prior artifacts. Remaining: final lake build/diff stages bounded only by CI/build-guard timeouts; setsid-escaping descendants.
+
 ## I09 — Distribution and editor workflow
 
-Classification: partial.
+Classification: complete.
 
-reproducible checksum-verified packages or build instructions, a dependency/target doctor command, release compatibility metadata and optional editor diagnostics. Acceptance: a clean supported environment can run a small complete proof without undocumented local state. Preserve the AIR-only compiler lock when LLVM is absent.
+Completed in [PR114](https://github.com/riventic/air2lean/pull/114): Checksum-pinned build instructions with compatibility.json release metadata (compat.py check/release); doctor checks toolchains, patched Zig per version, AIR-only lock state, Docker, disk/memory (--json); scripts/clean-env.sh fresh-container first proof and --translate locked-compiler translation both recorded passing; editor/LSP docs. No prebuilt binary packages.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## V01 — Formal AIR semantics
 
@@ -478,6 +490,8 @@ Classification: partial.
 
 separate observed-result matching from bounded outcome enumeration; replayable schedules, sound reduction techniques where proved, and explicit cap/fuel coverage. Acceptance: reports state schedules explored and limits; no capped run silently counts as demonstrated correspondence.
 
+Bounded progress ([PR108](https://github.com/riventic/air2lean/pull/108)): Bounded Outcome FIFO/DFS enumeration and replay; differential reports publish separate observed-matching and bounded-enumeration coverage (schedules, fuel/cap/node/prefix limits, truncation, replay seeds); capped searches and truncated enumerations cannot count as correspondence (qualified=false); no reduction used. Exhaustive all-schedule correspondence and sound reduction proofs remain (research).
+
 ## Q04 — Host and skipped-case accounting
 
 Classification: partial.
@@ -496,6 +510,8 @@ Classification: partial.
 
 measure parse/normalize/check/emit/proof time, peak memory, output size and warm-cache behavior on real modules. Improve lookup/indexing and modularization where measurements justify it. Acceptance: recorded workloads and budgets catch regressions; optimizations preserve definitions or carry preservation evidence.
 
+Bounded progress ([PR116](https://github.com/riventic/air2lean/pull/116)): Real-module workload suite (7 uniform golden AIR sets with reference translations), air2lean --timing-json per-phase timing, cold/warm translate/elaborate/proof recorder with peak RSS and output hash, recorded Darwin arm64 baseline and regression gate. No measurement-driven optimization yet; budgets are reference-platform specific.
+
 ## Q07 — Compiler and model upgrade qualification
 
 Classification: partial.
@@ -510,9 +526,11 @@ preserve review coverage, resolve confirmed findings, run release gates against 
 
 ## D01 — Reconcile stale milestones
 
-Classification: partial.
+Classification: complete.
 
-one current support matrix generated where possible; separate historical milestone scope from present open work. Acceptance: no current gap list repeats completed work; comments, README, PLAN and CLI agree.
+Completed in [PR109](https://github.com/riventic/air2lean/pull/109): scripts/support-matrix.py generates docs/support-matrix.md and the README/PLAN version regions from committed sources; its CI check fails on stale regions or README/PLAN/ROADMAP-count/CI/CLI-help disagreement. PLAN's milestone table is historical and its open-work section names only incomplete register IDs.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## D02 — Verify and close the current theorem inventory
 
@@ -525,6 +543,8 @@ build the current theorem modules for their declared version/target translations
 Classification: partial.
 
 one indexed reference for target profiles, allocator policies, thread creation, memory ordering, timers, opaque math, assembly and compiler trust; link each theorem/report to the premises it uses. Acceptance: a reader can determine what a proof means without searching every runtime module.
+
+Bounded progress ([PR115](https://github.com/riventic/air2lean/pull/115)): docs/premises.md indexes stable premise IDs (PRF/ALC/THR/ORD/TMR/MTH/ASM/SEM/EXT/TRU) and links reports to them; scripts/premises.py maps all Proofs/roadmap/tutorial/case-study theorems in docs/premise-index.md and fails on stale/undefined/unmapped entries; kernel-graph (compiled) mode runs in CI. Remaining: review of compiled-mode source gaps.
 
 ## D04 — Tutorials and supported model extension examples
 

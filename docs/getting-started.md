@@ -13,6 +13,8 @@ lake env lean tutorials/first-proof/Main.lean
 
 The first command builds only the Basic proof module and its dependencies. The first run may download the pinned Lean toolchain. The second command checks the tutorial; success means exit status zero with no Lean errors. You do not need Zig for this step: the generated definitions are already committed.
 
+`scripts/doctor.sh --require proofs` checks these prerequisites (it also reports optional Zig, Docker, disk and memory state and prints a fix for each problem; `--json` gives a machine-readable report). To see the whole first proof succeed in a fresh container from checksum-pinned downloads, run `scripts/clean-env.sh`. See [distribution, doctor and editor workflow](distribution.md), which also covers editor setup and `lake env lean --json` diagnostics.
+
 If `lake` is missing, finish the elan installation and open a new terminal. If Lean reports an unknown `Proofs.Basic.Proofs` module, run the build command above from the repository root before checking the tutorial. An editor can also report missing imports until those dependencies have been built.
 
 ## Follow the source, model, and theorem
@@ -94,7 +96,7 @@ zig-patch/build.sh 0.16.0
 scripts/doctor.sh
 ```
 
-The patched compiler is installed in `zig-air-0.16.0/`. Its default build is locked to AIR export with no emitted binary. Use a stock Zig compiler to build or run Zig programs. The translation command below builds the runtime library and translator before exporting AIR.
+The patched compiler is installed in `zig-air-0.16.0/`. Its default build is locked to AIR export with no emitted binary; the doctor reports this lock state for every installed version. `scripts/clean-env.sh --translate` runs this setup and the translation below in a fresh container. Use a stock Zig compiler to build or run Zig programs. The translation command below builds the runtime library and translator before exporting AIR.
 
 ## Translate your own file
 
@@ -110,7 +112,7 @@ ZIG
 scripts/translate.sh work/first/demo.zig -o Proofs/MyProgram/Gen.lean --namespace MyProgram
 ```
 
-That single command builds the runtime and translator, exports fresh AIR, translates it, and checks the generated Lean before publishing the output. It uses the reference target `x86_64-linux` with baseline CPU features and `ReleaseSafe`. It requires the toolchain and patched compiler from the setup step; it does not install them or write a property proof. Choose an output path you intend to replace: successful translation replaces that file, while a failed run leaves the existing output intact.
+That single command builds the runtime and translator, exports fresh AIR, translates it, and checks the generated Lean before publishing the output. It uses the reference target `x86_64-linux` with baseline CPU features and `ReleaseSafe`. It requires the toolchain and patched compiler from the setup step; it does not install them or write a property proof. Choose an output path you intend to replace: successful translation atomically replaces that file (`--no-clobber` refuses an existing one), while a failed, interrupted or timed-out run (`--timeout SECONDS`, default 3600 per stage) leaves the existing output intact; see [safe-output.md](safe-output.md).
 
 The default AIR filter and Lean name prefix come from the input basename (`demo.` here). Zig analyzes referenced functions; `export fn` ensures this example is included. For a `pub fn`, reference it from a `comptime { _ = &tardiness; }` block. A file requiring translated std functions may need additional filter prefixes; see [std models](std-models.md).
 

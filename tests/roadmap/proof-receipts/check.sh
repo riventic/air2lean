@@ -27,7 +27,8 @@ for module in "$@"; do modules+=(--module "$module"); done
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
 inputs=(--input "$attempt/plan.json")
 for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean \
-            scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh; do
+            scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
+            assurance/float-semantics.json scripts/float-semantics.py; do
   inputs+=(--input "$repo_root/$path")
 done
 inputs+=(--input "$guard")

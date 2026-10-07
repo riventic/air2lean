@@ -11,9 +11,11 @@ from pathlib import Path
 import re
 import stat
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).absolute().parents[1]
 MAX_JSON = 64 * 1024 * 1024
@@ -25,7 +27,8 @@ MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
-          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh')
+          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
+          'assurance/float-semantics.json', 'scripts/float-semantics.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 
 
@@ -135,6 +138,62 @@ def write_new(path, data):
         os.link(temporary, path)  # Atomic no-clobber, including concurrent finalizers.
     finally:
         temporary.unlink()
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)  # Persist the published name before reporting success.
+    except OSError:
+        pass
+    finally:
+        os.close(directory)
+
+
+def run_child(argv, cwd, grace=2.0):
+    """Run the auditor in its own process group; any exit path stops the whole group.
+
+    SIGINT/SIGTERM/SIGHUP become one KeyboardInterrupt here, so cancellation never leaves a
+    live auditor writing into the attempt after this worker (and the outer guard) report it."""
+    cancelled = []
+    def cancel(signum, frame):
+        if not cancelled:  # Raise once: a repeated signal must not abort stop() mid-cleanup.
+            cancelled.append(signum)
+            raise KeyboardInterrupt
+    child = None
+    def group_alive():
+        try:
+            os.killpg(child.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    def stop():
+        for signum in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(child.pid, signum)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                child.wait(timeout=grace if signum == signal.SIGTERM else None)
+            except subprocess.TimeoutExpired:
+                continue
+            for _ in range(int(grace * 50) + 1):
+                if not group_alive():
+                    return
+                time.sleep(0.02)
+    previous = {s: signal.signal(s, cancel) for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+    try:
+        child = subprocess.Popen(argv, cwd=cwd, start_new_session=True)
+        returncode = child.wait()
+        if group_alive():
+            raise ValueError('auditor exited with live child processes')
+        return subprocess.CompletedProcess(argv, returncode)
+    except BaseException:
+        if child is not None:
+            stop()
+        raise
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def git(*args):
@@ -370,7 +429,7 @@ def worker(attempt):
     if plan['scope'] == 'explicit-modules':
         for module in plan['modules']:
             argv += ['--module', module]
-    result = subprocess.run(argv, cwd=ROOT)  # The existing outer guard owns timeout and cleanup.
+    result = run_child(argv, ROOT)  # The outer guard owns the timeout; cancellation stops the group.
     if result.returncode:
         return result.returncode if result.returncode > 0 else 128 - result.returncode
     after = context(plan)
@@ -387,6 +446,13 @@ def evidence_matches(rows, paths):
         demand(isinstance(row, dict), 'malformed guard identity row')
         demand(all(row.get(key) == actual[key] for key in ('path', 'sha256', 'bytes')),
                'guard identity mismatch: ' + actual['path'])
+
+
+def float_labels(audit):
+    """Receipt copy of the audit's float-semantics summary plus each stated theorem's label."""
+    labels = {t['name']: t['float_semantics']['label'] for t in audit['theorems']
+              if t.get('float_semantics', {}).get('scope') == 'stated'}
+    return dict(audit['float_semantics'], theorems=dict(sorted(labels.items())))
 
 
 def seal(attempt):
@@ -420,10 +486,13 @@ def seal(attempt):
            and before == after['context'] == context(plan), 'source context stale')
     demand(after['compiled'] == compiled(plan) and after['profiles'] == profiles(), 'compiled/profile context stale')
     audit_ok(plan, audit)
-    write_new(attempt / 'receipt.json', {'schema': 1, 'status': 'audited', 'authentication': 'not_attested',
+    # The audit's float-semantics summary (recomputed by audit_ok) states which semantics the
+    # numerical theorems concern; it never claims binary/native correspondence.
+    write_new(attempt / 'receipt.json', {'schema': 2, 'status': 'audited', 'authentication': 'not_attested',
               'proof_scope': 'selected compiled Lean theorem dependency policy only',
               'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
               'attempt': str(attempt), 'theorem_count': audit['theorem_count'],
+              'float_semantics': float_labels(audit),
               'artifacts': inventory([attempt / n for n in ('plan.json', *OUTPUTS, 'guard.json', 'guard.log')])})
 
 
@@ -431,8 +500,8 @@ def verify(attempt):
     attempt = physical(attempt)
     receipt = load(attempt / 'receipt.json')
     demand(set(receipt) == {'schema', 'status', 'authentication', 'proof_scope', 'source_correspondence',
-                          'native_adequacy', 'attempt', 'theorem_count', 'artifacts'} and
-           type(receipt['schema']) is int and receipt['schema'] == 1 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
+                          'native_adequacy', 'attempt', 'theorem_count', 'float_semantics', 'artifacts'} and
+           type(receipt['schema']) is int and receipt['schema'] == 2 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
            and receipt['authentication'] == receipt['source_correspondence'] == receipt['native_adequacy'] == 'not_attested'
            and receipt['proof_scope'] == 'selected compiled Lean theorem dependency policy only',
            'invalid receipt')
@@ -440,6 +509,9 @@ def verify(attempt):
            'receipt artifacts changed')
     plan, after, audit = plan_for(attempt), load(attempt / 'after.json'), load(attempt / 'audit.json')
     demand(type(receipt['theorem_count']) is int and receipt['theorem_count'] == audit['theorem_count'], 'receipt theorem count mismatch')
+    # audit_ok below recomputes the audit labels, which never claim binary correspondence.
+    demand(receipt['float_semantics'] == float_labels(audit),
+           'receipt float-semantics labels differ from the audit or claim binary correspondence')
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
     audit_ok(plan, audit)
@@ -447,6 +519,8 @@ def verify(attempt):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ('manifest', 'check-manifest'):
+        return helper('artifact-manifest').manifest_main(sys.argv[1:])  # Loaded only when used.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'worker', 'seal', 'verify'))
     parser.add_argument('attempt', type=Path)
@@ -490,6 +564,9 @@ def main():
     except (OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
         print('proof receipt unavailable/stale: ' + str(error), file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        print('proof receipt incomplete: interrupted; no receipt was published', file=sys.stderr)
+        return 130
 
 
 if __name__ == '__main__':

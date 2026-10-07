@@ -1,8 +1,10 @@
 # Plan
 
-For the current bounded closeout, requirement classifications and remaining acceptance, see the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md).
+This file holds the design decisions, the version-support rules, the subset reference and the milestone history. For what is supported now, see the generated [support matrix](docs/support-matrix.md); for requirement classifications and remaining acceptance, see the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md).
 
-## Status
+## Historical milestones
+
+Historical scope: each row records what that milestone delivered when it merged; the rows are not a current gap list. Later work supersedes some restrictions stated here. For example, M18's "`remap` always fails" precedes the bounded successful resize/remap model (M02); M22's integer-only atomics and its rejection of `.yield`, `.spinLoopHint`, `Futex.*`, `Mutex.*` and `Condition.*` precede T3–T5 and the yield/spin hint model (C03); M22's cut proof scope was closed by T4 (1) (`parallelCounter`); and M6/M13/M16b/M18/M19 input counts are the counts at merge time. The [support matrix](docs/support-matrix.md) and the [subset](#subset) describe the current scope.
 
 | # | Milestone | State |
 |---|---|---|
@@ -85,12 +87,18 @@ Mutation check (`scripts/mutate.sh`, 5 CI jobs, one per line of `scripts/mutatio
 | (ae) | `Io.Group.await` does not join the last task | diff test (`iogroup`: the `unspecified` count) |
 | (af) | `Thread.join` does not merge the joined thread's clock | proof build (`join_eq`; `Owned.join`, which `disjoint_safe` needs) |
 
-## Next
+## Current open work
 
-| # | Milestone |
-|---|---|
-| T6 | Docs for the T series (the status table, README, `docs/`); a release tag after approval. |
-| T7 | Verify current theorem inventory: `vectors.checkedAdd` already has universal `checkedAdd_ok` and `checkedAdd_overflow` proofs; `checkedAdd_spec` and the two iff corollaries give the complete four-lane `u32` result classification (see `docs/vector-proofs.md` for domain and qualification); remaining inventory: every `floatops` selector (`opN_spec`; `op128` without the `f128` division and `@sqrt`, which differ by version) and `divExact64`; `Triple`'s memory invariant `Mem.Seq` (one thread, every block below `Mem.nextAddr`) and `lists.append` (`append_run`); `sync.semaphoreCounter` over all schedules (done: `Proofs/Sync/Semaphore.lean` proves `wait` and `post` for every protocol, `Proofs/Sync/SemCounter.lean` the example); `sync.rwLockRead` over all schedules (done: `Proofs/Sync/RwLock.lean`, with the semaphore's specs from the kit); 0.15.2 `Thread.Mutex` on macOS (done: `Proofs/Threadsync/Lock.lean` proves `lock_spec`/`unlock_spec` for the macOS translation; CI builds the `threadsync` proofs against `Gen-darwin.lean`). |
+Current open work is the incomplete part of the [requirement register](ROADMAP.md#requirement-register), summarized by area in the generated [support matrix](docs/support-matrix.md#requirement-register); the acceptance for each ID is in [remaining acceptance](remaining-acceptance.md). This section lists no finished work; `scripts/support-matrix.py check` rejects a `complete` ID or a finished item in this section.
+
+The former T-series follow-ups now map to register IDs:
+
+| Former item | Register | Remaining scope |
+|---|---|---|
+| T6 (docs, release tag) | Q08 | Q08: release record, gates and review ledger for one exact source/profile state. |
+| T7 (theorem inventory) | D02, F05 | D02: a current check result and precise domain for each listed theorem against its version/target translation: the `floatops` selector theorems (`opN_spec`, `divExact64_spec`), the `Mem.Seq` invariant with `lists.append` (`append_run`), and the threaded clients; a one-step or one-schedule theorem is not labeled all-schedules. F05: `op128_spec` excludes the `f128` division-family and `@sqrt` selectors, which differ by version. |
+
+Earlier T7 clauses whose proofs exist (`vectors.checkedAdd`, [docs/vector-proofs.md](docs/vector-proofs.md); `sync.semaphoreCounter`; `sync.rwLockRead`; 0.15.2 `Thread.Mutex` on macOS) are historical; their current check results belong to D02.
 
 ## Decisions
 
@@ -112,7 +120,7 @@ Mutation check (`scripts/mutate.sh`, 5 CI jobs, one per line of `scripts/mutatio
 
 ## Zig version support
 
-Supported: **0.16.0** (default), **0.15.2** and **0.14.1** (matrix below). The design supports every major Zig release (each `0.x` minor, later `1.x`). The rule: one source for all versions; a version adds only its differences, each in one named place.
+The supported versions are in the generated matrix below. The design is meant to extend to later Zig releases (each `0.x` minor, later `1.x`), but each new version needs the steps below and its own qualification. The rule: one source for all versions; a version adds only its differences, each in one named place.
 
 | Layer | Shared | Per version |
 |---|---|---|
@@ -129,11 +137,19 @@ Supported: **0.16.0** (default), **0.15.2** and **0.14.1** (matrix below). The d
 
 Support matrix:
 
-| Zig | State |
-|---|---|
-| 0.16.0 | supported, default |
-| 0.15.2 | supported |
-| 0.14.1 | supported for `basic`, `recursion`, `options`, `floatops`, `floats`, `errors`, `variants`, `pointers`, `layout` (`floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have; `lists` uses `ArrayListUnmanaged`, another type in 0.14.1, `docs/std-models.md`). Builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override) and builds the proofs against it; its std cannot build the diff harness, so the diff test runs in the 0.16.0 and 0.15.2 jobs. |
+<!-- support-matrix:begin zig-versions (generated by scripts/support-matrix.py; do not edit by hand) -->
+Supported: Zig **0.16.0** (default), **0.15.2** and **0.14.1**. Default example selection (`scripts/example-selection.sh` on x86_64; `asm` needs x86_64):
+
+| Zig | CI | Examples | Not selected |
+|---|---|---|---|
+| 0.16.0 (default) | full job (pipeline, diff test, proofs); 5 mutation shards | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `iogroup`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `sync`, `threads`, `variants`, `vectors` | `threadsync` |
+| 0.15.2 | full job (pipeline, diff test, proofs) | `asm`, `atomics`, `basic`, `errors`, `floatconv`, `floatops`, `floats`, `layout`, `lists`, `options`, `pointers`, `recursion`, `slices`, `threads`, `threadsync`, `variants`, `vectors` | `iogroup`, `sync` |
+| 0.14.1 | restricted job (translation and proofs; no diff harness) | `basic`, `errors`, `floatops`, `floats`, `layout`, `options`, `pointers`, `recursion`, `variants` | `asm`, `atomics`, `floatconv`, `iogroup`, `lists`, `slices`, `sync`, `threads`, `threadsync`, `vectors` |
+
+Full matrix: [docs/support-matrix.md](docs/support-matrix.md).
+<!-- support-matrix:end zig-versions -->
+
+0.14.1 notes: of the examples it does not select, `floatconv` differs: 0.14.1 lowers the `@intFromFloat` check differently, `zig-patch/0.14.1/TAGS.md`; `slices` uses `@memmove`, which 0.14.1 does not have; `lists` uses `ArrayListUnmanaged`, another type in 0.14.1, `docs/std-models.md`; 0.14.1 has no inline-asm export support (M21); the other unselected examples' `zig-versions` files omit 0.14.1. The 0.14.1 compiler builds on Linux only: it cannot link on macOS 26. CI checks that its translation equals the committed one (or its `tests/golden/0.14.1/` override) and builds the proofs against it; its std cannot build the diff harness, so the diff test runs in the 0.16.0 and 0.15.2 jobs.
 
 **To add a Zig version** (add only differences; never copy a shared file):
 1. Add its source and host-zig URLs and sha256 to `zig-patch/versions.toml`.
@@ -141,7 +157,7 @@ Support matrix:
 3. Compare the AIR tag list in `src/Air.zig` with the previous version. Add the version to `supportedVersions` in `Normalize.lean`; add a tag case only if a subset tag differs.
 4. `AIR2LEAN_ZIG_VERSION=<version> scripts/check.sh`. If the AIR of an example differs: if the same code gives a different AIR pattern, rewrite it in `Canon.lean` so that the translation stays shared; copy only the differing AIR files to `tests/golden/<version>/<ex>/air/`. Write each difference in `zig-patch/<version>/TAGS.md`.
 5. Run `scripts/floatprobe.sh` with the version. Each changed float result is a model difference: a named def in `ZigLean/Float/`, picked in `Emit.lean` by `FCtx.zigVersion`, and a line in `tests/floatprobe/expected.<version>.txt`.
-6. Add the version to the CI matrix and the table above.
+6. Add the version to the CI matrix, generate `coverage/<version>.json` (`docs/coverage.md`), then run `python3 scripts/support-matrix.py generate` and `check` to refresh the table above.
 
 ## Subset
 

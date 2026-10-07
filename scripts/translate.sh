@@ -17,10 +17,16 @@ Options:
   --prefix PREFIX           Strip this prefix from Lean names (default: input basename + '.')
   --filter PREFIXES         Comma-separated AIR name prefixes (default: --prefix)
   --float-semantics MODE    ieee (default) or compiler-rt; forwarded to air2lean
+  --overwrite               Replace an existing OUTPUT after a successful check (default)
+  --no-clobber              Refuse to replace an existing OUTPUT, even one created concurrently
+  --timeout SECONDS         Per-stage limit (default 3600; 0 disables); the stage's process
+                            group is stopped and OUTPUT is left unchanged
   --help, -h                Show this help
   --                        Treat the next argument as the input, even if it starts with '-'
 
-Environment: AIR2LEAN_ZIG_VERSION, AIR2LEAN_ZIG_AIR.
+Environment: AIR2LEAN_ZIG_VERSION, AIR2LEAN_ZIG_AIR, AIR2LEAN_STAGE_TIMEOUT.
+OUTPUT is written by fsync + atomic rename: an interrupted, failed or timed-out run leaves
+the previous OUTPUT intact; see docs/safe-output.md.
 Needs the installed Lean toolchain in lean-toolchain and an existing patched Zig.
 No downloads or compiler bootstrap; Lean uses one worker per process and stages run sequentially.
 Target: x86_64-linux -mcpu=baseline, ReleaseSafe, no error tracing or binary emission.
@@ -32,6 +38,7 @@ HELP
 zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_ZIG_AIR:-}
 input='' output='' namespace='' prefix='' filter='' float_semantics=ieee
+overwrite=--overwrite workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
 prefix_set=0 filter_set=0 positional_only=0
 while [ "$#" -gt 0 ]; do
   if [ "$positional_only" = 1 ]; then
@@ -41,12 +48,14 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --help | -h) usage; exit 0 ;;
     --) positional_only=1; shift ;;
-    -o | --namespace | --zig-version | --zig-air | --prefix | --filter | --float-semantics)
+    --overwrite | --no-clobber) overwrite=$1; shift ;;
+    -o | --namespace | --zig-version | --zig-air | --prefix | --filter | --float-semantics | --timeout)
       [ "$#" -ge 2 ] || { workflow_error "missing value for $1"; exit 2; }
       case "$1" in
         -o) output=$2 ;; --namespace) namespace=$2 ;; --zig-version) zig_version=$2 ;;
         --zig-air) zig_air=$2 ;; --prefix) prefix=$2; prefix_set=1 ;;
         --filter) filter=$2; filter_set=1 ;; --float-semantics) float_semantics=$2 ;;
+        --timeout) workflow_stage_timeout=$2 ;;
       esac
       shift 2 ;;
     -*) workflow_error "unknown option: $1"; usage >&2; exit 2 ;;
@@ -60,6 +69,10 @@ case "$float_semantics" in
   ieee | compiler-rt) ;;
   *) workflow_error "invalid --float-semantics '$float_semantics'; choose ieee or compiler-rt"; exit 2 ;;
 esac
+case "$workflow_stage_timeout" in
+  '' | *[!0-9]*) workflow_error "invalid --timeout '$workflow_stage_timeout'; give whole seconds (0 disables)"; exit 2 ;;
+esac
+command -v python3 >/dev/null 2>&1 || { workflow_error 'python3 is required for bounded stages and atomic publication'; exit 1; }
 case "$input" in /*) ;; *) input="$caller_dir/$input" ;; esac
 case "$output" in /*) ;; *) output="$caller_dir/$output" ;; esac
 [ -f "$input" ] || { workflow_error "input file not found: $input"; exit 1; }
@@ -68,6 +81,9 @@ output_parent=$(dirname -- "$output")
 [ -d "$output_parent" ] || { workflow_error "output directory does not exist: $output_parent; create it first"; exit 1; }
 if { [ -e "$output" ] && [ ! -f "$output" ]; } || [ -L "$output" ] || [ "$input" -ef "$output" ]; then
   workflow_error 'output must be a regular file path distinct from the input (no symlinks or directories)'; exit 1
+fi
+if [ "$overwrite" = --no-clobber ] && [ -e "$output" ]; then
+  workflow_error "output exists and --no-clobber was given: $output"; exit 1
 fi
 if [ "$prefix_set" = 0 ]; then source_name=${input##*/}; prefix="${source_name%.zig}."; fi
 if [ "$filter_set" = 0 ]; then filter=$prefix; fi
@@ -81,9 +97,9 @@ cleanup() {
   [ -z "$lock" ] || rmdir -- "$lock"
 }
 trap cleanup EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'workflow_interrupt 129' HUP
+trap 'workflow_interrupt 130' INT
+trap 'workflow_interrupt 143' TERM
 # One pipeline per worktree. Do not steal a lock after an interrupted run: the
 # user must first establish that no other translate.sh is still using this build.
 mkdir -p "$repo_root/.lake"
@@ -104,7 +120,7 @@ if ! workflow_lake build ZigLean air2lean; then
   workflow_error 'Lean build failed; output was not changed'; exit 1
 fi
 printf '2/4 Exporting fresh AIR (x86_64-linux, baseline CPU)\n' >&2
-if ! ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
+if ! workflow_run_stage env ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline "$input" \
     2>"$work/export.stderr"; then
   cat "$work/export.stderr" >&2
@@ -122,7 +138,7 @@ if [ ! -f "${jsons[0]}" ]; then
   exit 1
 fi
 printf '3/4 Translating AIR to Lean\n' >&2
-if ! "$repo_root/.lake/build/bin/air2lean" "$work/air" -o "$stage/Gen.lean" \
+if ! workflow_run_stage "$repo_root/.lake/build/bin/air2lean" "$work/air" -o "$stage/Gen.lean" \
     --namespace "$namespace" --prefix "$prefix" --float-semantics "$float_semantics"; then
   workflow_error 'translation failed; check the reported subset/model limitation; output was not changed'; exit 1
 fi
@@ -134,5 +150,6 @@ fi
 if { [ -e "$output" ] && [ ! -f "$output" ]; } || [ -L "$output" ] || [ "$input" -ef "$output" ]; then
   workflow_error 'output path changed while translating; refusing to publish'; exit 1
 fi
-mv -f -- "$stage/Gen.lean" "$output"
+# fsync + atomic rename (or no-clobber link) beside OUTPUT; a failure leaves OUTPUT unchanged.
+workflow_publish "$overwrite" "$stage/Gen.lean" "$output" || exit 1
 printf 'Generated and checked: %s\nWrite property proofs separately; see docs/proofs.md.\n' "$output"

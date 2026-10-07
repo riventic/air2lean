@@ -82,7 +82,7 @@ class ReceiptTests(unittest.TestCase):
         for name in ('scripts/assumptions.py', 'scripts/normalize-generated.py', 'scripts/build-guard.py',
                      'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh', 'assurance/policy.json',
                      'tools/Assurance.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
-                     'zig-patch/versions.toml'):
+                     'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py'):
             self.source(name, (ROOT / name).read_bytes())
         self.source('ZigLean.lean', b'import ZigLean.Basic\n')
         self.source('ZigLean/Basic.lean', b'def trivial := 0\n')
@@ -340,6 +340,28 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(receipt['source_correspondence'], 'not_attested')
         self.assertEqual(receipt['native_adequacy'], 'not_attested')
 
+    def test_float_semantics_labels_are_carried_and_binary_claims_rejected(self):
+        audit = r.load(self.attempt / 'audit.json')
+        self.assertEqual(audit['float_semantics']['binary_correspondence'], 'not_claimed')
+        tampered = copy.deepcopy(audit)
+        tampered['theorems'][0]['float_semantics'] = {'scope': 'stated', 'label': 'ieee',
+                                                      'binary_correspondence': 'claimed'}
+        tampered['float_semantics']['binary_correspondence'] = 'claimed'
+        self.write('audit.json', tampered)
+        self.refresh_guard()
+        self.rejected()
+        self.write('audit.json', audit)
+        self.refresh_guard()
+        r.seal(self.attempt)
+        receipt = r.load(self.attempt / 'receipt.json')
+        self.assertEqual(receipt['schema'], 2)
+        self.assertEqual(receipt['float_semantics'], dict(audit['float_semantics'], theorems={}))
+        self.assertEqual(r.helper('float-semantics').report_problems(receipt, root=self.root), [])
+        claimed = dict(receipt, float_semantics=dict(receipt['float_semantics'], binary_correspondence='claimed'))
+        (self.attempt / 'receipt.json').write_text(json.dumps(claimed))
+        with self.assertRaisesRegex(ValueError, 'float-semantics'):
+            r.verify(self.attempt)
+
     def test_prepare_is_fresh_scoped_and_does_not_execute_tools(self):
         fresh = self.base / 'fresh'
         arguments = ['proof-receipt.py', 'prepare', str(fresh), '--toolchain', str(self.tc),
@@ -399,7 +421,7 @@ class ReceiptTests(unittest.TestCase):
             self.assertEqual(argv[-2:], ['--module', 'Proofs.One'])
             return types.SimpleNamespace(returncode=0)
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run', side_effect=runner):
+             mock.patch.object(r, 'run_child', side_effect=runner):
             self.assertEqual(r.worker(self.attempt), 0)
         self.assertEqual(len(calls), 1)
 
@@ -410,7 +432,7 @@ class ReceiptTests(unittest.TestCase):
         old = source.read_bytes()
         source.write_bytes(old + b'changed')
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run') as run, self.assertRaises(ValueError):
+             mock.patch.object(r, 'run_child') as run, self.assertRaises(ValueError):
             r.worker(self.attempt)
         run.assert_not_called()
         source.write_bytes(old)
@@ -418,7 +440,7 @@ class ReceiptTests(unittest.TestCase):
             source.write_bytes(old + b'changed during audit')
             return types.SimpleNamespace(returncode=0)
         with mock.patch.object(r.fcntl, 'flock', side_effect=BlockingIOError), \
-             mock.patch.object(r.subprocess, 'run', side_effect=change), self.assertRaises(ValueError):
+             mock.patch.object(r, 'run_child', side_effect=change), self.assertRaises(ValueError):
             r.worker(self.attempt)
         self.assertFalse((self.attempt / 'after.json').exists())
 

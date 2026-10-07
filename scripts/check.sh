@@ -22,6 +22,8 @@
 #                         from there, and the translator makes that OS's Gen.lean from them.
 #   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
 #                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
+#   AIR2LEAN_STAGE_TIMEOUT  Seconds per AIR dump/translation stage (default 3600; 0 disables).
+#                         A timed-out or interrupted stage's process group is stopped.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
 #                         translation equals the one that the diff test checks.
@@ -29,10 +31,28 @@
 # examples/<ex>/translate.args, if present: one line of extra `lake exe air2lean` arguments for
 # that example (e.g. `--float-semantics compiler-rt`; docs/generated-code.md). Opt-in per
 # example, since most examples never need a non-default flag.
+#
+# Generated Gen.lean files and check reports are staged, fsynced and atomically renamed
+# into place (docs/safe-output.md): an interrupted, failed or timed-out run leaves each
+# previous file intact, never a prefix of a new one.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+. "$repo_root/scripts/workflow-common.sh"
+workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
+case "$workflow_stage_timeout" in
+  '' | *[!0-9]*) echo "error: AIR2LEAN_STAGE_TIMEOUT must be whole seconds (0 disables)" >&2; exit 2 ;;
+esac
+air_dir='' cmp_dir=''
+cleanup() {
+  [ -z "$air_dir" ] || rm -rf -- "$air_dir"
+  [ -z "$cmp_dir" ] || rm -rf -- "$cmp_dir"
+}
+trap cleanup EXIT
+trap 'workflow_interrupt 129' HUP
+trap 'workflow_interrupt 130' INT
+trap 'workflow_interrupt 143' TERM
 
 zig_version=${AIR2LEAN_ZIG_VERSION:-0.16.0}
 zig_air=${AIR2LEAN_ZIG_AIR:-zig-air-$zig_version/bin/zig}
@@ -73,7 +93,6 @@ for ex in $examples; do
   os_dir="tests/golden/$zig_version/$ex/air-$(uname -s | tr '[:upper:]' '[:lower:]')"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
-  trap 'rm -rf "$air_dir" "$cmp_dir"' EXIT
 
   # examples/<ex>/filter, if present: more name prefixes to translate, one per line: the std
   # functions that the example calls and that have no model (docs/std-models.md).
@@ -82,7 +101,7 @@ for ex in $examples; do
     filter="$filter,$(paste -sd, "examples/$ex/filter")"
   fi
   echo "== $ex: dumping AIR ==" >&2
-  ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
+  workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
@@ -102,18 +121,17 @@ for ex in $examples; do
     translate_args=$(cat "examples/$ex/translate.args")
   fi
   generated="$cmp_dir/Gen.lean"
-  lake exe air2lean "$air_dir" -o "$generated" --namespace "$Ex" --prefix "$ex." $translate_args
+  workflow_run_stage lake exe air2lean "$air_dir" -o "$generated" --namespace "$Ex" --prefix "$ex." $translate_args
   report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
   mkdir -p "$report_dir"
   report="$report_dir/$ex.json"
-  python3 scripts/normalize-generated.py report "$generated" "$air_dir" "$report"
-  cp "$generated" "$report_dir/$ex.Gen.lean"
+  python3 scripts/normalize-generated.py report "$generated" "$air_dir" "$cmp_dir/report.json"
+  workflow_publish --overwrite "$cmp_dir/report.json" "$report"
+  workflow_publish --overwrite "$generated" "$report_dir/$ex.Gen.lean"
   if [ -n "${AIR2LEAN_OUT_DIR:-}" ]; then
     mkdir -p "$AIR2LEAN_OUT_DIR/check-reports/$zig_version"
-    if [ ! "$report" -ef "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json" ]; then
-      cp "$report" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json"
-    fi
-    cp "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
+    workflow_publish --overwrite "$cmp_dir/report.json" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.json"
+    workflow_publish --overwrite "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
   fi
 
   echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
@@ -183,10 +201,11 @@ for ex in $examples; do
     fi
   fi
   # Preserve the real validated profile header in the artifact compiled by the proof gate.
-  cp "$generated" "Proofs/$Ex/Gen.lean"
+  # Atomic replacement: an interruption leaves the previous complete Gen.lean in place.
+  workflow_publish --overwrite "$generated" "Proofs/$Ex/Gen.lean"
 
   rm -rf "$air_dir" "$cmp_dir"
-  trap - EXIT
+  air_dir='' cmp_dir=''
 done
 
 if [ -n "$restore_gen" ]; then

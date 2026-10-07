@@ -7,7 +7,7 @@ python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
 out=.lake/assurance/regressions
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/assurance
-for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition; do
+for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels; do
   lake env lean -o ".lake/build/lib/lean/tests/roadmap/assurance/$fixture.olean" \
     "tests/roadmap/assurance/$fixture.lean"
 done
@@ -30,6 +30,46 @@ for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection N
     --output "$out/$fixture.json" || status=$?
   [ "$status" = 1 ] || { echo "error: $fixture must fail policy (exit 1), got $status" >&2; exit 1; }
 done
+# Float-semantics labels (docs/float-semantics.md): unlabeled, mislabeled and binary claims fail.
+python3 - "$out" <<'PY'
+import json, sys
+from pathlib import Path
+registry = json.loads(Path('assurance/float-semantics.json').read_text())
+key = 'tests.roadmap.assurance.FloatLabels::AssuranceFixture.float_add_self'
+for name, entry in [('ieee', {'semantics': 'ieee', 'correspondence': 'model'}),
+                    ('abstract', {'semantics': 'abstract-spec', 'correspondence': 'model'}),
+                    ('binary', {'semantics': 'ieee', 'correspondence': 'binary'})]:
+    Path(sys.argv[1], 'float-' + name + '.json').write_text(json.dumps(dict(registry, theorems=dict(registry['theorems'], **{key: entry}))))
+PY
+float_status() {
+  local status=0
+  scripts/assumptions.sh --no-build --module tests.roadmap.assurance.FloatLabels "$@" || status=$?
+  echo "$status"
+}
+[ "$(float_status --output "$out/float-unlabeled.json")" = 1 ] || { echo 'error: unlabeled float theorem must fail policy' >&2; exit 1; }
+[ "$(float_status --float-semantics "$out/float-abstract.json" --output "$out/float-mislabeled.json")" = 1 ] \
+  || { echo 'error: abstract-spec label on an IEEE-operation theorem must fail policy' >&2; exit 1; }
+[ "$(float_status --float-semantics "$out/float-binary.json" --output "$out/float-binary-report.json")" = 2 ] \
+  || { echo 'error: binary-correspondence label must be rejected' >&2; exit 1; }
+[ "$(float_status --float-semantics "$out/float-ieee.json" --output "$out/float-labeled.json")" = 0 ] \
+  || { echo 'error: labeled float theorem must pass' >&2; exit 1; }
+python3 scripts/float-semantics.py check-report --float-semantics "$out/float-ieee.json" "$out/float-labeled.json"
+python3 - "$out" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+unlabeled = json.loads((root/'float-unlabeled.json').read_text())
+assert any(v['name'] == 'AssuranceFixture.float_add_self' and v['trust_class'] == 'unlabeled-numerical-theorem'
+           for v in unlabeled['violations']), unlabeled['violations']
+mislabeled = json.loads((root/'float-mislabeled.json').read_text())
+assert any(v['trust_class'] == 'float-semantics-mismatch' for v in mislabeled['violations']), mislabeled['violations']
+labeled = json.loads((root/'float-labeled.json').read_text())
+records = {t['name']: t.get('float_semantics') for t in labeled['theorems']}
+assert records['AssuranceFixture.float_add_self']['label'] == 'ieee', records
+assert records['AssuranceFixture.float_add_self']['binary_correspondence'] == 'not_claimed'
+assert records['AssuranceFixture.nat_add_self'] is None, records
+assert labeled['float_semantics']['labels'] == {'ieee': 1}, labeled['float_semantics']
+PY
 python3 - "$out" <<'PY'
 import json, sys
 from pathlib import Path

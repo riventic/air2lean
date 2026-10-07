@@ -436,6 +436,7 @@ if [ -n "${AIR2LEAN_DIFF_REPORT:-}" ]; then
   diff_phase=compare
   python3 "$repo_root/scripts/diff-report.py" compare --summary "$AIR2LEAN_DIFF_REPORT" \
     --root "$repo_root" --examples "$examples" --version "$zig_version" \
-    --host "$(uname -s)-$(uname -m)" || mismatch_found=1
+    --host "$(uname -s)-$(uname -m)" \
+    --schedule-receipts "${AIR2LEAN_SCHEDULE_RECEIPTS:-}" || mismatch_found=1
 fi
 [ "$mismatch_found" -eq 0 ]

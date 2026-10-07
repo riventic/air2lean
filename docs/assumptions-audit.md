@@ -95,7 +95,8 @@ The report has a versioned schema and contains:
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
-  `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status.
+  `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,
+  plus the kernel type's `conclusion` shape used for claim strength (see `docs/claim-strength.md`).
 - `nodes`: a shared dependency graph with actual kernel names, stable user names, defining
   modules, declaration kind, direct dependencies, trust class, unsafe/partial flags,
   `implemented_by` targets, and complete extern entries (kind, backend, and symbol/inline
@@ -103,6 +104,10 @@ The report has a versioned schema and contains:
   complete transitive declaration dependency set without duplicating it for every theorem.
 - `project_declarations`: trust-relevant project declarations checked independently of
   theorem reachability, and `violations`: the gate's global rejection list.
+- `float_semantics`: per numerical theorem and as a summary, the float semantics it concerns
+  (`ieee`, `compiler-rt@<versions>` or `abstract-spec`, from `assurance/float-semantics.json`).
+  An unlabeled numerical theorem or a label that contradicts the graph is a violation
+  (`docs/float-semantics.md`).
 
 Logical dependency edges do not include `implemented_by` replacement edges. The report
 records those targets separately because execution and kernel proof reduction use different
@@ -129,7 +134,11 @@ An opaque declaration can have a checked value. Opacity alone is not a logical a
 its trust class records a reviewed boundary rather than inventing an axiom. Theorem types
 retain ordinary hypotheses about assembly, allocations, scheduling, and other semantic
 premises. This gate inventories constants and axioms, not a semantic interpretation or
-human-readable enumeration of all local hypotheses.
+human-readable enumeration of all local hypotheses. The semantic premises (profile,
+allocator, scheduler, ordering, timer, float, assembly and trust) have stable IDs in
+[premises.md](premises.md). [premise-index.md](premise-index.md) maps each theorem to
+those IDs. `scripts/premises.py compiled --assurance <this report>` derives the same
+mapping from this report's dependency graph.
 
 The audit demonstrates that the selected compiled theorem inventory obeys the explicit
 dependency policy. It does not prove Zig export, AIR normalization/emission, backend
