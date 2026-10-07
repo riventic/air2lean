@@ -124,8 +124,9 @@ has its own `input_validation` entry, so accepting JSON does not claim Zig seman
 analysis. Supplied AIR is not evidence that this invocation exported the declared
 sources. Declared goals, a wrapper theorem and sampled tests cannot turn `proved` into
 `passed`. Export, Lean proof checking, differential execution and incremental caches
-remain explicit unavailable capabilities; use separately recorded qualified gates for
-those stages. The full roadmap acceptance criteria for I03/I05-I08 are not complete.
+remain explicit unavailable capabilities of `report`/`translate`; `coverage` (below) joins
+separately recorded proof receipts and differential summaries. The full roadmap
+acceptance criteria for I03/I05/I07/I08 are not complete.
 
 Diagnostics have stable wrapper codes, categories, root/path context and optional source
 and dependency locations. The current AIR format does not reliably supply those
@@ -153,3 +154,74 @@ then translates `example-project.json` with that executable and verifies the res
 artifact hashes. The artifact and JSON reports stay under `RUNNER_TEMP` and are not
 uploaded by this gate. This checks translation and stale-input detection; it does not
 check the declared Lean proof goals or establish source/export/backend correspondence.
+
+## Verification coverage reports
+
+`coverage` joins each manifest root with independently produced evidence and assigns an
+explicit verification level. It runs no compiler, Lake or Lean process itself.
+
+```sh
+python3 scripts/project.py coverage project.json \
+  --artifact artifacts/run-001 \
+  --receipt "$FRESH_ATTEMPT" \
+  --diff "$AIR2LEAN_DIFF_REPORT" \
+  [--format text] [--out coverage.json] [--require-level functionally_verified_total]
+```
+
+Every input is optional; a missing input leaves its stages `not_run`. Evidence sources:
+
+| Stage | Evidence | Pass rule |
+|---|---|---|
+| `analyzed`, `exported` | none available | always `not_run`; supplied AIR is not export evidence |
+| `translated` | `--artifact` | `verify` succeeds: manifest, inputs, generated Lean and translator hashes current |
+| `compiled` | `--receipt` ([proof receipt](proof-receipts.md) attempt) | `proof-receipt.py verify` reports `current`; some receipt `after.json` generated profile is byte-identical to the artifact's `Gen.lean`; each contract file's current hash equals the receipt source inventory; generated and contract modules are in the compiled inventory |
+| `proved` | receipt `audit.json` | per goal (below); `passed` only when every declared goal is `direct` |
+| `tested` | `--diff` (repeatable, typed diff-report summary + `.jsonl`) | summary complete; it hashes at least one declared source-closure file and all such hashes are current; at least one match and no mismatch, host difference, input or harness failure or unrecognized status for `example.function` |
+
+The receipt verifier defaults to `scripts/proof-receipt.py` and can be overridden with
+`--receipt-verifier` (tests use a mock). Any nonzero exit or non-`current` answer marks
+`compiled` and `proved` failed as a stale receipt. Only the existing receipt/plan/audit/after
+files are read; their format is not extended. Differential source binding matches
+manifest-relative `source_closure` names against the runner's repository-relative
+`runner_runtime_sources`, so place the manifest at the runner root for that binding.
+
+Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`, with
+one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
+contract file), `policy_violation` (audit `allowed` false or violations),
+`wrapper_or_unrelated`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
+`direct` requires the theorem declaration itself to depend on the generated root
+definition `namespace.(function without prefix)`, which must live in the hash-bound
+generated module. A theorem about a wrapper or a hand-written model that reaches the
+generated code only through other definitions or lemmas is `wrapper_or_unrelated`.
+
+Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
+`functionally_verified_partial`, `functionally_verified_total`.
+
+* `functionally_verified_*` requires passed preflight, `translated`, `compiled`, at least
+  one declared goal, every goal `direct`, and at least one `partial_correctness` or
+  `total_correctness` goal. `_total` additionally requires a direct `total_correctness`
+  goal; only that level sets `fully_functionally_verified`.
+* `proved_scoped`: translated, compiled and at least one direct goal, but the functional
+  rule fails (missing/wrapper goals, or only `safety`, `resource_bound`, `correspondence`).
+* `tested_sampled`: translated, compiled and passing differential samples. Differential
+  evidence is always `scope: sampled` and never contributes to a higher level.
+* A wrapper-only theorem or sampled-only tests therefore cannot reach functional
+  verification; `blockers` lists every unmet rule.
+
+Each root also reports `contract_domain` (declared domains, `review: declared_not_checked`),
+`theorem_strength` (declared and direct strengths; strengths are manifest declarations, not
+machine-classified statements), `assumptions` (declared manifest identifiers plus audited
+axioms, opaque, extern and compiler-redirection dependencies of direct theorems) and
+`exclusions` (manifest exclusions, differential exclusion/skip counts and the receipt's
+`not_attested` trust fields). `--require-level` exits 1 when any root is below the level;
+diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
+publication as `report`.
+
+Residual limits: a theorem whose own proof term mentions the generated definition while
+its statement concerns a wrapper is still classified `direct`; the declared strength and
+domain remain review obligations. The level does not attest export, source
+correspondence, backend lowering or native adequacy (see the receipt's trust fields).
+
+```sh
+python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
+```
