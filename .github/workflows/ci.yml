@@ -369,13 +369,15 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/blockers.log"
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
       # client proofs that reading them is `.unspecified`, and rejection of every other
-      # `undefined` operand. Hand-written AIR only.
+      # `undefined` operand. A store of `undefined` to a local: byte locals whose undefined
+      # parts read as `.unspecified`, copied without decoding. Hand-written AIR only.
       - name: Undefined constant operands
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
+          bash tests/roadmap/undef-locals/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 

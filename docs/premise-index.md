@@ -5,22 +5,22 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1768 theorems in 83 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 504 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1003 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 4 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 688 | Futex model |
+| [THR-05](premises.md#thr-05) | 690 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
 | [THR-08](premises.md#thr-08) | 901 | Protocol (rely-guarantee / CSL) proofs over all schedules |
@@ -28,22 +28,22 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-02](premises.md#ord-02) | 759 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 295 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 440 | Weak CAS spurious failure |
-| [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
+| [TMR-01](premises.md#tmr-01) | 28 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 55 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 21 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1046 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1366 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 1768 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 820 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 820 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 
 ## `Proofs/Asm/Proofs.lean`
@@ -1378,8 +1378,11 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, S
 |---|---|
 | `Threadsync.dl0_size` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.bsD_size` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `Threadsync.dl_none_b` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.none_of_isNone` | SEM-01, TRU-01 |
 | `Threadsync.dl_none` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.dinit_bytes` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.dinit_timeout` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.dinit_started` | PRF-01, THR-01, THR-05, TMR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.dinit_eq` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.hb0_of` | THR-01, THR-08, SEM-02, TRU-01 |
 | `Threadsync.DLb.b0` | THR-01, THR-08, SEM-02, TRU-01 |
@@ -2276,6 +2279,33 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | `TryPointersProofs.payloadProgram_owned` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `TryPointersProofs.payload8_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `TryPointersProofs.payload64_owned` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/undef-locals/UndefLocals/Proofs.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `UndefLocalsClients.fieldA_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.fieldB_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.mk_bytes` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.copyA_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.copyB_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.wholeRead_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.writtenRead_value` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.condWrite_written` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefLocalsClients.condWrite_unwritten` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/undef-operands/UndefOperands/Proofs.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `UndefOperandsClients.localA_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.localB_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.recLen_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.recMid_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/vcs/Clients.lean`
 

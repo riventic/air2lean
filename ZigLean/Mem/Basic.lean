@@ -372,6 +372,35 @@ def optSetSome (α : Type) [Enc α] (p : Ptr) : MemM Ptr := do
 def storeUndef (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Unit :=
   storeBytes p align (Array.replicate (Enc.size α) .undef)
 
+/-! ## Values with undefined parts
+
+A local that receives a store of `undefined` holds the bytes of its value (`Enc`), so that its
+undefined parts stay undefined bytes: a store writes bytes, a read of a part decodes only the
+part's bytes and throws `.unspecified` if one of them is undefined. A copy of the whole value
+(a load returned or stored to memory) moves the bytes without decoding them. -/
+
+/-- The bytes of a value of type `α` that can have undefined parts. -/
+abbrev Bytes (_α : Type) := Array Byte
+
+/-- Every byte undefined. -/
+def Bytes.undef (α : Type) [Enc α] : Bytes α := Array.replicate (Enc.size α) .undef
+
+/-- The bytes at `off` hold `v`. -/
+def Bytes.set {α β : Type} [Enc β] (bs : Bytes α) (off : Nat) (v : β) : Bytes α :=
+  writeBytes bs off (Enc.encode v)
+
+/-- The bytes of a `β` at `off` become undefined. -/
+def Bytes.setUndef {α : Type} (β : Type) [Enc β] (bs : Bytes α) (off : Nat) : Bytes α :=
+  writeBytes bs off (Array.replicate (Enc.size β) .undef)
+
+/-- The bytes at `off` become `src`'s (a copy of a value with undefined parts). -/
+def Bytes.copy {α β : Type} (bs : Bytes α) (off : Nat) (src : Bytes β) : Bytes α :=
+  writeBytes bs off src
+
+/-- The `β` at `off`: throws `.unspecified` if one of its bytes is undefined. -/
+def Bytes.get (β : Type) [Enc β] {α : Type} (bs : Bytes α) (off : Nat) : Result β :=
+  Enc.decode (bs.extract off (off + Enc.size β))
+
 /-! ## Memory ops
 
 `@memset`, `@memcpy` and `@memmove` do nothing for 0 bytes (0 items or a zero-sized item), also through a pointer

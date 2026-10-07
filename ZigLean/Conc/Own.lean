@@ -401,19 +401,18 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
       Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
-/-- A store of `w`, whose encoding has the size of `T`, at byte `k` of owned bytes. -/
-theorem TTriple.storeAt' {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {k a : Nat} (w : T) (hw : (Enc.encode w).size = Enc.size T) (hq : q = p.add k)
-    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
-    (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
-    TTriple (bytesAt p A S K bs) (Zig.store a q w)
-      (fun _ => bytesAt p A S K (writeBytes bs k (Enc.encode w))) :=
+/-- A store of the bytes `bs'` at byte `k` of owned bytes. -/
+theorem TTriple.storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {k a : Nat} (bs' : Array Byte) (hq : q = p.add k) (hn : 0 < bs'.size)
+    (hk : k + bs'.size ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    TTriple (bytesAt p A S K bs) (Zig.storeBytes q a bs')
+      (fun _ => bytesAt p A S K (writeBytes bs k bs')) :=
   TTriple.of_run fun m hP hF hd hm hb hc ho => by
     have hin : ∀ b, p.block = some b →
-        ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + (Enc.encode w).size → hP (b, x) ≠ none :=
+        ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + bs'.size → hP (b, x) ≠ none :=
       fun b hpb x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     obtain ⟨b, blk, hpb, hr, h', hd', hm', hb'⟩ :=
-      bytesAt_store_core (bs' := Enc.encode w) hb hm hd hq (by omega) (by omega) ha
+      bytesAt_store_core (bs' := bs') hb hm hd hq (by omega) (by omega) ha
         (fun b hpb => ho.noRace (by omega) (hin b hpb)) hK
     have hbs : b < m.blocks.size := by
       have c0 := bytesAt_cell (j := 0) hb hm hpb (by omega)
@@ -422,7 +421,7 @@ theorem TTriple.storeAt' {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byt
     have hs1 := StepIn.recordAt (kind := .write) hc hd (by omega) (hin b hpb) hbs
     refine ⟨(), _, h', hr, hd', hm', hb', Mem.Owns.write ?_, hs1.trans (StepIn.write _ _ _ _ _ _)⟩
     -- The bytes of `h'` are those of `hP`.
-    have ho1 := Mem.Owns.recordAt (b := b) (off := p.off.toNat + k) (len := (Enc.encode w).size)
+    have ho1 := Mem.Owns.recordAt (b := b) (off := p.off.toNat + k) (len := bs'.size)
       (kind := .write) hc ho
     intro e he ht
     apply ho1 e he
@@ -438,6 +437,15 @@ theorem TTriple.storeAt' {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byt
         rw [hbe]; exact bytesAt_in hb hpb hx1 hx2
       · exact absurd rfl h3
     · exact .inr (by simpa [Mem.write] using hb2)
+
+/-- A store of `w`, whose encoding has the size of `T`, at byte `k` of owned bytes. -/
+theorem TTriple.storeAt' {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {k a : Nat} (w : T) (hw : (Enc.encode w).size = Enc.size T) (hq : q = p.add k)
+    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size)
+    (ha : (A + p.off.toNat + k) % a = 0) (hK : K ≠ .constGlobal) :
+    TTriple (bytesAt p A S K bs) (Zig.store a q w)
+      (fun _ => bytesAt p A S K (writeBytes bs k (Enc.encode w))) :=
+  TTriple.storeBytesAt (Enc.encode w) hq (by omega) (by omega) ha hK
 
 /-- A store of `w` at byte `k` of owned bytes. -/
 theorem TTriple.storeAt [LawfulEnc T] {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}

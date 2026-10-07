@@ -1,0 +1,245 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "undef_locals.branchOut",
+ "params": [
+  6
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 6,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 3,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    }
+   ],
+   "name": "x"
+  },
+  {
+   "id": 14,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 2,
+     "tag": "store_safe",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 1
+      },
+      {
+       "ty": 0,
+       "undef": true
+      }
+     ]
+    },
+    {
+     "id": 5,
+     "tag": "block",
+     "ty": 1,
+     "body": [
+      {
+       "id": 6,
+       "tag": "cond_br",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 0
+        }
+       ],
+       "then": [
+        {
+         "id": 7,
+         "tag": "br",
+         "ty": 5,
+         "target": 4,
+         "args": [
+          {
+           "ty": 1,
+           "val": "{}"
+          }
+         ]
+        }
+       ],
+       "else": [
+        {
+         "id": 8,
+         "tag": "br",
+         "ty": 5,
+         "target": 5,
+         "args": [
+          {
+           "ty": 1,
+           "val": "{}"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "tag": "store_safe",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 1
+      },
+      {
+       "ty": 0,
+       "val": "5"
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "br",
+     "ty": 5,
+     "target": 4,
+     "args": [
+      {
+       "ty": 1,
+       "val": "{}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "undef_locals.Pair",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "b",
+     "ty": 0,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn () undef_locals.Pair"
+  }
+ ]
+}

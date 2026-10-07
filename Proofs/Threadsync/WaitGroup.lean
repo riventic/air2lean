@@ -2989,8 +2989,8 @@ theorem wus_spec (p0 : Ptr) (hp1 : (p0.add 0).add 0 = EV.ptr) (hp2 : p0.add 0 = 
       rw [dinit_eq]
       refine WP.bind (WP.bind (WP.callC (WP.pure' ?_)))
       obtain ⟨A₁, hA₁, hb₁⟩ := hdl.bytes
-      refine WP.bind (wp_mownM (TTriple.storeAt' (p := q) (q := q) (k := 0) (a := 8) dl0 dl0_size
-        (by cases q; simp [Ptr.add]) (by decide) (by simp; exact Nat.le_refl 48) (by rw [hdl.off]; simpa using hA₁) (by decide))
+      refine WP.bind (wp_mownM (TTriple.storeBytesAt (p := q) (q := q) (k := 0) (a := 8) dl0
+        (by cases q; simp [Ptr.add]) (by rw [dl0_size]; decide) (by simp [dl0_size]) (by rw [hdl.off]; simpa using hA₁) (by decide))
         hi₅ hop₅.current hb₁ (fun _ hQ' hq' => hb0_of hq' (hdl.blk.choose_spec.1) hdl.blk.choose_spec.2)
         fun _ m₆ hQ₆ _ hc₆ _ hq₆ hi₆ => ?_)
       have hdl₆ : DL q hQ₆ := ⟨hdl.off, hdl.blk, A₁, hA₁, hq₆⟩
