@@ -77,8 +77,11 @@ def lint(root):
         for heading in SECTIONS:
             if heading not in readme:
                 errors.append(f'{rel}/README.md: missing {heading}')
-        if not EXPECT.search((path / 'Negative.lean').read_text()):
+        negative = (path / 'Negative.lean').read_text()
+        if not EXPECT.search(negative):
             errors.append(f'{rel}/Negative.lean: missing "-- expect-error: <text>"')
+        if not re.search(r'^theorem ', negative, re.M):
+            errors.append(f'{rel}/Negative.lean: no theorem to reject')
         derived = file_premises(root, f'{rel}/Main.lean')
         listed = set(PREMISE.findall(section(readme, SECTIONS[-1])))
         if derived is None:
@@ -113,14 +116,20 @@ def check(root, results):
             if code != 0:
                 failures += 1
                 print(f'FAIL: {rel}/{name} (exit {code})\n{text}', file=sys.stderr)
-        expect = EXPECT.search((path / 'Negative.lean').read_text()).group(1).strip()
+        source = (path / 'Negative.lean').read_text()
+        expect = EXPECT.search(source).group(1).strip()
+        # The expected error must come from the last theorem (the false claim), not from a
+        # broken helper above it.
+        last = max(i for i, line in enumerate(source.splitlines(), 1) if line.startswith('theorem '))
         code, text = lean(root, f'{rel}/Negative.lean', results / f'{path.name}-Negative.lean.log')
+        lines = [int(n) for n in re.findall(rf'Negative\.lean:(\d+):\d+: error: {re.escape(expect)}', text)]
         if code == 0:
             failures += 1
             print(f'FAIL: Lean accepted the negative control {rel}/Negative.lean', file=sys.stderr)
-        elif not re.search(rf'Negative\.lean:\d+:\d+: error: {re.escape(expect)}', text):
+        elif not any(n >= last for n in lines):
             failures += 1
-            print(f'FAIL: {rel}/Negative.lean failed without "error: {expect}"\n{text}', file=sys.stderr)
+            print(f'FAIL: {rel}/Negative.lean failed without "error: {expect}" in its last theorem '
+                  f'(line {last} on)\n{text}', file=sys.stderr)
         if failures == before:
             print(f'OK: {rel}: proof, exercise and negative control')
     return failures

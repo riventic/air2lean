@@ -33,7 +33,8 @@ class Committed(unittest.TestCase):
 
     def test_clean_env_and_ci_run_every_tutorial(self):
         clean = (ROOT / 'scripts/clean-env.sh').read_text()
-        self.assertIn('lake build $(python3 scripts/tutorials.py modules)', clean)
+        self.assertIn('modules=$(python3 scripts/tutorials.py modules)', clean)
+        self.assertIn('lake build $modules', clean)
         self.assertIn('python3 scripts/tutorials.py check', clean)
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIn('scripts/tutorials.py check', ci)

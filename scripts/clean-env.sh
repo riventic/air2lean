@@ -40,7 +40,9 @@ if [ "${1:-}" = --inside ]; then
   lake build Proofs.Basic.Proofs
   lake env lean tutorials/first-proof/Main.lean
   # 4. Every tutorial: its proof, the solved exercise, and the negative control Lean must reject.
-  lake build $(python3 scripts/tutorials.py modules)
+  # A failing assignment stops set -e; a failing substitution inside `lake build` would not.
+  modules=$(python3 scripts/tutorials.py modules)
+  lake build $modules
   python3 scripts/tutorials.py check --results "$out/tutorials"
   echo 'OK: every tutorial, exercise and negative control' | tee "$out/proofs.ok"
   if [ "$translate" = 1 ]; then
