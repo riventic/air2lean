@@ -17,43 +17,6 @@ open Assn
 /-- The memory with a new allocation count has the same heap. -/
 theorem Mem.heap_allocs (m : Mem) (k : Nat) : ({ m with allocs := k } : Mem).heap = m.heap := rfl
 
-/-- `rawAlloc` gives `none` and changes no byte, or a new heap block, as `alloc_run`. -/
-theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (n align : Nat) (ha : 0 < align) (hst : m.Seq) :
-    ∃ r m', (rawAlloc n align).run m = pure (r, m') ∧ m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧
-      match r with
-      | none => m'.heap = h ∪ hF
-      | some p => p.off = 0 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧
-          Heap.Disjoint h h' ∧ ∃ A, A % align = 0 ∧
-            bytesAt p A n .heap (Array.replicate n .undef) h' ∧
-            ∀ l c, m.heap l = some c → c.addr + c.size < A := by
-  let m₁ : Mem := { m with allocs := m.allocs + 1 }
-  have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
-  have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
-  by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
-  · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
-    simp [rawAlloc, hc, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
-  by_cases ho : m.oracleDenies n = true
-  · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
-    simp only [not_or] at hc
-    simp [rawAlloc, hc, ho, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
-  · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
-      alloc_run hd hm₁ .heap n align ha hst₁
-    refine ⟨some p, m', ?_, hst', by rw [hsz]; exact Nat.le_succ _, h0, h', hd', hm', hdd, A, hA, hb,
-      hab⟩
-    simp only [StateT.run] at hr
-    simp only [not_or] at hc
-    simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set, m₁] at hr ⊢
-    simp [hr, ExceptT.bindCont]
-
-/-- A policy as a general failure oracle with no fixed cap or failure list: its cap and finite
-failure indices move into `fails`; the budget, remap mode and the oracle itself are kept. -/
-def AllocPolicy.asOracle (P : AllocPolicy) : AllocPolicy :=
-  { P with
-    maxBytes := unboundedAllocBytes
-    failures := []
-    fails := fun i n => (decide (P.maxBytes < n) || P.failures.contains i) || P.fails i n }
-
 /-- Every failure decision of `rawAlloc`: a fixed/legacy rule or the general oracle/budget. -/
 def Mem.allocDenied (m : Mem) (n : Nat) : Prop :=
   (m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures) ∨
@@ -74,6 +37,39 @@ theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
   · simp only [show ¬ m.allocDenied n from fun h => h.elim hc ho, ↓reduceIte]
     simp only [not_or] at hc
     simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set]
+
+/-- `rawAlloc` gives `none` and changes no byte, or a new heap block, as `alloc_run`. -/
+theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
+    (n align : Nat) (ha : 0 < align) (hst : m.Seq) :
+    ∃ r m', (rawAlloc n align).run m = pure (r, m') ∧ m'.Seq ∧ m.blocks.size ≤ m'.blocks.size ∧
+      match r with
+      | none => m'.heap = h ∪ hF
+      | some p => p.off = 0 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧
+          Heap.Disjoint h h' ∧ ∃ A, A % align = 0 ∧
+            bytesAt p A n .heap (Array.replicate n .undef) h' ∧
+            ∀ l c, m.heap l = some c → c.addr + c.size < A := by
+  let m₁ : Mem := { m with allocs := m.allocs + 1 }
+  have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
+  have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
+  classical
+  rw [rawAlloc_eq]
+  by_cases hdn : m.allocDenied n
+  · exact ⟨none, m₁, by simp only [hdn, ↓reduceIte]; rfl, hst₁, Nat.le_refl _, hm₁⟩
+  · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
+      alloc_run hd hm₁ .heap n align ha hst₁
+    refine ⟨some p, m', ?_, hst', by rw [hsz]; exact Nat.le_succ _, h0, h', hd', hm', hdd, A, hA, hb,
+      hab⟩
+    simp only [hdn, ↓reduceIte]
+    simp only [StateT.run] at hr ⊢
+    simp [zig_unfold, hr, m₁]
+
+/-- A policy as a general failure oracle with no fixed cap or failure list: its cap and finite
+failure indices move into `fails`; the budget, remap mode and the oracle itself are kept. -/
+def AllocPolicy.asOracle (P : AllocPolicy) : AllocPolicy :=
+  { P with
+    maxBytes := unboundedAllocBytes
+    failures := []
+    fails := fun i n => (decide (P.maxBytes < n) || P.failures.contains i) || P.fails i n }
 
 /-- The finite-list policy embeds in the oracle policy: every `usize` request gets the same
 failure decision. -/

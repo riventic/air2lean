@@ -16,7 +16,9 @@ a policy decision. Duplicate indices have no extra effect.
 
 The default policy has no failures and no fixed cap (`maxBytes = unboundedAllocBytes = 2^64`,
 so every `usize` request passes the size check). The model therefore never rejects a valid
-large request only because of a model constant. The differential harness keeps its legacy
+large request only because of a model constant. Lean represents every allocated byte, so a Lean runtime run of a very large request under
+the default policy can exhaust host memory. Runners that accept untrusted sizes select an
+explicit cap or budget. The differential harness keeps its legacy
 1 MiB cap as an explicit choice: `AllocPolicy.harness` in `tests/diff/Diff.lean`, and
 `TestAllocator.max_alloc_bytes` natively. It does not use the model default. To select a 2 MiB cap, failures at attempts 0
 and 2, every odd attempt above 64 bytes and a 16 MiB live-heap budget:

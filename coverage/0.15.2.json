@@ -2548,6 +2548,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/Block.lean",
           "ZigLean/Sep/Heap.lean"
         ]
@@ -2810,6 +2811,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/Block.lean",
           "ZigLean/Sep/Heap.lean"
         ]
@@ -4053,6 +4055,7 @@
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Lists/Append.lean",
           "Proofs/Lists/Gen.lean",
+          "Proofs/Lists/Policy.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
           "Proofs/Pointers/Gen.lean",
@@ -15559,8 +15562,8 @@
       "ZigLean/Float.lean": "989952fee1cea32435cc635770218f858d54c3b20bf63fa33598bf38f3eb6625",
       "ZigLean/Lemmas.lean": "1fb0ae49b9ea33ad0caadec7bb61378c06539088e95a014e117d91debd491634",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
-      "ZigLean/Mem/Alloc.lean": "6f1f165294dc0ded6fd37198dfa678bd5194e684cf0e6f24ffa9309f5305be87",
-      "ZigLean/Mem/Basic.lean": "8fe87314675a4cfb30ec7c0d6efb856ee6d79678dc425f318dbdd0ac9cee15dd",
+      "ZigLean/Mem/Alloc.lean": "aed9d87f7b8b4838ff4b4954b67a1f7ebd9b7984c6b220b1d70437b2574c6713",
+      "ZigLean/Mem/Basic.lean": "f20a72d286ce32ab697239975a78999d2b250aa1eb6d203ec8f7042a3778632f",
       "ZigLean/Mem/Enc.lean": "9c823b860da4d569beae7ea55ab04827370fab81532db5f9fea2558a1bb368e5",
       "ZigLean/Mem/Lemmas.lean": "a67b519108b215ff3bb9c1fe3dffe5571dae062ae7177b3332c45f0de0702bbe",
       "ZigLean/Mem/Null.lean": "ce3a714180a3adeb4864af0d534f85f871371e2f00fd8624d9f4dbc907fa1e8f",
@@ -15568,7 +15571,7 @@
       "ZigLean/Mem.lean": "984464356198c9e326876be51ad994e401290d0fe92decdf93ba24529abbc6ad",
       "ZigLean/Packed.lean": "1d67210ee4ead8839b972f08e3340f6e1e6e72a91d61fc98a18a071903e153d9",
       "ZigLean/Permutation.lean": "46ea25243d11f31b66fcecc984a21b0843fe1366276d7abf69840107567c27e9",
-      "ZigLean/Sep/Alloc.lean": "6624a58e2ab8d88c6d8bbc323a54129d04288f52360418da9be495ccd5dc5fd5",
+      "ZigLean/Sep/Alloc.lean": "9e45909e11314e5e511c0e5c8e631a76802cfb1427d491b1e2204b13d02b902d",
       "ZigLean/Sep/Array/Reassemble.lean": "f98c475227121c4bd51111005eb8b9dacc061100a91817be373fa0e57be7fc36",
       "ZigLean/Sep/Array.lean": "b8fd8b72407b1486e8bbe841591c03a6decd258e0de3ac7b2ddd0d2967e936fd",
       "ZigLean/Sep/Assert.lean": "6ec6646b84bea7e51c0c2be4bc7a77c50d9ff494c678697437eee27f4385353b",
@@ -15620,6 +15623,7 @@
       "Proofs/Layout/Proofs.lean": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
       "Proofs/Lists/Append.lean": "d2531088b9228faad48d4ac6e653791d018d8424ceeeb125cbd5959929591443",
       "Proofs/Lists/Gen.lean": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d",
+      "Proofs/Lists/Policy.lean": "ac275fe67274d15c721c843bca73db7d031540d2ec3661951163d7a4bbf7e41e",
       "Proofs/Lists/Sep.lean": "cc6e5911a5a28f9f4009e312c5ae20b7f49c757cee74333d1dc45c86fad1057c",
       "Proofs/Options/Gen.lean": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e",
       "Proofs/Options/Proofs.lean": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
@@ -15660,7 +15664,7 @@
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",
       "tests/diff/Concurrent.lean": "4895f5102ecade7c1c9084e719adc713e7459ea6d6a9133adc19696d96c9373d",
-      "tests/diff/Diff.lean": "abf615be80cd23d39deed8817f3436ad36c018dc3934a8cc051450bf7d921f74",
+      "tests/diff/Diff.lean": "13cb97f0b252db5b7afdba037c93affa2622025b33832942f9c37afb196daf83",
       "tests/diff/Outcome.lean": "cac6309e3373d6fd40b6666ef42d47ea937c8f7e478ca3f7bb7a9528630dc982",
       "tests/diff/ScheduleSearch.lean": "ee4ea6c96f8da944fad95895ffcc2bc181be886c9d3abd695f8d8891d782932a",
       "tests/diff/ScheduleSearchTest.lean": "aa14b06fc3ee19578b9bb51e2d6de7e0e8fcf5ef05765f9c7f46c072ce76795b",
@@ -16340,7 +16344,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "c6e6614ae5a7395c9052479fd8cf7c3ee34b951a60edc5f27a2aeef029e3bd15",
       "Air2Lean/Memory.lean": "30d64e08c7bdb0ec8e8976903e83fb22725c81ee24278f14d63a774b36fa017c",
-      "docs/std-models.md": "a5736f5afbb3128e7f5b61834a9fea4627daf0924839e3eee64e701e7f774ee7"
+      "docs/std-models.md": "1e090ac3c8cc81b5767c9edcec8664eab36b1cd44dbd97c0a988a817decdbc75"
     }
   },
   "summary": {
