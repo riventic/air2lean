@@ -548,6 +548,15 @@ jobs:
         if: ${{ matrix.full && !matrix.mutate }}
         run: lake env lean tests/roadmap/progress/Total.lean
 
+      # Opt-in timed interpreter only: no translated source call, OS clock or futex backend.
+      - name: Deadline case contracts and solver budget path
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.TimedBudget ZigLean.Conc.TimedCall
+          lake env lean tests/roadmap/deadline-cases/Contracts.lean
+          lake env lean --run tests/roadmap/deadline-cases/Runtime.lean
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'

@@ -76,6 +76,7 @@
     "ZigLean.Conc.Total": ["THR-07", "SEM-04"],
     "ZigLean.Conc.TimedSched": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedBody": ["TMR-02"],
+    "ZigLean.Conc.TimedBudget": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedCall": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedClient": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedCompare": ["TMR-02", "THR-05"],
