@@ -1,6 +1,5 @@
 import ZigLean.Sep.Array
 import ZigLean.Sep.Total
-import ZigLean.Sep.Alloc
 import Lean
 
 /-!
@@ -198,6 +197,10 @@ end TotalTriple
 
 theorem assn_cast {P Q : Assn} {h : Heap} (e : P = Q) (hp : P h) : Q h := e ▸ hp
 
+theorem ex_sep_intro {γ : Type} {F : γ → Assn} {R : Assn} {h : Heap} (x : γ)
+    (hx : (F x ∗ R) h) : (Assn.ex F ∗ R) h :=
+  sep_mono (fun _ hf => ⟨x, hf⟩) (fun _ hr => hr) hx
+
 /-- `StateT.lift` of a pure result (an arithmetic step whose overflow check passed). -/
 theorem StateT.lift_pure_eq {σ α : Type} {m : Type → Type} [Monad m] [LawfulMonad m]
     (a : α) : (StateT.lift (pure a) : StateT σ m α) = pure a := by
@@ -219,7 +222,8 @@ macro_rules
         StateT.run_set, StateT.run_pure, StateT.run_modify, StateT.run_monadLift,
         StateT.run_lift, monadLift, MonadLift.monadLift, Zig.callM, Zig.optPayload,
         Zig.StateT.lift_pure_eq, map_bind, map_pure, pure_bind, bind_assoc, Option.isSome_some,
-        Option.isSome_none, ↓reduceIte, Bool.false_eq_true, $args,*])
+        Option.isSome_none, ↓reduceIte, Bool.false_eq_true, Zig.lt, Zig.le, Zig.gt, Zig.ge,
+        BitVec.ult, BitVec.ule, BitVec.reduceToNat, decide_eq_true_eq, $args,*])
 
 namespace Zig.SepStep
 
@@ -280,7 +284,12 @@ def findAtom (P pat : Expr) (head : Name) : MetaM Bool := do
 
 /-- Prove a bound side goal if possible; otherwise keep it. -/
 def tryBound (g : MVarId) : TacticM (List MVarId) := do
-  let tac ← `(tactic| first | assumption | omega | (simp only [List.length_set]; omega))
+  let tac ← `(tactic| first
+    | assumption
+    | omega
+    | (simp only [List.length_set, List.length_take, List.length_drop, List.length_cons,
+         List.length_nil, BitVec.reduceToNat] at *
+       omega))
   match ← observing? (evalTacticAt tac g) with
   | some [] => return []
   | _ => return [g]
@@ -344,8 +353,9 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
       let rule ← Term.exprToSyntax (← instantiateMVars proof)
       if (← observing? (evalTactic (← `(tactic|
           refine $(lemmaId kind "spec_bind_eq") $rule ?_)))).isNone then
-        evalTactic (← `(tactic| refine $(lemmaId kind "spec_bind") $rule (fun _ => ?_)))
+        evalTactic (← `(tactic| refine $(lemmaId kind "spec_bind") $rule ?_))
         evalTactic (← `(tactic| intro r))
+        evalTactic (← `(tactic| try clear r))
         evalTactic (← `(tactic| try dsimp only))
         intro []
       pure []
@@ -382,73 +392,98 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
   cont facts
   setGoals ((← getGoals) ++ side ++ rest)
 
-/-- Prove `∀ h, P h → Q h`: pure atoms of `Q` become goals (closed by `rfl`/`assumption`
-when possible), the spatial rest must equal `P` up to AC and `emp`. Fails otherwise. -/
-def entail : TacticM Unit := do
-  evalTactic (← `(tactic| intro _ hp))
-  evalTactic (← `(tactic| try dsimp only at hp ⊢))
+/-- Prove the entailment goal `Q h` from `hp : P h`. Existentials of `Q` take the witnesses
+`ws` in order; pure atoms of `Q` become goals (closed by `rfl`/`assumption` when possible);
+the spatial rest must equal `P` up to AC and `emp`. Fails otherwise. -/
+def close (hp : Ident) (ws : List Term) : TacticM Unit := do
+  evalTactic (← `(tactic| try dsimp only at $hp:ident ⊢))
   let mut pure := #[]
+  let mut ws := ws
   repeat
     let g ← getMainGoal
     let t ← instantiateMVars (← g.getType)
-    let some (q, h) := (match t.consumeMData with
-      | .app q h => some (q, h) | _ => none) | break
+    let .app q _ := t.consumeMData | break
     let all := atoms q
-    let some φ := all.find? (·.isAppOfArity ``Zig.Assn.lift 1) | break
-    let rest := all.filter (· != φ)
-    let target ← Term.exprToSyntax (mkApp2 (mkConst ``Zig.Assn.sep) φ (sepOf rest))
-    let _ := h
-    let gs ← evalTacticAt (← `(tactic|
-      refine Zig.assn_cast (P := $target) (by first | rfl | sep_normalize) ?_)) g
-    match gs with
-    | [k] =>
-      match ← evalTacticAt (← `(tactic| refine Zig.sep_lift.mpr ⟨?_, ?_⟩)) k with
-      | [hφ, k'] =>
-        if (← observing? (evalTacticAt (← `(tactic| first | rfl | assumption | trivial)) hφ)).isNone then
-          pure := pure.push hφ
-        setGoals [k']
-      | _ => throwError "sep_ret: unexpected goals"
-    | _ => throwError "sep_ret: unexpected goals"
-  evalTactic (← `(tactic| first | exact hp | (sep_normalize at hp ⊢; exact hp)))
+    let some a := all.find? fun a =>
+        a.isAppOfArity ``Zig.Assn.lift 1 || (a.isAppOfArity ``Zig.Assn.ex 2 && !ws.isEmpty)
+      | break
+    let target ← Term.exprToSyntax
+      (mkApp2 (mkConst ``Zig.Assn.sep) a (sepOf (all.filter (· != a))))
+    let [k] ← evalTacticAt (← `(tactic|
+        refine Zig.assn_cast (P := $target) (by first | rfl | sep_normalize) ?_)) g
+      | throwError "sep: unexpected goals"
+    if a.isAppOfArity ``Zig.Assn.ex 2 then
+      let w :: rest := ws | break
+      ws := rest
+      let [k'] ← evalTacticAt (← `(tactic| refine Zig.ex_sep_intro $w ?_)) k
+        | throwError "sep: unexpected goals"
+      setGoals [k']
+      evalTactic (← `(tactic| try dsimp only))
+    else
+      let [hφ, k'] ← evalTacticAt (← `(tactic| refine Zig.sep_lift.mpr ⟨?_, ?_⟩)) k
+        | throwError "sep: unexpected goals"
+      if (← observing? (evalTacticAt (← `(tactic| first | rfl | assumption | trivial)) hφ)).isNone then
+        pure := pure.push hφ
+      setGoals [k']
+  evalTactic (← `(tactic| first | exact $hp | (sep_normalize at $hp:ident ⊢; exact $hp)))
   setGoals ((← getGoals) ++ pure.toList)
 
 end Zig.SepStep
 
 open Lean.Parser.Tactic in
 /-- One proof-producing step of symbolic execution (module doc). -/
-syntax (name := sepStep) "sep_step" (" using " term)?
-  (" [" (simpStar <|> simpErase <|> simpLemma),* "]")? : tactic
+syntax (name := sepStep) "sep_step"
+  (" [" (simpStar <|> simpErase <|> simpLemma),* "]")? (" using " term)? : tactic
 
 open Lean.Parser.Tactic in
-/-- `sep_step` repeated while a built-in load/store rule applies. -/
-syntax (name := sepSteps) "sep_steps" (" [" (simpStar <|> simpErase <|> simpLemma),* "]")? : tactic
+/-- `sep_step` repeated while a built-in load/store rule or one of the given rules applies. -/
+syntax (name := sepSteps) "sep_steps"
+  (" [" (simpStar <|> simpErase <|> simpLemma),* "]")? (" using " term,+)? : tactic
 
 /-- Move `⌜φ⌝` facts and `Assn.ex` witnesses of the precondition into the context. -/
-syntax (name := sepIntro) "sep_intro" (ppSpace ident)* : tactic
+syntax (name := sepIntro) "sep_intro" (ppSpace colGt ident)* : tactic
 
-/-- Close `Triple P (pure v) Q` by normalization, or reduce it to `∀ h, P h → Q v h`. -/
-syntax (name := sepRet) "sep_ret" : tactic
+/-- Close `Triple P (pure v) Q` (`sep_close` with the given witnesses), or reduce it to
+`∀ h, P h → Q v h`. -/
+syntax (name := sepRet) "sep_ret" (ppSpace colGt term:max)* : tactic
+
+/-- Prove `Q h` from `hp : P h`: witnesses for the existentials of `Q`, pure atoms as goals,
+spatial atoms by AC normalization. -/
+syntax (name := sepClose) "sep_close " ident (ppSpace colGt term:max)* : tactic
 
 /-- Split `arr p xs` in the precondition at `k` into its prefix and suffix. -/
 syntax (name := sepSplit) "sep_split " term:max ppSpace term:max : tactic
 
 open Lean Meta Elab Tactic in
 elab_rules : tactic
-  | `(tactic| sep_step $[using $rule]? $[[$facts,*]]?) =>
+  | `(tactic| sep_step $[[$facts,*]]? $[using $rule]?) =>
     Zig.SepStep.step rule (facts.map (·.getElems.map (·.raw)) |>.getD #[])
-  | `(tactic| sep_steps $[[$facts,*]]?) => do
+  | `(tactic| sep_steps $[[$facts,*]]? $[using $rules,*]?) => do
     let facts := facts.map (·.getElems.map (·.raw)) |>.getD #[]
+    let rules := (rules.map (·.getElems) |>.getD #[]).toList.map some
     repeat
       if (← getGoals).isEmpty then break
-      if (← observing? (Zig.SepStep.step none facts)).isNone then break
+      let mut progress := false
+      for rule in none :: rules do
+        if (← observing? (Zig.SepStep.step rule facts)).isSome then
+          progress := true
+          break
+      unless progress do break
   | `(tactic| sep_intro $names*) => Zig.SepStep.intro (names.map (·.getId)).toList
-  | `(tactic| sep_ret) => withMainContext do
+  | `(tactic| sep_ret $ws*) => withMainContext do
     let (kind, _, _, _) ← Zig.SepStep.goalTriple
     evalTactic (← `(tactic| refine $(Zig.SepStep.lemmaId kind "ret_of") ?_))
     let g ← getMainGoal
-    match ← observing? Zig.SepStep.entail with
-    | some _ => pure ()
-    | none => setGoals [g]
+    let ws := ws.toList
+    let entail : TacticM Unit := do
+      let hp := mkIdent `hp
+      evalTactic (← `(tactic| intro _ $hp:ident))
+      Zig.SepStep.close hp ws
+    if (← observing? entail).isNone then
+      setGoals [g]
+      evalTactic (← `(tactic| try dsimp only))
+  | `(tactic| sep_close $hp $ws*) => withMainContext do
+    Zig.SepStep.close hp ws.toList
   | `(tactic| sep_split $p $k) => withMainContext do
     let (kind, P, _, _) ← Zig.SepStep.goalTriple
     let p ← Term.elabTerm p (mkConst ``Zig.Ptr)
