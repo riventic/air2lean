@@ -91,6 +91,21 @@ def default_version(root):
     return next(iter(found.values()))
 
 
+def version_status(root):
+    """compatibility.json's qualification status per pinned version (`qualified` when absent)."""
+    try:
+        entries = json.loads(read(root, DEFAULT_METADATA))['zig']['versions']
+        return {e['version']: e.get('status', 'qualified') for e in entries}
+    except (ValueError, KeyError, TypeError):
+        raise Stale(f'{DEFAULT_METADATA}: zig.versions not found')
+
+
+def version_label(version, default, status):
+    if version == default: return f'{version} (default)'
+    if status.get(version) == 'in-qualification': return f'{version} (in qualification)'
+    return version
+
+
 def examples(root):
     return sorted(p.name for p in (root/'examples').iterdir() if p.is_dir())
 
@@ -163,8 +178,8 @@ def lean_string(root, rel, name):
     return re.sub(r'\\(.)', lambda e: '\n' if e.group(1) == 'n' else e.group(1), ''.join(parts))
 
 
-def version_vote(versions, default):
-    marked = [f'**{v}** (default)' if v == default else f'**{v}**' for v in versions]
+def version_vote(versions, default, status):
+    marked = [f'**{v}**' + version_label(v, default, status)[len(v):] for v in versions]
     return marked[0] if len(marked) == 1 else ', '.join(marked[:-1]) + ' and ' + marked[-1]
 
 
@@ -174,6 +189,7 @@ def version_vote(versions, default):
 def version_rows(root):
     versions = supported_versions(root)
     default = default_version(root)
+    status = version_status(root)
     rows = []
     for v in versions:
         selected = default_selection(root, v)
@@ -185,19 +201,21 @@ def version_rows(root):
         else:
             ci = 'none'
         if shards: ci += f'; {len(shards)} mutation shards'
-        rows.append({'version': v, 'default': v == default, 'examples': selected, 'ci': ci})
+        rows.append({'version': v, 'label': version_label(v, default, status),
+                     'status': status.get(v, 'missing'), 'examples': selected, 'ci': ci})
     return versions, default, rows
 
 
 def region_zig_versions(root):
     versions, default, rows = version_rows(root)
     every = examples(root)
-    lines = [f'Supported: Zig {version_vote(versions, default)}. Default example selection '
+    status = {row['version']: row['status'] for row in rows}
+    lines = [f'Supported: Zig {version_vote(versions, default, status)}. Default example selection '
              '(`scripts/example-selection.sh` on x86_64; `asm` needs x86_64):', '',
              '| Zig | CI | Examples | Not selected |', '|---|---|---|---|']
     for row in rows:
         missing = [e for e in every if e not in row['examples']]
-        lines.append(f'| {row["version"]}{" (default)" if row["default"] else ""} | {row["ci"]} | '
+        lines.append(f'| {row["label"]} | {row["ci"]} | '
                      + ', '.join(f'`{e}`' for e in row['examples']) + ' | '
                      + (', '.join(f'`{e}`' for e in missing) or '—') + ' |')
     lines += ['', 'Full matrix: [docs/support-matrix.md](docs/support-matrix.md).']
@@ -210,12 +228,12 @@ def region_matrix(root):
     cov = coverage(root)
     reg = register(root)
     out = ['## Zig versions', '',
-           '| Zig | Default | Translator | Exporter pin | Coverage inventory | CI |',
-           '|---|---|---|---|---|---|']
+           '| Zig | Default | Status | Translator | Exporter pin | Coverage inventory | CI |',
+           '|---|---|---|---|---|---|---|']
     pins = pinned_versions(root)
     for row in rows:
         v = row['version']
-        out.append(f'| {v} | {"yes" if row["default"] else "no"} | `supportedVersions` | '
+        out.append(f'| {v} | {"yes" if v == default else "no"} | {row["status"]} | `supportedVersions` | '
                    f'{"`zig-patch/versions.toml`" if v in pins else "missing"} | '
                    f'{"`coverage/" + v + ".json`" if v in cov else "missing"} | {row["ci"]} |')
     out += ['', '## Examples by version', '',
@@ -298,6 +316,9 @@ def consistency(root):
     default = default_version(root)
     if default not in versions:
         problems.append(f'default Zig {default} is not in supportedVersions {versions}')
+    status = version_status(root)
+    if sorted(status) != sorted(versions):
+        problems.append(f'{DEFAULT_METADATA} lists {sorted(status)}, translator supports {versions}')
     pins = pinned_versions(root)
     if sorted(pins) != sorted(versions):
         problems.append(f'zig-patch/versions.toml pins {pins}, translator supports {versions}')

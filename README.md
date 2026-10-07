@@ -4,7 +4,7 @@
 
 Translate a subset of Zig into Lean 4, then prove properties of the code in Lean.
 
-**Status:** supports a bounded subset of Zig 0.16.0, 0.15.2 and 0.14.1. The original Outcome closeout’s Zig 0.16.0 differential report records 87,064 cases: 85,987 exact matches, 497 illegal cases and 580 unspecified cases, with zero setup failures or mismatches; one example and three functions are skipped. The report is complete with `qualified=false`; these totals belong to that original scope, not a later focused subset, and do not establish compiler/native correspondence or proof applicability. Machine-checked proofs have their stated domains and exclusions. The generated [support matrix](docs/support-matrix.md) is the current summary of versions, examples, inventory and open requirements; the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md) hold the requirement detail, and [PLAN.md](PLAN.md) the design and historical milestones.
+**Status:** supports a bounded subset of Zig 0.16.0, 0.15.2 and 0.14.1; Zig 0.17.0 is in qualification ([CI scope](docs/zig-0.17-ci.md)) and 0.16.0 stays the default. The original Outcome closeout’s Zig 0.16.0 differential report records 87,064 cases: 85,987 exact matches, 497 illegal cases and 580 unspecified cases, with zero setup failures or mismatches; one example and three functions are skipped. The report is complete with `qualified=false`; these totals belong to that original scope, not a later focused subset, and do not establish compiler/native correspondence or proof applicability. Machine-checked proofs have their stated domains and exclusions. The generated [support matrix](docs/support-matrix.md) is the current summary of versions, examples, inventory and open requirements; the [roadmap handoff](ROADMAP.md) and [remaining acceptance](remaining-acceptance.md) hold the requirement detail, and [PLAN.md](PLAN.md) the design and historical milestones.
 
 | Examples | What they cover |
 |---|---|
@@ -150,7 +150,7 @@ scripts/no-sorry.sh    # no sorry/admit/native_decide
 scripts/mutate.sh      # a changed function must fail a test
 ```
 
-`scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15` or `AIR2LEAN_REVIEW_ZIG16` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; the CI workflow runs the integration checks for its selected Zig version.
+`scripts/review.sh` needs the complete review suite from the integration stack. It does not build a patched compiler. To additionally check exported JSON with an existing patched compiler, set `AIR2LEAN_REVIEW_ZIG14`, `AIR2LEAN_REVIEW_ZIG15`, `AIR2LEAN_REVIEW_ZIG16` or `AIR2LEAN_REVIEW_ZIG17` to its absolute path and `AIR2LEAN_REVIEW_TRANSLATOR` to the built translator; CI does this for its selected Zig version. The [review strategy](REVIEW_STRATEGY.md) and [baseline coverage ledger](REVIEW_COVERAGE.tsv) describe the review scope; the CI workflow runs the integration checks for its selected Zig version.
 
 The float model follows x86_64-linux. On another host (for example an arm64 Mac) the diff test counts the float results that differ by target as `host=N`, not as mismatches: `tests/diff/<ex>/host.txt` lists those functions. CI (x86_64-linux) checks them.
 
@@ -198,7 +198,7 @@ Supported: Zig **0.16.0** (default), **0.15.2** and **0.14.1**. Default example 
 Full matrix: [docs/support-matrix.md](docs/support-matrix.md).
 <!-- support-matrix:end zig-versions -->
 
-The 0.14.1 compiler builds on Linux only. One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
+The 0.14.1 compiler builds on Linux only. Zig 0.17.0 is in qualification: CI runs a full 0.17.0 job, but version-specific source/native gates, the mutation shards and the default stay on their qualified versions until it is qualified ([docs/zig-0.17-ci.md](docs/zig-0.17-ci.md)). One source serves every version: one exporter, one golden set, one translation and one set of proofs. A version adds only its differences (a `Compat` branch, a hook, the AIR, translation or float results that differ); the proofs hold for each version's translation. See [PLAN.md § Zig version support](PLAN.md#zig-version-support).
 
 ## License
 

@@ -32,6 +32,13 @@ jobs:
             examples: ""
             full: true
             mutate: false
+          # 0.17.0 is in qualification (docs/zig-0.17-ci.md): a full job, but gates whose
+          # source/native qualification is version-specific stay on their qualified versions.
+          # The default and the mutation shards stay on 0.16.0 until 0.17.0 is qualified.
+          - zig: "0.17.0"
+            examples: ""
+            full: true
+            mutate: false
           # 0.14.1: `floatconv` is excluded (0.14.1 lowers `@intFromFloat` without the check,
           # zig-patch/0.14.1/TAGS.md), `slices` (no `@memmove`) and `lists` (its
           # `ArrayListUnmanaged` is another type, docs/std-models.md). Its std cannot build the
@@ -734,9 +741,10 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
 
-      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16.
+      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
+      # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
       - name: Loop-switch dispatch regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
@@ -766,6 +774,7 @@ jobs:
           AIR2LEAN_REVIEW_ZIG14: ${{ matrix.zig == '0.14.1' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG15: ${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG16: ${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
+          AIR2LEAN_REVIEW_ZIG17: ${{ matrix.zig == '0.17.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
         run: scripts/review.sh
 
