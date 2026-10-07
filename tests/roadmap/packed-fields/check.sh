@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # L08 packed fields and bit-pointers: retained translation, client proofs and CLI rejections.
-# Needs a built translator and `lake build ZigLean ZigLean.PackedLemmas`; runs no compiler.
+# Needs a built translator and `lake build ZigLean`; runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"

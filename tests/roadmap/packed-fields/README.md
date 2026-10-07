@@ -4,7 +4,7 @@ A bit-pointer access reads and writes the field's bits only, with defined-bit ma
 (`ZigLean/Packed.lean` §Defined bits): every other bit of the host keeps its state, defined or
 undefined, and a store of `undefined` makes only the field's bits undefined. The checker compares
 each exporter pointer to a packed struct field with the layout that the model computes and rejects
-a mismatch with `PACKED_LAYOUT` (`docs/generated-code.md` §Packed structs).
+a mismatch with `PACKED_LAYOUT` (`docs/generated-code.md` §Casts, layout and function pointers).
 
 The fixture is hand-written AIR in the exporter's schema (`air/0.16.0`, written by
 `fixtures.py --write`; pointer types follow the compiler's `Type.packedStructFieldPtrInfo`) for:
@@ -50,7 +50,7 @@ and a byte-pointer field exported at the wrong bit (`PACKED_LAYOUT`), and a fiel
 (`TYPE_FAILURE`).
 
 ```sh
-lake build air2lean ZigLean ZigLean.PackedLemmas
+lake build air2lean ZigLean
 bash tests/roadmap/packed-fields/check.sh
 ```
 

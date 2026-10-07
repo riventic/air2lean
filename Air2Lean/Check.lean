@@ -600,7 +600,7 @@ fills its ABI size can be a byte pointer instead. `none`: not a packed struct fi
 size the exporter does not give. -/
 def packedFieldPtr? (types : Array Ty) (layouts : Array Layout) (base : TyId) (idx : Nat) :
     Option (Array Nat × Nat × Option Nat) := do
-  let some (.ptr "one" _ s) := types[base]? | none
+  let some (.ptr _ _ s) := types[base]? | none
   let some (.struct _ "packed" fields) := types[s]? | none
   let (_, fty) ← fields[idx]?
   let bits ← packedBits types s
@@ -629,7 +629,9 @@ def CheckCtx.checkPackedLayout (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op
       | none => return
     | _ => return
   let some (.ptr _ _ s) := cx.types[base]? | return
-  let some (.struct name "packed" _) := cx.types[s]? | return
+  let some (.struct name "packed" fields) := cx.types[s]? | return
+  -- A field outside the packed subset is `checkTy`'s type error, not a layout mismatch.
+  unless (packedBits cx.types s).isSome && idx < fields.size do return
   let some (hosts, bit, bytePtr) := packedFieldPtr? cx.types cx.layouts base idx
     | cx.fail line s!"packed layout of '{name}' field {idx}: the struct, field or pointer \
         sizes are not in the AIR file (a bit-pointer needs them)"
