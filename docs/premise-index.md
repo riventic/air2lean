@@ -5,17 +5,18 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1752 theorems in 81 files.
+1755 theorems in 82 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 489 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 306 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 10 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 15 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 15 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 18 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 18 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 5 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [THR-01](premises.md#thr-01) | 1001 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 65 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
@@ -36,12 +37,12 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
 | [SEM-01](premises.md#sem-01) | 1030 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1352 | Byte-level block memory model |
+| [SEM-02](premises.md#sem-02) | 1355 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 792 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 19 | Total-correctness statements |
 | [EXT-01](premises.md#ext-01) | 8 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1752 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1755 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 805 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 805 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -1817,6 +1818,16 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 | `FlowTime.timestamp64_exact` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp32_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp64_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/allocator-identity/Kernel.lean`
+
+File premises: ALC-01, ALC-02, ALC-05, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L8` | ALC-01, ALC-02, ALC-05, SEM-02, TRU-01 |
+| `example@L15` | ALC-01, ALC-02, ALC-05, SEM-02, TRU-01 |
+| `example@L19` | ALC-01, ALC-02, ALC-05, SEM-02, TRU-01 |
 
 ## `tests/roadmap/bitops/Runtime.lean`
 

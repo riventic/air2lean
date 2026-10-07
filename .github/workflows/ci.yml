@@ -491,6 +491,11 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
+      # M01: allocator identity, arena/fixed-buffer policies and the arena client proof.
+      - name: Allocator identity proofs and model regressions
+        if: ${{ !matrix.mutate }}
+        run: bash tests/roadmap/allocator-identity/check.sh
+
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
       - name: Thread tuple source and ownership gate

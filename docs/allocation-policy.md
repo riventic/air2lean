@@ -18,7 +18,9 @@ For every finite execution prefix, a finite list can represent its permitted fai
 decisions. The default beyond the list is success subject to the request cap and legacy
 index. This does not model an arbitrary infinite failure function or a total live-byte
 budget. It does not qualify native malloc, a custom allocator's policy, successful resize,
-address reuse or multiple allocator identities. Those remain separate M01/M02/M05 work.
+or address reuse. Those remain separate M02/M05 work. Allocator identities, arenas and fixed
+buffers (M01) are in [allocator-identity.md](allocator-identity.md); arena requests use this
+policy.
 
 `rawAlloc_run` and existing `create_run`/separation triples now quantify over the policy
 as part of arbitrary initial memory. `releaseAttempt_run` and `releaseAttempts_run` state

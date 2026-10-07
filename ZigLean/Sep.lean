@@ -5,3 +5,5 @@ import ZigLean.Sep.Sentinel
 import ZigLean.Sep.Try
 import ZigLean.Sep.Discard
 import ZigLean.Sep.Remap
+import ZigLean.Sep.Owned
+import ZigLean.Sep.ArenaClient

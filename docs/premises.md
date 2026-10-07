@@ -144,6 +144,21 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Derived from: `ZigLean.Sep.Sentinel`; tokens `allocSentinel`, `freeSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [byte sentinel README](../tests/roadmap/byte-sentinel/README.md).
 
+<a id="alc-05"></a>
+### ALC-05 — Allocator identity, arena and fixed-buffer policies
+
+- Kind: environment.
+- Statement: `Mem.allocators[a]` is allocator `a`; its blocks have kind `.owned a`. A free,
+  destroy or remap through one allocator of another's block is `.illegal`. An arena request is
+  an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
+  arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
+  bytes back only for its last allocation. Owned blocks get fresh model addresses; growing
+  remap fails; reset records no race-check access. The translator does not route
+  `std.heap` arena or fixed-buffer calls.
+- Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
+  `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
+- Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
+
 ## Thread creation and scheduling
 
 <a id="thr-01"></a>

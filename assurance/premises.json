@@ -42,6 +42,7 @@
     "ZigLean.Mem.Lemmas": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
+    "ZigLean.Mem.Owned": ["ALC-05"],
     "ZigLean.Mem.Thread": ["ORD-01", "THR-01"],
     "ZigLean.Conc.Basic": ["THR-01"],
     "ZigLean.Conc.Call": ["THR-01"],
@@ -86,6 +87,8 @@
     "ZigLean.Sep.Alloc": ["ALC-01"],
     "ZigLean.Sep.Remap": ["ALC-03"],
     "ZigLean.Sep.Sentinel": ["ALC-04"],
+    "ZigLean.Sep.Owned": ["ALC-05"],
+    "ZigLean.Sep.ArenaClient": ["ALC-05"],
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Result": ["SEM-03"]
@@ -95,6 +98,8 @@
     {"premise": "ALC-02", "scope": "closure", "pattern": "allocPolicy|AllocPolicy|failAt|maxAllocBytes|releaseAttempt"},
     {"premise": "ALC-03", "scope": "closure", "pattern": "(?:^|\\.)remap|Remap"},
     {"premise": "ALC-04", "scope": "closure", "pattern": "allocSentinel|freeSentinel"},
+
+    {"premise": "ALC-05", "scope": "closure", "pattern": "AllocRef|(?:^|\\.)(?:Arena\\.(?:init|deinit)|FixedBuffer\\.init|Owned\\.(?:init|reset))|owned(?:RawAlloc|AllocBytes|Free|RemapBytes|State)|resetOwned"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC"},
     {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Await|Concurrent|Cancel)C"},
@@ -116,6 +121,7 @@
     "ALC-02": ["ALC-01"],
     "ALC-03": ["ALC-01"],
     "ALC-04": ["ALC-01"],
+    "ALC-05": ["ALC-01", "ALC-02"],
     "THR-02": ["THR-01"],
     "THR-03": ["THR-01"],
     "THR-04": ["THR-02"],
