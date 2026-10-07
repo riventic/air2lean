@@ -29,7 +29,7 @@ Every schema-12 function has a mandatory `profile` object:
 | `backend` | Actual configured compiler backend, such as `stage2_llvm`; recorded for provenance |
 | `cpu` | Resolved CPU model name |
 | `features` | Enabled CPU feature names, emitted in sorted order; empty/duplicate names are rejected |
-| `build_mode` | `Debug`, `ReleaseSafe`, `ReleaseFast`, or `ReleaseSmall` |
+| `build_mode` | `Debug`, `ReleaseSafe`, `ReleaseFast`, or `ReleaseSmall`; recording a mode does not qualify it ([build-modes.md](build-modes.md)) |
 | `float_mode` | `"per-instruction"` |
 | `error_set_bits` | `16`; other widths are rejected |
 | `error_layout` | `"type-table"`; each exported type's ABI size/alignment remains checked against the model |
@@ -150,7 +150,8 @@ is unchanged; `--output-dir DIRECTORY` selects the batch overlay operation.
 or aarch64-linux-gnu, each in ReleaseSafe or ReleaseFast. Run on the selected Linux
 CPU, or under an explicitly recorded execution emulator; foreign compilation alone
 cannot produce a report. The runtime rejects discrepancies in target, endian,
-pointer width, backend, CPU/features, mode, error-set width and tracing.
+pointer width, backend, CPU/features, mode, error-set width and tracing. Per-mode status:
+[build-modes.md](build-modes.md).
 
 ```sh
 python3 scripts/abi-probe.py observe --zig /absolute/path/to/stock/zig \
@@ -176,7 +177,8 @@ records are strictly parser/contract tests. A successful pair does not prove a
 compiler preservation theorem, ABI completeness, synchronization, float ABI or
 WASM correspondence. f80/f128 operations and numerical tolerances remain outside
 this fragment, and the existing float probe remains a separate reference gate.
-ReleaseFast is a separate observation profile, not inferred from ReleaseSafe.
+ReleaseFast is a separate observation profile, not inferred from ReleaseSafe
+([build-modes.md](build-modes.md)).
 
 This tool does not change the translator's accepted target profiles. In particular,
 aarch64-linux translation remains guarded, and wasm32 pointer parameterization

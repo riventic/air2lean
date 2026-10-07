@@ -140,6 +140,13 @@ jobs:
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
 
+      # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
+      - name: Build-mode qualification records
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/build-modes -v
+          python3 -B scripts/build-modes.py check
+
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
       # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
