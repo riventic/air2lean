@@ -16,7 +16,7 @@ proof makes (for example partial correctness).
 python3 scripts/premises.py check            # fails on a stale index, undefined/orphan ID or unmapped module
 python3 scripts/premises.py write            # regenerate docs/premise-index.md
 python3 scripts/premises.py explain parallelCounter_spec   # which tokens/modules caused each premise
-python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.json --output premises.json
+python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.json --output premises.json --strict
 ```
 
 ## How premises are derived
@@ -26,13 +26,17 @@ the tool:
 
 1. Strips comments and tokenizes the theorem's statement and proof. It resolves each
    identifier through the file's namespaces and `open` declarations, against declarations
-   visible through its transitive imports.
+   visible through its transitive imports. Three implicit forms are approximated:
+   `x.f` on a binder or `variable` `x : T ...` resolves to `T.f` (generalized field
+   notation); `.c` resolves to the inductive that declares constructor `c` when exactly one
+   visible inductive does; and a visible instance is assumed used when every name in its
+   instance type (for example `Enc ThreadId`) occurs in the closure.
 2. Follows resolved project declarations (proof helpers, other theorems, generated `Gen.lean`
    functions and their callees) transitively. It stops at runtime (`ZigLean.*`) declarations
    and records their modules.
 3. Maps every recorded runtime module through the reviewed `runtime_modules` table. It
-   applies the token rules to every identifier in the closure. `statement` rules see only
-   the theorem's own hypotheses and conclusion.
+   applies the token rules to every identifier and resolved name in the closure. `statement`
+   rules see only the theorem's own hypotheses and conclusion.
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02; no header or `legacy-abi64-le` selects
    PRF-01. A generated import absent from the repository uses PRF-03.
@@ -44,13 +48,31 @@ neither resolvable nor an allowed generated import, or if the committed index is
 Every theorem therefore has a derived premise set. TRU-01 alone means that the theorem
 uses no runtime model.
 
-**Limits of the source derivation.** Implicit dependencies are not visible in source.
-These include simp sets such as `zig_unfold`, instances, auto-bound implicits and
-tactic-generated terms. Generalized field notation on a local value also does not resolve.
-The `compiled` mode applies the same tables to the kernel dependency graph of
-`scripts/assumptions.sh`. That is the authoritative closure for `Proofs/` and `ZigLean/`.
-It reports source-index gaps separately. Roadmap clients outside `Proofs/` have only the
-source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
+**Limits of the source derivation.** Some implicit dependencies are still not visible in
+source: simp sets such as `zig_unfold`, unification and tactic-generated terms, and field
+notation on a value whose type is not written in a binder. The `compiled` mode applies the
+same tables to the kernel dependency graph of `scripts/assumptions.sh`. That is the
+authoritative closure for `Proofs/` and `ZigLean/`. It lists each theorem's `source_gaps`
+(compiled premises absent from the source index) with the reason for each (`gap_via`).
+`--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
+superset of the kernel-derived premises for every audited theorem.
+
+**Reviewed compiled-mode gaps.** The first strict review of the 0.16.0 audit found 441
+theorems with gaps. They were closed by general rules, not per-theorem entries:
+
+- Struct updates such as `{ m with current := c }` mention every `Mem` field, including
+  `allocPolicy` and `failAt`, in the kernel term. These fields are inert data; the policy acts
+  only through the allocator modules. ALC-02 and ALC-03 therefore come from those modules and
+  from policy-content tokens, not from the `Mem` fields or the `ByteRemapMode` type.
+- The runtime model is layered, and `implies` records the layers: THR-01 implies SEM-02 (the
+  scheduler runs over the block memory), and SEM-02 and SEM-03 imply SEM-01 (memory ops and
+  loops return `Zig.Result`).
+- `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: their ops and frame
+  structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
+- Field notation on typed binders, unique `.ctor` names and instances are resolved as in
+  step 1.
+
+Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.
 
 ## Index
@@ -122,7 +144,9 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   `Mem.failAt` decide `OutOfMemory`. Theorems over arbitrary `Mem` quantify over every
   policy; a theorem that fixes initial memory fixes the policy. The cap is not a resource
   guarantee of the host.
-- Derived from: `ZigLean.Mem.Alloc`; tokens `allocPolicy`, `AllocPolicy`, `failAt`, `releaseAttempt`.
+- Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
+  `releaseAttempt`. The `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct
+  update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 
 <a id="alc-03"></a>
@@ -132,7 +156,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Statement: `remap` fails for nonzero-size items under the default policy. An explicit
   `Mem.allocPolicy.byteRemap` selects in-place or moved success for whole alignment-1 byte
   buffers. `resize` is outside the boundary.
-- Derived from: `ZigLean.Sep.Remap`; tokens `remap`, `Remap`.
+- Derived from: `ZigLean.Sep.Remap`; tokens `remap`, `Remap` (not `ByteRemapMode`).
 - Sources: [std-models.md](std-models.md#allocator-model), `tests/roadmap/resize-remap`.
 
 <a id="alc-04"></a>
@@ -193,7 +217,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Statement: A futex wait on a matching `u32` sleeps until a wake at that address. Waiters
   wake in FIFO order. There is no spurious wakeup or cancellation, and a wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -355,7 +379,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
   is a `Zig.Error` (`.illegal`, `.unspecified`, panics) rather than undefined behavior.
   Zig error unions are ordinary values. Integer, bit, vector, packed and union operations
   follow `ZigLean/Basic.lean` and its companions.
-- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02.
+- Derived from: `ZigLean.Basic`, `ZigLean.Bit`, `ZigLean.Permutation`, `ZigLean.Packed`, `ZigLean.Union`, `ZigLean.Vec`, `ZigLean.Lemmas`; implied by TRU-02, SEM-02 and SEM-03.
 - Sources: [generated-code.md](generated-code.md), [docs/generated-code.md §Panics](generated-code.md#panics).
 
 <a id="sem-02"></a>
@@ -365,7 +389,7 @@ source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translatio
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
   misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Sep.*`.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>

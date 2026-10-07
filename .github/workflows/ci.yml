@@ -784,11 +784,12 @@ jobs:
           python3 scripts/float-semantics.py check-report "$RUNNER_TEMP/air2lean-assumptions.json"
 
       # Same premise tables over the kernel dependency graph of the audited translation.
+      # --strict: the committed source index must cover every kernel-derived premise (D03).
       - name: Map audited theorems to premise IDs
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         run: |
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
-            --output "$RUNNER_TEMP/air2lean-premises.json"
+            --output "$RUNNER_TEMP/air2lean-premises.json" --strict
 
       # A03: real generated asm wrappers under a test-only interpretation, five wrapper
       # mutants, and the harness kept out of the audited theorem dependencies.
