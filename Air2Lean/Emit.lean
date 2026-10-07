@@ -1797,11 +1797,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
       let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
-    else if (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts) && dstPtr then
+    else
+    let srcOptPtr := (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts)
+    if srcOptPtr && dstPtr then
       -- `?*T` → `*U`: unwrap, null throws (`ZigLean/Mem/Repr.lean`).
       let (env, l) := bindLet fc env inst.id s!"Zig.optPtrUnwrap {rv a}"
       (env, some l)
-    else if (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts) && isInt (fc.tyOfId inst.ty) then
+    else if srcOptPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr` of `?*T`: null is 0.
       let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.optPtrAddr {rv a})))"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)

@@ -844,14 +844,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct \
             or `extern` union and a type other than an integer, float, `bool`, packed struct, \
             array, `extern` struct or `extern` union is outside the subset"
-        let some abits := reprBitSize cx.types cx.layouts aty
-          | cx.fail line "a Zig ≤0.16 representation `@bitCast` of a type without a guaranteed \
-              in-memory layout (an `auto` struct, tuple, tagged union, packed union, slice, \
-              vector, sentinel array or error storage, at any depth) is outside the subset"
-        let some bbits := reprBitSize cx.types cx.layouts ty
-          | cx.fail line "a Zig ≤0.16 representation `@bitCast` to a type without a guaranteed \
-              in-memory layout (an `auto` struct, tuple, tagged union, packed union, slice, \
-              vector, sentinel array or error storage, at any depth) is outside the subset"
+        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
+            reprBitSize cx.types cx.layouts ty)
+          | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a type without a \
+              guaranteed in-memory layout (an `auto` struct, tuple, tagged union, packed union, \
+              slice, vector, sentinel array or error storage, at any depth) is outside the subset"
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
             {bbits} bits (`@bitSizeOf`) is outside the subset"
