@@ -15,6 +15,11 @@
 #                         AIR dumps only.
 #   AIR2LEAN_LLVM_PREFIX  AIR2LEAN_LLVM=1: `;`-separated install prefixes of LLVM, Clang and LLD.
 #                         Default: Homebrew's llvm@<N> and lld@<N>.
+#   AIR2LEAN_ZIG_MAXRSS   Bytes passed as `zig build --maxrss` (the memory the build runner may
+#                         assume). Zig's build.zig declares an upper bound for compiling the
+#                         compiler (0.15.2: 7.8 GB, 0.16.0: 8 GB) and refuses to start that step
+#                         on a machine with less memory, such as the 7 GiB macos-14 CI runner.
+#                         The bound is a ceiling, not a measurement. Default: unset.
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -39,6 +44,13 @@ sha256=$("$script_dir/toml-get.sh" "[\"$version\"]" sha256)
 hook_rel=$("$script_dir/toml-get.sh" "[\"$version\"]" hook)
 llvm=${AIR2LEAN_LLVM:-0}
 case "$llvm" in 0 | 1) ;; *) echo "error: AIR2LEAN_LLVM must be 0 or 1, not '$llvm'" >&2; exit 1 ;; esac
+maxrss_flags=()
+if [ -n "${AIR2LEAN_ZIG_MAXRSS:-}" ]; then
+  case "$AIR2LEAN_ZIG_MAXRSS" in
+    *[!0-9]*) echo "error: AIR2LEAN_ZIG_MAXRSS must be a byte count, not '$AIR2LEAN_ZIG_MAXRSS'" >&2; exit 1 ;;
+  esac
+  maxrss_flags=(--maxrss "$AIR2LEAN_ZIG_MAXRSS")
+fi
 hook_file="$script_dir/$hook_rel"
 exporter="$script_dir/air-json/json.zig"
 [ -f "$hook_file" ] || { echo "error: hook patch not found: $hook_file" >&2; exit 1; }
@@ -183,6 +195,7 @@ echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
   -Dcpu=baseline \
   -Ddebug-extensions=true \
   "${llvm_flags[@]}" \
+  ${maxrss_flags[@]+"${maxrss_flags[@]}"} \
   --prefix "$stage_prefix")
 
 # Lock the staged compiler before it can become the advertised executable. A failed build

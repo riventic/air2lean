@@ -1016,9 +1016,12 @@ jobs:
           path: zig-air-0.15.2/
           key: zig-air-macos-arm64-0.15.2-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.15.2/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
 
-      # One retry per version, as in the Linux job.
+      # One retry per version, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB
+      # bound that Zig's build.zig declares for compiling the compiler; --maxrss lets it start.
       - name: Build patched zig (macOS)
         if: steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
+        env:
+          AIR2LEAN_ZIG_MAXRSS: "8000000000"
         run: |
           set -euo pipefail
           for v in 0.16.0 0.15.2; do
