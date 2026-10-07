@@ -59,6 +59,21 @@ class PolicyChecks(unittest.TestCase):
                         gate.index('lake env lean --run tests/roadmap/allocation-policy/Check.lean'))
         self.assertIn('AIR2LEAN_ALLOCATION_REPORT_DIR', gate)
 
+    def test_gate_runs_general_policy_checks(self):
+        gate = (HERE / 'check.sh').read_text()
+        self.assertLess(gate.index('lake build Proofs.Lists.Policy'),
+                        gate.index('lake env lean --run tests/roadmap/allocation-policy/Oracle.lean'))
+        oracle = (HERE / 'Oracle.lean').read_text()
+        for case in ('oracle-even-indices', 'list-as-oracle', 'budget', 'default-uncapped',
+                     'harness-cap', 'large-dupe', 'append-loop-several-failures'):
+            self.assertIn(case, oracle)
+
+    def test_rawalloc_consults_general_oracle(self):
+        source = (ROOT / 'ZigLean/Mem/Alloc.lean').read_text()
+        self.assertIn('  if m.oracleDenies n then return none', source)
+        basic = (ROOT / 'ZigLean/Mem/Basic.lean').read_text()
+        self.assertIn('maxBytes : Nat := unboundedAllocBytes', basic)
+
     def test_legacy_mutation_still_targets_fail_at(self):
         source = (ROOT / 'scripts/mutate.sh').read_text()
         self.assertIn('if m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none', source)
