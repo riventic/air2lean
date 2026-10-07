@@ -96,7 +96,7 @@ The former T-series follow-ups now map to register IDs:
 | Former item | Register | Remaining scope |
 |---|---|---|
 | T6 (docs, release tag) | Q08 | Q08: release record, gates and review ledger for one exact source/profile state. |
-| T7 (theorem inventory) | D02, C14, F05 | D02: [docs/theorem-inventory.md](docs/theorem-inventory.md) (`scripts/theorem-inventory.py check`) gives each listed theorem a scope class, a precise domain and a current guarded check result per Zig version/target translation; an edit to a listed proof module or translation needs a new recorded build. C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol only; reusable RwLock contracts remain. F05: `op128_spec` excludes the `f128` division-family and `@sqrt` selectors, which differ by version. |
+| T7 (theorem inventory) | C14, F05 | C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol only; reusable RwLock contracts remain. F05: `op128_spec` excludes the `f128` division-family and `@sqrt` selectors, which differ by version. Each listed theorem's scope class, domain and current guarded check result per Zig version/target translation are in [docs/theorem-inventory.md](docs/theorem-inventory.md) (`scripts/theorem-inventory.py check`). |
 
 Earlier T7 clauses whose proofs exist (`vectors.checkedAdd`, [docs/vector-proofs.md](docs/vector-proofs.md); `sync.semaphoreCounter`; `sync.rwLockRead`; 0.15.2 `Thread.Mutex` on macOS) are historical; their current check results are in docs/theorem-inventory.md.
 
