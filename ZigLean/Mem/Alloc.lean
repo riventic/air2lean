@@ -10,9 +10,11 @@ same name here (`Air2Lean/Memory.lean`'s `allocFn?`).
 The model is one allocator, with its state in `Mem`:
 
 * Each allocation gets a new heap block. Allocation number `Mem.failAt` (from 0), every
-  index in `Mem.allocPolicy.failures`, and requests above `Mem.allocPolicy.maxBytes` fail.
-  The default is the legacy one-failure policy with a 1 MiB request cap. Policies are
-  explicit environment parameters; they do not guarantee native allocation success.
+  index in `Mem.allocPolicy.failures`, requests above `Mem.allocPolicy.maxBytes`, requests the
+  oracle `Mem.allocPolicy.fails` rejects and requests beyond `Mem.allocPolicy.budget` fail.
+  The default has no failures and no fixed cap; the differential harness selects its 1 MiB
+  cap explicitly (`AllocPolicy.harness`). Policies are explicit environment parameters; they
+  do not guarantee native allocation success.
 * The default `remap` policy fails. Explicit byte policies permit in-place or moved success
   for whole alignment-1 byte blocks; `resize` and other item sizes keep their old behavior.
 * A free of a pointer that is not the start of a live heap block, or with a length other than
@@ -34,11 +36,24 @@ instance : Enc Allocator where
   encode _ := Array.replicate 16 (.int 0)
   decode _ := pure ⟨⟩
 
+/-- The bytes of the live heap blocks. -/
+def Mem.liveHeapBytes (m : Mem) : Nat :=
+  m.blocks.foldl (fun acc blk => if blk.live && blk.kind == .heap then acc + blk.bytes.size else acc) 0
+
+/-- The general decision for a request of `n` bytes at attempt `m.allocs`: the oracle fails
+it, or the live heap would exceed the budget. The heap is only summed under a budget. -/
+def Mem.oracleDenies (m : Mem) (n : Nat) : Bool :=
+  m.allocPolicy.fails m.allocs n ||
+    match m.allocPolicy.budget with
+    | none => false
+    | some b => decide (b < m.liveHeapBytes + n)
+
 /-- `rawAlloc` of `n > 0` bytes: allocation number `Mem.allocs`. `none`: the allocation fails. -/
 def rawAlloc (n align : Nat) : MemM (Option Ptr) := do
   let m ← get
   set { m with allocs := m.allocs + 1 }
   if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures then return none
+  if m.oracleDenies n then return none
   some <$> alloc .heap n align
 
 /-- The pointer of an allocation of 0 bytes: no block, and the highest address with the

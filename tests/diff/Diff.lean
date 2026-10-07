@@ -952,13 +952,15 @@ def allocationPolicyNat (j : Json) : IO Nat := do
   return n.toNat
 
 /-- A function that takes an allocator: legacy null/index or an explicit object with
-`fail_at`, `failures` and `max_bytes`. This is the test-model policy, not native malloc. -/
+`fail_at`, `failures` and `max_bytes`. This is the test-model policy, not native malloc. The
+harness keeps its 1 MiB request cap (`AllocPolicy.harness`, `TestAllocator.max_alloc_bytes`)
+explicitly; the model default has no fixed cap. -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
   let (f, policy) ← match fa with
-    | .null => pure (none, ({} : Zig.AllocPolicy))
+    | .null => pure (none, Zig.AllocPolicy.harness)
     | .num _ => do
       let n ← allocationPolicyNat fa
-      pure (some n, ({} : Zig.AllocPolicy))
+      pure (some n, Zig.AllocPolicy.harness)
     | .obj _ => do
       let f ← match fa.getObjVal? "fail_at" with
         | .ok .null => pure none

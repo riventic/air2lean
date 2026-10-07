@@ -16,6 +16,7 @@ import Proofs.Iogroup.Counter
 import Proofs.Layout.Mem
 import Proofs.Layout.Proofs
 import Proofs.Lists.Append
+import Proofs.Lists.Policy
 import Proofs.Lists.Sep
 import Proofs.Options.Proofs
 import Proofs.Pointers.Proofs
