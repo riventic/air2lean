@@ -11,6 +11,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ('tests/roadmap/abi-probes/probe.zig', 'tests/diff/compat.zig')
 TARGETS = ('x86_64-linux-gnu', 'aarch64-linux-gnu')  # the paired Linux relation
+# Zig versions with a bounded contract. A profile `tests/roadmap/abi-probes/<p>.json` is the 0.16.0
+# contract; `tests/roadmap/abi-probes/<version>/<p>.json` is the same contract for another Zig
+# version (`observe` selects it from the stock compiler's `zig version`).
+PROFILE_VERSIONS = ('0.16.0', '0.17.0')
 # triple -> (platform.system() that executes it, builtin os, builtin abi, baseline CPU model)
 NATIVE = {'x86_64-linux-gnu': ('Linux', 'linux', 'gnu', 'x86_64'),
           'aarch64-linux-gnu': ('Linux', 'linux', 'gnu', 'generic'),
@@ -39,7 +43,7 @@ def profile_check(profile):
     if (profile['name'] != 'abi64-le-v1' or profile['target_triple'] not in NATIVE
             or type(profile['pointer_bits']) is not int or profile['pointer_bits'] != 64
             or profile['endian'] != 'little' or profile['abi'] != NATIVE[profile['target_triple']][2]
-            or profile['backend'] != 'stage2_llvm' or profile['zig_version'] != '0.16.0'
+            or profile['backend'] != 'stage2_llvm' or profile['zig_version'] not in PROFILE_VERSIONS
             or profile['build_mode'] not in ('ReleaseSafe', 'ReleaseFast')
             or profile['export_stage'] != 'analyzed-air'
             or profile['float_mode'] != 'per-instruction' or profile['error_layout'] != 'type-table'
@@ -153,6 +157,14 @@ def compare(left, right):
             'native_execution_attested': False, 'translation_qualified': False, 'wasm_qualified': False}
 
 
+def version_profile(zig, path):
+    """`path`, or its contract for the stock compiler's Zig version (`PROFILE_VERSIONS`)."""
+    version = subprocess.run([zig, 'version'], check=True, timeout=60, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE).stdout.decode('utf-8').strip()
+    variant = path.parent / version / path.name
+    return variant if variant.is_file() else path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
@@ -165,7 +177,7 @@ def main():
     pair.add_argument('right', type=Path)
     args = parser.parse_args()
     if args.action == 'observe':
-        report = run(args.zig, json.loads(args.profile.read_text()))
+        report = run(args.zig, json.loads(version_profile(args.zig, args.profile).read_text()))
         args.output.write_text(json.dumps(report, indent=2) + '\n')
     else:
         print(json.dumps(compare(json.loads(args.left.read_text()), json.loads(args.right.read_text())), indent=2))

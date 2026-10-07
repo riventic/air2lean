@@ -256,18 +256,28 @@ theorem encode_array_eq_intBytes_ofLanes (k n : Nat) (hsize : intSize (8 * k) = 
   apply Array.toList_inj.mp
   simp [henc, List.map_flatten, Function.comp_def, Vector.toList_toArray]
 
-/-- The same for a vector `@Vector(n, uW)` whose lanes fill the power-of-2 vector size. -/
-theorem encode_vec_eq_intBytes_ofLanes (k n : Nat) (hsize : intSize (8 * k) = k)
+/-- `ZigLean/Vec.lean`'s lane packing is `packNat` of the lanes' values. -/
+theorem packLanes_eq_packNat {w : Nat} (xs : List (BitVec w)) :
+    packLanes xs = packNat w (xs.map BitVec.toNat) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => simp [packLanes, packNat, ih]
+
+/-- The same for a vector `@Vector(n, uW)` whose lanes fill the power-of-2 vector size: its
+bit-packed memory image (`Vec.packedEnc`) is the bytes of the 0.17 integer. -/
+theorem encode_vec_eq_intBytes_ofLanes (k n : Nat) (_hsize : intSize (8 * k) = k)
     (hvec : vecLayout n k = n * k) (v : Vector (BitVec (8 * k)) n) :
     (Enc.encode (⟨v⟩ : Vec (BitVec (8 * k)) n) : Array Byte) = intBytes (ofLanes v) := by
-  rw [← encode_array_eq_intBytes_ofLanes k n hsize v]
-  show padTo (vecLayout n (intSize (8 * k))) ((v.toArray.map Enc.encode).flatten) =
-    (v.toArray.map Enc.encode).flatten
-  have hlen : ((v.toArray.map Enc.encode).flatten : Array Byte).size = n * k := by
-    rw [show ((v.toArray.map Enc.encode).flatten : Array Byte) = Enc.encode v from rfl,
-      encode_array_eq_intBytes_ofLanes k n hsize v]
-    simp [intBytes]; rw [Nat.mul_left_comm]; omega
-  simp [padTo, hlen, hsize, hvec]
+  have hpack : Vec.packBits (8 * k) id (⟨v⟩ : Vec (BitVec (8 * k)) n) = ofLanes v := by
+    simp [Vec.packBits, ofLanes, packLanes_eq_packNat]
+  show padTo (packedVecLayout n (8 * k)) (intBytes (Vec.packBits (8 * k) id ⟨v⟩)) = _
+  rw [hpack]
+  have h8 : n * (8 * k) = 8 * (n * k) := Nat.mul_left_comm n 8 k
+  have hlay : packedVecLayout n (8 * k) = n * k := by
+    rw [packedVecLayout, show (n * (8 * k) + 7) / 8 = n * k by omega]; exact hvec
+  have hlen : (intBytes (ofLanes v)).size = n * k := by
+    simp [intBytes]; omega
+  simp [padTo, hlay, hlen]
 
 /-- The 0.17 integer has the same memory bytes as the array when it has no padding of its own. -/
 theorem encode_ofLanes_eq_encode_array (k n : Nat) (hsize : intSize (8 * k) = k)
