@@ -13,7 +13,7 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location('diff_report', ROOT/'scripts/diff-report.py')
-REPORT = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(REPORT)
+REPORT = importlib.util.module_from_spec(SPEC); sys.modules['diff_report'] = REPORT; SPEC.loader.exec_module(REPORT)
 SPEC = importlib.util.spec_from_file_location('schedule_cli', ROOT/'scripts/schedules.py')
 CLI = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(CLI)
 K = REPORT.Kind
@@ -50,7 +50,7 @@ class Exploration(unittest.TestCase):
     def scope(self, data, fn='foo'):
         return next(s for s in data['schedule_exploration']['scopes'] if s['function'] == fn)
 
-    def receipt(self, name, *, mode='enumerate', truncated=False, fn='foo'):
+    def receipt(self, name, *, mode='enumerate', truncated=False, fn='foo', saw=False):
         """Write a schedules.py receipt through the real CLI with a mocked model process."""
         output = self.root/name
         def respond(_, request, __):
@@ -58,13 +58,13 @@ class Exploration(unittest.TestCase):
             full = dict(prefix=request.get('prefix', [0]), options=[2], choice_count=1, trace_complete=True, observation=obs)
             executions = [full]
             if request['mode'] == 'enumerate' and not truncated:
-                executions.append(dict(full, prefix=[1]))
+                executions.append(dict(full, prefix=[1], observation=dict(schema=1, kind='bounded_no_result', legacy_line='{"diverge":true}') if saw else obs))
             if truncated:
                 executions.append(dict(prefix=[1], options=[2], choice_count=2, trace_complete=False, observation=obs))
             return dict(schema=1, qualified=False, mode=request['mode'], fuel=request['fuel'], node_cap=request['node_cap'],
                         prefix_cap=request['prefix_cap'], runs=len(executions), truncated=truncated, node_cap_reached=False,
                         prefix_cap_reached=truncated, exploration_complete=request['mode'] == 'enumerate' and not truncated,
-                        saw_no_result=False, executions=executions, outcomes=[obs])
+                        saw_no_result=saw, executions=executions, outcomes=[e['observation'] for e in executions][:1 if not saw else 2])
         args = CLI.parser().parse_args(['enumerate', '--example', 'basic', '--function', fn, '--fuel', '50',
                                         '--node-cap', '8', '--prefix-cap', '1', '--output', str(output)])
         with patch.object(CLI, 'invoke', side_effect=respond): CLI.execute(args, self.root)
@@ -196,5 +196,23 @@ class Exploration(unittest.TestCase):
         with self.assertRaisesRegex(REPORT.Invalid, 'stale runner'): self.compare([receipt])
         with self.assertRaisesRegex(REPORT.Invalid, 'receipt list'): self.compare([receipt, receipt])
         self.assertEqual(data['qualified'], False)
+
+    def test_enumerated_no_result_branch_blocks_correspondence(self):
+        self.seed([({'ok': 1}, {'ok': 1}, K.VALUE, K.VALUE, self.search('witness', runs=1))])
+        scope = self.scope(self.compare([self.receipt('enum.json', saw=True)])[1])
+        self.assertFalse(scope['counts_as_correspondence']); self.assertIn('bounded_no_result', scope['blockers'])
+
+    def test_duplicate_receipt_content_or_alias_is_rejected(self):
+        self.seed([({'ok': 1}, {'ok': 1}, K.VALUE, K.VALUE, None)])
+        receipt = self.receipt('enum.json'); copy = self.root/'copy.json'; copy.write_bytes(receipt.read_bytes())
+        alias = receipt.parent/'.'/receipt.name
+        for pair in ([receipt, copy], [receipt, alias]):
+            with self.assertRaisesRegex(REPORT.Invalid, 'duplicate|receipt list'): self.compare(pair)
+
+    def test_malformed_receipt_is_invalid_not_traceback(self):
+        self.seed([({'ok': 1}, {'ok': 1}, K.VALUE, K.VALUE, None)])
+        receipt = self.receipt('enum.json'); changed = json.loads(receipt.read_text())
+        del changed['request']['function']; receipt.write_text(json.dumps(changed))
+        with self.assertRaises(REPORT.Invalid): self.compare([receipt])
 
 if __name__ == '__main__': unittest.main()

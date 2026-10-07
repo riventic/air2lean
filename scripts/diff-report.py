@@ -4,12 +4,14 @@ import argparse
 from collections import Counter
 from enum import Enum
 import math
+import functools
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
 
 SCHEMA = 1
@@ -289,7 +291,7 @@ class Exploration:
     def scope(self, ex, fn):
         return self.scopes.setdefault((ex,fn),{'example':ex,'function':fn,'cases':0,'exact_matches':0,
             'observed':{'searched_cases':0,'schedules_explored':0,'capped':0,'bounded':0},
-            'enumeration':{'receipts':0,'schedules_explored':0,'complete':0,'truncated':0}})
+            'enumeration':{'receipts':0,'schedules_explored':0,'complete':0,'truncated':0,'saw_no_result':0}})
 
     def case(self, ex, fn, index, status, search):
         scope=self.scope(ex,fn);scope['cases']+=1;scope['exact_matches']+=status in MATCHES
@@ -300,12 +302,12 @@ class Exploration:
         o['saw_no_result_cases']+=search['saw_no_result'];o['replayable_witnesses']+=search['status']=='witness'
         o['fuel'].add(search['fuel']);o['cap'].add(search['cap'])
         s=scope['observed'];s['searched_cases']+=1;s['schedules_explored']+=search['runs']
-        s['capped']+=search['status']=='capped';s['bounded']+=search['status']=='bounded' or search['saw_no_result']
+        s['capped']+=search['status']=='capped';s['bounded']+=search['saw_no_result']  # bounded implies saw_no_result
         if search['status']=='capped':
             self.capped_cases.append({'example':ex,'function':fn,'input_index':index,'status':status.value,
                                       'runs':search['runs'],'cap':search['cap'],'fuel':search['fuel']})
 
-    def receipt(self, path, receipt):
+    def receipt(self, path, receipt, digest):
         request,result=receipt['request'],receipt['result']
         if request['mode']=='replay':
             self.enumeration['replays']+=1;return
@@ -318,7 +320,8 @@ class Exploration:
         s=self.scope(request['example'],request['function'])['enumeration']
         s['receipts']+=1;s['schedules_explored']+=result['runs']
         s['complete']+=result['exploration_complete'];s['truncated']+=result['truncated']
-        self.receipts.append({'path':str(path),'sha256':hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+        s['saw_no_result']+=result['saw_no_result']
+        self.receipts.append({'path':str(path),'sha256':digest,
             'example':request['example'],'function':request['function'],'input_index':receipt['input_index'],
             'fuel':request['fuel'],'node_cap':request['node_cap'],'prefix_cap':request['prefix_cap'],
             'runs':result['runs'],'truncated':result['truncated'],'node_cap_reached':result['node_cap_reached'],
@@ -331,13 +334,12 @@ class Exploration:
             scope=self.scopes[key];blockers=[]
             if scope['observed']['capped']:blockers.append('search_cap')
             if scope['enumeration']['truncated']:blockers.append('enumeration_truncated')
-            if scope['observed']['bounded']:blockers.append('bounded_no_result')
+            if scope['observed']['bounded'] or scope['enumeration']['saw_no_result']:blockers.append('bounded_no_result')
             if scope['cases']==0 or scope['exact_matches']!=scope['cases']:blockers.append('non_matching_cases')
             capped=bool(scope['observed']['capped'] or scope['enumeration']['truncated'])
             scope.update(capped=capped,counts_as_correspondence=not blockers,qualified=False,
                          blockers=blockers+['proof_applicability_not_evaluated'])
             scopes.append(scope)
-        if any(s['capped'] and s['counts_as_correspondence'] for s in scopes):raise Invalid('capped scope counted as correspondence')
         sets=lambda d:{k:sorted(v) if isinstance(v,set) else v for k,v in d.items()}
         return {'qualified':False,'reduction':REDUCTION,
                 'observed_matching':sets(self.observed),'bounded_enumeration':sets(self.enumeration),
@@ -345,26 +347,23 @@ class Exploration:
                 'capped_scopes':sum(s['capped'] for s in scopes),'capped_cases':self.capped_cases,
                 'enumeration_receipts':self.receipts,'scopes':scopes}
 
+@functools.cache
 def load_schedule_cli():
+    # Share this module (and its Invalid class) with schedules.py instead of loading a second copy.
+    this=sys.modules.get(__name__)
+    if this is not None and getattr(this,'Exploration',None) is Exploration:sys.modules.setdefault('diff_report',this)
     spec=importlib.util.spec_from_file_location('air2lean_schedules',Path(__file__).with_name('schedules.py'))
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
 def schedule_receipt(root, path, examples, sources):
-    """Validate one schedules.py receipt against the current source/input context."""
-    cli=load_schedule_cli()
+    """Validate one schedules.py receipt against the current source/input context.
+    Returns the receipt and the SHA-256 of the exact bytes that were validated."""
     try:
-        receipt=cli.read_json(path)
-        cli.bound_context(receipt,sources)
-        request=receipt.get('request')
-        if type(request) is not dict or request.get('example') not in examples:raise Invalid('schedule receipt outside selected examples')
-        cli.validate_response(receipt.get('result'),request)
-        raw,digest=cli.current_input(root,request['example'],request['function'],receipt.get('input_index'))
-    except cli.REPORT.Invalid as exc:
+        receipt,raw_bytes=load_schedule_cli().load_receipt(root,path,sources,examples)
+    except (KeyError,TypeError,ValueError) as exc:  # Invalid is a ValueError
         raise Invalid(f'schedule receipt {path}: {exc}') from exc
-    if digest!=receipt.get('input_sha256') or not json_equal(raw,request.get('input')):
-        raise Invalid(f'schedule receipt {path}: stale input')
-    return receipt
+    return receipt,hashlib.sha256(raw_bytes).hexdigest()
 
 def headline(summary):
     x=summary['schedule_exploration'];o=x['observed_matching'];e=x['bounded_enumeration'];c=o['status_counts']
@@ -439,11 +438,20 @@ def source_hashes(root):
     return result
 
 def compare(root, examples, version, host, summary, schedule_receipts=()):
+    return compare_summary(root,examples,version,host,summary,schedule_receipts)[0]
+
+def compare_summary(root, examples, version, host, summary, schedule_receipts=()):
+    """Write the summary and return (exit code, summary dict)."""
     if not examples or len(set(examples))!=len(examples) or any(not IDENT.fullmatch(ex) for ex in examples):
         raise Invalid('invalid selected examples')
     sources=source_hashes(root);exploration=Exploration()
     if len(schedule_receipts)>MAX_CASES or len(set(schedule_receipts))!=len(schedule_receipts):raise Invalid('invalid schedule receipt list')
-    for path in schedule_receipts:exploration.receipt(path,schedule_receipt(root,Path(path),examples,sources))
+    seen=set()
+    for path in schedule_receipts:
+        receipt,digest=schedule_receipt(root,Path(path),examples,sources)
+        keys={Path(path).resolve(),digest}
+        if keys&seen:raise Invalid(f'duplicate schedule receipt {path}')
+        seen|=keys;exploration.receipt(path,receipt,digest)
     report_path=Path(str(summary)+'.jsonl')
     report_path.parent.mkdir(parents=True,exist_ok=True)
     totals=Counter();legacy_totals=Counter();violations=[];eligible=0;case_count=0;written=0
@@ -470,7 +478,7 @@ def compare(root, examples, version, host, summary, schedule_receipts=()):
                 if not IDENT.fullmatch(fn):raise Invalid('invalid function name')
                 zpath=root/'tests/diff/out/zig'/ex/infile.name;lpath=root/'tests/diff/out/lean'/ex/infile.name
                 generators=[iter(lines(path)) for path in (infile,zpath,lpath,Path(str(zpath)+'.outcomes'),Path(str(lpath)+'.outcomes'))]
-                local=Counter();statuses=Counter();count=0;incomplete_search=False
+                local=Counter();statuses=Counter();count=0
                 while True:
                     values=[next(g,None) for g in generators]
                     if all(v is None for v in values):break
@@ -481,7 +489,6 @@ def compare(root, examples, version, host, summary, schedule_receipts=()):
                     values_match=same_value(native,model)
                     status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match)
                     bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search)
-                    incomplete_search |= bool(search and (search['status'] in {'capped','bounded'} or search['saw_no_result']))
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
@@ -494,6 +501,7 @@ def compare(root, examples, version, host, summary, schedule_receipts=()):
                     if search:row['schedule']=search
                     emit(row)
                 if count==0:raise Invalid('empty function inputs')
+                observed=exploration.scope(ex,fn)['observed'];incomplete_search=bool(observed['capped'] or observed['bounded'])
                 for bucket,specs in fn_pins.items():
                     lo,hi=specs.get(fn,(0,0))
                     if not lo<=local[bucket]<=hi:
@@ -502,16 +510,17 @@ def compare(root, examples, version, host, summary, schedule_receipts=()):
                         # Search-cap changes are budget evidence, not semantic mutation detections.
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]
-    atomic_json(summary,{'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host},
+    result={'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host},
                          'case_count':case_count,'skipped_examples':len(skipped),'skipped_functions':sum(len(row['functions']) for row in skipped),
-                         'exact_matches':sum(totals[s.value] for s in (Status.VALUE_MATCH,Status.ERROR_RETURN_MATCH,Status.PANIC_MATCH)),
+                         'exact_matches':sum(totals[s.value] for s in MATCHES),
                          'proof_applicability':'not_evaluated_by_differential_runner',
                          'proof_exclusions':[{'example':ex,'reason':'proof_applicability_not_evaluated','sources':sorted(str(p.relative_to(root)) for p in (root/'Proofs'/(ex[0].upper()+ex[1:])).glob('*.lean'))} for ex in examples],
                          'counts':dict(totals),'legacy_counts':dict(legacy_totals),
                          'schedule_exploration':exploration.summary(),
                          'pin_violations':violations,'mutation_eligible':0 if setup_failures else eligible,
-                         'setup_failures':setup_failures,'cases_path':str(report_path),'runner_runtime_sources':sources})
-    return 1 if setup_failures or totals[Status.MISMATCH.value] or legacy_totals['mismatch'] or violations else 0
+                         'setup_failures':setup_failures,'cases_path':str(report_path),'runner_runtime_sources':sources}
+    atomic_json(summary,result)
+    return (1 if setup_failures or totals[Status.MISMATCH.value] or legacy_totals['mismatch'] or violations else 0),result
 
 def failure_observations(root, examples):
     observations=[];seen=0
@@ -565,8 +574,8 @@ def main():
             value=result.get('mutation_eligible')
             if type(value) is not int or value<0:raise Invalid('invalid mutation accounting')
             print(value);return 0
-        code=compare(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split())
-        print(headline(read_summary(args.summary)));return code
+        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split())
+        print(headline(result));return code
     except (Invalid,OSError,UnicodeError,RecursionError) as exc:
         if args.action!='eligible':summary_failure(args.summary,args.phase,str(exc),Failure.UNSUPPORTED if isinstance(exc,Unsupported) else Failure.SETUP)
         parser.exit(2,str(exc)+'\n')
