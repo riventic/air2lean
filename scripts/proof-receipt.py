@@ -11,9 +11,11 @@ from pathlib import Path
 import re
 import stat
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).absolute().parents[1]
 MAX_JSON = 64 * 1024 * 1024
@@ -135,6 +137,62 @@ def write_new(path, data):
         os.link(temporary, path)  # Atomic no-clobber, including concurrent finalizers.
     finally:
         temporary.unlink()
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)  # Persist the published name before reporting success.
+    except OSError:
+        pass
+    finally:
+        os.close(directory)
+
+
+def run_child(argv, cwd, grace=2.0):
+    """Run the auditor in its own process group; any exit path stops the whole group.
+
+    SIGINT/SIGTERM/SIGHUP become one KeyboardInterrupt here, so cancellation never leaves a
+    live auditor writing into the attempt after this worker (and the outer guard) report it."""
+    cancelled = []
+    def cancel(signum, frame):
+        if not cancelled:  # Raise once: a repeated signal must not abort stop() mid-cleanup.
+            cancelled.append(signum)
+            raise KeyboardInterrupt
+    child = None
+    def group_alive():
+        try:
+            os.killpg(child.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    def stop():
+        for signum in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(child.pid, signum)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                child.wait(timeout=grace if signum == signal.SIGTERM else None)
+            except subprocess.TimeoutExpired:
+                continue
+            for _ in range(int(grace * 50) + 1):
+                if not group_alive():
+                    return
+                time.sleep(0.02)
+    previous = {s: signal.signal(s, cancel) for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+    try:
+        child = subprocess.Popen(argv, cwd=cwd, start_new_session=True)
+        returncode = child.wait()
+        if group_alive():
+            raise ValueError('auditor exited with live child processes')
+        return subprocess.CompletedProcess(argv, returncode)
+    except BaseException:
+        if child is not None:
+            stop()
+        raise
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def git(*args):
@@ -370,7 +428,7 @@ def worker(attempt):
     if plan['scope'] == 'explicit-modules':
         for module in plan['modules']:
             argv += ['--module', module]
-    result = subprocess.run(argv, cwd=ROOT)  # The existing outer guard owns timeout and cleanup.
+    result = run_child(argv, ROOT)  # The outer guard owns the timeout; cancellation stops the group.
     if result.returncode:
         return result.returncode if result.returncode > 0 else 128 - result.returncode
     after = context(plan)
@@ -492,6 +550,9 @@ def main():
     except (OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
         print('proof receipt unavailable/stale: ' + str(error), file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        print('proof receipt incomplete: interrupted; no receipt was published', file=sys.stderr)
+        return 130
 
 
 if __name__ == '__main__':

@@ -276,11 +276,17 @@ def extract(modules: list[str], build: bool) -> dict:
 def write_report(path: Path, report: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
-        json.dump(report, handle, indent=2)
-        handle.write("\n")
         temporary = Path(handle.name)
+        try:
+            json.dump(report, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
     try:
-        os.replace(temporary, path)
+        os.replace(temporary, path)  # Atomic replacement: readers see the old or the complete report.
     finally:
         temporary.unlink(missing_ok=True)
 
