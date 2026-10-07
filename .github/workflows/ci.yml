@@ -377,6 +377,15 @@ jobs:
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
+      # Synthetic 0.17.0 AIR (no compiler output): tag table, @divCeil, new/renamed tag
+      # translation and rejections, and the 0.16.0 goldens rewritten to 0.17.0 spelling.
+      - name: Zig 0.17.0 translator regressions
+        if: ${{ !matrix.mutate && matrix.zig == '0.17.0' }}
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/zig017/Tags.lean
+          python3 -B tests/roadmap/zig017/test_cli.py "$PWD/.lake/build/bin/air2lean" --elaborate
+
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
       - name: External model contracts
