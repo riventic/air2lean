@@ -7,13 +7,27 @@ import json
 from pathlib import Path
 import selectors
 import subprocess
+import sys
 import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location('diff_report', ROOT/'scripts/diff-report.py')
-REPORT = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(REPORT)
+
+
+def load_report():
+    """Reuse an already-loaded diff-report module so both share one Invalid class."""
+    loaded = sys.modules.get('diff_report')
+    if loaded is not None: return loaded
+    spec = importlib.util.spec_from_file_location('diff_report', ROOT/'scripts/diff-report.py')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['diff_report'] = module
+    try: spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules['diff_report']; raise
+    return module
+
+
+REPORT = load_report()
 LIMIT = 64 * 1024 * 1024
 
 
@@ -23,11 +37,15 @@ def nat(value, limit, name):
     return value
 
 
-def read_json(path):
+def read_bytes(path):
     with Path(path).open('rb') as stream:
         raw = stream.read(LIMIT + 1)
     if len(raw) > LIMIT: raise REPORT.Invalid('receipt exceeds 64 MiB')
-    return REPORT.decode(raw.decode('utf-8'))
+    return raw
+
+
+def read_json(path):
+    return REPORT.decode(read_bytes(path).decode('utf-8'))
 
 
 def row(path, index):
@@ -50,6 +68,20 @@ def bound_context(receipt, sources):
         raise REPORT.Invalid('unsupported receipt')
     if not REPORT.json_equal(receipt.get('runner_runtime_sources'), sources):
         raise REPORT.Invalid('stale runner/runtime source fingerprints')
+
+
+def load_receipt(root, path, sources, examples=None):
+    """Read and validate a receipt against current sources and input; return (receipt, raw bytes).
+    `examples`, when given, restricts the receipt to selected examples before any input is read."""
+    raw = read_bytes(path)
+    receipt = REPORT.decode(raw.decode('utf-8')); bound_context(receipt, sources)
+    request = receipt.get('request')
+    if type(request) is not dict: raise REPORT.Invalid('invalid receipt request')
+    if examples is not None and request.get('example') not in examples: raise REPORT.Invalid('schedule receipt outside selected examples')
+    validate_response(receipt.get('result'), request)
+    raw_input, digest = current_input(root, request.get('example'), request.get('function'), receipt.get('input_index'))
+    if digest != receipt.get('input_sha256') or not REPORT.json_equal(raw_input, request.get('input')): raise REPORT.Invalid('stale input')
+    return receipt, raw
 
 
 def invoke(binary, request, timeout):
@@ -145,13 +177,11 @@ def prepare(args, root):
                        fuel=nat(args.fuel,100000,'fuel'), node_cap=nat(args.node_cap,2000,'node cap'), prefix_cap=nat(args.prefix_cap,4096,'prefix cap'))
         return request, args.input_index, digest, sources
     if args.receipt:
-        receipt = read_json(args.receipt); bound_context(receipt, sources)
-        original = receipt.get('request')
-        if type(original) is not dict or original.get('mode') != 'enumerate': raise REPORT.Invalid('not an enumeration receipt')
-        validate_response(receipt.get('result'), original)
-        index = receipt.get('input_index')
-        raw_input, digest = current_input(root, original['example'], original['function'], index)
-        if digest != receipt.get('input_sha256') or not REPORT.json_equal(raw_input,original['input']): raise REPORT.Invalid('stale input')
+        receipt, _ = load_receipt(root, args.receipt, sources)
+        original = receipt['request']
+        if original.get('mode') != 'enumerate': raise REPORT.Invalid('not an enumeration receipt')
+        index = receipt['input_index']
+        digest = receipt['input_sha256']
         i = nat(args.execution_index,1999,'execution index')
         executions = receipt['result']['executions']
         if i >= len(executions): raise REPORT.Invalid('missing execution')

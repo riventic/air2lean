@@ -76,6 +76,9 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      - name: Schedule exploration cap accounting regressions
+        run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
+
       - name: Local Lake cache hygiene regressions
         run: python3 tests/roadmap/local-ci/test_cache.py
 
@@ -522,6 +525,10 @@ jobs:
             --fuel 1000 --node-cap 4 --prefix-cap 128 --output "$RUNNER_TEMP/schedules.json"
           python3 scripts/schedules.py replay --receipt "$RUNNER_TEMP/schedules.json" \
             --output "$RUNNER_TEMP/schedule-replay.json"
+          # Separate observed/enumeration coverage; the summary keeps qualified=false.
+          python3 scripts/diff-report.py compare --summary "$RUNNER_TEMP/schedule-report.json" \
+            --root "$PWD" --examples atomics --version "${{ matrix.zig }}" --host "$(uname -s)-$(uname -m)" \
+            --schedule-receipts "$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json"
           python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
           zig build-exe -OReleaseSafe -lc --dep common \
