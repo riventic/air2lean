@@ -11,7 +11,8 @@ same abstract sequence.
 * `addAll` adds every item: on success the container holds `xs ++ vs`, after `OutOfMemory`
   it holds `xs` followed by a prefix of `vs` (`addAll_spec`). Its functional property, the item
   total, is a statement about abstract lists only (`addAll_total`).
-* `addEvens` (the loop of `evens` in `examples/lists/lists.zig`) adds the even items: every
+* `addEvens` (a Lean client modelled on the loop of `evens` in `examples/lists/lists.zig`, not
+  the generated `evens` body) adds the even items: every
   outcome keeps `xs` as a prefix, and success gives exactly `xs ++ evens` (`addEvens_spec`).
 
 These are sequential partial-correctness contracts on existing generated model bodies; no new
@@ -59,7 +60,8 @@ theorem addAll_spec (I : SeqImpl) (a : Allocator) (h : I.H) (xs vs : List (BitVe
     | error e =>
       refine Triple.conseq (Triple.ret (Q := Filled I xs (v :: vs)) (h, .error e)) ?_
         (fun _ _ hq => hq)
-      rintro hp ⟨h₁, h₂, -, rfl, ⟨he, rfl⟩, hrep⟩
+      intro hp hpre
+      obtain ⟨he, hrep⟩ := sep_lift.mp hpre
       exact ⟨[], List.nil_prefix, he, by simpa using hrep⟩
 
 /-- The total of the items, as natural numbers. -/
@@ -83,7 +85,7 @@ theorem addAll_total (I : SeqImpl) (a : Allocator) (h : I.H) (xs vs : List (BitV
 /-- The even items of `vs`. -/
 def evens (vs : List (BitVec 32)) : List (BitVec 32) := vs.filter (fun v => v % 2 == 0)
 
-/-- Add the even items of `vs` (the loop of `evens` in `lists.zig`). -/
+/-- Add the even items of `vs` (modelled on the loop of `evens` in `lists.zig`). -/
 def addEvens (I : SeqImpl) (a : Allocator) :
     I.H → List (BitVec 32) → MemM (I.H × Except ErrName Unit)
   | h, [] => pure (h, .ok ())
@@ -128,8 +130,9 @@ theorem addEvens_spec (I : SeqImpl) (a : Allocator) (h : I.H) (xs vs : List (Bit
       | error e =>
         refine Triple.conseq (Triple.ret (Q := Kept I xs (v :: vs)) (h, .error e)) ?_
           (fun _ _ hq => hq)
-        rintro hp ⟨h₁, h₂, -, rfl, ⟨he', rfl⟩, hrep⟩
-        exact ⟨xs, List.prefix_refl _, List.prefix_append _ _, he', by simpa using hrep⟩
+        intro hp hpre
+        obtain ⟨he', hrep⟩ := sep_lift.mp hpre
+        exact ⟨xs, List.prefix_refl _, List.prefix_append _ _, he', hrep⟩
     · have he : evens (v :: vs) = evens vs := by
         simp only [evens, List.filter_cons, hv, Bool.false_eq_true, ↓reduceIte]
       show Triple _ (if v % 2 == 0 then _ else _) _

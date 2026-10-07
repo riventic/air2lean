@@ -98,9 +98,9 @@ The `.empty` value, whose pointer names a constant global, is therefore outside 
 `tests/roadmap/container-contracts/Clients.lean` proves two clients once for every `I : SeqImpl`
 from `I.add_spec` and the generic triple rules, without unfolding a representation. `addAll`
 gives exactly `xs ++ vs`, or `xs` followed by a prefix of `vs` after `OutOfMemory`. Its total
-property is a lemma about abstract lists. `addEvens`, the `evens` loop, always keeps `xs` as a
-prefix. The same client theorems are instantiated unchanged to both containers. A rejected
-attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
+property is a lemma about abstract lists. `addEvens`, a Lean client modelled on the `evens` loop
+(not the generated `evens` body), always keeps `xs` as a prefix. The same client theorems are
+instantiated unchanged to both containers. A rejected attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
 with `lake build Proofs.Lists.Container` and
 `lake env lean tests/roadmap/container-contracts/Clients.lean`. Queues with removal, maps,
 container deallocation through the interface, and a general ADT library remain outside this

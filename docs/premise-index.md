@@ -1932,7 +1932,7 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, T
 | `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `example@L173` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L176` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/deadline-futex/AtomicKernel.lean`

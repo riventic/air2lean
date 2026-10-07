@@ -132,9 +132,7 @@ theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : Bit
   | error e =>
     obtain ⟨rfl, hl', -⟩ := happ
     exact ⟨.error "OutOfMemory", m', hL', by simp [arrayAdd, hr], hd', hm',
-      ⟨Heap.empty, hL', (Heap.disjoint_empty hL').symm, (Heap.empty_union hL').symm,
-        ⟨rfl, rfl⟩,
-        ptr, cap, hz, hl'⟩, hst'⟩
+      sep_lift.mpr ⟨rfl, ptr, cap, hz, hl'⟩, hst'⟩
 
 /-- `std.ArrayListUnmanaged(u32)` as a `SeqImpl`. -/
 def arraySeq : SeqImpl where
