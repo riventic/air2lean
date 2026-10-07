@@ -100,10 +100,14 @@ def version_status(root):
         raise Stale(f'{DEFAULT_METADATA}: zig.versions not found')
 
 
+def version_suffix(version, default, status):
+    if version == default: return ' (default)'
+    if status.get(version) == 'in-qualification': return ' (in qualification)'
+    return ''
+
+
 def version_label(version, default, status):
-    if version == default: return f'{version} (default)'
-    if status.get(version) == 'in-qualification': return f'{version} (in qualification)'
-    return version
+    return version + version_suffix(version, default, status)
 
 
 def examples(root):
@@ -179,7 +183,7 @@ def lean_string(root, rel, name):
 
 
 def version_vote(versions, default, status):
-    marked = [f'**{v}**' + version_label(v, default, status)[len(v):] for v in versions]
+    marked = [f'**{v}**' + version_suffix(v, default, status) for v in versions]
     return marked[0] if len(marked) == 1 else ', '.join(marked[:-1]) + ' and ' + marked[-1]
 
 
