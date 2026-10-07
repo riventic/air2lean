@@ -43,7 +43,12 @@ ATTR_ONLY_RE = re.compile(r"^(?:@\[[^\]]*\]\s*)+$")
 IDENT = r"[A-Za-z_À-ɏͰ-Ͽἀ-῿][A-Za-z_0-9'!?À-ɏͰ-Ͽἀ-῿₀-ₜ]*"
 TOKEN_RE = re.compile(IDENT + r"(?:\." + IDENT + r")*")
 NAME_RE = re.compile(r"\s*(" + IDENT + r"(?:\." + IDENT + r")*)")
-CTOR_RE = re.compile(r"^\s*\|\s*(" + IDENT + r")")
+CTOR_RE = re.compile(r"\|\s*(" + IDENT + r")")
+# `.ctor` with an expected type (`throw .unspecified`), not a field access on a term.
+DOT_CTOR_RE = re.compile(r"(?<![\w.'!?)\]}⟩])\.(" + IDENT + r")")
+# `(a b : T ...)`, `{a : T}`, `[a : T]`, `⦃a : T⦄`: bound names and the head token of their type.
+BINDER_RE = re.compile(r"[(\[{⦃]\s*((?:" + IDENT + r"\s+)*" + IDENT + r")\s*:(?!=)\s*@?("
+                       + IDENT + r"(?:\." + IDENT + r")*)")
 PROFILE_MARKER = "-- air2lean-profile:"
 
 
@@ -216,6 +221,8 @@ class Decl:
     conditions: tuple[str, ...] = ()
     statement: str = ""
     tokens: set = field(default_factory=set)
+    binders: dict = field(default_factory=dict)
+    dot_ctors: set = field(default_factory=set)
     targets: list | None = None
 
 
@@ -243,6 +250,31 @@ def module_name(rel: Path) -> str:
     return ".".join(rel.with_suffix("").parts)
 
 
+def binders(text: str) -> list[tuple[str, str]]:
+    """(name, type head) of every explicit binder group in `text`."""
+    return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
+
+
+def instance_type(decl: Decl) -> frozenset:
+    """Names in an instance's type, `instance [Enc α] : Enc (Array α) where` -> {Enc, Array}.
+    Binder names and single-letter (auto-bound) variables are dropped."""
+    text = re.split(r"\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
+    depth = 0
+    for i, c in enumerate(text):
+        if c in "([{⟨⦃":
+            depth += 1
+        elif c in ")]}⟩⦄":
+            depth = max(0, depth - 1)
+        elif c == ":" and depth == 0:
+            text = text[i + 1:]
+            break
+    else:
+        return frozenset()
+    bound = {name for name, _ in binders(decl.text)}
+    names = {t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(text)}
+    return frozenset(n for n in names - bound - {"Type", "Prop", "Sort"} if len(n.rstrip("'₀₁₂₃₄₅₆₇₈₉")) > 1)
+
+
 def parse_file(path: Path, root: Path) -> LeanFile:
     raw = path.read_text()
     text = strip_comments(raw)
@@ -267,19 +299,22 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 continue
         if items:
             items[-1][2].append(line)
-    scopes: list[list] = []  # [kind, name parts, opens]
+    scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
     file_opens: list[str] = []
+    file_vars: list[tuple[str, str]] = []
     for keyword, number, lines in items:
         body = "\n".join(lines)
         head = lines[0]
         rest = COMMAND_RE.sub("", head, count=1)
         namespaces = tuple(p for s in scopes if s[0] == "namespace" for p in s[1])
         if keyword == "namespace":
-            scopes.append(["namespace", rest.split()[0].split("."), []])
+            scopes.append(["namespace", rest.split()[0].split("."), [], []])
         elif keyword in {"section", "mutual"}:
-            scopes.append([keyword, [], []])
+            scopes.append([keyword, [], [], []])
         elif keyword == "if_decl":
-            scopes.append([keyword, [], [], rest.split()[0]])
+            scopes.append([keyword, [], [], [], rest.split()[0]])
+        elif keyword == "variable":
+            (scopes[-1][3] if scopes else file_vars).extend(binders(body))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
@@ -305,9 +340,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 full = name[len("_root_."):]
             else:
                 full = ".".join([*namespaces, name]) if name else ""
-            conditions = tuple(s[3] for s in scopes if s[0] == "if_decl")
+            conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
+            decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
+            for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
+                decl.binders.setdefault(name, set()).add(head)
             if keyword in {"theorem", "lemma", "example"}:
                 decl.statement = statement_of(body)
             lean.decls.append(decl)
@@ -323,7 +361,17 @@ class Repository:
     files: dict[str, LeanFile]
     table: dict[str, list[Decl]]
     errors: list[str]
+    ctors: dict[str, list[Decl]] = field(default_factory=dict)  # constructor short name -> inductives
     _visible: dict[str, set[str]] = field(default_factory=dict)
+    _instances: list | None = None
+
+    def instances(self) -> list[tuple[Decl, frozenset]]:
+        """Every instance with the last name components of its instance type (cached)."""
+        if self._instances is None:
+            # An instance type with no recognisable names would match every closure: skip it.
+            self._instances = [(d, need) for lean in self.files.values() for d in lean.decls
+                               if d.kind == "instance" and (need := instance_type(d))]
+        return self._instances
 
     def visible(self, lean: LeanFile) -> set[str]:
         """Files reachable through `lean`'s transitive imports (cached per file)."""
@@ -399,18 +447,21 @@ def load_repository(root: Path, config: dict) -> Repository:
                       if all(any((f"{p}.{c}" if p else c) in names for p in prefixes(d.namespaces))
                              for c in d.conditions)]
     table: dict[str, list[Decl]] = {}
+    ctors: dict[str, list[Decl]] = {}
     for lean in files.values():
         for decl in lean.decls:
             if decl.name:
                 table.setdefault(decl.name, []).append(decl)
                 if decl.kind == "inductive":
-                    for line in decl.text.split("\n")[1:]:
-                        ctor = CTOR_RE.match(line)
-                        if ctor:
-                            table.setdefault(f"{decl.name}.{ctor.group(1)}", []).append(decl)
+                    first, _, rest = decl.text.partition("\n")
+                    for line in [first.partition(" where")[2], *rest.split("\n")]:
+                        # `| a | b`: every constructor of the line, including `inductive T where | a | b`.
+                        for ctor in CTOR_RE.findall(line) if line.lstrip().startswith("|") else ():
+                            table.setdefault(f"{decl.name}.{ctor}", []).append(decl)
+                            ctors.setdefault(ctor, []).append(decl)
                 elif decl.kind in {"structure", "class"}:
                     table.setdefault(f"{decl.name}.mk", []).append(decl)
-    return Repository(root, config, files, table, errors)
+    return Repository(root, config, files, table, errors, ctors)
 
 
 def prefixes(parts: tuple[str, ...]) -> list[str]:
@@ -425,14 +476,36 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
     bases = prefixes(decl.namespaces)
     for opened in decl.opens:
         bases += [f"{b}.{opened}" if b else opened for b in prefixes(decl.namespaces)]
+
+    def lookup(name: str) -> list[Decl]:
+        return [t for base in bases for t in repo.table.get(f"{base}.{name}" if base else name, ())
+                if t.file.rel in visible]
+
+    def typed(token: str, depth: int = 0) -> list[Decl]:
+        """`x.f` on a bound `x : T ...` is generalized field notation for `T.f x`."""
+        local, _, rest = token.partition(".")
+        if not rest or local not in decl.binders or depth > 2:
+            return []
+        field_name = rest.split(".")[0]
+        hits = []
+        for head in decl.binders[local]:
+            for owner in typed(head, depth + 1) or lookup(head):
+                hits += [t for t in repo.table.get(f"{owner.name}.{field_name}", ()) if t.file.rel in visible]
+        return hits
+
     found: dict[int, Decl] = {}
+    for name in decl.dot_ctors:
+        # The expected type is unknown in source: resolve only a constructor name that exactly one
+        # visible inductive declares. Ambiguous names (generated exits, phases) are left out.
+        owners = {id(t): t for t in repo.ctors.get(name, ()) if t.file.rel in visible}
+        if len(owners) == 1 and decl not in owners.values():
+            found.update(owners)
     for token in decl.tokens:
+        found.update((id(t), t) for t in typed(token) if t is not decl)
         # An unresolved dotted name may be a field or projection: retry its owner.
         parts = token.split(".")
         while parts:
-            hits = [t for base in bases
-                    for t in repo.table.get(f"{base}.{'.'.join(parts)}" if base else ".".join(parts), ())
-                    if t.file.rel in visible]
+            hits = lookup(".".join(parts))
             if hits:
                 found.update((id(t), t) for t in hits if t is not decl)
                 break
@@ -481,21 +554,39 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     seen, pending, tokens = {id(theorem)}, [theorem], set()
     runtime: set[str] = set()
     generated: set[str] = set()
-    while pending:
-        current = pending.pop()
-        tokens |= current.tokens
-        for target in resolve(repo, current):
-            if target.file.runtime:
-                runtime.add(target.file.module)
-                continue
-            if target.kind == "axiom":
-                for premise in config["source_axiom"]:
-                    via.setdefault(premise, []).append(f"axiom {target.name}")
-            if target.file.generated:
-                generated.add(target.file.rel)
-            if id(target) not in seen:
-                seen.add(id(target))
-                pending.append(target)
+    visible = repo.visible(theorem.file)
+    instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
+
+    def visit(target: Decl) -> None:
+        if target.name:
+            tokens.add(target.name)  # as in the kernel graph, rules also see resolved names
+        if target.file.runtime:
+            runtime.add(target.file.module)
+            seen.add(id(target))
+            return
+        if target.kind == "axiom":
+            for premise in config["source_axiom"]:
+                via.setdefault(premise, []).append(f"axiom {target.name}")
+        if target.file.generated:
+            generated.add(target.file.rel)
+        if id(target) not in seen:
+            seen.add(id(target))
+            pending.append(target)
+
+    while True:
+        while pending:
+            current = pending.pop()
+            tokens |= current.tokens
+            for target in resolve(repo, current):
+                visit(target)
+        # Instance arguments are implicit in source: assume every visible instance whose type
+        # names only things the closure names is used.
+        names = {t.rsplit(".", 1)[-1] for t in tokens}
+        found = [d for d, need in instances if id(d) not in seen and need <= names]
+        if not found:
+            break
+        for instance in found:
+            visit(instance)
     for module in sorted(runtime):
         for premise in config["runtime_modules"].get(module, ()):
             via.setdefault(premise, []).append(f"runtime module {module}")
@@ -705,6 +796,8 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             known = by_name.get((theorem["module"], user(theorem["name"])))
             if known is not None:
                 entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)
+                if entry["source_gaps"]:
+                    entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",

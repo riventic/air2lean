@@ -54,8 +54,8 @@
     "ZigLean.Conc.Lemmas": ["THR-08"],
     "ZigLean.Conc.Lock": ["THR-08", "THR-05"],
     "ZigLean.Conc.LockRules": ["THR-08", "THR-05"],
-    "ZigLean.Conc.Word": ["THR-08", "ORD-01"],
-    "ZigLean.Conc.WeakWord": ["THR-08", "ORD-04"],
+    "ZigLean.Conc.Word": ["THR-08", "THR-05", "ORD-01"],
+    "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],
     "ZigLean.Conc.WeakCasLemmas": ["ORD-04"],
     "ZigLean.Conc.Progress": ["THR-07"],
@@ -92,8 +92,8 @@
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
-    {"premise": "ALC-02", "scope": "closure", "pattern": "allocPolicy|AllocPolicy|failAt|maxAllocBytes|releaseAttempt"},
-    {"premise": "ALC-03", "scope": "closure", "pattern": "(?:^|\\.)remap|Remap"},
+    {"premise": "ALC-02", "scope": "closure", "pattern": "(?:^|\\.)AllocPolicy\\.(?:maxBytes|failures)$|releaseAttempt"},
+    {"premise": "ALC-03", "scope": "closure", "pattern": "(?:^|\\.)remap|Remap(?!Mode)"},
     {"premise": "ALC-04", "scope": "closure", "pattern": "allocSentinel|freeSentinel"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC"},
@@ -131,6 +131,9 @@
     "ASM-01": ["TRU-04"],
     "ASM-02": ["ASM-01"],
     "EXT-02": ["EXT-01"],
+    "SEM-02": ["SEM-01"],
+    "SEM-03": ["SEM-01"],
+    "THR-01": ["SEM-02"],
     "TRU-02": ["TRU-03", "SEM-01"]
   }
 }
