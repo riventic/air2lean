@@ -35,6 +35,8 @@ MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9!?']*(\.[A-Za-z_][A-Za-z_0-9!?']*)*")
 # Lean-generated companions of a declaration: equation, injectivity, sizeOf, sparse-case
 # and abstracted proof lemmas. They are reported, but their parent states the claim.
+PRIVATE = re.compile(r'^_private(?:\.[^.]+)*?\.0\.')
+GENERATED_PART = re.compile(r'_(?:proof|simp|sparseCasesOn|auxLemma)(?:_\d+)*')
 AUXILIARY = re.compile(r'(^|\.)(eq_\d+|eq_def|inj|injEq|sizeOf_spec|else_eq|ofNat_ctorIdx|ctorIdx_ofNat)$')
 # Source-level float vocabulary (the light check only; the audit uses the checked graph).
 FLOAT_WORDS = re.compile(r'\bZig\.F(?:16|32|64|80|128)\b|\bF(?:16|32|64|80|128)\b|\bFloat\b|'
@@ -136,7 +138,9 @@ def user_name(node):
 
 
 def is_auxiliary(name):
-    return bool(AUXILIARY.search(name)) or any(part.startswith('_') for part in name.split('.'))
+    # `private` declarations are hand-written: drop Lean's `_private.<module>.0.` mangling first.
+    name = PRIVATE.sub('', name)
+    return bool(AUXILIARY.search(name)) or any(GENERATED_PART.fullmatch(part) for part in name.split('.'))
 
 
 def own_flags(module):

@@ -39,6 +39,15 @@ def write(path, text):
     path.write_text(text)
 
 
+class GeneratedNameTests(unittest.TestCase):
+    def test_private_theorems_are_not_compiler_generated(self):
+        self.assertFalse(fs.is_auxiliary('_private.ZigLean.Float.Ops.0.add_comm'))
+        self.assertFalse(fs.is_auxiliary('Foo._bar'))
+        self.assertTrue(fs.is_auxiliary('_private.ZigLean.Float.Ops.0.add_comm._proof_1'))
+        for name in ('A._proof_1_2', 'A.b._simp_1', 'A._sparseCasesOn_1', 'A.eq_1', 'A.injEq'):
+            self.assertTrue(fs.is_auxiliary(name), name)
+
+
 class RegistryTests(unittest.TestCase):
     def setUp(self):
         self.registry = json.loads((ROOT / 'assurance/float-semantics.json').read_text())
