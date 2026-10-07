@@ -175,7 +175,16 @@ structure Layout where
   /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
   length, not a byte count. -/
   vectorIndex : Option Nat := none
+  /-- A lane pointer whose lane is runtime-known (`vector_index: "runtime"`, 0.14.1/0.15.2). -/
+  runtimeLane : Bool := false
+  /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
+  export has none, so its bit-pointers may be lane pointers. -/
+  vectorIndexExported : Bool := false
   deriving Repr, Inhabited, BEq
+
+/-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
+def Layout.isLanePtr (l : Layout) : Bool :=
+  l.vectorIndex.isSome || l.runtimeLane
 
 /-- Both legacy exports may omit the byte value, preserving the presence-only
 comparison. Explicit values must agree; known and missing metadata cannot establish

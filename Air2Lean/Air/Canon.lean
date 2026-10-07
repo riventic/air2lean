@@ -121,7 +121,8 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
     let bits := match types[lane]? with | some (.int _ b) | some (.float b) => b | _ => 0
     let bytes := ((layouts[lane]?).bind (·.size)).getD 0
     unless child == lane && k < n && bytes ∈ [1, 2, 4, 8, 16] && bits == 8 * bytes do continue
-    let plain : Layout := { l with hostSize := 0, bitOffset := 0, vectorIndex := none }
+    let plain : Layout := { l with hostSize := 0, bitOffset := 0, vectorIndex := none,
+                              vectorIndexExported := false }
     let t := Ty.ptr "one" isConst lane
     let id := match (types.zip layouts).findIdx? (· == (t, plain)) with
       | some id => id
