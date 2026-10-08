@@ -831,6 +831,25 @@ fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !voi
             try writeFloatOpLine(writer, T, s, a, b, c);
         }
     }
+    try writeTieRows(writer, T);
+}
+
+/// Exact round-half-even ties, appended after the 7,800 rows (no random draw, so every other
+/// generated file is unchanged): with `p` the format's precision, `1 + 2^-p` lies halfway
+/// between 1 and its successor, so ties-to-even gives 1 (an even quotient) and
+/// ties-away-from-zero (scripts/mutate.sh mutation (d)) the successor. Random operands and the
+/// edge pairs never hit such a tie. The rows cover both operand orders, a negative sum, a
+/// subtraction, and `1 + 3*2^-p` (rounds up to an even successor under both rules).
+fn writeTieRows(writer: anytype, comptime T: type) !void {
+    const p: i32 = std.math.floatFractionalBits(T) + 1;
+    const half_ulp = std.math.ldexp(@as(T, 1), -p);
+    const one: T = 1;
+    const odd = one + 2 * half_ulp;
+    try writeFloatOpLine(writer, T, 0, one, half_ulp, 0); // 1 + 2^-p
+    try writeFloatOpLine(writer, T, 0, half_ulp, one, 0);
+    try writeFloatOpLine(writer, T, 0, -one, -half_ulp, 0);
+    try writeFloatOpLine(writer, T, 1, one, -half_ulp, 0); // 1 - (-2^-p)
+    try writeFloatOpLine(writer, T, 0, odd, half_ulp, 0); // odd quotient: rounds up either way
 }
 
 /// cmp64(a, b) -> u8 bitmask. 150 edge pairs with full lhs/rhs coverage, then 150
