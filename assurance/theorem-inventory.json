@@ -637,16 +637,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
+        "head": "8890b2018696065edbd80dffd5127f9f8b80dbb0",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T23:12:16.904861+00:00",
-      "elapsed_seconds": 50.678,
+      "started_utc": "2026-10-08T10:22:25.104330+00:00",
+      "elapsed_seconds": 42.397,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1dbc7ec4dc381b97dcd10895e02c05cd3d1ee0d395be77b6ae729ff28f486db9",
+      "log_sha256": "2ede2667515953c2d542b5312fe88cb66cb0b2e200afc00227fe35b06589fca9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -658,7 +658,7 @@
       "gens": {
         "threadsync": {
           "path": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
-          "sha256": "09c60ff01c7b482a9f67499f558284b0daf23a2a4d3c25ed4e66b52f02b0fafa"
+          "sha256": "b3cddcdb7d2de8c24dcdb866a7387987dc3e0fcb7f023466a97ea56c98a41e61"
         }
       },
       "sources": {
@@ -719,16 +719,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
+        "head": "8890b2018696065edbd80dffd5127f9f8b80dbb0",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T23:02:33.195067+00:00",
-      "elapsed_seconds": 583.592,
+      "started_utc": "2026-10-08T10:22:24.357633+00:00",
+      "elapsed_seconds": 0.46,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "88c9d3bce23ed2b0113a3a74248a5e2c754c4509eb52fa7ca62908107a386067",
+      "log_sha256": "55a60c8281a75a2de5d05d242293face56b1961bdbe692dee569529b22649d14",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -847,7 +847,7 @@
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
-          "sha256": "b00f98a5928fe8c3dac4e38a4a3067c2ce2245fbab420db5aa00e9d553f65c7e"
+          "sha256": "a6b5069d5aeff05a74187ed0922a854d045893f393132bac6698b8d7145ff7cc"
         },
         "variants": {
           "path": "Proofs/Variants/Gen.lean",
