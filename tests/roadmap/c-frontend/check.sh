@@ -9,7 +9,8 @@
 #                      (patched 0.16.0); AIR2LEAN_ZIG_NATIVE_0152 adds the 0.15.2 translate-c column.
 #                      Runs compilers and Lean sequentially; wrap it in one scripts/build-guard.py.
 #   --generated OUT_DIR START COUNT
-#                      cgen.py programs through the same stages into OUT_DIR/record.json.
+#                      cgen.py programs through the same stages into OUT_DIR/record.json
+#                      (published copy: generated-record.json, checked by --light).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -34,6 +35,7 @@ case "${1:-}" in
     mkdir -p "$2/corpus"
     python3 "$here/cgen.py" emit "$3" "$4" "$2/corpus" >/dev/null
     python3 "$here/run.py" heavy --corpus "$2/corpus" --out "$2/work" --record "$2/record.json"
+    echo "to publish: copy $2/record.json to $here/generated-record.json and update docs/c-frontend.md" >&2
     ;;
   *)
     echo 'usage: check.sh --light | --heavy OUT_DIR [FILE...] | --generated OUT_DIR START COUNT' >&2

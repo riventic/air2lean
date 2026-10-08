@@ -39,8 +39,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 CORPUS = HERE / "corpus"
 RECORD = HERE / "record.json"
+GENERATED = HERE / "generated-record.json"
 DOC = ROOT / "docs" / "c-frontend.md"
-sys.path.insert(0, str(ROOT / "tests" / "roadmap" / "fuzz"))
+sys.path[:0] = [str(HERE), str(ROOT / "tests" / "roadmap" / "fuzz")]
+import cgen  # noqa: E402
 from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard emitter)
 
 SCHEMA = 1
@@ -48,7 +50,7 @@ TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
 # std code that translate-c output calls is translated from its AIR like user code. Wider
 # prefixes (`mem.zeroes`, `debug.assert`) also select std's own unrelated instances and fail
-# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G8).
+# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G6).
 STD_FILTER = ["zig.c_translation."]
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
@@ -56,7 +58,7 @@ WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M
 MISMATCH = re.compile(r"expected \d+, found \d+")
 COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: undefined symbol)")
 EXTERN_FN = re.compile(r"^pub extern fn (\w+)\(", re.M)
-BODY = re.compile(r"^(?:pub )?(?:export )?fn \w+\(.*\{$.*?^\}$", re.M | re.S)  # translated bodies
+BODY = re.compile(r"^(?:pub )?(?:export )?fn \w+\([^\n]*\{$.*?^\}$", re.M | re.S)  # translated bodies
 
 # Construct families each corpus file targets (the histogram's "by C construct" axis).
 CONSTRUCTS = {
@@ -124,7 +126,17 @@ def run(cmd, timeout, cwd=None, env=None):
         return -1, str(e)
 
 
+def scrub(text):
+    """Host-independent logs: the repository and home directories become placeholders."""
+    for var in ("AIR2LEAN_ZIG_AIR", "AIR2LEAN_ZIG_NATIVE", "AIR2LEAN_ZIG_NATIVE_0152"):
+        if os.environ.get(var):  # <prefix>/bin/zig or <prefix>/zig
+            prefix = Path(os.environ[var]).parent
+            text = text.replace(str(prefix.parent if prefix.name == "bin" else prefix), "$" + var)
+    return text.replace(str(ROOT), "$REPO").replace(str(Path.home()), "$HOME")
+
+
 def tail(text, n=1500):
+    text = scrub(text)
     return text if len(text) <= n else "..." + text[-n:]
 
 
@@ -269,7 +281,7 @@ def stage_air2lean(binary, air):
         if isinstance(fn, dict):
             fn = fn.get("name") or fn.get("identity") or json.dumps(fn, sort_keys=True)
         items.append({"code": d.get("code"), "phase": d.get("phase"), "category": d.get("category"),
-                      "function": fn, "message": (d.get("message") or "")[:400]})
+                      "function": fn, "message": scrub(d.get("message") or "")[:400]})
     status = doc.get("status")
     return {"status": "checked" if status == "checked" and code == 0 else "rejected",
             "codes": dict(sorted(collections.Counter(i["code"] for i in items).items())),
@@ -334,8 +346,8 @@ def outcome(entry):
     s = entry["stages"]
     if s.get("c_native", {}).get("status") != "ok":
         return "c_native"
-    if s.get("translate_c", {}).get("status") == "failed":
-        return "translate_c"
+    if s.get("translate_c", {}).get("status") in ("failed", "demoted", None):
+        return "translate_c"  # a demoted C function leaves the program incompletely translated
     if s.get("air_export", {}).get("status") != "ok":
         return "air_export" if "air_export" in s else "translate_c"
     if s.get("air2lean", {}).get("status") != "checked":
@@ -351,7 +363,8 @@ def summarize(files):
     stage_counts = {st: dict(sorted(collections.Counter(
         f["stages"][st]["status"] for f in files.values() if st in f["stages"]).items())) for st in STAGES}
     headline = dict(sorted(collections.Counter(outcome(f) for f in files.values()).items()))
-    by_code, by_construct, libc = collections.Counter(), collections.defaultdict(collections.Counter), collections.Counter()
+    by_code, by_construct = collections.Counter(), collections.defaultdict(collections.Counter)
+    libc, zig_externs = collections.Counter(), collections.Counter()
     for f in files.values():
         codes = f["stages"].get("air2lean", {}).get("codes", {})
         for code in codes:
@@ -361,10 +374,13 @@ def summarize(files):
             by_construct[c][result] += 1
         for sym in f.get("libc_symbols") or []:
             libc[sym] += 1
+        for sym in f["stages"].get("translate_c", {}).get("extern_calls", []):
+            zig_externs[sym] += 1
     return {"files": len(files), "stage_status": stage_counts, "headline": headline,
             "rejection_codes_by_file": dict(sorted(by_code.items())),
             "outcome_by_construct": {k: dict(sorted(v.items())) for k, v in sorted(by_construct.items())},
-            "libc_symbols": dict(sorted(libc.items()))}
+            "libc_symbols": dict(sorted(libc.items())),
+            "zig_extern_calls": dict(sorted(zig_externs.items()))}
 
 
 # --- tables ------------------------------------------------------------------------------
@@ -439,6 +455,25 @@ def cmd_heavy(args):
     return 0
 
 
+def check_generated(path):
+    """The committed cgen.py record: every seed regenerates to the recorded source, its
+    summary recomputes, and the doc states its headline."""
+    if not path.exists():
+        return [f"{path.relative_to(ROOT)} is missing"]
+    record, errors = json.loads(path.read_text()), []
+    for stem, f in record["files"].items():
+        seed = int(stem.removeprefix("gen_s"))
+        digest = hashlib.sha256(cgen.Gen(seed).program().encode()).hexdigest()
+        if f["source_sha256"] != digest:
+            errors.append(f"generated {stem}: cgen.py no longer produces the recorded program")
+    if record.get("summary") != summarize(record["files"]):
+        errors.append("generated record summary is stale")
+    line = f"generated headline: {json.dumps(record['summary']['headline'], sort_keys=True)}"
+    if DOC.exists() and line not in DOC.read_text():
+        errors.append(f"docs/c-frontend.md does not state `{line}`")
+    return errors
+
+
 def cmd_check(args):
     record = json.loads(Path(args.record).read_text())
     errors = []
@@ -464,6 +499,7 @@ def cmd_check(args):
             errors.append(f"{stem}: Lean ok without an accepted translation")
     if record.get("summary") != summarize(record["files"]):
         errors.append("record summary is stale; regenerate it from the per-file stages")
+    errors += check_generated(Path(args.generated))
     if DOC.exists():
         if tables(record) not in DOC.read_text():
             errors.append("docs/c-frontend.md does not contain the current generated tables (run.py tables)")
@@ -493,6 +529,7 @@ def main(argv=None):
     for name in ("check", "tables"):
         p = sub.add_parser(name)
         p.add_argument("--record", default=str(RECORD))
+    sub.choices["check"].add_argument("--generated", default=str(GENERATED))
     args = parser.parse_args(argv)
     return {"heavy": cmd_heavy, "check": cmd_check, "tables": cmd_tables}[args.cmd](args)
 
