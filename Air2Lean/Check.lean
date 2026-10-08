@@ -149,14 +149,17 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
-    if l.isLanePtr then
-      throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside the subset"
+    if l.isLanePtr && !l.laneBitPtr then
+      throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
+        the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
+        profile for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
       throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
     -- A bit-pointer reads and writes its host's `hostSize` bytes, any count (`Zig.loadBits`):
     -- `(bits + 7) / 8` on LLVM (3 for a `packed struct(u24)`), the ABI size on x86_64.
+    -- A lane pointer's host is the vector's integer bytes (`Zig.loadLane`), of any count.
     if l.hostSize != 0 then
       -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
       let some bits := packedBits types child
@@ -564,6 +567,8 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
+  if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
+    cx.fail line "an atomic op through a vector lane pointer is outside the subset"
   if atomicPtrPointee cx.types cx.layouts c then
     match rmw with
     | some op => if op != .xchg then
@@ -626,6 +631,22 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
   checkMemTy cx.fnName cx.types cx.layouts line e cx.errBits
+
+/-- `&v[idx]` of type `ty`, a lane pointer (`Layout.laneBitPtr`) into the bit-packed vector that
+`ptr` points to: the lane type, lane count and comptime lane of `ty` must be the vector's and
+`idx`. The result is `ptr` itself (`Emit.lean`); the type carries the lane's bits. -/
+def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
+    Except String Unit := do
+  let pty ← cx.memPtrTy line ptr
+  let some (.vector n e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+    | cx.fail line "a lane pointer that does not point into a vector"
+  let l := cx.layouts[ty]?.getD {}
+  let lane := match idx with | .int _ k => if k ≥ 0 then some k.toNat else none | _ => none
+  let w := match cx.types[e]? with | some (.int _ bits) => bits | some .bool => 1 | _ => 0
+  unless ptrChild cx.types ty == some e && lane.isSome && l.vectorIndex == lane &&
+      lane.any (· < n) && l.hostSize == (n * w + 7) / 8 do
+    cx.fail line "a lane pointer whose type does not match its vector and comptime lane"
+  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -1065,7 +1086,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .store ptr v =>
     cx.memAccess line ptr
     -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
-    -- undefined (a local with such a store is a stack block: `escapingAllocs`).
+    -- undefined (a local with such a store is a stack block: `escapingAllocs`). A vector lane
+    -- (`Zig.storeLane`) has no undefined-bits store.
+    if let .undef _ := v then
+      if let some pty := cx.valTy? ptr then
+        if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
+          cx.fail line "a store of `undefined` to a vector lane is outside the subset"
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -1100,6 +1126,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .ptrElemVal p _ => cx.itemAccess line p; pure line
   | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
+    if let .elemPtr _ idx := op then
+      if (cx.layouts[ty]?.map (·.laneBitPtr)).getD false then
+        cx.lanePtr line ty p idx
+        return line
     -- The result is a pointer to an item: its child is the item type.
     if let some pty := cx.valTy? p then
       if let some (.ptr "one" _ c) := cx.types[pty]? then
@@ -1822,6 +1852,8 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       else some (g, off + delta)
     | .elemPtr p n =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      -- A lane pointer is the vector's address (`CheckCtx.lanePtr`).
+      if (f.layouts[i.ty]?.map (·.laneBitPtr)).getD false then return (g, off)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty

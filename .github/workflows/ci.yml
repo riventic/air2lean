@@ -848,17 +848,27 @@ jobs:
           bash tests/roadmap/error-width/check.sh
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
-      # encoding, the recorded aarch64-macos images, and the checker's backend gate.
-      - name: Vector memory layouts, compiler probe and checker controls
+      # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane
+      # pointers: the native lanes.zig test, a fresh export, the committed translations,
+      # theorems and kernel-checked runs.
+      - name: Vector memory layouts, compiler probe, lane pointers and checker controls
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.VecMem Air2Lean
+          lake build ZigLean ZigLean.VecMem Air2Lean air2lean
           observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
           host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
           lake env lean --run tests/roadmap/vector-layouts/Checker.lean
+          bash tests/roadmap/vector-layouts/lanes.sh --native
+          bash tests/roadmap/vector-layouts/lanes.sh --export "$RUNNER_TEMP/vector-lanes"
+          bash tests/roadmap/vector-layouts/lanes.sh
+          host-zig/zig test -fllvm -OReleaseSafe tests/roadmap/vector-layouts/lane_reads.zig
+          python3 tests/roadmap/vector-layouts/test_lane_reads.py "$PWD/.lake/build/bin/air2lean"
 
       # L07: Zig ≤0.16 representation casts and optional-pointer rules: retained translation,
       # proofs, checker version gate, and this host's native probe against the model.

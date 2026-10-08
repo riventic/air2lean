@@ -410,6 +410,19 @@ end
 
 def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 
+/-- The layout of a lane pointer `*align(a:0:n:i) T` (`&v[i]` of `@Vector(n, T)`, `T` an integer
+or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
+vector's integer of `n * w` bits is its host (`⌈n * w / 8⌉` bytes, LLVM's store size), the lane
+is at bit `i * w`. `packedLanes` marks it. Any other lane pointer keeps its layout, which the
+checker rejects. -/
+def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
+  match l.vectorIndex, types[child]? with
+  | some lane, some t =>
+    let w := match t with | .int _ bits => bits | .bool => 1 | _ => 0
+    if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize then l
+    else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
+  | _, _ => l
+
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/
 def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
@@ -421,10 +434,16 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   let llvm := raw.profile.backend == "stage2_llvm"
   -- The pointer width is the profile's (`BuildProfile.parse` admits 32 and 64 bits).
   let ptrBytes := raw.profile.pointerBits / 8
+  -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
+  -- a bit-pointer into the vector's integer, as LLVM lays it out; checked natively only on
+  -- these targets.
+  let laneTarget := llvm && ["x86_64", "aarch64"].contains
+    ((raw.profile.targetTriple.splitOn "-").headD "")
   let layouts := raw.layouts.mapIdx fun i l =>
     let l := { l with ptrBytes }
     match raw.types[i]? with
     | some (.vector ..) => { l with packedLanes := llvm }
+    | some (.ptr "one" _ c) => if laneTarget then lanePtrLayout raw.types c l else l
     | _ => l
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,

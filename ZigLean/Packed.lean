@@ -142,4 +142,69 @@ def storeUndefBits (n hostSize align bitOffset : Nat) (p : Ptr) : MemM Unit := d
   let bs ← loadBytes p hostSize align
   storeBytes p align (writeField bs bitOffset (none : Option (BitVec n)))
 
+/-! ## Vector lanes
+
+A pointer to one lane of a vector whose lanes are not a power-of-two number of bytes
+(`&v[i]` of `@Vector(n, u9)`, `u3`, `u24` or `bool`; Zig's type `*align(a:0:n:i) T`) is a
+bit-pointer into the vector's `n * w`-bit integer (`ZigLean/Vec.lean`'s `Vec.packedEnc`, the
+LLVM backend's layout): `Air2Lean/Air/Normalize.lean`'s `lanePtrLayout` gives it the host
+`⌈n * w / 8⌉` bytes, the vector's LLVM store size, and the bit offset `i * w`. LLVM loads the whole vector and extracts or
+inserts the lane, then stores the whole vector.
+
+Unlike a packed struct's host, a vector in memory can be partly undefined: an `undefined`
+vector that the program fills lane by lane. So `loadLane`/`storeLane` look at the bits of
+each byte: a load needs only the lane's own bits defined, and a store replaces only the lane's
+bits. A `Byte` has a defined low prefix (`Byte.part`), so a lane whose bits start above the
+defined bits of a byte cannot be written into it: that byte stays as it was and the lane reads
+as undefined (`.unspecified`), never as a wrong value. Lanes written in increasing order (as
+Zig initializes a vector) are always defined. `ZigLean/VecMem.lean` proves that on a defined
+vector a lane load reads the lane and a lane store leaves exactly the image of `Vec.set`.
+-/
+
+/-- The defined low bits of a byte: how many (8 for `.int`, `m` for `.part m`, else 0) and their
+value. -/
+def Byte.lowBits : Byte → Nat × Nat
+  | .int x => (8, x.toNat)
+  | .part m x => (Nat.min m 8, x.toNat % 2 ^ Nat.min m 8)
+  | _ => (0, 0)
+
+/-- The bits `[lo, hi)` of byte `k` of a host that a lane of `w` bits at bit `o` covers (empty if
+`hi ≤ lo`). -/
+def laneSpan (k o w : Nat) : Nat × Nat := (Nat.min 8 (o - 8 * k), Nat.min 8 (o + w - 8 * k))
+
+/-- Every bit of the lane of `w` bits at bit `o` of the host bytes `bs` is defined. -/
+def laneDefined (bs : Array Byte) (o w : Nat) : Bool :=
+  (List.range bs.size).all fun k =>
+    let (lo, hi) := laneSpan k o w
+    hi ≤ lo || hi ≤ (bs[k]!).lowBits.1
+
+/-- The host bytes as an integer, little-endian, with undefined bits as 0. -/
+def hostVal (bs : Array Byte) : Nat := bs.toList.foldr (fun b acc => b.lowBits.2 + 256 * acc) 0
+
+/-- Byte `k` of a host after a write of the `w` lane bits `x` at bit `o`: the bits that the lane
+covers replaced, the others kept. If the lane's bits start above the byte's defined
+bits, the byte cannot hold them and stays as it was. -/
+def Byte.setLane (b : Byte) (k o w x : Nat) : Byte :=
+  let (lo, hi) := laneSpan k o w
+  let (m, old) := b.lowBits
+  if hi ≤ lo || m < lo then b else
+  -- The lane's bits in this byte, at `[lo, hi)`.
+  let bits := (x >>> (8 * k + lo - o)) % 2 ^ (hi - lo)
+  let v := (old % 2 ^ lo) ||| (bits <<< lo) ||| ((old >>> hi) <<< hi)
+  if Nat.max m hi = 8 then .int (BitVec.ofNat 8 v) else .part (Nat.max m hi) (BitVec.ofNat 8 v)
+
+/-- A load through a lane pointer: the `n` bits at `bitOffset` of the `hostSize` bytes at `p`. -/
+def loadLane (α : Type) {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr) :
+    MemM α := do
+  let bs ← loadBytes p hostSize align
+  if laneDefined bs bitOffset n then Packed.ofBits? (BitVec.ofNat n (hostVal bs >>> bitOffset))
+  else throw .unspecified
+
+/-- A store through a lane pointer: read the `hostSize` bytes at `p`, replace the lane's bits,
+write them back. -/
+def storeLane {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Nat) (p : Ptr)
+    (v : α) : MemM Unit := do
+  let bs ← loadBytes p hostSize align
+  storeBytes p align (bs.mapIdx fun k b => b.setLane k bitOffset n (Packed.toBits v).toNat)
+
 end Zig

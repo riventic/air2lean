@@ -2,7 +2,10 @@
 //! lanes are not byte-strided (u9, u12, u24, u40, i9, f80, bool) and of byte-lane controls,
 //! before and after a store through a lane pointer. A byte past the lanes' bits prints as `--`
 //! and the unused high bits of the last value byte are cleared: both are padding, which the
-//! model leaves undefined. `Model.lean` prints the same lines from the Lean encoding.
+//! model leaves undefined. For a lane pointer into a bit-packed integer or `bool` vector, also a
+//! load through another lane's pointer and the padding bytes after the lanes' bytes, set to a5
+//! before a lane store: the store writes only the lanes' bytes. `Model.lean` prints the same
+//! lines from the Lean encoding and `Zig.loadLane`/`Zig.storeLane`.
 const std = @import("std");
 
 fn rt(comptime T: type, value: T) T {
@@ -45,6 +48,38 @@ fn probe(comptime name: []const u8, comptime N: comptime_int, comptime T: type, 
     pointer.* = rt(T, new);
     out.print("lane {s} {d}", .{ name, lane });
     image(V, &v, out);
+    if (comptime isLanePointer(T)) lanePointer(name, N, T, lanes, lane, new, out);
+}
+
+/// `&v[i]` is a lane pointer (`*align(a:0:n:i) T`) for an integer or `bool` lane whose bit size
+/// is not a power-of-two byte count; the translator models it as a bit-pointer (Zig.loadLane).
+fn isLanePointer(comptime T: type) bool {
+    const bits = @bitSizeOf(T);
+    return @typeInfo(T) != .float and (bits < 8 or !std.math.isPowerOfTwo(bits));
+}
+
+fn laneBits(comptime T: type, x: T) u64 {
+    return if (T == bool) @intFromBool(x) else @as(std.meta.Int(.unsigned, @bitSizeOf(T)), @bitCast(x));
+}
+
+/// A load through `&v[j]`, `j` the lane after `lane`; then the bytes after the vector's integer
+/// (its host, `ceil(N * bits / 8)` bytes), set to a5 before a store through `&v[lane]`.
+fn lanePointer(comptime name: []const u8, comptime N: comptime_int, comptime T: type, lanes: [N]T,
+    comptime lane: usize, new: T, out: anytype) void {
+    const V = @Vector(N, T);
+    const host = (N * @bitSizeOf(T) + 7) / 8;
+    var v: V = undefined;
+    inline for (0..N) |i| v[i] = rt(T, lanes[i]);
+    const j = (lane + 1) % N;
+    const q = &v[j];
+    out.print("load {s} {d} {x}\n", .{ name, j, laneBits(T, rt(T, q.*)) });
+    const bytes: *volatile [@sizeOf(V)]u8 = @ptrCast(&v);
+    for (host..@sizeOf(V)) |k| bytes[k] = 0xa5;
+    const pointer = &v[lane];
+    pointer.* = rt(T, new);
+    out.print("pad {s}", .{name});
+    for (host..@sizeOf(V)) |k| out.print(" {x:0>2}", .{bytes[k]});
+    out.print("\n", .{});
 }
 
 pub fn main() void {
