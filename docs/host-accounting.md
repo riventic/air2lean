@@ -83,3 +83,32 @@ python3 scripts/accounting.py claims $(printf -- '--summary %s ' summaries/*/rep
 
 Only Linux x86_64 full jobs exist today, so the table has one target per version. Cross-target
 rows wait on Q05.
+
+## Published table
+
+From CI run [37747391759](https://github.com/riventic/air2lean/actions/runs/37747391759), the
+`push` run on `main` at `9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee` (conclusion `success`). Its
+two full-job artifacts, `diff-summary-0.16.0-Linux-X64` and `diff-summary-0.15.2-Linux-X64`,
+are committed unchanged under
+[`assurance/accounting/9f39e808…/`](../assurance/accounting/9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee/),
+and the table published from them is
+[`assurance/accounting/9f39e808….json`](../assurance/accounting/9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee.json).
+
+Successful comparisons (exact matches only): **171934**.
+
+| Zig | Target | cases | exact_matches | host_differences | illegal | unspecified | capped_searches | bounded_no_result | mismatches | setup_failures | skipped_examples | skipped_functions | proof_exclusions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.15.2 | Linux-x86_64 | 87004 | 85927 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 2 | 7 | 17 |
+| 0.16.0 | Linux-x86_64 | 87084 | 86007 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 1 | 3 | 18 |
+| total |  | 174088 | 171934 | 0 | 994 | 1160 | 0 | 0 | 0 | 0 | 3 | 10 | 35 |
+
+Verification, on that run's summaries: `publish`, `check` and `claims --require-full-versions`
+each exit 0 against this commit's README and CI matrix. `tests/roadmap/host-accounting/test_accounting.py`
+re-checks every committed table against its committed summaries.
+
+The table is `qualified: false`. It does not establish compiler/native correspondence or proof
+applicability. The 0.16.0 row's 87,084 cases are the current scope; README's 87,064-case headline
+belongs to the original Outcome closeout. 0.14.1 has no row because its restricted job runs no
+diff harness. There are no cross-target rows. The macOS job (`macos-14`, aarch64) runs the
+differential test for 0.16.0 and 0.15.2 through `scripts/check.sh`, but uploads no
+`diff-summary-*` artifact, so this table cannot include it (Q05).

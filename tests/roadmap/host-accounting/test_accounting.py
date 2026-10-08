@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Q04 per-version/target accounting and legacy-claim regressions on synthetic summaries.
+"""Q04 per-version/target accounting and legacy-claim regressions.
 
 No Zig, Lake or Lean process: one test drives the real diff-report producer on a mocked
-native/model output tree; the rest use hand-built summaries and negative controls.
+native/model output tree, one re-checks the committed CI tables, the rest use hand-built
+summaries and negative controls.
 """
 import contextlib
 import copy
@@ -194,6 +195,24 @@ class Check(Temp):
 
     def test_check_needs_its_summaries(self):
         self.assertFails('needs the --summary', 'check', '--json', self.put('t.json', self.table))
+
+
+class Published(unittest.TestCase):
+    """Each committed table (assurance/accounting/<sha>.json) regenerates from the CI summaries
+    committed beside it (assurance/accounting/<sha>/), real producer output from that run."""
+
+    def test_committed_tables_check(self):
+        tables = sorted((ROOT/'assurance/accounting').glob('*.json'))
+        self.assertTrue(tables)
+        for table in tables:
+            with self.subTest(table=table.name):
+                summaries = sorted(table.with_suffix('').glob('*.json'))
+                self.assertTrue(summaries)
+                code, output = run('check', '--json', table,
+                                   *(a for path in summaries for a in ('--summary', path)))
+                self.assertEqual(code, 0, output)
+                versions = {r['version'] for r in json.loads(table.read_text())['rows']}
+                self.assertLessEqual(set(CLAIMED), versions)
 
 
 class Claims(Temp):
