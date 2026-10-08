@@ -399,6 +399,18 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
 
+      # Q06 (docs/perf-budgets.md): translate + elaborate every budgeted golden workload and fail
+      # on a gross time/memory regression or any change of emitted Lean. Portable limits are
+      # generous multiples of the recorded baseline so runner noise does not trip them.
+      - name: Performance budget regression gate (portable)
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          export LEAN_NUM_THREADS=1
+          python3 -I -B scripts/perf-budgets.py record --no-build --skip-proof --out "$RUNNER_TEMP/perf.json"
+          python3 -I -B scripts/perf-budgets.py gate --portable --measurement "$RUNNER_TEMP/perf.json" \
+            --json "$RUNNER_TEMP/perf-findings.json"
+
       # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
         if: ${{ !matrix.mutate }}
