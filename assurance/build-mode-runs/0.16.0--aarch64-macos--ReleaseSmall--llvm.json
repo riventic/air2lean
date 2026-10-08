@@ -1,0 +1,456 @@
+{
+  "backend": "llvm",
+  "cases": 85884,
+  "counts": {
+    "error_return_match": 892,
+    "host_difference": 760,
+    "illegal_exclusion": 497,
+    "mismatch": 85,
+    "ub_excluded": 4975,
+    "unspecified_exclusion": 580,
+    "value_match": 78095
+  },
+  "emulated": false,
+  "examples": {
+    "atomics": 100,
+    "basic": 2400,
+    "errors": 900,
+    "floatconv": 3000,
+    "floatops": 39600,
+    "floats": 1800,
+    "iogroup": 40,
+    "layout": 12241,
+    "lists": 1503,
+    "options": 900,
+    "pointers": 3300,
+    "recursion": 1200,
+    "slices": 6003,
+    "sync": 100,
+    "threads": 1220,
+    "variants": 2577,
+    "vectors": 9000
+  },
+  "excluded_examples": [],
+  "exclusions": [
+    {
+      "cases": 86,
+      "example": "basic",
+      "function": "absDiff",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 279,
+      "example": "basic",
+      "function": "scale",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 218,
+      "example": "basic",
+      "function": "totalWeightedTardiness",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 154,
+      "example": "basic",
+      "function": "weightedTardiness",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "bits32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 63,
+      "example": "floatconv",
+      "function": "f80ToF64",
+      "status": "host_difference"
+    },
+    {
+      "cases": 131,
+      "example": "floatconv",
+      "function": "toByte",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 3,
+      "example": "floatconv",
+      "function": "toByte",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 73,
+      "example": "floatconv",
+      "function": "toI32",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toI32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 104,
+      "example": "floatconv",
+      "function": "toU64",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toU64",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 23,
+      "example": "floatops",
+      "function": "divExact64",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 5,
+      "example": "floatops",
+      "function": "op16",
+      "status": "host_difference"
+    },
+    {
+      "cases": 4,
+      "example": "floatops",
+      "function": "op32",
+      "status": "host_difference"
+    },
+    {
+      "cases": 12,
+      "example": "floatops",
+      "function": "op32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "floatops",
+      "function": "op64",
+      "status": "host_difference"
+    },
+    {
+      "cases": 12,
+      "example": "floatops",
+      "function": "op64",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 655,
+      "example": "floatops",
+      "function": "op80",
+      "status": "host_difference"
+    },
+    {
+      "cases": 373,
+      "example": "floatops",
+      "function": "op80",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 150,
+      "example": "layout",
+      "function": "align4",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 120,
+      "example": "layout",
+      "function": "applyOp",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlMode",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlSum",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "growCircle",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 135,
+      "example": "layout",
+      "function": "maskCount",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 143,
+      "example": "layout",
+      "function": "numInt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "numInt",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 149,
+      "example": "layout",
+      "function": "numRoundTrip",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 300,
+      "example": "layout",
+      "function": "ptrFromAddr",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "shapeArea",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 164,
+      "example": "options",
+      "function": "firstIndexPlusOne",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 15,
+      "example": "pointers",
+      "function": "addDown",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 12,
+      "example": "pointers",
+      "function": "bumpOpt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 158,
+      "example": "pointers",
+      "function": "delay",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 294,
+      "example": "recursion",
+      "function": "fact",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 55,
+      "example": "slices",
+      "function": "bumpAt",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 168,
+      "example": "slices",
+      "function": "copy",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 73,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 60,
+      "example": "slices",
+      "function": "factorial",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 120,
+      "example": "slices",
+      "function": "sentinelArr",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 209,
+      "example": "slices",
+      "function": "subZ",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 226,
+      "example": "slices",
+      "function": "sumMid",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 117,
+      "example": "slices",
+      "function": "total",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 300,
+      "example": "threads",
+      "function": "race",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 13,
+      "example": "variants",
+      "function": "area",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 253,
+      "example": "variants",
+      "function": "lightOf",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 237,
+      "example": "variants",
+      "function": "radius",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 167,
+      "example": "variants",
+      "function": "scale",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 70,
+      "example": "variants",
+      "function": "totalArea",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 268,
+      "example": "vectors",
+      "function": "checkedAdd",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "host_difference"
+    },
+    {
+      "cases": 5,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "host_difference"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 21,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 18,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 30,
+      "example": "vectors",
+      "function": "vDiv",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 26,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 241,
+      "example": "vectors",
+      "function": "vNarrow",
+      "status": "ub_excluded"
+    },
+    {
+      "cases": 28,
+      "example": "vectors",
+      "function": "vNeg",
+      "status": "ub_excluded"
+    }
+  ],
+  "flags": "-OReleaseSmall -mcpu=baseline -fllvm",
+  "float_mode_optimized_sources": [],
+  "host": "Darwin-arm64",
+  "mode": "ReleaseSmall",
+  "pin_violations": 0,
+  "schema": "air2lean-build-mode-run/1",
+  "skipped_examples": {
+    "asm": "host_excluded",
+    "threadsync": "version_excluded"
+  },
+  "sources_sha256": "e9736375afe7c03e1aa51c066e2ec488f315ad0c3b2d0fa98fd9f5327ecfa86d",
+  "stock_zig_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
+  "target": "aarch64-macos",
+  "triage": [
+    {
+      "cases": 85,
+      "classification": "illegal-behaviour-not-detected-by-releasesafe",
+      "example": "floatops",
+      "function": "divExact64",
+      "note": "Each input has a non-integral quotient, which @divExact makes illegal. ReleaseSafe does not check float @divExact and returns the truncated quotient, which the model reproduces without throwing; ReleaseFast and ReleaseSmall return the plain quotient. The ReleaseFast no-illegal-behaviour-transfer premise (a model that does not throw implies legal execution) therefore does not hold for float @divExact.",
+      "reproducer": "tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig"
+    }
+  ],
+  "zig_version": "0.16.0"
+}

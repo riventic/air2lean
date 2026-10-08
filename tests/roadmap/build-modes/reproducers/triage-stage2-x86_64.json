@@ -1,0 +1,26 @@
+[
+  {
+    "example": "floatops",
+    "function": "op16/op32/op64/op80/op128 (sel 8, @mod)",
+    "cases": 346,
+    "classification": "stage2-x86_64-float-mod-rounding",
+    "reproducer": "tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig",
+    "note": "Float @mod with operands of opposite sign where the LLVM lowering frem(frem(a, b) + b, b) and the self-hosted backend round differently (e.g. @mod(-2^-24 as f16, 1.0) is 0 under LLVM and the model, 1.0 under stage2_x86_64). The model follows the LLVM lowering, so this is a backend divergence on a legal input, in every optimize mode."
+  },
+  {
+    "example": "floatops",
+    "function": "op80 (sel 16 and 17, @min and @max)",
+    "cases": 2,
+    "classification": "stage2-x86_64-f80-signed-zero-minmax",
+    "reproducer": "tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig",
+    "note": "f80 @min(-0.0, +0.0) and @max(-0.0, +0.0): the model and LLVM order the signed zeros, stage2_x86_64 returns the other zero. The language leaves the order of signed zeros unspecified, so this may be a model over-specification rather than a backend defect."
+  },
+  {
+    "example": "layout",
+    "function": "setNib, nibArg",
+    "cases": 173,
+    "classification": "stage2-x86_64-narrow-int-extension",
+    "reproducer": "tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig",
+    "note": "An i4 read from a packed union and returned is not sign-extended by stage2_x86_64 (returns 8 where LLVM and the model return -8). A backend defect on a legal input, in every optimize mode."
+  }
+]

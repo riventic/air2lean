@@ -83,6 +83,7 @@ DIFF_STATUSES = {
     'value_match': Outcome.VALID,
     'error_return_match': Outcome.ERROR_RETURN,
     'panic_match': Outcome.PANIC,
+    'ub_excluded': Outcome.PANIC,
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
     'unspecified_timer_exclusion': Outcome.UNSPECIFIED_TIMER,

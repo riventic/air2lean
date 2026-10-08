@@ -6,12 +6,17 @@
       "compiler": "patched Zig of the selected supported version (zig-patch/build.sh)",
       "flags": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing",
       "recorded_backend": "stage2_llvm",
-      "sources": ["scripts/check.sh", "scripts/translate.sh"]
+      "sources": [
+        "scripts/check.sh",
+        "scripts/translate.sh"
+      ]
     },
     "native": {
       "compiler": "stock Zig of the same version (AIR2LEAN_ZIG)",
       "flags": "build-exe -OReleaseSafe -mcpu=baseline",
-      "sources": ["scripts/diff.sh"]
+      "sources": [
+        "scripts/diff.sh"
+      ]
     },
     "compatibility_optimize": "ReleaseSafe"
   },
@@ -21,100 +26,266 @@
       "backend": "llvm",
       "status": "qualified",
       "claim": "analyzed-air-model",
-      "scope": "The reference build. Proofs concern the analyzed AIR of this mode as recorded in the schema-12 profile. Native behaviour of this build is related to the model only by bounded differential tests and ABI probes; no backend preservation theorem.",
+      "scope": "The reference build. Proofs concern the analyzed AIR of this mode as recorded in the schema-12 profile. Native behaviour of this build is related to the model only by bounded differential tests and ABI probes; no backend preservation theorem. The native differential runs (aarch64-macos, x86_64-linux) of every example also compare this build with the model: no mismatch.",
       "premise": "The theorem's Lean model is the ReleaseSafe analyzed AIR named in the generated profile header (PRF-02), with safety-checked illegal behaviour as Zig.Error (SEM-01). The exporter/translator fidelity (TRU-02) and LLVM lowering of the same source with -OReleaseSafe -mcpu=baseline (TRU-03) are trusted, supported only by golden comparisons and bounded native differential tests.",
-      "premises": ["PRF-02", "SEM-01", "TRU-02", "TRU-03"],
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
       "evidence": [
-        {"kind": "profile", "path": "tests/golden/0.16.0/slices/air/slices.sumZ.json"},
-        {"kind": "profile", "path": "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json"},
-        {"kind": "profile", "path": "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseSafe.json"},
-        {"kind": "command", "path": "scripts/check.sh", "text": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing"},
-        {"kind": "command", "path": "scripts/diff.sh", "text": "build-exe -OReleaseSafe -mcpu=baseline"},
-        {"kind": "literal", "path": ".github/workflows/ci.yml", "text": "run: scripts/check.sh"}
+        {
+          "kind": "profile",
+          "path": "tests/golden/0.16.0/slices/air/slices.sumZ.json"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseSafe.json"
+        },
+        {
+          "kind": "command",
+          "path": "scripts/check.sh",
+          "text": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing"
+        },
+        {
+          "kind": "command",
+          "path": "scripts/diff.sh",
+          "text": "build-exe -OReleaseSafe -mcpu=baseline"
+        },
+        {
+          "kind": "literal",
+          "path": ".github/workflows/ci.yml",
+          "text": "run: scripts/check.sh"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseSafe--llvm.json"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--ReleaseSafe--llvm.json"
+        }
+      ],
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "commands": [
+        "python3 scripts/build-guard.py --timeout 10800 -- env AIR2LEAN_ZIG=/abs/stock/zig-0.16.0 AIR2LEAN_DIFF_OPTIMIZE=ReleaseSafe AIR2LEAN_DIFF_BACKEND=llvm AIR2LEAN_DIFF_REPORT=tests/diff/out/report-ReleaseSafe.json bash scripts/diff.sh",
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseSafe llvm /abs/out-dir"
       ]
     },
     {
       "mode": "ReleaseFast",
       "backend": "llvm",
-      "status": "unqualified",
+      "status": "qualified",
       "claim": "no-illegal-behaviour-transfer",
-      "scope": "Only the claim in README.md: a proof that a function never throws on given inputs implies its ReleaseFast build has no illegal behaviour on those inputs. No output, layout or performance correspondence is claimed, and no ReleaseFast AIR is translated.",
-      "premise": "ReleaseFast compiles the same source as the ReleaseSafe reference build; it only removes safety checks, so it may diverge from ReleaseSafe only on executions with illegal behaviour. If the ReleaseSafe analyzed-AIR model (PRF-02, SEM-01) does not throw on an input, the source has no illegal behaviour on that input, provided Sema/export/translation (TRU-02) and LLVM lowering (TRU-03) are faithful. The premise excludes code under @setRuntimeSafety(false), @setFloatMode(.optimized), different CPU features or error tracing, and any differing comptime branch on @import(\"builtin\").mode.",
-      "premises": ["PRF-02", "SEM-01", "TRU-02", "TRU-03"],
-      "evidence": [
-        {"kind": "profile", "path": "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseFast.json"},
-        {"kind": "profile", "path": "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseFast.json"}
+      "scope": "Only the claim in README.md: a proof that a function never throws on given inputs implies its ReleaseFast build has no illegal behaviour on those inputs and returns the modelled value. No output, layout or performance correspondence is claimed beyond the tested inputs, and no ReleaseFast AIR is translated. Exception: float @divExact with a non-integral quotient (see premise).",
+      "premise": "ReleaseFast compiles the same source as the ReleaseSafe reference build and only removes safety checks, so it may diverge from the ReleaseSafe model only on executions with illegal behaviour. If the model does not throw on an input, the source has no illegal behaviour on that input, provided Sema/export/translation (TRU-02) and LLVM lowering (TRU-03) are faithful. The differential runs support this on every input on which the model does not throw, except float @divExact with a non-integral quotient: that is illegal behaviour that ReleaseSafe does not detect, so the model does not throw and the ReleaseFast result differs (triaged with a reproducer). The premise also excludes code under @setRuntimeSafety(false), @setFloatMode(.optimized), different CPU features or error tracing, and any differing comptime branch on @import(\"builtin\").mode.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
       ],
-      "missing": "No committed native ReleaseFast observation pair, and no differential run against a ReleaseFast harness build.",
+      "evidence": [
+        {
+          "kind": "profile",
+          "path": "tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseFast.json"
+        },
+        {
+          "kind": "profile",
+          "path": "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseFast.json"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseFast--llvm.json"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--ReleaseFast--llvm.json"
+        }
+      ],
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
       "commands": [
-        "python3 scripts/abi-probe.py observe --zig /abs/stock/zig-0.16.0 --profile tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseFast.json --output x86-fast.json",
-        "python3 scripts/abi-probe.py observe --zig /abs/stock/zig-0.16.0 --profile tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseFast.json --output arm-fast.json",
-        "python3 scripts/abi-probe.py compare x86-fast.json arm-fast.json"
+        "python3 scripts/build-guard.py --timeout 10800 -- env AIR2LEAN_ZIG=/abs/stock/zig-0.16.0 AIR2LEAN_DIFF_OPTIMIZE=ReleaseFast AIR2LEAN_DIFF_BACKEND=llvm AIR2LEAN_DIFF_REPORT=tests/diff/out/report-ReleaseFast.json bash scripts/diff.sh",
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseFast llvm /abs/out-dir"
+      ],
+      "exceptions": [
+        "illegal-behaviour-not-detected-by-releasesafe"
       ]
     },
     {
       "mode": "ReleaseSmall",
       "backend": "llvm",
-      "status": "unqualified",
-      "claim": "none",
-      "scope": "No claim. Shares ReleaseFast's unchecked safety but is neither probed nor tested.",
-      "premise": "None stated; a ReleaseSmall claim needs the ReleaseFast transfer premise restated for this mode and its own probe profile.",
-      "premises": [],
-      "evidence": [],
-      "missing": "No probe profile, native observation or differential run."
+      "status": "qualified",
+      "claim": "no-illegal-behaviour-transfer",
+      "scope": "Only the claim in README.md: a proof that a function never throws on given inputs implies its ReleaseSmall build has no illegal behaviour on those inputs and returns the modelled value. No output, layout or performance correspondence is claimed beyond the tested inputs, and no ReleaseSmall AIR is translated. Exception: float @divExact with a non-integral quotient (see premise).",
+      "premise": "ReleaseSmall compiles the same source as the ReleaseSafe reference build and only removes safety checks, so it may diverge from the ReleaseSafe model only on executions with illegal behaviour. If the model does not throw on an input, the source has no illegal behaviour on that input, provided Sema/export/translation (TRU-02) and LLVM lowering (TRU-03) are faithful. The differential runs support this on every input on which the model does not throw, except float @divExact with a non-integral quotient: that is illegal behaviour that ReleaseSafe does not detect, so the model does not throw and the ReleaseSmall result differs (triaged with a reproducer). The premise also excludes code under @setRuntimeSafety(false), @setFloatMode(.optimized), different CPU features or error tracing, and any differing comptime branch on @import(\"builtin\").mode.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
+      "evidence": [
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--ReleaseSmall--llvm.json"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--ReleaseSmall--llvm.json"
+        }
+      ],
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "commands": [
+        "python3 scripts/build-guard.py --timeout 10800 -- env AIR2LEAN_ZIG=/abs/stock/zig-0.16.0 AIR2LEAN_DIFF_OPTIMIZE=ReleaseSmall AIR2LEAN_DIFF_BACKEND=llvm AIR2LEAN_DIFF_REPORT=tests/diff/out/report-ReleaseSmall.json bash scripts/diff.sh",
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseSmall llvm /abs/out-dir"
+      ],
+      "exceptions": [
+        "illegal-behaviour-not-detected-by-releasesafe"
+      ]
     },
     {
       "mode": "Debug",
       "backend": "llvm",
-      "status": "unqualified",
-      "claim": "none",
-      "scope": "No claim. Debug keeps safety checks, but its AIR is never exported, translated or tested.",
-      "premise": "None stated.",
-      "premises": [],
-      "evidence": [],
-      "missing": "No Debug export, probe profile or differential run."
+      "status": "qualified",
+      "claim": "tested-input-agreement",
+      "scope": "Debug keeps every safety check. Its native behaviour on the differential inputs (values, returned errors and safety panics) equals the ReleaseSafe model. No Debug AIR is exported or translated, and no claim goes beyond the tested inputs.",
+      "premise": "The Debug build of the same source behaves, on the tested inputs, like the ReleaseSafe analyzed-AIR model (PRF-02, SEM-01), provided export and translation (TRU-02) and LLVM lowering (TRU-03) are faithful. Evidence is the 0-mismatch differential runs only.",
+      "premises": [
+        "PRF-02",
+        "SEM-01",
+        "TRU-02",
+        "TRU-03"
+      ],
+      "evidence": [
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--aarch64-macos--Debug--llvm.json"
+        },
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--Debug--llvm.json"
+        }
+      ],
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "commands": [
+        "python3 scripts/build-guard.py --timeout 10800 -- env AIR2LEAN_ZIG=/abs/stock/zig-0.16.0 AIR2LEAN_DIFF_OPTIMIZE=Debug AIR2LEAN_DIFF_BACKEND=llvm AIR2LEAN_DIFF_REPORT=tests/diff/out/report-Debug.json bash scripts/diff.sh",
+        "bash scripts/build-mode-docker.sh 0.16.0 Debug llvm /abs/out-dir"
+      ]
     },
     {
       "mode": "Debug",
       "backend": "stage2_x86_64",
       "status": "unqualified",
       "claim": "none",
-      "scope": "No claim. Zig's self-hosted x86_64 backend may be selected by default for x86_64 Debug builds. Sema emits backend-dependent AIR, and every committed export records stage2_llvm.",
-      "premise": "None stated.",
+      "scope": "No claim. The differential examples ran natively with -ODebug -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
+      "premise": "None stated: the backend divergences below are unresolved.",
       "premises": [],
-      "evidence": [],
-      "missing": "No export or native run with -fno-llvm."
+      "evidence": [
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--Debug--stage2_x86_64.json"
+        }
+      ],
+      "targets": [
+        "x86_64-linux"
+      ],
+      "commands": [
+        "bash scripts/build-mode-docker.sh 0.16.0 Debug stage2_x86_64 /abs/out-dir"
+      ],
+      "findings": [
+        "stage2-x86_64-float-mod-rounding",
+        "stage2-x86_64-f80-signed-zero-minmax",
+        "stage2-x86_64-narrow-int-extension"
+      ],
+      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
     },
     {
       "mode": "ReleaseSafe",
       "backend": "stage2_x86_64",
       "status": "unqualified",
       "claim": "none",
-      "scope": "No claim. Neither the export nor the differential harness uses -fno-llvm.",
-      "premise": "None stated.",
+      "scope": "No claim. The differential examples ran natively with -OReleaseSafe -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
+      "premise": "None stated: the backend divergences below are unresolved.",
       "premises": [],
-      "evidence": [],
-      "missing": "No export or native run with -fno-llvm."
+      "evidence": [
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--ReleaseSafe--stage2_x86_64.json"
+        }
+      ],
+      "targets": [
+        "x86_64-linux"
+      ],
+      "commands": [
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseSafe stage2_x86_64 /abs/out-dir"
+      ],
+      "findings": [
+        "stage2-x86_64-float-mod-rounding",
+        "stage2-x86_64-f80-signed-zero-minmax",
+        "stage2-x86_64-narrow-int-extension"
+      ],
+      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
     },
     {
       "mode": "ReleaseFast",
       "backend": "stage2_x86_64",
-      "status": "excluded",
+      "status": "unqualified",
       "claim": "none",
-      "scope": "Excluded: the ReleaseFast transfer premise names LLVM lowering of an LLVM-profile AIR; the self-hosted backend is outside it.",
-      "premise": "None stated.",
+      "scope": "No claim. The differential examples ran natively with -OReleaseFast -fno-llvm on x86_64-linux (emulated). The export still uses the LLVM backend (stage2_llvm profile).",
+      "premise": "None stated: the backend divergences below are unresolved.",
       "premises": [],
-      "evidence": []
+      "evidence": [
+        {
+          "kind": "run",
+          "path": "assurance/build-mode-runs/0.16.0--x86_64-linux--ReleaseFast--stage2_x86_64.json"
+        }
+      ],
+      "targets": [
+        "x86_64-linux"
+      ],
+      "commands": [
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseFast stage2_x86_64 /abs/out-dir"
+      ],
+      "findings": [
+        "stage2-x86_64-float-mod-rounding",
+        "stage2-x86_64-f80-signed-zero-minmax",
+        "stage2-x86_64-narrow-int-extension",
+        "illegal-behaviour-not-detected-by-releasesafe"
+      ],
+      "missing": "The self-hosted backend disagrees with the LLVM backend and the model on legal inputs: float @mod with operands of opposite sign (346 cases, rounding), an i4 read from a packed union (173 cases, no sign extension) and f80 @min/@max of signed zeros (2 cases, order unspecified by the language). Each has a reproducer in tests/roadmap/build-modes/reproducers/. examples/asm does not compile with the backend at -mcpu=baseline."
     },
     {
       "mode": "ReleaseSmall",
       "backend": "stage2_x86_64",
-      "status": "excluded",
+      "status": "unqualified",
       "claim": "none",
-      "scope": "Excluded: no release-mode self-hosted backend build is used or claimed.",
+      "scope": "No claim.",
       "premise": "None stated.",
       "premises": [],
-      "evidence": []
+      "evidence": [],
+      "findings": [],
+      "missing": "No completed run: the ReleaseSmall -fno-llvm harness binaries die with SIGBUS at start under the emulated (Rosetta) x86_64 container, which cannot be told from a backend defect. A native x86_64-linux host is needed.",
+      "commands": [
+        "bash scripts/build-mode-docker.sh 0.16.0 ReleaseSmall stage2_x86_64 /abs/out-dir"
+      ]
     }
   ],
   "changed_semantics": [
@@ -123,8 +294,14 @@
       "status": "excluded",
       "reason": "@setFloatMode(.optimized) permits value-changing float rewrites, so the IEEE and compiler-rt models (MTH-01, MTH-03) do not describe it. ReleaseFast alone does not select it. Optimized AIR tags are rejected before emission.",
       "guards": [
-        {"path": "Air2Lean/Air/Normalize.lean", "text": "optimized float mode is outside the subset"},
-        {"path": "Air2Lean/Air/Profile.lean", "text": "profile.float_mode: expected 'per-instruction'; optimized AIR remains unsupported"}
+        {
+          "path": "Air2Lean/Air/Normalize.lean",
+          "text": "optimized float mode is outside the subset"
+        },
+        {
+          "path": "Air2Lean/Air/Profile.lean",
+          "text": "profile.float_mode: expected 'per-instruction'; optimized AIR remains unsupported"
+        }
       ]
     },
     {
@@ -132,7 +309,10 @@
       "status": "excluded",
       "reason": "A profile that claims a shipping binary instead of analyzed AIR is rejected. The model concerns analyzed AIR only (TRU-03).",
       "guards": [
-        {"path": "Air2Lean/Air/Profile.lean", "text": "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"}
+        {
+          "path": "Air2Lean/Air/Profile.lean",
+          "text": "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
+        }
       ]
     }
   ]

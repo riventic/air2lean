@@ -1045,6 +1045,25 @@ jobs:
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
         run: scripts/check.sh
 
+      # T06: the same differential examples in the other optimize modes on LLVM, checked against
+      # the committed x86_64-linux run records (docs/build-modes.md). ReleaseFast and
+      # ReleaseSmall exclude the inputs on which the model throws (illegal behaviour there).
+      - name: Native build-mode differential runs (Debug, ReleaseFast, ReleaseSmall on LLVM)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          for mode in Debug ReleaseFast ReleaseSmall; do
+            summary="$RUNNER_TEMP/build-mode-$mode.json"
+            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh
+            python3 scripts/build-modes.py record --verify --summary "$summary" \
+              --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
+              --mode "$mode" --backend llvm --explicit-backend \
+              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json)
+          done
+
       # A failed check hands out the AIR that this host dumped: the golden files of this OS
       # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
       - name: Upload the dumped AIR
