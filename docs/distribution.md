@@ -101,7 +101,7 @@ proofs`, `lake build Proofs.Basic.Proofs`, `lake env lean tutorials/first-proof/
 then builds the modules of every tutorial (`python3 scripts/tutorials.py modules`) and runs
 `python3 scripts/tutorials.py check`: each `Main.lean` and solved exercise must elaborate, and
 each negative control (for example the first proof's `pure 1`) must fail with its expected
-error. The documentation-only cross-target tutorial is not run.
+error.
 `--translate` additionally installs the pinned host Zig, runs `zig-patch/build.sh 0.16.0`
 (default: no LLVM, AIR-only lock), requires the doctor to report `locked`, verifies the locked
 compiler refuses `build-exe`, translates the getting-started demo and checks its separate proof.

@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2166 theorems in 126 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 605 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
@@ -19,19 +19,19 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1163 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1165 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 111 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 760 | Futex model |
+| [THR-05](premises.md#thr-05) | 762 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 968 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 970 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 956 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 956 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 958 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 958 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
+| [ORD-04](premises.md#ord-04) | 459 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 70 | Executable IEEE-754 float model |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2045 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1704 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 980 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2166 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1004 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1004 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2972,6 +2972,22 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | Theorem | Premises |
 |---|---|
 | `ConcurrentClients.never_three` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/cross-target/Main.lean`
+
+File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `CrossTarget.lock_keeps_current` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tutorials/cross-target/Solution.lean`
+
+File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `CrossTarget.unlock_keeps_current` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/external-contracts/Main.lean`
 

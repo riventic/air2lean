@@ -9,8 +9,7 @@ A checked tutorial is a directory tutorials/<name>/ with Main.lean (the worked p
 Solution.lean (the exercise, solved), Negative.lean (a false variant Lean must reject, with a
 `-- expect-error: <text>` line naming the expected diagnostic) and README.md. The README's
 "Assumptions and remaining obligations" section lists exactly the file premises that
-docs/premise-index.md derives for Main.lean. A directory in DOCUMENTED has only a README: its
-workflow is not yet runnable from a clean environment. `check` needs the modules from
+docs/premise-index.md derives for Main.lean. `check` needs the modules from
 `modules` built (`lake build $(python3 scripts/tutorials.py modules)`).
 """
 import argparse
@@ -21,10 +20,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ('README.md', 'Main.lean', 'Solution.lean', 'Negative.lean')
-# Documentation-only tutorials and why they have no checked proof yet.
-DOCUMENTED = {
-    'cross-target': 'only the reference profiles are qualified; no second target is runnable',
-}
 SECTIONS = ('## Steps', '## Exercise', '## Negative control', '## Assumptions and remaining obligations')
 PREMISE = re.compile(r'\b[A-Z]{3}-\d{2}\b')
 EXPECT = re.compile(r'^-- expect-error: (.+)$', re.M)
@@ -32,10 +27,6 @@ EXPECT = re.compile(r'^-- expect-error: (.+)$', re.M)
 
 def tutorials(root):
     return sorted(p for p in (root / 'tutorials').iterdir() if p.is_dir())
-
-
-def checked(root):
-    return [p for p in tutorials(root) if p.name not in DOCUMENTED]
 
 
 def section(text, heading):
@@ -57,18 +48,8 @@ def file_premises(root, rel):
 
 def lint(root):
     errors = []
-    names = {p.name for p in tutorials(root)}
-    for name in sorted(set(DOCUMENTED) - names):
-        errors.append(f'tutorials/{name}: listed as documented but missing')
     for path in tutorials(root):
         rel = f'tutorials/{path.name}'
-        if path.name in DOCUMENTED:
-            present = sorted(f.name for f in path.iterdir())
-            if present != ['README.md']:
-                errors.append(f'{rel}: a documented tutorial has only README.md, found {present}')
-            elif '## Status' not in (path / 'README.md').read_text():
-                errors.append(f'{rel}/README.md: missing ## Status')
-            continue
         missing = [f for f in FILES if not (path / f).is_file()]
         if missing:
             errors.append(f'{rel}: missing {", ".join(missing)}')
@@ -94,7 +75,7 @@ def lint(root):
 
 def modules(root):
     found = set()
-    for path in checked(root):
+    for path in tutorials(root):
         for lean in sorted(path.glob('*.lean')):
             found.update(re.findall(r'^import (\S+)$', lean.read_text(), re.M))
     return sorted(found)
@@ -109,7 +90,7 @@ def lean(root, rel, log):
 def check(root, results):
     results.mkdir(parents=True, exist_ok=True)
     failures = 0
-    for path in checked(root):
+    for path in tutorials(root):
         rel, before = f'tutorials/{path.name}', failures
         for name in ('Main.lean', 'Solution.lean'):
             code, text = lean(root, f'{rel}/{name}', results / f'{path.name}-{name}.log')

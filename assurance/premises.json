@@ -7,6 +7,7 @@
   "excluded": {
     "tests/roadmap/assurance/": "Intentionally untrusted assurance-gate fixtures (hidden sorry, project axiom, native proof); they must fail scripts/assumptions.py and are not shipped premises.",
     "tutorials/allocation-failure/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
+    "tutorials/cross-target/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/concurrent-clients/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/external-contracts/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/first-proof/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
