@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2233 theorems in 126 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 445 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2112 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1771 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2233 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1066 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1066 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2876,6 +2876,89 @@ File premises: SEM-01, SEM-03, TRU-01
 | `example@L50` | SEM-01, TRU-01 |
 | `example@L56` | SEM-01, SEM-03, TRU-01 |
 | `example@L62` | SEM-01, TRU-01 |
+
+## `tests/roadmap/vector-layouts/Lanes/Checks.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L9` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L11` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L13` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L15` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L17` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L19` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L21` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L23` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L25` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L27` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L29` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L31` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L33` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L35` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L37` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L39` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L41` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L43` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L45` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L47` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L49` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L51` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L53` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L55` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L57` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L59` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L61` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L63` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L65` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L67` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L69` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L71` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L73` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L75` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L77` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L79` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L81` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L83` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L85` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L87` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L89` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L91` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L93` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L95` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L97` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L99` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L101` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L103` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L105` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L107` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L109` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L111` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L113` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L115` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L117` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L119` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L121` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L123` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L125` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L127` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L129` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/vector-layouts/Lanes/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `u3_host` | SEM-01, SEM-02, TRU-01 |
+| `getU3_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `putU3_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `putU3_load` | SEM-01, SEM-02, TRU-01 |
+| `putU3_lane_ne` | SEM-01, SEM-02, TRU-01 |
+| `bool_round` | SEM-01, SEM-02, TRU-01 |
+| `flipBool_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `flipBool_load` | SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/vector-layouts/Model.lean`
 
