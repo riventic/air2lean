@@ -185,6 +185,8 @@ def parseTy (j : Json) : Except String Ty := do
     if name == "mem.Allocator" then return .allocator
     if name == "Thread" then return .thread
     if name == "Io" then return .io
+    -- A struct that is only behind a pointer can have no known fields (`no_fields`).
+    if (← trueMarker j "no_fields") then return .other name
     -- `Io.Future(T)`: exactly `any_future: ?*Io.AnyFuture` then `result: T` (Zig 0.16.0).
     if name.startsWith "Io.Future(" && name.endsWith ")" then
       let fieldsJ ← (← j.getObjVal? "fields").getArr?
@@ -192,8 +194,6 @@ def parseTy (j : Json) : Except String Ty := do
       unless names == #["any_future", "result"] do
         throw s!"{name}: unexpected fields {names}"
       return .future (← (← fieldsJ[1]!.getObjVal? "ty").getNat?)
-    -- A struct that is only behind a pointer can have no known fields (`no_fields`).
-    if (← trueMarker j "no_fields") then return .other name
     let layout ← (← j.getObjVal? "layout").getStr?
     let fieldsJ ← (← j.getObjVal? "fields").getArr?
     let fields ← fieldsJ.mapM fun fj => do

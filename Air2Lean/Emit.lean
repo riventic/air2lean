@@ -3045,19 +3045,20 @@ def emitCapturedCallWithStorage (name : String) (args : Array (String × Option 
   | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
       "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
 
+/-- Bind a multi-field capture `a` to the `capture<i>` names of `emitCapturedCallWithStorage`. -/
+def emitCaptureUnpack (size : Nat) : String :=
+  let binders := (List.range size).map fun i => s!"capture{i}"
+  if size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
+
 def emitCapturedFallbackWithStorage (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  let binders := (List.range args.size).map fun i => s!"capture{i}"
-  let unpack := if args.size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
-  s!"fun a => (do {unpack}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+  s!"fun a => (do {emitCaptureUnpack args.size}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
 
 /-- The caller's eager execution of an `Io.async` task (fallible policy): the complete
 capture, the worker's result. -/
 def emitFutureEager (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  let binders := (List.range args.size).map fun i => s!"capture{i}"
-  let unpack := if args.size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
-  s!"fun a => (do {unpack}{emitCapturedCallWithStorage name args kind})"
+  s!"fun a => (do {emitCaptureUnpack args.size}{emitCapturedCallWithStorage name args kind})"
 
 /-- Only async sites execute a caller fallback. Scan all sites before filtering the
 ordered first-use descriptions: an earlier spawn/concurrent site can share the worker. -/
