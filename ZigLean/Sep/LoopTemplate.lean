@@ -281,10 +281,13 @@ def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.with
   let ((), facts) ← (walk structName ctorVal.name unfolded).run {}
   let written := fields.filter fun f => facts.writes.any (·.1 == f)
   let unchanged := fields.filter (!written.contains ·)
-  let steps (f : Name) : Array Bool := facts.writes.filterMap fun (w : Name × Src) =>
-    match w with
-    | (f', .step f'' up) => if f' == f && f'' == f then some up else none
-    | _ => none
+  -- The direction of `f`, if every write of `f` steps it the same way by a literal.
+  let direction (f : Name) : Option Bool :=
+    let ws := facts.writes.filterMap fun (w : Name × Src) => if w.1 == f then some w.2 else none
+    let dirs := ws.filterMap fun
+      | .step f' up => if f' == f then some up else none
+      | _ => none
+    if dirs.size == ws.size then dirs[0]?.filter fun up => dirs.all (· == up) else none
   let names (xs : Array Name) := if xs.isEmpty then m!"(none)" else
     MessageData.joinSep (xs.toList.map (m!"{·}")) m!", "
   let mut lines : Array MessageData := #[
@@ -300,8 +303,8 @@ def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.with
       continue
     -- The counter moves towards the bound by a checked step; the bound does not change.
     let pick : Option (Name × Bool × Src) := match lo, hi with
-      | .field f, b => if (steps f).contains true then some (f, true, b) else none
-      | b, .field f => if (steps f).contains false then some (f, false, b) else none
+      | .field f, b => if direction f == some true then some (f, true, b) else none
+      | b, .field f => if direction f == some false then some (f, false, b) else none
       | _, _ => none
     let some (f, up, bnd) := pick
       | lines := lines.push m!"guard {op}: no local steps towards a fixed bound, no measure inferred"

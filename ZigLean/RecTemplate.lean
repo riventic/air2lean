@@ -17,8 +17,9 @@ named goal, `step`, in which `x₁ … xₖ` are introduced and
 is the induction hypothesis: every call with a smaller measure already meets the specification.
 Further binders of the goal (premises, ghost values) stay in `B` and so are quantified in `ih`.
 
-`rec_template μ unfolding f, g` also rewrites, once, each application of `f` and `g` that the
-target contains (`f.eq_1`), so the goal shows the generated body and its recursive call sites.
+`rec_template μ unfolding f, g` also rewrites the goal with `f.eq_1` and `g.eq_1`: the first
+application of each (and identical copies) becomes the generated body, whose recursive call
+sites stay folded.
 For a mutually recursive group, state the specifications of the members as one conjunction over
 the same arguments (or over an index type such as `Sum`) and unfold every member; the shared
 measure must decrease across the group's calls.
@@ -37,6 +38,7 @@ open Lean Elab Tactic Meta
 /-- Build the proof of `∀ x̄, B x̄` from a fresh `step` goal; returns that goal. -/
 def scaffold (g : MVarId) (μ : Expr) : MetaM (MVarId × Expr) := g.withContext do
   let tgt ← instantiateMVars (← g.getType)
+  unless ← isProp tgt do throwError "rec_template: the goal is not a proposition: {tgt}"
   let k ← forallTelescopeReducing (← inferType μ) fun xs _ => pure xs.size
   if k == 0 then throwError "rec_template: the measure takes no arguments"
   let nat := mkConst ``Nat
@@ -86,11 +88,12 @@ def scaffold (g : MVarId) (μ : Expr) : MetaM (MVarId × Expr) := g.withContext 
   let (_, step) ← step.intro `ih
   return (step, stepType)
 
-/-- Rewrite each listed function's unfold equation `f.eq_1` once in the goal. -/
+/-- Rewrite with each listed function's unfold equation `f.eq_1`: the first application of `f`
+in the goal (and identical copies) becomes its body. Calls inside the body are left alone. -/
 def unfoldOnce (g : MVarId) (fns : Array Ident) : TacticM MVarId := do
   let mut g := g
   for f in fns do
-    let eqn := mkIdent (f.getId ++ `eq_1)
+    let eqn := mkIdent ((← realizeGlobalConstNoOverloadWithInfo f) ++ `eq_1)
     match ← evalTacticAt (← `(tactic| rewrite [$eqn:ident])) g with
     | [g'] => g := g'
     | gs => throwError "rec_template: unfolding {f} left {gs.length} goals"
@@ -115,19 +118,13 @@ syntax recUnfolding := " unfolding " ident,+
 
 /-- Strong induction on the measure `μ` of the goal's leading binders; leaves the goal `step`
 with the induction hypothesis `ih`. `unfolding f, …` rewrites each `f.eq_1` once. -/
-elab "rec_template " μ:term:max u:(recUnfolding)? : tactic => do
-  let fns := match u with
-    | some u => match u with
-      | `(recUnfolding| unfolding $fs,*) => fs.getElems
-      | _ => #[]
-    | none => #[]
-  Zig.RecTemplate.run μ fns false
+syntax "rec_template " term:max (recUnfolding)? : tactic
 
 /-- `rec_template`, reporting the remaining premise and the induction hypothesis. -/
-elab "rec_template? " μ:term:max u:(recUnfolding)? : tactic => do
-  let fns := match u with
-    | some u => match u with
-      | `(recUnfolding| unfolding $fs,*) => fs.getElems
-      | _ => #[]
-    | none => #[]
-  Zig.RecTemplate.run μ fns true
+syntax "rec_template? " term:max (recUnfolding)? : tactic
+
+elab_rules : tactic
+  | `(tactic| rec_template $μ $[unfolding $fs,*]?) =>
+    Zig.RecTemplate.run μ (fs.map (·.getElems) |>.getD #[]) false
+  | `(tactic| rec_template? $μ $[unfolding $fs,*]?) =>
+    Zig.RecTemplate.run μ (fs.map (·.getElems) |>.getD #[]) true

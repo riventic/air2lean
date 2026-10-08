@@ -9,7 +9,8 @@ import ZigLean.Sep.LoopTemplate
 body; it proves nothing and leaves the goal unchanged. These regressions pin its output on two
 generated loops (`Pointers.sumTo`, a counter loop with a call; `Lists.sum`, a linked-list walk)
 and on hand-written bodies in the generated shapes for the cases it refuses: a signed guard, a
-counter that steps away from its bound, and a bound that the loop changes.
+counter that steps away from its bound, a counter that is also reset, and a bound that the loop
+changes.
 `tests/roadmap/loop-tactics/nested/Proof.lean` covers a translated nested loop.
 -/
 
@@ -117,6 +118,30 @@ example (s : L) (Q : Bool × L → Assn) :
 #guard_msgs in
 example (s : L) (Q : Bool × L → Assn) :
     TotalTriple (fun _ => False) ((Zig.loop movingBound id).run s) Q := by
+  loop_template?
+  exact vacuous
+
+/-- The counter steps up, but another path resets it: it need not approach the bound. -/
+def resetLoop : MM L Bool := do
+  let i ← pure ((← get).i)
+  let n ← pure ((← get).n)
+  if Zig.lt false i n then do
+    if i == 7 then modify (fun s => { s with i := 0 })
+    else do
+      let i' ← Zig.add false i (1 : BitVec 32)
+      modify (fun s => { s with i := i' })
+    pure true
+  else pure false
+
+/-- info: loop_template? suggestions (unchecked, nothing is proved):
+  loop-carried locals (written by the body): i
+  unchanged locals: n
+  guard Zig.lt: no local steps towards a fixed bound, no measure inferred
+  measure: not inferred (no unsigned counter steps towards a fixed bound); supply a ghost measure, e.g. the number of remaining items
+  not inferred: side premises (overflow and range bounds), the values of the other carried locals, memory shapes -/
+#guard_msgs in
+example (s : L) (Q : Bool × L → Assn) :
+    TotalTriple (fun _ => False) ((Zig.loop resetLoop id).run s) Q := by
   loop_template?
   exact vacuous
 

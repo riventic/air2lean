@@ -211,10 +211,10 @@ the unchanged ones. For an unsigned guard whose counter steps towards a bound th
 does not change, it suggests the measure `bound - counter` (or `counter - bound`) and the
 bound invariant. Given `post`, it also suggests `post` with a bound from outside the loop
 replaced by the counter. It reports, and does not infer, measures for signed guards, counters
-that step away from their bound, bounds the loop changes, and loops without a counter (such as
-list walks, which need a ghost measure). Nested loop bodies, calls and memory are not followed,
-and side premises such as overflow bounds are never inferred. `Infer.lean` and `nested/Proof.lean`
-fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
+that step away from their bound or are also reset, bounds the loop changes, and loops without
+a counter (such as list walks, which need a ghost measure). Nested loop bodies, calls and memory
+are not followed, and side premises such as overflow bounds are never inferred. `Infer.lean`
+and `nested/Proof.lean` fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
 `pairs` are the ones its invariants use.
 
 ### Recursive functions
