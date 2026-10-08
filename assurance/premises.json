@@ -153,7 +153,8 @@
     {"premise": "MTH-03", "scope": "closure", "pattern": "Rt016|(?:^|\\.)mulRt$|RtChk"},
     {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
-    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
+    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
+    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"}
   ],
   "implies": {
     "ALC-02": ["ALC-01"],
@@ -180,6 +181,7 @@
     "EXT-02": ["EXT-01"],
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],
+    "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
     "THR-01": ["SEM-02"],
     "TRU-02": ["TRU-03", "SEM-01"]
   }

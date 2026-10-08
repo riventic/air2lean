@@ -87,7 +87,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
-| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
+| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
@@ -508,6 +508,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   memory use. Relating one to those needs a separate calibration argument.
 - Derived from: `ZigLean.Sep.Cost`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+
+<a id="sem-06"></a>
+### SEM-06 — Canonical AIR fragment semantics
+
+- Kind: meaning.
+- Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
+  its fragment: an interpreter over the decoded `Air2Lean.Func`, over ZigLean's primitive
+  operations and `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment
+  and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`) relates the
+  generated definition to this meaning; it does not relate the meaning to Zig, the exporter
+  or canonicalization (TRU-02).
+- Derived from: `Air2Lean.Sem`.
+- Sources: [air-semantics.md](air-semantics.md).
 
 ## External models
 
