@@ -64,6 +64,13 @@
       },
       "block_sha256": "c03617eca64c5586482d76a273ddedde6a9f558d670ecfd82848a8ff714c38b7"
     },
+    "d": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "floatops"
+      },
+      "block_sha256": "7594f4623a8ee3b077c84a1a9c1d3cfee0d50e9354f5fde3cd93bc2dc10286b4"
+    },
     "e": {
       "killed_by": {
         "kind": "diff",
@@ -93,7 +100,10 @@
       "block_sha256": "d63e563fa443167aa2b01f2aad12c4c2462034cb9e4f3b038f6108a48d498612"
     },
     "i": {
-      "unrecorded": "asm example is x86_64 only; not run on the Darwin-arm64 recording host",
+      "killed_by": {
+        "kind": "diff",
+        "target": "asm"
+      },
       "block_sha256": "6825d5178e7bc9ef5c73deddf012ea33f8fefa24970e68cfbc48aff01bb6b14a"
     },
     "j": {

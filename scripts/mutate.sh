@@ -378,6 +378,22 @@ translate_mutated() {
 # detected (mismatch=N)" and sets $detected (1/0). A diff.sh crash with no TOTAL line at all (not
 # even a mismatch report) is a broken test setup, not an undetected mutation, so that case
 # aborts the whole script instead.
+# require_mutated <label>: a mutation that changed none of the sources it may edit (a sed whose
+# pattern stopped matching, an unchanged translation) would run the unmutated build and report a
+# survivor that proves nothing. Abort as a setup failure instead: never "survived" or "killed".
+require_mutated() {
+  local pair
+  for pair in "$gen_file:$gen_backup" "$options_gen:$options_backup" "$variants_gen:$variants_backup" \
+      "$layout_gen:$layout_backup" "$slices_gen:$slices_backup" "$basic_lean:$basic_backup" \
+      "$lemmas_lean:$lemmas_backup" "$round_lean:$round_backup" "$mem_lean:$mem_backup" \
+      "$enc_lean:$enc_backup" "$alloc_lean:$alloc_backup" "$asm_zig:$asm_backup" "$vec_lean:$vec_backup" \
+      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$conc_lean:$conc_backup"; do
+    cmp -s "${pair%%:*}" "${pair#*:}" || return 0
+  done
+  echo "error: $1: the mutation changed no source file (its pattern no longer matches?)" >&2
+  exit 1
+}
+
 # kill_log <label> <kind> <target> <status>: with AIR2LEAN_MUTATION_KILL_LOG set, append one
 # "<letter> <status> <kind> <target>" line (kind diff|proof; target the example or module whose
 # regression ran). `scripts/mutation-map.py kills record|verify` turns the log into, or checks it
@@ -392,6 +408,7 @@ kill_log() {
 proof_report() {
   local label=$1 mod=$2
   mutations_run=$((mutations_run + 1))
+  require_mutated "$1"
   local out status=0
   out=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-proof.XXXXXX")
   lake build "$mod" >"$out" 2>&1 || status=$?
@@ -416,6 +433,7 @@ proof_report() {
 run_and_report() {
   local label=$1 ex=$2
   mutations_run=$((mutations_run + 1))
+  require_mutated "$1"
   local out
   out=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-diff.XXXXXX")
   local status=0

@@ -95,6 +95,11 @@ python3 scripts/mutation-map.py kills verify --log kills.log  # fail unless each
 `mutate.sh` appends one line per mutation it runs (`<label> killed|survived diff|proof <target>`).
 `record` refuses a log with a survivor; the CI mutation shards run `verify` on their own log, so a
 mutant that survives or is killed by something else than the recorded regression fails the job.
+`mutate.sh` aborts as a setup failure, never reporting "killed" or "survived", when a mutation
+changed none of the sources it may edit. Differential kills of host-dependent functions
+(`tests/diff/<ex>/host.txt`, e.g. `floatops` for mutation (d)) count only on the reference host
+(Linux x86_64); on another host their mismatches are host differences. The (d) and (i) kills were
+recorded in the `linux/amd64` local-ci container (emulated on Apple silicon).
 The ledger is evidence of what was run when it was recorded; it is not rechecked offline
 beyond the block hash, so a change to the mutated Lean source alone is caught by the CI shards, not by `check`.
 

@@ -10,6 +10,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -191,6 +193,51 @@ class Kills(Scratch):
         write(self.root / 'kill.log', 'a maybe diff ex\n')
         with contextlib.redirect_stderr(err):
             self.assertEqual(mm.main(['kills', 'verify', '--root', str(self.root), '--log', str(self.root / 'kill.log')]), 2)
+
+
+class NoOpMutation(unittest.TestCase):
+    """mutate.sh aborts, instead of reporting a result, when a mutation changed no source."""
+
+    PAIRS = (('gen_file', 'gen_backup'), ('options_gen', 'options_backup'), ('variants_gen', 'variants_backup'),
+             ('layout_gen', 'layout_backup'), ('slices_gen', 'slices_backup'), ('basic_lean', 'basic_backup'),
+             ('lemmas_lean', 'lemmas_backup'), ('round_lean', 'round_backup'), ('mem_lean', 'mem_backup'),
+             ('enc_lean', 'enc_backup'), ('alloc_lean', 'alloc_backup'), ('asm_zig', 'asm_backup'),
+             ('vec_lean', 'vec_backup'), ('thread_lean', 'thread_backup'), ('sched_lean', 'sched_backup'),
+             ('conc_lean', 'conc_backup'))
+
+    def run_helper(self, changed):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        body = text[text.index('require_mutated() {'):]
+        body = body[:body.index('\n}\n') + 3]
+        with tempfile.TemporaryDirectory(prefix='air2lean-noop-') as tmp:
+            lines = []
+            for source, backup in self.PAIRS:
+                write(Path(tmp) / source, 'changed\n' if source == changed else 'same\n')
+                write(Path(tmp) / backup, 'same\n')
+                lines += [f'{source}={tmp}/{source}', f'{backup}={tmp}/{backup}']
+            script = '\n'.join(lines) + '\n' + body + '\nrequire_mutated "mutation (z)"\necho reached\n'
+            return subprocess.run(['bash', '-c', script], capture_output=True, text=True)
+
+    def test_unchanged_sources_abort(self):
+        result = self.run_helper(None)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('mutation (z): the mutation changed no source file', result.stderr)
+        self.assertNotIn('reached', result.stdout)
+
+    def test_a_changed_source_continues(self):
+        for source, _ in self.PAIRS:
+            result = self.run_helper(source)
+            self.assertEqual((result.returncode, result.stdout.strip()), (0, 'reached'), source)
+
+    def test_every_reporting_path_requires_a_mutation(self):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        for function in ('proof_report', 'run_and_report'):
+            body = text[text.index(f'\n{function}() {{'):]
+            self.assertIn('require_mutated "$1"', body[:body.index('\n}\n')], function)
+
+    def test_pairs_match_the_backups_mutate_sh_makes(self):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        self.assertEqual(set(self.PAIRS), set(re.findall(r'^cp "\$(\w+)" "\$(\w+_backup)"$', text, re.M)))
 
 
 class Map(Scratch):
