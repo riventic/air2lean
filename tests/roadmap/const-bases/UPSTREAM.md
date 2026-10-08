@@ -40,9 +40,32 @@ pub fn main() void {
 
 ### Expected behavior
 
-`constant=10 runtime=12 constant_read=22 runtime_read=22`. The comptime-known pointer
+`constant=12 runtime=12 constant_read=22 runtime_read=22`. The comptime-known pointer
 `&(frozen.res catch unreachable)[2]` addresses payload element 2. The payload of
 `error{Bad}![3]u8` follows the 2-byte error code.
+
+### Minimal test
+
+A self-checking reproducer. On stock 0.16.0 aarch64-macos, `zig test repro.zig -fllvm -OReleaseSafe`
+fails with "expected 22, found 20":
+
+```zig
+const std = @import("std");
+
+const Holder = struct { res: error{Bad}![3]u8 };
+const frozen: Holder = .{ .res = .{ 20, 21, 22 } };
+
+// Keep the optimizer from folding the load through the comptime-known pointer.
+noinline fn read(p: *const u8) u8 {
+    const q: *const volatile *const u8 = &p;
+    return q.*.*;
+}
+
+test "comptime pointer into error-union payload" {
+    const p = &(frozen.res catch unreachable)[2];
+    try std.testing.expectEqual(@as(u8, 22), read(p));
+}
+```
 
 ### Actual behavior
 
