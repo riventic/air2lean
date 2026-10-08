@@ -167,7 +167,7 @@ remaining obligations** section listing the [premise IDs](premises.md) that
 | [external-contracts](../tutorials/external-contracts/README.md) | a model, its contract and a client of the contract | `ZigLean.External` |
 | [allocation-failure](../tutorials/allocation-failure/README.md) | a failed `try a.create(Node)` leaves the heap unchanged | `Proofs.Lists.Sep` |
 | [concurrent-clients](../tutorials/concurrent-clients/README.md) | two threads under an `Io.Mutex` always return 4 | `Proofs.Sync.Mutex` |
-| [cross-target](../tutorials/cross-target/README.md) | documentation only: what is qualified per target profile | - |
+| [cross-target](../tutorials/cross-target/README.md) | `Thread.Mutex.lock` keeps the locking thread running on the Linux and macOS translations | `Proofs.Threadsync.Lock` |
 
 Check all of them (after building the listed modules) with:
 
