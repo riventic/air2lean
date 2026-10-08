@@ -11,7 +11,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 TM = runpy.run_path(str(ROOT/'scripts/target-matrix.py'))
-SOURCES = ['compatibility.json', TM['MAP'], TM['WORKFLOW']]
+SOURCES = ['compatibility.json', TM['MAP'], TM['WORKFLOW']] + [
+    p['expected'] for p in json.loads((ROOT/TM['MAP']).read_text())['abi_profiles']]
 DARWIN_15 = ('0.15.2', 'aarch64-macos')
 
 
@@ -235,6 +236,55 @@ class Declarations(Scratch):
     def test_not_declared_entries_need_a_dependency(self):
         self.edit_json(TM['MAP'], lambda d: d['not_declared'][0].pop('depends_on'))
         self.check_fails('needs depends_on and a reason')
+
+
+class AbiProfiles(Scratch):
+    """T04 ABI-only profiles: native probe on the profile's host, a model check of its file."""
+    LINUX = 'abi 0.16.0/aarch64-linux-gnu/ReleaseSafe'
+
+    def profile(self, data, triple='aarch64-linux-gnu'):
+        return next(p for p in data['abi_profiles'] if p['target_triple'] == triple)
+
+    def test_committed_profiles_are_abi_only(self):
+        code, output = run('check', '--root', self.root, '--json')
+        self.assertEqual(code, 0, output)
+        rows = {row['profile']: row for row in json.loads(output)['abi_profiles']}
+        self.assertEqual(set(rows), {'0.16.0/aarch64-linux-gnu/ReleaseSafe',
+                                     '0.16.0/aarch64-macos-none/ReleaseSafe'})
+        self.assertEqual(rows['0.16.0/aarch64-linux-gnu/ReleaseSafe']['probe_job'], 'aarch64-linux')
+
+    def test_probe_on_another_host_does_not_count(self):
+        self.edit_text(TM['WORKFLOW'], 'runs-on: ubuntu-24.04-arm', 'runs-on: ubuntu-24.04')
+        self.check_fails(f"{self.LINUX}: probe: job 'aarch64-linux' runs on 'ubuntu-24.04' (x86_64-linux)")
+
+    def test_probe_must_check_its_own_target(self):
+        self.edit_text(TM['WORKFLOW'], '--target aarch64-linux-gnu --output',
+                       '--target aarch64-macos-none --output')
+        self.check_fails(f'{self.LINUX}: probe step', 'do not run the native probe and compare')
+
+    def test_ignored_failure_does_not_count(self):
+        self.edit_text(TM['WORKFLOW'], '"$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt"',
+                       '"$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt" || true')
+        self.check_fails(f'{self.LINUX}: probe step', 'ignores a failure')
+
+    def test_proof_must_check_the_profile_file(self):
+        self.edit_text(TM['WORKFLOW'], 'Model.lean aarch64-linux-gnu \\\n',
+                       'Model.lean aarch64-macos-none \\\n')
+        self.check_fails(f'{self.LINUX}: proof step', 'do not run the profile model check')
+
+    def test_expected_file_must_be_versioned_and_present(self):
+        self.edit_json(TM['MAP'], lambda d: self.profile(d).update(
+            expected='tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-linux-gnu-ReleaseSafe.txt'))
+        self.check_fails('is not the versioned file of this profile')
+        self.edit_json(TM['MAP'], lambda d: self.profile(d).update(
+            expected='tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt'))
+        (self.root/'tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt').unlink()
+        self.check_fails('expected file tests/roadmap/aarch64-abi/expected/0.16.0/'
+                         'aarch64-linux-gnu-ReleaseSafe.txt is missing')
+
+    def test_abi_profile_does_not_declare_translation(self):
+        self.edit_json(TM['MAP'], lambda d: self.profile(d).update(host='aarch64-macos'))
+        self.check_fails('target aarch64-linux-gnu is not native to host aarch64-macos')
 
 
 class Expressions(unittest.TestCase):
