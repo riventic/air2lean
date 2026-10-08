@@ -6,7 +6,7 @@ namespace DiffOutcome
 open Lean (Json)
 
 inductive Kind where
-  | value | errorReturn | modelPanic | illegal | unspecified | deadlock
+  | value | errorReturn | modelPanic | illegal | unspecified | unspecifiedTimer | deadlock
   | boundedNoResult | searchCap | inputFailure | nativeHarnessFailure
   deriving BEq, DecidableEq, Repr
 
@@ -16,6 +16,7 @@ def Kind.tag : Kind → String
   | .modelPanic => "model_panic"
   | .illegal => "illegal"
   | .unspecified => "unspecified"
+  | .unspecifiedTimer => "unspecified_timer"
   | .deadlock => "deadlock"
   | .boundedNoResult => "bounded_no_result"
   | .searchCap => "search_cap"
@@ -38,6 +39,7 @@ def valueKind [ReturnedError α] (a : α) : Kind :=
 def errorKind : Zig.Error → Kind
   | .illegal => .illegal
   | .unspecified => .unspecified
+  | .unsupportedTimer => .unspecifiedTimer
   | .deadlock => .deadlock
   | .overflow | .outOfBounds | .divByZero | .unreachable | .panic => .modelPanic
 

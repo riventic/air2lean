@@ -1480,7 +1480,7 @@ theorem preA_write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (h : Pr
 
 theorem preA_alloc {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr} (h : PreA m)
     (ha : ((alloc kind size align).run m).run = some (.ok (q, m'))) : PreA m' := by
-  obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; exact ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
+  obtain ⟨-, rfl⟩ := Proto.alloc_ok' ha; exact ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
 
 /-- The counter's bytes do not change by a write to another block, or by `recordAccess`. -/
 theorem curBytes_write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (hb : b ≠ 1) :

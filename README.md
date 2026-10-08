@@ -12,7 +12,7 @@ Translate a subset of Zig into Lean 4, then prove properties of the code in Lean
 | `pointers`, `slices`, `lists` | byte-level memory, pointer aliasing, heap memory, an allocator, translated std code |
 | `layout`, `vectors`, `asm` | casts, `packed` and `extern` layout, function pointers, unions in memory; `@Vector`; inline asm with register operands (x86_64 only) |
 | `floatops`, `floatconv`, `floats` | f16 to f128, bit-exact on x86_64-linux, IEEE-754 rounding ([docs/floats.md](docs/floats.md)) |
-| `threads`, `atomics` | atomics and fork-join threads that take turns at sync ops, with a data-race check; the RC11 memory model (message passing, store buffering, 2+2W, a lock-free stack) ([docs/std-models.md](docs/std-models.md)) |
+| `threads`, `atomics` | atomics and fork-join threads that take turns at sync ops, with a data-race check; `Thread.detach` (0.16.0) with one join owner per handle; the RC11 memory model (message passing, store buffering, 2+2W, a lock-free stack) ([docs/std-models.md](docs/std-models.md)) |
 | `sync`, `iogroup` (0.16.0) | `Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock`, translated from their std code, on a futex model; `Io.Group` (a model: a task is a thread) |
 | `threadsync` (0.15.2) | `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup`, translated from their std code |
 
@@ -160,17 +160,17 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 
 The supported subset includes checked, wrapping and saturating arithmetic; control flow and recursion; structs, enums, unions, optionals and error unions; pointers, slices and byte-level memory; heap allocation; floats and vectors; selected atomics, threads and std synchronization primitives. Inline asm is modeled as opaque functions with register operands on x86_64. See the [subset reference](PLAN.md#subset), [generated-code guide](docs/generated-code.md), and [std models](docs/std-models.md) for restrictions.
 
-Unsupported features include `threadlocal` globals, `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, detached threads and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
+Unsupported features include `threadlocal` globals outside pointer-free, error-free storage ([docs](docs/generated-code.md#thread-local-storage)), `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
 
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
-| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` globals; `extern` globals holding pointers, unions or errors |
+| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `extern` or pointer-, union- or error-holding `threadlocal` globals; `extern` globals holding pointers, unions or errors |
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
 | enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays (also `[N:s]T`) | |
-| atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Thread.detach`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
+| atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model); `Io.async`/`Future.await`/`.cancel`/`Io.checkCancel` (a separate 0.16.0 model, [futures](docs/futures.md)); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Io.futexWaitTimeout`, `Io.concurrent`, `Io.Select`, `Io.Batch`, cancel protection |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual lane of a `bool` vector or of a vector whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`); such vectors in memory outside a schema-12 LLVM-backend profile ([layouts](docs/vector-proofs.md#memory-layout)) |
@@ -178,13 +178,13 @@ Unsupported features include `threadlocal` globals, `extern` globals other than 
 | nonoptional C/allowzero pointer null tests, casts, direct access, storage, struct/array fields and projections ([fragment](docs/null-pointers.md)) | optionals of nullable pointers, nullable pointers in unions/tuples/error unions, volatile/null-bit/slice representations and nullable slicing/bulk memory |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
-| inline asm, register operands only, as opaque functions (x86_64 only) | |
+| inline asm as opaque functions (x86_64 only): register operands, and read-write (`+r`, `+m`) and memory (`=m`) lvalue outputs under an explicit effect contract ([A01](docs/generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01)) | `m`/immediate inputs, a `"memory"` clobber outside the reviewed registry, clobbers of a pinned operand's register |
 
 Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs; the premise and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 
-The Lean kernel checks the proof about the generated Lean code. Applying that result to compiled Zig also trusts Zig `Sema`, the AIR export patch, the translator, and the fidelity of the handwritten `ZigLean` semantics to the compiler and target. Memory uses a little-endian, 64-bit pointer ABI ([docs/generated-code.md](docs/generated-code.md#memory)); floats follow the stated reference target ([docs/floats.md](docs/floats.md)); allocator and concurrency results rely on the model assumptions in [docs/std-models.md](docs/std-models.md), including infallible thread creation and no load buffering. The differential tests check this correspondence on sampled inputs: `scripts/diff.sh` runs the compiled Zig and the generated Lean on the same inputs, including edge values, and compares results and panics.
+The Lean kernel checks the proof about the generated Lean code. Applying that result to compiled Zig also trusts Zig `Sema`, the AIR export patch, the translator, and the fidelity of the handwritten `ZigLean` semantics to the compiler and target. Memory uses a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile ([docs/generated-code.md](docs/generated-code.md#memory)); floats follow the stated reference target ([docs/floats.md](docs/floats.md)); allocator and concurrency results rely on the model assumptions in [docs/std-models.md](docs/std-models.md), including infallible thread creation and no load buffering. The differential tests check this correspondence on sampled inputs: `scripts/diff.sh` runs the compiled Zig and the generated Lean on the same inputs, including edge values, and compares results and panics.
 
 ## Zig versions
 

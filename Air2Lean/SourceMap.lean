@@ -117,8 +117,9 @@ partial def lineMap (ids : Std.HashMap Nat Nat) (body : Array Json)
         | _, _ => acc
       (nestedBodies inst).foldl (fun st nested => lineMap ids nested st) (line, acc)
 
-/-- One function's sidecar entry. `doc` is the AIR file after generic renumbering. -/
-def record (doc : Json) (airName airFile definition : String) (proofApi : Option (String × String)) :
+/-- One function's sidecar entry. `doc` is the AIR file after generic renumbering.
+`proofApi` is the `--proof-api` lemma-name index (`proofLemmaIndex`), if any. -/
+def record (doc : Json) (airName airFile definition : String) (proofApi : Option Json) :
     Json :=
   let body := arrayField doc "body"
   let order := canonicalIds body
@@ -130,9 +131,7 @@ def record (doc : Json) (airName airFile definition : String) (proofApi : Option
     ("types", field "types"), ("globals", canonicalValue ids (field "globals")),
     ("body", canonicalBody ids body)]
   let referenced := callees (Json.arr #[canonical]) |>.qsort (· < ·)
-  let api := match proofApi with
-    | some (model, unfold) => Json.mkObj [("model", .str model), ("unfold", .str unfold)]
-    | none => .null
+  let api := proofApi.getD .null
   Json.mkObj [("source", .str source), ("air_name", .str airName), ("air_file", .str airFile),
     ("definition", .str definition), ("proof_api", api),
     ("callees", .arr (referenced.map Json.str)), ("canonical", canonical),

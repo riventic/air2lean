@@ -233,7 +233,7 @@ axioms, opaque, extern and compiler-redirection dependencies of direct theorems)
 exporter-marked unsupported AIR in the shared [outcome taxonomy](outcome-taxonomy.md);
 `absence_claims` reports `no-panic` and `guaranteed-return` as `proved`, `refused` or
 `not_proved`. Only a direct goal of matching strength proves one; a capped search, fuel-bounded
-no-result run, unspecified (including no-clock timer) or unsupported outcome, or an observed
+no-result run, unspecified result, unsupported timer (`unspecified_timer`) or unsupported outcome, or an observed
 failure the claim denies, refuses it and adds a blocker, so the root cannot reach
 `functionally_verified_*`. Error returns never refuse `no-panic`. `--require-level` exits 1 when any root is below the level;
 diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
@@ -246,6 +246,154 @@ correspondence, backend lowering or native adequacy (see the receipt's trust fie
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
+```
+
+## Dependency closure
+
+The exporter writes only functions matching `ZIG_AIR_JSON_FILTER`, so a translation can
+silently lack a transitive callee. `project.py closure` (equivalently
+`scripts/dependency-closure.py manifest`) computes, for each root, the closure of its
+`function` over the root's `air` list and classifies every target:
+
+| Class | Meaning |
+|---|---|
+| `exported` | AIR present (a global: its initial value is embedded in the referencing AIR) |
+| `modelled` | boundary: `std_model` (`Air2Lean/StdModels.lean`, qualified for the AIR's Zig version), `registry_binding` (`--model-registry`), `panic_handler` (`panicErrorFor?`), `extern_initial_state` (extern global) |
+| `missing` | required function without AIR: exact FQN, the chain from the root, and the filter prefix (a generic instance `f__anon_<n>` by its base `f`) |
+| `unresolvable` | `runtime_function_pointer` (indirect call with no address-taken function of its type in the closure), `non_function_pointer_callee`, `rejected_std_model`, `std_model_not_qualified`, `std_model_air_conflict`, `unmodelled_noreturn_callee`, `threadlocal_global` (an `extern` thread-local global; a defined one is embedded, C02), `unresolved_global_initializer`; each with function and instruction |
+
+Edges are direct calls, function values, functions in global initial values, the comptime
+function argument of a non-exported generic instance (a spawn worker), and qualified
+indirect targets (the closure's address-taken functions with the callee's function type,
+as `fnRefs`). Each root report carries `filter.value` (the minimal prefix list covering
+every exported or missing function plus the root prefix, with `std_model_collisions` for a
+prefix that would also export a modelled std name) and a `reexport` command:
+
+```sh
+python3 scripts/project.py closure project.json --format text   # exit 1 unless closed
+ZIG_AIR_JSON_DIR="$AIR_DIR" ZIG_AIR_JSON_FILTER='lib.deep.leaf,proj.' \
+  zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing src.zig
+```
+
+Calls inside a missing function are unknown until it is exported: iterate export and
+closure until the status is `closed`. `dependency-closure.py goldens` checks every example
+over its committed golden AIR for each supported Zig version and host overlay (the
+`check.sh` overlay order) and also requires `examples/<ex>/filter` to cover the closure.
+
+```sh
+python3 scripts/dependency-closure.py goldens --format text
+python3 -m unittest discover -s tests/roadmap/dependency-closure -v
+```
+
+## Original-source export and `zig build` integration
+
+`project.py export` runs the whole path from the original Zig source to Lean: it selects the
+manifest roots, exports their AIR with the patched AIR-only compiler, closes the dependency
+closure by re-exporting, and translates each root. It needs a patched compiler of
+`export.zig_version` (`--zig-air`, else `AIR2LEAN_ZIG_AIR`, else `zig-air-<version>/bin/zig`
+in this repository) and a built translator. It never builds or downloads either.
+
+```sh
+python3 scripts/project.py export flow-time-project.json \
+  --translator .lake/build/bin/air2lean --out "$WORK/flow-time" --format text
+```
+
+A manifest with an `export` section may give `"air": []` for its roots; `report`,
+`translate` and `check` then report `ROOT_NOT_PRESENT` (they never translate an empty set).
+
+| `export` key | Meaning |
+|---|---|
+| `zig_version` | `0.16.0`, `0.15.2` or `0.14.1`; `zig version` of the compiler must match |
+| `flags` | compiler flags, passed **verbatim and in order** after `build-obj -fno-emit-bin` (target, `-mcpu`, `-O` mode, `-fllvm`, `-fno-error-tracing`, …). Rejected: `@file`, `-femit-*`/`-fno-emit-bin`, `-M`/`--dep`/`-o` and `.zig`/`.c`/`.o`/`.a` sources |
+| `modules` | `{name, path, deps?, env?, sha256?}`; the first is the main module. `path` is relative to the manifest or absolute (an external checkout); `env` names a variable that overrides it; `sha256` pins the bytes, checked before and after every compiler run |
+| `options` | `{"module": "build_options", "values": {NAME: {"type", "value"}}}`: the generated module a `build.zig` `addOptions` step would provide (`bool`, `iN`/`uN`, `usize`, `isize`, `[]const u8`); `-D NAME=VALUE` overrides a declared value |
+| `references` | `MODULE.decl` paths: a generated main module `comptime { _ = &@import("MODULE").decl; }` selects library roots without a hand-written wrapper |
+| `filter` | extra `ZIG_AIR_JSON_FILTER` prefixes for the first export |
+| `max_iterations` | export/closure rounds, 1-16 (default 8) |
+| `timeout_seconds` | per compiler and translator run (default 3600) |
+
+The command line is `build-obj -fno-emit-bin FLAGS... [--dep D]... -M<main>=<path>` followed by
+every other module with its `--dep`s, run in the manifest directory with only
+`ZIG_AIR_JSON_DIR` and `ZIG_AIR_JSON_FILTER` replaced in the environment. `--module
+NAME=PATH` points a module at another checkout (pins still apply).
+
+**Fixed point.** The first filter is the root names themselves. After each export,
+`dependency-closure.py` classifies every root's closure; the filter prefix of every
+`missing` function (a generic instance by its base name) is added and the source is exported
+again. The loop ends at a `fixed_point` (no missing function: every dependency is exported or
+a modelled/unresolvable boundary), when it is `stalled` (the filter already covers a missing
+function but the compiler wrote no AIR for it), or at `max_iterations`. Only a fixed point
+proceeds. Each exported file must carry `export.zig_version` and, for an `abi64-le-v1`
+manifest profile, exactly the manifest profile: flags that silently produce another target,
+mode or error-tracing setting fail. Exporter warnings fail as in `translate.sh`.
+
+**Requested roots without AIR** are listed in `unexported_roots` with a reason derived from
+the exported names and the module sources: `generic_instances_only` (only `f__anon_N`
+instances exist), `inline_only` (`inline fn`), `comptime_only_generic` (`anytype`/`comptime`
+parameters), `unreferenced` (declared but never analyzed) or `not_found`. Any such root fails
+the command: nothing is published, so an empty or partial export is never mistaken for a
+translation.
+
+**Output.** `--out` must be fresh or empty (`--replace` also accepts a previous export
+artifact, replaced only after success). The artifact holds `air/` (the final export),
+`<root-id>/Gen.lean` and `export.json`: per-iteration filter, verbatim argv, exported and
+missing names, per-root closure counts, model boundaries, unresolvable boundaries
+(`closure_status: boundaries`), the generated hashes and every module's SHA-256. Exit status:
+0 translated, 1 failed (report on stdout and `--report`), 2 invalid input or tools.
+
+### `zig build` step
+
+A project keeps its own `build.zig` and adds a step that runs the export. Zig creates the
+output directory; `--replace` lets the step rerun into it.
+
+```zig
+const air2lean = b.option([]const u8, "air2lean", "air2lean checkout") orelse "../air2lean";
+const run = b.addSystemCommand(&.{ "python3", b.pathJoin(&.{ air2lean, "scripts/project.py" }), "export" });
+run.addFileArg(b.path("air2lean-project.json"));
+run.addArgs(&.{ "--translator", b.pathJoin(&.{ air2lean, ".lake/build/bin/air2lean" }), "--replace", "--out" });
+const out = run.addOutputDirectoryArg("air2lean");
+run.has_side_effects = true;
+const install = b.addInstallDirectory(.{ .source_dir = out, .install_dir = .prefix, .install_subdir = "air2lean" });
+b.step("air2lean", "Export the selected roots' AIR closure and translate it").dependOn(&install.step);
+```
+
+`zig build air2lean` then writes `zig-out/air2lean/`. To keep one source of truth for
+`-D` options, forward them: `run.addArgs(&.{ "-D", b.fmt("lanes={d}", .{lanes}) })`. This
+was checked with stock Zig 0.16.0 (`zig build air2lean`, run twice).
+
+### Production kernels
+
+Both committed manifests read Flow's production files from `/opt/dev/boxhub` (override with
+`FLOW_TIME_SOURCE` / `PCG64_SOURCE`); the SHA-256 pins reject any other bytes. No
+implementation is copied into this repository.
+
+* `flow-time-project.json`: the `case-studies/flow-time` wrapper as the main module and the
+  original `des/time.zig` as `flow_time_original`, with the case study's flags. One export
+  reaches the fixed point (`addDuration` is inlined into both entry points). The exported AIR
+  is byte-identical to a `scripts/flow-time.sh` export: the case-study guard
+  (`compare-air.py --generated`) accepts it, the generated body equals the committed
+  `FlowTime/Gen.lean`, and `FlowTime/Proofs.lean` kernel-checks against it.
+* `pcg64-project.json`: roots `pcg64.init` and `pcg64.nextU32` of the original
+  `optimizer/engine/src/pcg64.zig`, selected through `references` (no wrapper). Three
+  exports: `pcg64.init,pcg64.nextU32` (3 functions; missing `generateState`, `mixEntropy`,
+  `next`) → 6 functions (missing `math.rotr__anon_N`, `hashmix`, `hashmixB`, `mix`) →
+  10 functions, fixed point. `init` closes over 7 functions plus the `outOfBounds` panic
+  handler; `nextU32` over 3. Both translate and elaborate.
+
+Requesting `time.addDuration` itself (the generic inline production function) instead of the
+wrapper fails with `inline_only`: Zig writes no AIR for it, and the report says so instead of
+publishing an empty translation.
+
+Residual limits: the reason for an unexported root is a source-text hint, not compiler
+evidence. The command does not drive a project's own `build.zig` graph (`zig build` cannot
+yet emit AIR for a chosen step); the manifest restates its modules and flags, and the
+profile check catches a target/mode mismatch, not every flag difference. The closure has
+the scope of `dependency-closure.py`.
+
+```sh
+python3 -m unittest discover -s tests/roadmap/project-export -v
+AIR2LEAN_ZIG_AIR=zig-air-0.16.0/bin/zig AIR2LEAN_TRANSLATOR=.lake/build/bin/air2lean \
+  python3 -m unittest discover -s tests/roadmap/project-export -k RealCompilerTest -v
 ```
 
 ## Reproducible project check
@@ -294,7 +442,9 @@ The optional `check` object bounds proof checking: `build_timeout_seconds` and
 `audit_timeout_seconds` (default 3600, maximum 21600) and the guard's sampled `rss_mib`
 (default 8192, maximum 65536). `--lock` selects the guard lock (default
 `AIR2LEAN_BUILD_LOCK`); `--build-guard`, `--assumptions-script` and `--claims-script`
-override the tools (tests use a stub audit). `lake` resolves from `PATH`.
+override the tools (tests use a stub audit). `--lock-wait SECONDS` (default 0) lets each
+guarded stage wait for a lock another build holds; without it a busy lock fails the stage
+with outcome `lock_busy`. `lake` resolves from `PATH`.
 
 `--out` is a fresh directory published by rename after the record is written:
 `record.json`, `artifact/`, the guard reports and logs, `assumptions.json` and
@@ -319,6 +469,36 @@ allowed assumptions and strengths on both machines. It does not establish export
 correspondence or backend adequacy. Translator binaries are trusted per host, and Lake
 dependency revisions are covered only through `lake-manifest.json` when it is listed in
 `components`.
+
+### Second machine
+
+`scripts/second-machine.sh` produces the second record from a fresh clone in a clean Linux
+container and compares it with a record from the host checkout:
+
+```sh
+lake build air2lean
+python3 scripts/project.py check example-project.json \
+  --translator .lake/build/bin/air2lean --out /tmp/machine-a --lock-wait 3600
+scripts/second-machine.sh --platform linux/arm64 --rev HEAD --compare /tmp/machine-a/record.json
+```
+
+It builds `Dockerfile.clean-env` (Ubuntu 24.04 with no Lean, elan, Zig or caches) and passes
+only a `git bundle` of the committed ref, so working-tree edits never reach the container.
+Inside, it clones the bundle, checks out the exact commit, installs the elan pin for the
+container architecture (`zig-patch/versions.toml` `[ci.elan]` for `x86_64`,
+`[ci.elan-aarch64]` for `aarch64`, both sha256-checked) and the `lean-toolchain` release, runs
+`lake build air2lean`, then `project.py check`. The check fails if the clone is dirty afterwards.
+Zig is not installed because the manifest translates committed AIR. `--platform` defaults to
+`compatibility.json` `clean_environment.platform` (`linux/amd64`); on Apple-silicon hosts
+`linux/arm64` runs natively, while `linux/amd64` runs emulated (about 7 instead of 3 minutes for
+`example-project.json`). Results go to
+`.lake/second-machine-results/run.*/` (`check/` with `record.json` and all check evidence,
+`clone.json`, `build-air2lean.log`); override with `AIR2LEAN_SECOND_RESULTS`. The script exits
+with the container's status (1 for a failed record), then with `compare-records`' status.
+Both records must come from the same commit, because `reproducible` hashes the check scripts.
+The committed run (macOS arm64 host against linux/arm64 and linux/amd64 containers, both
+`reproduced`) is in `assurance/reproductions/i03-second-machine/` (`note.json`, the three
+records and both comparisons).
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v

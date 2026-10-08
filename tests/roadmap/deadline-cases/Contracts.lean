@@ -139,7 +139,7 @@ theorem real_duration_rejected (raw : TimedCall.Duration) :
   simp [TimedCall.checkedTimeout]
 
 /-- Reading the wall clock fails closed: see `TimedCall.wrong_clock_rejected`. -/
-example (io : Io) : TimedCall.clockNow .real io = .fail .unspecified :=
+example (io : Io) : TimedCall.clockNow .real io = .fail .unsupportedTimer :=
   TimedCall.wrong_clock_rejected io
 
 end DeadlineCaseContracts

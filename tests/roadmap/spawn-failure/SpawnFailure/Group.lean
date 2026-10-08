@@ -404,6 +404,14 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
     obtain ⟨rfl, rfl⟩ := hr
     refine ⟨rfl, ?_⟩
+    -- `main` is not an `Io` task: no cancelation point (C05).
+    refine WP.bind (WP.callMC (fun e he => by rw [isTask_run] at he; cases he) fun b m₈ hr => ?_)
+    rw [isTask_run] at hr
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+    obtain ⟨hb, rfl⟩ := hr
+    obtain rfl : b = false := by rw [← hb]; simp [hc]
+    refine ⟨rfl, ?_⟩
+    simp only [Bool.false_eq_true, ↓reduceIte]
     simp only [Array.filter_empty, Array.map_empty, StateT.run_bind]
     rw [← Array.forIn_toList]
     simp only [Array.toList, List.forIn_nil, StateT.run_pure, pure_bind]
@@ -417,6 +425,14 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
     obtain ⟨rfl, rfl⟩ := hr
     refine ⟨rfl, ?_⟩
+    -- `main` is not an `Io` task: no cancelation point (C05).
+    refine WP.bind (WP.callMC (fun e he => by rw [isTask_run] at he; cases he) fun b m₈ hr => ?_)
+    rw [isTask_run] at hr
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+    obtain ⟨hb, rfl⟩ := hr
+    obtain rfl : b = false := by rw [← hb]; simp [hc]
+    refine ⟨rfl, ?_⟩
+    simp only [Bool.false_eq_true, ↓reduceIte]
     have hft : (#[(B.g, (1 : ThreadId))].filter (·.1 == B.g)).map (·.2) = #[1] := by simp
     have hfn : #[(B.g, (1 : ThreadId))].filter (·.1 != B.g) = #[] := by simp
     rw [hft, hfn]
@@ -448,7 +464,7 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     obtain ⟨ph, w₁, hm, B', h0, -, hma₁, hsh⟩ := hi₁.main
     rw [hg₁] at h0; cases h0
     obtain ⟨hsz₁, r1₁, hgr₁, ⟨hk, dk, hk1₁⟩, hn₁⟩ := hsh
-    refine ⟨fun _ => ⟨by decide, by rw [hsz₁]; decide, ⟨_, _, _, rfl⟩, by
+    refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁]; decide, ⟨_, _, _, rfl⟩, by
       have hr := r1₁
       unfold KidRec at hr
       simp [Thread.joinValid, hr]⟩,

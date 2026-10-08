@@ -16,13 +16,21 @@ fp = importlib.util.module_from_spec(spec); spec.loader.exec_module(fp)
 GRAPH = dict(a=['b'], b=['c'], c=[], d=[], e=['f'], f=['e'], g=['e'], h=['ext.model'])
 
 
+def translator(emit='e' * 64):
+    modules = [['Air2Lean.Emit', emit], ['Air2Lean.Main', 'a' * 64]]
+    t = dict(lean='4.34.0', modules=modules, revision='')
+    t['revision'] = fp.translator_revision(t)
+    return t
+
+
 def sidecar():
     functions = [dict(source=name, air_name=name, air_file=name + '.json', definition=name,
                       proof_api=None, callees=callees, lines=[[0, 1]],
                       canonical=dict(body=[dict(id=0, tag='ret', args=[dict(val=name)])]))
                  for name, callees in GRAPH.items()]
     return dict(format=fp.SIDECAR, namespace='Demo', metadata=dict(profile='p'),
-                options=dict(spawn_policy='available', models=None), functions=functions)
+                options=dict(spawn_policy='available', models=None), translator=translator(),
+                functions=functions)
 
 
 def change(doc, name):
@@ -64,8 +72,19 @@ def main():
     other = copy.deepcopy(base); other['metadata']['profile'] = 'q'
     assert fp.compare(base, other)['invalidated'] == sorted(GRAPH)
 
+    # The translator revision participates: an emitter change invalidates everything,
+    # even though no translator input changed.
+    emitter = copy.deepcopy(base); emitter['translator'] = translator('f' * 64)
+    report = fp.compare(base, emitter)
+    assert report['invalidated'] == sorted(GRAPH) and report['translator_changed'], report
+    assert not fp.compare(base, moved)['translator_changed']
+    forged = copy.deepcopy(base); forged['translator']['modules'][0][1] = 'f' * 64
+    unsorted = copy.deepcopy(base); unsorted['translator']['modules'].reverse()
+    unsorted['translator']['revision'] = fp.translator_revision(unsorted['translator'])
+    missing = copy.deepcopy(base); del missing['translator']
     for bad in [dict(base, format='x'), dict(base, functions=base['functions'] * 2),
-                dict(base, functions=[dict(base['functions'][0], extra=1)])]:
+                dict(base, functions=[dict(base['functions'][0], extra=1)]),
+                dict(base, format='air2lean-source-map-v1'), forged, unsorted, missing]:
         try:
             with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as handle:
                 json.dump(bad, handle)

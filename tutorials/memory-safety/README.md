@@ -81,6 +81,7 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 | `buildThenFree_no_illegal` | `m.Seq → (buildThenFree a xs).run m ≠ throw e`, for every `e`, including `.illegal` |
 | `buildThenFree_no_leak` | `m.Seq → (buildThenFree a xs).run m = pure (r, m') → m'.heap = m.heap` |
 | `buildThenFree_every_policy` | the same from `{ m with failAt := k, allocPolicy := pol }`, for every `k` and `pol` |
+| `buildThenFree_address_reuse` | the same from `m.withReuse pick pm`: the allocator may give a freed node's address to a later node, for every reuse oracle `pick` and provenance mode `pm` |
 
 [`Controls.lean`](Controls.lean) holds the refuted clients; Lean accepts it. `Room m` says that the next 16-byte
 allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
@@ -90,6 +91,7 @@ allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
 |---|---|
 | `doubleFree`: `freeAll(a, n); a.destroy(n);` | `doubleFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `doubleFree_unsafe`: `¬SafeNoLeak (doubleFree a v)` |
 | `useAfterFree`: `freeAll(a, n); return sum(n);` | `useAfterFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `useAfterFree_unsafe`: `¬SafeNoLeak (useAfterFree a v)` |
+| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withReuse pick pm) = throw .illegal` for every `pick` and `pm` |
 | `forgetFree`: `_ = try push(a, null, v);` | `forgetFree_leaks`: `m.Seq → Room m → ∃ m', run m = pure (.ok (), m') ∧ m'.heap ≠ m.heap`; `forgetFree_unsafe`: `¬SafeNoLeak (forgetFree a v)` |
 
 ## How each property maps to the model
@@ -124,6 +126,13 @@ failure index, every finite failure trace and every cap. That covers a failure o
 push, of the last push, of any push in between, and no failure.
 `buildThenFree_every_policy` states this explicitly.
 
+**Every address-reuse policy.** A real allocator may give a freed node's address to the next
+node. The model's opt-in reuse policy (`Mem.allocPolicy.reuseAddr`,
+[docs/address-reuse.md](../../docs/address-reuse.md)) does that. The checks above use the
+pointer's block id, which is never reused, not its address. So the properties hold under every
+reuse policy (`buildThenFree_address_reuse`), and a stale node pointer stays dead even when a
+live node has its address (`doubleFree_reuse`, `useAfterFree_reuse`).
+
 **Values.** `list hd xs` (`Proofs/Lists/Sep.lean`) owns the chain of 16-byte nodes from
 `hd`, with `val` fields `xs`. `build_total` gives it for the items in order: `pushAll` gives
 them reversed, and the generated `reverse` turns them around.
@@ -139,6 +148,8 @@ The theorems of `Main.lean` hold in the model under the premises of
   a free must name the start and the whole length of a live heap block, or it is `.illegal`.
 * [ALC-02](../../docs/premises.md#alc-02): the allocation policy (`failAt`, `allocPolicy`).
   The theorems quantify over it.
+* [ALC-08](../../docs/premises.md#alc-08): the opt-in address-reuse policy and provenance mode
+  (`buildThenFree_address_reuse`). The theorem quantifies over both.
 * [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): safety
   checks are `Zig.Error`s, and memory is the byte-level block model. A dead access is
   `.illegal`.
@@ -165,8 +176,9 @@ single-threaded memory operation the specs use preserves it.
   proved from those specs with the frame rule, not by unfolding the whole program. A property
   of a function is only as strong as its spec: `push_total`, `reverse_total` and
   `freeAll_total` are exact about ownership, so leaks show up.
-* **Model, not native allocator.** "No leak" is about `Mem.heap`. It does not cover native
-  address reuse, allocator metadata or fragmentation (ALC-01). The allocation policy is a
+* **Model, not native allocator.** "No leak" is about `Mem.heap`. It covers every model
+  address-reuse policy (ALC-08), not the native allocator's actual addresses, metadata or
+  fragmentation (ALC-01). The allocation policy is a
   model parameter. It is not a guarantee about the host's memory (ALC-02).
 * **Single-threaded.** `m.Seq` is a hypothesis. Concurrent clients use the schedule-quantified
   proofs of [docs/proofs.md](../../docs/proofs.md#proofs-over-all-schedules).

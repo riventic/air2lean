@@ -1285,6 +1285,12 @@
       ],
       "correspondence": "model"
     },
+    "tests/roadmap/aarch64-abi/Model.lean": {
+      "labels": [
+        "ieee"
+      ],
+      "correspondence": "model"
+    },
     "tests/roadmap/vector-layouts/Model.lean": {
       "labels": [
         "ieee"

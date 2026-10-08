@@ -290,7 +290,7 @@ def parse (contents : String) : Except String (Array ModelBinding) := do
     let errors ← strings m "errors"
     for e in errors do
       unless ["overflow", "outOfBounds", "divByZero", "unreachable", "panic", "unspecified",
-        "illegal", "deadlock"].contains e do throw s!"model registry: unknown safety error '{e}'"
+        "illegal", "deadlock", "unsupportedTimer"].contains e do throw s!"model registry: unknown safety error '{e}'"
     let dependencies ← strings m "dependencies"
     unless dependencies.all (fun s => !s.isEmpty) do throw "model registry: empty semantic dependency"
     let footprint ← match m.getObjVal? "footprint" with
@@ -366,6 +366,8 @@ Function pointers and concurrent clients remain outside this selected extension 
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
     Except String Unit := do
   if models.isEmpty then return
+  unless profile.pointerBits == 64 do
+    throw "model registry: external models are qualified for the 64-bit pointer model only"
   unless funcs.all (·.zigVersion == profile.zigVersion) do
     throw "model registry: function Zig version differs from checked profile"
   let completedShapes ← funcs.mapM fun f => preflightShapes f.types f.layouts

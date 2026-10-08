@@ -151,6 +151,11 @@ const Compat = struct {
     }
 
     /// A `ty_op` tag that does not exist in every version (`int_from_float_safe`: 0.15.2+).
+    /// `runtime_nav_ptr` (0.15.2+; 0.14.1 has a constant pointer to a `threadlocal` global).
+    fn isRuntimeNavPtr(tag: Air.Inst.Tag) bool {
+        return if (v14) false else tag == .runtime_nav_ptr;
+    }
+
     fn isNewTyOp(tag: Air.Inst.Tag) bool {
         return if (v14) false else tag == .int_from_float_safe;
     }
@@ -983,6 +988,11 @@ const W = struct {
                     const s = w.air.unwrapShuffleTwo(zcu, inst);
                     try w.writeArgs(&.{ s.operand_a, s.operand_b });
                     try w.writeShuffleTwoMask(s.mask);
+                } else if (Compat.isRuntimeNavPtr(tag)) {
+                    // A runtime pointer to a `Nav` (`threadlocal var`, or an `extern` that needs a
+                    // runtime address): the global's entry in `globals`, whose flags say which.
+                    try w.field("global");
+                    try w.j.write(try w.globalId(.{ .nav = w.data(inst).ty_nav.nav }));
                 } else if (Compat.isNewTyOp(tag)) {
                     try w.writeArgs(&.{w.data(inst).ty_op.operand});
                 } else if (Compat.isNewBinOp(tag)) {

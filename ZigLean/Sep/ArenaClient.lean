@@ -206,7 +206,7 @@ theorem dupeBytes_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
       let m₂ := m₁.afterAlloc (.owned a) bs.size 1
       let nb : Block :=
         { bytes := Array.replicate bs.size .undef, align := 1, kind := .owned a, live := true,
-          addr := alignUp m₁.nextAddr 1 }
+          addr := m₁.newAddr (.owned a) bs.size 1 }
       have hblk₂ : m₂.blocks[B]? = some nb := by simp [m₂, Mem.afterAlloc, B, m₁, nb]
       have hacc : m₂.access ⟨some B, 0⟩ (bs.map Byte.int).size 1 = pure (B, nb, 0) := by
         simpa using access_of (p := ⟨some B, 0⟩) (n := (bs.map Byte.int).size) (a := 1) rfl hblk₂

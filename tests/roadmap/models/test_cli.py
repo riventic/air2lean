@@ -92,7 +92,7 @@ def main(executable):
                            ("implementation", "X; axiom injected : False", "invalid Lean identifier"),
                            ("signature", {"params": [], "return": None}, "incompatible signature/layout"),
                            ("symbol", "mem.Allocator.create", "conflicts with translated AIR or a built-in model"),
-                           ("dependencies", ["Thread.detach"], "is outside the subset"),
+                           ("dependencies", ["Io.futexWaitTimeout"], "is outside the subset"),
                            ("dependencies", ["project.identity"], "cyclic semantic dependency"),
                            ("dependencies", ["Zig.x", "Zig.x"], "duplicate semantic dependency")]:
             bad = copy.deepcopy(data)

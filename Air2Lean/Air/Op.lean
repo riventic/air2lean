@@ -54,6 +54,9 @@ inductive Ty where
   /-- `std.Io` (0.16.0): the model's `Zig.Io` (`ZigLean/Conc/Call.lean`). Its fields
   (`userdata`, the `vtable`) are not translated. -/
   | io
+  /-- `std.Io.Future(T)` (0.16.0): the model's `Zig.Future` (`ZigLean/Conc/Future.lean`) of the
+  result type `result`. Its `any_future` field (`?*Io.AnyFuture`) is the model's runtime record. -/
+  | future (result : TyId)
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
@@ -74,7 +77,7 @@ def integerFits (signed : Bool) (bits : Nat) (v : Int) : Bool :=
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
-  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
+  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c | .future c => #[c]
   | .errorUnion s p => #[s, p]
   | .struct _ _ fs => fs.map (·.2)
   | .enum _ t _ _ => #[t]
@@ -184,7 +187,15 @@ structure Layout where
   /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
   export has none, so its bit-pointers may be lane pointers. -/
   vectorIndexExported : Bool := false
+  /-- The profile's pointer size in bytes (`Zig.PtrWidth.bytes`): the model's size of a pointer,
+  slice, `usize` and allocator in `modelLayout`. Set by `normalize` from the profile, never by the
+  exporter, as `packedLanes`. -/
+  ptrBytes : Nat := 8
   deriving Repr, Inhabited, BEq
+
+/-- The profile's pointer size in bytes, as `normalize` set it in every layout (8 when there is
+no type). -/
+def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes)).getD 8
 
 /-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
 def Layout.isLanePtr (l : Layout) : Bool :=
@@ -497,6 +508,10 @@ inductive Op where
   | unionInit (index : Nat) (a : Val)
   /-- A local: `alloc`, or `ret_ptr` (the place the result is built in). -/
   | alloc
+  /-- `runtime_nav_ptr`: the address of global `global` (an index into `Func.globals`) at run
+  time. `Check.lean` admits only a `threadlocal` global: the current thread's instance
+  (`Zig.tlsPtr`, `docs/generated-code.md` §Thread-local storage). -/
+  | runtimeNavPtr (global : Nat)
   /-- `struct_field_ptr*`: the pointer to field `index` of the struct or union at `base`. -/
   | fieldPtr (base : Val) (index : Nat)
   /-- `field_parent_ptr` (`@fieldParentPtr`): the pointer to the struct that has `fieldPtr` at
@@ -568,11 +583,13 @@ inductive Op where
   | line (n : Nat)
   /-- `dbg_var_*`, `dbg_empty_stmt`: no effect. `name` is kept for readable output. -/
   | dbg (name : Option String) (v : Option Val)
-  /-- `assembly`: register-operand-only inline asm (M21). Translated as a call to an `opaque`
+  /-- `assembly`: inline asm (M21, A01). Translated as a call to an `opaque`
   Lean function keyed by a hash of `source` and the operand constraints
   (`docs/generated-code.md` §asm); a proof knows nothing about it beyond what the caller
-  states. `Check.lean` accepts only a register constraint (`=r`, `r`, `{reg}`, `={reg}`), no
-  `"memory"` clobber, and at most one result output (an `=r`/`={reg}` output with no `ref`). -/
+  states. `Check.lean` accepts the constraints of `Air2Lean/AsmContract.lean` (register operands,
+  and A01's read-write/memory lvalue outputs under the effect contract), a `"memory"` clobber only
+  for a reviewed registry block, and at most one result output (an `=r`/`={reg}` output with no
+  `ref`). -/
   | asm (source : String) (isVolatile : Bool) (clobbers : Array String)
       (outputs inputs : Array AsmOperand)
 
@@ -613,5 +630,9 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The schema-12 profile's code generator (`stage2_llvm`, `stage2_x86_64`, …); legacy
+  schemas and constructed functions are `unverified`. Backend-specific constant lowering
+  checks (`Check.lean`) read it. -/
+  backend : String := "unverified"
 
 end Air2Lean

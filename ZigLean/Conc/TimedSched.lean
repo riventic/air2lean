@@ -130,7 +130,7 @@ structure Outcome (α : Type) where
 
 def State.observe (s : State α) : Except Error (Time.Timestamp × State α) :=
   match s.inputs.environment with
-  | .noClock => .error .unspecified
+  | .noClock => .error .unsupportedTimer
   | .awake env _ =>
     let now := env.observe s.observations
     let kernel := match s.inputs.wakeAt s.observations with

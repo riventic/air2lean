@@ -2,6 +2,7 @@
 """V06 outcome-taxonomy regressions: shared taxonomy, absence refusal in claims and coverage.
 
 Offline: synthetic diff summaries and the checked-in claim fixture report only."""
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -62,6 +63,7 @@ class TaxonomyTests(unittest.TestCase):
             (case('panic_match', 'model_panic'), {O.PANIC}),
             (case('illegal_exclusion', 'illegal'), {O.ILLEGAL}),
             (case('unspecified_exclusion', 'unspecified'), {O.UNSPECIFIED}),
+            (case('unspecified_timer_exclusion', 'unspecified_timer'), {O.UNSPECIFIED_TIMER}),
             (case('mismatch', 'deadlock'), {O.DEADLOCK}),
             (case('search_cap', 'value', search('capped')), {O.NONDETERMINISTIC_VALID, O.SEARCH_CAP}),
             (case('value_match', 'value', search('witness', True)), {O.NONDETERMINISTIC_VALID, O.DIVERGENCE}),
@@ -87,7 +89,8 @@ class TaxonomyTests(unittest.TestCase):
             'search cap': case('search_cap', 'value', search('capped')),
             'fuel-bounded no result': case('bounded_no_result', 'bounded_no_result', search('bounded', True)),
             'witness beside no-result branch': case('value_match', 'value', search('witness', True)),
-            'unspecified / timer': case('unspecified_exclusion', 'unspecified'),
+            'unspecified': case('unspecified_exclusion', 'unspecified'),
+            'unsupported timer': case('unspecified_timer_exclusion', 'unspecified_timer'),
             'panic': case('panic_match', 'model_panic'),
             'illegal': case('illegal_exclusion', 'illegal'),
             'deadlock': case('mismatch', 'deadlock'),
@@ -100,6 +103,39 @@ class TaxonomyTests(unittest.TestCase):
                     self.assertIn('refused', verdict['reason'])
         self.assertEqual(outcomes.absence('no-panic', {O.UNSUPPORTED.value: 1})['status'], 'refused')
 
+    def test_timer_and_unspecified_stay_distinct(self):
+        timer = case('unspecified_timer_exclusion', 'unspecified_timer')
+        plain = case('unspecified_exclusion', 'unspecified')
+        self.assertEqual(outcomes.count([timer]), {'unspecified_timer': 1})
+        self.assertEqual(outcomes.count([plain]), {'unspecified_behavior': 1})
+        for claim in outcomes.ABSENCE_CLAIMS:
+            with self.subTest(claim=claim):
+                verdict = self.verdict(claim, timer)
+                self.assertEqual(verdict['blocking'], {'unspecified_timer': 1})
+                self.assertIn('unsupported timer', verdict['reason'])
+                verdict = self.verdict(claim, plain)
+                self.assertEqual(verdict['blocking'], {'unspecified_behavior': 1})
+                self.assertNotIn('unsupported timer', verdict['reason'])
+                self.assertIn('unspecified result', verdict['reason'])
+        # The status alone (rows without `model_kind`) keeps the distinction.
+        self.assertEqual(outcomes.case_outcomes(case('unspecified_timer_exclusion')), {O.UNSPECIFIED_TIMER})
+
+    def test_diff_report_types_the_timer_constructor(self):
+        meta = lambda kind: json.dumps({'schema': 1, 'kind': kind, 'legacy_line': '{"fail":"Zig.Error.unsupportedTimer"}'})
+        timer = {'fail': 'Zig.Error.unsupportedTimer'}
+        kind, _ = report.observation(meta('unspecified_timer'), timer, 'model')
+        self.assertEqual(kind, report.Kind.UNSPECIFIED_TIMER)
+        for wrong in ('unspecified', 'model_panic'):
+            with self.subTest(kind=wrong), self.assertRaises(report.Invalid):
+                report.observation(meta(wrong), timer, 'model')
+        native = {'ok': 1}
+        self.assertEqual(report.classify(native, timer, report.Kind.VALUE, kind, None), report.Status.UNSPECIFIED_TIMER)
+        unspecified = {'fail': 'Zig.Error.unspecified'}
+        self.assertEqual(report.classify(native, unspecified, report.Kind.VALUE, report.Kind.UNSPECIFIED, None),
+                         report.Status.UNSPECIFIED)
+        # The legacy compatibility projection still counts both in its `unspecified` bucket.
+        self.assertEqual(report.legacy_bucket(native, timer, False), 'unspecified')
+
 
 class ClaimsEvidenceTests(unittest.TestCase):
     def setUp(self):
@@ -109,7 +145,8 @@ class ClaimsEvidenceTests(unittest.TestCase):
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.diff = self.base / 'diff.json'
 
-    def run_check(self, rows, strength='total_correctness', function='example.root', complete=True, diff=True):
+    def run_check(self, rows, strength='total_correctness', function='example.root', complete=True, diff=True,
+                  tamper=None):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                     'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                     'allowed_assumptions': [],
@@ -119,8 +156,11 @@ class ClaimsEvidenceTests(unittest.TestCase):
                                'assumptions': [], 'exclusions': []}]}
         path = self.base / 'project.json'
         path.write_text(json.dumps(manifest))
-        self.diff.write_text(json.dumps({'schema': 1, 'complete': complete}))
-        Path(str(self.diff) + '.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+        cases = ''.join(json.dumps(r) + '\n' for r in rows).encode()
+        Path(str(self.diff) + '.jsonl').write_bytes(cases)
+        summary = {'schema': 1, 'complete': complete, 'runner_runtime_sources': report.source_hashes(ROOT),
+                   'cases_sha256': hashlib.sha256(cases).hexdigest()}
+        self.diff.write_text(json.dumps(tamper(summary) if tamper else summary))
         extra = ['--diff', str(self.diff)] if diff else []
         result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(FIXTURE), *extra],
                                 capture_output=True, text=True, timeout=30)
@@ -143,6 +183,49 @@ class ClaimsEvidenceTests(unittest.TestCase):
                     goal = result['roots'][0]['goals'][0]
                     self.assertEqual(goal['status'], 'rejected')
                     self.assertTrue(goal['blocking'])
+
+    def test_timer_evidence_rejects_with_unsupported_timer_reason(self):
+        code, result, err = self.run_check([case('value_match', 'value'),
+                                            case('unspecified_timer_exclusion', 'unspecified_timer')], 'safety')
+        self.assertEqual(code, 1, err)
+        self.assertEqual(result['roots'][0]['outcomes'], {'valid': 1, 'unspecified_timer': 1})
+        goal = result['roots'][0]['goals'][0]
+        self.assertEqual(goal['blocking'], {'unspecified_timer': 1})
+        self.assertIn('unsupported timer', goal['reason'])
+        code, result, err = self.run_check([case('value_match', 'value'), case('unspecified_exclusion', 'unspecified')])
+        self.assertEqual(code, 1, err)
+        self.assertEqual(result['roots'][0]['outcomes'], {'valid': 1, 'unspecified_behavior': 1})
+        self.assertNotIn('unsupported timer', result['roots'][0]['goals'][0]['reason'])
+
+    def test_stale_or_unbound_evidence_is_refused(self):
+        rows = [case('value_match', 'value')]
+        name = 'scripts/diff-report.py'
+
+        def changed(summary):
+            sources = dict(summary['runner_runtime_sources'])
+            sources[name] = '0' * 64
+            return dict(summary, runner_runtime_sources=sources)
+
+        def missing(summary):
+            sources = dict(summary['runner_runtime_sources'])
+            del sources[name]
+            return dict(summary, runner_runtime_sources=sources)
+
+        tampers = {
+            'changed source': (changed, 'stale differential evidence'),
+            'inventory differs': (missing, 'stale differential evidence'),
+            'no fingerprints': (lambda s: {k: v for k, v in s.items() if k != 'runner_runtime_sources'},
+                                'no source/runner fingerprints'),
+            'cases changed': (lambda s: dict(s, cases_sha256='0' * 64), 'cases_sha256'),
+            'cases unbound': (lambda s: {k: v for k, v in s.items() if k != 'cases_sha256'}, 'cases_sha256'),
+        }
+        for label, (tamper, message) in tampers.items():
+            with self.subTest(label=label):
+                code, result, err = self.run_check(rows, tamper=tamper)
+                self.assertEqual(code, 2, err)
+                self.assertIsNone(result)
+                self.assertIn(message, err)
+        self.assertEqual(self.run_check(rows)[0], 0)
 
     def test_other_functions_and_unbound_roots_do_not_count(self):
         code, _, err = self.run_check([case('value_match', 'value'), case('search_cap', 'value', search('capped'), 'other')])

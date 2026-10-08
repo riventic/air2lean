@@ -44,16 +44,84 @@ theorem Mem.SameThreads.singleThread {m m' : Mem} (h : m.SameThreads m') (hs : m
     m'.SingleThread := by
   unfold Mem.SingleThread; rw [h.current, h.clocks, h.footprint]; exact hs
 
-/-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. -/
+/-! ## The address of a new block
+
+`alloc` takes a fresh address or, under the opt-in reuse policy (`AllocPolicy.reuseAddr`, M05),
+a valid reused one (`Mem.reuseOk`). The separation-logic rules below hold for both: ownership
+and liveness are per block id, and the only address facts they give are the alignment of the new
+block and that its address range is clear of every live block (`Mem.newAddr_clear`). -/
+
+theorem Mem.reuseAddr?_ok {m : Mem} {kind : BlockKind} {size align A : Nat}
+    (h : m.reuseAddr? kind size align = some A) :
+    0 < A ∧ A % align = 0 ∧ A + size < m.nextAddr ∧ m.addrFree A size = true := by
+  unfold Mem.reuseAddr? at h
+  split at h
+  · split at h
+    · split at h
+      · cases h; simpa [Mem.reuseOk, and_assoc] using ‹m.reuseOk _ size align = true›
+      · cases h
+    · cases h
+  · split at h
+    · split at h
+      · cases h; simpa [Mem.reuseOk, and_assoc] using ‹m.reuseOk _ size align = true›
+      · cases h
+    · cases h
+  · cases h
+
+theorem Mem.newAddr_mod (m : Mem) (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+    m.newAddr kind size align % align = 0 := by
+  unfold Mem.newAddr
+  split
+  · exact (Mem.reuseAddr?_ok ‹_›).2.1
+  · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+
+theorem Mem.nextAddr_le_newNext (m : Mem) (kind : BlockKind) (size align : Nat) :
+    m.nextAddr ≤ m.newNext kind size align := by
+  unfold Mem.newNext
+  split
+  · exact Nat.le_refl _
+  · have := le_alignUp m.nextAddr align; omega
+
+theorem Mem.newAddr_lt_newNext (m : Mem) (kind : BlockKind) (size align : Nat) :
+    m.newAddr kind size align + size < m.newNext kind size align := by
+  unfold Mem.newAddr Mem.newNext
+  split
+  · exact (Mem.reuseAddr?_ok ‹_›).2.2.1
+  · omega
+
+/-- A block clear of every live block by `Mem.addrFree` is clear of every live cell. -/
+theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l : Loc} {c : Cell}
+    (hc : m.heap l = some c) : c.addr + c.size < A ∨ A + n < c.addr := by
+  obtain ⟨b, o⟩ := l
+  obtain ⟨blk, hblk, hl, -, rfl⟩ := Mem.heap_some hc
+  unfold Mem.addrFree at hf
+  rw [Array.all_eq_true] at hf
+  obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hblk
+  have := hf b hi
+  simp only [hl, Bool.not_true, Bool.false_or, Bool.or_eq_true, decide_eq_true_eq] at this
+  simp only
+  omega
+
+/-- The address range of a new block, one past its end included, is clear of every live block:
+above all of them for a fresh address, between them for a reused one. -/
+theorem Mem.newAddr_clear {m : Mem} (hA : m.AddrBelow) (kind : BlockKind) (size align : Nat)
+    {l : Loc} {c : Cell} (hc : m.heap l = some c) :
+    c.addr + c.size < m.newAddr kind size align ∨ m.newAddr kind size align + size < c.addr := by
+  unfold Mem.newAddr
+  split
+  · exact Mem.addrFree_cell (Mem.reuseAddr?_ok ‹_›).2.2.2 hc
+  · have := hA l c hc; have := le_alignUp m.nextAddr align; omega
+
+/-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. This
+holds for every address the block gets: the heap is per block id. -/
 theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
     (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       p.block = some m.blocks.size ∧ m'.blocks.size = m.blocks.size + 1 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m.SameThreads m' ∧
-      ∃ A, A = alignUp m.nextAddr align ∧ A % align = 0 ∧
+      ∃ A, A = m.newAddr kind size align ∧ A % align = 0 ∧
         bytesAt p A size kind (Array.replicate size .undef) h' := by
-  let A := alignUp m.nextAddr align
-  let nb : Block := { bytes := Array.replicate size .undef, align, kind, live := true, addr := A }
+  let A := m.newAddr kind size align
   let h' : Heap := fun l =>
     if l.1 = m.blocks.size ∧ 0 ≤ l.2 ∧ l.2 < 0 + size then some ⟨.undef, A, size, kind⟩ else none
   -- Every location of the new block is free in the old memory.
@@ -64,12 +132,14 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     exact Option.or_eq_none_iff.mp this.symm
   have hh' : ∀ x y, x ≠ m.blocks.size → h' (x, y) = none := by
     intro x y hx; simp [h', hx]
-  refine ⟨⟨some m.blocks.size, 0⟩, _, h', rfl, rfl, rfl, by simp, ?_, ?_, ?_, ?_, A, rfl, ?_, ?_⟩
+  refine ⟨⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align, h', rfl, rfl, rfl,
+    by simp [Mem.afterAlloc], ?_, ?_, ?_, ?_, A, rfl, ?_, ?_⟩
   · refine Heap.disjoint_union_left.mpr ⟨hd, fun ⟨x, y⟩ => ?_⟩
     by_cases hx : x = m.blocks.size
     · subst hx; right; exact (hfree y).2
     · left; exact hh' x y hx
   · funext ⟨x, y⟩
+    unfold Mem.afterAlloc
     rw [Mem.heap_push]
     by_cases hx : x = m.blocks.size
     · subst hx
@@ -84,18 +154,10 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     · right; exact hh' x y hx
   · -- `alloc` only changes `blocks` and `nextAddr`.
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · simp only [A, alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+  · exact m.newAddr_mod kind size align ha
   · refine ⟨m.blocks.size, rfl, Int.le_refl 0, fun l => ?_⟩
     simp only [h', Int.toNat_zero, Array.size_replicate]
     split <;> simp_all
-
-/-- The memory after `alloc`: the new block at `alignUp m.nextAddr align`. -/
-def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
-  { m with
-    blocks := m.blocks.push
-      { bytes := Array.replicate size .undef, align, kind, live := true,
-        addr := alignUp m.nextAddr align }
-    nextAddr := alignUp m.nextAddr align + size + 1 }
 
 theorem alloc_run_eq (m : Mem) (kind : BlockKind) (size align : Nat) :
     (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) :=
@@ -104,23 +166,26 @@ theorem alloc_run_eq (m : Mem) (kind : BlockKind) (size align : Nat) :
 theorem Mem.Seq.alloc {m : Mem} (hst : m.Seq) (kind : BlockKind) (size align : Nat) :
     (m.afterAlloc kind size align).Seq := by
   refine ⟨hst.single, fun l c hc => ?_⟩
-  have hle := le_alignUp m.nextAddr align
+  have h₁ := m.nextAddr_le_newNext kind size align
+  have h₂ := m.newAddr_lt_newNext kind size align
   unfold Mem.afterAlloc at hc ⊢
   rw [Mem.heap_push] at hc
   split at hc
   · split at hc
-    · cases hc; simp
+    · cases hc; simp only [Array.size_replicate]; omega
     · cases hc
   · have := hst.addr l c hc
     simp only; omega
 
+/-- `alloc` under every address policy: a new block id whose bytes nothing owned, at an aligned
+address `A` whose range is clear of every live block (`Mem.newAddr_clear`). -/
 theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
     (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hst : m.Seq) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size + 1 ∧
       ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' ∧
-        ∀ l c, m.heap l = some c → c.addr + c.size < A := by
+        ∀ l c, m.heap l = some c → c.addr + c.size < A ∨ A + size < c.addr := by
   obtain ⟨p, m', h', hr, h0, -, -, hd', hm', hdd, -, A, hAe, hA, hb⟩ :=
     alloc_run_core hd hm kind size align ha
   have e := hr.symm.trans (alloc_run_eq m kind size align)
@@ -128,9 +193,8 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
   obtain ⟨-, rfl⟩ := Prod.mk.inj (Except.ok.inj (Option.some.inj e))
   refine ⟨p, _, h', hr, h0, hd', hm', hdd, hst.alloc kind size align, by simp [Mem.afterAlloc], A,
     hA, hb, fun l c hc => ?_⟩
-  have := hst.addr l c hc
-  have := le_alignUp m.nextAddr align
-  omega
+  subst hAe
+  exact Mem.newAddr_clear hst.addr kind size align hc
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned) removes it from the heap. -/
 theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind}

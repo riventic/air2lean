@@ -79,6 +79,8 @@ structure RawInst where
   mask : Array ShuffleLane
   /-- `assembly`. -/
   asm : Option RawAsm
+  /-- `runtime_nav_ptr`: the global's entry in the `globals` table. -/
+  global : Option Nat := none
   unsupported : Bool
 
 /-- One case of a `switch_br`/`loop_switch_br`, before tag interpretation. -/
@@ -187,6 +189,13 @@ def parseTy (j : Json) : Except String Ty := do
     if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
     if (← trueMarker j "no_fields") then return .other name
+    -- `Io.Future(T)`: exactly `any_future: ?*Io.AnyFuture` then `result: T` (Zig 0.16.0).
+    if name.startsWith "Io.Future(" && name.endsWith ")" then
+      let fieldsJ ← (← j.getObjVal? "fields").getArr?
+      let names ← fieldsJ.mapM fun fj => do (← fj.getObjVal? "name").getStr?
+      unless names == #["any_future", "result"] do
+        throw s!"{name}: unexpected fields {names}"
+      return .future (← (← fieldsJ[1]!.getObjVal? "ty").getNat?)
     let layout ← (← j.getObjVal? "layout").getStr?
     let fieldsJ ← (← j.getObjVal? "fields").getArr?
     let fields ← fieldsJ.mapM fun fj => do
@@ -532,9 +541,10 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       unless (match p.constTy?.bind (types[·]?) with
         | some (.ptr "many" _ c) => types[c]? == types[child]?
         | _ => false) do throw s!"{fnName}: slice constant has an incompatible pointer"
+      -- The profile's exact `usize` width is checked with the normalized layouts (`Check.lean`).
       unless (match n.constTy?.bind (types[·]?) with
-        | some (.int false 64) => true | _ => false) do
-        throw s!"{fnName}: slice constant length is not a 64-bit unsigned integer"
+        | some (.int false 64) | some (.int false 32) => true | _ => false) do
+        throw s!"{fnName}: slice constant length is not a 32- or 64-bit unsigned integer"
       return .sliceConst tyId p n
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?
@@ -650,9 +660,12 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let asm ← match optField j "source" with
     | some _ => some <$> parseAsm fnName types j
     | none => pure none
+  let global ← match optField j "global" with
+    | some gj => some <$> gj.getNat?
+    | none => pure none
   let unsupported ← boolField j "unsupported"
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, unsupported }
+           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, global, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?

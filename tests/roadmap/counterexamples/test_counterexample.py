@@ -198,10 +198,14 @@ class Bundles(unittest.TestCase):
         for reason in sorted(CX.UNSOLVED_REASONS):
             for replay in ('verified', None):
                 self.assertEqual(CX.verdict(automation=reason, replay=replay)[0], 'unsolved')
-        for kind in ('search_cap', 'bounded_no_result', 'unspecified'):
+        for kind in ('search_cap', 'bounded_no_result', 'unspecified', 'unspecified_timer'):
             self.assertEqual(CX.verdict(kind=kind, replay='verified')[0], 'unsolved')
-        for status in ('search_cap', 'bounded_no_result', 'unspecified_exclusion', 'host_difference'):
+        for status in ('search_cap', 'bounded_no_result', 'unspecified_exclusion', 'unspecified_timer_exclusion',
+                       'host_difference'):
             self.assertEqual(CX.verdict(status=status, replay='verified')[0], 'unsolved')
+        # An unsupported timer keeps its own reason, apart from an unspecified result.
+        self.assertEqual(CX.verdict(kind='unspecified_timer')[:2], ('unsolved', 'unsupported_timer'))
+        self.assertEqual(CX.verdict(status='unspecified_exclusion')[:2], ('unsolved', 'unspecified_result'))
         for status in ('input_failure', 'native_harness_failure'):
             self.assertEqual(CX.verdict(status=status, replay='verified')[0], 'setup_failure')
         for status in ('value_match', 'error_return_match', 'panic_match'):

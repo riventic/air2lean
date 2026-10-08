@@ -6,8 +6,8 @@ Static checks (always):
     the harness;
   * no shipped source (ZigLean, Proofs, Air2Lean, tools, root modules) names `AsmHarness` or
     imports `tests`;
-  * the harness Lean files declare only `AsmHarness.*` namespaces and add no theorem, axiom,
-    compiler redirection, extern or `sorry`.
+  * the harness Lean files (and A01's tests/roadmap/asm-effects/Runner.lean) declare only
+    `AsmHarness.*` namespaces and add no theorem, axiom, compiler redirection, extern or `sorry`.
 
 With `--assurance REPORT` (scripts/assumptions.py output), also:
   * no audited declaration is an `AsmHarness` name or comes from a `tests` module;
@@ -48,8 +48,14 @@ def static_issues(root: Path = ROOT, harness: Path = HERE) -> list[str]:
         text = path.read_text()
         if "AsmHarness" in text or re.search(r"^\s*import\s+tests\b", text, re.M):
             issues.append(f"{path.relative_to(root)} refers to the asm harness or a tests module")
-    for name in HARNESS_LEAN:
-        text = (harness / name).read_text()
+    files = [harness / name for name in HARNESS_LEAN]
+    # A01's effect-contract runner is pasted into the same kind of program (asm-effects/harness.py).
+    effects = root / "tests/roadmap/asm-effects/Runner.lean"
+    if effects.is_file():
+        files.append(effects)
+    for path in files:
+        name = path.name if path.parent == harness else str(path.relative_to(root))
+        text = path.read_text()
         if FORBIDDEN_IN_HARNESS.search(text):
             issues.append(f"{name} declares a logical fact, redirection or sorry")
         namespaces = re.findall(r"^namespace\s+(\S+)", text, re.M)

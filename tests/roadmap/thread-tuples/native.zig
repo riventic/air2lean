@@ -22,3 +22,14 @@ test "group empty and mixed argument tuples on Zig 0.16" {
         try std.testing.expectEqual(@as(u32, 680), try source.groupMixed(threaded.io(), 10, 2));
     }
 }
+
+test "group mixed finishes its tasks when concurrent assignment fails on Zig 0.16" {
+    if (@hasDecl(std, "Io") and @hasDecl(std.Io, "Group")) {
+        // No concurrent capacity: `Group.concurrent` fails after `mixedWorker` was assigned.
+        var threaded: std.Io.Threaded = .init(std.heap.page_allocator, .{ .concurrent_limit = .nothing });
+        defer threaded.deinit();
+        for (0..64) |_| {
+            try std.testing.expectError(error.ConcurrencyUnavailable, source.groupMixed(threaded.io(), 10, 2));
+        }
+    }
+}

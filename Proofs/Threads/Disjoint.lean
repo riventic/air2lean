@@ -536,7 +536,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₅.main
   rw [hg₃] at h0; cases h0
   obtain ⟨hsz₁₅, r1₁₅, r2₁₅, k1₁₅, k2₁₅, hn₁₅⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
+  refine ⟨fun _ => ⟨by show 0 < 1; decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
     have hr := r1₁₅
     unfold KidRec at hr
     simp [Thread.joinValid, hr]⟩,
@@ -590,7 +590,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   obtain ⟨ph, hm, B', h0, -, hma₁₇, hsh⟩ := hi₁₇.main
   rw [hg₄] at h0; cases h0
   obtain ⟨hsz₁₇, r1₁₇, r2₁₇, k1₁₇, k2₁₇, hn₁₇⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
+  refine ⟨fun _ => ⟨by show 0 < 2; decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
     have hr := r2₁₇
     unfold KidRec at hr
     simp [Thread.joinValid, hr]⟩,

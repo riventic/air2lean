@@ -14,7 +14,7 @@ case "${AIR2LEAN_LOCAL_PARENT_KEEP_WORK:-0}" in
   *) rm -rf "$work"; echo 'KEEP_WORK must be 0 or 1' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/local-parent/test_harness.py
-lake build Air2Lean Air2Lean.Check Air2Lean.Emit ZigLean air2lean
+lake build Air2Lean Air2Lean.Check Air2Lean.Emit ZigLean ZigLean.Mem.Parent air2lean
 lake env lean tests/roadmap/local-parent/Proofs.lean
 lake env lean --run tests/roadmap/local-parent/Pipeline.lean "$work/generated"
 for source in "$work/generated/"*.lean; do lake env lean -R "$work/generated" "$source"; done

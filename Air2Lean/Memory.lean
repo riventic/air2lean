@@ -125,7 +125,7 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
 `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, and `dbg`. -/
 def valueOperands (op : Op) : Array Val :=
   match op with
-  | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
+  | .arg _ | .alloc | .runtimeNavPtr _ | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
   | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
@@ -266,7 +266,7 @@ def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : N
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr ..) | some .allocator | some .io => true
+  | some (.ptr ..) | some .allocator | some .io | some (.future _) => true
   | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
@@ -416,6 +416,7 @@ def memoryOp (op : Op) : Bool :=
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
+  | .runtimeNavPtr _ => true
   | .call (.func name ..) _ => modelledStdFn name
   | _ => false
 
@@ -464,19 +465,37 @@ def fnRefs (funcs : Array Func) : Array (String × String) :=
     | some (.func nm ..), some (.other tn) => if acc.contains (tn, nm) then acc else acc.push (tn, nm)
     | _, _ => acc
 
-/-- The function type name of the indirect callee `id` (a pointer to a function). -/
-def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
-  let i ← f.allInsts.find? (·.id == id)
-  let .ptr _ _ c ← f.types[i.ty]? | none
-  let child ← f.types[c]?
+/-- The function type name of the pointer type `ty`, if it points to a function. -/
+def fnPtrTyName? (types : Array Ty) (ty : TyId) : Option String := do
+  let .ptr _ _ c ← types[ty]? | none
+  let child ← types[c]?
   unless isFnTy child do none
   let .other tn := child | none
   pure tn
 
+/-- The function type name of the indirect callee `id` (a pointer to a function). -/
+def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
+  let i ← f.allInsts.find? (·.id == id)
+  fnPtrTyName? f.types i.ty
+
+/-- An indirect callee: an instruction, or a constant address (`ptrConst`). Every function
+pointer resolves through the one table of address-taken functions (`fnRefs`), whatever its
+origin (L11). -/
+def Val.isIndirectCallee : Val → Bool
+  | .inst _ | .ptrConst .. => true
+  | _ => false
+
+/-- The function type name of an indirect callee (`Val.isIndirectCallee`). -/
+def Func.calleeValFnTy? (f : Func) (callee : Val) : Option String :=
+  match callee with
+  | .inst id => f.calleeFnTy? id
+  | .ptrConst ty .. => fnPtrTyName? f.types ty
+  | _ => none
+
 /-- The functions that an indirect call in `f` can call (`fnRefs`). -/
 def Func.indirectCallees (f : Func) (refs : Array (String × String)) : Array String :=
   f.allInsts.flatMap fun i => match i.op with
-    | .call (.inst v) _ => match f.calleeFnTy? v with
+    | .call v _ => match f.calleeValFnTy? v with
       | some tn => refs.filterMap fun (t, nm) => if t == tn then some nm else none
       | none => #[]
     | _ => #[]
@@ -521,6 +540,20 @@ def ThreadFn.spawnArgs? : ThreadFn → Option Nat
   | .groupAsync | .groupConcurrent => some 2
   | _ => none
 
+/-- The position of the args tuple of any call that starts a task: a spawn (`spawnArgs?`) or
+`Io.async(io, f, args)`. -/
+def ThreadFn.taskArgs? : ThreadFn → Option Nat
+  | .futureAsync => some 1
+  | fn => fn.spawnArgs?
+
+/-- The field types of the args tuple `v` of a call in `f`. -/
+def Func.tupleFields? (f : Func) (v : Option Val) : Option (Array TyId) :=
+  (v.bind fun v => match v with
+    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+    | v => v.constTy?).bind fun t => match f.types[t]? with
+      | some (.tuple fs) => some fs
+      | _ => none
+
 /-- The spawn targets of `funcs`: each function that a `Thread.spawn` or an `Io.Group.async` runs,
 with all captured argument types in source order, in first-use order. -/
 def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
@@ -529,14 +562,24 @@ def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
     | .call (.func name _ (some sf)) args =>
       if let some k := (threadFn? name).bind (·.spawnArgs?) then
         if acc.any (·.1 == sf) then acc else
-        let argTys := ((args[k]? : Option Val).bind fun v => match v with
-          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-          | v => v.constTy?).bind fun t => match f.types[t]? with
-            | some (.tuple fs) => some fs
-            | _ => none
-        match argTys with
+        match f.tupleFields? (args[k]?) with
         | some fields => acc.push (sf, f, fields)
         | none => acc
+      else acc
+    | _ => acc
+
+/-- The future targets of `funcs`: each function that an `Io.async` runs, with its captured
+argument types in source order and the call's `Io.Future` result type, in first-use order
+(`docs/futures.md`). They are separate from `spawnTargets`: the task writes its result. -/
+def futureTargets (funcs : Array Func) : Array (String × Func × Array TyId × TyId) :=
+  funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
+    match i.op with
+    | .call (.func name _ (some sf)) args =>
+      if threadFn? name == some .futureAsync then
+        if acc.any (·.1 == sf) then acc else
+        match f.tupleFields? (args[1]?), f.types[i.ty]? with
+        | some fields, some (.future r) => acc.push (sf, f, fields, r)
+        | _, _ => acc
       else acc
     | _ => acc
 

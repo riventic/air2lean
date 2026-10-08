@@ -22,6 +22,11 @@ example : ¬ ∀ o : Nat → Nat, ∃ bound, ∀ fuel, bound ≤ fuel →
 example : ¬ Zig.Conc.Total.EventuallyReturns dispatch main mem0 (fun _ _ => True) :=
   not_eventuallyReturns
 
+-- P05 conditional concurrent termination: the premise is an explicit argument of the interface.
+example : Zig.Conc.Total.EventuallyReturnsUnder Cooperative dispatch main mem0 (fun _ _ => True) :=
+  idle_total_under
+example : ¬ ∀ o, Cooperative o := cooperative_not_all
+
 -- The worker runs the translated loop: one iteration is a load, then hint and yield on 0.
 example : worker = wLoop := worker_eq
 
@@ -41,3 +46,7 @@ example : worker = wLoop := worker_eq
 /-- info: 'IdleLoop.Client.progress_needs_premise' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms progress_needs_premise
+
+/-- info: 'IdleLoop.Client.idle_total_under' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms idle_total_under

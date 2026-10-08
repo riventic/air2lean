@@ -1,7 +1,8 @@
 # Separation proof tools
 
 Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`. Import
-`ZigLean.Sep.Total` for total-correctness rules. These are optional modules;
+`ZigLean.Sep.Total` for total-correctness rules and `ZigLean.Sep.Step` for the
+symbolic-execution tactics ([below](#symbolic-execution-steps-p01)). These are optional modules;
 existing generated-code imports and `Triple` keep their current meaning.
 
 `sep_normalize` rewrites assertion expressions with associativity, commutativity,
@@ -141,6 +142,67 @@ The optional-module build and all six proof-tool fixtures have passed kernel
 checking with the pinned Lean toolchain. These checks establish the stated model
 contracts and rejected proof attempts; they add no native/export qualification.
 
+## Symbolic execution steps (P01)
+
+Import `ZigLean.Sep.Step` (optional; not in the `ZigLean` umbrella) to execute generated
+`MemM`/`MM` code step by step against a `Triple` or `TotalTriple` goal. Each tactic elaborates
+to applications of ordinary lemmas in that module, built from `bind`, `frame`, `conseq`, `lift`,
+`ex` and the existing load/store/array rules. The kernel checks every generated step; the
+tactics add no axiom and run no decision procedure.
+
+| Tactic | Effect |
+|---|---|
+| `sep_unfold [e, …]` | Unfolds the named definitions in the command only, pushes `StateT.run` through binds, `get`, `modify`, `callM` and `StateT.lift`, and flattens binds. It unfolds the comparison helpers (`Zig.lt`, …) and decides branches with the given facts, such as a bound or an overflow fact `Zig.add false x 1 = pure (x + 1)`. |
+| `sep_step [e, …]` | Executes the first command of `c >>= f`, or a lone `c`. For `load`/`store` at `p`, it finds `pts p a ?v` in the precondition. If there is none and the address is `q.elem size i`, it finds `arr q ?xs` instead. It frames the remaining atoms, applies the load/store lemma and continues with `f v`, normalized by `sep_unfold [e, …]`. A store to an array gives `arr q (xs.set i w)`. The array bound `i.toNat < xs.length` is tried with `assumption`/`omega`. An unproved bound stays a goal. |
+| `sep_step [e, …] using rule` | Applies a supplied contract for the command, such as a function triple or a representation lemma like `Lists.node_next_total`. Its precondition atoms are matched, and the rest is the frame. A postcondition `⌜r = v⌝ ∗ P` continues with `f v`. Otherwise the result is introduced, followed by its pure facts and witnesses. |
+| `sep_steps [e, …] using r₁, …` | Repeats `sep_step` while a built-in rule or one of the `rᵢ` applies. |
+| `sep_intro x h …` | Moves `⌜φ⌝` atoms and `Assn.ex` witnesses of the precondition into the context, using the given names in order. An unnamed equation with a local variable on one side is substituted. |
+| `sep_ret w …` | On `pure v`, proves `∀ h, P h → Q v h`. It instantiates existentials of `Q` with the witnesses `w …` and turns pure atoms into goals, closing them by `rfl`/`assumption` when possible. The spatial rest must equal `P` up to AC and `emp`. Otherwise it leaves `∀ h, P h → Q v h`. |
+| `sep_close hp w …` | The same entailment step on a goal `Q h` with `hp : P h`. |
+| `sep_split p k` | Splits `arr p xs` in the precondition at element `k` (`arr_split`). The bound and ABI divisibility are side conditions. |
+
+`TotalTriple.step_run` turns a total triple of one loop-body run into the run-level step
+premise of `loop_sep_ghost`/`loop_sep_spec`. Existing step lemmas therefore keep their
+statements and can be proved at the triple level.
+
+Frame inference matches atoms by definitional equality. It is not a search through
+`emp`-padded or rewritten forms; such atoms need an explicit rewrite such as
+`Lists.list_cons_eq` first. The tactics do not synthesize loop invariants, measures, ranges
+or existential witnesses, and they do not prove arithmetic beyond the `omega` attempt on bounds.
+Range and loop-invariant synthesis remain outside P01.
+
+The following proofs were re-proved with these tactics. Line counts are non-blank, non-comment
+proof lines. Statements are unchanged.
+
+| Proof | Before | After |
+|---|---|---|
+| `bump_spec` (`Proofs/Slices/Sep.lean`, pointer load/add/store/load) | 11 | 4 |
+| `reverse_step` (`Proofs/Slices/Sep.lean`, two indexed loads and stores in a `u32` slice) | 64 | 52 |
+| `Lists.reverse_step` (`Proofs/Lists/Sep.lean`, in-place list reversal step) | 28 | 19 |
+| `Lists.freeAll_step` (`Proofs/Lists/Sep.lean`, read `next`, then free the node) | 19 | 16 |
+| `generated_at_array` → `at_array_steps` (`StepClients.lean`) | 15 | 3 |
+| `generated_bumpAt_array` → `bumpAt_array_steps` (`StepClients.lean`) | 51 | 3 |
+| the composition of both clients (`StepClients.lean`) | 18 | 3 |
+| node triples `node_next_total`, `node_set_next_total`, `node_free_total`, `list_cons_eq` (new, shared) | — | 10 |
+| total | 206 | 110 |
+
+The reduction is 47% overall. Separation bookkeeping (memory threading, disjointness, frame
+heaps, run equations) disappears entirely. What remains in `reverse_step` is the list-index
+arithmetic of the invariant. `ArrayClients.lean` keeps its manual proofs as evidence for the
+reassembly interface; `StepClients.lean` proves the same statements with the tactics.
+
+`tests/roadmap/proof-tools/Steps.lean` checks the following:
+
+- framed `pts` and `arr` steps in partial and total form;
+- a bound left visible as a goal;
+- `sep_split`, caller rules with existential/pure postconditions, `sep_intro` naming, and a
+  generated-style `MM` body.
+
+It also rejects a missing points-to, a dropped frame, a store claiming the old value, a wrong
+array neighbor, and a rule for a different command. Run it after
+`lake build ZigLean.Sep.Step Proofs.Slices.Gen` with
+`lake env lean tests/roadmap/proof-tools/Steps.lean` (and `StepClients.lean`).
+
 ## Loop templates and range conversions
 
 Import `ZigLean.Sep.LoopTemplate` for the invariant/measure template and
@@ -239,3 +301,24 @@ to CPU time, cache behavior, instruction counts, or a native allocator's memory 
 Such a claim needs a separate calibration argument, which this layer does not
 provide. The counts cover only successful runs: a panic or divergence has no
 `LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
+
+### Resource-bounded total triples (P05)
+
+`ZigLean.Sep.Bounded` defines `TotalTripleWithin B P body again s Q`: from every framed
+precondition, the loop `loop body again` exits with `Q` after at most `B` body runs (a
+`LoopRuns` witness). `toTotal` gives the total triple; the bound is extra information.
+`count_le` applies the bound to the loop's single run, because the body is deterministic.
+The rules are `mono` (a larger bound is weaker), `conseq` and `frame`. `step` composes one
+body run (a `TotalTriple` of the body) with a bounded rest and adds one to the bound. `exit`
+is the one-run case. `then_total` composes a bounded loop with a total continuation.
+`of_ghost` is `TotalTriple.loop_ghost` with the bound `n + 1`. `not_within_of_count` and
+`not_within_of_stuck` refute a bound from an admissible input. A run with more body runs
+refutes it, and so does a loop with no counted run. So divergence cannot satisfy it
+vacuously.
+
+`Proofs/Lists/Bounded.lean` proves `sum_loop_within`: the generated `sum` loop over
+`xs.length` items exits within `xs.length + 1` body runs with the sum. `sum_loop_total` is
+the total triple it implies, and `sum_total` is the function-level total triple for `sum`.
+`sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
+count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
+Proofs.Lists.Bounded`.

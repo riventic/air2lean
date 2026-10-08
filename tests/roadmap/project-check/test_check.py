@@ -1,5 +1,6 @@
 """Offline I03 project check regressions: stub translator, Lake and audit; real guard and claims."""
 import copy
+import fcntl
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
@@ -335,11 +337,83 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(self.run_check('taken')[0].returncode, 2)
         self.assertEqual(self.calls(), [])
 
+    def test_busy_lock_fails_unless_waited_for(self):
+        self.lock.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock.open('a') as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            result, record = self.run_check('busy')
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(record['reproducible']['stages']['build']['outcome'], 'lock_busy')
+            releaser = threading.Timer(1.0, fcntl.flock, (held, fcntl.LOCK_UN))
+            releaser.start()
+            try:
+                result, record = self.run_check('waited', '--lock-wait', '60')
+            finally:
+                releaser.cancel()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(record['status'], 'reproduced')
+        self.assertEqual(self.compare(self.out / 'waited/record.json', self.out / 'waited/record.json').returncode, 0)
+        self.assertEqual(self.run_check('negative', '--lock-wait', '-1')[0].returncode, 2)
+
     def test_compare_rejects_non_records(self):
         other = self.out / 'x.json'
         other.parent.mkdir(parents=True)
         other.write_text(json.dumps({'schema': 1, 'kind': 'air2lean-project-evidence'}))
         self.assertEqual(self.compare(other, other).returncode, 2)
+
+
+def _load_project():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('air2lean_project_check_compare', SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+project = _load_project()
+
+
+class CompareRecordsTests(unittest.TestCase):
+    """`compare_records` in process: equal reproducible sections reproduce only if both runs passed."""
+
+    def write(self, directory, name, status, toolchain='leanprover/lean4:v4.34.0'):
+        path = Path(directory) / name
+        path.write_text(json.dumps({'schema': project.SCHEMA, 'kind': project.RECORD_KIND, 'status': status,
+                                    'reproducible': {'lean_toolchain': toolchain, 'inputs': {}},
+                                    'host': {'platform': {'system': name}}}))
+        return path
+
+    def test_failed_record_with_equal_sections_is_not_reproduced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            passed = self.write(directory, 'a.json', 'reproduced')
+            self.assertEqual(project.compare_records(passed, self.write(directory, 'b.json', 'reproduced'))['status'],
+                             'reproduced')
+            result = project.compare_records(passed, self.write(directory, 'c.json', 'failed'))
+            self.assertEqual((result['status'], result['differences']), ('not_reproduced', []))
+            other = project.compare_records(passed, self.write(directory, 'd.json', 'reproduced', 'v4.0.0'))
+            self.assertEqual([d['path'] for d in other['differences']], ['reproducible.lean_toolchain'])
+
+
+class SecondMachineScriptTests(unittest.TestCase):
+    """scripts/second-machine.sh rejects bad arguments before touching Docker or Git."""
+    SCRIPT = SCRIPT.with_name('second-machine.sh')
+
+    def run_script(self, *args):
+        return subprocess.run(['bash', str(self.SCRIPT), *args], capture_output=True, text=True, timeout=30)
+
+    def test_arguments(self):
+        self.assertEqual(self.run_script('--help').returncode, 0)
+        for args in (('--bogus',), ('--platform', 'linux/riscv64'), ('--rev',),
+                     ('--compare', '/nonexistent/record.json')):
+            with self.subTest(args=args):
+                self.assertEqual(self.run_script(*args).returncode, 2)
+
+    def test_elan_pins_cover_container_architectures(self):
+        toml = SCRIPT.parents[1] / 'zig-patch/toml-get.sh'
+        for table in ('[ci.elan]', '[ci.elan-aarch64]'):
+            with self.subTest(table=table):
+                sha = subprocess.run([str(toml), table, 'sha256'], capture_output=True, text=True, check=True).stdout
+                self.assertRegex(sha.strip(), r'^[0-9a-f]{64}$')
 
 
 if __name__ == '__main__':

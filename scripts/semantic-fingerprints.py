@@ -3,8 +3,9 @@
 
 `air2lean ... --source-map-json Gen.source-map.json` writes a sidecar with one canonical,
 renumbering-invariant AIR body per function (`docs/stable-generation.md`). This script
-hashes each body with the checked profile metadata and translator options, then folds in
-callee fingerprints over the call graph. Mutually recursive functions share one
+hashes each body with the checked profile metadata, translator options and the translator
+revision (a digest of the translator's own sources), then folds in callee fingerprints over
+the call graph. A translator (emitter) change therefore invalidates every fingerprint. Mutually recursive functions share one
 strongly connected component digest, so a change anywhere in a cycle invalidates
 the whole cycle and every caller.
 
@@ -21,9 +22,9 @@ import re
 from pathlib import Path
 import sys
 
-SIDECAR = "air2lean-source-map-v1"
-INDEX = "air2lean-semantic-fingerprint-v1"
-COMPARISON = "air2lean-proof-interface-comparison-v1"
+SIDECAR = "air2lean-source-map-v2"
+INDEX = "air2lean-semantic-fingerprint-v2"
+COMPARISON = "air2lean-proof-interface-comparison-v2"
 FIELDS = {"source", "air_name", "air_file", "definition", "proof_api", "callees", "canonical", "lines"}
 
 sys.dont_write_bytecode = True  # importing the sibling script must not leave __pycache__
@@ -40,12 +41,31 @@ def digest(value):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def translator_revision(translator):
+    """Recompute the translator revision (`Air2Lean/Revision.lean`) from its module digests."""
+    listing = translator["lean"] + "\n" + "".join(f"{m} {h}\n" for m, h in translator["modules"])
+    return hashlib.sha256(listing.encode("utf-8")).hexdigest()
+
+
+def valid_translator(translator):
+    hexdigest = re.compile(r"[0-9a-f]{64}")
+    return (isinstance(translator, dict) and set(translator) == {"lean", "revision", "modules"} and
+            isinstance(translator["lean"], str) and isinstance(translator["revision"], str) and
+            isinstance(translator["modules"], list) and translator["modules"] and
+            all(isinstance(m, list) and len(m) == 2 and all(isinstance(x, str) for x in m) and
+                hexdigest.fullmatch(m[1]) for m in translator["modules"]) and
+            [m for m, _ in translator["modules"]] == sorted({m for m, _ in translator["modules"]}) and
+            translator_revision(translator) == translator["revision"])
+
+
 def load_sidecar(path, generated=None):
     doc = parse_json(Path(path).read_text(encoding="utf-8"))
     if (not isinstance(doc, dict) or doc.get("format") != SIDECAR or
-            set(doc) != {"format", "namespace", "metadata", "options", "functions"} or
+            set(doc) != {"format", "namespace", "metadata", "options", "translator", "functions"} or
             not isinstance(doc["functions"], list)):
         raise ValueError(f"{path}: not an {SIDECAR} sidecar")
+    if not valid_translator(doc["translator"]):
+        raise ValueError(f"{path}: malformed or inconsistent translator revision")
     seen = set()
     for record in doc["functions"]:
         if (not isinstance(record, dict) or set(record) != FIELDS or
@@ -102,7 +122,8 @@ def components(nodes, edges):
 
 def fingerprints(doc):
     """`source -> entry` with local, component and call-graph fingerprints."""
-    context = digest(dict(format=INDEX, metadata=doc["metadata"], options=doc["options"]))
+    context = digest(dict(format=INDEX, metadata=doc["metadata"], options=doc["options"],
+                          translator=doc["translator"]["revision"]))
     records = {r["source"]: r for r in doc["functions"]}
     local = {s: digest(dict(context=context, canonical=r["canonical"])) for s, r in records.items()}
     edges = {s: sorted(set(c for c in r["callees"] if c in records)) for s, r in records.items()}
@@ -131,13 +152,14 @@ def interface(doc, entry):
 
 def index(doc):
     entries = fingerprints(doc)
-    return dict(format=INDEX, namespace=doc["namespace"],
+    return dict(format=INDEX, namespace=doc["namespace"], translator=doc["translator"]["revision"],
                 functions=[entries[s] for s in sorted(entries)])
 
 
 def compare(old, new):
     before, after = fingerprints(old), fingerprints(new)
-    report = dict(format=COMPARISON, unaffected=[], invalidated=[], renamed=[], added=[], removed=[])
+    report = dict(format=COMPARISON, unaffected=[], invalidated=[], renamed=[], added=[], removed=[],
+                  translator_changed=old["translator"]["revision"] != new["translator"]["revision"])
     for source in sorted(set(before) | set(after)):
         if source not in after:
             report["removed"].append(source)
