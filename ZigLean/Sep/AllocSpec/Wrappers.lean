@@ -29,6 +29,14 @@ loads and the indirect calls reduce to `vt.*`).
 constant without a block), else the granted region.
 -/
 
+/-- Close an assertion goal from a hypothesis with the same separating conjuncts. -/
+macro "sep_from " h:ident : tactic =>
+  `(tactic| first
+    | exact $h
+    | (sep_normalize at $h:ident ⊢; exact $h)
+    | (sep_normalize at $h:ident; exact $h)
+    | (sep_normalize; exact $h))
+
 namespace Zig
 
 open Assn
@@ -174,7 +182,7 @@ theorem keepsPrefix_copy (bs bn : Array Byte) :
       Array.extract_eq_self_of_le hle]
     simpa using extract_writeBytes bn 0 bs (by omega)
   · have hx : (bs.extract 0 bn.size).size = bn.size := by simp; omega
-    rw [Nat.min_eq_left hle, writeBytes_all hx, Array.extract_eq_self_of_le (by simp), hx]
+    rw [Nat.min_eq_left hle, writeBytes_all hx, Array.extract_eq_self_of_le (by rw [hx]; exact hle), hx]
 
 theorem allocBytes_spec (h : AllocSpec L vt ctx I) (k : Nat) (n ra : BitVec 64) (hk : k < 64) :
     L.T I.own (allocBytes vt ctx k n ra) (allocResult I k n.toNat) := by
@@ -461,10 +469,11 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
               (h.free ⟨old.ptr, byteLen size old⟩ k ra
                 (Array.replicate (byteLen size old).toNat .undef) hk (by simp) (by simp; omega)))
               fun hh hp => ?_) fun _ => L.ret' _ fun hh hp => ?_
-            · unfold granted
-              rw [Array.size_replicate]
-              rw [← eo] at hp
-              sep_normalize at hp ⊢; exact hp
+            · have et : I.tok old.ptr (byteLen size old).toNat k = I.tok old.ptr bs.size k := by
+                rw [eo]
+              unfold granted
+              rw [Array.size_replicate, et]
+              sep_from hp
             · have hw : (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))).size = bn.size :=
                 writeBytes_size _ _ _ (by simp; omega)
               refine sep_lift.mpr ⟨rfl, sep_ex_right.mpr ⟨_, sep_lift_right.mpr
@@ -473,4 +482,4 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
               rw [owned_pos (by rw [hw, hbn]; omega)]
               unfold granted
               rw [hw]
-              sep_normalize at hp ⊢; exact hp
+              sep_from hp

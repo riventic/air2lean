@@ -33,6 +33,9 @@ theorem ptrAddr_regionIn {q : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : A
 
 namespace Bump
 
+theorem alignUp_mod_pow (n k : Nat) : alignUp n (2 ^ k) % 2 ^ k = 0 := by
+  simp only [alignUp, Nat.pos_iff_ne_zero.mp (Nat.two_pow_pos k), ↓reduceIte, Nat.mul_mod_left]
+
 /-- Bytes the allocator has given up (padding, leaked regions): any heap. -/
 def junk : Assn := fun _ => True
 
@@ -82,7 +85,7 @@ theorem state_absorb {ctx buf : Ptr} {e A S : Nat} {K : BlockKind} {tail : Array
   unfold state at hs ⊢
   have h2 : (pts ctx 8 buf ∗ (pts (ctx.add 8) 8 (BitVec.ofNat 64 e) ∗
       (regionIn (buf.add (e : Int)) A S K 1 tail ∗ (G ∗ junk)))) h := by
-    sep_normalize at hs ⊢; exact hs
+    sep_from hs
   exact sep_mono (fun _ x => x) (sep_mono (fun _ x => x) (sep_mono (fun _ x => x)
     (fun _ _ => trivial))) h2
 
@@ -131,7 +134,7 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
   refine TotalTriple.bind (TotalTriple.conseq (TotalTriple.frame
     (R := pts (ctx.add 8) 8 (BitVec.ofNat 64 e) ∗ (pts ctx 8 b' ∗ junk))
     (ptrAddr_regionIn (q := b'.add (e : Int)) (A := A) (S := S) (K := K) (a := 1) hpos))
-    (fun h hp => by sep_normalize at hp ⊢; exact hp) (fun _ _ h => h)) fun addr => ?_
+    (fun h hp => by sep_from hp) (fun _ _ h => h)) fun addr => ?_
   refine TotalTriple.conseq ?_ (fun h hp => sep_assoc hp) (fun _ _ h => h)
   refine TotalTriple.lift fun ha => ?_
   subst ha
@@ -139,14 +142,14 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
   have haddr : ((A : Int) + (b'.add (e : Int)).off).toNat = A + (b'.add (e : Int)).off.toNat := by
     simp [Ptr.add]; omega
   split
-  · exact Logic.ret' Logic.total _ fun h hp => back h (by unfold state; sep_normalize at hp ⊢; exact hp)
+  · exact Logic.ret' Logic.total _ fun h hp => back h (by unfold state; sep_from hp)
   rename_i hfit2
   -- store the new end index
   refine TotalTriple.bind (TotalTriple.conseq (TotalTriple.frame
     (R := regionIn (b'.add (e : Int)) A S K 1 tail ∗ (pts ctx 8 b' ∗ junk))
     (TotalTriple.store (p := ctx.add 8) (a := 8) (v := BitVec.ofNat 64 e) u64_size
       (BitVec.ofNat 64 (e + padding ((A : Int) + (b'.add (e : Int)).off) k + len.toNat))))
-    (fun h hp => by sep_normalize at hp ⊢; exact hp) (fun _ _ h => h)) fun _ => ?_
+    (fun h hp => by sep_from hp) (fun _ _ h => h)) fun _ => ?_
   refine Logic.ret' Logic.total _ fun h hp => ?_
   -- carve the free bytes: padding (junk), the new region, the new free bytes
   generalize hpd : padding ((A : Int) + (b'.add (e : Int)).off) k = pad at hp hfit2 ⊢
@@ -154,7 +157,7 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
     rw [← hpd, padding, haddr]
     have := le_alignUp (A + (b'.add (e : Int)).off.toNat) (2 ^ k)
     rw [Nat.add_sub_cancel' this]
-    exact alignUp_mod _ _ (Nat.two_pow_pos k)
+    exact alignUp_mod_pow _ _
   have hfit3 : pad + len.toNat ≤ tail.size := by omega
   have e3 : e + (pad + len.toNat) = e + pad + len.toNat := by omega
   have hp2 := sep_mono (fun _ x => x) (sep_mono (fun _ x => by
@@ -167,11 +170,14 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
         (regionIn (b'.add ((e : Nat) : Int)) A S K 1 (tail.extract 0 pad) ∗ junk)))) ∗
       regionIn (b'.add ((e + pad : Nat) : Int)) A S K (2 ^ k)
         ((tail.extract pad tail.size).extract 0 len.toNat)) h := by
-    sep_normalize at hp2 ⊢; exact hp2
-  refine sep_mono (fun _ x => own_intro (e := e + pad + len.toNat) ?_ ?_)
+    sep_from hp2
+  refine sep_mono (fun _ x => own_intro (e := e + pad + len.toNat) (A := A) (S := S) (K := K)
+      (tail := (tail.extract pad tail.size).extract len.toNat (tail.extract pad tail.size).size)
+      ?_ ?_)
     (fun _ x => ⟨(tail.extract pad tail.size).extract 0 len.toNat,
-      sep_lift.mpr ⟨by simp; omega, sep_emp.mpr (region_of_regionIn x)⟩⟩) hp3
-  · exact ⟨by omega, by simp; omega, hcap, hoff⟩
+      sep_lift.mpr ⟨by simp only [Array.size_extract]; omega,
+        sep_emp.mpr (Region.region_of_regionIn x)⟩⟩) hp3
+  · exact ⟨by omega, by simp only [Array.size_extract]; omega, hcap, hoff⟩
   · unfold state
     exact sep_mono (fun _ y => y) (sep_mono (fun _ y => y) (sep_mono (fun _ y => y)
       (fun _ _ => trivial))) x
@@ -212,8 +218,9 @@ theorem granted_cell {I : AllocInv} {p : Ptr} {k n : Nat} {bs : Array Byte} {h :
   obtain ⟨hs, hg⟩ := sep_lift.mp hg
   obtain ⟨h₁, h₂, -, rfl, ⟨A, S, K, -, -, b, hpb, -, hl⟩, -⟩ := hg
   refine ⟨b, hpb, ?_⟩
+  have hpos : 0 < bs.size := by omega
   rw [Heap.union_apply, hl]
-  simp; omega
+  simp [hpos]
 
 /-- No invariant that holds in some memory makes the static allocator satisfy `AllocSpec`:
 the second `alloc` would grant bytes that the first grant still owns. -/
@@ -236,8 +243,10 @@ theorem not_allocSpec (p ctx : Ptr) (I : AllocInv)
   obtain ⟨b', hpb', hc₂⟩ := granted_cell hg₂ (by decide)
   rw [hpb] at hpb'; cases hpb'
   rcases hd₂ (b, p.off.toNat) with e | e
-  · simp [e] at hc₂
-  · simp [e] at hc₁
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at e
+    exact hc₂ e.2
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at e
+    exact hc₁ e.1
 
 end Static
 
