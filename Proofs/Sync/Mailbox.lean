@@ -782,6 +782,383 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
   | work p => cases hg
   | writer p => cases hg
 
+/-! ## `main` -/
+
+theorem sem_size : (Enc.encode semZ).size = 24 := by decide +kernel
+theorem sem_c : (Enc.encode semZ).extract 0 8 = Enc.encode (0 : BitVec 64) := by decide +kernel
+theorem sem_w : (Enc.encode semZ).extract 8 12 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_s : (Enc.encode semZ).extract 12 16 = Enc.encode (0 : BitVec 32) := by decide +kernel
+theorem sem_e : (Enc.encode semZ).extract 16 20 = Enc.encode (0 : BitVec 32) := by decide +kernel
+
+/-- `main` before its spawn, with the message cells `h`. -/
+def gPre (h : Heap) : Gh := gK h .pre
+
+/-- The start: no thread. -/
+def G0 : ThreadId → Gh := fun _ => (⟨.gone, Heap.empty, Heap.empty⟩, .none, .none)
+
+/-- The mailbox in three parts, after `main`'s stores: the semaphore, `a = 0`, `b = 0`. -/
+def Parts (A : Nat) : Assn :=
+  bytesAt cPtr A 32 .stack (Enc.encode semZ) ∗
+    (bytesAt (cPtr.add 24) A 32 .stack (Enc.encode (0 : BitVec 32)) ∗
+      bytesAt ((cPtr.add 24).add 4) A 32 .stack (Enc.encode (0 : BitVec 32)))
+
+theorem allLe_one {m : Mem} {c : VClock} (h1 : m.threads.size = 1)
+    (h : VClock.le c (m.clocks[0]!) = true) : AllLe m c := fun u hu => by
+  rw [h1] at hu
+  have : u = 0 := by omega
+  subst this; exact h
+
+/-- Before the spawn: `main` alone owns the mailbox. The semaphore starts with no permit: its
+mutex owns the permit count; `main` keeps the message cells; the rest belongs to no thread. -/
+theorem inv_pre {m : Mem} {A : Nat} {h : Heap} (ho : Owned (upd (fun _ => Heap.empty) 0 h) m)
+    (hp : Parts A h) (hA : A % 8 = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
+    (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
+    ∃ hM, Msg 0 hM ∧ proto.inv (upd G0 0 (gPre hM)) m := by
+  obtain ⟨hS, h2, dS, rfl, hs, ha, hb, dAB, rfl, hwa, hwb⟩ := hp
+  obtain ⟨hC, hR1, dC, rfl, hC₁, hR1'⟩ := bytesAt_split hs (k := 8) (by rw [sem_size]; decide)
+  obtain ⟨hW, hCo, dW, rfl, hW₁, -⟩ := bytesAt_split hR1' (k := 4) (by simp [sem_size])
+  have hsub := ho.sub 0; rw [upd_self] at hsub
+  have h1 : m.threads.size = 1 := by rw [hth]; rfl
+  have sS : (hC ∪ (hW ∪ hCo)).Sub m.heap := Heap.sub_union_left.trans hsub
+  -- block 0 and its bytes
+  obtain ⟨blk, hblk, hl, hA', hS', hK', hxs⟩ := bytesAt_blk (m := m) hs sS rfl
+    (by rw [sem_size]; decide)
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hword : ∀ o, o + 4 ≤ 24 → blk.bytes.extract o (o + 4) =
+      (Enc.encode semZ).extract o (o + 4) := by
+    intro o h2
+    have := congrArg (fun a => Array.extract a o (o + 4)) hxs
+    simp only [Array.extract_extract] at this
+    rw [← this]
+    simp only [show cPtr.off.toNat = 0 from rfl, sem_size]
+    congr 1 <;> omega
+  -- each access to a byte of `main`'s part happened before `main`
+  have hown : ∀ e ∈ m.footprint, e.Touches ((hC ∪ (hW ∪ hCo)) ∪ (ha ∪ hb)) →
+      AllLe m e.clock := fun e he ht => allLe_one h1 (by
+    have := ho.owns 0 (by rw [h1]; decide) e he (.inl (by rw [upd_self]; exact ht)); exact this)
+  have hcellS : ∀ x, x < 24 → ((hC ∪ (hW ∪ hCo)) ∪ (ha ∪ hb)) (0, x) ≠ none :=
+    fun x hx => Heap.sub_union_left.ne
+      (bytesAt_in hs rfl (by simp [cPtr]) (by simp [cPtr, sem_size]; omega))
+  have hwi : ∀ W : Word 32 4, W.b = 0 → W.o % 4 = 0 → 12 ≤ W.o → W.o + 4 ≤ 20 →
+      (Enc.encode semZ).extract W.o (W.o + 4) = Enc.encode (0 : BitVec 32) →
+      W.Ok m ∧ (W.hist m).size = 1 ∧ (W.hist m)[0]!.Val (0 : BitVec 32) :=
+    fun W hb h4 h1' h2' he =>
+    Sem.word_init hb hblk hl (by omega) (by rw [hA']; omega) hK' hat
+      (by rw [hword W.o (by omega), he]; exact intOfBytes_rmw 0)
+      (fun e he' hh => hown e he' (Word.touches_of hh fun x a b => by
+        rw [hb]; exact hcellS x (by omega)))
+  obtain ⟨hwsOk, hwsz, hwsv⟩ := hwi S.WS rfl (by decide) (by decide) (by decide) sem_s
+  obtain ⟨hweOk, hwez, -⟩ := hwi S.WE rfl (by decide) (by decide) (by decide) sem_e
+  have hno : ∀ i l, ¬ S.WE.Loc m i l := fun i l hl => by
+    have := (Word.loc_get hl).1; rw [hat] at this; simp at this
+  have hE0 : (S.WE.hist m)[0]!.clock = #[] := by rw [Word.hist_none hno]; rfl
+  have hcellW : ∀ x, 8 ≤ x → x < 8 + 4 → hW (0, x) ≠ none := fun x h1 h2 =>
+    bytesAt_in hW₁ rfl (by simp [cPtr, Ptr.add]; omega)
+      (by simp [cPtr, Ptr.add, sem_size]; omega)
+  have h0 : S.L.U32 m 0 := by
+    show (intOfBytes 32 (curBytes m 0 8 4)).run = _
+    unfold curBytes; rw [hblk]
+    simp only [Option.map_some, Option.getD_some]
+    rw [hword 8 (by decide), sem_w]
+    exact intOfBytes_rmw 0
+  -- `main` keeps the message; the mutex owns the permit count
+  obtain ⟨dCW, -⟩ := Heap.disjoint_union_right.mp dC
+  obtain ⟨dCM, dWCoM⟩ := Heap.disjoint_union_left.mp dS
+  obtain ⟨dWM, -⟩ := Heap.disjoint_union_left.mp dWCoM
+  have hsub' : ((ha ∪ hb) ∪ (hC ∪ hW)).Sub ((hC ∪ (hW ∪ hCo)) ∪ (ha ∪ hb)) := by
+    refine Heap.union_sub (Heap.sub_union_right dS) (Heap.union_sub ?_ ?_)
+    · exact Heap.sub_union_left.trans Heap.sub_union_left
+    · exact (Heap.sub_union_left.trans (Heap.sub_union_right dC)).trans Heap.sub_union_left
+  have ho' := ho.shrink (t := 0) (by rw [upd_self]; exact hsub')
+  rw [upd_upd] at ho'
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 (gPre (ha ∪ hb)) u = G0 u := fun u h => upd_ne _ _ h
+  have hjt : joinedB m 0 = false := rfl
+  have hpC : pts S.ptr 8 (0 : BitVec 64) hC :=
+    ⟨A, 32, .stack, _, by simp [S, Sem.ptr]; omega, by rw [sem_c]; exact LawfulEnc.size_encode _,
+      by rw [sem_c]; exact LawfulEnc.decode_encode _, hC₁, by decide⟩
+  have hM : Msg 0 (ha ∪ hb) := by
+    rw [Msg0]
+    exact ⟨ha, hb, dAB, rfl,
+      ⟨A, 32, .stack, Enc.encode (0 : BitVec 32), by simp [aPtr, cPtr, Ptr.add]; omega, enc_u32 0,
+        LawfulEnc.decode_encode _, hwa, by decide⟩,
+      ⟨A, 32, .stack, Enc.encode (0 : BitVec 32), by simp [bPtr, cPtr, Ptr.add]; omega, enc_u32 0,
+        LawfulEnc.decode_encode _, hwb, by decide⟩⟩
+  have hav0 : avail (XG (upd G0 0 (gPre (ha ∪ hb)))) = false := rfl
+  have hR : S.L.R (upd G0 0 (gPre (ha ∪ hb))) hC := by
+    change (pts S.ptr 8 (if avail (XG (upd G0 0 (gPre (ha ∪ hb)))) then (1 : BitVec 64) else 0) ∗
+      (if avail (XG (upd G0 0 (gPre (ha ∪ hb)))) then Msg 2 else emp)) hC
+    rw [hav0]
+    exact ⟨hC, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty hC).symm, hpC, rfl⟩
+  refine ⟨ha ∪ hb, hM, Inv.make (t := 0) (hL := hC) (hW := hW) ho' hjt (fun u hu => ?_)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; exact Heap.disjoint_union_right.mpr ⟨dCM.symm, dWM.symm⟩)
+    dCW (fun u => ?_) (fun u => ?_) hR hcellW
+    ⟨blk, hblk, hl, by rw [hS']; decide, by show (blk.addr + 8) % 4 = 0; rw [hA']; omega,
+      by rw [hK']; decide⟩ h0 (by rw [hat]; simp) hq (fun u hu => ?_) (by rw [h1]; decide),
+    Sem.Inv.start (S := S) hwsOk hweOk hwsz hwsv hwez (by rw [hE0]; exact Sem.allLe_nil m)
+      (fun u => by unfold upd; split <;> rfl) (fun w hw => by rw [hq] at hw; simp at hw)
+      (fun u x _ h2 => ?_),
+    ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by simp only [XG, upd_self]; rfl,
+      fun u hu => by simp only [XG]; rw [hGu u (by unfold ThreadId at *; omega)]; rfl⟩⟩,
+      fun u => ?_, hbk, fun w hw => by rw [hq] at hw; simp at hw,
+      fun u hu => by unfold upd at hu; split at hu <;> cases hu⟩⟩
+  · rw [upd_ne _ _ hu]
+    unfold Lock.own; rw [hGu u hu]; split <;> rfl
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; exact .inl ⟨rfl, by rw [h1]; decide, rfl⟩
+    · rw [hGu u hu]; exact .inr rfl
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; rfl
+    · rw [hGu u hu]; rfl
+  · have : u = 0 := by rw [h1] at hu; omega
+    subst this; exact VClock.le_refl _
+  · by_cases hu : u = 0
+    · subst hu; rw [upd_self]; exact msg_off hM (by simp [S] at h2; omega)
+    · rw [hGu u hu]; rfl
+  · by_cases hu : u = 0
+    · subst hu; simp only [XG, upd_self]; exact hM
+    · simp only [XG]; rw [hGu u hu]; rfl
+
+include C in
+theorem main_spec (io : Io) (d : Nat) :
+    proto.WP 0 (mailMain waitOp io) QM G0 { mem0 with current := 0 } d := by
+  unfold mailMain
+  -- the mailbox: block 0
+  refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 32 8 (by decide))
+    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨A, hA⟩ := hq₁
+  obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
+  have hc₁ : m₁.current = 0 := hs₁.current
+  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  -- its three parts
+  obtain ⟨hS, hR₁, dS, rfl, hS₁, hR₁'⟩ := bytesAt_split hb₁ (k := 24) (by simp)
+  obtain ⟨ha, hb, dAB, rfl, ha₁, hb₁'⟩ := bytesAt_split hR₁' (k := 4) (by simp)
+  have hsS : ((Array.replicate 32 Byte.undef).extract 0 24).size = 24 := by simp
+  have hsA : (((Array.replicate 32 Byte.undef).extract 24).extract 0 4).size = 4 := by simp
+  have hsB : (((Array.replicate 32 Byte.undef).extract 24).extract 4).size = 4 := by simp
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  -- the semaphore, `a`, `b`
+  have ho₁' : Owned (upd (fun _ => Heap.empty) 0 (hS ∪ (ha ∪ hb))) m₁ := ho₁
+  have F₁ : (bytesAt cPtr A 32 .stack ((Array.replicate 32 Byte.undef).extract 0 24) ∗
+      (bytesAt (cPtr.add 24) A 32 .stack (((Array.replicate 32 Byte.undef).extract 24).extract 0 4) ∗
+        bytesAt ((cPtr.add 24).add 4) A 32 .stack
+          (((Array.replicate 32 Byte.undef).extract 24).extract 4)))
+      (hS ∪ (ha ∪ hb)) := ⟨hS, ha ∪ hb, dS, rfl, hS₁, ha, hb, dAB, rfl, ha₁, hb₁'⟩
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr) (A := A) (S := 32) (K := .stack)
+    (k := 0) (a := 8) semZ (by rw [sem_size]; rfl) rfl (by decide) (by rw [hsS]; decide)
+    (by simp [cPtr]; omega) (by decide)).frame) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (by rw [upd_self]; exact F₁) fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
+  rw [upd_upd] at ho₂
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := cPtr.add 24) (A := A) (S := 32)
+    (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsA]; decide)
+    (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
+  rw [upd_upd] at ho₃
+  refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 24).add 4) (A := A) (S := 32)
+    (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsB]; decide)
+    (by simp [cPtr, Ptr.add]; omega) (by decide)).frameL.frameL) ho₃
+    (hs₃.current.trans (hs₂.current.trans hc₁))
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
+  rw [upd_upd] at ho₄
+  have hth₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by
+    rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; rfl
+  have hat₄ : m₄.atomics = #[] := by rw [hs₄.atomics, hs₃.atomics, hs₂.atomics, hs₁.atomics]; rfl
+  have hq₄ : m₄.waiters = #[] := by rw [hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
+  have hP : Parts A h₄ := by
+    rw [writeBytes_all (by rw [hsS, sem_size]), writeBytes_all (by rw [hsA, enc_u32]),
+      writeBytes_all (by rw [hsB, enc_u32])] at F₄
+    exact F₄
+  obtain ⟨hM, hM0, hiP⟩ := inv_pre ho₄ hP hA8 hth₄ hat₄ hq₄
+  -- the spawn: the producer gets the message cells
+  refine WP.bind (WP.spawnC fun k _ => ⟨gPre hM, hiP, fun G₁ m₅ hg₁ hi₅ =>
+    ⟨gK hM (.pr 0), ⟨rfl, hM, rfl⟩, fun child m₆ hf => ?_⟩⟩)
+  obtain ⟨hl₅, hs₅, hu₅⟩ := hi₅
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hu₅.shape
+  rotate_left
+  · exfalso; rcases h0 with h0 | h0 | h0 <;> change (G₁ 0).2.2 = _ at h0 <;> rw [hg₁] at h0 <;>
+      cases h0
+  have hcs₅ : m₅.clocks.size = 1 := by rw [hl₅.own.csize, hs1]
+  have hk : ∀ W : Word 32 4, W.Keep m₅ m₆ := fun _ =>
+    Word.keep_fork (t := 0) (by rw [hs1]; decide) (by rw [hcs₅, hs1]) hf
+  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  rw [hs1] at hch
+  subst hch hm₆
+  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs₅]; decide)
+  have hg1 : (G₁ 1).1.ph = .gone := by
+    by_cases e : (G₁ 1).1.ph = .gone
+    · exact e
+    · exact absurd (hl₅.live 1 e).1 (by rw [hs1]; decide)
+  have hX1 : (G₁ 1).2.2 = .none := hnone 1 (Nat.le_refl _)
+  have h1n : (G₁ 1).2.1 = .none := by
+    cases e : (G₁ 1).2.1 with
+    | none => rfl
+    | reg i jr sn e' =>
+      have := hu₅.wx 1 (by rw [e]; rfl); rw [hX1] at this; cases this
+    | _ => have := hs₅.crit 1 (by rw [e]; rfl); rw [hg1] at this; cases this
+  have hGo : ∀ u, 2 ≤ u → upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt) u = G₁ u :=
+    fun u hu => by
+      rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+  have hav₁ : avail (XG G₁) = false := by
+    unfold avail; rw [show XG G₁ 1 = .none from hX1]; rfl
+  have hav₆ : avail (XG (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt))) = false := rfl
+  have hi₆ : proto.inv (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt))
+      { m₅ with
+        current := 0
+        clocks := (m₅.clocks.set! 0 (VClock.bump (m₅.clocks[0]!) 0)).push
+          (VClock.bump (m₅.clocks[0]!) 0)
+        threads := m₅.threads.push { spawner := 0, joined := false } } := by
+    refine ⟨hl₅.fork (t := 0) (by rw [hg₁]; rfl) hf (by rw [hg₁]; exact (Heap.empty_union hM).symm)
+        (fun _ => .inl rfl) rfl rfl rfl rfl fun hL hR => ?_, ?_,
+      ⟨⟨?_, .inr ⟨by simp [hs1], ?_, .inl ?_, .inr (.inr ⟨0, by decide, ?_⟩),
+        fun h => ?_, fun u hu => ?_⟩⟩, fun u => ?_, hu₅.blk, hu₅.q, fun u hu => ?_⟩⟩
+    · change (pts S.ptr 8 (if avail (XG G₁) then (1 : BitVec 64) else 0) ∗
+        (if avail (XG G₁) then Msg 2 else emp)) hL at hR
+      change (pts S.ptr 8 (if avail (XG (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt)))
+        then (1 : BitVec 64) else 0) ∗
+        (if avail (XG (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt))) then Msg 2
+          else emp)) hL
+      rw [hav₆]; rw [hav₁] at hR; exact hR
+    · refine (hs₅.mono (hs₅.ws.keep (hk _)) (hs₅.we.keep (hk _)) (Word.hist_keep hs₅.ws (hk _))
+        (Word.hist_keep hs₅.we (hk _)) (fun u => ?_) (fun c ⟨i, l, h1, h2⟩ => ⟨i, l, h1, h2⟩)
+        (fun h => .inl h) (fun w hw _ => .inl hw) (fun c h u hu => ?_)).congrG (fun u => ?_)
+        (fun u => ?_) (fun u x h1 h2 => ?_)
+      · by_cases hu : u < m₅.clocks.size
+        · exact hcl u hu
+        · rw [getElem!_neg m₅.clocks u hu]
+          exact VClock.le_iff.mpr fun i => by show (#[] : Array Nat).getD i 0 ≤ _; simp
+      · simp only [Array.size_push, hs1] at hu
+        rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+        · exact VClock.le_trans (h 0 (by rw [hs1]; decide)) (hcl 0 (by rw [hcs₅]; decide))
+        · rw [← hcs₅]; exact VClock.le_trans (h 0 (by rw [hs1]; decide)) hcn
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self, hg₁]; rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self, h1n]; rfl
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self, hg₁]; exact Iff.rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self, hg1]
+            simp [gK]
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]
+      · by_cases e0 : u = 0
+        · subst e0; rw [upd_self]; rfl
+        · by_cases e1 : u = 1
+          · subst e1; rw [upd_ne _ _ (by decide), upd_self]
+            exact msg_off hM0 (by simp [S] at h2; omega)
+          · rw [upd_ne _ _ e0, upd_ne _ _ e1]; exact hs₅.off u x h1 h2
+    · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+    · simp only [Array.getElem?_push, hs1, ↓reduceIte]
+    · show (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt) 0).2.2 = _; rw [upd_self]; rfl
+    · show (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt) 1).2.2 = _
+      rw [upd_ne _ _ (by decide), upd_self]; rfl
+    · have : (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt) 0).2.2.took = true := h
+      rw [upd_self] at this; cases this
+    · show (upd (upd G₁ 1 (gK hM (.pr 0))) 0 (gK Heap.empty .wt) u).2.2 = _
+      rw [hGo u hu]; exact hnone u (by unfold ThreadId at *; omega)
+    · by_cases e0 : u = 0
+      · subst e0; simp only [XG, upd_self]; rfl
+      · by_cases e1 : u = 1
+        · subst e1; simp only [XG]; rw [upd_ne _ _ (by decide), upd_self]; exact hM0
+        · simp only [XG]; rw [hGo u (by unfold ThreadId at *; omega)]
+          have hn : (G₁ u).2.2 = .none := hnone u (by unfold ThreadId at *; omega)
+          have := hu₅.parts u; simp only [XG] at this; rw [hn] at this ⊢; exact this
+    · by_cases e0 : u = 0
+      · subst e0; rw [upd_self] at hu; cases hu
+      · by_cases e1 : u = 1
+        · subst e1; rw [upd_ne _ _ (by decide), upd_self] at hu; cases hu
+        · rw [hGo u (by unfold ThreadId at *; omega)] at hu ⊢; exact hu₅.wx u hu
+  simp only [StateT.run_bind, StateT.run_pure]
+  -- `wait`: `main` takes the permit and the message
+  refine WP.bind (WP.callC (WP.mono ?_ (C.wait fits 0 Heap.empty .wt .got (Msg 2) io hone_w rfl
+    trivial trivial hmv_w hU_w _ _ k hi₆)))
+  rintro _ G₂ m₇ d₂ ⟨hd₂, hc₇, h₃, hm₃, hi₇⟩
+  have hi₇' : proto.inv (upd G₂ 0 (gK (Heap.empty ∪ h₃) .got)) m₇ := hi₇
+  -- the message: `a`, then `b`
+  refine WP.bind (wp_msg (x' := .got) (P₁ := Msg 2) (P₂ := Msg 2) (r₀ := (3 : BitVec 32)) hi₇' hc₇
+    (fun h => h) (fun _ h => h)
+    (by rw [Msg2]; exact (TTriple.load (by decide)).frame_eq) (fun _ hm y hy => msg_off hm hy) rfl id
+    fun m₈ h₈ hc₈ _ hi₈ => ?_)
+  refine WP.bind (wp_msg (x' := .got) (P₁ := Msg 2) (P₂ := Msg 2) (r₀ := (4 : BitVec 32)) hi₈ hc₈
+    (fun h => h) (fun _ h => h)
+    (by rw [Msg2]; exact (TTriple.load (by decide)).frameL_eq) (fun _ hm y hy => msg_off hm hy) rfl id
+    fun m₉ h₉ hc₉ _ hi₉ => ?_)
+  -- the join of the producer
+  have hs₉ := shape_of hi₉
+  have h2₉ : m₉.threads.size = 2 := by
+    obtain ⟨-, ⟨-, h0, -⟩ | ⟨h2, -⟩⟩ := hs₉
+    · rw [upd_self] at h0; cases h0
+    · exact h2
+  have hpost : (upd (XG G₂) 0 Ph.got 1).posted = true := by
+    obtain ⟨-, ⟨-, h0, -⟩ | ⟨-, -, -, -, ht, -⟩⟩ := hs₉
+    · rw [upd_self] at h0; cases h0
+    · exact ht (by rw [upd_self]; rfl)
+  have hiJ : proto.inv (upd G₂ 0 (gK h₉ .joins)) m₉ :=
+    inv_ghost (g := gK h₉ .joins) hi₉ (.inl rfl) rfl
+      (by unfold avail; rw [upd_self, upd_self, upd_ne _ _ (by decide), upd_ne _ _ (by decide)]; rfl)
+      (by
+        have := shape_set hs₉ h2₉ .joins (fun _ => .inr (.inr rfl)) (fun h => by cases h) (.inl rfl)
+          (fun _ => by rw [upd_upd, upd_ne _ _ (by decide)]; rw [upd_ne _ _ (by decide)] at hpost
+                       exact hpost)
+        rwa [upd_upd] at this)
+      (by have := hi₉.2.2.parts 0; simp only [XG, upd_self] at this; exact this)
+  refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gK h₉ .joins, hiJ, fun G₄ m₁₁ hg₄ hi₁₁ => ?_⟩)
+  obtain ⟨h0₁₁, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₁₁.2.2.shape
+  · exfalso; change (G₄ 0).2.2 = _ at h0; rw [hg₄] at h0; cases h0
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩,
+    fun _ => ⟨fun _ => join_run (m := { m₁₁ with current := 0 }) hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
+  obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
+  refine WP.pure' ?_
+  -- the free of the mailbox
+  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.2.blk
+  have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀ e he).elim)
+    fun _ m₁₃ hfr => ?_)
+  obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
+  -- every thread is joined
+  have hth₁₂ : m₁₂.threads = m₁₁.threads.set! 1 { rec with joined := true } := by rw [hm₁₂]
+  simp only [hth₁₂] at hr
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  simp only [Array.size_set!] at hi'
+  simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hi'] at hsp ⊢
+  split
+  · rfl
+  · rename_i hne
+    have : i = 0 := by omega
+    subst this
+    rw [Array.getElem?_eq_getElem (by omega)] at h0₁₁
+    rw [Option.some.inj h0₁₁]
+
 end Proofs
+
+/-! ## The results, for the translated `Io.Semaphore` -/
+
+/-- The mailbox client with the translated std semaphore. -/
+abbrev stdMain := mailMain Io_Semaphore_waitUncancelable
+
+/-- The spawn targets with the translated std semaphore. -/
+abbrev stdDispatch := dispatch Io_Semaphore_post
+
+/-- **The consumer receives the whole message under every schedule**: every completed run of
+the mailbox client returns 34 (every oracle, every fuel). -/
+theorem mailbox_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run stdDispatch fuel o (stdMain io) mem0).run = some (.ok (v, m))) :
+    v = .ok 34 := by
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound stdDispatch G0 (dispatch_spec (semaphore S))
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec (semaphore S) io) h
+  exact hv
+
+/-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
+(also when the consumer sleeps at the condition first), no lifetime error at the free. -/
+theorem mailbox_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run stdDispatch fuel o (stdMain io) mem0).run ≠ some (.error e) :=
+  proto.run_safe stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
+    (main_spec (semaphore S) io)
 
 end Sync.Mailbox
