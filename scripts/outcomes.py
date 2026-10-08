@@ -128,5 +128,5 @@ def absence(claim: str, counts: dict[str, int]) -> dict:
     return {'status': 'refused', 'blocking': {o.value: counts[o.value] for o in found},
             'reason': f'{claim} refused: evidence includes '
                       + ', '.join(f'{o.value} ({counts[o.value]}: {REFUSAL_REASONS[o]})' for o in found)
-                      + '; capped, fuel-bounded, unsupported (including unsupported timer), unspecified or '
-                        'observed failure outcomes cannot support proved absence'}
+                      + '; capped, fuel-bounded, unsupported, unspecified or observed failure outcomes '
+                        'cannot support proved absence'}

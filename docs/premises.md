@@ -358,7 +358,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: The default runtime has no clock. Reaching `time.Timer` or
-  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unspecified`.
+  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unsupportedTimer`,
+  a model error kept apart from `.unspecified` (reports type it `unspecified_timer`).
   `Io.futexWaitTimeout` is rejected at translation. Theorems cover the no-timeout path only.
 - Derived from: tokens `Deadline`, `time_Timer`, `timedWait`.
 - Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Deadline.lean`.
