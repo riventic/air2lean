@@ -102,7 +102,7 @@ def main : IO Unit := do
   require (!lane (laneCx llvm 2) 12 1) "&v[1] typed as lane 2 is accepted"
   require (!lane (laneCx llvm 15) 12 2) "a u9 lane pointer into a bool vector is accepted"
   require (!lane (laneCx llvm 5) 12 2) "a u9 lane pointer into a u32 vector is accepted"
-  require ((laneCx llvm 16).atomicIntChild 0 (.inst 0) |>.toOption.isNone)
+  require ((laneCx llvm 16).atomicChild 0 (.inst 0) |>.toOption.isNone)
     "an atomic op through a bool lane pointer is accepted"
   IO.println "lane pointers: integer and bool lanes are bit-pointers on LLVM x86_64/aarch64"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
