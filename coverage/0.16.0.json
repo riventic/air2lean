@@ -3855,6 +3855,7 @@
           "ZigLean/Mem/ErrWidthLemmas.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Null.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Repr.lean",
           "ZigLean/Mem/Thread.lean",
@@ -4195,6 +4196,7 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Null.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
@@ -8747,6 +8749,7 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Null.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
@@ -9826,6 +9829,7 @@
           "ZigLean/Mem/ErrWidth.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
@@ -14244,6 +14248,8 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Mem/Null.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -14306,6 +14312,8 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Mem/Null.lean",
+          "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -17170,10 +17178,10 @@
       "Air2Lean/Air/Op.lean": "59ef008f2078dd053ab759e118ddf93b687698ece582b227080ee6edb4f362eb",
       "Air2Lean/Air/Profile.lean": "f5f4fe8064d68ce22ce0136e9277c54d5846cb25be7573b3ef6dfae7c3750da3",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "b4a611f4d70a5357a5289e8de365539a412a622e4c17e8b7d1a7ed10342bab21",
+      "Air2Lean/Check.lean": "c91b91848be1e7579b2b25bb94a27631982f32883419b788068058f8ad4f8946",
       "Air2Lean/Diagnose.lean": "a65115cfc20c3d7587fa26ce97109921a2e97ef731f27a5330422ff73af4ee15",
       "Air2Lean/Diagnostic.lean": "c129ba11206952f8c4faac769c77dedc0d4422fb8e009416d20300f1faf9e650",
-      "Air2Lean/Emit.lean": "c750f3a553c077eb84ec231974a1f5109acb8966b27071b34bce329c7be6ed48",
+      "Air2Lean/Emit.lean": "13e636b5c2ebdc7e4dfc6a7b3d8db36ac52cc07e63c0d8ec1c500d6eb9ccd910",
       "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
       "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
@@ -17237,7 +17245,8 @@
       "ZigLean/Mem/ErrWidth.lean": "f87beae1b49f34e21ee976278a45fa4e6a9ac102bf34d6255a1dd1b9c5c9ca3b",
       "ZigLean/Mem/ErrWidthLemmas.lean": "85be79a9d04bfc403d30bf3c911d2d12d0c418b54788a6642a4865994f1a2cff",
       "ZigLean/Mem/Lemmas.lean": "9add6a53b0f078fe0b342e2b4168e1401b9344db7dc67e7e88c394ac94a33f65",
-      "ZigLean/Mem/Null.lean": "ce3a714180a3adeb4864af0d534f85f871371e2f00fd8624d9f4dbc907fa1e8f",
+      "ZigLean/Mem/Null.lean": "55e96c1532e3306945275f57b4e6af64a61e7824984a70e8a54522d7dc6474c9",
+      "ZigLean/Mem/NullLemmas.lean": "1bcaeb2630882ebd4d4476938c55258ae2e6c8df73b2a3dfd694ece3e1d3a18f",
       "ZigLean/Mem/Owned.lean": "fb2ad1cace98c4a3d9e962a48c72430ee7cc573978454a8e8651a4d65246276b",
       "ZigLean/Mem/Repr.lean": "3670f8d65c4d17678ab436e5848f244cd70fb4a22c8de6627ba9195512fb0879",
       "ZigLean/Mem/Thread.lean": "c70ab52aaad07bbcf0080f16660ad970e2c702ced1ba2799ff96400e696fb325",

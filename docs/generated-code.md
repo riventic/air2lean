@@ -145,7 +145,7 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | call of a function that uses memory | — | `Zig.callM` |
 | call of a pure function | `Zig.call` | `Zig.callR`; a `[]const T` argument is `Zig.readSlice T align s` |
 
-Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. Nullable pointer storage, nullable optional payload encodings and nullable projections remain rejected.
+Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. A stored C/allowzero pointer (a `*[*c]T` target, struct field, array item or global) binds the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes), and a projection from a C/allowzero base is `Zig.ptrProjectNullable` (illegal at address zero). Optionals of nullable pointers, nullable pointers in unions/tuples/error-union payloads, and nullable slicing/bulk memory/parent recovery remain rejected.
 
 | AIR, through a pointer to memory | Lean |
 |---|---|
