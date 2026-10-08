@@ -115,7 +115,7 @@ class Bundles(unittest.TestCase):
         self.assertEqual(data['replay']['status'], 'verified'); self.assertNotIn('expected', data['replay']['request'])
         self.assertEqual(data['replay']['command'][-4:-2], ['--bundle', str(self.out)])
         loc = data['location']
-        self.assertEqual(loc['function'], 'demo.run'); self.assertEqual(loc['source_map'], 'unavailable')
+        self.assertEqual(loc['function'], 'demo.run'); self.assertEqual(loc['source_map'], 'unavailable_in_AIR')
         self.assertEqual([f['name'] for f in loc['functions']], ['demo.run', 'demo.writer'])
         sites = {(s['function'], s['air_id']): s for s in loc['candidate_sites']}
         self.assertEqual(sites[('demo.run', 6)]['zig_line'], 10)       # const r = x;
@@ -264,6 +264,57 @@ class Bundles(unittest.TestCase):
         self.assertIn(('atomics.mpRelaxed', 'load', 43), lines)              # reader: `... data else 0`
         self.assertIn(('atomics.mpWriterRelaxed', 'store_safe', 20), lines)  # writer: `c.data.* = 42`
         self.assertTrue(all(s['zig_file'] in (None, 'examples/atomics/atomics.zig') for s in loc['candidate_sites']))
+
+
+SRC = dict(file='demo.zig', module='root', decl_line=30)
+INLINE_SRC = dict(file='helper.zig', module='root', decl_line=7)
+SPAN_AIR = [dict(id=0, tag='load'),
+            dict(id=1, tag='dbg_stmt', line=3, column=9), dict(id=2, tag='load'),
+            dict(id=3, tag='cond_br', then=[dict(id=4, tag='load'), dict(id=5, tag='dbg_stmt', line=5, column=2), dict(id=6, tag='load')],
+                 **{'else': [dict(id=7, tag='load')]}),
+            dict(id=8, tag='load'),
+            dict(id=9, tag='dbg_inline_block', src=INLINE_SRC, body=[dict(id=10, tag='load'), dict(id=11, tag='dbg_stmt', line=2, column=4),
+                                                                     dict(id=12, tag='load')]),
+            dict(id=13, tag='dbg_inline_block', body=[dict(id=14, tag='dbg_stmt', line=2, column=4), dict(id=15, tag='load')])]
+
+
+class SourceSpans(unittest.TestCase):
+    """I05 source-span semantics (docs/diagnostics.md) applied to counterexample sites."""
+
+    def spans(self, src):
+        walk = CX.instructions(SPAN_AIR, {'line': None}, scope=dict(src=src, line=None, column=None))
+        return {i['id']: span for i, _, _, span in walk if i['tag'] == 'load'}
+
+    def test_statement_declaration_and_scoping(self):
+        spans = self.spans(SRC)
+        self.assertEqual(spans[0], (dict(file='demo.zig', module='root', line=30, column=None), 'declaration'))  # before any dbg_stmt
+        self.assertEqual(spans[2], (dict(file='demo.zig', module='root', line=32, column=9), 'statement'))
+        self.assertEqual(spans[4][0]['line'], 32)                      # branch starts from the parent's statement
+        self.assertEqual(spans[6], (dict(file='demo.zig', module='root', line=34, column=2), 'statement'))
+        self.assertEqual(spans[7][0]['line'], 32)                      # the then-branch statement does not leak into else
+        self.assertEqual(spans[8][0]['line'], 32)                      # ... nor into the parent
+        self.assertEqual(spans[10], (dict(file='helper.zig', module='root', line=7, column=None), 'declaration'))  # callee decl
+        self.assertEqual(spans[12], (dict(file='helper.zig', module='root', line=8, column=4), 'statement'))
+        self.assertEqual(spans[15], (None, 'unavailable_in_AIR'))     # inlined body without its callee's src
+
+    def test_old_air_without_src_is_unavailable(self):
+        spans = self.spans(None)  # only the inlined callee that exports its own src keeps a span
+        self.assertTrue(all(span == (None, 'unavailable_in_AIR') for i, span in spans.items() if i not in (10, 12)))
+
+    def test_localize_reports_exact_lines_when_the_air_has_src(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); air = root/'air'; air.mkdir()
+            (air/'demo.f.json').write_text(json.dumps(dict(schema=11, name='demo.f', src=SRC, body=[
+                dict(id=0, tag='dbg_stmt', line=4, column=3), dict(id=1, tag='load')])))
+            loc = CX.localize(root, 'demo', 'f', 'illegal', None, air_dir=air)
+            self.assertEqual(loc['source_map'], 'exact_statement')
+            site, = loc['candidate_sites']
+            self.assertEqual((site['source_span_status'], site['zig_line'], site['source_span']['column']), ('statement', 33, 3))
+            self.assertEqual(loc['functions'][0]['source_span']['line'], 30)
+            (air/'demo.f.json').write_text(json.dumps(dict(schema=11, name='demo.f', body=[dict(id=0, tag='load')])))
+            old = CX.localize(root, 'demo', 'f', 'illegal', None, air_dir=air)
+            self.assertEqual(old['source_map'], 'unavailable_in_AIR')
+            self.assertEqual(old['candidate_sites'][0]['source_span_status'], 'unavailable_in_AIR')
 
 
 if __name__ == '__main__':
