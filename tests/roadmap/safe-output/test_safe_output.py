@@ -67,6 +67,23 @@ def translate(out):
         hang(ignore_term=True)
     if mode == 'hang':
         hang()
+    if mode.startswith('setsid'):
+        # A new session is outside the stage's process group. 'scrubbed' also drops the stage's
+        # environment marker; 'orphan' has the leader exit; 'double' forks through a short-lived parent.
+        env = {} if 'scrubbed' in mode else None
+        sleeper = 'import time; time.sleep(60)'
+        if 'double' in mode:
+            code = ('import os, subprocess, sys\n'
+                    f'c = subprocess.Popen([sys.executable, "-c", {sleeper!r}], start_new_session=True)\n'
+                    'print(c.pid)')
+            child = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, env=env)
+            record(int(child.stdout))
+        else:
+            record(subprocess.Popen([sys.executable, '-c', sleeper], start_new_session=True, env=env).pid)
+        if 'orphan' in mode:
+            time.sleep(1)
+            sys.exit(0)
+        hang()
     if mode == 'leave-child':
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
         record(child.pid)
@@ -97,6 +114,16 @@ elif kind == 'zig':
         pathlib.Path(os.environ['ZIG_AIR_JSON_DIR'], 'demo.foo.json').write_text('{}')
 elif kind == 'air2lean':
     translate(args[args.index('-o') + 1])
+elif kind == 'lake' and args[:1] == ['build']:
+    if mode == 'build-hang':
+        hang()
+elif kind == 'normalize-generated.py':
+    pathlib.Path(args[-1]).write_text('{}')
+elif kind == 'normalize-air.py':
+    pass
+elif kind == 'diff.sh':
+    if mode == 'diff-hang':
+        hang()
 elif kind == 'lake':
     assert args[:2] == ['exe', 'air2lean'], args
     translate(args[args.index('-o') + 1])
@@ -267,6 +294,84 @@ class Runner(Stubbed):
         self.assert_stopped()
 
 
+def marker_visible():
+    """Whether this host's ps shows other processes' environments (the marker scan needs it)."""
+    probe = subprocess.Popen(['sleep', '5'], env={safe.MARKER: 'probe'})
+    try:
+        time.sleep(0.2)
+        return any('probe' in row[2] for row in safe._processes().values() if safe.MARKER in row[2])
+    finally:
+        probe.kill()
+        probe.wait()
+
+
+class Escape(Stubbed):
+    """Descendants that leave the stage's process group with setsid are found and stopped."""
+
+    run_stub = Runner.run_stub
+
+    def cancel(self, mode, signum=signal.SIGTERM):
+        code, output = self.interrupt(self.run_stub(mode), signum)
+        self.assertEqual(code, 128 + signum, output)
+        self.assertEqual(len(self.recorded()), 2)
+        self.assert_stopped()
+
+    def test_setsid_child_stopped_on_cancel(self):
+        self.cancel('setsid')
+
+    def test_setsid_child_with_scrubbed_environment_stopped_on_cancel(self):
+        process = self.run_stub('setsid-scrubbed')
+        deadline = time.monotonic() + 20
+        while not self.ready.exists():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.02)
+        time.sleep(1)  # The parent link is the only trace: let a process-table sample see it.
+        process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=20)
+        self.assertEqual(process.returncode, 128 + signal.SIGTERM)
+        self.assert_stopped()
+
+    def test_setsid_child_stopped_on_timeout(self):
+        code, output = self.finish(self.run_stub('setsid', '--timeout', '1'))
+        self.assertEqual(code, safe.TIMEOUT, output)
+        self.assert_stopped()
+
+    def test_setsid_child_orphaned_by_leader_exit_fails_the_stage(self):
+        code, output = self.finish(self.run_stub('setsid-scrubbed-orphan'))
+        self.assertEqual(code, safe.DESCENDANTS, output)
+        self.assert_stopped()
+
+    @unittest.skipUnless(marker_visible(), 'ps does not show process environments on this host')
+    def test_double_forked_setsid_child_found_by_marker(self):
+        code, output = self.finish(self.run_stub('setsid-double-orphan'))
+        self.assertEqual(code, safe.DESCENDANTS, output)
+        self.assert_stopped()
+
+    def test_marker_and_parent_links_in_a_process_table(self):
+        class Leader:
+            pid, returncode = 10, None
+        t = 'Thu Oct  8 12:00:00 2026'
+        table = {10: (1, t, 'leader'), 11: (10, t, 'child'), 12: (1, t, 'orphan'),
+                 13: (12, t, 'grandchild'), 14: (1, t, f'sleep 60 HOME=/ {safe.MARKER}=tok'),
+                 15: (1, t, f'sleep 60 {safe.MARKER}=other'), 16: (1, t, 'unrelated')}
+        escapees = safe.Escapees(Leader, 'tok')
+        original = safe._processes
+        try:
+            safe._processes = lambda: table
+            self.assertEqual(sorted(escapees.scan()), [11, 14])
+            table[12] = (11, t, 'orphan')  # Reached through an owned parent only later.
+            self.assertEqual(sorted(escapees.scan()), [11, 12, 13, 14])
+            table[11] = (1, 'Fri Oct  9 12:00:00 2026', 'reused pid')  # Same pid, other process.
+            self.assertEqual(sorted(escapees.scan()), [12, 13, 14])
+        finally:
+            safe._processes = original
+
+    def test_clean_stage_is_not_slowed_or_failed(self):
+        started = time.monotonic()
+        self.assertEqual(self.finish(self.run_stub('ok'))[0], 0)
+        self.assertLess(time.monotonic() - started, 5)
+
+
 class Translate(Stubbed):
     def setUp(self):
         super().setUp()
@@ -405,6 +510,50 @@ class Check(Stubbed):
         self.assertIn('timeout', output)
         self.assert_stopped()
         self.assert_prior_intact()
+
+
+class FinalStages(Check):
+    """check.sh's final lake build and differential test are bounded and cancellable."""
+
+    def setUp(self):
+        super().setUp()
+        self.env.pop('AIR2LEAN_DIFF')
+        for name in ('diff.sh', 'normalize-generated.py', 'normalize-air.py'):
+            self.stub(self.repo / 'scripts' / name)
+        self.generated = b'import ZigLean\n-- fresh generated output\n'
+
+    def assert_gen_complete(self):
+        # Gen.lean is published before the build; it is never a prefix, and nothing else is left.
+        self.assertEqual(self.gen.read_bytes(), self.generated)
+        self.assertEqual([p.name for p in self.gen.parent.iterdir()], ['Gen.lean'])
+
+    def test_build_timeout(self):
+        self.env['AIR2LEAN_STAGE_TIMEOUT'] = '1'
+        code, output = self.finish(self.check('build-hang'))
+        self.assertEqual(code, safe.TIMEOUT, output)
+        self.assertIn('timeout', output)
+        self.assert_stopped()
+        self.assert_gen_complete()
+
+    def test_build_interrupt(self):
+        code, output = self.interrupt(self.check('build-hang'), signal.SIGINT)
+        self.assertEqual(code, 130, output)
+        self.assert_stopped()
+        self.assert_gen_complete()
+
+    def test_diff_timeout_and_interrupt(self):
+        self.env['AIR2LEAN_STAGE_TIMEOUT'] = '1'
+        code, output = self.finish(self.check('diff-hang'))
+        self.assertEqual(code, safe.TIMEOUT, output)
+        self.assert_stopped()
+        self.env['AIR2LEAN_STAGE_TIMEOUT'] = '0'
+        code, output = self.interrupt(self.check('diff-hang'), signal.SIGTERM)
+        self.assertEqual(code, 143, output)
+        self.assert_stopped()
+        self.assert_gen_complete()
+
+    def test_diff_status_is_the_exit_status(self):
+        self.assertEqual(self.finish(self.check('ok'))[0], 0)
 
 
 class ProofReceipt(Stubbed):

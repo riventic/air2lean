@@ -47,9 +47,12 @@ once. Without this, bash would defer the trap until the foreground child exited.
 
 The per-stage timeout is `--timeout SECONDS` or `AIR2LEAN_STAGE_TIMEOUT`. The default
 is 3600, and 0 disables the limit. `translate.sh` bounds the Lean build, the AIR export,
-translation and the Lean check. `check.sh` bounds the AIR dump and translation. Its
-final `lake build` and differential tests remain bounded by the CI job timeout or an
-outer `scripts/build-guard.py` ([build-budgets.md](build-budgets.md)).
+translation and the Lean check. `check.sh` bounds the AIR dump, translation, final
+`lake build` and differential tests (`scripts/diff.sh`) in the same way, each with its own
+limit and the same TERM/KILL cancellation. A timeout or interrupt there leaves the
+already-published `Proofs/<Ex>/Gen.lean` and check reports complete; `check.sh` exits 124
+(timeout) or 129/130/143 (signal). An outer `scripts/build-guard.py`
+([build-budgets.md](build-budgets.md)) and the CI job timeout remain additional bounds.
 `proof-receipt.py worker` runs the auditor in its own group. SIGINT/SIGTERM/SIGHUP, an
 exception, or an auditor exiting with live children stops that group, and no
 `after.json`/receipt is written. The outer guard owns its timeout.
@@ -63,9 +66,17 @@ and enforced by `project.py` and `proof-receipt.py`.
   staging directory or `.partial` temporary file may remain beside the output. The
   published path still holds the previous complete file.
   `translate.sh` also leaves its empty lock directory, which must be removed by hand.
-- A process that calls `setsid` or otherwise leaves the stage's process group is outside
-  the runner's control. `scripts/build-guard.py` tracks such descendants with `ps`
-  sampling.
+- A descendant that calls `setsid` or otherwise leaves the stage's process group is
+  found by the runner itself, not by the group. It samples the process table (`ps` pid,
+  ppid, start time) every 0.25s and follows parent links from the leader, so a
+  reparented escapee stays owned. It also marks the stage with
+  `AIR2LEAN_STAGE_ID=<token>` and owns any process whose environment shows the token,
+  where `ps` shows other processes' environments (Linux; not every macOS setup). On
+  cancel, timeout, or a leader exit with escapees alive (exit 125), TERM then KILL goes
+  to every owned process, rescanning so late forks are caught. A recycled pid is
+  ignored because its start time differs. A descendant that forks and escapes within one
+  sampling interval and also scrubs its environment can still be missed. When that
+  matters, run under `scripts/build-guard.py`, which tracks descendants too.
 - After the leader is reaped, the group is probed by its ID. In the brief window
   after the group empties, an unrelated new group could reuse that ID. The runner sends
   KILL once, while the last probe still saw members, and afterwards only probes, so a
@@ -75,7 +86,9 @@ and enforced by `project.py` and `proof-receipt.py`.
 
 `tests/roadmap/safe-output/test_safe_output.py` drives the real `translate.sh`,
 `check.sh`, runner and receipt writer with stub `elan`/`zig`/`lake`/`air2lean` tools.
-It covers interrupts mid-write (SIGINT/SIGTERM/SIGHUP), a failing translator after a
+It covers `setsid` children (plain, environment-scrubbed, orphaned by the leader's exit,
+double-forked; the marker case runs only where `ps` shows environments), timeouts and
+interrupts of `check.sh`'s final build and `diff.sh`, interrupts mid-write (SIGINT/SIGTERM/SIGHUP), a failing translator after a
 partial write, a translator child that ignores SIGTERM, timeouts, leftover child
 processes, an interrupted Lean check, and the overwrite policy. Each case asserts
 that the prior artifact is unchanged, no partial file is published, staging and lock
