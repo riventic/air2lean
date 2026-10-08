@@ -21,9 +21,11 @@
 //! out for free.
 //!
 //! `<kind>` is a `std.builtin.panic` member name — `outOfBounds`, `integerOverflow`, … (see
-//! `panic` below, docs/generated-code.md §Panics) — or `unknown` if the child died without
-//! reporting one (a signal, not a checked safety panic). scripts/diff.sh maps each kind to the
-//! `Zig.Error` constructor the Lean side is expected to throw for the same check.
+//! `panic` below, docs/generated-code.md §Panics) — `SIGFPE`/`SIGILL`/`SIGSEGV`/`SIGBUS` if a
+//! synchronous fault signal killed the child during the tested call (a CPU fault, not a checked
+//! safety panic), or `unknown` if it died without reporting either. scripts/diff.sh maps each
+//! kind to the `Zig.Error` constructor the Lean side is expected to throw for the same check
+//! (`SIGFPE`: `trap`, an allowlisted asm fault such as `divl` by zero).
 //!
 //! A root module wires this in with `pub const panic = common.panic;` — Zig's panic override is
 //! chosen by shape (`std.debug.FullPanic` / `std.debug.no_panic`) on the root module, not by an
@@ -397,8 +399,9 @@ pub fn vectorFromJson(comptime n: usize, comptime T: type, v: std.json.Value) @V
 /// `renderPayload` for `func`'s (possibly `?`/`!`-wrapped) int leaf. On success the child writes
 /// its rendered ok-payload to a pipe and exits 0; on a safety panic, `panic` above writes the
 /// tripped check's name to the same pipe and exits 1. The parent reports `.ok` only for a clean
-/// exit with bytes; a nonzero exit with a reported name becomes `.fail` with that name; anything
-/// else (a signal, or no bytes at all) becomes `.fail("unknown")`.
+/// exit with bytes; a nonzero exit with a reported name becomes `.fail` with that name; a
+/// synchronous fault signal during the call becomes `.fail("SIG<name>")`; anything else (another
+/// signal, or no bytes at all) becomes `.fail("unknown")`.
 pub fn forkCall(comptime Args: type, args: Args, comptime func: anytype, quote_wide: bool) !Outcome {
     return forkCallBufs(Args, args, func, quote_wide, null);
 }
@@ -521,9 +524,11 @@ pub fn forkCallBufsWithRenderingAllocator(
     // Resource kills, cancellation and renderer-stage signals remain harness failures.
     if (std.posix.W.IFSIGNALED(wr.status) and std.mem.eql(u8, text.items, "C")) {
         const sig = std.posix.W.TERMSIG(wr.status);
-        if (sig == std.posix.SIG.ILL or sig == std.posix.SIG.FPE or
-            sig == std.posix.SIG.SEGV or sig == std.posix.SIG.BUS)
-            return .{ .fail = .{ .name = try out_gpa.dupe(u8, "unknown"), .kind = .native_signal } };
+        // The signal's name is the legacy failure kind: `SIGFPE` matches a model `trap`.
+        const faults = .{ .{ std.posix.SIG.FPE, "SIGFPE" }, .{ std.posix.SIG.ILL, "SIGILL" }, .{ std.posix.SIG.SEGV, "SIGSEGV" }, .{ std.posix.SIG.BUS, "SIGBUS" } };
+        inline for (faults) |f| {
+            if (sig == f[0]) return .{ .fail = .{ .name = try out_gpa.dupe(u8, f[1]), .kind = .native_signal } };
+        }
     }
     if (text.items.len < 2 or text.items[0] != 'C') return harnessFailure();
     const returned = text.items[1] == 'R';

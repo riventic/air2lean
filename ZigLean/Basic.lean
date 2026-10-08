@@ -29,6 +29,11 @@ inductive Error where
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
   | deadlock
+  /-- A CPU fault of an allowlisted inline-asm instruction (`Air2Lean/AsmAllowlist.lean`'s
+  `AsmFault`), e.g. `divl` with a zero divisor (#DE): the process is killed by a signal
+  (`SIGFPE`), it is not a Zig panic. A proof of "never throws" shows that the code never runs
+  the instruction on such an input (`Zig.asmTrap`). -/
+  | trap
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/
@@ -39,6 +44,13 @@ abbrev M (σ α : Type) := StateT σ Result α
 
 abbrev usize := BitVec 64
 abbrev isize := BitVec 64
+
+/-- An allowlisted inline-asm instruction (an `opaque` `airAsm_<hash>` value `v`) that faults
+when `faults` holds: the entry's `AsmFault` condition, rendered by the translator over the
+instruction's inputs (`Air2Lean/AsmAllowlist.lean`). An instruction whose entry is `never` is
+emitted without this guard. -/
+@[inline] def asmTrap {α : Type} (faults : Prop) [Decidable faults] (v : α) : Result α :=
+  if faults then throw .trap else pure v
 
 /-- A Zig error's identity is its name, from one global namespace: `E!T` becomes
 `Except ErrName T'`. Distinct from `Zig.Error` (panics): a Zig error is a return value, not a

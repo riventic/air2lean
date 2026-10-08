@@ -1071,14 +1071,19 @@ def runLzcnt64 : IO Unit :=
 
 -- The right side of `Proofs/Asm/Proofs.lean`'s `divmod_spec`, from the opaque's two outputs:
 -- the test checks the asm op, the proof checks the translation around it (the tuple and the
--- store to `rem`).
+-- store to `rem`). The fault decision is the generated wrapper's own (S7): its `Zig.asmTrap`
+-- guard throws `trap` for a zero divisor (native: SIGFPE); its value, computed from the
+-- opaque's placeholder, is not used.
 def runDivmod : IO Unit :=
   processFile "asm" "divmod" fun j => do
     let items ← getArr j
     let a := bv 32 (← getInt items[0]!)
     let b := bv 32 (← getInt items[1]!)
     let (q, r) := Asm.airAsm_3653072158 a b
-    pure (render (pure (r.setWidth 64 <<< 32 ||| q.setWidth 64) : Zig.Result (BitVec 64)) true)
+    let value : Zig.Result (BitVec 64) := match (Asm.divmod a b).run with
+      | some (.error e) => throw e
+      | _ => pure (r.setWidth 64 <<< 32 ||| q.setWidth 64)
+    pure (render value true)
 
 end DiffTest
 
