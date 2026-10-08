@@ -36,8 +36,11 @@ model calls `groupCancelC` on all three exits.
 `ThreadTuples/FallibleRuntime.lean` runs `groupMixed` translated with `--spawn-policy fallible`
 under 256 deterministic oracles. Every schedule must return 680 or
 `ConcurrencyUnavailable` without a memory error, with no group entry left and every child
-joined. The suite must reach the path where a child was assigned and `concurrent` then failed.
-On the previous checked AIR this gate fails with `Zig.Error.illegal` (schedule 8, stride 1).
+joined. The suite must reach the path where both `async` tasks were assigned to children and
+`concurrent` then failed. On the previous checked AIR this gate fails with `Zig.Error.illegal`
+(schedule 8, stride 1). The model reports `illegal` both for an access to a freed block and for
+a run whose main thread ends with an unjoined child, so the error code alone does not tell
+which of the two occurred. Both follow from the missing await.
 The native test runs the failing path with `std.Io.Threaded` `concurrent_limit = .nothing`. It
 exercises the failure exit natively; it cannot itself detect a late write to a freed frame.
 

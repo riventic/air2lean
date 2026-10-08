@@ -30,8 +30,9 @@ def main : IO Unit := do
           succeeded := true
         | .error e =>
           require (e == "ConcurrencyUnavailable") s!"undeclared groupMixed error {e}"
-          -- Thread 0 is main; a child means `async` assigned a task before the failure.
-          if m.threads.size > 1 then assignedThenFailed := true
+          -- Thread 0 is main. Two children: both `async` calls, including `mixedWorker`,
+          -- were assigned before `concurrent` failed (a failed `concurrent` adds none).
+          if m.threads.size == 3 then assignedThenFailed := true
       | some (.error e) =>
         throw (IO.userError s!"groupMixed schedule {seed}, {stride} failed: {repr e}")
       | none => throw (IO.userError s!"groupMixed schedule {seed}, {stride} ran out of fuel")
