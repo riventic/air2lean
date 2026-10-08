@@ -630,5 +630,9 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The schema-12 profile's code generator (`stage2_llvm`, `stage2_x86_64`, …); legacy
+  schemas and constructed functions are `unverified`. Backend-specific constant lowering
+  checks (`Check.lean`) read it. -/
+  backend : String := "unverified"
 
 end Air2Lean

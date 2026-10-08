@@ -64,6 +64,7 @@
     "ZigLean.Mem.ErrWidth": ["SEM-02"],
     "ZigLean.Mem.ErrWidthLemmas": ["SEM-02"],
     "ZigLean.Mem.Lemmas": ["SEM-02"],
+    "ZigLean.Mem.ConstPtr": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Repr": ["SEM-01", "SEM-02"],
     "ZigLean.Mem.NullLemmas": ["SEM-02"],
