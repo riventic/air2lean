@@ -1,6 +1,7 @@
 integerOverflow	overflow
 shlOverflow	overflow
 shrOverflow	overflow
+shiftRhsTooBig	overflow
 integerOutOfBounds	overflow
 integerPartOutOfBounds	overflow
 outOfBounds	outOfBounds

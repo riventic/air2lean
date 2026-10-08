@@ -579,6 +579,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/padded-atomics/test_cli.py --self-test
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/padded-atomics/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
+      # Zig's shift-count safety check (`shiftRhsTooBig`) maps to `.overflow`: committed
+      # patched-compiler AIR for 0.14.1, 0.15.2 and 0.16.0, no compiler needed.
+      - name: Shift-count panic mapping
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: python3 -B tests/roadmap/bitops-native/shift-panic/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
       # client proofs that reading them is `.unspecified`, and rejection of every other
       # `undefined` operand. A store of `undefined` to a local: byte locals whose undefined
@@ -1196,6 +1202,28 @@ jobs:
           AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
         run: tests/roadmap/bitops/check.sh
 
+      # L02 native qualification of the wide cases (tests/roadmap/bitops-native): AIR of
+      # wide.zig is exported with this row's patched compiler, translated and evaluated in Lean,
+      # and every row is compared with stock Zig executables in four optimization modes:
+      # x86_64-linux natively and aarch64-linux under qemu-user. The committed evidence
+      # (aarch64-macos and native aarch64-linux come from their own jobs) must be reproduced.
+      - name: Wide integer bit operations native differential (x86_64-linux, aarch64-linux)
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+          python3 -B tests/roadmap/bitops-native/gen.py --check
+          python3 -B tests/roadmap/bitops-native/qualify.py check
+          lake build ZigLean Air2Lean air2lean
+          python3 -B tests/roadmap/bitops-native/qualify.py run --version "${{ matrix.zig }}" \
+            --zig-air "$PWD/zig-air-${{ matrix.zig }}/bin/zig" --zig zig \
+            --targets x86_64-linux,aarch64-linux \
+            --exec x86_64-linux=host,aarch64-linux=qemu:qemu-aarch64-static \
+            --evidence "$RUNNER_TEMP/bitops-native.json"
+          python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native.json" \
+            --committed "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"
+
       # Check source-linked VCs against the pointer translation selected by check.sh.
       - name: Build optional verification conditions
         if: ${{ !matrix.mutate }}
@@ -1583,6 +1611,19 @@ jobs:
           AIR2LEAN_ZIG_VERSION: "0.15.2"
         run: lake build Proofs
 
+      # L02: wide bit operations, native aarch64-macos (0.14.1 has no macOS patched compiler).
+      - name: macOS wide integer bit operations native differential
+        run: |
+          set -euo pipefail
+          for v in 0.16.0 0.15.2; do
+            python3 -B tests/roadmap/bitops-native/qualify.py run --version "$v" \
+              --zig-air "$PWD/zig-air-$v/bin/zig" --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+              --targets aarch64-macos --exec aarch64-macos=host \
+              --evidence "$RUNNER_TEMP/bitops-native-$v.json"
+            python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native-$v.json" \
+              --committed "tests/roadmap/bitops-native/evidence/$v.json"
+          done
+
       # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
       - name: Upload the dumped Darwin AIR
         if: failure()
@@ -1631,3 +1672,40 @@ jobs:
           name: abi-aarch64-linux
           path: ${{ runner.temp }}/aarch64-linux-gnu-ReleaseSafe.txt
           if-no-files-found: ignore
+
+  # L02: the wide bit-operation corpus on native aarch64-linux hardware. No Lean here: the
+  # native stream must equal the Lean stream recorded in the committed evidence, which the
+  # `test` and `macos` jobs reproduce from fresh translations.
+  bitops-native-arm:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zig: "0.16.0"
+            sha256: ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+          - zig: "0.15.2"
+            sha256: 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
+          - zig: "0.14.1"
+            sha256: f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
+      - name: Install stock zig (aarch64-linux)
+        run: |
+          set -euo pipefail
+          curl -fL --output zig.tar.xz "https://ziglang.org/download/${{ matrix.zig }}/zig-aarch64-linux-${{ matrix.zig }}.tar.xz"
+          echo "${{ matrix.sha256 }}  zig.tar.xz" | sha256sum -c -
+          mkdir -p host-zig
+          tar -xJf zig.tar.xz -C host-zig --strip-components=1
+
+      - name: Wide integer bit operations, native aarch64-linux
+        run: |
+          set -euo pipefail
+          python3 -B tests/roadmap/bitops-native/gen.py --check
+          python3 -B tests/roadmap/bitops-native/qualify.py native --version "${{ matrix.zig }}" \
+            --zig "$PWD/host-zig/zig" --target aarch64-linux \
+            --evidence "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"

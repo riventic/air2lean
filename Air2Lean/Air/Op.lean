@@ -321,7 +321,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
-  | some "shlOverflow" | some "shrOverflow" => some ".overflow"
+  | some "shlOverflow" | some "shrOverflow" | some "shiftRhsTooBig" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"
