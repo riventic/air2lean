@@ -1,0 +1,5 @@
+sum0 ok 0 sum10 ok 10 sum256 ok 256 sum257 ok 0
+create ok 7
+resize ok 1 ok 0 ok 0 ok 1
+reset ok 200 ok 400 ok 0
+page_sum ok 0 10 10000 page_create ok 7 page_resize ok 1 1 1

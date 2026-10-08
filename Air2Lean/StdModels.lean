@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Air2Lean.Air.Op
 
 /-! # Built-in std model registry
 
@@ -40,11 +41,19 @@ inductive ThreadFn where
   | groupAsync | groupConcurrent | groupAwait | groupCancel
   deriving BEq, Repr
 
-/-- What a recognized std name selects: an allocator or thread model, or an explicit
+/-- The trusted OS page-mapping primitives of `--allocator-model translated`
+(`ZigLean/Os/Mmap.lean`, premise OS-01): the call graph is cut at `posix.*`, above the
+syscall/libc layer, on Linux and macOS alike. -/
+inductive OsFn where
+  | mmap | munmap | mremap
+  deriving BEq, Repr
+
+/-- What a recognized std name selects: an allocator, thread or OS model, or an explicit
 rejection (outside the fork-join subset) with its reason. -/
 inductive StdModelKind where
   | alloc (fn : AllocFn)
   | thread (fn : ThreadFn)
+  | os (fn : OsFn)
   | rejected (reason : String)
   deriving BEq, Repr
 
@@ -56,16 +65,30 @@ structure StdModel where
   zigVersions : Array String := #[]
   /-- `ZigLean` declarations the emitted term may reference (the semantic dependencies). -/
   dependencies : Array String := #[]
+  /-- The `--allocator-model` this row is active in; `none`: every mode. Allocator rows are
+  `std`-only (translated mode translates `mem.Allocator.*` from its AIR); OS rows are
+  `translated`-only. -/
+  allocatorModel : Option AllocatorModel := none
   deriving Repr
 
 def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
   m.zigVersions.isEmpty || m.zigVersions.contains zigVersion
 
+/-- The row is active under `--allocator-model mode`. -/
+def StdModel.activeIn (m : StdModel) (mode : AllocatorModel) : Bool :=
+  match m.allocatorModel with
+  | none => true
+  | some only => only == mode
+
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
-  { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
+  { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·),
+    allocatorModel := some .std }
 private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String) : StdModel :=
   { symbol, kind := .thread fn, dependencies := deps.map ("Zig." ++ ·) }
+private def osModel (symbol : String) (fn : OsFn) (deps : Array String) : StdModel :=
+  { symbol, kind := .os fn, zigVersions := #["0.16.0"],
+    dependencies := deps.map ("Zig.Os." ++ ·), allocatorModel := some .translated }
 
 /-- The one table of built-in std models. -/
 def stdModels : Array StdModel := #[
@@ -98,6 +121,9 @@ def stdModels : Array StdModel := #[
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"],
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"],
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"],
+  osModel "posix.mmap" .mmap #["mmap", "Target.linux", "Target.macos"],
+  osModel "posix.munmap" .munmap #["munmap", "Target.linux", "Target.macos"],
+  osModel "posix.mremap" .mremap #["mremap", "Target.linux"],
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.detach",
@@ -109,16 +135,25 @@ private def stdModelIndex : Std.HashMap String StdModel :=
 /-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`. -/
 def stdModelBase (name : String) : String := (name.splitOn "__anon_").head!
 
-/-- The built-in std model (modelled or rejected) that the function `name` is an instance of. -/
-def stdModel? (name : String) : Option StdModel := stdModelIndex[stdModelBase name]?
+/-- The built-in std model (modelled or rejected) that the function `name` is an instance of,
+among the rows active under `mode` (`StdModel.activeIn`). -/
+def stdModel? (name : String) (mode : AllocatorModel := .std) : Option StdModel :=
+  (stdModelIndex[stdModelBase name]?).filter (·.activeIn mode)
 
-private def stdKind? (name : String) : Option StdModelKind := (stdModel? name).map (·.kind)
+private def stdKind? (name : String) (mode : AllocatorModel := .std) : Option StdModelKind :=
+  (stdModel? name mode).map (·.kind)
 
 /-- The allocator function that the function `name` is an instance of
-(`mem.Allocator.<fn>__anon_<n>`). -/
-def allocFn? (name : String) : Option AllocFn :=
-  match stdKind? name with
+(`mem.Allocator.<fn>__anon_<n>`). Std mode only. -/
+def allocFn? (name : String) (mode : AllocatorModel := .std) : Option AllocFn :=
+  match stdKind? name mode with
   | some (.alloc fn) => some fn
+  | _ => none
+
+/-- The trusted OS primitive that `name` selects. `--allocator-model translated` only. -/
+def osFn? (name : String) (mode : AllocatorModel := .std) : Option OsFn :=
+  match stdKind? name mode with
+  | some (.os fn) => some fn
   | _ => none
 
 /-- The `Thread` function that the function `name` is an instance of
@@ -135,10 +170,10 @@ def rejectedThreadFn? (name : String) : Option String :=
   | some (.rejected reason) => some reason
   | _ => none
 
-/-- `name` selects an allocator or thread model (not a rejection). -/
-def modelledStdFn (name : String) : Bool :=
-  match stdKind? name with
-  | some (.alloc _) | some (.thread _) => true
+/-- `name` selects an allocator, thread or OS model (not a rejection) under `mode`. -/
+def modelledStdFn (name : String) (mode : AllocatorModel := .std) : Bool :=
+  match stdKind? name mode with
+  | some (.alloc _) | some (.thread _) | some (.os _) => true
   | _ => false
 
 end Air2Lean

@@ -10,11 +10,11 @@ Proof-only module (not imported by `ZigLean.lean`): the rules of `Os.mmap`, `Os.
 `mapping P p A lo bs` owns the whole live range of one OS mapping: the bytes `bs` at `p`, which
 points at the mapping's first live offset `lo`, in a block at the page-aligned address `A`.
 
-* `Triple.mmap`: a fresh mapping of `len` zero bytes, or an `MMapError` and no change.
+* `Triple.mmap`: a fresh mapping of `len` zero bytes, or `error.OutOfMemory` and no change.
 * `Triple.munmapWhole`, `Triple.munmapPrefix`, `Triple.munmapTail`: `munmap` consumes the
   permission of exactly the unmapped range; a trim leaves the rest as a mapping.
 * `Triple.mremapShrink`, `Triple.mremapGrow`: the new mapping (in place or moved), or an
-  `MRemapError` and the old mapping.
+  `error.OutOfMemory` and the old mapping.
 * `munmap_whole_then_illegal`, `munmap_prefix_access_illegal`, `munmap_tail_access_illegal`:
   after `munmap` every access to the unmapped bytes and a second `munmap` are `.illegal`.
 * `mapDenied_iff`: the failure decision is `rawAlloc`'s (`Mem.allocDenied`).
@@ -164,12 +164,11 @@ theorem mapDenied_iff (m : Mem) (n : Nat) : m.mapDenied n = true ↔ m.allocDeni
 
 /-! ## mmap -/
 
-theorem Os.mmap_run (os : Os.Profile) (hint : Option Ptr) (len : BitVec 64) (hlen : len.toNat ≠ 0)
+theorem Os.mmap_run (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : len.toNat ≠ 0)
     (m : Mem) :
     (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0).run m =
       if m.mapDenied len.toNat then
-        pure (.error (m.allocPolicy.os.mmapError m.allocs len.toNat).name,
-          { m with allocs := m.allocs + 1 })
+        pure (.error "OutOfMemory", { m with allocs := m.allocs + 1 })
       else
         pure (.ok ⟨⟨some m.blocks.size, 0⟩, len⟩,
           ({ m with allocs := m.allocs + 1 } : Mem).afterMmap os.pageSize len.toNat) := by
@@ -214,29 +213,24 @@ theorem Mem.Seq.afterMmap {m : Mem} (hst : m.Seq) (P n : Nat) : (m.afterMmap P n
 def mmapPost (P : Nat) (len : BitVec 64) : Except ErrName Slice → Assn
   | .ok s => fun h => s.len = len ∧ s.ptr.off = 0 ∧
       ∃ A, mapping P s.ptr A 0 (Array.replicate len.toNat (.int 0)) h
-  | .error e => ⌜e ∈ mmapErrorNames⌝
-
-theorem MmapError.name_mem (e : MmapError) : e.name ∈ mmapErrorNames := by
-  cases e <;> simp [MmapError.name, mmapErrorNames]
-
-theorem MremapError.name_mem (e : MremapError) : e.name ∈ mremapErrorNames := by
-  cases e <;> simp [MremapError.name, mremapErrorNames]
+  | .error e => ⌜e = "OutOfMemory"⌝
 
 /-- **mmap.** From nothing: a fresh, page-aligned mapping of exactly `len` zero bytes that
 nothing else owns, or an `MMapError` with the heap unchanged. For every failure policy. -/
-theorem Triple.mmap (os : Os.Profile) (hP : 0 < os.pageSize) (hint : Option Ptr) (len : BitVec 64)
+theorem Triple.mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
     (hlen : 0 < len.toNat) :
     Triple emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
       (mmapPost os.pageSize len) :=
   Triple.of_run fun m hP' hF hd hm hp hst => by
+    have hP := os.pageSize_pos
     have hP0 : hP' = Heap.empty := hp
     subst hP0
     rw [Heap.empty_union] at hm
     have hst₁ : ({ m with allocs := m.allocs + 1 } : Mem).Seq := ⟨hst.single, hst.addr⟩
     by_cases hdn : m.mapDenied len.toNat
-    · refine ⟨.error (m.allocPolicy.os.mmapError m.allocs len.toNat).name,
+    · refine ⟨.error "OutOfMemory",
         { m with allocs := m.allocs + 1 }, Heap.empty, ?_, (Heap.disjoint_empty hF).symm,
-        by rw [Heap.empty_union]; exact hm, ⟨MmapError.name_mem _, rfl⟩, hst₁⟩
+        by rw [Heap.empty_union]; exact hm, ⟨rfl, rfl⟩, hst₁⟩
       rw [Os.mmap_run os hint len (by omega), if_pos hdn]
     · let m₁ : Mem := { m with allocs := m.allocs + 1 }
       let nb : Block :=
@@ -314,7 +308,7 @@ theorem mod_add3 {a b c P : Nat} (ha : a % P = 0) (hb : b % P = 0) (hc : c % P =
 
 /-- `munmap` of a range of a live mapping that `unmapCase` admits: record the removed bytes as a
 write, then apply the case to the block. -/
-theorem Os.munmap_run {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {blk : Block}
+theorem Os.munmap_run {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk : Block}
     {lo : Nat} {u : Os.Unmap} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
     (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
     (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
@@ -333,7 +327,7 @@ theorem Os.munmap_run {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {blk
 
 /-- The common part of the `munmap` rules: the memory after a case `u` on a whole owned mapping,
 for the range from byte `k` of it. -/
-theorem munmap_owned {m : Mem} {h hF : Heap} (os : Os.Profile)
+theorem munmap_owned {m : Mem} {h hF : Heap} (os : Os.Target)
     {p : Ptr} {A lo : Nat} {bs : Array Byte} {k : Nat} {len : BitVec 64} {u : Os.Unmap}
     (hp : mapping os.pageSize p A lo bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hst : m.Seq) (hk : k % os.pageSize = 0)
@@ -390,7 +384,7 @@ theorem add_le_of_mod {a b P : Nat} (ha : a % P = 0) (hb : b % P = 0) (h : a < b
   rw [← Nat.mul_succ]; exact Nat.mul_le_mul_left _ this
 
 /-- **munmap, whole mapping.** Consumes the mapping's permission; nothing is left. -/
-theorem Triple.munmapWhole (os : Os.Profile) {p : Ptr} {A lo : Nat} {bs : Array Byte}
+theorem Triple.munmapWhole (os : Os.Target) {p : Ptr} {A lo : Nat} {bs : Array Byte}
     {len : BitVec 64} (hlen : 0 < len.toNat) (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
     Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩) (fun _ => emp) :=
   Triple.of_run fun m h hF hd hm hp hst => by
@@ -408,7 +402,7 @@ theorem Triple.munmapWhole (os : Os.Profile) {p : Ptr} {A lo : Nat} {bs : Array 
 
 /-- **munmap, page prefix.** `len` (rounded up to pages, `k`) is less than the mapping: the
 permission of its first `k` bytes is consumed; the rest is a mapping that starts `k` bytes later. -/
-theorem Triple.munmapPrefix (os : Os.Profile) (hP : 0 < os.pageSize) {p : Ptr} {A lo : Nat}
+theorem Triple.munmapPrefix (os : Os.Target) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {len : BitVec 64} (hlen : 0 < len.toNat)
     (hlt : alignUp len.toNat os.pageSize < alignUp bs.size os.pageSize) :
     Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩)
@@ -416,6 +410,7 @@ theorem Triple.munmapPrefix (os : Os.Profile) (hP : 0 < os.pageSize) {p : Ptr} {
         (lo + alignUp len.toNat os.pageSize)
         (bs.extract (alignUp len.toNat os.pageSize) bs.size)) :=
   Triple.of_run fun m h hF hd hm hp hst => by
+    have hP := os.pageSize_pos
     have hpos := hp.2.1
     have hA0 := hp.2.2.1
     have hlo0 := hp.2.2.2.1
@@ -452,7 +447,7 @@ theorem Triple.munmapPrefix (os : Os.Profile) (hP : 0 < os.pageSize) {p : Ptr} {
 
 /-- **munmap, page tail.** From byte `k` (a page multiple, inside the mapping) to the mapping's
 page end: the permission of those bytes is consumed; the first `k` bytes stay a mapping. -/
-theorem Triple.munmapTail (os : Os.Profile) {p : Ptr} {A lo k : Nat} {bs : Array Byte}
+theorem Triple.munmapTail (os : Os.Target) {p : Ptr} {A lo k : Nat} {bs : Array Byte}
     {len : BitVec 64} (hk : k % os.pageSize = 0) (hk0 : 0 < k) (hkS : k < bs.size)
     (hlen : 0 < len.toNat)
     (heq : k + alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
@@ -505,7 +500,7 @@ theorem Os.mappingAt_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block}
       MonadStateOf.get, StateT.get, pure, ExceptT.pure, StateT.run]
 
 /-- `munmap` of a block that is not live (a double `munmap`) throws `.illegal`. -/
-theorem Os.munmap_dead {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {blk : Block}
+theorem Os.munmap_dead {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk : Block}
     (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
     (Os.munmap os s).run m = throw .illegal := by
   have h := Os.mappingAt_dead (m := m) hb hblk hl
@@ -515,7 +510,7 @@ theorem Os.munmap_dead {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {bl
 
 /-- **No use after munmap, no double munmap.** After `munmap` of a whole mapping, every access to
 its block and a second `munmap` of the same range throw `.illegal`. -/
-theorem munmap_whole_then_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p : Ptr}
+theorem munmap_whole_then_illegal {m : Mem} {h hF : Heap} (os : Os.Target) {p : Ptr}
     {A lo : Nat} {bs : Array Byte} {len : BitVec 64} (hp : mapping os.pageSize p A lo bs h)
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hst : m.Seq) (hlen : 0 < len.toNat)
     (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
@@ -533,7 +528,7 @@ theorem munmap_whole_then_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p :
 
 /-- After `munmap` of a page prefix, every access below the new first live offset throws
 `.illegal`. -/
-theorem munmap_prefix_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) (hP : 0 < os.pageSize)
+theorem munmap_prefix_access_illegal {m : Mem} {h hF : Heap} (os : Os.Target)
     {p : Ptr} {A lo : Nat} {bs : Array Byte} {len : BitVec 64}
     (hp : mapping os.pageSize p A lo bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hst : m.Seq) (hlen : 0 < len.toNat)
@@ -541,6 +536,7 @@ theorem munmap_prefix_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) (
     ∃ m', (Os.munmap os ⟨p, len⟩).run m = pure ((), m') ∧
       ∀ q n a, q.block = p.block → q.off.toNat < lo + alignUp len.toNat os.pageSize →
         m'.access q n a = throw .illegal := by
+  have hP := os.pageSize_pos
   obtain ⟨b, blk, rfl, hblk, -, -, -, -, -, -, m', hr, -, -, -, hb'⟩ :=
     munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
       (by rw [Nat.add_zero]; exact unmapCase_prefix hp.2.1 hlen hlt)
@@ -552,7 +548,7 @@ theorem munmap_prefix_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) (
 
 /-- After `munmap` of a page tail from byte `k`, every access that reaches byte `k` or beyond
 throws `.illegal`. -/
-theorem munmap_tail_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p : Ptr}
+theorem munmap_tail_access_illegal {m : Mem} {h hF : Heap} (os : Os.Target) {p : Ptr}
     {A lo k : Nat} {bs : Array Byte} {len : BitVec 64} (hp : mapping os.pageSize p A lo bs h)
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hst : m.Seq)
     (hk : k % os.pageSize = 0) (hk0 : 0 < k) (hkS : k < bs.size) (hlen : 0 < len.toNat)
@@ -571,7 +567,7 @@ theorem munmap_tail_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p 
 /-! ## mremap -/
 
 /-- The argument checks of `mremap` pass for the whole live mapping at `p`. -/
-theorem Os.mremap_eq {m : Mem} (os : Os.Profile) {b : BlockId} {blk : Block} {lo : Nat}
+theorem Os.mremap_eq {m : Mem} (os : Os.Target) {b : BlockId} {blk : Block} {lo : Nat}
     {oldLen newLen : BitVec 64} {flags : BitVec 32} (hhas : os.hasMremap = true)
     (hfl : flags = 0 ∨ flags = Os.mremapMayMove) (hblk : m.blocks[b]? = some blk) (hl : blk.live)
     (hK : blk.kind = .mapped lo) (hold0 : oldLen.toNat ≠ 0)
@@ -585,13 +581,12 @@ theorem Os.mremap_eq {m : Mem} (os : Os.Profile) {b : BlockId} {blk : Block} {lo
 theorem mremapFill_size (P cur n : Nat) : (mremapFill P cur n).size = n - cur := by
   simp [mremapFill]
 
-theorem Os.mremapLive_zero {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+theorem Os.mremapLive_zero {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
     (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32) (hn : newLen.toNat = 0) :
-    (Os.mremapLive os p b blk lo newLen flags).run m =
-      pure (.error MremapError.invalidSyscallParameters.name, m) := by
+    (Os.mremapLive os p b blk lo newLen flags).run m = throw .unspecified := by
   simp [Os.mremapLive, hn, zig_unfold]
 
-theorem Os.mremapLive_shrink {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+theorem Os.mremapLive_shrink {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
     (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32) (hn0 : newLen.toNat ≠ 0)
     (hn : newLen.toNat ≤ blk.bytes.size - lo) (hst : m.SingleThread) :
     (Os.mremapLive os p b blk lo newLen flags).run m =
@@ -603,18 +598,18 @@ theorem Os.mremapLive_shrink {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId)
   simp [Os.mremapLive, hn0, hn, zig_unfold, hrec, ExceptT.bindCont, modify, modifyGet,
     MonadStateOf.modifyGet, StateT.modifyGet, Mem.recordAt]
 
-theorem Os.mremapLive_grow {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
     (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32)
     (hn : blk.bytes.size - lo < newLen.toNat) (hst : m.SingleThread) :
     let n := newLen.toNat
     let m₁ : Mem := { m with allocs := m.allocs + 1 }
     (Os.mremapLive os p b blk lo newLen flags).run m =
-      if m.mapDenied n then pure (.error (m.allocPolicy.os.mremapError m.allocs n).name, m₁)
+      if m.mapDenied n then pure (.error "OutOfMemory", m₁)
       else if flags = Os.mremapMayMove ∧
           (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingOnTop b blk = false) then
         pure (.ok ⟨⟨some m.blocks.size, 0⟩, newLen⟩,
           (m₁.recordAt b lo (blk.bytes.size - lo) .write).mremapMoved os.pageSize b blk lo n)
-      else if m.mappingOnTop b blk = false then pure (.error MremapError.outOfMemory.name, m₁)
+      else if m.mappingOnTop b blk = false then pure (.error "OutOfMemory", m₁)
       else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
   intro n m₁
   have hn0 : newLen.toNat ≠ 0 := by omega
@@ -667,15 +662,15 @@ theorem extract_append_live {a f bs : Array Byte} {lo : Nat} (hlo : lo ≤ a.siz
     Array.extract_size]
 
 /-- What `mremap` returns for a growth: the grown mapping, in place or moved, or an
-`MRemapError` and the old mapping. -/
+`error.OutOfMemory` and the old mapping. -/
 def mremapPost (P : Nat) (p : Ptr) (A lo : Nat) (bs : Array Byte) (n : Nat) (newLen : BitVec 64) :
     Except ErrName Slice → Assn
   | .ok s => fun h => s.len = newLen ∧ ∃ A' lo', mapping P s.ptr A' lo' (bs ++ mremapFill P bs.size n) h
-  | .error e => fun h => e ∈ mremapErrorNames ∧ mapping P p A lo bs h
+  | .error e => fun h => e = "OutOfMemory" ∧ mapping P p A lo bs h
 
 /-- **mremap, shrink.** In place: the permission of the cut bytes is consumed, the first
 `newLen` bytes stay a mapping at the same pointer. -/
-theorem Triple.mremapShrink (os : Os.Profile) (hhas : os.hasMremap = true)
+theorem Triple.mremapShrink (os : Os.Target) (hhas : os.hasMremap = true)
     {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
     (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
@@ -706,25 +701,10 @@ theorem Triple.mremapShrink (os : Os.Profile) (hhas : os.hasMremap = true)
     · have := mapping_below hst hblk hl hK (by omega)
       rw [hnbs]; show blk.addr + (lo + newLen.toNat) < m.nextAddr; omega
 
-/-- **mremap, new length 0.** `error.InvalidSyscallParameters`; the mapping is unchanged. -/
-theorem Triple.mremapZero (os : Os.Profile) (hhas : os.hasMremap = true)
-    {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
-    {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
-    (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
-    (hn0 : newLen.toNat = 0) :
-    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
-      (fun r => ⌜r = .error "InvalidSyscallParameters"⌝ ∗ mapping os.pageSize p A lo bs) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
-    obtain ⟨b, blk, rfl, hblk, hl, hK, -, hS, -, -, -⟩ := mapping_block hp hm hd
-    have hcur : blk.bytes.size - lo = bs.size := by omega
-    rw [Os.mremap_eq os hhas hfl hblk hl hK (by omega) (by rw [hcur]; exact hold),
-      Os.mremapLive_zero os _ b blk lo newLen flags hn0]
-    exact ⟨_, m, h, rfl, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
-
 /-- **mremap, growth.** For every failure, move and placement decision: the grown mapping (the
 old bytes, then `mremapFill`), in place at the same pointer or moved to a fresh page-aligned
-block (the old block ends), or an `MRemapError` with the old mapping unchanged. -/
-theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.hasMremap = true)
+block (the old block ends), or `error.OutOfMemory` with the old mapping unchanged. -/
+theorem Triple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
     {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
     (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
@@ -732,6 +712,7 @@ theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.ha
     Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
       (mremapPost os.pageSize p A lo bs newLen.toNat newLen) :=
   Triple.of_run fun m h hF hd hm hp hst => by
+    have hP := os.pageSize_pos
     have hpos := hp.2.1
     have hA0 := hp.2.2.1
     have hlo0 := hp.2.2.2.1
@@ -748,7 +729,7 @@ theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.ha
     have hfs : fill.size = n - bs.size := by rw [hfill, mremapFill_size]
     by_cases hd₁ : m.mapDenied n
     · rw [if_pos hd₁]
-      exact ⟨_, _, h, rfl, hd, hm, ⟨MremapError.name_mem _, hp⟩, hst₁⟩
+      exact ⟨_, _, h, rfl, hd, hm, ⟨rfl, hp⟩, hst₁⟩
     rw [if_neg hd₁]
     by_cases hmv : flags = Os.mremapMayMove ∧
         (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingOnTop b blk = false)
@@ -790,7 +771,7 @@ theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.ha
     rw [if_neg hmv]
     by_cases ht : m.mappingOnTop b blk = false
     · rw [if_pos ht]
-      exact ⟨_, _, h, rfl, hd, hm, ⟨MremapError.name_mem _, hp⟩, hst₁⟩
+      exact ⟨_, _, h, rfl, hd, hm, ⟨rfl, hp⟩, hst₁⟩
     rw [if_neg ht]
     -- In place.
     let nb : Block := { blk with bytes := blk.bytes ++ fill }
@@ -830,7 +811,7 @@ def returns {α : Type} (c : MemM α) : Bool :=
   | some (.ok _) => true
   | _ => false
 
-def lx : Profile := .linuxX86_64
+def lx : Target := .linux
 
 def map8 : MemM Slice := do
   match ← Os.mmap lx none 8 lx.protReadWrite lx.mapPrivateAnonymous noFd 0 with

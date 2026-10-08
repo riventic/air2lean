@@ -7,22 +7,25 @@ three OS calls. Only these calls get a trusted model, premise
 
 | Zig 0.16.0 (`lib/std/posix.zig`) | Model (`ZigLean/Os/Mmap.lean`) |
 |---|---|
-| `mmap(ptr: ?[*]align(page_size_min) u8, length: usize, prot: PROT, flags: MAP, fd: fd_t, offset: u64) MMapError![]align(page_size_min) u8` | `Zig.Os.mmap (os : Os.Profile) (hint : Option Ptr) (length : BitVec 64) (prot flags fd : BitVec 32) (offset : BitVec 64) : MemM (Except ErrName Slice)` |
-| `munmap(memory: []align(page_size_min) const u8) void` | `Zig.Os.munmap (os : Os.Profile) (memory : Slice) : MemM Unit` |
-| `mremap(old_address: ?[*]align(page_size_min) u8, old_len: usize, new_len: usize, flags: MREMAP, new_address: ?[*]align(page_size_min) u8) MRemapError![]align(page_size_min) u8` (Linux) | `Zig.Os.mremap (os : Os.Profile) (oldAddress : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32) (newAddress : Option Ptr) : MemM (Except ErrName Slice)` |
+| `mmap(ptr: ?[*]align(page_size_min) u8, length: usize, prot: PROT, flags: MAP, fd: fd_t, offset: u64) MMapError![]align(page_size_min) u8` | `Zig.Os.mmap (target : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags : BitVec 32) (fd : BitVec 32) (offset : BitVec 64) : MemM (Except ErrName Slice)` |
+| `munmap(memory: []align(page_size_min) const u8) void` | `Zig.Os.munmap (target : Os.Target) (memory : Slice) : MemM Unit` |
+| `mremap(old_address: ?[*]align(page_size_min) u8, old_len: usize, new_len: usize, flags: MREMAP, new_address: ?[*]align(page_size_min) u8) MRemapError![]align(page_size_min) u8` (Linux) | `Zig.Os.mremap (target : Os.Target) (old : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32) (newAddress : Option Ptr) : MemM (Except ErrName Slice)` |
 
-`PROT`, `MAP` and `MREMAP` are `packed struct(u32)`s; the model takes their backing
-integers. `fd_t` is `i32`. `mremap` returns a slice (`[0..new_len]`), not a many-pointer.
+Under `--allocator-model translated` ([allocator-model.md](allocator-model.md)) the translator
+emits these calls for `std.posix.mmap`/`munmap`/`mremap`. `PROT`, `MAP` and `MREMAP` are
+`packed struct(u32)`s; the model takes their bits (`Zig.Packed.toBits`). `fd_t` is `i32`.
+`mremap` returns a slice (`[0..new_len]`), not a many-pointer. The only error the model
+returns is `error.OutOfMemory`; the translator checks that each call site's error set admits it.
 
-## Target profiles
+## Targets
 
-`Os.Profile` fixes the page size (`std.heap.pageSize()`, comptime in Zig 0.16.0 for both
+`Os.Target` fixes the page size (`std.heap.pageSize()`, comptime in Zig 0.16.0 for both
 modelled targets) and the flag encodings:
 
-| Profile | Page size | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
+| Target | Page size | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
 |---|---|---|---|---|
-| `Os.Profile.linuxX86_64` | 4096 | `3` | `0x22` | yes |
-| `Os.Profile.macosAarch64` | 16384 | `3` | `0x1002` | no (`posix.MREMAP == void`) |
+| `Os.Target.linux` (x86_64-linux) | 4096 | `3` | `0x22` | yes |
+| `Os.Target.macos` (aarch64-macos) | 16384 | `3` | `0x1002` | no (`posix.MREMAP == void`) |
 
 `Os.noFd` is `-1`, `Os.mremapMayMove` is `MREMAP{ .MAYMOVE = true }` (`1`).
 
@@ -37,9 +40,10 @@ combination throws `.unspecified` (outside the model). The hint is ignored: with
 Otherwise the call is one allocation attempt, numbered by `Mem.allocs` like every
 `std.mem.Allocator` request. The failure decision is the existing allocator one
 (`Mem.mapDenied`, equal to `Mem.allocDenied`: `failAt`, `failures`, `maxBytes`, the oracle
-`fails`, `budget`; `mapDenied_iff`). A failure returns the `MMapError` that the oracle
-`AllocPolicy.os.mmapError` picks (default `OutOfMemory`) and changes nothing but the attempt
-count. A success is a new block of kind `.mapped 0` with exactly `length` zero bytes at the
+`fails`, `budget`; `mapDenied_iff`; the budget counts the live `.heap` bytes plus the
+request). A failure returns `error.OutOfMemory` (`ENOMEM`) and changes nothing but the attempt
+count. The premise assumes the kernel fails such a mapping with no other `MMapError` member:
+the process locks no memory (no `EAGAIN`). A success is a new block of kind `.mapped 0` with exactly `length` zero bytes at the
 next page-aligned address; the next block starts above the mapping's last page. Addresses are
 fresh: a later mapping never reuses an unmapped range (address reuse is not on `main` yet).
 
@@ -63,15 +67,16 @@ absence is stronger. The removed bytes are recorded as a write for the race chec
 
 ## mremap
 
-Only where the profile has it (Linux). `flags` must be `0` or `MAYMOVE` and `new_address`
-null; `FIXED`/`DONTUNMAP` are `.unspecified`, as is any call on a profile without `mremap`.
+Only on Linux. `flags` must be `0` or `MAYMOVE` and `new_address` null; `FIXED`/`DONTUNMAP`
+are `.unspecified`, as is any call on macOS.
 `old_address`/`old_len` must name a whole live mapping, else `.illegal`. Then
 (`Os.mremapLive`):
 
-- `new_len = 0`: `error.InvalidSyscallParameters` (`EINVAL`), no change;
+- `new_len = 0` (`EINVAL`): outside the model, `.unspecified` (the allocator wrappers never
+  pass it);
 - a shrink: in place, the bytes end at `lo + new_len`;
-- a growth is an allocation attempt. The failure decision fails it with the `MRemapError`
-  that `AllocPolicy.os.mremapError` picks. Under `MAYMOVE` it moves to a fresh page-aligned
+- a growth is an allocation attempt. The failure decision fails it with `error.OutOfMemory`.
+  Under `MAYMOVE` it moves to a fresh page-aligned
   block when the oracle `AllocPolicy.os.mremapMoves` says so or when another block lies
   above the mapping; the live bytes are copied and the old block ends. Otherwise it grows in
   place if no other block lies above the mapping, else returns `error.OutOfMemory` (`ENOMEM`).
@@ -86,19 +91,18 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 
 | Theorem | Statement |
 |---|---|
-| `Triple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or an error in `mmapErrorNames` and no bytes. For every failure policy. |
+| `Triple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or `error.OutOfMemory` and no bytes. For every failure policy. |
 | `Triple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
 | `Triple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
 | `Triple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |
 | `Triple.mremapShrink` | `mapping p A lo (bs.extract 0 newLen)` after, the same pointer returned. |
-| `Triple.mremapZero` | `error.InvalidSyscallParameters`, the mapping unchanged. |
-| `Triple.mremapGrow` | `mremapPost`: a `mapping` of `bs ++ mremapFill` at the returned pointer (in place or moved), or an error in `mremapErrorNames` with the old `mapping`. |
+| `Triple.mremapGrow` | `mremapPost`: a `mapping` of `bs ++ mremapFill` at the returned pointer (in place or moved), or `error.OutOfMemory` with the old `mapping`. |
 | `munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
 | `munmap_prefix_access_illegal`, `munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
 | `Os.munmap_dead`, `access_illegal` | `munmap` of a dead block, and an access below `lo`, past the bytes or into a dead block, throw `.illegal`. |
 | `mapDenied_iff` | the failure decision is `Mem.allocDenied`. |
 
-The `MmapExamples` section checks concrete runs with the `x86_64-linux` profile in the
+The `MmapExamples` section checks concrete runs with the `linux` target in the
 kernel (`decide`): a store into a fresh mapping, use after `munmap`, double `munmap`, and a
 middle-range `munmap`.
 

@@ -1,8 +1,8 @@
 import ZigLean.Os.Mmap
 
 /-! Runtime regressions of the OS page-mapping model (premise OSM-01, `docs/os-mmap.md`): every
-rule of `Os.mmap`/`Os.munmap`/`Os.mremap` with its negative cases, on the `x86_64-linux`
-profile (4 KiB pages) unless noted. `lake env lean tests/roadmap/os-mmap/Check.lean`. -/
+rule of `Os.mmap`/`Os.munmap`/`Os.mremap` with its negative cases, on the `linux` target
+(4 KiB pages) unless noted. `lake env lean tests/roadmap/os-mmap/Check.lean`. -/
 
 open Zig Zig.Os
 
@@ -11,7 +11,7 @@ namespace OsMmapCheck
 /-- For `blocks[i]!` in the checks only. -/
 local instance : Inhabited Block := ⟨{ bytes := #[], align := 0, kind := .heap, live := false, addr := 0 }⟩
 
-def lx := Profile.linuxX86_64
+def lx : Target := .linux
 def P := lx.pageSize
 
 /-- `MemM` outcome as a short tag, with the final memory. -/
@@ -60,10 +60,10 @@ def value {α : Type} [Inhabited α] (c : MemM α) (m : Mem := {}) : α :=
 #guard value (do let s ← mapOk 16; load (BitVec 8) 1 (s.ptr.add 3)) == 0
 -- Past the length: illegal.
 #guard tag (run (do let s ← mapOk 16; load (BitVec 8) 1 (s.ptr.add 16))) == "Zig.Error.illegal"
--- Failure oracle: the error is a `MMapError`, the blocks are unchanged.
+-- Failure oracle: `error.OutOfMemory`, the blocks are unchanged.
 #guard
-  let m0 : Mem := { allocPolicy := { fails := fun _ _ => true, os := { mmapError := fun _ _ => .lockedMemoryLimitExceeded } } }
-  value (mmapRW 10) m0 == .error "LockedMemoryLimitExceeded" && (final (mmapRW 10) m0).blocks.size == 0
+  let m0 : Mem := { allocPolicy := { fails := fun _ _ => true } }
+  value (mmapRW 10) m0 == .error "OutOfMemory" && (final (mmapRW 10) m0).blocks.size == 0
 #guard
   let m0 : Mem := { failAt := some 0 }
   value (mmapRW 10) m0 == .error "OutOfMemory" && (final (mmapRW 10) m0).allocs == 1
@@ -74,9 +74,9 @@ def value {α : Type} [Inhabited α] (c : MemM α) (m : Mem := {}) : α :=
 #guard tag (run (mmap lx none 4096 3 0x22 noFd 4096)) == "Zig.Error.unspecified"
 #guard tag (run (mmapRW 0)) == "Zig.Error.illegal"
 -- macOS encoding.
-#guard tag (run (mmap .macosAarch64 none 10 3 0x1002 noFd 0)) == "ok"
-#guard ((final (mmap .macosAarch64 none 10 3 0x1002 noFd 0)).blocks[0]!).addr % 16384 == 0
-#guard tag (run (mmap .macosAarch64 none 10 3 0x22 noFd 0)) == "Zig.Error.unspecified"
+#guard tag (run (mmap .macos none 10 3 0x1002 noFd 0)) == "ok"
+#guard ((final (mmap .macos none 10 3 0x1002 noFd 0)).blocks[0]!).addr % 16384 == 0
+#guard tag (run (mmap .macos none 10 3 0x22 noFd 0)) == "Zig.Error.unspecified"
 
 /-! ## munmap -/
 
@@ -152,13 +152,13 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
 #guard
   let c := do let s ← mapOk 4096; let _ ← mapOk 4096; remap s 8192 0
   value c == .error "OutOfMemory" && ((final c).blocks[0]!).live && ((final c).blocks[0]!).bytes.size == 4096
--- Failure oracle on a growth: an `MRemapError`, the mapping unchanged.
+-- Failure oracle on a growth: `error.OutOfMemory`, the mapping unchanged.
 #guard
-  let m0 : Mem := { allocPolicy := { fails := fun i _ => i == 1, os := { mremapError := fun _ _ => .lockedMemoryLimitExceeded } } }
+  let m0 : Mem := { allocPolicy := { fails := fun i _ => i == 1 } }
   let c := do let s ← mapOk 4096; remap s 8192
-  value c m0 == .error "LockedMemoryLimitExceeded" && ((final c m0).blocks[0]!).bytes.size == 4096
--- new_len = 0: InvalidSyscallParameters.
-#guard value (do let s ← mapOk 4096; remap s 0) == .error "InvalidSyscallParameters"
+  value c m0 == .error "OutOfMemory" && ((final c m0).blocks[0]!).bytes.size == 4096
+-- new_len = 0 (EINVAL): outside the model.
+#guard tag (run (do let s ← mapOk 4096; remap s 0)) == "Zig.Error.unspecified"
 -- Not a whole live mapping, a heap block, after munmap: illegal.
 #guard tag (run (do let s ← mapOk 8192; remap ⟨s.ptr, 4096⟩ 100)) == "Zig.Error.illegal"
 #guard tag (run (do let s ← mapOk 8192; remap ⟨s.ptr.add 4096, 4096⟩ 100)) == "Zig.Error.illegal"
@@ -171,6 +171,6 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
 -- FIXED/DONTUNMAP flags, a new address, macOS: unspecified.
 #guard tag (run (do let s ← mapOk 4096; remap s 8192 2)) == "Zig.Error.unspecified"
 #guard tag (run (do let s ← mapOk 4096; mremap lx (some s.ptr) s.len 8192 1 (some s.ptr))) == "Zig.Error.unspecified"
-#guard tag (run (mremap .macosAarch64 none 4096 8192 1 none)) == "Zig.Error.unspecified"
+#guard tag (run (mremap .macos none 4096 8192 1 none)) == "Zig.Error.unspecified"
 
 end OsMmapCheck

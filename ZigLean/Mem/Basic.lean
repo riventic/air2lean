@@ -229,26 +229,11 @@ inductive ByteRemapMode where
   | fail | inPlace | move
   deriving DecidableEq, Repr, Inhabited
 
-/-- A member of Zig 0.16.0's `posix.MMapError` (`UnexpectedError` included): the error that the
-failure oracle picks for a failed `mmap` (`ZigLean/Os/Mmap.lean`, premise OSM-01). -/
-inductive MmapError where
-  | memoryMappingNotSupported | accessDenied | permissionDenied | lockedMemoryLimitExceeded
-  | processFdQuotaExceeded | systemFdQuotaExceeded | outOfMemory | mappingAlreadyExists
-  | unexpected
-  deriving DecidableEq, Repr, Inhabited
-
-/-- A member of Zig 0.16.0's `posix.MRemapError` (`UnexpectedError` included). -/
-inductive MremapError where
-  | lockedMemoryLimitExceeded | invalidSyscallParameters | outOfMemory | unexpected
-  deriving DecidableEq, Repr, Inhabited
-
-/-- The OS page-mapping oracles (premise OSM-01). Whether an `mmap` or a growing `mremap` fails
-is the allocator failure decision (`Mem.allocDenied`, one attempt index for every request);
-these pick only the error, and whether a growth that may move does move. Each gets the attempt
+/-- The OS page-mapping oracle (premise OSM-01, `ZigLean/Os/Mmap.lean`). Whether an `mmap` or a
+growing `mremap` fails is the allocator failure decision (`Mem.allocDenied`, one attempt index
+for every request); this picks only whether a growth that may move does move, from the attempt
 index and the requested length in bytes. -/
 structure OsPolicy where
-  mmapError : Nat → Nat → MmapError := fun _ _ => .outOfMemory
-  mremapError : Nat → Nat → MremapError := fun _ _ => .outOfMemory
   /-- A growth with `MREMAP.MAYMOVE` moves the mapping to a fresh address. -/
   mremapMoves : Nat → Nat → Bool := fun _ _ => false
   deriving Inhabited
@@ -266,7 +251,7 @@ structure AllocPolicy where
   fails : Nat → Nat → Bool := fun _ _ => false
   /-- Total live-heap bytes allowed after the request; `none` is unbounded. -/
   budget : Option Nat := none
-  /-- The error and move choices of the OS page-mapping model (`ZigLean/Os/Mmap.lean`). -/
+  /-- The move choice of the OS page-mapping model (`ZigLean/Os/Mmap.lean`). -/
   os : OsPolicy := {}
   deriving Inhabited
 
@@ -337,6 +322,14 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The explicit oracle of arbitrary words (`arbitraryWord`, `--allocator-model translated`,
+  `docs/allocator-model.md`): query `k` (from 0, in execution order) returns `arbitrary[k]`,
+  `0` past the end. `@returnAddress()` and an `undefined` pointer operand read it. Every finite
+  run makes finitely many queries, so a theorem about every initial `Mem` holds for every
+  sequence of values; nothing ties a value to a real code address. -/
+  arbitrary : Array (BitVec 64) := #[]
+  /-- The number of `arbitraryWord` queries so far. -/
+  arbitraryNext : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -344,6 +337,22 @@ abbrev MemM (α : Type) := StateT Mem Result α
 
 /-- The body monad of a function that uses memory: its locals over `MemM`. -/
 abbrev MM (σ α : Type) := StateT σ MemM α
+
+/-- The next value of the explicit oracle `Mem.arbitrary`. No memory access. -/
+def arbitraryWord : MemM (BitVec 64) := do
+  let m ← get
+  set { m with arbitraryNext := m.arbitraryNext + 1 }
+  pure (m.arbitrary.getD m.arbitraryNext 0)
+
+/-- `@returnAddress()`: an arbitrary `usize` (`arbitraryWord`). Allocators only pass it along
+as `ret_addr`. -/
+def returnAddress : MemM (BitVec 64) := arbitraryWord
+
+/-- An `undefined` pointer operand (`--allocator-model translated`, e.g. the `ptr` of
+`std.heap.page_allocator`): a pointer without a block at an arbitrary address
+(`arbitraryWord`), so every access through it throws `.illegal`. -/
+def undefPtr : MemM Ptr := do
+  pure ⟨none, (← arbitraryWord).toNat⟩
 
 /-- `n` rounded up to a multiple of `a` (`a = 0`: `n`). -/
 def alignUp (n a : Nat) : Nat := if a = 0 then n else (n + a - 1) / a * a

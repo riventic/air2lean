@@ -3,9 +3,12 @@ import ZigLean.Mem.Alloc
 /-!
 # OS page mappings: `posix.mmap`, `posix.munmap`, `posix.mremap` (premise OSM-01)
 
-The trusted base of the allocator proofs (`docs/os-mmap.md`). Every allocator above these three
-calls (`std.heap.PageAllocator`, arenas, user allocators) is translated from its Zig code; only the
-calls below are modelled. The signatures are Zig 0.16.0's (`lib/std/posix.zig`):
+The trusted base of the allocator proofs (`docs/os-mmap.md`). Under `--allocator-model
+translated` (`docs/allocator-model.md`) the translator cuts the call graph at these three
+`std.posix` functions and emits a call of the matching definition below (`Air2Lean/Check.lean`'s
+`checkOsCall`, `Air2Lean/Emit.lean`'s `FCtx.osCall`). Every allocator above them
+(`std.heap.PageAllocator`, arenas, user allocators) is translated from its Zig code. The
+signatures are Zig 0.16.0's (`lib/std/posix.zig`):
 
 * `mmap(ptr: ?[*]align(page_size_min) u8, length: usize, prot: PROT, flags: MAP, fd: fd_t,
   offset: u64) MMapError![]align(page_size_min) u8` — `Os.mmap`;
@@ -14,17 +17,21 @@ calls below are modelled. The signatures are Zig 0.16.0's (`lib/std/posix.zig`):
   flags: MREMAP, new_address: ?[*]align(page_size_min) u8) MRemapError![]align(page_size_min) u8`
   (Linux only) — `Os.mremap`.
 
-`PROT`, `MAP` and `MREMAP` are `packed struct(u32)`s: the model takes their backing integers.
+`target` selects the OS ABI (flag encodings, page size). A page-aligned `?[*]align(page) u8` is an
+`Option Ptr`, a `[]align(page) u8` a `Slice`. `PROT`, `MAP` and `MREMAP` are `packed struct(u32)`s:
+the model takes their bits (`Zig.Packed.toBits`), in the OS's own layout. The only error the model
+returns is `error.OutOfMemory` (the translator checks that every call site's error set admits it).
 
 **mmap.** Only an anonymous private read-write mapping is modelled: `prot = READ|WRITE`,
-`flags = PRIVATE|ANONYMOUS` (the profile's encoding), `fd = -1`, `offset = 0`. Any other
+`flags = PRIVATE|ANONYMOUS` (the target's encoding), `fd = -1`, `offset = 0`. Any other
 combination throws `.unspecified` (outside the model). The hint is ignored (the kernel may ignore
 a hint without `MAP.FIXED`). A length of 0 is `EINVAL`, which Zig maps to `unreachable`:
 `.illegal`. Otherwise the request is one allocation attempt (`Mem.allocs`); the allocator failure
 decision (`Mem.mapDenied`, the same decision as `rawAlloc`'s: `failAt`, `failures`, `maxBytes`,
-the oracle `fails`, `budget`) fails it with the `MMapError` that `AllocPolicy.os.mmapError` picks,
-and leaves every block unchanged. A success is a new block of kind `.mapped 0`: exactly `length`
-zero bytes, at a page-aligned address above every earlier block; the next block starts above the
+the oracle `fails`, `budget`) fails it with `error.OutOfMemory` (`ENOMEM`) and leaves every block
+unchanged. The premise assumes the kernel fails such a mapping with no other `MMapError` (no
+memory locking: no `EAGAIN`). A success is a new block of kind `.mapped 0`: exactly `length` zero
+bytes, at a page-aligned address above every earlier block; the next block starts above the
 mapping's last page (fresh addresses: no address is reused).
 
 **munmap.** `memory` must be a page-aligned range `[off, off + alignUp len page)` of one live
@@ -37,18 +44,18 @@ kernel would accept some of these (unmapping nothing, or someone else's pages); 
 them as illegal behaviour, which only makes the proofs of their absence stronger. The removed bytes
 are recorded as a write (a concurrent access races).
 
-**mremap** (Linux only; on a profile without `mremap` it throws `.unspecified`). `flags` may only
+**mremap** (Linux only; on macOS, where `posix.MREMAP` is `void`, it throws `.unspecified`). `flags` may only
 be `0` or `MAYMOVE` and `new_address` must be null (`FIXED`/`DONTUNMAP` are outside the model:
 `.unspecified`). `old_address`/`old_len` must name a whole live mapping (as for `munmap`'s whole
-case), else `.illegal`. `new_len = 0` returns `error.InvalidSyscallParameters` (`EINVAL`).
-A shrink stays in place. A growth is an allocation attempt: the failure decision fails it with the
-`MRemapError` that `AllocPolicy.os.mremapError` picks; otherwise it grows in place when no other
+case), else `.illegal`. `new_len = 0` (`EINVAL`, `error.InvalidSyscallParameters`) is outside the
+model: `.unspecified` (the allocator wrappers never pass it). A shrink stays in place. A growth is
+an allocation attempt: the failure decision fails it with `error.OutOfMemory`; otherwise it grows in place when no other
 block lies above the mapping and the oracle `mremapMoves` does not move it, or moves to a fresh
 mapping under `MAYMOVE`; without `MAYMOVE` and with no room it returns `error.OutOfMemory`. A moved
 mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
 undefined (the kernel keeps the stale tail of the last page), the rest are zero.
 
-**Page size.** A parameter of the target profile (`Os.Profile`), comptime in Zig 0.16.0's
+**Page size.** Fixed per target (`Os.Target.pageSize`), comptime in Zig 0.16.0's
 `page_allocator` for both modelled targets: 4 KiB on `x86_64-linux`, 16 KiB on `aarch64-macos`.
 -/
 
@@ -56,26 +63,32 @@ namespace Zig
 
 namespace Os
 
-/-- The target-dependent constants of the page-mapping model. -/
-structure Profile where
-  /-- `std.heap.pageSize()`; positive. -/
-  pageSize : Nat
-  /-- `PROT{ .READ = true, .WRITE = true }`'s backing integer. -/
-  protReadWrite : BitVec 32 := 3
-  /-- `MAP{ .TYPE = .PRIVATE, .ANONYMOUS = true }`'s backing integer. -/
-  mapPrivateAnonymous : BitVec 32
-  /-- `posix.MREMAP != void`. -/
-  hasMremap : Bool
-  deriving Repr, DecidableEq
+/-- The OS whose `std.posix` ABI a call uses (the profile's target triple). -/
+inductive Target where
+  | linux
+  | macos
+  deriving DecidableEq, Repr, Inhabited
 
-/-- `x86_64-linux`: 4 KiB pages, `MAP.PRIVATE = 0x02`, `MAP.ANONYMOUS = 0x20`, `mremap`. -/
-def Profile.linuxX86_64 : Profile :=
-  { pageSize := 4096, mapPrivateAnonymous := 0x22, hasMremap := true }
+/-- `std.heap.page_size_min` of the qualified targets: x86_64-linux and aarch64-macos. -/
+def Target.pageSize : Target → Nat
+  | .linux => 4096
+  | .macos => 16384
 
-/-- `aarch64-macos`: 16 KiB pages, `MAP.PRIVATE = 0x02`, `MAP.ANONYMOUS = 0x1000`, no
-`mremap`. -/
-def Profile.macosAarch64 : Profile :=
-  { pageSize := 16384, mapPrivateAnonymous := 0x1002, hasMremap := false }
+theorem Target.pageSize_pos (t : Target) : 0 < t.pageSize := by cases t <;> decide
+
+/-- `PROT{ .READ = true, .WRITE = true }`'s bits (`os.linux.PROT`, `macho.vm_prot_t`). -/
+def Target.protReadWrite (_ : Target) : BitVec 32 := 3
+
+/-- `MAP{ .TYPE = .PRIVATE, .ANONYMOUS = true }`'s bits: `PRIVATE = 0x02` and `ANONYMOUS = 0x20`
+(`os.linux.MAP`), `0x1000` (`c.MAP` on macOS). -/
+def Target.mapPrivateAnonymous : Target → BitVec 32
+  | .linux => 0x22
+  | .macos => 0x1002
+
+/-- `posix.MREMAP != void`. -/
+def Target.hasMremap : Target → Bool
+  | .linux => true
+  | .macos => false
 
 /-- `fd = -1`. -/
 def noFd : BitVec 32 := BitVec.allOnes 32
@@ -84,35 +97,6 @@ def noFd : BitVec 32 := BitVec.allOnes 32
 def mremapMayMove : BitVec 32 := 1
 
 end Os
-
-/-- The Zig error name. -/
-def MmapError.name : MmapError → ErrName
-  | .memoryMappingNotSupported => "MemoryMappingNotSupported"
-  | .accessDenied => "AccessDenied"
-  | .permissionDenied => "PermissionDenied"
-  | .lockedMemoryLimitExceeded => "LockedMemoryLimitExceeded"
-  | .processFdQuotaExceeded => "ProcessFdQuotaExceeded"
-  | .systemFdQuotaExceeded => "SystemFdQuotaExceeded"
-  | .outOfMemory => "OutOfMemory"
-  | .mappingAlreadyExists => "MappingAlreadyExists"
-  | .unexpected => "Unexpected"
-
-/-- The Zig error name. -/
-def MremapError.name : MremapError → ErrName
-  | .lockedMemoryLimitExceeded => "LockedMemoryLimitExceeded"
-  | .invalidSyscallParameters => "InvalidSyscallParameters"
-  | .outOfMemory => "OutOfMemory"
-  | .unexpected => "Unexpected"
-
-/-- `posix.MMapError`'s names. -/
-def mmapErrorNames : List ErrName :=
-  ["MemoryMappingNotSupported", "AccessDenied", "PermissionDenied", "LockedMemoryLimitExceeded",
-    "ProcessFdQuotaExceeded", "SystemFdQuotaExceeded", "OutOfMemory", "MappingAlreadyExists",
-    "Unexpected"]
-
-/-- `posix.MRemapError`'s names. -/
-def mremapErrorNames : List ErrName :=
-  ["LockedMemoryLimitExceeded", "InvalidSyscallParameters", "OutOfMemory", "Unexpected"]
 
 /-- The allocator failure decision for a request of `n` bytes at attempt `m.allocs`: `rawAlloc`'s
 (`Mem.allocDenied`), as a `Bool`. -/
@@ -141,7 +125,7 @@ def Mem.mappingOnTop (m : Mem) (b : BlockId) (blk : Block) : Bool :=
 namespace Os
 
 /-- `posix.mmap` (module doc). -/
-def mmap (os : Profile) (_hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
+def mmap (os : Target) (_hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
     (offset : BitVec 64) : MemM (Except ErrName Slice) := do
   if prot ≠ os.protReadWrite ∨ flags ≠ os.mapPrivateAnonymous ∨ fd ≠ noFd ∨ offset ≠ 0 then
     throw .unspecified
@@ -149,7 +133,7 @@ def mmap (os : Profile) (_hint : Option Ptr) (len : BitVec 64) (prot flags fd : 
   let m ← get
   set { m with allocs := m.allocs + 1 }
   if m.mapDenied len.toNat then
-    return .error (m.allocPolicy.os.mmapError m.allocs len.toNat).name
+    return .error "OutOfMemory"
   let m₁ ← get
   set (m₁.afterMmap os.pageSize len.toNat)
   return .ok ⟨⟨some m₁.blocks.size, 0⟩, len⟩
@@ -192,7 +176,7 @@ def mappingAt (p : Ptr) : MemM (BlockId × Block × Nat) := do
       | _ => throw .illegal
 
 /-- `posix.munmap` (module doc). -/
-def munmap (os : Profile) (memory : Slice) : MemM Unit := do
+def munmap (os : Target) (memory : Slice) : MemM Unit := do
   let (b, blk, lo) ← mappingAt memory.ptr
   let off := memory.ptr.off.toNat
   if (blk.addr + off) % os.pageSize ≠ 0 then throw .illegal
@@ -225,13 +209,13 @@ def _root_.Zig.Mem.mremapMoved (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (
 
 /-- `mremap` of the whole live mapping `b` (from `lo`) at `p` to `newLen` bytes, after the
 argument checks (module doc). -/
-def mremapLive (os : Profile) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (newLen : BitVec 64)
+def mremapLive (os : Target) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (newLen : BitVec 64)
     (flags : BitVec 32) : MemM (Except ErrName Slice) := do
   let P := os.pageSize
   let hi := blk.bytes.size
   let cur := hi - lo
   let n := newLen.toNat
-  if n = 0 then return .error MremapError.invalidSyscallParameters.name
+  if n = 0 then throw .unspecified
   if n ≤ cur then
     recordAccess b (lo + n) (hi - (lo + n)) .write
     modify fun m => m.mremapShrunk b blk lo n
@@ -239,19 +223,19 @@ def mremapLive (os : Profile) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (
   let m ← get
   set { m with allocs := m.allocs + 1 }
   if m.mapDenied n then
-    return .error (m.allocPolicy.os.mremapError m.allocs n).name
+    return .error "OutOfMemory"
   let onTop := m.mappingOnTop b blk
   if flags = mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n ∨ onTop = false) then
     recordAccess b lo cur .write
     let m₁ ← get
     set (m₁.mremapMoved P b blk lo n)
     return .ok ⟨⟨some m₁.blocks.size, 0⟩, newLen⟩
-  if onTop = false then return .error MremapError.outOfMemory.name
+  if onTop = false then return .error "OutOfMemory"
   modify fun m => m.mremapGrown P b blk lo n
   return .ok ⟨p, newLen⟩
 
 /-- `posix.mremap` (module doc). -/
-def mremap (os : Profile) (oldAddress : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
+def mremap (os : Target) (oldAddress : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
     (newAddress : Option Ptr) : MemM (Except ErrName Slice) := do
   if os.hasMremap = false ∨ newAddress ≠ none ∨ (flags ≠ 0 ∧ flags ≠ mremapMayMove) then
     throw .unspecified

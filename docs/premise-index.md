@@ -52,7 +52,7 @@ premise was derived. This index covers the committed generated modules.
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
-| [OSM-01](premises.md#osm-01) | 0 | POSIX page mapping (`posix.mmap`, `posix.munmap`, `posix.mremap`) |
+| [OSM-01](premises.md#osm-01) | 0 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 
 ## `Proofs/Asm/Proofs.lean`
 

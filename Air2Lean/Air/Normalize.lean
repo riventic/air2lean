@@ -118,6 +118,9 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter{markedTagGuidance raw.tag}"
   match raw.tag with
+  -- Reached only under `--allocator-model translated` (`Raw.admitRetAddr`); std mode keeps the
+  -- exporter's `unsupported` marker and rejects above.
+  | "ret_addr" => return .retAddr
   | "arg" =>
     let some p := raw.param
       | throw s!"{fnName}: inst {raw.id}: 'arg' needs 'param'"
@@ -412,7 +415,10 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     | _ => l
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,
-           errorSetBits := raw.profile.errorSetBits }
+           errorSetBits := raw.profile.errorSetBits, allocatorModel := raw.allocatorModel,
+           targetOs := match raw.profile.targetTriple.splitOn "-" with
+             | [_, os, _] => (os.splitOn ".").head!
+             | _ => "" }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
