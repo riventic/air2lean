@@ -5,29 +5,30 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1983 theorems in 109 files.
+2037 theorems in 110 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 576 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 66 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 66 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 74 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 74 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1042 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 70 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1085 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 73 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 743 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 8 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 925 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 869 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 869 | No load buffering in compiled code |
+| [THR-08](premises.md#thr-08) | 968 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [ORD-01](premises.md#ord-01) | 900 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 900 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
+| [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 70 | Executable IEEE-754 float model |
@@ -35,14 +36,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1863 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1541 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1917 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1595 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 918 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1983 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2037 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -121,6 +122,67 @@ File premises: PRF-01, THR-01, THR-02, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, S
 | `mp_sees_data` | PRF-01, THR-01, THR-02, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `mpRelaxed_race` | PRF-01, THR-01, THR-02, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Zig.acquireClock_le` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+
+## `Proofs/Atomics/PtrPublish.lean`
+
+File premises: ALC-01, ALC-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `Atomics.PtrPublish.NodeAt.congr` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.grow` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.congr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.record` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.noRace_inv` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.thr_of` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.thr_upd1` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.intSize64` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.loc_slot` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.slot_locIdx_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.setLoc` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.SlotLoc.pos` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.acc_slot` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.accW_slot` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.noRace_slot` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.recordAt_le'` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.create_ok` | ALC-01, ALC-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.create_noErr` | ALC-01, ALC-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.allocM_node` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.allocM_lt` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.curBytes_allocM` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.node_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.step_node` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.inv_oom` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.NodeAt.write0` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.pushSlot` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.step_store` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.store_noErr` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.joinedAll_kid` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.dispatch_spec` | ALC-01, ALC-02, THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.size_noneBytes` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.pre_store` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.pre_store_noErr` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.pre_inv` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.thr_fork` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.inv_fork` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.decode_none` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.decode_some` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.decode_eq` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.step_acq` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.slotLoad_noErr` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.acc_node` | SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.step_read` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.read_noErr` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.Inv.retag0` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.join_ok` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.inv_join` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.joinedAll_post` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.step_last` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.destroy_ok` | ALC-01, ALC-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.destroy_noErr` | ALC-01, ALC-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.main_spec` | ALC-01, ALC-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.publishRead_spec` | ALC-01, ALC-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
+| `Atomics.PtrPublish.publishRead_safe` | ALC-01, ALC-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, TRU-01 |
 
 ## `Proofs/Atomics/Relaxed.lean`
 
