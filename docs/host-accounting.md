@@ -23,6 +23,7 @@ add up to its `cases`:
 | `exact_matches` | `value_match`, `error_return_match`, `panic_match` |
 | `host_differences` | `host_difference` |
 | `illegal` / `unspecified` | `illegal_exclusion` / `unspecified_exclusion` |
+| `unspecified_timer` | `unspecified_timer_exclusion` (`Zig.Error.unsupportedTimer`: a clock the model lacks) |
 | `capped_searches` | `search_cap` (including any capped search that would otherwise have matched) |
 | `bounded_no_result` | `bounded_no_result` |
 | `mismatches` | `mismatch` |

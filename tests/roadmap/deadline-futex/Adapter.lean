@@ -39,5 +39,5 @@ def main : IO Unit := do
   require (finished.state.kernel.registration.isNone && finished.state.kernel.mem.waiters.isEmpty &&
     finished.state.kernel.mem.woken.isEmpty) "normal return leaked registration"
   let noClock := TimedSched.run {} 3 (fun _ => 0) (TimedCall.clockNow .awake {}) memory
-  require (match noClock.result with | some (.error .unspecified) => true | _ => false)
+  require (match noClock.result with | some (.error .unsupportedTimer) => true | _ => false)
     "default environment gained a clock"

@@ -48,7 +48,8 @@ CONTRACTS = {
 # Automation limits: inconclusive by construction, never evidence of a program bug.
 UNSOLVED_REASONS = {
     'timeout', 'replay_timeout', 'replay_not_reproduced', 'search_cap', 'enumeration_truncated',
-    'prefix_cap', 'bounded_no_result', 'unspecified_result', 'host_difference', 'unsupported',
+    'prefix_cap', 'bounded_no_result', 'unspecified_result', 'unsupported_timer', 'host_difference',
+    'unsupported',
 }
 SETUP_REASONS = {'input_failure', 'native_harness_failure', 'replay_error'}
 
@@ -78,14 +79,16 @@ def verdict(*, kind=None, status=None, automation=None, replay=None, tree=None):
         if status in (S.INPUT_FAILURE, S.NATIVE_HARNESS_FAILURE): return SETUP, status.value, None
         if status == S.SKIPPED: raise Invalid('skipped rows carry no outcome')
         unsolved = {S.SEARCH_CAP: 'search_cap', S.BOUNDED_NO_RESULT: 'bounded_no_result',
-                    S.UNSPECIFIED: 'unspecified_result', S.HOST: 'host_difference'}
+                    S.UNSPECIFIED: 'unspecified_result', S.UNSPECIFIED_TIMER: 'unsupported_timer',
+                    S.HOST: 'host_difference'}
         if status in unsolved: return UNSOLVED, unsolved[status], None
         if status == S.MISMATCH: failure = 'mismatch'
         elif status == S.ILLEGAL: failure = 'illegal'
         else: return NO_FAILURE, status.value, None
     elif kind is not None:
         kind = K(kind)
-        unsolved = {K.SEARCH_CAP: 'search_cap', K.BOUNDED_NO_RESULT: 'bounded_no_result', K.UNSPECIFIED: 'unspecified_result'}
+        unsolved = {K.SEARCH_CAP: 'search_cap', K.BOUNDED_NO_RESULT: 'bounded_no_result', K.UNSPECIFIED: 'unspecified_result',
+                    K.UNSPECIFIED_TIMER: 'unsupported_timer'}
         if kind in unsolved: return UNSOLVED, unsolved[kind], None
         if kind in (K.INPUT_FAILURE, K.NATIVE_HARNESS_FAILURE): return SETUP, kind.value, None
         if kind in (K.ILLEGAL, K.DEADLOCK, K.MODEL_PANIC): failure = kind.value

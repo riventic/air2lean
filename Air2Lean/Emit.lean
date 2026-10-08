@@ -1266,7 +1266,7 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
-  | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unspecified)"
+  | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unsupportedTimer)"
   -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`).
   | .groupAsync | .groupConcurrent =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""

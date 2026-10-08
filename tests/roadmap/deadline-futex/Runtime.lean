@@ -51,9 +51,9 @@ def main : IO Unit := do
   check "duration overflow rejected" ((Time.Timeout.duration eleven).resolve maxTime).isNone true
   check "zero duration preserves current deadline"
     (((Time.Timeout.duration ⟨0, by decide⟩).resolve ten).bind id |>.map (·.nanoseconds)) (some 10)
-  check "default no-clock stays unspecified"
+  check "default no-clock is an unsupported timer"
     (result (run {} 5 (fun _ => 0) (.observe (fun _ => .done 1)) memory))
-    (some (.error .unspecified))
+    (some (.error .unsupportedTimer))
   let mismatch := run (input) 5 (fun _ => 0) (wait eleven 1) memory
   check "predicate mismatch returns normally" (result mismatch) (some (.ok 73))
   check "mismatch leaves no registration" (clean mismatch.state) true

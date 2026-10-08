@@ -34,10 +34,12 @@ total_correctness`. Malformed inputs and reports without conclusion shapes exit 
 `example.function` root, classified by the shared [outcome taxonomy](outcome-taxonomy.md).
 Every declared strength asserts `no-panic`; `total_correctness` also asserts
 `guaranteed-return`. A goal is rejected when its root's evidence includes a capped search,
-a fuel-bounded no-result run, an unspecified (including no-clock timer) or unsupported
-outcome, or an observed failure the claim denies. Error returns never reject a goal. Evidence
-can only reject: an incomplete summary exits 2, and clean evidence adds nothing to the
-type-derived strength.
+a fuel-bounded no-result run, an unspecified result, an unsupported timer (`unspecified_timer`,
+reason `unsupported timer`), an unsupported outcome, or an observed failure the claim denies.
+Error returns never reject a goal. Evidence can only reject: an incomplete summary exits 2, and
+clean evidence adds nothing to the type-derived strength. Each summary must be bound to the
+current tree: its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py`
+computes now and its `cases_sha256` the case file beside it; stale or unbound evidence exits 2.
 
 ## Vacuity
 

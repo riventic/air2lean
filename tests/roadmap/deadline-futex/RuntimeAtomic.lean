@@ -29,7 +29,7 @@ private def result (out : Outcome Nat) := out.result
 
 def main : IO Unit := do
   let noClock := run {} 2 (fun _ => 0) (wait) memory
-  check "default no-clock rejects before any compare" (result noClock) (some (.error .unspecified))
+  check "default no-clock rejects before any compare" (result noClock) (some (.error .unsupportedTimer))
   check "no-clock rejection consumes no read choice" noClock.state.reads 0
   check "no-clock rejection adds no read footprint" noClock.state.kernel.mem.footprint.size 0
   let current := run (input 0) 1 (fun _ => 0) (wait) memory

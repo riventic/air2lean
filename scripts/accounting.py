@@ -3,7 +3,7 @@
 
 `publish` reads complete scripts/diff-report.py summaries (one per Zig version and host target)
 and writes one table whose columns partition every observed case: exact matches, host
-differences, illegal and unspecified exclusions, capped searches, bounded no-result runs,
+differences, illegal, unspecified and unsupported-timer exclusions, capped searches, bounded no-result runs,
 mismatches and setup failures. Skipped examples/functions and proof exclusions are reported
 beside the partition; they are not cases. The headline `successful_comparisons` is the exact
 match total only.
@@ -42,17 +42,17 @@ S = REPORT.Status
 # Each comparison status lands in exactly one column; `skipped` rows are selections, not cases.
 COLUMN = {status: 'exact_matches' for status in REPORT.MATCHES} | {
     S.HOST: 'host_differences', S.ILLEGAL: 'illegal',
-    S.UNSPECIFIED: 'unspecified', S.SEARCH_CAP: 'capped_searches',
+    S.UNSPECIFIED: 'unspecified', S.UNSPECIFIED_TIMER: 'unspecified_timer', S.SEARCH_CAP: 'capped_searches',
     S.BOUNDED_NO_RESULT: 'bounded_no_result', S.MISMATCH: 'mismatches',
     S.INPUT_FAILURE: 'setup_failures', S.NATIVE_HARNESS_FAILURE: 'setup_failures',
 }
-PARTITION = ['exact_matches', 'host_differences', 'illegal', 'unspecified', 'capped_searches',
+PARTITION = ['exact_matches', 'host_differences', 'illegal', 'unspecified', 'unspecified_timer', 'capped_searches',
              'bounded_no_result', 'mismatches', 'setup_failures']
 OUTSIDE = ['skipped_examples', 'skipped_functions', 'proof_exclusions']
 NUMERIC = ['cases'] + PARTITION + OUTSIDE
 HEADLINE = 'successful_comparisons'
 DEFINITION = ('exact matches only (value_match, error_return_match, panic_match); host '
-              'differences, illegal/unspecified exclusions, capped searches, bounded no-result '
+              'differences, illegal/unspecified/unsupported-timer exclusions, capped searches, bounded no-result '
               'runs, mismatches, setup failures, skipped functions and proof exclusions are excluded')
 PROOF_UNEVALUATED = 'not_evaluated_by_differential_runner'
 

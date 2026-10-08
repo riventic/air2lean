@@ -138,8 +138,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -
     return {**result, 'status': 'accepted', 'reason': None}
 
 
-def _sibling(name):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
+def _sibling(name, filename=None):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / (filename or f'{name}.py'))
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
     spec.loader.exec_module(module)
@@ -147,16 +147,41 @@ def _sibling(name):
 
 
 OUTCOMES = _sibling('outcomes')
+REPO = Path(__file__).resolve().parents[1]
+
+
+def current_evidence(project, path: Path, current: dict) -> None:
+    """Refuse a differential summary that is not bound to the current tree.
+
+    Its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py` computes
+    for this checkout now (runner, harness, ZigLean, Proofs, examples, toolchain pins), and its
+    `cases_sha256` must equal the case evidence beside it. `current` is
+    `diff-report.py source_hashes` of this checkout. Stale or unbound evidence raises."""
+    summary = project.diff_summary(path)
+    if summary is None:
+        raise ValueError(f'differential summary {path} is incomplete or unsupported')
+    recorded = summary.get('runner_runtime_sources')
+    if not isinstance(recorded, dict) or not recorded:
+        raise ValueError(f'differential summary {path} records no source/runner fingerprints; '
+                         'regenerate it with scripts/diff-report.py')
+    stale = sorted(name for name in recorded.keys() | current.keys() if recorded.get(name) != current.get(name))
+    if stale:
+        shown = ', '.join(stale[:5]) + (f' and {len(stale) - 5} more' if len(stale) > 5 else '')
+        raise ValueError(f'stale differential evidence {path}: source/runner fingerprints differ from '
+                         f'the current tree for {shown}')
+    cases = Path(str(path) + '.jsonl')
+    digest = summary.get('cases_sha256')
+    if not isinstance(digest, str) or project.hash_bounded(cases, 128 * 1024 * 1024)[0] != digest:
+        raise ValueError(f'stale differential evidence {path}: case evidence {cases.name} does not '
+                         'match the summary cases_sha256')
 
 
 def root_outcomes(project, root: dict, diffs) -> dict | None:
-    """Outcome counts for an `example.function` root from differential case evidence."""
+    """Outcome counts for an `example.function` root from current differential case evidence."""
     if not diffs or '.' not in root['function']:
         return None
     rows = []
     for path in diffs:
-        if project.diff_summary(path) is None:
-            raise ValueError(f'differential summary {path} is incomplete or unsupported')
         rows += project.diff_cases(path, root['function'])[0]
     return OUTCOMES.count(rows)
 
@@ -165,6 +190,9 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     project = _sibling('project')
     manifest = project.load_manifest(manifest_path)[0]
     theorems = {t['name']: t for t in classify(report)['theorems']}
+    current = _sibling('diff_report', 'diff-report.py').source_hashes(REPO) if diffs else {}
+    for path in diffs:
+        current_evidence(project, path, current)
     roots = []
     for root in manifest['roots']:
         counts = root_outcomes(project, root, diffs)
@@ -175,8 +203,10 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
             'scope': 'Strength is derived from conclusion head constants only. Preconditions and '
                      'domains are not checked: an unsatisfiable precondition remains vacuous. '
                      'Differential outcomes (when supplied) can only refuse absence claims: capped, '
-                     'fuel-bounded, unsupported or unspecified/timer outcomes and observed failures '
-                     'reject a goal; error returns do not. outcomes is null for roots without evidence.'}
+                     'fuel-bounded, unsupported, unsupported-timer or unspecified outcomes and observed '
+                     'failures reject a goal; error returns do not. Summaries must be bound to the current '
+                     'tree (source/runner fingerprints and case hash) or the check fails. outcomes is null '
+                     'for roots without evidence.'}
 
 
 def main(argv=None) -> int:
@@ -186,7 +216,8 @@ def main(argv=None) -> int:
     check_cmd = sub.add_parser('check', help='reject manifest goals stronger than their theorem types')
     check_cmd.add_argument('manifest', type=Path)
     check_cmd.add_argument('--diff', type=Path, action='append', default=[],
-                           help='diff-report summary JSON; its outcomes can only refuse absence claims')
+                           help='diff-report summary JSON bound to the current tree; its outcomes can only '
+                                'refuse absence claims')
     for cmd in (report_cmd, check_cmd):
         cmd.add_argument('--assurance', type=Path, required=True, help='scripts/assumptions.py report')
         cmd.add_argument('--output', type=Path)
