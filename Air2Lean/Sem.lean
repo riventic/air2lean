@@ -356,15 +356,163 @@ decreasing_by
 
 end
 
-/-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
-binds its parameter) and no local cells. A function that ends other than by `ret` is stuck. -/
-def execFunc (call : String → List Value → Result Value) (f : Func) (args : List Value) :
-    Result Value := do
-  let e ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run' (fun _ => none)
-  match e with
-  | .ret v => pure v
-  | _ => stuck
+/-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
+`void`) have values here. -/
+def valOk (t : Ty) (v : Value) : Bool :=
+  match t, v with
+  | .int s w, .int s' w' _ => s == s' && w == w'
+  | .bool, .bool _ => true
+  | .void, .void => true
+  | _, _ => false
 
+/-- Do the arguments match the parameter types, one for one? -/
+def argsOk (f : Func) : List TyId → List Value → Bool
+  | [], [] => true
+  | t :: ts, v :: vs => valOk (tyOf f t) v && argsOk f ts vs
+  | _, _ => false
+
+/-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
+binds its parameter) and no local cells. A call whose arguments do not match the parameter
+types, and a function that ends other than by `ret`, are stuck. -/
+def execFunc (call : String → List Value → Result Value) (f : Func) (args : List Value) :
+    Result Value :=
+  if argsOk f f.params.toList args then do
+    let e ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run' (fun _ => none)
+    match e with
+    | .ret v => pure v
+    | _ => stuck
+  else stuck
+
+/-- The integer an `int` value holds, at width `w` (`0` for any other value). -/
+def Value.toBV (w : Nat) : Value → BitVec w
+  | .int _ w' v => if h : w' = w then v.cast h else 0
+  | _ => 0
+
+def Value.toBool : Value → Bool
+  | .bool b => b
+  | _ => false
+
+theorem argsOk_nil {f : Func} {args : List Value} (h : argsOk f [] args = true) : args = [] := by
+  cases args <;> simp_all [argsOk]
+
+theorem argsOk_cons {f : Func} {t : TyId} {ts : List TyId} {args : List Value}
+    (h : argsOk f (t :: ts) args = true) :
+    ∃ v vs, args = v :: vs ∧ valOk (tyOf f t) v = true ∧ argsOk f ts vs = true := by
+  cases args with
+  | nil => simp [argsOk] at h
+  | cons v vs => simp only [argsOk, Bool.and_eq_true] at h; exact ⟨v, vs, rfl, h⟩
+
+theorem valOk_int {s : Bool} {w : Nat} {v : Value} (h : valOk (.int s w) v = true) :
+    v = .int s w (v.toBV w) := by
+  cases v <;> simp_all [valOk, Value.toBV]
+  obtain ⟨rfl, rfl⟩ := h; simp
+
+theorem valOk_bool {v : Value} (h : valOk .bool v = true) : v = .bool v.toBool := by
+  cases v <;> simp_all [valOk, Value.toBool]
+
+theorem valOk_void {v : Value} (h : valOk .void v = true) : v = .void := by
+  cases v <;> simp_all [valOk]
+
+/-! ## Programs -/
+
+/-- A call oracle: the meaning of a direct call by fully qualified name. -/
+abbrev Oracle := String → List Value → Result Value
+
+section Monotone
+open Lean.Order
+
+theorem evalPure_mono (f : Func) (args : List Value) (env : Env) (i : Inst) :
+    monotone (fun o : Oracle => evalPure ⟨f, args, o⟩ env i) := by
+  unfold evalPure
+  split <;> (try exact monotone_const _) <;> (try (dsimp only; exact monotone_const _))
+  split
+  · exact monotone_const _
+  · apply monotone_bind
+    · dsimp only; exact monotone_const _
+    · apply monotone_of_monotone_apply; intro a
+      dsimp only
+      exact monotone_apply a _ (monotone_apply _ _ monotone_id)
+
+local macro "mono_step" : tactic => `(tactic| first
+  | exact monotone_const _
+  | (dsimp only; exact monotone_const _)
+  | assumption
+  | (apply_assumption <;> rfl)
+  | (apply monotone_apply; first | assumption | apply_assumption)
+  | exact evalPure_mono _ _ _ _
+  | (apply Zig.monotone_loop)
+  | (apply monotone_bind)
+  | (apply monotone_ite)
+  | split
+  | (apply monotone_of_monotone_apply; intro))
+
+/-- A body is monotone in its call oracle: a more defined callee gives a more defined
+caller. -/
+theorem execBody_mono (f : Func) (args : List Value) :
+    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o⟩ l env) := by
+  apply execBody.induct ⟨f, args, fun _ _ => stuck⟩
+    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o⟩ i rest env))
+    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
+  case case1 => intros; simp only [execBody]; exact monotone_const _
+  case case2 => intros; simp only [execBody]; assumption
+  case case20 => intros; simp only [execSwitch]; assumption
+  case case21 => intros; unfold execSwitch; repeat' mono_step
+  case case19 =>
+    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 ih
+    unfold execInst
+    split <;> (try (exfalso; simp_all; done))
+    rename_i m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15
+    clear n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15
+    repeat' mono_step
+  all_goals
+    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+    simp only at *
+    subst_vars
+    simp only [execInst]
+    try simp only [*]
+    repeat' mono_step
+
+@[partial_fixpoint_monotone]
+theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
+    (f : Func) (args : List Value) : monotone (fun x => execFunc (g x) f args) := by
+  unfold execFunc
+  apply monotone_ite _ _ _ _ (monotone_const _)
+  apply monotone_bind
+  · exact monotone_compose (g := fun o : Oracle =>
+      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run' (fun _ => none)) hg
+      (Zig.monotone_run' _ (execBody_mono f args _ _) _)
+  · exact monotone_const _
+
+end Monotone
+
+/-- A program: its functions by fully qualified name. -/
+abbrev Prog := String → Option Func
+
+/-- The semantics of a program: the least oracle that each function's body satisfies (the
+least fixpoint of `execFunc`, in `Zig.Result`'s order where non-termination and stuck states
+are the bottom). A call to a name outside the program is stuck. -/
+def run (p : Prog) (name : String) (args : List Value) : Result Value :=
+  match p name with
+  | some f => execFunc (run p) f args
+  | none => stuck
+partial_fixpoint
+
+open Lean.Order in
+/-- Soundness of any fixpoint: if an oracle `G` satisfies every function's equation
+(`execFunc G f = G f.name`), the program semantics is below it. So every terminating
+AIR behaviour (a value or a panic) is `G`'s behaviour too. -/
+theorem run_le_of_fixpoint (p : Prog) (G : Oracle)
+    (hG : ∀ name f args, p name = some f → execFunc G f args = G name args) :
+    run p ⊑ G := by
+  apply run.fixpoint_induct p (motive := fun r => r ⊑ G)
+  · exact fun c hc h => csup_le hc h
+  · intro r hr name args
+    show (match p name with | some f => execFunc r f args | none => stuck) ⊑ G name args
+    split
+    · rename_i f hf
+      rw [← hG name f args hf]
+      exact execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ hr
+    · exact FlatOrder.rel.bot
 
 /-! ## Normalization lemmas for certificates -/
 
@@ -391,7 +539,7 @@ theorem run_ite' {σ α : Type} (c : Prop) [Decidable c] (a b : Zig.M σ α) (s 
     (if c then a else b).run s = if c then a.run s else b.run s := by
   split <;> rfl
 
-attribute [air_sem] execFunc execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw Zig.call
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
@@ -401,7 +549,8 @@ attribute [air_sem] execFunc execBody execInst execSwitch caseHit evalPure intBi
   BitVec.cast_eq dite_true ite_true ite_false decide_eq_true_eq List.getElem?_cons_zero
   List.getElem?_cons_succ Nat.reduceEqDiff reduceIte reduceDIte Bool.or_false Bool.false_or
   Int.reduceLT Int.reduceNeg Int.reduceToNat BitVec.ofNat_eq_ofNat List.cons_append
-  List.nil_append List.foldr_cons List.foldr_nil true_and and_true
+  List.nil_append List.foldr_cons List.foldr_nil true_and and_true Bool.and_true
+  Bool.true_and beq_self_eq_true List.toList_toArray
 
 end Cert
 
