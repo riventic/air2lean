@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 33 complete, 45 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 36 complete, 42 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -116,7 +116,7 @@ Classification: partial.
 
 target-qualified lane stride, padding, packed bool addressing and element access metadata. Acceptance: memory round trips and lane writes preserve unrelated lanes; vector layout matches compiler probes.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): bit-packed `@Vector(n, uW/iW/fW)` memory layout as the LLVM backend lays it out (`Vec.packedEnc`); ZigLean/VecMem.lean proves the integer round trip at any width, LawfulEnc of the packed encodings and lane-write frames on lanes, on the image and through memory; the checker admits non-byte or ABI-padded lanes only for stage2_llvm profiles; stock Zig 0.16.0 probe images (aarch64-macos, CI x86_64-linux) match the model line for line. [PR124](https://github.com/riventic/air2lean/pull/124) (soundness fix): the exporter writes `vector_index` (lane, "runtime" or null) for every bit-pointer and the checker rejects lane pointers wherever they appear, accepting a field-less bit-pointer only as a packed `struct_field_ptr` result. Remaining: lane pointers into bit-packed vectors, bool-lane pointers and other backends stay rejected.
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): bit-packed `@Vector(n, uW/iW/fW)` memory layout as the LLVM backend lays it out (`Vec.packedEnc`); ZigLean/VecMem.lean proves the integer round trip at any width, LawfulEnc of the packed encodings and lane-write frames on lanes, on the image and through memory; the checker admits non-byte or ABI-padded lanes only for stage2_llvm profiles; stock Zig 0.16.0 probe images (aarch64-macos, CI x86_64-linux) match the model line for line. [PR124](https://github.com/riventic/air2lean/pull/124) (soundness fix): the exporter writes `vector_index` (lane, "runtime" or null) for every bit-pointer and the checker rejects lane pointers wherever they appear, accepting a field-less bit-pointer only as a packed `struct_field_ptr` result. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): lane pointers `&v[i]` into bit-packed vectors of integer or `bool` lanes (`u3`, `u9`, `u24`, `bool`) are bit-pointers into the vector's integer (`lanePtrLayout`, `Zig.loadLane`/`Zig.storeLane`); ZigLean/VecMem.lean proves lane reads, host-only lane writes and `Vec.set` round trips for every width, count and lane; `Lanes/Proofs.lean` proves translated get/put/flip clients; `lanes.zig` passes natively and the probe matches the model on aarch64-macos and x86_64-linux; atomics and `undefined` stores through lane pointers are rejected. Remaining: other LLVM targets, the self-hosted and C backends, float (`f80`) lanes, 0.14.1/0.15.2 runtime lanes and legacy schema-11 files stay rejected.
 
 ## L10 — Error values and error layouts
 
@@ -364,11 +364,11 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## F06 — Practical numerical reasoning
 
-Classification: partial.
+Classification: complete.
 
 non-NaN/finite closure, rounding bounds, range bounds, stable comparison conditions, and accumulated-error reasoning for sums, penalties and reductions. Acceptance: prove a fitness or bound calculation's stated numerical property, including its overflow/NaN conditions. Never assume float addition is associative.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLean/Float/Error.lean: non-NaN closure, relative rounding bounds for add/mul with underflow term, and left-fold accumulated error for sums, applied to the translated f64 dot product (Proofs/Floats/Dot.lean, with its overflow/NaN conditions). Remaining: sub/div/fma/sqrt bounds, f80/compiler-rt variants, a fitness-calculation case study.
+Completed in [PRNNN](https://github.com/riventic/air2lean/pull/NNN): ZigLean/Float/Error.lean: non-NaN closure; relative rounding bounds `u·A + η` for `+`, `-`, `*`, `/`, `@sqrt`, `@floatCast` (exact when widening) and single-rounding `@mulAdd` on every format (f80 with `u = 2^-64`), double-rounding bounds for f16/f80 `@mulAdd`; compiler-rt bounds `fmaRt_error_f32` and `divRt_error_f128` (0.14.1/0.15.2), with the Dekker fma, f128 `__multf3` and 0.16.0 subnormal f128 division ports documented out of scope with native reproducers; NaN propagation lemmas; left-fold accumulated error applied to the translated dot product and to a fitness case study (Proofs/Floats/Fitness.lean: error bound, NaN, length-mismatch panic and threshold comparison) with a fitness differential test. Scope: correctly rounded `ieee` mode plus the two stated compiler-rt helpers.
 
 ## A01 — Assembly effects and operand coverage
 
@@ -456,7 +456,7 @@ Classification: partial.
 
 invariant/measure templates, recursive induction scaffolding, arithmetic-range lemmas and proof-producing BitVec/Int/Nat conversions. Acceptance: a queue loop can be proved without unfolding unrelated runtime internals; automation reports the remaining premises.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLean/Sep/LoopTemplate.lean + loop_template?/loop_template tactics reduce a generated loop to invariant, step and exit premises; ZigLean/Range.lean zig_range discharges in-range casts and wrapping arithmetic; a linked-list queue walk is proved total without unfolding memory internals. Remaining: recursive-call induction, invariant inference, nested/concurrent loops.
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLean/Sep/LoopTemplate.lean + loop_template?/loop_template tactics reduce a generated loop to invariant, step and exit premises; ZigLean/Range.lean zig_range discharges in-range casts and wrapping arithmetic; a linked-list queue walk is proved total without unfolding memory internals. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): `rec_template` (ZigLean/RecTemplate.lean) scaffolds measure induction over generated `partial_fixpoint` groups (self and mutual recursion, memory-backed `addDown` proved total); `LoopTemplate.run` composes nested loops (a translated nested loop proved total with retained AIR and a byte-identical retranslation check); `loop_template?` suggests bounded counter measures, bound invariants and posts and reports the shapes it does not infer. Remaining: measures for recursion, signed or reset counters and ghost measures (list walks) are not inferred; side premises are never inferred; concurrent loops.
 
 ## P04 — Modular contracts and abstract data types
 
@@ -540,11 +540,11 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## I05 — Complete machine-readable diagnostics
 
-Classification: partial.
+Classification: complete.
 
 collect independent blockers, stable diagnostic codes, source spans, dependency chains and JSON output. Keep fatal malformed-input errors separate from unsupported features. Acceptance: a coverage command reports every independent blocker in a project without requiring one edit-and-retry cycle per error.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): Markers no longer stop canonicalization: after a composed normalization failure each canonical instruction is normalized on its own, so every independently rejected instruction of a unit is reported in one run; runtime-effect tags are unsupported_semantics, malformed input stays one fatal unit error, and blocked units contribute dependency chains through their directly normalized calls. Remaining: no source spans; canonicalization of malformed input, checkProgram and profile validation still stop at their first error; explicit caps.
+Completed in [PRNNN](https://github.com/riventic/air2lean/pull/NNN): One check-only run reports every independent blocker: canonicalization of malformed input, the whole-program validator (`programIssues`) and profile validation (`BuildProfile.collect`) collect each independent violation instead of stopping at the first; schema-2 diagnostics carry exporter source spans (statement or declaration, from additive `src`/`column` exporter provenance), explicit total and per-unit caps (`--unit-diagnostic-limit`, `caps`, `capped_units`), and project-diagnostics.py validates the schema-2 protocol and spans. tests/roadmap/diagnostics-complete covers each formerly first-error boundary and, in CI, real exports whose spans point at the marked source lines. Scope: selected AIR validation; no proof or runtime outcomes.
 
 ## I06 — Verification coverage reports
 
@@ -554,7 +554,7 @@ per-root status for analyzed, exported, translated, compiled, differentially tes
 
 Bounded progress ([PR110](https://github.com/riventic/air2lean/pull/110)): project.py coverage joins manifest roots with verified artifacts, current receipts/audits and typed diff summaries into per-root status, domain, declared vs bound strength, assumptions and exclusions; sampled tests, stale receipts and hash mismatches cannot reach functional levels. Remaining: goal binding uses proof-term dependencies, so a wrapper-statement theorem whose proof mentions the root still binds directly; analyzed/exported lack evidence sources; no end-to-end real-receipt run.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): Goals bind by statement: the conclusion of the audited kernel type (not hypotheses or proof term) must reference the generated root, and audits without statement dependencies fail closed; declared safety/partial/total strengths count only up to the strength claims.py derives from the conclusion, so a trivial `root x = root x` cannot reach functional levels. Remaining: trivial-conclusion interpretation beyond derived strength, analyzed/exported evidence, a real-receipt run.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): Goals bind by statement: the conclusion of the audited kernel type (not hypotheses or proof term) must reference the generated root, and audits without statement dependencies fail closed; declared safety/partial/total strengths count only up to the strength claims.py derives from the conclusion, so a trivial `root x = root x` cannot reach functional levels. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): the analyzed and exported coverage stages bind to a current I07 artifact manifest (export requires the analyzed-air profile; schema-2 receipts accepted); tests/roadmap/coverage-report/real_run.py runs the report in CI over the real translator and a real sealed receipt: `tardiness_spec` binds at derived total correctness, a wrapper theorem and sampled tests never reach a functional level, and a real manifest binds `exported` (and schema-12 analyzed AIR). Remaining: trivial-conclusion interpretation beyond derived strength; analyzed evidence and a real receipt are not yet on the same root.
 
 ## I07 — Provenance and artifact manifests
 
@@ -570,7 +570,7 @@ Classification: partial.
 
 atomic output publication, explicit overwrite behavior, bounded input size/depth, compiler/proof timeouts and cancellation that preserves prior verified artifacts. Acceptance: failed generation or interrupted checking cannot leave a partial file presented as a current verified artifact.
 
-Bounded progress ([PR113](https://github.com/riventic/air2lean/pull/113)): Atomic fsync+rename/no-clobber publication with explicit overwrite policy for translate.sh, check.sh, proof receipts and project artifacts; per-stage timeouts and INT/TERM/HUP cancellation stop the stage process group and preserve prior artifacts. Remaining: final lake build/diff stages bounded only by CI/build-guard timeouts; setsid-escaping descendants.
+Bounded progress ([PR113](https://github.com/riventic/air2lean/pull/113)): Atomic fsync+rename/no-clobber publication with explicit overwrite policy for translate.sh, check.sh, proof receipts and project artifacts; per-stage timeouts and INT/TERM/HUP cancellation stop the stage process group and preserve prior artifacts. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): `check.sh` bounds its final `lake build` and differential tests with per-stage timeouts and TERM/KILL cancellation, keeping published artifacts; the runner follows setsid-escaping descendants by sampled parent links and an `AIR2LEAN_STAGE_ID` environment marker and kills them on cancel, timeout or leader exit (exit 125). Remaining: a descendant that escapes within one sampling interval and scrubs its environment can be missed (the marker needs `ps` environments, not every macOS setup).
 
 ## I09 — Distribution and editor workflow
 
@@ -626,7 +626,7 @@ Classification: partial.
 
 typed Zig program generation, malformed JSON generation, reproducible seeds and failure shrinking. Include aliasing, globals, cleanup, unions, casts and nested control flow. Acceptance: failures reduce to a minimal reproducible source/input; malformed inputs fail predictably rather than reaching emitter placeholders.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): tests/roadmap/fuzz: a seeded malformed-AIR fuzzer with delta-debugging shrinking found and fixed 3 checker gaps (debug-instruction operand refs, non-pointer pointer arithmetic, array_to_slice of a non-array pointee), kept as 6 minimal regressions; 300 seeds run in CI; a typed Zig program generator runs in light mode. Remaining: the heavy Zig differential mode has not been run.
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): tests/roadmap/fuzz: a seeded malformed-AIR fuzzer with delta-debugging shrinking found and fixed 3 checker gaps (debug-instruction operand refs, non-pointer pointer arithmetic, array_to_slice of a non-array pointee), kept as 6 minimal regressions; 300 seeds run in CI; a typed Zig program generator runs in light mode. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): the heavy Zig differential ran over seeds 0-39 (37 pass native, translation and `#guard` stages; a corrupted-expectation control is rejected); harness bugs fixed (primitive-type name shadowing, unbounded and drifting shrinking); CI runs `--heavy` over seeds 0-2 with explicit caps. Remaining: one OPEN translator bug (seeds 18/19/39: an address-taken comptime tagged-union local becomes a constant global without `Zig.Enc`), kept as reproducer tests/roadmap/fuzz/known-failures/fuzz_s19.zig; larger seed ranges are a manual job.
 
 ## Q02 — Property coverage and mutation expansion
 
@@ -634,7 +634,7 @@ Classification: partial.
 
 coverage mapped to each register item and meaningful mutants for forwarding, layout, operand order, failure cleanup, profile selection and invariant transfer. Acceptance: a feature cannot close on positive examples alone; its negative tests and designated mutants detect the wrong behavior.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): assurance/mutation-map.json maps every register ID to negative tests and designated mutants by category; scripts/mutation-map.py check fails any complete row lacking negative tests or a designated mutant per declared category, and any unmapped mutant; in-memory Python-side mutants (tests/roadmap/mutation-map/mutants.py) are killed only by assertion failures of named regressions. The checker proves designated Lean/Zig mutants exist, not that they are killed. Remaining: negative tests and designated mutants for partial rows, kill evidence for Lean/Zig mutants, and mutants beyond mutate.sh and the Python-side set.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): assurance/mutation-map.json maps every register ID to negative tests and designated mutants by category; scripts/mutation-map.py check fails any complete row lacking negative tests or a designated mutant per declared category, and any unmapped mutant; in-memory Python-side mutants (tests/roadmap/mutation-map/mutants.py) are killed only by assertion failures of named regressions. The checker proves designated Lean/Zig mutants exist, not that they are killed. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): assurance/mutation-kills.json records which regression (differential example or proof module) killed each mutate.sh mutant, bound to the mutation's block hash; all 33 mutate.sh mutants are killed (d/i on the linux/amd64 reference host); `check` fails a designated mutant without a current kill and CI shards `verify` their logs; mutate.sh aborts when a mutation changes no source; new negative tests for C07/C12/C14/L09/L12/L14. Remaining: negative tests and designated mutants for the remaining partial rows, and mutants beyond mutate.sh and the Python-side set.
 
 ## Q03 — Concurrent schedule exploration
 
@@ -716,8 +716,8 @@ Completed in [PR122](https://github.com/riventic/air2lean/pull/122): every sourc
 
 ## D04 — Tutorials and supported model extension examples
 
-Classification: partial.
+Classification: complete.
 
 tutorials for pure arithmetic, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients and cross-target verification. Acceptance: each tutorial runs from a clean qualified environment and exposes the assumptions and remaining obligations.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): Six checked tutorials (first proof, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients) each with a solved exercise, a negative control that must fail with its expected error and an assumptions section matching the premise index; scripts/tutorials.py lint/check in CI and scripts/clean-env.sh runs every tutorial in a clean container. Remaining: cross-target verification tutorial is documentation only.
+Completed in [PRNNN](https://github.com/riventic/air2lean/pull/NNN): Seven checked tutorials (first proof, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients, cross-target verification), each with a solved exercise, a negative control that must fail with its expected error and an assumptions section matching the premise index; scripts/tutorials.py lint/check in CI and scripts/clean-env.sh runs every tutorial in a clean container. The cross-target tutorial proves Threadsync `lock_spec`/`unlock_spec` target-generically (via `mutexC`); CI's macOS golden-swap step builds Proofs.Threadsync.Lock against the darwin translation, elaborates its Main and Solution there and asserts the darwin-side negative control fails. Scope: x86_64-linux and aarch64-macos translations of one client.
