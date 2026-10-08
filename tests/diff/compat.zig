@@ -87,7 +87,10 @@ pub fn waitpid(pid: posix.pid_t, flags: u32) WaitPidResult {
         const r = posix.waitpid(pid, flags);
         return .{ .pid = r.pid, .status = r.status };
     }
-    var status: if (builtin.link_libc) c_int else u32 = undefined;
+    // The status pointee of this std's waitpid: c_int with libc; on Linux u32 (0.16.0) or i32
+    // (0.17.0, `std.os.linux.waitpid`).
+    const Status = if (builtin.link_libc) c_int else if (v17) i32 else u32;
+    var status: Status = undefined;
     while (true) {
         const rc = system.waitpid(pid, &status, @intCast(flags));
         switch (posix.errno(rc)) {
