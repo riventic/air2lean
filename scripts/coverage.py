@@ -292,6 +292,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
+    'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
+    'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',

@@ -24,7 +24,7 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
   `byteLocalOk`, else it escapes.
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
-  pointer constant and no memory op (`memoryOp`, which includes a call to the allocator model),
+  pointer constant, no integer-to-pointer `bitcast` (`@ptrFromInt`) and no memory op (`memoryOp`, which includes a call to the allocator model),
   and it calls only pure functions. Every other function **uses memory**.
 -/
 
@@ -430,8 +430,21 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
+  let insts := f.allInsts
+  -- A pointer or optional pointer type.
+  let ptrLike (t : Option TyId) : Bool := match t.bind (f.types[·]?) with
+    | some (.ptr ..) => true
+    | some (.optional c) => match f.types[c]? with | some (.ptr ..) => true | _ => false
+    | _ => false
+  let tyOf (v : Val) : Option TyId := match v with
+    | .inst id => (insts.find? (·.id == id)).map (·.ty)
+    | v => v.constTy?
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+    insts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+      -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
+      (match i.op with
+       | .bitcast a => ptrLike (some i.ty) && !ptrLike (tyOf a)
+       | _ => false) ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||

@@ -5,7 +5,7 @@ import Air2Lean.Air.Json
 /-!
 # Canonical AIR
 
-Five rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Six rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -38,7 +38,14 @@ supported version, so one translation (and the proofs over it) serves all versio
    `comptime` parameters of a generic instance (`dupeSentinel(allocator, comptime T, m)` reads
    `m` as `param 2`). The pass ranks these indices against runtime parameter slots that have
    AIR args, preserving slots for one-possible-value parameters (such as `void` and `u0`).
-5. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+5. `dropDeadAllocPlaceholders`. When Sema resolves a local's value at compile time (a
+   `const` whose address is taken, `const u: U = .{ .b = 0 }; _ = &u;`), it puts the value in
+   a constant global, points every live use at it, and rewrites the local's now-dead `alloc` and
+   stores to `bitcast` of the integer 0 to the `alloc`'s pointer type (0.15.2, 0.16.0;
+   0.14.1 uses `bitcast` of a `u8` 0). Liveness marks these and their field/element pointers
+   unused, so no code is generated for them. The pass drops them when nothing but other such
+   pointers and debug instructions reads them; a read one is rejected by `Check.lean`.
+6. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -422,6 +429,49 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
       | none => some i
   return { f with body }
 
+/-- The side-effect-free pointer projections that Sema maps from a comptime-known `alloc` to its
+constant (`resolveComptimeKnownAllocPtr`); operand 0 is the parent pointer. Sema rewrites the
+writing ones (`optional_payload_ptr_set`, `errunion_payload_ptr_set`) to placeholders itself, so
+one that reads a placeholder is not dropped. -/
+def allocProjectionTags : List String :=
+  ["struct_field_ptr", "struct_field_ptr_index_0", "struct_field_ptr_index_1",
+   "struct_field_ptr_index_2", "struct_field_ptr_index_3", "ptr_slice_ptr_ptr",
+   "ptr_slice_len_ptr", "ptr_elem_ptr", "bitcast"]
+
+/-- `dropDeadAllocPlaceholders` (module doc). A placeholder is a `bitcast` of the integer 0 to a
+non-`allowzero`, non-C pointer: Sema's rewrite of the `alloc` and the stores of a comptime-known
+local (`finishResolveComptimeKnownAllocPtr`, 0.15.2 and 0.16.0), whose live uses it redirects to
+a constant pointer into a global. Source code cannot make it: `@ptrFromInt(0)` to such a pointer
+is a compile error. The placeholders and their projections go, with their debug uses, only if
+nothing else reads them; otherwise they stay and `Check.lean` rejects the placeholder. -/
+def dropDeadAllocPlaceholders (f : RawFunc) : RawFunc := Id.run do
+  let all := flatten f.body
+  let placeholder (i : RawInst) : Bool :=
+    i.tag == "bitcast" && i.args.size == 1 &&
+      (match (i.args[0]? : Option Val) with | some (.int _ 0) => true | _ => false) &&
+      match i.ty with
+      | some t => (match f.types[t]? with | some (.ptr size _ _) => size != "slice" | _ => false) &&
+          !nullablePtrTy f.types f.layouts t
+      | none => false
+  if !all.any placeholder then return f
+  -- The placeholders and, to a fixpoint, the projections of one.
+  let mut dead : Std.HashSet InstId := {}
+  for i in all do
+    if placeholder i then dead := dead.insert i.id
+  let mut changed := true
+  while changed do
+    changed := false
+    for i in all do
+      if !dead.contains i.id && allocProjectionTags.contains i.tag then
+        if let some (.inst p) := (i.args[0]? : Option Val) then
+          if dead.contains p then dead := dead.insert i.id; changed := true
+  -- Every non-debug reader must itself go.
+  let read := all.any fun i => !isDbgTag i.tag && !dead.contains i.id && i.uses.any dead.contains
+  if read then return f
+  let body := rewriteBody (body := f.body) fun i =>
+    if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
+  return { f with body }
+
 /-- `renumber` (module doc). -/
 def renumber (f : RawFunc) : RawFunc :=
   let all := flatten f.body
@@ -487,11 +537,11 @@ def argRanks (f : RawFunc) : Except String RawFunc := do
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }
 
-/-- The five rewrites (module doc). -/
+/-- The six rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   validateRefs f
   let f ← argRanks f
-  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies f))
+  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
   validateRefs f
   pure (renumber f)
 

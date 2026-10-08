@@ -928,6 +928,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
     pure line
   | .bitcast a =>
+    -- Only Sema's placeholder for a comptime-resolved local makes address 0 a non-allowzero
+    -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
+    if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
+      cx.fail line "a read of the address-0 placeholder that the compiler leaves for a comptime-resolved local is outside the subset"
     let sourceTy := cx.valTy? a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
