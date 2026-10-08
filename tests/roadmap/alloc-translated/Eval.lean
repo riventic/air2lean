@@ -9,8 +9,8 @@ import AllocTranslated.PageMacos
 `FixedBufferAllocator` is translated from its AIR, `mem.Allocator`'s wrappers included, with
 its vtable call as an ordinary indirect call. Its results equal the native run of the same
 functions (`expected.txt`, `native.zig`) on both targets. The page allocator reaches the
-trusted `posix.mmap` stub (`ZigLean/Os/Mmap.lean`), which throws `.unspecified` until P2's
-model replaces it, on every schedule the oracle `fun _ => 0` picks.
+trusted page-mapping model (`ZigLean/Os/Mmap.lean`, premise OSM-01); on the schedule that the
+oracle `fun _ => 0` picks its results equal the native ones too.
 -/
 
 namespace AllocTranslated.Eval
@@ -48,20 +48,41 @@ open AllocTranslated.FbaMacos
 #guard [word (fba_reset 100) mem0, word (fba_reset 200) mem0] = ["ok 200", "ok 400"]
 end Macos
 
-/-- The first schedule's outcome of a concurrent page-allocator client. -/
-def first {α : Type} (main : Zig.ConcM Tgt α) (dispatch : Tgt → Zig.ConcM Tgt Unit)
+/-- The first schedule's result of a concurrent page-allocator client. -/
+def first {α : Type} [ToString α] (main : Zig.ConcM Tgt α) (dispatch : Tgt → Zig.ConcM Tgt Unit)
     (m : Zig.Mem) : String :=
   match (Zig.Sched.run dispatch 10000 (fun _ => 0) main m).run with
-  | some (.ok _) => "ok"
+  | some (.ok (v, _)) => s!"ok {v}"
   | some (.error e) => s!"fail {repr e}"
   | none => "diverge"
 
-#guard first (Tgt := AllocTranslated.PageLinux.Tgt) (AllocTranslated.PageLinux.page_sum 10)
-  AllocTranslated.PageLinux.dispatch AllocTranslated.PageLinux.mem0 = "fail Zig.Error.unspecified"
-#guard first (Tgt := AllocTranslated.PageMacos.Tgt) (AllocTranslated.PageMacos.page_create 7)
-  AllocTranslated.PageMacos.dispatch AllocTranslated.PageMacos.mem0 = "fail Zig.Error.unspecified"
--- A zero-length allocation returns the integer sentinel without reaching the OS.
-#guard first (Tgt := AllocTranslated.PageLinux.Tgt) (AllocTranslated.PageLinux.page_sum 0)
-  AllocTranslated.PageLinux.dispatch AllocTranslated.PageLinux.mem0 = "ok"
+instance : ToString (BitVec 64) := ⟨fun v => toString v.toNat⟩
+instance : ToString (BitVec 32) := ⟨fun v => toString v.toNat⟩
+
+section PageLinux
+open AllocTranslated.PageLinux
+#guard [first (page_sum 0) dispatch mem0, first (page_sum 10) dispatch mem0,
+  first (page_sum 10000) dispatch mem0] = ["ok 0", "ok 10", "ok 10000"]
+#guard first (page_create 7) dispatch mem0 = "ok 7"
+-- `resize` within a page; across pages it fails (x86_64 stacks grow down, so a `resize`, which
+-- may not move, does not call `mremap`); a shrink unmaps the tail page.
+#guard [first (page_resize 10 20) dispatch mem0, first (page_resize 10 5000) dispatch mem0,
+  first (page_resize 8192 10) dispatch mem0] = ["ok true", "ok false", "ok true"]
+-- Every mapping fails: the allocator's `OutOfMemory` path, no illegal behaviour.
+#guard first (page_sum 10) dispatch { mem0 with allocPolicy := { fails := fun _ _ => true } } =
+  "ok 0"
+end PageLinux
+
+section PageMacos
+open AllocTranslated.PageMacos
+#guard [first (page_sum 10) dispatch mem0, first (page_create 7) dispatch mem0] =
+  ["ok 10", "ok 7"]
+-- 16 KiB pages: the native results of `expected.txt` (recorded on aarch64-macos); no `mremap`,
+-- so a growth past the page fails.
+#guard [first (page_resize 10 20) dispatch mem0, first (page_resize 10 5000) dispatch mem0,
+  first (page_resize 8192 10) dispatch mem0, first (page_resize 10 20000) dispatch mem0] =
+  ["ok true", "ok true", "ok true", "ok false"]
+#guard [first (page_sum 0) dispatch mem0, first (page_sum 10000) dispatch mem0] = ["ok 0", "ok 10000"]
+end PageMacos
 
 end AllocTranslated.Eval
