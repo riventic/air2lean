@@ -583,7 +583,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   rules constrain only completed results, so a diverging program satisfies them. Finite
   loops do not reduce in the kernel, so loop clients use runtime assertions or
   invariant-based proofs.
-- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`; tokens `loop*`.
+- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>

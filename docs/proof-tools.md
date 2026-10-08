@@ -205,8 +205,9 @@ array neighbor, and a rule for a different command. Run it after
 
 ## Loop templates and range conversions
 
-Import `ZigLean.Sep.LoopTemplate` for the invariant/measure template and
-`ZigLean.Range` for arithmetic-range lemmas. Both are optional modules.
+Import `ZigLean.Sep.LoopTemplate` for the invariant/measure template,
+`ZigLean.RecTemplate` for recursive functions and `ZigLean.Range` for arithmetic-range lemmas.
+All three are optional modules.
 
 `LoopTemplate body again inv post` has one field, `step`: for every state `s` and
 measure `n`, one run of the body is a `TotalTriple` from `inv s n` to
@@ -244,15 +245,71 @@ byte encodings, blocks, or allocators. A `#guard_msgs` check fixes `loop_templat
 on that loop: exactly `step` and `entry` remain. `Template.lean` checks the report including
 `exit`, the partial form, rejection of non-loop goals, the necessity of a decreasing measure,
 and the `zig_range` conversions, including an undischarged premise.
-Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.Range Proofs.Lists.Sep`, then run
-`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template` and `Queue`.
+### Nested loops
 
-This is a bounded P03 contribution. The template is single-loop and sequential. It does not
-infer invariants or measures, provide a recursive-call (non-loop) induction rule, or handle
-nested-loop or concurrent termination. `zig_range` performs only conditional rewriting and
-is not a general BitVec decision procedure. The client is a linked-list queue traversal.
-No ring-buffer example exists in `examples/`, and the module adds no exporter or native
-qualification.
+The translator emits an inner loop as `Zig.loop inner again'` inside the outer loop's body
+def, over the same locals. `LoopTemplate.run` turns the inner loop's template into its run
+from any state satisfying its invariant: it returns, preserves the frame and establishes the
+inner `post`. The outer `step` uses that run like any other step of its body, so the inner
+iterations are proved once.
+
+`tests/roadmap/loop-tactics/nested/Proof.lean` proves the translated `pairs` of
+`tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
+`while (i < n)`) total: under the explicit premise that the result fits in `u64`, it returns
+and adds `0 + 1 + … + (n - 1)` to `*acc`. The proof uses `pts_load_run`/`pts_store_run` and
+`zig_range` lemmas and does not unfold `Zig.load`, `Zig.store`, encodings or blocks. The AIR
+is retained with its provenance in `nested/`; `nested/check.sh` retranslates it, compares
+the result with the committed `nested/Nested/Gen.lean` byte for byte, and checks the proof.
+
+### Bounded invariant and measure inference
+
+`loop_template?` without arguments, or `loop_template? _ post`, prints suggestions for the
+goal's loop and leaves the goal unchanged; it proves nothing. It unfolds the loop body once
+and follows only generated shapes: locals read by `(← get).f`, writes by
+`modify (fun s => { s with … })`, checked `Zig.add`/`Zig.sub` of a local by a literal, and
+`Zig.lt`/`le`/`gt`/`ge` guards. It reports the loop-carried locals (written by the body) and
+the unchanged ones. For an unsigned guard whose counter steps towards a bound that the loop
+does not change, it suggests the measure `bound - counter` (or `counter - bound`) and the
+bound invariant. Given `post`, it also suggests `post` with a bound from outside the loop
+replaced by the counter. It reports, and does not infer, measures for signed guards, counters
+that step away from their bound or are also reset, bounds the loop changes, and loops without
+a counter (such as list walks, which need a ghost measure). Nested loop bodies, calls and memory
+are not followed, and side premises such as overflow bounds are never inferred. `Infer.lean`
+and `nested/Proof.lean` fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
+`pairs` are the ones its invariants use.
+
+### Recursive functions
+
+A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
+`<fn>.eq_1` and no induction principle. Import `ZigLean.RecTemplate` (optional, Lean-only) for
+`rec_template μ unfolding f, g`. It proves a goal `∀ x₁ … xₖ, B` by strong induction on the
+`Nat` measure `μ` of its first `k` binders (the arity of `μ`). It leaves one goal, `step`,
+with `x₁ … xₖ` introduced and
+`ih : ∀ y₁ … yₖ, μ y₁ … yₖ < μ x₁ … xₖ → B[y/x]`. It rewrites the goal with each listed
+function's `eq_1`: the first application (and identical copies) becomes the generated body,
+whose recursive calls stay folded. Premises and ghost values after the first `k` binders stay in `B`
+and are quantified in `ih`. A mutually recursive group is specified as one conjunction (or
+over an index type such as `Sum`) with one measure, unfolding every member.
+`rec_template? …` also reports the remaining premise. The scaffold does not infer the
+measure. Each recursive call site discharges the decrease when it applies `ih`.
+
+`tests/roadmap/loop-tactics/Recursion.lean` uses it on committed translations: `gcd`
+(self-recursive, the second argument decreases by `a % b < b`), the mutual `isEven`/`isOdd`
+group, `fact` (a range premise carried through `ih`), and the memory-backed `Pointers.addDown`
+(`Zig.callM`). `addDown_total` is a `TotalTriple` proved through `pts_load_run`/`pts_store_run`
+without unfolding memory internals.
+
+Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range
+Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean`, then run
+`lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Template`, `Queue`, `Infer` and
+`Recursion`, and `tests/roadmap/loop-tactics/nested/check.sh`.
+
+This is a bounded P03 contribution. Templates are sequential: concurrent loops (and
+termination under a scheduler) are out of scope. Invariant inference is the syntactic
+suggestion pass above and is never trusted. The recursion scaffold needs a user-given `Nat`
+measure and specification. `zig_range` performs only conditional rewriting and is not a
+general BitVec decision procedure. No ring-buffer example exists in `examples/`, and the
+modules add no exporter or native qualification.
 
 ## Model cost: allocation counts and counted loops (P06)
 
