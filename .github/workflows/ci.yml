@@ -1349,6 +1349,8 @@ jobs:
           bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
+          # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest.
+          python3 tests/roadmap/coverage-report/real_run.py "$receipt_parent/attempt" .lake/build/bin/air2lean
 
   # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
   # (assurance/target-matrix.json, docs/target-matrix.md). One job without a matrix, since

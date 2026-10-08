@@ -169,6 +169,7 @@ python3 scripts/project.py coverage project.json \
   --artifact artifacts/run-001 \
   --receipt "$FRESH_ATTEMPT" \
   --diff "$AIR2LEAN_DIFF_REPORT" \
+  [--export-manifest export-manifest.json [--export-root REPO]] [--require-export-evidence] \
   [--format text] [--out coverage.json] [--require-level functionally_verified_total]
 ```
 
@@ -176,7 +177,7 @@ Every input is optional; a missing input leaves its stages `not_run`. Evidence s
 
 | Stage | Evidence | Pass rule |
 |---|---|---|
-| `analyzed`, `exported` | none available | always `not_run`; supplied AIR is not export evidence |
+| `analyzed`, `exported` | `--export-manifest` (an [I07 artifact manifest](artifact-manifest.md), `--export-root` = the repository it was recorded in) | without a manifest `not_run`: supplied AIR is not export evidence. With one, `check-manifest` machinery must find the manifest intact, its provenance clean and its `source`, `compiler_patch`, `air` and `profile` links recomputing to the recorded digests (other stale links, such as proofs, are irrelevant). `exported` then requires every root AIR file and declared source-closure file to hash to a file recorded in the `air`/`source` links, with the same profile name and Zig version. `analyzed` additionally requires the recorded profile to be `export_stage: analyzed-air` (schema-12 AIR) and equal to the project profile; legacy AIR fails closed. Anything stale, missing or foreign marks both `failed` |
 | `translated` | `--artifact` | `verify` succeeds: manifest, inputs, generated Lean and translator hashes current |
 | `compiled` | `--receipt` ([proof receipt](proof-receipts.md) attempt) | `proof-receipt.py verify` reports `current`; some receipt `after.json` generated profile is byte-identical to the artifact's `Gen.lean`; each contract file's current hash equals the receipt source inventory; generated and contract modules are in the compiled inventory |
 | `proved` | receipt `audit.json` | per goal (below); `passed` only when every declared goal is `direct` |
@@ -222,6 +223,10 @@ Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `prove
   rule fails (missing/wrapper goals, or only `safety`, `resource_bound`, `correspondence`).
 * `tested_sampled`: translated, compiled and passing differential samples. Differential
   evidence is always `scope: sampled` and never contributes to a higher level.
+* A `failed` analyzed/exported stage blocks every functional level. `--require-export-evidence`
+  additionally blocks them when the stage is not `passed` (including `not_run` without a
+  manifest); the default keeps earlier reports unchanged. Neither stage reruns the exporter or
+  compiler, so both remain trusted.
 * A wrapper-only theorem or sampled-only tests therefore cannot reach functional
   verification; `blockers` lists every unmet rule.
 
@@ -239,14 +244,21 @@ failure the claim denies, refuses it and adds a blocker, so the root cannot reac
 diagnostics also exit 1, invalid input exits 2. `--out` uses the same no-clobber/`--overwrite`
 publication as `report`.
 
-Residual limits: a theorem whose own proof term mentions the generated definition while
-its statement concerns a wrapper is still classified `direct`; the declared strength and
-domain remain review obligations. The level does not attest export, source
+Residual limits: the declared domain, preconditions and any strength claims.py cannot derive
+remain review obligations. The level does not attest export, source
 correspondence, backend lowering or native adequacy (see the receipt's trust fields).
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 ```
+
+`tests/roadmap/coverage-report/real_run.py ATTEMPT TRANSLATOR` runs the report over
+`example-project.json`, the real translator and a real sealed receipt (CI runs it after the
+all-shipped receipt). It asserts that `tardiness_spec` binds directly at derived total
+correctness, that a wrapper theorem (`weightedTardiness_ok`) and sampled differential tests
+never reach a functional level, and that a real I07 manifest over the legacy `basic` example
+binds `exported` but leaves `analyzed` failed. Goal variants are applied in memory so the
+receipt, artifact and hashes remain genuine.
 
 ## Dependency closure
 
