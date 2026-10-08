@@ -490,7 +490,7 @@ def Func.calleeValFnTy? (f : Func) (callee : Val) : Option String :=
 /-- The functions that an indirect call in `f` can call (`fnRefs`). -/
 def Func.indirectCallees (f : Func) (refs : Array (String × String)) : Array String :=
   f.allInsts.flatMap fun i => match i.op with
-    | .call v _ => if !v.isIndirectCallee then #[] else match f.calleeValFnTy? v with
+    | .call v _ => match f.calleeValFnTy? v with
       | some tn => refs.filterMap fun (t, nm) => if t == tn then some nm else none
       | none => #[]
     | _ => #[]
