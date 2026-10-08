@@ -479,4 +479,93 @@ theorem Triple.munmapTail (os : Os.Profile) {p : Ptr} {A lo k : Nat} {bs : Array
     · have := mapping_below hst hblk hl hK (by omega)
       rw [hn', hnbs]; show blk.addr + (lo + k) < m.nextAddr; omega
 
+/-! ## Unmapped bytes are illegal -/
+
+/-- An access to a block that is dead, or below its first live offset, or past its bytes,
+throws `.illegal`. -/
+theorem access_illegal {m : Mem} {q : Ptr} {n a : Nat} {b : BlockId} {nb : Block}
+    (hq : q.block = some b) (hb : m.blocks[b]? = some nb)
+    (h : nb.live = false ∨ q.off.toNat < nb.kind.mappedLo ∨ nb.bytes.size < q.off + n) :
+    m.access q n a = throw .illegal := by
+  unfold Mem.access
+  simp only [hq, hb]
+  rw [if_neg]
+  rintro ⟨hl, h0, hn, -, hlo⟩
+  rcases h with h | h | h
+  · rw [hl] at h; cases h
+  · omega
+  · omega
+
+theorem Os.mappingAt_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block}
+    (hb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
+    (Os.mappingAt p).run m = throw .illegal := by
+  cases hk : blk.kind <;>
+    simp [Os.mappingAt, hb, hblk, hk, hl, zig_unfold, throw, throwThe, MonadExceptOf.throw,
+      ExceptT.mk, StateT.lift, StateT.bind, ExceptT.bind, ExceptT.bindCont, get, getThe,
+      MonadStateOf.get, StateT.get, pure, ExceptT.pure, StateT.run]
+
+/-- `munmap` of a block that is not live (a double `munmap`) throws `.illegal`. -/
+theorem Os.munmap_dead {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {blk : Block}
+    (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
+    (Os.munmap os s).run m = throw .illegal := by
+  have h := Os.mappingAt_dead (m := m) hb hblk hl
+  simp only [StateT.run] at h
+  simp only [Os.munmap, StateT.run, bind, StateT.bind, h]
+  rfl
+
+/-- **No use after munmap, no double munmap.** After `munmap` of a whole mapping, every access to
+its block and a second `munmap` of the same range throw `.illegal`. -/
+theorem munmap_whole_then_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p : Ptr}
+    {A lo : Nat} {bs : Array Byte} {len : BitVec 64} (hp : mapping os.pageSize p A lo bs h)
+    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hst : m.Seq) (hlen : 0 < len.toNat)
+    (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
+    ∃ m', (Os.munmap os ⟨p, len⟩).run m = pure ((), m') ∧
+      (Os.munmap os ⟨p, len⟩).run m' = throw .illegal ∧
+      ∀ q n a, q.block = p.block → m'.access q n a = throw .illegal := by
+  obtain ⟨b, blk, rfl, hblk, -, -, -, -, -, -, m', hr, -, -, -, hb'⟩ :=
+    munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
+      (by rw [Nat.add_zero]; exact unmapCase_whole hp.2.1 hlen heq)
+  rw [show (((0 : Nat) : Int)) = 0 from rfl, Ptr.add_zero'] at hr
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hb₂ : m'.blocks[b]? = some (Os.Unmap.apply blk .whole) := by
+    rw [hb', Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hlt
+  refine ⟨m', hr, Os.munmap_dead os _ rfl hb₂ rfl, fun q n a hq => access_illegal hq hb₂ (.inl rfl)⟩
+
+/-- After `munmap` of a page prefix, every access below the new first live offset throws
+`.illegal`. -/
+theorem munmap_prefix_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) (hP : 0 < os.pageSize)
+    {p : Ptr} {A lo : Nat} {bs : Array Byte} {len : BitVec 64}
+    (hp : mapping os.pageSize p A lo bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hst : m.Seq) (hlen : 0 < len.toNat)
+    (hlt : alignUp len.toNat os.pageSize < alignUp bs.size os.pageSize) :
+    ∃ m', (Os.munmap os ⟨p, len⟩).run m = pure ((), m') ∧
+      ∀ q n a, q.block = p.block → q.off.toNat < lo + alignUp len.toNat os.pageSize →
+        m'.access q n a = throw .illegal := by
+  obtain ⟨b, blk, rfl, hblk, -, -, -, -, -, -, m', hr, -, -, -, hb'⟩ :=
+    munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
+      (by rw [Nat.add_zero]; exact unmapCase_prefix hp.2.1 hlen hlt)
+  rw [show (((0 : Nat) : Int)) = 0 from rfl, Ptr.add_zero'] at hr
+  have hlt' : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hb₂ : m'.blocks[b]? = some (Os.Unmap.apply blk (.prefix (lo + alignUp len.toNat os.pageSize))) := by
+    rw [hb', Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hlt'
+  exact ⟨m', hr, fun q n a hq ho => access_illegal hq hb₂ (.inr (.inl (by simpa [Os.Unmap.apply])))⟩
+
+/-- After `munmap` of a page tail from byte `k`, every access that reaches byte `k` or beyond
+throws `.illegal`. -/
+theorem munmap_tail_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p : Ptr}
+    {A lo k : Nat} {bs : Array Byte} {len : BitVec 64} (hp : mapping os.pageSize p A lo bs h)
+    (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hst : m.Seq)
+    (hk : k % os.pageSize = 0) (hk0 : 0 < k) (hkS : k < bs.size) (hlen : 0 < len.toNat)
+    (heq : k + alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
+    ∃ m', (Os.munmap os ⟨p.add k, len⟩).run m = pure ((), m') ∧
+      ∀ (q : Ptr) (n a : Nat), q.block = p.block → ((lo + k : Nat) : Int) < q.off + n →
+        m'.access q n a = throw .illegal := by
+  obtain ⟨b, blk, rfl, hblk, -, -, -, hS, -, -, m', hr, -, -, -, hb'⟩ :=
+    munmap_owned os (k := k) (len := len) hp hm hd hst hk (unmapCase_tail hk0 hkS hlen heq)
+  have hlt' : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hb₂ : m'.blocks[b]? = some (Os.Unmap.apply blk (.tail (lo + k))) := by
+    rw [hb', Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hlt'
+  refine ⟨m', hr, fun q n a hq ho => access_illegal hq hb₂ (.inr (.inr ?_))⟩
+  simp only [Os.Unmap.apply, Array.size_extract, hS]; omega
+
 end Zig
