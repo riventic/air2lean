@@ -37,7 +37,7 @@ private def types : Array Json := #[
       obj [("name", .str "k"), ("ty", num 0), ("offset", num 8)]])],
   ptr 10 true (some 8), ptr 2 false (some 8), ptr 0 true (some 4),
   fnTy "fn (*const fn (u32) u32, u32) u32", ptr 2 true (some 8), ptr 10 false (some 8),
-  fnTy "fn (*const Ops, u32) u32"]
+  fnTy "fn (*const Ops, u32) u32", fnTy "fn (**const fn (u32) u32, u32) u32"]
 
 private def inst (id : Nat) (tag : String) (ty : Nat) (args : Array Json := #[])
     (extra : List (String × Json) := []) : Json :=
@@ -84,6 +84,10 @@ private def table : Json :=
 private def constant : Json :=
   file "constant" #[0] #[arg 0 0 0, call 1 (gptr 2 1) #[ref 0], ret 2 (ref 1)] unaryTable
 
+/-- One call through a parameter: the emitted dispatch, in isolation. -/
+private def callOnce : Json :=
+  file "callOnce" #[2, 0] #[arg 0 0 2, arg 1 1 0, call 2 (ref 0) #[ref 1], ret 3 (ref 2)] unaryTable
+
 /-- `f(f(x))` through a parameter, and its callers passing each target. -/
 private def twice : Json :=
   file "twice" #[2, 0] #[arg 0 0 2, arg 1 1 0, call 2 (ref 0) #[ref 1], call 3 (ref 0) #[ref 2],
@@ -128,25 +132,122 @@ private def dataAddress : Json :=
   file "dataAddress" #[0] #[arg 0 0 0, inst 1 "bitcast" 2 #[gptr 13 1], call 2 (ref 1) #[ref 0],
     ret 3 (ref 2)] #[fnGlobal "double", dataGlobal "word" true 0 (lit 5)]
 
+/-- Runtime counterparts: the reinterpreted address reaches `twice` through a parameter,
+so no fixed origin is visible at the call and the dispatch throws `.illegal`. -/
+private def viaCast (name : String) (source : Json) (globals : Array Json) : Json :=
+  file name #[0] #[arg 0 0 0, inst 1 "bitcast" 2 #[source],
+    call 2 (obj [("ty", num 14), ("func", .str "twice"), ("noreturn", .bool false)]) #[ref 1, ref 0],
+    ret 3 (ref 2)] globals
+private def viaMismatch := viaCast "viaMismatch" (gptr 7 3) (unaryTable.push (fnGlobal "add2" 6))
+private def viaData := viaCast "viaData" (gptr 13 3) (unaryTable.push (dataGlobal "word" true 0 (lit 5)))
+private def viaInt : Json :=
+  file "viaInt" #[8, 0] #[arg 0 0 8, arg 1 1 0, inst 2 "bitcast" 2 #[ref 0],
+    call 3 (obj [("ty", num 14), ("func", .str "twice"), ("noreturn", .bool false)]) #[ref 2, ref 1],
+    ret 4 (ref 3)] unaryTable
+
+/-- A caller-owned stack slot for `memory`. -/
+private def memoryCaller : Json :=
+  file "memoryCaller" #[0] #[arg 0 0 0, inst 1 "alloc" 12,
+    call 2 (obj [("ty", num 18), ("func", .str "memory"), ("noreturn", .bool false)]) #[ref 1, ref 0],
+    ret 3 (ref 2)] unaryTable
+
+/-- Static rejections: a fixed callee address that is provably not a function block of the
+callee's signature, or a constant that is not a function address. -/
+private def constData : Json :=
+  file "constData" #[0] #[arg 0 0 0, call 1 (gptr 2 1) #[ref 0], ret 2 (ref 1)]
+    #[fnGlobal "double", dataGlobal "word" true 0 (lit 5)]
+private def constIncompatible : Json :=
+  file "constIncompatible" #[0] #[arg 0 0 0, call 1 (gptr 2 0) #[ref 0], ret 2 (ref 1)]
+    #[fnGlobal "add2" 6, fnGlobal "double"]
+private def constOffset : Json :=
+  file "constOffset" #[0] #[arg 0 0 0, call 1 (gptr 2 0 1) #[ref 0], ret 2 (ref 1)] unaryTable
+private def constDataPointer : Json :=
+  file "constDataPointer" #[0] #[arg 0 0 0, call 1 (gptr 13 1) #[ref 0], ret 2 (ref 1)]
+    #[fnGlobal "double", dataGlobal "word" true 0 (lit 5)]
+private def undefCallee : Json :=
+  file "undefCallee" #[0] #[arg 0 0 0, call 1 (obj [("ty", num 2), ("undef", .bool true)]) #[ref 0],
+    ret 2 (ref 1)] unaryTable
+
 private def process (j : Json) : Except String Func := do
   let f ← normalize (← Raw.parseFunc j)
   check f
   pure f
 private def require (ok : Bool) (msg : String) : IO Unit :=
   unless ok do throw (IO.userError msg)
+private def reject (j : Json) (diagnostic : String) : IO Unit :=
+  match process j with
+  | .ok _ => throw (IO.userError s!"accepted negative case: {diagnostic}")
+  | .error e => require ((e.splitOn diagnostic).length > 1) s!"unexpected rejection: {e}"
+private def accept (j : Json) : IO Func :=
+  match process j with
+  | .ok f => pure f
+  | .error e => throw (IO.userError e)
+
+/-- Decided observations of the emitted program, appended to the generated file. -/
+private def assertions : String := "
+deriving instance DecidableEq for Except
+def observe (r : Zig.Result (BitVec 32 × Zig.Mem)) : Option (Except Zig.Error Nat) :=
+  r.run.map fun e => e.map (·.1.toNat)
+-- Every declared target of the table is reachable, through each origin of the pointer.
+example : observe ((table 0 5).run mem0) = some (.ok 10) := by decide +kernel
+example : observe ((table 1 5).run mem0) = some (.ok 6) := by decide +kernel
+example : observe ((table 2 5).run mem0) = some (.ok 25) := by decide +kernel
+example : observe ((«constant» 5).run mem0) = some (.ok 6) := by decide +kernel
+example : observe ((callOnce ⟨some 2, 0⟩ 5).run mem0) = some (.ok 25) := by decide +kernel
+example : observe ((viaDouble 5).run mem0) = some (.ok 20) := by decide +kernel
+example : observe ((viaSquare 5).run mem0) = some (.ok 625) := by decide +kernel
+example : observe ((globalSlot false 5).run mem0) = some (.ok 6) := by decide +kernel
+example : observe ((globalSlot true 5).run mem0) = some (.ok 25) := by decide +kernel
+example : observe ((fieldCaller 5).run mem0) = some (.ok 25) := by decide +kernel
+example : observe ((memoryCaller 5).run mem0) = some (.ok 10) := by decide +kernel
+-- An integer that is the address of a function block is that function.
+example : observe ((do viaInt (BitVec.ofInt 64 (← Zig.ptrAddr ⟨some 2, 0⟩)) 5).run mem0) =
+    some (.ok 625) := by decide +kernel
+-- A target of another signature, a data address and any other address are rejected.
+example : observe ((viaMismatch 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((viaData 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((viaInt 0 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((do viaInt (BitVec.ofInt 64 ((← Zig.ptrAddr ⟨some 2, 0⟩) + 1)) 5).run mem0) =
+    some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨some 3, 0⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨some 0, 1⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
+example : observe ((callOnce ⟨none, 0⟩ 5).run mem0) = some (.error .illegal) := by decide +kernel
+"
 
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Pipeline.lean OUTPUT_DIR")
   let dir := System.FilePath.mk output
   IO.FS.createDirAll dir
-  let all := #[double, succ, square, add2, table, constant, twice, viaParam "viaDouble" 0,
-    viaParam "viaSquare" 2, globalSlot, field, fieldCaller, memory, mismatched, dataAddress]
-  let mut funcs := #[]
-  for j in all do
-    match process j with
-    | .ok f => funcs := funcs.push f
-    | .error e => IO.println s!"REJECT: {e}"
+  let unknown := "not a function block (an unknown executable address)"
+  let incompatible := "has an incompatible signature (called through 'fn (u32) u32')"
+  reject mismatched incompatible
+  reject constIncompatible incompatible
+  reject dataAddress unknown
+  reject constData unknown
+  reject constOffset unknown
+  reject constDataPointer "a constant indirect callee is not a function pointer"
+  reject undefCallee "undefined"
+  let funcs ← #[double, succ, square, add2, table, constant, callOnce, twice,
+    viaParam "viaDouble" 0, viaParam "viaSquare" 2, globalSlot, field, fieldCaller, memory,
+    memoryCaller, viaMismatch, viaData, viaInt].mapM accept
   match checkProgram funcs with
-  | .error e => IO.println s!"PROGRAM REJECT: {e}"
+  | .error e => throw (IO.userError e)
   | .ok _ => pure ()
-  IO.FS.writeFile (dir / "Calls.lean") (emit funcs "Calls" "")
+  -- One table: a constant callee is a callee of the call graph like a runtime pointer.
+  let refs := fnRefs funcs
+  require (refs == #[("fn (u32) u32", "double"), ("fn (u32) u32", "succ"),
+    ("fn (u32) u32", "square"), ("fn (u32, u32) u32", "add2")]) s!"unexpected table {refs}"
+  for f in funcs do
+    if f.name == "constant" || f.name == "callOnce" then
+      require (f.indirectCallees refs == #["double", "succ", "square"])
+        s!"{f.name}: indirect callees {f.indirectCallees refs}"
+  -- The program check validates each indirect target's signature, also for a constant callee.
+  let badSquare := (square.setObjVal! "params" (toJson #[0, 0])).setObjVal! "body"
+    (.arr #[arg 0 0 0, arg 1 1 0, inst 2 "mul_wrap" 0 #[ref 0, ref 1], ret 3 (ref 2)])
+  match checkProgram (#[← accept badSquare, ← accept constant, ← accept double, ← accept succ]) with
+  | .ok _ => throw (IO.userError "accepted a constant-callee target with a mismatched arity")
+  | .error e => require ((e.splitOn "callee 'square' has 2 arguments, expected 1").length > 1 ||
+      (e.splitOn "has 1 arguments, expected 2").length > 1) s!"unexpected program rejection: {e}"
+  IO.FS.writeFile (dir / "Calls.lean") (emit funcs "Calls" "" ++ "\nnamespace Calls\n" ++
+    assertions ++ "end Calls\n")
+  IO.println "indirect call synthetic regressions passed"
