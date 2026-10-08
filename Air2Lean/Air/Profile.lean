@@ -92,7 +92,8 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless endian == targetEndian do
     throw s!"profile.endian '{endian}' differs from the {arch} target's {targetEndian}-endian byte order"
   if let .ok te := j.getObjVal? "target_endian" then
-    unless te.getStr? == .ok endian do throw "target_endian differs from profile.endian"
+    unless (match te.getStr? with | .ok s => s == endian | .error _ => false) do
+      throw "target_endian differs from profile.endian"
   let profileVersion ← strField p "zig_version"
   unless profileVersion == zigVersion do
     throw "profile.zig_version differs from top-level zig_version"

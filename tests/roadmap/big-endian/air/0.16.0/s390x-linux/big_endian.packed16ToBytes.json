@@ -1,0 +1,274 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "big",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "s390x-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "big",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "arch8",
+  "features": [],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "big_endian.packed16ToBytes",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "bitcast",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 8
+    }
+   ],
+   "name": "q"
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 11,
+   "tag": "load",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "bitcast",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 11
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3
+  },
+  {
+   "id": 14,
+   "tag": "ret_safe",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 12,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "array",
+   "len": 2,
+   "child": 10,
+   "sentinel": false,
+   "abi_size": 2,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 2,
+   "bit_offset": 0,
+   "vector_index": null,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 2,
+   "bit_offset": 12,
+   "vector_index": null,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 8,
+   "ptr_align": 2,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "big_endian.Q",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "lo",
+     "ty": 0
+    },
+    {
+     "name": "hi",
+     "ty": 1
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

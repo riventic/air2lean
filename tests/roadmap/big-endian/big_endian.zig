@@ -89,13 +89,18 @@ pub fn byteOfF64(x: f64, i: usize) u8 {
     return bytes[i];
 }
 
-pub fn vecToBytes(a: u16, b: u16) [4]u8 {
-    const v: @Vector(2, u16) = .{ a, b };
-    return @bitCast(v);
+/// Byte `i` of a vector in memory (a vector `@bitCast` is outside the translated subset).
+pub fn vecByte(a: u16, b: u16, i: usize) u8 {
+    var v: @Vector(2, u16) = .{ a, b };
+    const bytes: *const [4]u8 = @ptrCast(&v);
+    return bytes[i];
 }
 
-pub fn bytesToVecLane0(b: [8]u8) u32 {
-    const v: @Vector(2, u32) = @bitCast(b);
+/// Lane 0 of a vector whose memory bytes were stored as an array.
+pub fn vecLane0FromBytes(b: [8]u8) u32 {
+    var v: @Vector(2, u32) = .{ 0, 0 };
+    const bytes: *[8]u8 = @ptrCast(&v);
+    bytes.* = b;
     return v[0];
 }
 
@@ -130,8 +135,8 @@ comptime {
     _ = &byteOfU32;
     _ = &u16FromStoredBytes;
     _ = &byteOfF64;
-    _ = &vecToBytes;
-    _ = &bytesToVecLane0;
+    _ = &vecByte;
+    _ = &vecLane0FromBytes;
     _ = &externToBytes;
     _ = &unionHalf;
     _ = &unionByte;

@@ -613,5 +613,8 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
+  (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
+  bigEndian : Bool := false
 
 end Air2Lean

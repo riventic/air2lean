@@ -1727,9 +1727,54 @@ private def checkBitPtrConstant (f : Func) (v : Val) : Except String Unit :=
     else pure ()
   | none => pure ()
 
+/-- A big-endian profile (T03, `ZigLean/Endian.lean`) parameterizes the byte order of
+integers, floats, slices, enums, packed structs (their backing integer and bit-pointer hosts),
+whole-byte vector lanes and every aggregate built from them. The rest is unqualified on a
+big-endian target and fails closed (`docs/profiles.md` §Byte order). -/
+def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
+  let fail {α : Type} (what : String) : Except String α :=
+    throw s!"{f.name}: {what} is outside the qualified big-endian model (`docs/profiles.md` §Byte order)"
+  unless f.errorSetBits == 16 do fail s!"error_set_bits {f.errorSetBits}"
+  for t in f.types do
+    match t with
+    | .float 80 => fail "`f80`"
+    | .union _ "packed" none _ => fail "a `packed union`"
+    | .vector _ c =>
+      match f.types[c]? with
+      | some (.int _ bits) => unless bits % 8 == 0 do fail "a vector of non-byte-multiple lanes"
+      | some (.float 80) => fail "a vector of `f80` lanes"
+      | some (.float _) => pure ()
+      | _ => fail "a vector of `bool` or pointer lanes"
+    | _ => pure ()
+  let tyOf (v : Val) : Option TyId := match v with
+    | .inst id => (insts.find? (·.id == id)).map (·.ty)
+    | v => v.constTy?
+  let packedPtr (t : TyId) : Bool := match f.types[t]? with
+    | some (.ptr _ _ s) => match f.types[s]? with
+      | some (.struct _ "packed" _) => true
+      | _ => false
+    | _ => false
+  let hostOf (t : TyId) : Nat := (f.layouts[t]?.map (·.hostSize)).getD 0
+  for i in insts do
+    match i.op with
+    | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => fail "an atomic op"
+    | .asm .. => fail "inline assembly"
+    | .tagName _ => fail "`@tagName`"
+    | .errorName _ => fail "`@errorName`"
+    | .call (.func callee ..) _ =>
+      if modelledStdFn callee then fail s!"the std model '{callee}'"
+    -- The little-endian byte offset of a byte-aligned packed field (`FCtx.fieldOffsetIn`).
+    | .fieldPtr b _ =>
+      if (tyOf b).any packedPtr && hostOf i.ty == 0 then fail "a byte pointer to a packed struct field"
+    | .fieldParentPtr p _ =>
+      if packedPtr i.ty && (tyOf p).all (hostOf · == 0) then
+        fail "`@fieldParentPtr` from a byte pointer to a packed struct field"
+    | _ => pure ()
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
 def check (f : Func) : Except String Unit := do
   validateTypeGraph f.name f.types
+  if f.bigEndian then checkBigEndian f f.allInsts
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
     checkBitPtrParam f p
@@ -2448,6 +2493,8 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
     (selectedCallees : Array String := #[]) : Except String Unit := do
   unless models.isEmpty do
     let some profile := profile | throw "external model bindings require a checked program profile"
+    if profile.isBigEndian then
+      throw "external model bindings are outside the qualified big-endian model (`docs/profiles.md` §Byte order)"
     ModelRegistry.check models profile funcs
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let indexes ← checkSharedDefinitions funcs
