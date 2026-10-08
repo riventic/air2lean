@@ -1,7 +1,39 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "thread_tuples.groupMixed",
  "params": [
   0,
@@ -154,7 +186,7 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 8
   },
   {
    "id": 20,
@@ -183,7 +215,7 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 6
+   "line": 9
   },
   {
    "id": 26,
@@ -208,7 +240,7 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 6
+   "line": 9
   },
   {
    "id": 29,
@@ -236,7 +268,7 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 7
+   "line": 10
   },
   {
    "id": 33,
@@ -262,7 +294,7 @@
    ]
   },
   {
-   "id": 39,
+   "id": 41,
    "tag": "try",
    "ty": 3,
    "args": [
@@ -289,8 +321,32 @@
     },
     {
      "id": 36,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 17,
+      "func": "Io.Group.cancel",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 12
+      },
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 37,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 10
+    },
+    {
+     "id": 38,
      "tag": "bitcast",
-     "ty": 17,
+     "ty": 18,
      "args": [
       {
        "inst": 34
@@ -298,39 +354,39 @@
      ]
     },
     {
-     "id": 37,
+     "id": 39,
      "tag": "wrap_errunion_err",
      "ty": 2,
      "args": [
       {
-       "inst": 36
+       "inst": 38
       }
      ]
     },
     {
-     "id": 38,
+     "id": 40,
      "tag": "ret_safe",
-     "ty": 18,
+     "ty": 19,
      "args": [
       {
-       "inst": 37
+       "inst": 39
       }
      ]
     }
    ]
   },
   {
-   "id": 40,
+   "id": 42,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 8
+   "line": 11
   },
   {
-   "id": 41,
+   "id": 43,
    "tag": "call",
-   "ty": 19,
+   "ty": 20,
    "callee": {
-    "ty": 20,
+    "ty": 21,
     "func": "Io.Group.await",
     "noreturn": false
    },
@@ -344,45 +400,59 @@
    ]
   },
   {
-   "id": 47,
+   "id": 51,
    "tag": "try",
    "ty": 3,
    "args": [
     {
-     "inst": 41
+     "inst": 43
     }
    ],
    "body": [
     {
-     "id": 42,
-     "tag": "unwrap_errunion_err",
-     "ty": 21,
-     "args": [
-      {
-       "inst": 41
-      }
-     ]
-    },
-    {
-     "id": 43,
-     "tag": "dbg_stmt",
-     "ty": 3,
-     "line": 8
-    },
-    {
      "id": 44,
-     "tag": "bitcast",
-     "ty": 17,
+     "tag": "unwrap_errunion_err",
+     "ty": 22,
      "args": [
       {
-       "inst": 42
+       "inst": 43
       }
      ]
     },
     {
      "id": 45,
-     "tag": "wrap_errunion_err",
-     "ty": 2,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 7
+    },
+    {
+     "id": 46,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 17,
+      "func": "Io.Group.cancel",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 12
+      },
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 47,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 11
+    },
+    {
+     "id": 48,
+     "tag": "bitcast",
+     "ty": 18,
      "args": [
       {
        "inst": 44
@@ -390,25 +460,35 @@
      ]
     },
     {
-     "id": 46,
-     "tag": "ret_safe",
-     "ty": 18,
+     "id": 49,
+     "tag": "wrap_errunion_err",
+     "ty": 2,
      "args": [
       {
-       "inst": 45
+       "inst": 48
+      }
+     ]
+    },
+    {
+     "id": 50,
+     "tag": "ret_safe",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 49
       }
      ]
     }
    ]
   },
   {
-   "id": 48,
+   "id": 52,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 12
   },
   {
-   "id": 49,
+   "id": 53,
    "tag": "load",
    "ty": 1,
    "args": [
@@ -418,7 +498,7 @@
    ]
   },
   {
-   "id": 50,
+   "id": 54,
    "tag": "load",
    "ty": 1,
    "args": [
@@ -428,12 +508,12 @@
    ]
   },
   {
-   "id": 51,
+   "id": 55,
    "tag": "mul_wrap",
    "ty": 1,
    "args": [
     {
-     "inst": 50
+     "inst": 54
     },
     {
      "ty": 1,
@@ -442,41 +522,65 @@
    ]
   },
   {
-   "id": 52,
+   "id": 56,
    "tag": "add_wrap",
    "ty": 1,
    "args": [
     {
-     "inst": 49
+     "inst": 53
     },
     {
-     "inst": 51
+     "inst": 55
     }
    ]
   },
   {
-   "id": 53,
+   "id": 57,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 7
   },
   {
-   "id": 54,
+   "id": 58,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 17,
+    "func": "Io.Group.cancel",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 12
+  },
+  {
+   "id": 60,
    "tag": "wrap_errunion_payload",
    "ty": 2,
    "args": [
     {
-     "inst": 52
+     "inst": 56
     }
    ]
   },
   {
-   "id": 55,
+   "id": 61,
    "tag": "ret_safe",
-   "ty": 18,
+   "ty": 19,
    "args": [
     {
-     "inst": 54
+     "inst": 60
     }
    ]
   }
@@ -494,7 +598,7 @@
     },
     {
      "name": "vtable",
-     "ty": 22,
+     "ty": 23,
      "offset": 8
     }
    ],
@@ -510,7 +614,7 @@
   },
   {
    "k": "error_union",
-   "error": 17,
+   "error": 18,
    "payload": 1,
    "abi_size": 8,
    "abi_align": 4
@@ -581,7 +685,7 @@
   },
   {
    "k": "optional",
-   "child": 23,
+   "child": 24,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -649,6 +753,10 @@
    "abi_align": 2
   },
   {
+   "k": "other",
+   "name": "fn (*Io.Group, Io) void"
+  },
+  {
    "k": "error_set",
    "errors": [
     "Canceled",
@@ -662,7 +770,7 @@
   },
   {
    "k": "error_union",
-   "error": 21,
+   "error": 22,
    "payload": 3,
    "abi_size": 2,
    "abi_align": 2
@@ -683,7 +791,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 24,
+   "child": 25,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
@@ -695,7 +803,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 25,
+   "child": 26,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
