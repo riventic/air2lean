@@ -291,6 +291,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/aggregate-casts/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',

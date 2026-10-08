@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2219 theorems in 127 files.
+2233 theorems in 128 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 620 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 634 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 399 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2097 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1753 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2111 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1767 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 988 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2219 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1037 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1037 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2233 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1051 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1051 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2594,6 +2594,27 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `example@L57` | SEM-01, TRU-01 |
 | `example@L58` | SEM-01, TRU-01 |
 | `example@L59` | SEM-01, TRU-01 |
+
+## `tests/roadmap/packed-fields/PackedFields/Proofs.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `PackedFieldsClients.setA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerC_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerCKeepsA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.setInner_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerPartial_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.undefKeepsA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.undefField_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.signedS_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.boolOn_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.modeHigh_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.unionRaw_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.unionBadMode_illegal` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.hostAbi_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.localUndef_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/progress/Runtime.lean`
 

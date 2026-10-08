@@ -144,15 +144,15 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
       throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
-    -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
-    -- `hostSize` (`Zig.loadBits`).
-    if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
-      throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
-        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
+    -- A bit-pointer reads and writes its host's `hostSize` bytes, any count (`Zig.loadBits`):
+    -- `(bits + 7) / 8` on LLVM (3 for a `packed struct(u24)`), the ABI size on x86_64.
     if l.hostSize != 0 then
-      if let some bits := packedBits types child then
-        if l.bitOffset + bits > 8 * l.hostSize then
-          throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
+      -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
+      let some bits := packedBits types child
+        | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
+            `bool`, an enum or a packed struct is outside the subset"
+      if l.bitOffset + bits > 8 * l.hostSize then
+        throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
     match size with
     -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`
@@ -695,6 +695,64 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
             cx.fail line s!"built-in std model '{name}' has no volatile contract (argument \
               type {aty}): {guidance}"
 
+/-- The pointer to field `idx` of a packed struct (L08), from the pointer type `base` to it:
+`(host size, bit offset)` of a bit-pointer, or `(0, byte offset)` of a byte pointer. The
+compiler's rule (`Type.packedStructFieldPtrInfo`): the field's bit offset is the sum of the
+earlier fields' bit sizes, plus the base's bit offset if the base is a bit-pointer, whose host it
+keeps. Otherwise the host is the struct: `(bits + 7) / 8` bytes (LLVM) or its ABI size (the
+self-hosted x86_64 backend), both accepted (`hosts`). A field at a byte boundary whose bit size
+fills its ABI size can be a byte pointer instead. `none`: not a packed struct field, or a
+size the exporter does not give. -/
+def packedFieldPtr? (types : Array Ty) (layouts : Array Layout) (base : TyId) (idx : Nat) :
+    Option (Array Nat × Nat × Option Nat) := do
+  let some (.ptr _ _ s) := types[base]? | none
+  let some (.struct _ "packed" fields) := types[s]? | none
+  let (_, fty) ← fields[idx]?
+  let bits ← packedBits types s
+  let fieldBits ← packedBits types fty
+  let bl := layouts[base]?.getD {}
+  let bit := (if bl.hostSize != 0 then bl.bitOffset else 0) + packedFieldBit types fields idx
+  let hosts ← if bl.hostSize != 0 then pure #[bl.hostSize] else do
+    let abi ← (layouts[s]?).bind (·.size)
+    pure (if abi == (bits + 7) / 8 then #[abi] else #[(bits + 7) / 8, abi])
+  let fieldAbi ← (layouts[fty]?).bind (·.size)
+  let bytePtr := if bit % 8 == 0 && 8 * fieldAbi == fieldBits then some (bit / 8) else none
+  pure (hosts, bit, bytePtr)
+
+/-- Cross-boundary packed layout (L08): the exporter's pointer to a packed struct field (its
+`host_size` and `bit_offset`, or a byte pointer) is the one the model computes from the struct's
+field bit sizes (`packedFieldPtr?`); a mismatch is rejected, with `PACKED_LAYOUT`. Also for
+`@fieldParentPtr`, from the field pointer back to the struct pointer. -/
+def CheckCtx.checkPackedLayout (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let (base, field, idx) ← match op with
+    | .fieldPtr b idx => match cx.valTy? b with
+      | some bt => pure (bt, ty, idx)
+      | none => return
+    | .fieldParentPtr f idx => match cx.valTy? f with
+      | some ft => pure (ty, ft, idx)
+      | none => return
+    | _ => return
+  let some (.ptr _ _ s) := cx.types[base]? | return
+  let some (.struct name "packed" fields) := cx.types[s]? | return
+  -- A field outside the packed subset is `checkTy`'s type error, not a layout mismatch.
+  unless (packedBits cx.types s).isSome && idx < fields.size do return
+  let some (hosts, bit, bytePtr) := packedFieldPtr? cx.types cx.layouts base idx
+    | cx.fail line s!"packed layout of '{name}' field {idx}: the struct, field or pointer \
+        sizes are not in the AIR file (a bit-pointer needs them)"
+  let fl := cx.layouts[field]?.getD {}
+  let hostText := String.intercalate " or " (hosts.toList.map toString)
+  let expected := s!"host_size {hostText}, bit_offset {bit}" ++
+    (match bytePtr with | some o => s!", or a byte pointer at byte {o}" | none => "")
+  let fail {α : Type} (got : String) : Except String α :=
+    cx.fail line s!"packed layout mismatch: field {idx} of '{name}' through pointer type {base} \
+      is {got} in the AIR file, the model computes {expected} (the field bit offsets are the sums \
+      of the earlier fields' bit sizes)"
+  if fl.hostSize == 0 then
+    if bytePtr.isNone then fail s!"a byte pointer (type {field})"
+  else if !hosts.contains fl.hostSize || fl.bitOffset != bit then
+    fail s!"host_size {fl.hostSize}, bit_offset {fl.bitOffset} (type {field})"
+
 /-- Scalar or vector integer shape: lane count, signedness and element width. -/
 def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
   match cx.types[t]? with
@@ -718,6 +776,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   cx.checkVolatile line ty op
+  cx.checkPackedLayout line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -914,11 +973,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr v =>
     cx.memAccess line ptr
-    -- `Zig.storeBits` has no undefined bits: `undefined` would clobber the host's other fields.
-    if let .undef _ := v then
-      if let some pty := cx.valTy? ptr then
-        if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
-          cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
+    -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
+    -- undefined (a local with such a store is a stack block: `escapingAllocs`).
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -2498,6 +2554,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let volatileCheck := cx.checkVolatile line i.ty i.op
     log := log.record { (checkDiagnostic file f .volatileAccess anchor) with
       category := .unsupportedSemantics } volatileCheck
+    -- L08: an exporter packed field pointer that the model's layout does not match.
+    let packedCheck := cx.checkPackedLayout line i.ty i.op
+    log := log.record { (checkDiagnostic file f .packedLayout anchor) with
+      category := .unsupportedSemantics } packedCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2511,7 +2571,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 

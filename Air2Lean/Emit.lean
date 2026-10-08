@@ -1071,12 +1071,13 @@ def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
 /-- The Lean type of the value that the pointer `v` points to. -/
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
-/-- The byte offset of field `idx` of the struct that the pointer `base` points to. -/
-def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
+/-- The byte offset of field `idx` of the struct that the pointer `base` points to. `baseBit`:
+the bit offset of `base` if it is a bit-pointer (its address is its host's). -/
+def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) (baseBit : Nat := 0) : Nat :=
   match fc.tyOfId c with
   -- A byte-aligned field of a packed struct that is a whole number of bytes: its pointer is
-  -- not a bit-pointer.
-  | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
+  -- not a bit-pointer, at its byte in the host (`Check.lean`'s `packedFieldPtr?`).
+  | .struct _ "packed" fields => (baseBit + packedFieldBit fc.types fields idx) / 8
   -- Every field of a tagged union is its payload.
   | .union _ _ (some tag) fields =>
     ((unionOffsets fc.types fc.layouts tag (fields.map (·.2)) fc.errBits).map (·.2)).getD 0
@@ -1084,19 +1085,23 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
   | .union _ _ none _ => 0
   | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
 
-def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
-  match fc.valTy base with
-  | .ptr _ _ c => fc.fieldOffsetIn c idx
-  | _ => 0
-
 /-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
 def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
+
+/-- A bit-pointer type's bit offset in its host; 0 for every other type. -/
+def FCtx.bitOffset (fc : FCtx) (ptrTy : TyId) : Nat :=
+  if fc.hostSize ptrTy != 0 then (fc.layouts[ptrTy]?.map (·.bitOffset)).getD 0 else 0
+
+def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
+  match fc.valTy base with
+  | .ptr _ _ c => fc.fieldOffsetIn c idx (((fc.valTyId? base).map fc.bitOffset).getD 0)
+  | _ => 0
 
 /-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
 def FCtx.fieldOffsetOfPtrTy (fc : FCtx) (ptrTy : TyId) (idx : Nat) : Nat :=
   match fc.tyOfId ptrTy with
-  | .ptr _ _ c => fc.fieldOffsetIn c idx
+  | .ptr _ _ c => fc.fieldOffsetIn c idx (fc.bitOffset ptrTy)
   | _ => 0
 
 /-- The item type of the slice, many-pointer or array pointer `v`. -/
@@ -1138,7 +1143,7 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   | some t =>
     if fc.hostSize t != 0 then
       s!"Zig.loadBits ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
-        {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
+        {fc.bitOffset t} {p}"
     else fc.pointeeStorageExpr ptr s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
   | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
 
@@ -2117,9 +2122,17 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
       -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
       if isRaw then (env, some s!"Zig.storeBytes {rv ptr} {align} {rv v}") else
+      let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+      let bitOff := ((fc.valTyId? ptr).map fc.bitOffset).getD 0
       match v with
-      -- `undefined`: every byte of the value becomes undefined.
-      | .undef _ => (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
+      -- `undefined` through a bit-pointer: only the field's bits become undefined.
+      | .undef _ =>
+        if host != 0 then
+          let bits := (((fc.valTyId? ptr).bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
+          (env, some s!"Zig.storeUndefBits {bits} {host} {align} {bitOff} {rv ptr}")
+        else
+        -- `undefined`: every byte of the value becomes undefined.
+        (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
       -- Partly `undefined`: one store of the value's bytes, with the bytes of each `undefined`
       -- item or field undefined (`undefByteRanges`; `Check.lean` rejects any other shape).
       | v =>
@@ -2133,9 +2146,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
             (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
           | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
         else
-        let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
         if host != 0 then
-          let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
           (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
     else (env, some (fc.storePlace ptr (rv v)))

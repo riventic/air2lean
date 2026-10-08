@@ -54,6 +54,12 @@ inductive Byte where
   are undefined: the last byte of a `uN` with `N % 8 ≠ 0` (`intBytes`). A read that needs a
   bit above `m` throws `.unspecified` (`intOfBytes`). -/
   | part (m : Nat) (b : BitVec 8)
+  /-- The bits set in `d` are defined, with the values of `b`; the others are undefined (`b`'s
+  bits there are 0). Only for a mask that is not all, none or the low bits (`.int`, `.undef`,
+  `.part`): a bit-pointer store of a field or of `undefined` next to undefined bits
+  (`Byte.ofDefBits`, `ZigLean/Packed.lean`). A read that needs a bit outside `d` throws
+  `.unspecified` (`intOfBytes`). -/
+  | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
 /-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
