@@ -30,6 +30,7 @@ Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py list   (each case and its inputs; no translation)
 """
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -173,15 +174,21 @@ def compose(dirs, destination, version):
             (destination / name).write_text(json.dumps(doc), encoding="utf-8")
 
 
-def comparable(data, mode):
-    """The compared bytes: all of them (`exact`), else the body after a valid profile record."""
+@functools.cache
+def split_generated():
+    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))["split_generated"]
+
+
+def comparable(data, mode, committed=False):
+    """The compared bytes: all of them (`exact`), else the body after the profile record. A
+    committed record must be valid: a malformed one is an error, not ignorable metadata."""
     if mode == "exact":
         return data
-    first, newline, rest = data.partition(b"\n")
+    first, _, rest = data.partition(b"\n")
     if not first.startswith(PROFILE_PREFIX):
         return data
-    split = runpy.run_path(str(ROOT / "scripts/normalize-generated.py"))["split_generated"]
-    split(data, required=True)  # A malformed or unsupported record is an error, not metadata.
+    if committed:
+        split_generated()(data, required=True)
     return rest
 
 
@@ -224,7 +231,7 @@ class Translator:
         """None if `path` equals the fresh output of `case`, else the difference."""
         fresh = self.output(index, case)
         committed = (ROOT / path).read_bytes()
-        mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
+        mine, theirs = comparable(committed, case.mode, committed=True), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
 
 

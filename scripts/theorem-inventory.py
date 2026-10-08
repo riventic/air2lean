@@ -15,7 +15,9 @@ over every fuel and oracle, when a document or Lean doc comment says "every sche
 theorem whose scope is narrower, when a theorem of a proved-examples table is not listed,
 or when docs/theorem-inventory.md is stale. `write` regenerates that document's table.
 `swap-build` builds modules against other translation files and restores the committed
-ones. `record` adds a build-guard report of such a build to the inventory. See
+ones. `record` adds a build-guard report of such a build to the inventory, after
+scripts/gen-integrity.py attests that each translation file it records is a fresh translation
+of its committed AIR. See
 docs/theorem-inventory.md.
 """
 from __future__ import annotations
@@ -418,6 +420,16 @@ def portable(root: Path, arg: str) -> str:
         return path.name
 
 
+def attest_generated(root: Path, paths: list[str]) -> None:
+    """Refuse a result over a translation file that is not a fresh translation of its committed
+    AIR (scripts/gen-integrity.py attest; the translator must be built)."""
+    result = subprocess.run([sys.executable, str(root / 'scripts/gen-integrity.py'), 'attest', *paths],
+                            cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        raise Error('translation files are not fresh translations of their committed AIR:\n'
+                    + result.stderr.strip())
+
+
 def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path) -> dict:
     report = json.loads(report_path.read_text())
     log = log_path.read_bytes()
@@ -452,6 +464,7 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
                 'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
         else:
             sources[mod] = sha256(root / module_path(mod))
+    attest_generated(root, sorted({gen['path'] for gen in gens.values()}))
     toolchain = [p for p in report.get('pins', []) if p.get('path', '').endswith('lean-toolchain')]
     return {
         'zig': zig, 'target': target, 'command': [portable(root, c) for c in command],

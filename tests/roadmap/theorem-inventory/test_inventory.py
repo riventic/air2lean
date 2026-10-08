@@ -54,6 +54,16 @@ FILES = {
         ''',
     'docs/vector-proofs.md': '# Checked vector addition proofs\n',
     'docs/theorem-inventory.md': f'# Inventory\n\n{ti.BEGIN}\n{ti.END}\n',
+    # Stub attestation: exit 0 unless a listed path is named in STALE.
+    'scripts/gen-integrity.py': '''\
+        import sys
+        from pathlib import Path
+        stale = (Path(__file__).parent / 'STALE').read_text().split() if (Path(__file__).parent / 'STALE').exists() else []
+        assert sys.argv[1] == 'attest'
+        bad = [p for p in sys.argv[2:] if p in stale]
+        if bad:
+            sys.exit('error: ' + ' '.join(bad) + ': not a fresh translation of its committed AIR')
+        ''',
 }
 
 THEOREMS = [
@@ -252,6 +262,16 @@ class FixtureTests(unittest.TestCase):
                                     f'{ti.SWAP_PREFIX}demo {swap} {"0" * 64}\n')
         self.fx.assert_main(['record', '--run', 'x', '--zig', '0.15.2', '--guard-report', str(report),
                              '--guard-log', str(log)], code=1)
+
+    def test_record_rejects_a_translation_that_is_not_fresh(self):
+        swap = 'tests/golden/0.15.2/demo/Gen.lean'
+        (self.fx.root / 'scripts/STALE').write_text(swap + '\n')
+        digest = hashlib.sha256((self.fx.root / swap).read_bytes()).hexdigest()
+        report, log = self.fx.guard('demo', ['python3', 'x', 'swap-build', '--', 'Proofs.Demo.Proofs'],
+                                    f'{ti.SWAP_PREFIX}demo {swap} {digest}\n')
+        self.fx.assert_main(['record', '--run', 'x', '--zig', '0.15.2', '--guard-report', str(report),
+                             '--guard-log', str(log)], code=1)
+        self.assertEqual(self.fx.load()['runs'], {})
 
     def test_swap_build_restores_the_committed_translation(self):
         bin_dir = Path(self.temp.name) / 'bin'
