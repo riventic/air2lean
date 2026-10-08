@@ -362,7 +362,7 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
             Q ({ task := some slot, result := none }, s) (upd G₁ child g₀) m₄ k) :
     P.WP t ((asyncC mk : CM Tgt σ (Future α)).run s) Q G m n := by
   unfold asyncC
-  simp only [StateT.run_bind, StateT.run_lift]
+  simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
@@ -406,7 +406,7 @@ theorem await_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Threa
   obtain rfl := hp f m₁ hl
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind ?_
   refine Proto.WP.joinC ?_
   intro k _
@@ -422,10 +422,10 @@ theorem await_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Threa
   have hh₄ : Future.Holds slot r m₄ := by
     obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
     exact hh.of_blocks rfl
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₅ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
   obtain rfl := Future.take_eq hh₄ htk
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [store_threads hs], ?_⟩)
   exact Proto.WP.pure' (hQ v _ _ _ hr)
 
@@ -444,7 +444,7 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
   obtain rfl := hp f m₁ hl
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
-  simp only [StateT.run_bind, StateT.run_lift]
+  simp only [StateT.run_lift]
   have hstop : (futureProto slotOf R).inv (upd G 0 (.main slot child)) m₂ := by
     intro u sl d hu
     by_cases hu0 : u = 0
@@ -458,7 +458,7 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
   obtain ⟨hb₄, ht₄⟩ := Future.requestCancel_eq hc
   refine ⟨by rw [ht₄], ?_⟩
   have hi₄ := inv_of_blocks hi₃ hb₄
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind (Proto.WP.bind ?_)
   refine Proto.WP.joinC ?_
   intro k' _
@@ -470,10 +470,10 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
   have hh₆ : Future.Holds slot r m₆ := by
     obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
     exact hh.of_blocks rfl
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₇ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
   obtain rfl := Future.take_eq hh₆ htk
-  simp only [StateT.run_bind]
+  dsimp only
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₈ hs => ⟨by rw [store_threads hs], ?_⟩)
   refine Proto.WP.pure' ?_
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₉ hd => ⟨?_, ?_⟩)

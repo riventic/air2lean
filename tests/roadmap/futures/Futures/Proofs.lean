@@ -170,7 +170,7 @@ theorem errorUnionEnc_lawful (d : ErrorDomain) {α : Type} [inst : Enc α] [Lawf
   | error e =>
     have := hv e rfl
     have hm : e ∈ d.names := Array.contains_iff_mem.mp this
-    simp [this, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+    simp [hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
 
 /-- The storage dictionary of `Fail!u32` that the generated code binds. -/
 abbrev zeroEnc : Enc (Except ErrName (BitVec 32)) :=
@@ -189,7 +189,7 @@ theorem checked_run (x : BitVec 32) : (Futures.checked x).run = some (.ok (check
     have hov : x.usubOverflow 1 = false := by
       simp [BitVec.usubOverflow, BitVec.lt_def] at hlt ⊢; omega
     have hb : (x == 0) = false := beq_eq_false_iff_ne.mpr hx
-    simp only [hx, Zig.sub, hov, hb, ite_false, Bool.false_eq_true, ↓reduceIte]
+    simp only [hx, Zig.sub, hov, hb, Bool.false_eq_true, ↓reduceIte]
     rfl
 
 /-- The checked task of `x` only. -/
