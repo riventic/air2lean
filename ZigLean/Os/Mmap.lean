@@ -204,49 +204,65 @@ def munmap (os : Profile) (memory : Slice) : MemM Unit := do
     let m ← get
     set { m with blocks := m.blocks.set! b (u.apply blk) }
 
-/-- `posix.mremap` (module doc). -/
-def mremap (os : Profile) (oldAddress : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
-    (newAddress : Option Ptr) : MemM (Except ErrName Slice) := do
-  if os.hasMremap = false ∨ newAddress ≠ none ∨ (flags ≠ 0 ∧ flags ≠ mremapMayMove) then
-    throw .unspecified
+/-- The memory after an in-place shrink of mapping block `b` to `lo + n` bytes. -/
+def _root_.Zig.Mem.mremapShrunk (m : Mem) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
+  { m with blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
+
+/-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes. -/
+def _root_.Zig.Mem.mremapGrown (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
+  { m with
+    blocks := m.blocks.set! b { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n }
+    nextAddr := Nat.max m.nextAddr (blk.addr + lo + alignUp n P + 1) }
+
+/-- The memory after moving mapping block `b` (live from `lo`) to a fresh block of `n` live bytes:
+the old block ends, the new one is at the next page-aligned address. -/
+def _root_.Zig.Mem.mremapMoved (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
+  { m with
+    blocks := (m.blocks.set! b { blk with live := false }).push
+      { bytes := blk.bytes.extract lo blk.bytes.size ++ mremapFill P (blk.bytes.size - lo) n,
+        align := P, kind := .mapped 0, live := true, addr := alignUp m.nextAddr P }
+    nextAddr := alignUp m.nextAddr P + alignUp n P + 1 }
+
+/-- `mremap` of the whole live mapping `b` (from `lo`) at `p` to `newLen` bytes, after the
+argument checks (module doc). -/
+def mremapLive (os : Profile) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (newLen : BitVec 64)
+    (flags : BitVec 32) : MemM (Except ErrName Slice) := do
   let P := os.pageSize
-  let p ← match oldAddress with
-    | none => throw .illegal
-    | some p => pure p
-  let (b, blk, lo) ← mappingAt p
   let hi := blk.bytes.size
   let cur := hi - lo
-  if p.off.toNat ≠ lo ∨ oldLen.toNat = 0 ∨ alignUp oldLen.toNat P ≠ alignUp cur P then
-    throw .illegal
   let n := newLen.toNat
   if n = 0 then return .error MremapError.invalidSyscallParameters.name
   if n ≤ cur then
     recordAccess b (lo + n) (hi - (lo + n)) .write
-    let m ← get
-    set { m with blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
+    modify fun m => m.mremapShrunk b blk lo n
     return .ok ⟨p, newLen⟩
   let m ← get
   set { m with allocs := m.allocs + 1 }
   if m.mapDenied n then
     return .error (m.allocPolicy.os.mremapError m.allocs n).name
-  let fill := mremapFill P cur n
   let onTop := m.mappingOnTop b blk
   if flags = mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n ∨ onTop = false) then
     recordAccess b lo cur .write
     let m₁ ← get
-    let m₂ : Mem := { m₁ with blocks := m₁.blocks.set! b { blk with live := false } }
-    set { m₂ with
-      blocks := m₂.blocks.push
-        { bytes := blk.bytes.extract lo hi ++ fill, align := P, kind := .mapped 0, live := true,
-          addr := alignUp m₂.nextAddr P }
-      nextAddr := alignUp m₂.nextAddr P + alignUp n P + 1 }
-    return .ok ⟨⟨some m₂.blocks.size, 0⟩, newLen⟩
+    set (m₁.mremapMoved P b blk lo n)
+    return .ok ⟨⟨some m₁.blocks.size, 0⟩, newLen⟩
   if onTop = false then return .error MremapError.outOfMemory.name
-  let m₁ ← get
-  set { m₁ with
-    blocks := m₁.blocks.set! b { blk with bytes := blk.bytes ++ fill }
-    nextAddr := Nat.max m₁.nextAddr (blk.addr + lo + alignUp n P + 1) }
+  modify fun m => m.mremapGrown P b blk lo n
   return .ok ⟨p, newLen⟩
+
+/-- `posix.mremap` (module doc). -/
+def mremap (os : Profile) (oldAddress : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
+    (newAddress : Option Ptr) : MemM (Except ErrName Slice) := do
+  if os.hasMremap = false ∨ newAddress ≠ none ∨ (flags ≠ 0 ∧ flags ≠ mremapMayMove) then
+    throw .unspecified
+  let p ← match oldAddress with
+    | none => throw .illegal
+    | some p => pure p
+  let (b, blk, lo) ← mappingAt p
+  if p.off.toNat ≠ lo ∨ oldLen.toNat = 0 ∨
+      alignUp oldLen.toNat os.pageSize ≠ alignUp (blk.bytes.size - lo) os.pageSize then
+    throw .illegal
+  mremapLive os p b blk lo newLen flags
 
 end Os
 
