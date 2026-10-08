@@ -348,4 +348,157 @@ theorem readEvidence :
   · intro args before after _ frame b outside
     exact frame b fun h => outside (by simp [readFootprint, External.Region.block, h])
 
+/-! ## Running the primitives on a known buffer -/
+
+/-- The memory byte of a buffer byte. -/
+def enc (x : UInt8) : Byte := .int (BitVec.ofNat 8 x.toNat)
+
+theorem received_eq (bytes : List UInt8) : received bytes = (bytes.map enc).toArray := by
+  simp [received, enc]
+
+theorem byteValues?_map (buf : List UInt8) : byteValues? (buf.map enc) = some buf := by
+  induction buf with
+  | nil => rfl
+  | cons x xs ih =>
+    simp only [List.map_cons, enc, byteValues?, ih, Option.map_some]
+    congr
+    apply UInt8.toNat_inj.mp
+    simp
+
+/-- `buf`'s bytes are at `p` (a live block, alignment 1). -/
+def BytesAt (m : Mem) (p : Ptr) (buf : List UInt8) : Prop :=
+  ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live ∧ 0 ≤ p.off ∧
+    p.off.toNat + buf.length ≤ blk.bytes.size ∧
+    (blk.bytes.toList.drop p.off.toNat).take buf.length = buf.map enc
+
+theorem BytesAt.blocks {m m' : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf)
+    (e : m'.blocks = m.blocks) : BytesAt m' p buf := by
+  obtain ⟨b, blk, hb, hblk, rest⟩ := h
+  exact ⟨b, blk, hb, e ▸ hblk, rest⟩
+
+/-- The bytes from `i` on, `k` of them. -/
+theorem BytesAt.sub {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i k : Nat)
+    (hik : i + k ≤ buf.length) (hi64 : i < 2 ^ 64) :
+    BytesAt m (p.elem 1 (BitVec.ofNat 64 i)) ((buf.drop i).take k) := by
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
+  have hi : (BitVec.ofNat 64 i).toNat = i := by simp; omega
+  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by simp [Ptr.elem, Ptr.add, hi]
+  have hlen : ((buf.drop i).take k).length = k := by simp; omega
+  refine ⟨b, blk, hb, hblk, hl, by rw [hoff]; omega, by rw [hoff, hlen]; omega, ?_⟩
+  rw [hoff, hlen]
+  have ht : (p.off + i).toNat = p.off.toNat + i := by omega
+  rw [ht, ← List.drop_drop, List.map_take, List.map_drop, ← hbytes, List.drop_take]
+  rw [List.take_take]
+  congr 1
+  omega
+
+theorem BytesAt.take {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (k : Nat) :
+    BytesAt m p (buf.take k) := by
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
+  refine ⟨b, blk, hb, hblk, hl, h0, by simp; omega, ?_⟩
+  rw [List.map_take, ← hbytes]
+  simp [List.take_take, Nat.min_comm]
+
+theorem BytesAt.drop {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i : Nat)
+    (hi : i ≤ buf.length) (hi64 : i < 2 ^ 64) :
+    BytesAt m (p.elem 1 (BitVec.ofNat 64 i)) (buf.drop i) := by
+  have := h.sub i (buf.length - i) (by omega) hi64
+  rwa [List.take_of_length_le (by simp)] at this
+
+theorem BytesAt.access {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) :
+    ∃ b blk, m.access p buf.length 1 = pure (b, blk, p.off.toNat) ∧
+      blk.bytes.extract p.off.toNat (p.off.toNat + buf.length) = received buf := by
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
+  refine ⟨b, blk, access_of hb hblk hl h0 (by omega) (Nat.mod_one _), ?_⟩
+  rw [received_eq]
+  apply Array.ext'
+  simp [Array.toList_extract, ← hbytes]
+
+/-- `write` of a whole buffer on an open handle, single-threaded. -/
+theorem write_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {buf : List UInt8}
+    (ho : OpenAt fd m h) (hb : BytesAt m p buf) (hne : buf ≠ []) (hlen : buf.length < 2 ^ 64)
+    (hst : m.SingleThread) :
+    ∃ m1 : Mem, write (fd, p, BitVec.ofNat 64 buf.length) m =
+        pure ((m.host.afterWrite h buf).1, { m1 with host := (m.host.afterWrite h buf).2 }) ∧
+      m1.blocks = m.blocks ∧ m1.host = m.host ∧ m1.SingleThread := by
+  obtain ⟨b, blk, hacc, hext⟩ := hb.access
+  have hn : (BitVec.ofNat 64 buf.length).toNat = buf.length := by simp; omega
+  have hpos : buf.length ≠ 0 := by simpa using hne
+  have hoh : (openHandle fd m).run = some (.ok h) := by
+    simp [openHandle, ho.1, ho.2]
+  have hl := loadBytes_run (kind := .read) hacc (noRace_of_singleThread hst _ _ _ _)
+  refine ⟨m.recordAt b p.off.toNat buf.length .read, ?_, rfl, rfl, singleThread_recordAt hst _ _ _ _⟩
+  simp only [write, hoh, hn, hpos, if_false]
+  rw [hl]
+  simp [ExceptT.run, pure, ExceptT.pure, ExceptT.mk, hext, received_eq, byteValues?_map]
+  try rfl
+
+/-- The buffer at `p` has room for `k` bytes and may be written. -/
+def WritableAt (m : Mem) (p : Ptr) (k : Nat) : Prop :=
+  ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live ∧ 0 ≤ p.off ∧
+    p.off.toNat + k ≤ blk.bytes.size ∧ blk.kind ≠ .constGlobal
+
+/-- The raw return of a `read` result. -/
+def readRet : Except IoError (List UInt8) → BitVec 64
+  | .ok bytes => BitVec.ofNat 64 bytes.length
+  | .error e => errReturn e
+
+theorem received_size (bytes : List UInt8) : (received bytes).size = bytes.length := by
+  simp [received]
+
+/-- `read` of at most `k > 0` bytes into a writable buffer on an open handle, single-threaded:
+the raw result, the new host, and on success the received bytes are in the buffer. -/
+theorem read_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {k : Nat}
+    {errs : List IoError} (hc : Contract m.host.ops errs) (ho : OpenAt fd m h)
+    (hw : WritableAt m p k) (hk0 : k ≠ 0) (hk : k < 2 ^ 64) (hst : m.SingleThread) :
+    ∃ m' : Mem, read (fd, p, BitVec.ofNat 64 k) m = pure (readRet (m.host.afterRead h k).1, m') ∧
+      m'.host = (m.host.afterRead h k).2 ∧ m'.SingleThread ∧
+      (∀ bytes, (m.host.afterRead h k).1 = .ok bytes → BytesAt m' p bytes) := by
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hK⟩ := hw
+  have hkn : (BitVec.ofNat 64 k).toNat = k := by simp; omega
+  have hoh : (openHandle fd m).run = some (.ok h) := by simp [openHandle, ho.1, ho.2]
+  simp only [read, hoh, hkn, hk0, if_false]
+  unfold Host.afterRead
+  cases hr : m.host.ops.read m.host.env h k with
+  | mk r s' =>
+    cases r with
+    | error e => exact ⟨_, rfl, rfl, hst, fun _ h => nomatch h⟩
+    | ok bytes =>
+      have hbound := hc.readBound m.host.env h k bytes s' ho.2 (by rw [hr])
+      by_cases he : bytes = []
+      · subst he
+        refine ⟨_, rfl, rfl, hst, fun bytes' hb' => ?_⟩
+        cases hb'
+        exact ⟨b, blk, hb, hblk, hl, h0, by simp; omega, by simp⟩
+      · have hne : bytes.isEmpty = false := by simpa using he
+        simp only [hne, Bool.false_eq_true, ite_false]
+        let m1 : Mem := { m with host := ⟨m.host.ops, s', m.host.log ++ [.received h bytes]⟩ }
+        have hsz := received_size bytes
+        have hacc : m1.access p (received bytes).size 1 = pure (b, blk, p.off.toNat) :=
+          access_of hb hblk hl h0 (by rw [hsz]; omega) (Nat.mod_one _)
+        have hst1 : m1.SingleThread := hst
+        have hs := storeBytes_run (kind := .write) hacc hK (noRace_of_singleThread hst1 _ _ _ _)
+        rw [hs]
+        refine ⟨_, rfl, rfl,
+          singleThread_write (singleThread_recordAt hst1 _ _ _ _) _ _ _ _, fun bytes' hb' => ?_⟩
+        cases hb'
+        have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+        have hfit : p.off.toNat + (received bytes).size ≤ blk.bytes.size := by rw [hsz]; omega
+        refine ⟨b, { blk with bytes := writeBytes blk.bytes p.off.toNat (received bytes) }, hb, ?_, hl,
+          h0, ?_, ?_⟩
+        · simp only [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds]
+          exact Array.getElem?_setIfInBounds_self_of_lt hlt
+        · rw [writeBytes_size _ _ _ hfit]; omega
+        · have hx := extract_writeBytes blk.bytes p.off.toNat (received bytes) hfit
+          rw [hsz] at hx
+          have := congrArg Array.toList hx
+          rw [Array.toList_extract] at this
+          rw [received_eq] at this ⊢
+          simpa [List.extract] using this
+/-- `close` of an open descriptor. -/
+theorem close_ok {m : Mem} {fd : BitVec 32} {h : Handle} (ho : OpenAt fd m h) :
+    close fd m = pure (0, { m with host := m.host.afterClose h }) := by
+  have hoh : (openHandle fd m).run = some (.ok h) := by simp [openHandle, ho.1, ho.2]
+  simp only [close, hoh]
+
 end Zig.Env.Linux
