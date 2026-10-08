@@ -656,6 +656,11 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: bash tests/roadmap/allocator-identity/check.sh
 
+      # M05: opt-in address reuse, lifetime safety from provenance, stale @ptrFromInt.
+      - name: Address reuse proofs and model regressions
+        if: ${{ !matrix.mutate }}
+        run: bash tests/roadmap/address-reuse/check.sh
+
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
       - name: Thread tuple source and ownership gate

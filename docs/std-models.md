@@ -45,7 +45,8 @@ not total live bytes, and `failures` lists zero-based attempted nonzero allocati
 fail. An attempt advances `allocs` even when its size exceeds the cap. Duplicate failure
 indices have no extra effect; indices beyond a finite run are unused. Every finite prefix
 of an arbitrary failure trace can be selected, including several or all attempts failing.
-Zero-byte allocation does not consume a decision. The model's fresh-address policy,
+Zero-byte allocation does not consume a decision. The model's default fresh-address policy
+(address reuse is a separate opt-in parameter, [address-reuse.md](address-reuse.md)),
 allocator identity, and default failure-only remap behavior are unchanged. Raising this cap
 does not establish that native malloc has resources or the same address behavior.
 

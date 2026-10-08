@@ -5,20 +5,21 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2173 theorems in 125 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 606 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 79 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 74 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
+| [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
 | [THR-01](premises.md#thr-01) | 1163 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 111 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
@@ -39,16 +40,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2052 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1711 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 981 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 61 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2173 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1005 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1005 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -1892,6 +1893,19 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 | `FlowTime.timestamp32_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp64_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 
+## `tests/roadmap/address-reuse/Kernel.lean`
+
+File premises: ALC-01, ALC-08, SEM-01, SEM-02, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L10` | ALC-01, ALC-08, SEM-01, SEM-02, TRU-01 |
+| `example@L17` | ALC-01, ALC-08, SEM-01, SEM-02, TRU-01 |
+| `example@L22` | ALC-01, ALC-08, SEM-01, SEM-02, SEM-04, TRU-01 |
+| `example@L30` | SEM-01, SEM-02, TRU-01 |
+| `example@L36` | ALC-01, ALC-08, SEM-01, SEM-02, TRU-01 |
+| `example@L38` | ALC-01, ALC-08, SEM-01, SEM-02, TRU-01 |
+
 ## `tests/roadmap/allocator-identity/Kernel.lean`
 
 File premises: ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01
@@ -3026,7 +3040,7 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, T
 
 ## `tutorials/memory-safety/Controls.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3039,6 +3053,8 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
@@ -3047,7 +3063,7 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 
 ## `tutorials/memory-safety/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3059,6 +3075,7 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `MemorySafety.buildThenFree_no_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_address_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Solution.lean`
 

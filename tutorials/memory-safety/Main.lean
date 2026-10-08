@@ -1,4 +1,5 @@
 import Proofs.Lists.Sep
+import ZigLean.Sep.AddrReuse
 
 /-!
 # Memory safety, end to end: build a list, then free it
@@ -29,6 +30,10 @@ For every input, every allocation policy and every failure trace (`Mem.failAt`,
 * no leak, also on the out-of-memory path: the live heap after the run is exactly the live
   heap before it (`buildThenFree_no_leak`);
 * on success, the list holds the pushed items in order (`build_total`).
+
+The allocator may also reuse the address of a freed node for a later node
+(`buildThenFree_address_reuse`, M05): the properties follow from block-id provenance, not from
+fresh addresses (`docs/address-reuse.md`).
 
 `tutorials/memory-safety/Controls.lean` shows that each property can fail: a double free and
 a read after free throw `.illegal`, and a client that skips the free leaks. README.md lists
@@ -165,5 +170,14 @@ theorem buildThenFree_every_policy (a : Allocator) (xs : List (BitVec 32)) (m : 
     ∃ r m', (buildThenFree a xs).run { m with failAt := k, allocPolicy := pol } = pure (r, m') ∧
       Ended r ∧ m'.heap = m.heap :=
   buildThenFree_memory_safe a xs { m with failAt := k, allocPolicy := pol } ⟨hs.single, hs.addr⟩
+
+/-- Address reuse (M05): the same holds for every address-reuse oracle and provenance mode, so
+the allocator may give a freed node's address to a later node. No-use-after-free, no-double-free
+and no-leak do not rest on fresh addresses. -/
+theorem buildThenFree_address_reuse (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
+    (hs : m.Seq) (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
+    ∃ r m', (buildThenFree a xs).run (m.withReuse pick pm) = pure (r, m') ∧
+      Ended r ∧ m'.heap = m.heap :=
+  buildThenFree_memory_safe a xs (m.withReuse pick pm) (hs.withReuse pick pm)
 
 end MemorySafety

@@ -1,4 +1,5 @@
 import Proofs.Lists.Sep
+import ZigLean.Sep.AddrReuse
 
 /-!
 # Refuted clients for the memory-safety tutorial
@@ -19,7 +20,9 @@ theorem proves the bug, so the properties of `Main.lean` are not vacuous:
   property of `Main.lean` is false.
 
 Each holds whenever the allocation succeeds (`Room m`); `{}` (the default memory, no failure)
-is such a memory, so the safety property of `Main.lean` is refuted for each client.
+is such a memory, so the safety property of `Main.lean` is refuted for each client. The bugs
+stay bugs under address reuse (`doubleFree_reuse`, `useAfterFree_reuse`): the stale node
+pointer names the freed block, whatever block now has its address.
 -/
 
 namespace MemorySafety.Controls
@@ -179,6 +182,18 @@ theorem forgetFree_leaks (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) 
   · have hl := congrFun (hm₁.symm.trans he) (b, 0)
     have hn := (hd₁ (b, 0)).resolve_left (hcell 0 (by decide))
     simpa [Heap.union, hn] using hl
+
+/-- Address reuse (M05) does not hide either bug: with any reuse oracle and provenance mode,
+the stale pointer still throws `.illegal`. -/
+theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
+    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
+    (doubleFree a v).run (m.withReuse pick pm) = throw .illegal :=
+  doubleFree_illegal a v (hs.withReuse pick pm) hc
+
+theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
+    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
+    (useAfterFree a v).run (m.withReuse pick pm) = throw .illegal :=
+  useAfterFree_illegal a v (hs.withReuse pick pm) hc
 
 /-- The default memory (`{}`: one thread, no allocation fails) has room for a node. -/
 theorem default_seq : ({} : Mem).Seq :=

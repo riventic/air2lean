@@ -26,7 +26,8 @@ the allocator that owns it.
 
 Remap keeps lengths and shrinks in place; growth fails (Zig grows the last allocation in place
 when it fits, M02). Owned blocks get fresh model addresses, not addresses inside the buffer or
-the arena's nodes (M05). Reset and deinit record no access for the race check: like Zig's,
+the arena's nodes, unless the opt-in reuse policy (`AllocPolicy.reuseAddr`, M05) gives one the
+address of a freed or reset block. Reset and deinit record no access for the race check: like Zig's,
 they are not thread-safe.
 -/
 
