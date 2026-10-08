@@ -16476,7 +16476,7 @@
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
-      "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
+      "Air2Lean/Air/Anon.lean": "7ee38c3240d8eb01c2a932c378dc22fb695ec46ef947ee6cd89810203b9f63c8",
       "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
@@ -16647,7 +16647,7 @@
       "Proofs/Sync/Mailbox.lean": "72a8756a092ea395499156fefa2f79d90139444eada1a9008744c4039103d459",
       "Proofs/Sync/Mutex.lean": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
       "Proofs/Sync/Proofs.lean": "8194f6a607f850a7f25404e9a10108f556e5d5ae4972c4bb57b5fd960edfb925",
-      "Proofs/Sync/RwLock.lean": "eaaeba63ffa8e23e88229849b03c17ffe04fa0ae8a9f622bc8c71dba75605b3c",
+      "Proofs/Sync/RwLock.lean": "122a7ceeb00944cfb1aa70e4b36ba951d0c40083cd33fcdc106978d68817b488",
       "Proofs/Sync/RwLockContract.lean": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
       "Proofs/Sync/RwLockSnapshotPair.lean": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
       "Proofs/Sync/SemCounter.lean": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
