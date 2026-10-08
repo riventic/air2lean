@@ -9,6 +9,10 @@ example : errorKind .panic = .modelPanic := rfl
 example : errorKind .illegal = .illegal := rfl
 example : errorKind .unspecified = .unspecified := rfl
 example : errorKind .deadlock = .deadlock := rfl
+-- An unsupported timer has its own kind and wire tag, apart from an unspecified result.
+example : errorKind .unsupportedTimer = .unspecifiedTimer := rfl
+example : Kind.tag .unspecifiedTimer = "unspecified_timer" := rfl
+example : (failure .unsupportedTimer).kind = .unspecifiedTimer := rfl
 example : noResult.kind = .boundedNoResult := rfl
 
 example : Nonempty Observation := inferInstance
