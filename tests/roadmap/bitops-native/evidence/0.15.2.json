@@ -1,8 +1,9 @@
 {
   "corpus": {
-    "Diff.lean.inc": "18ed8e2a56359928ab6b39dc1607470b9141938b1cf55290ce3ed18a65d2d738",
+    "Diff.lean.inc": "4575b42954a9e87fab9870435484bcc3e2c51e528dc96b0092d083d42c6c2395",
     "native.zig": "f9c0d2c68db4a3b482321fe80da7cff56c189b65a58b2e9ab82388c738986374",
-    "wide.zig": "937de9b87a43c14c9fd2d0b8fd2d6fd4eb42a9f1c43d18e16469442ad6b0597e"
+    "panics.zig": "1371c3d6c2427e6babcea5e669922df90aa783e2d6da03fe5946e5bfbc775924",
+    "wide.zig": "3ddf8c24845ec0afc22c674d8f0b6c40cd3869e09b17f7418a4476f2a767669c"
   },
   "expected_rows": 31366,
   "host": "darwin-arm64",
@@ -15,8 +16,9 @@
   "targets": {
     "aarch64-linux": {
       "air_equivalent_to": "x86_64-linux",
-      "air_sha256": "415fbe27ac703c1e1643c98860302942650bbe1768f988f42b8c4fec5b9ae62e",
+      "air_sha256": "43633e42b0f0f33ceae8207ebc7ec0d315ad048d9c1660c7c062b5bf2b809830",
       "executor": "docker:linux/arm64",
+      "lean_panics_sha256": "54cc76df99dfe963a508cc803030ad3358ec26a83d5a5b0e0a33c074a6121895",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
       "modes": {
@@ -51,12 +53,35 @@
           "native_exit": 0,
           "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
           "rows": 31366
+        }
+      },
+      "panics": {
+        "Debug": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
+        },
+        "ReleaseSafe": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
         }
       }
     },
     "aarch64-macos": {
-      "air_sha256": "48319945071cf571e53dd037a2b6f217fc91a5fe0e0e2bb16f936b6b7042e987",
+      "air_sha256": "70adce088772490e7dc820d3cd8aa5d9c4e2ccea7e83d5525d1a6a776bd87755",
       "executor": "host",
+      "lean_panics_sha256": "54cc76df99dfe963a508cc803030ad3358ec26a83d5a5b0e0a33c074a6121895",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
       "modes": {
@@ -92,11 +117,34 @@
           "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
           "rows": 31366
         }
+      },
+      "panics": {
+        "Debug": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
+        },
+        "ReleaseSafe": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
+        }
       }
     },
     "x86_64-linux": {
-      "air_sha256": "eb477a2295125ef029f2b35fa40321a653d321c5f9a4ad5369d852b098baf73f",
+      "air_sha256": "d8f9513f2b7856b04e35406db696b70024743957fad609bbc17bbd51ccd777c6",
       "executor": "docker:linux/amd64",
+      "lean_panics_sha256": "54cc76df99dfe963a508cc803030ad3358ec26a83d5a5b0e0a33c074a6121895",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
       "modes": {
@@ -131,6 +179,28 @@
           "native_exit": 0,
           "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
           "rows": 31366
+        }
+      },
+      "panics": {
+        "Debug": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
+        },
+        "ReleaseSafe": {
+          "expected_panics": 312,
+          "first_mismatches": [],
+          "lean_rows": 408,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "023f3e5a06f1d15aec4bca60e9f400a846b87bdb5b5080d8cf63d1d85e8bb2c0",
+          "panics": 312,
+          "rows": 408
         }
       }
     }

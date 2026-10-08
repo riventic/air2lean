@@ -10,6 +10,10 @@ verify:   a fresh `run` evidence file must reproduce the committed Lean and nati
 check:    offline; fail unless the committed evidence covers every version and target with the
           current corpus, the full row count and no mismatch.
 
+Shift counts >= W (`panics.zig`, Debug and ReleaseSafe only; illegal behavior in the other modes)
+must panic natively with `shiftRhsTooBig` exactly where Lean throws that check's constructor
+(`scripts/panic-policy.tsv`), and the legal W - 1 control rows must agree in value.
+
 Run `run` and `native` under scripts/build-guard.py (one guard around the whole invocation).
 """
 import argparse
@@ -32,6 +36,7 @@ EVIDENCE = HERE / "evidence"
 VERSIONS = ["0.14.1", "0.15.2", "0.16.0"]
 TARGETS = ["x86_64-linux", "aarch64-linux", "aarch64-macos"]
 MODES = ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"]
+SAFE_MODES = ["Debug", "ReleaseSafe"]
 # Native binaries are static musl on Linux so that one minimal image runs them anywhere.
 NATIVE_TRIPLE = {"x86_64-linux": "x86_64-linux-musl", "aarch64-linux": "aarch64-linux-musl",
                  "aarch64-macos": "aarch64-macos"}
@@ -39,7 +44,9 @@ IMAGE = "alpine:3.21"
 AIR_IMAGE = "ubuntu:24.04"  # the compiler lock wrapper is a bash script
 # Rosetta (Docker on Apple silicon) rejects some non-PIE x86_64 binaries ("bss_size overflow").
 NATIVE_FLAGS = ["-fno-strip", "-fPIE"]
-SRC_FILES = ["wide.zig", "native.zig", "Diff.lean.inc"]
+SRC_FILES = ["wide.zig", "native.zig", "panics.zig", "Diff.lean.inc"]
+PANIC_POLICY = dict(line.split("\t") for line in
+                    (ROOT / "scripts" / "panic-policy.tsv").read_text().splitlines() if line)
 
 
 def sha(path):
@@ -118,10 +125,12 @@ def lean_stream(air, work, label):
         cwd=ROOT)
     diff = work / f"Diff-{label}.lean"
     diff.write_text(gen_lean.read_text() + (HERE / "Diff.lean.inc").read_text())
-    out = work / f"lean-{label}.txt"
-    with open(out, "w") as f:
-        run(["lake", "env", "lean", "-R", str(work), "--run", str(diff)], cwd=ROOT, stdout=f)
-    return out
+    lines = run(["lake", "env", "lean", "-R", str(work), "--run", str(diff)], cwd=ROOT,
+                stdout=subprocess.PIPE, text=True).stdout.splitlines(keepends=True)
+    out, panics = work / f"lean-{label}.txt", work / f"lean-panics-{label}.txt"
+    out.write_text("".join(x for x in lines if not x.startswith("P ")))
+    panics.write_text("".join(x for x in lines if x.startswith("P ")))
+    return out, panics
 
 
 def executor(spec, exe):
@@ -138,12 +147,12 @@ def executor(spec, exe):
 exit_codes = {}
 
 
-def native_stream(zig, target, mode, exec_spec, work):
-    exe = work / f"native-{target}-{mode}"
+def native_stream(zig, target, mode, exec_spec, work, root="native"):
+    exe = work / f"{root}-{target}-{mode}"
     run([zig, "build-exe", f"-O{mode}", *NATIVE_FLAGS, "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
-         f"-femit-bin={exe}", "--dep", "wide", f"-Mroot={HERE / 'native.zig'}", f"-Mwide={HERE / 'wide.zig'}"],
+         f"-femit-bin={exe}", "--dep", "wide", f"-Mroot={HERE / f'{root}.zig'}", f"-Mwide={HERE / 'wide.zig'}"],
         cwd=work)
-    out = work / f"native-{target}-{mode}.txt"
+    out = work / f"{root}-{target}-{mode}.txt"
     with open(out, "w") as f:
         proc = subprocess.run(executor(exec_spec, exe), stderr=f)
     exit_codes[str(out)] = proc.returncode
@@ -156,6 +165,32 @@ def compare(native, lean):
     mismatches_total = len(mismatches) + abs(len(a) - len(b))
     return {"rows": len(a), "lean_rows": len(b), "mismatches": mismatches_total,
             "first_mismatches": [{"row": i, "native": x, "lean": y} for i, x, y in mismatches[:5]]}
+
+
+def lean_panic_line(line):
+    """A Lean `P` row in native form: the thrown constructor becomes the native check name that
+    panic-policy.tsv maps to it, if the constructor is that of `shiftRhsTooBig`."""
+    head, sep, kind = line.rpartition(" panic ")
+    if sep and PANIC_POLICY["shiftRhsTooBig"] == kind:
+        return f"{head} panic shiftRhsTooBig"
+    return line
+
+
+def compare_panics(native, lean):
+    """Native `panics.zig` stream against the Lean `P` rows; every illegal count must panic."""
+    a = Path(native).read_text().splitlines()
+    b = [lean_panic_line(x) for x in Path(lean).read_text().splitlines()]
+    mismatches = [(i + 1, x, y) for i, (x, y) in enumerate(zip(a, b)) if x != y]
+    panics = sum(x.endswith(" panic shiftRhsTooBig") for x in a)
+    want = sum(int(k) >= int(t[1:]) for _, t, _, _, k in (r.split()[:5] for r in b))
+    return {"rows": len(a), "lean_rows": len(b), "panics": panics, "expected_panics": want,
+            "mismatches": len(mismatches) + abs(len(a) - len(b)),
+            "first_mismatches": [{"row": i, "native": x, "lean": y} for i, x, y in mismatches[:5]]}
+
+
+def panics_bad(r):
+    return (r["mismatches"] or r["native_exit"] or r["rows"] != len(gen.panic_rows())
+            or r["panics"] != r["expected_panics"])
 
 
 def parse_pairs(text):
@@ -183,10 +218,10 @@ def cmd_run(a):
         for target in sorted(targets, key=lambda t: t == "aarch64-linux"):
             airs[target] = work / f"air-{target}"
             hashes[target] = export_air(a.zig_air, target, airs[target])
-            entry = {"air_sha256": hashes[target], "executor": execs[target], "modes": {}}
+            entry = {"air_sha256": hashes[target], "executor": execs[target], "modes": {}, "panics": {}}
             if target in TRANSLATABLE:
                 leans[target] = lean_stream(airs[target], work, target)
-                lean = leans[target]
+                lean, lean_panics = leans[target]
             else:
                 # The translator is guarded to the model ABI scope (x86_64-linux, aarch64-macos):
                 # aarch64-linux AIR is accepted only if it equals the x86_64-linux AIR but for
@@ -196,9 +231,10 @@ def cmd_run(a):
                 diff = air_differences(airs["x86_64-linux"], airs[target])
                 if diff:
                     raise SystemExit(f"{target} AIR differs from x86_64-linux beyond `profile`: {diff[:5]}")
-                lean = leans["x86_64-linux"]
+                lean, lean_panics = leans["x86_64-linux"]
                 entry["air_equivalent_to"] = "x86_64-linux"
-            entry.update({"lean_sha256": sha(lean), "lean_rows": len(lean.read_text().splitlines())})
+            entry.update({"lean_sha256": sha(lean), "lean_rows": len(lean.read_text().splitlines()),
+                          "lean_panics_sha256": sha(lean_panics)})
             for mode in a.modes.split(","):
                 nat = native_stream(a.zig, target, mode, execs[target], work)
                 res = compare(nat, lean)
@@ -208,12 +244,21 @@ def cmd_run(a):
                     res["crash_after_row"] = res["rows"]
                 entry["modes"][mode] = res
                 print(f"{a.version} {target} {mode}: rows={res['rows']} mismatches={res['mismatches']}", flush=True)
+                if mode in SAFE_MODES:
+                    nat = native_stream(a.zig, target, mode, execs[target], work, "panics")
+                    res = compare_panics(nat, lean_panics)
+                    res.update({"native_sha256": sha(nat), "native_exit": exit_codes[str(nat)]})
+                    entry["panics"][mode] = res
+                    print(f"{a.version} {target} {mode} panics: rows={res['rows']} panics={res['panics']}/"
+                          f"{res['expected_panics']} mismatches={res['mismatches']}", flush=True)
             evidence["targets"][target] = entry
         out = Path(a.evidence)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
         bad = [(t, m) for t, e in evidence["targets"].items() for m, r in e["modes"].items()
                if r["mismatches"] or r["native_exit"] or r["rows"] != expected_rows or r["lean_rows"] != expected_rows]
+        bad += [(t, m, "panics") for t, e in evidence["targets"].items() for m, r in e["panics"].items()
+                if panics_bad(r)]
         if bad:
             raise SystemExit(f"mismatching or incomplete lanes (triage required): {bad}")
     finally:
@@ -241,6 +286,13 @@ def cmd_native(a):
             print(f"{a.version} {target} {mode}: rows={rows} {'match' if ok else 'MISMATCH'}", flush=True)
             if not ok:
                 failed.append(mode)
+            if mode in SAFE_MODES:
+                want_panics = committed["targets"][target]["panics"][mode]["native_sha256"]
+                nat = native_stream(a.zig, target, mode, a.exec, work, "panics")
+                ok = exit_codes[str(nat)] == 0 and sha(nat) == want_panics
+                print(f"{a.version} {target} {mode} panics: {'match' if ok else 'MISMATCH'}", flush=True)
+                if not ok:
+                    failed.append(f"{mode} panics")
         if failed:
             raise SystemExit(f"native stream differs from committed Lean stream: {failed}")
     finally:
@@ -263,6 +315,11 @@ def cmd_verify(a):
         for mode, r in entry["modes"].items():
             if r["mismatches"] or r["native_sha256"] != ref["lean_sha256"]:
                 problems.append(f"{target} {mode}: mismatches={r['mismatches']}")
+        if entry["lean_panics_sha256"] != ref["lean_panics_sha256"]:
+            problems.append(f"{target}: Lean shift-count panic stream differs from committed evidence")
+        for mode, r in entry["panics"].items():
+            if panics_bad(r) or r["native_sha256"] != ref["panics"][mode]["native_sha256"]:
+                problems.append(f"{target} {mode} panics: mismatches={r['mismatches']}")
     if problems:
         print("\n".join(problems), file=sys.stderr)
         raise SystemExit(1)
@@ -296,11 +353,19 @@ def cmd_check(a):
                     problems.append(f"{version} {target}: missing mode {mode}")
                 elif r["mismatches"] or r.get("native_exit") or r["rows"] != expected_rows or r["native_sha256"] != entry["lean_sha256"]:
                     problems.append(f"{version} {target} {mode}: mismatches={r['mismatches']} rows={r['rows']}")
+            for mode in SAFE_MODES:
+                r = entry.get("panics", {}).get(mode)
+                if r is None:
+                    problems.append(f"{version} {target}: missing shift-count panic lane {mode}")
+                elif panics_bad(r):
+                    problems.append(f"{version} {target} {mode} panics: mismatches={r['mismatches']} "
+                                    f"panics={r['panics']}/{r['expected_panics']}")
     if problems:
         print("\n".join(problems), file=sys.stderr)
         raise SystemExit(1)
     print(f"bitops-native evidence current: {len(VERSIONS)} versions x {len(TARGETS)} targets x "
-          f"{len(MODES)} modes, {expected_rows} rows each, 0 mismatches")
+          f"{len(MODES)} modes, {expected_rows} rows each, 0 mismatches; shift-count panics "
+          f"{len(gen.panic_rows())} rows x {len(SAFE_MODES)} safe modes")
 
 
 def main():

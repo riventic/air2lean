@@ -148,6 +148,8 @@ def main (args : List String) : IO Unit := do
     [("callee", obj [("func", .str "user.call"), ("noreturn", .bool true)])]]) "user noreturn"
   require (panicErrorFor? "debug.FullPanic((function 'defaultPanic')).outOfBounds" == some ".outOfBounds")
     "known panic handler rejected"
+  require (panicErrorFor? "debug.FullPanic((function 'defaultPanic')).shiftRhsTooBig" == some ".overflow")
+    "shift-count panic handler not mapped like shlOverflow/shrOverflow"
   require (panicErrorFor? "debug.defaultPanic" == some ".panic")
     "exact standard default panic handler rejected"
   let defaultPanic ← accept (file "defaultPanic" #[intTy 8, nrTy] #[] 0

@@ -355,11 +355,13 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 | segment | constructor |
 |---|---|
-| `integerOverflow`, `integerOutOfBounds`, `integerPartOutOfBounds`, `shlOverflow`, `shrOverflow` | `.overflow` |
+| `integerOverflow`, `integerOutOfBounds`, `integerPartOutOfBounds`, `shlOverflow`, `shrOverflow`, `shiftRhsTooBig` | `.overflow` |
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
 | `outOfBounds`, `startGreaterThanEnd` | `.outOfBounds` |
 | `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch`, `memcpyAlias`, `call` (`@panic`) | `.panic` |
+
+`shiftRhsTooBig` is the shift-count check of `<<`, `>>`, `@shlExact` and `@shrExact` on an integer whose width is not a power of two (its count type can hold counts at or above the width; for a power-of-two width it cannot, and Sema emits no check). 0.14.1, 0.15.2 and 0.16.0 emit it in the same safety block as `shlOverflow`/`shrOverflow`, so it shares their constructor; `@shlWithOverflow` has no count check, and an oversized count there stays `.illegal` (`tests/roadmap/bitops-native`).
 
 The exact noreturn callee `debug.defaultPanic` maps to `.panic` as well. Pinned std sources for 0.14.1, 0.15.2 and 0.16.0 define this standard panic handler as noreturn; fresh 0.16.0 adapter-fixture AIR calls it directly. This is an exact-name compatibility rule: foreign names and suffix variants remain rejected, and a returning call with this name has no external-call model. The existing `FullPanic` table is unchanged.
 

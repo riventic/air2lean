@@ -481,6 +481,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
+      # Zig's shift-count safety check (`shiftRhsTooBig`) maps to `.overflow`: committed
+      # patched-compiler AIR for 0.14.1, 0.15.2 and 0.16.0, no compiler needed.
+      - name: Shift-count panic mapping
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: python3 -B tests/roadmap/bitops-native/shift-panic/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
       # client proofs that reading them is `.unspecified`, and rejection of every other
       # `undefined` operand. A store of `undefined` to a local: byte locals whose undefined
