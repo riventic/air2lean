@@ -788,6 +788,10 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     match fc.tyOfId tid with
     | .int _ b => s!"(0#{b})"
     | .bool => "false"
+    -- Admitted only under `--allocator-model translated` (`checkUndefOperands`).
+    | .ptr "one" .. | .ptr "many" .. =>
+      if fc.allocatorModel == .translated then
+        s!"(← {if fc.conc then "Zig.callMC" else "Zig.callM"} Zig.undefPtr)" else "default"
     | _ => "default"
   | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
@@ -944,7 +948,14 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             | some (u, f, _) => .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}")
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
-        acc.push (i.id, root, path.push step)
+        -- A tuple is a right-nested `Prod`: field `idx` of `n` is `snd` `idx` times, then
+        -- `fst` unless it is the last (`tupleProjection`).
+        let steps := match base with
+          | .tuple fields =>
+            (Array.replicate idx (PathStep.field "snd")) ++
+              (if idx + 1 < fields.size then #[PathStep.field "fst"] else #[])
+          | _ => #[step]
+        acc.push (i.id, root, path ++ steps)
       | none => acc
     | .fieldParentPtr (.inst b) _ =>
       -- The checker proved the exact terminal struct field and result pointee type.

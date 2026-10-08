@@ -71,7 +71,9 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   if fuel == 0 || seen.contains id then none
   let ty ← types[id]?
   let count ← match ty with
-    | .other _ | .errorSet none => none
+    -- A function type is code (a 1-byte function block in `Emit.lean`), never error storage.
+    | .other n => if n.startsWith "fn (" then some 0 else none
+    | .errorSet none => none
     | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
     | .struct _ _ fields => some fields.size
@@ -104,7 +106,8 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       if visited.contains id then continue
       let some ty := types[id]? | return false
       match ty with
-      | .other _ | .errorSet _ | .errorUnion .. => return false
+      | .other n => unless n.startsWith "fn (" do return false
+      | .errorSet _ | .errorUnion .. => return false
       | _ => pure ()
       let count := match ty with
         | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
@@ -844,7 +847,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         let be ← cx.layouts[bset]?
         let _ ← cx.types[apayload]?
         let payload ← cx.layouts[apayload]?
-        return apayload == bpayload && anames == bnames && validErrorDomainNames anames &&
+        -- Distinct IDs of one payload type (same entry and layout) decode identically.
+        let samePayload := apayload == bpayload ||
+          (cx.types[apayload]? == cx.types[bpayload]? && cx.layouts[apayload]? == cx.layouts[bpayload]?)
+        return samePayload && anames == bnames && validErrorDomainNames anames &&
           a.size.isSome && a.align.isSome && ae.size.isSome && ae.align.isSome &&
           payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
       if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
@@ -886,13 +892,16 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
         ((pointerChild aty).bind (cx.types[·]?)) == some (.other "anyopaque")
+      -- Erasing to `*anyopaque` exposes no bytes: every recovery passes `fromOpaque`.
+      let toOpaque := cx.allocatorModel == .translated &&
+        ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque")
       if fromOpaque then
         if let some target := pointerChild ty then
           unless hasErrorCapability cx.types target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
-        unless qualifierOnly || optionalWrapOnly || fromOpaque do
+        unless qualifierOnly || optionalWrapOnly || fromOpaque || toOpaque do
           let some sourceCap := hasErrorCapability cx.types source
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           let some targetCap := hasErrorCapability cx.types target
@@ -1212,6 +1221,15 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
+/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
+partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
+  match v with
+  | .undef t => !admit t
+  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
+  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
+  | _ => false
+
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value
 (`Zig.storeUndef`) and a partly `undefined` one, whose undefined items and fields at any depth
@@ -1225,9 +1243,11 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
   let fail {α : Type} (what : String) : Except String α :=
     throw s!"{f.name}: inst {i.id}: {what} is outside the subset (`undefined` is never read as \
       a default; only a store or `memset` writes it, as undefined bytes)"
-  let hasUndef (v : Val) : Bool := match v with
-    | .undef _ => true
-    | v => v.hasNestedUndef
+  -- `--allocator-model translated`: an `undefined` single/many-item pointer operand is an
+  -- arbitrary non-dereferenceable pointer (`Zig.undefPtr`), e.g. `page_allocator.ptr`.
+  let undefPtr (t : TyId) : Bool := f.allocatorModel == .translated &&
+    (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
+  let hasUndef (v : Val) : Bool := v.hasUndefExcept undefPtr
   let (written, rest) : Option Val × Array Val := match i.op with
     | .store p v => (some v, #[p])
     | .memset p v => (some v, #[p])
