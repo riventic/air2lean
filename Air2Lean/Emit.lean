@@ -1139,10 +1139,15 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
 /-- A projection `project` (`(·.add off)`, `(·.elem size i)`) of the pointer `base`, whose
-term is `p`. From a C/allowzero base it is `Zig.ptrProjectNullable`: address zero is illegal
-behaviour; otherwise `pure (p.project)`. -/
-def FCtx.projectExpr (fc : FCtx) (base : Val) (p project : String) : String :=
-  if fc.nullableVal base then s!"{fc.callMName} (Zig.ptrProjectNullable {p} (·.{project}))"
+term is `p`, with result type `result`. From a C/allowzero base it is
+`Zig.ptrProjectNullable` (a zero offset keeps address zero; a nonzero offset from it is illegal
+behaviour) when the result is again C/allowzero, and `Zig.ptrProjectNonnull` (address zero is
+illegal behaviour) when the compiler types the result as a nonnullable pointer (Zig ≤0.15
+`struct_field_ptr`); otherwise `pure (p.project)`. -/
+def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String) : String :=
+  if fc.nullableVal base then
+    let f := if nullablePtrTy fc.types fc.layouts result then "ptrProjectNullable" else "ptrProjectNonnull"
+    s!"{fc.callMName} (Zig.{f} {p} (·.{project}))"
   else s!"pure ({p}.{project})"
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
@@ -2079,7 +2084,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if fc.isMemPtr base then
       -- A bit-pointer points to the host integer: the base's own address.
       let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
-      let (env, l) := bindLet fc env inst.id (fc.projectExpr base (rv base) s!"add {off}")
+      let (env, l) := bindLet fc env inst.id (fc.projectExpr base inst.ty (rv base) s!"add {off}")
       (env, some l)
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
@@ -2211,11 +2216,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then "elemSub" else "elem"
-    let (env, l) := bindLet fc env inst.id (fc.projectExpr p (rv p) s!"{f} {size} {rv n}"); (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.projectExpr p inst.ty (rv p) s!"{f} {size} {rv n}"); (env, some l)
   | .elemPtr p i =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.elem {size} {rv i})"
-      else fc.projectExpr p (rv p) s!"elem {size} {rv i}"
+      else fc.projectExpr p inst.ty (rv p) s!"elem {size} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"

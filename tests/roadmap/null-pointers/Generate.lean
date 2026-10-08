@@ -165,6 +165,13 @@ example : failure (do Zig.load (BitVec 8) 1 (← Nullable.nextPtr Zig.Ptr.null))
     "example : failure (Nullable.valPtr Zig.Ptr.null) .illegal = true := by native_decide
 example : value (Nullable.valPtr ⟨none, 4096⟩) = some ⟨none, 4104⟩ := by native_decide"
     ["Zig.ptrProjectNullable"]
+  -- Zig 0.14.1/0.15.2 type `&p.*.next` of a C base as a nonnullable `*[*c]u8`: address zero
+  -- must not become a `*T`, so every offset from it is illegal (`Zig.ptrProjectNonnull`).
+  writeCase dir "nextPtrNonnull" (file "nextPtrNonnull" (storageTypes) #[8] 6
+    (argInsts [8] ++ #[inst 1 "struct_field_ptr" 6 #[ref 0] [("index", num 0)], inst 2 "ret" 4 #[ref 1]]))
+    "example : failure (Nullable.nextPtrNonnull Zig.Ptr.null) .illegal = true := by native_decide
+example : value (Nullable.nextPtrNonnull ⟨none, 4096⟩) = some ⟨none, 4096⟩ := by native_decide"
+    ["Zig.ptrProjectNonnull"]
   -- The same rule for an `allowzero` base (`*allowzero Node` → `*allowzero [*c]u8`).
   writeCase dir "allowzeroNextPtr" (file "allowzeroNextPtr"
     ((storageTypes) ++ #[ptrTy "one" 7 (allowzero := true) (align := 8), ptrTy "one" 2 (allowzero := true) (align := 8)])
@@ -209,8 +216,9 @@ example : value (Nullable.allowzeroAdd Zig.Ptr.null 0) = some Zig.Ptr.null := by
 example : value (Nullable.allowzeroAdd ⟨none, 4096⟩ 1) = some ⟨none, 4097⟩ := by native_decide"
     ["Zig.ptrProjectNullable"]
   -- `&p[i]` keeps the projection; a load through it (`p[i]`) is `cElem`'s item access.
-  writeCase dir "cIndex" (file "cIndex" (types) #[2, 0] 5
-    (argInsts [2, 0] ++ #[inst 2 "ptr_elem_ptr" 5 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
+  -- As exported: `&p[i]` of a `[*c]u8` is a `*allowzero u8`.
+  writeCase dir "cIndex" (file "cIndex" ((types).push (ptrTy "one" 1 (allowzero := true))) #[2, 0] 6
+    (argInsts [2, 0] ++ #[inst 2 "ptr_elem_ptr" 6 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
     "example : value (Nullable.cIndex Zig.Ptr.null 0) = some Zig.Ptr.null := by native_decide
 example : failure (Nullable.cIndex Zig.Ptr.null 1) .illegal = true := by native_decide
 example : failure (do Zig.load (BitVec 8) 1 (← Nullable.cIndex Zig.Ptr.null 0)) .illegal = true := by native_decide
@@ -296,4 +304,4 @@ example : value (Nullable.fromOptional (some ⟨none, 5⟩)) = some ⟨none, 5�
   let ts := #[intTy 64, intTy 8, (ptrTy "c" 1).setObjVal! "volatile" (.bool true), boolTy, nrTy]
   reject (file "volatileNullable" ts #[2] 2
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "volatile nullable pointers"
-  IO.println "nullable pointer source pipeline: 26 generated cases; adjacent rejections checked"
+  IO.println "nullable pointer source pipeline: 27 generated cases; adjacent rejections checked"

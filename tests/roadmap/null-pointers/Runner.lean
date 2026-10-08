@@ -12,6 +12,10 @@ private def illegal (x : Zig.MemM α) : IO Bool :=
   | _ => pure false
 
 private def addr (p : Zig.Ptr) : Zig.MemM Nat := do pure (← Zig.ptrAddr p).toNat
+/-- The address of a field pointer of address zero, or `illegal` where the compiler types it as a
+nonnullable pointer (Zig ≤0.15, `Zig.ptrProjectNonnull`; check.sh expects that only there). -/
+private def addrOrIllegal (x : Zig.MemM Zig.Ptr) : IO String := do
+  if ← illegal x then pure "illegal" else pure (toString (← observed (do addr (← x))))
 private def bit (b : Bool) : Nat := if b then 1 else 0
 /-- A two-byte heap block holding 7, 9 (the native `byte2`). -/
 private def live2 : Zig.MemM Zig.Ptr := do
@@ -98,15 +102,16 @@ def main : IO Unit := do
     let live ← live2
     pure ((← NullableNative.cElem live 0).toNat, (← NullableNative.cElem live 1).toNat))
   IO.println s!"cElem {a} {b}"
-  let (a, b) ← observed (do
+  let a ← addrOrIllegal (NullableNative.nextPtr Zig.Ptr.null)
+  let b ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
-    pure (← addr (← NullableNative.nextPtr Zig.Ptr.null), (← addr (← NullableNative.nextPtr node)) - (← addr node)))
+    pure ((← addr (← NullableNative.nextPtr node)) - (← addr node)))
   IO.println s!"nextPtr {a} {b}"
   let a ← observed (do
     let node ← nodeWith { next := Zig.Ptr.null, val := 0#8 }
     pure ((← addr (← NullableNative.valPtr node)) - (← addr node)))
   IO.println s!"valPtr {a}"
-  let a ← observed (do addr (← NullableNative.allowzeroNextPtr Zig.Ptr.null))
+  let a ← addrOrIllegal (NullableNative.allowzeroNextPtr Zig.Ptr.null)
   IO.println s!"allowzeroNextPtr {a}"
   let (a, b) ← observed (do
     let live ← live2

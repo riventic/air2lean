@@ -106,6 +106,16 @@ theorem ptrProjectNullable_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr �
   simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
 
+/-- A nonnullable-typed projection whose base address is nonzero is exactly the projected
+pointer; memory is unchanged. -/
+theorem ptrProjectNonnull_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
+    (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
+    (ptrProjectNonnull p project).run m = pure (project p, m) := by
+  have hn := ptrIsNull_nonzero ha hz
+  simp only [ptrProjectNonnull, StateT.run_bind, hn]
+  simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
+    StateT.pure]
+
 /-- A nonzero-offset projection whose base is at address zero (`Ptr.null`, or a pointer that
 reaches address zero by arithmetic on its provenance) is illegal behaviour. -/
 theorem ptrProjectNullable_zero_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr)

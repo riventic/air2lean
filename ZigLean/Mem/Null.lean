@@ -64,6 +64,14 @@ def ptrProjectNullable (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := do
   if project p = p then pure p
   else if ← ptrIsNull p then throw .illegal else pure (project p)
 
+/-- A projection of a C/allowzero base whose result the compiler types as a nonnullable pointer:
+Zig 0.14.1 and 0.15.2 type `&p.*.field` of a `[*c]T` or `*allowzero T` as `*F`, not
+`*allowzero F` (0.16.0 keeps `allowzero`). Address zero must not become a `*F`, so every offset
+from address zero is `.illegal` here. For offset 0 this is conservative: the native code yields
+address zero, whose later uses as a `*F` are not confirmed natively. -/
+def ptrProjectNonnull (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := do
+  if ← ptrIsNull p then throw .illegal else pure (project p)
+
 /-- A C/allowzero pointer coerced or cast to an ordinary optional pointer (`?*T`): address
 zero becomes the explicit `none`; any other value becomes `some` of the same pointer. -/
 def ptrToOptional (p : Ptr) : MemM (Option Ptr) := do
@@ -115,6 +123,10 @@ theorem null_add_zero (m : Mem) :
 theorem null_add_ne (m : Mem) (off : Int) (h : off ≠ 0) :
     (ptrProjectNullable Ptr.null (·.add off)).run m = throw .illegal :=
   null_project m _ (by simp [Ptr.null, Ptr.add, h])
+
+/-- A projection typed as a nonnullable pointer never yields address zero. -/
+theorem null_project_nonnull (m : Mem) (project : Ptr → Ptr) :
+    (ptrProjectNonnull Ptr.null project).run m = throw .illegal := by rfl
 
 /-- Every pointer derived from address zero by an offset still has no block: an access
 through it fails, for every size and alignment. -/
