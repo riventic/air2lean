@@ -127,12 +127,21 @@ def main (args : List String) : IO Unit := do
     | .error e =>
       require ((e.splitOn "a Zig 0.17 `@bitCast`").length > 1 && (e.splitOn expected).length > 1)
         s!"wrong 0.17 diagnostic for {name}: {e}"
-  -- ≤0.16 keeps its rules: the aggregate and vector casts stay rejected there.
+  -- ≤0.16 keeps its rules: vector and sub-byte-array casts stay rejected there, and a byte-array
+  -- cast is the memory representation cast (`Zig.reprCast`, docs/aggregate-casts.md), not the
+  -- 0.17 logical-order path.
   for version in ["0.14.1", "0.15.2", "0.16.0"] do
-    for (name, src, dst) in [("vec4u5ToU20", 2, 0), ("arr4u8ToU32", 20, 21), ("packedToArr16u1", 10, 9)] do
+    for (name, src, dst) in [("vec4u5ToU20", 2, 0), ("packedToArr16u1", 10, 9)] do
       match verdict (← load name src dst version) with
       | .ok _ => throw (IO.userError s!"{version} accepted the aggregate cast {name}")
       | .error e => require ((e.splitOn "0.17").length == 1) s!"{version} got a 0.17 diagnostic: {e}"
+    let f ← load "arr4u8ToU32" 20 21 version
+    match verdict f with
+    | .error e => throw (IO.userError s!"{version} rejected the memory cast arr4u8ToU32: {e}")
+    | .ok _ =>
+      let text := emit #[f] "Repr" ""
+      require ((text.splitOn "Zig.reprCast").length > 1 && (text.splitOn "Zig.BitCast").length == 1)
+        s!"{version} arr4u8ToU32 is not a memory representation cast"
   -- A scalar cast emits the same text under every version.
   let scalar (v : String) : IO String := do
     let f ← load "i8ToU8" 18 17 v
