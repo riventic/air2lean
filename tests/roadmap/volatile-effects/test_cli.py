@@ -31,11 +31,11 @@ def ptr(child, *, volatile, const=False, size="one", align=4):
 
 
 # 0 u32, 1 void, 2 noreturn, 3 *volatile u32, 4 *u32, 5 *const volatile u32,
-# 6 []volatile u8, 7 u8, 8 usize, 9 *const u32, 10 []u8, 11 *volatile u8
+# 6 []volatile u8, 7 u8, 8 usize, 9 *const u32, 10 []u8, 11 *volatile u8, 12 []const volatile u8
 TYPES = [U32, VOID, NORETURN, ptr(0, volatile=True), ptr(0, volatile=False),
          ptr(0, volatile=True, const=True), ptr(7, volatile=True, size="slice", align=1), U8, USIZE,
          ptr(0, volatile=False, const=True), ptr(7, volatile=False, size="slice", align=1),
-         ptr(7, volatile=True, align=1)]
+         ptr(7, volatile=True, align=1), ptr(7, volatile=True, const=True, size="slice", align=1)]
 
 
 def inst(i, tag, ty, args=(), **extra):
@@ -75,6 +75,10 @@ def fixtures(version="0.16.0"):
             returning(2, ref(1))]), "volatile atomic access"),
         "slice_volatile": (f("slice_volatile", [6, 8], 7, [
             inst(0, "arg", 6, param=0), inst(1, "arg", 8, param=1),
+            inst(2, "slice_elem_val", 7, [ref(0), ref(1)]), returning(3, ref(2))]), "volatile load"),
+        # A `[]const volatile u8` parameter is device memory, never a pure `Array` argument.
+        "const_slice_volatile": (f("const_slice_volatile", [12, 8], 7, [
+            inst(0, "arg", 12, param=0), inst(1, "arg", 8, param=1),
             inst(2, "slice_elem_val", 7, [ref(0), ref(1)]), returning(3, ref(2))]), "volatile load"),
         # 0.16.0's `slice_elem_ptr` + `load` pair: canonicalization must keep the volatile load.
         "slice_ptr_volatile": (f("slice_ptr_volatile", [6, 8], 7, [
@@ -231,7 +235,7 @@ DEVICE_CONTRACT = Path(__file__).resolve().parent / "uart.json"
 # rejection marker. Only an integer load or store through a volatile pointer to memory is an event.
 DEVICE_EXPECTED = {
     "load_volatile": None, "load_plain": None, "store_volatile": None, "store_plain": None,
-    "atomic_volatile": "volatile atomic access", "slice_volatile": None,
+    "atomic_volatile": "volatile atomic access", "slice_volatile": None, "const_slice_volatile": None,
     "slice_ptr_volatile": None, "local_volatile": "points into a local", "local_plain": None,
     "drop_volatile": "without `volatile`", "int_from_volatile": "without `volatile`",
     "keep_volatile": None, "std_volatile": "has no volatile contract",
@@ -275,7 +279,7 @@ def check_device(binary, tmp, air):
                 assert "-- air2lean-device: " in text and "def air2lean_device : Zig.Device" in text
                 if name.endswith("_volatile") and name != "keep_volatile":
                     assert "Zig.vload air2lean_device" in text or "Zig.vstore air2lean_device" in text, text
-                    assert "Zig.load " not in text and "Zig.store " not in text, text
+                    assert all(op not in text for op in ("Zig.load ", "Zig.store ", "Zig.index")), text
             else:
                 assert result.returncode == 1 and expected in result.stderr, (name, result.stderr)
                 assert out.read_text() == "KEEP\n", name
@@ -377,6 +381,18 @@ def check_asm(binary, tmp, air):
                     text = out.read_text()
                     assert ("Zig.vasm air2lean_device" in text) == (name == "rdtsc_twice" and bool(flags)), text
                 checks += 1
+    # A spin hint off its target's list is not a declarable device event (the emitter makes it a
+    # hint): `isb` is allowlisted for aarch64 only, and these fixtures are the x86_64 reference.
+    write(air, {"isb": function("isb", [], 1, [asm(0, 1, "isb"), returning(1, dict(ty=1, val="{}"))])})
+    isb = tmp / "isb.json"
+    isb.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [],
+                               "asm": [{"template": "isb", "constraints": [], "clobbers": []}]}))
+    for flags in ((), ("--device-contract", isb)):
+        result = invoke(binary, "--diagnostics-json", air, *flags)
+        found = [d for d in json.loads(result.stdout)["diagnostics"] if d["code"] == "ASM_VOLATILE_EFFECT"]
+        assert len(found) == 1, (flags, result.stdout)
+        checks += 1
+    assert "spin hint" in found[0]["message"], found
     # Device asm entries: a `memory` clobber is outside the contract (DEV-01), templates are unique.
     contract = json.loads(TSC_CONTRACT.read_text())
     entry = contract["asm"][0]

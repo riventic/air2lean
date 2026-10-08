@@ -17,13 +17,13 @@ translate_uart() {
     --device-contract "$dir/uart.json"
 }
 # Only `elapsed` of device_asm.zig is a declared device event; the others stay rejected.
-translate_tsc() {
+translate_tsc() {  # AIR directory, output file (its directory holds the selected AIR)
   local only
-  only=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-tsc.XXXXXX")
+  only="$(dirname -- "$2")/tsc-air"
+  mkdir "$only"
   cp "$1/device_asm.elapsed.json" "$only/"
   "$translator" "$only" -o "$2" --namespace DeviceAsm --prefix device_asm. \
     --device-contract "$dir/tsc.json"
-  rm -rf "$only"
 }
 export_fixture() {  # source, filter, output directory
   ZIG_AIR_JSON_DIR="$3" ZIG_AIR_JSON_FILTER="$2" \

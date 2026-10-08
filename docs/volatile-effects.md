@@ -210,9 +210,9 @@ enough. So the allowlist applies to non-volatile asm too (`ticksPlain`). The com
 
 **Goldens.** Every committed asm fixture is on the list and translates byte-identically: the four
 `examples/asm` goldens (also re-exported with the patched 0.16.0 and 0.15.2 compilers) and the C03
-`progress.idle` spin hint. A default translation of all 72 committed AIR directories with the
-previous and the new translator is identical. The only exception is the new device fixture,
-whose rejection message now names `--device-contract`.
+`progress.idle` spin hint. A default translation of every AIR directory committed before L13
+(72) with the previous and the new translator is identical (the new device fixtures differ only
+in the rejection message, which now names `--device-contract`).
 
 **Real-export evidence.** `device_asm.zig` (0.15.2/0.16.0 syntax; the committed export is 0.16.0
 in `air-asm/`) has `elapsed` (two `rdtsc`), `random` (`rdrand`), `fence` (output-less `mfence`),

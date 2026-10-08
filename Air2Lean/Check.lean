@@ -739,11 +739,15 @@ output, which must be the expression's result, and no `memory` clobber (DEV-01),
 checked by `checkOp` (M21). -/
 def CheckCtx.checkAsmEffect (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
   let .asm source isVolatile clobbers outputs inputs := op | return
-  let constraints := (outputs.map (·.constraint) ++ inputs.map (·.constraint)).toList
-  if let some entry := asmAllowed? cx.targetArch source constraints clobbers.toList then
+  let constraints := asmConstraints outputs inputs
+  if let some entry := op.asmAllowEntry? cx.targetArch then
     if entry.semantics == .spinHint && !op.isSpinHint then
       cx.fail line s!"asm {source.quote} is allowlisted as a spin hint, which has no operands"
     return
+  -- A spin hint off its target's list stays rejected: the emitter would make it a hint, not an event.
+  if op.isSpinHint then
+    cx.fail line s!"spin hint {source.quote} is not allowlisted for target \
+      '{if cx.targetArch.isEmpty then "x86_64" else cx.targetArch}' (Air2Lean/AsmAllowlist.lean)"
   let guidance := "an opaque asm is a repeatable function of its inputs, which is unsound for \
     effects and nondeterministic outputs (rdtsc, rdrand, port I/O, barriers, output-less asm, \
     memory clobbers); declare it as a device event with an `asm` entry of `--device-contract`, \
