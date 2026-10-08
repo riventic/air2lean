@@ -396,7 +396,7 @@ def build_run(summary, cases, args, root):
         'mode': args.mode,
         'backend': args.backend,
         'flags': flags,
-        'stock_zig_sha256': hashlib.sha256(Path(args.zig).read_bytes()).hexdigest(),
+        'stock_zig_sha256': args.zig_sha256 or hashlib.sha256(args.zig.read_bytes()).hexdigest(),
         'sources_sha256': hashlib.sha256(
             json.dumps(summary['runner_runtime_sources'], sort_keys=True).encode()).hexdigest(),
         'examples': dict(sorted(examples.items())),
@@ -418,7 +418,8 @@ def main(argv=None):
     sub.add_parser('commands', help='print commands that unqualified claims still need')
     rec = sub.add_parser('record', help='write a run record from a scripts/diff.sh summary')
     rec.add_argument('--summary', type=Path, required=True)
-    rec.add_argument('--zig', required=True, help='the stock zig binary that built the harness')
+    rec.add_argument('--zig', type=Path, help='the stock zig binary that built the harness')
+    rec.add_argument('--zig-sha256', help='its digest, when the binary is not on this host')
     rec.add_argument('--zig-version', required=True)
     rec.add_argument('--target', choices=TARGETS, required=True)
     rec.add_argument('--mode', choices=MODES, required=True)
@@ -433,6 +434,8 @@ def main(argv=None):
         print(f'build-modes: cannot read {REGISTRY}: {error}', file=sys.stderr)
         return 1
     if args.action == 'record':
+        if bool(args.zig) == bool(args.zig_sha256):
+            parser.error('record needs exactly one of --zig and --zig-sha256')
         try:
             summary = json.loads(args.summary.read_text(encoding='utf-8'))
             with open(str(args.summary) + '.jsonl', encoding='utf-8') as cases:

@@ -27,6 +27,7 @@ if [ "${1:-}" = --inside ]; then
   export AIR2LEAN_ZIG=$zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend
   export AIR2LEAN_DIFF_REPORT=/work/tests/diff/out/report.json
   if [ -n "$examples" ]; then export AIR2LEAN_EXAMPLES=$examples; fi
+  sha256sum "$zig" | cut -d' ' -f1 >/artifacts/zig.sha256
   status=0
   bash scripts/diff.sh >/artifacts/diff.log 2>&1 || status=$?
   cp -a /work/tests/diff/out/report.json /work/tests/diff/out/report.json.jsonl /artifacts/ 2>/dev/null || true
