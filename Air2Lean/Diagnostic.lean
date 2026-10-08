@@ -157,6 +157,9 @@ structure Log where
   failed : Bool := false
   complete : Bool := true
   truncated : Bool := false
+  /-- The total count or payload bound is reached: no further diagnostic can be retained.
+  A per-unit cap truncates only its unit and leaves siblings reportable. -/
+  exhausted : Bool := false
   payloadBytes : Nat := 0
   /-- Retained and dropped diagnostic counts per unit. -/
   retained : Std.HashMap String Nat := {}
@@ -181,15 +184,17 @@ def Log.add (log : Log) (d : Diagnostic) : Log :=
       | .program, some function, .canonical, some instruction => log.programAnchors.insert (function, instruction)
       | _, _, _, _ => log.programAnchors }
   let unit := d.file.getD ""
-  let drop (log : Log) : Log :=
+  let drop (log : Log) (exhausted : Bool) : Log :=
     { log with
       complete := false
       truncated := true
+      exhausted := log.exhausted || exhausted
       dropped := log.dropped.insert unit (log.dropped.getD unit 0 + 1) }
-  if log.items.size ≥ log.limit || log.retained.getD unit 0 ≥ log.unitLimit then drop log
+  if log.items.size ≥ log.limit then drop log true
+  else if log.retained.getD unit 0 ≥ log.unitLimit then drop log false
   else
     let bytes := d.toJson.compress.utf8ByteSize
-    if log.payloadBytes + bytes > maxPayloadBytes then drop log
+    if log.payloadBytes + bytes > maxPayloadBytes then drop log true
     else
       { log with
         complete := log.complete && !d.firstErrorInUnit

@@ -203,7 +203,8 @@ private def collectorChecks : IO Unit := do
     observed := 1
     failed := true
     complete := false
-    truncated := true }
+    truncated := true
+    exhausted := true }
   let afterDependency := collectProgram #[
     { file := "calls.json", function := some call.name, normalized := some call, structureValid := true, localPassed := true },
     { file := "target.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true }] beforeDependency

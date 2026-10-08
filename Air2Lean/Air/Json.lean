@@ -604,7 +604,7 @@ def parseSrc? (j : Json) : Option RawSrc := do
   let file ← (s.getObjValAs? String "file").toOption
   let module ← (s.getObjValAs? String "module").toOption
   let declLine ← (s.getObjValAs? Nat "decl_line").toOption
-  guard (declLine ≥ 1 && file.length ≤ 4096 && module.length ≤ 1024)
+  guard (declLine ≥ 1 && !file.isEmpty && file.length ≤ 4096 && !module.isEmpty && module.length ≤ 1024)
   pure { file, module, declLine }
 
 mutual

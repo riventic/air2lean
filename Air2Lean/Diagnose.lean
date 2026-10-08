@@ -312,7 +312,7 @@ def collectProgram (units : Array FileResult) (initial : Log)
   for u in safe do
     if let some f := u.normalized then
       log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
-  if !log.truncated then
+  if !log.exhausted then
     let graph := edges units
     let mut blockers : Array (Edge × Code × Option String) := #[]
     for edge in graph do
@@ -327,11 +327,11 @@ def collectProgram (units : Array FileResult) (initial : Log)
     if !blockers.isEmpty then
       let index := adjacency graph
       for root in units do
-        if log.truncated then break
+        if log.exhausted then break
         if let some name := root.function then
           let paths := pathsFrom index name (maxFiles + 1)
           for (edge, code, unsupported) in blockers do
-            if log.truncated then break
+            if log.exhausted then break
             if let some chain := paths[edge.caller]? then
               log := log.add { (boundary edge.file (some edge.caller) code .program
                 (if unsupported.isSome then .unsupportedSemantics else .validationFailure)

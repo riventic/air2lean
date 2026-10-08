@@ -187,13 +187,17 @@ def spans(binary, air):
 def caps(binary, air):
     """A noisy unit cannot starve a sibling: per-unit caps are explicit and accounted."""
     noisy = function("noisy", [inst(i, f"unknown_{i}", 0) for i in range(10)] + [RET])
-    write(air, {"a-noisy.json": noisy, "b-quiet.json": function("quiet", [inst(0, "unknown_q", 0), RET])})
+    write(air, {"a-noisy.json": noisy, "b-quiet.json": function("quiet", [inst(0, "unknown_q", 0), RET]),
+                "c-caller.json": calls("caller", "absent_c")})
     report = decode(invoke(binary, air, "--unit-diagnostic-limit", "3", "--diagnostic-limit", "8"), "rejected")
     assert report["caps"] == dict(diagnostics=8, diagnostics_per_unit=3, payload_bytes=1024 * 1024,
                                   message_chars=2048, files=256, input_bytes=64 * 1024 * 1024,
                                   function_name_chars=1024, dependency_chain_names=257), report["caps"]
     names = [Path(d["file"]).name for d in report["diagnostics"]]
     assert names.count("a-noisy.json") == 3 and "b-quiet.json" in names, names
+    # A per-unit cap truncates only that unit: later program-phase blockers still report.
+    assert any(d["code"] == "CALLEE_MISSING" and d["dependency_chain"] == ["caller", "absent_c"]
+               for d in report["diagnostics"]), report["diagnostics"]
     assert [Path(u["file"]).name for u in report["capped_units"]] == ["a-noisy.json"]
     assert report["capped_units"][0]["dropped"] == 8, report["capped_units"]
     assert report["truncated"] and not report["complete"]
