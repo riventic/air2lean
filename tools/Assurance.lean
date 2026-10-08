@@ -1,4 +1,11 @@
 import Lean
+import ZigLean.Witness
+-- Every claim head of assurance/claim-heads.json is imported here, so an audited module that
+-- defines a declaration with the same name fails with a name clash instead of spoofing it.
+import ZigLean.Sep.Triple
+import ZigLean.Sep.Total
+import ZigLean.Conc.Own
+import ZigLean.Conc.Total
 
 /-!
 Environment-based assurance data extraction. The generated driver imports every selected
@@ -6,7 +13,7 @@ module and invokes `#assurance_audit`. Policy is deliberately applied outside th
 the raw declaration graph and Lean's own transitive axiom inventory remain inspectable.
 -/
 
-open Lean Elab Command
+open Lean Elab Command Meta
 
 namespace Air2Lean.Assurance
 
@@ -118,6 +125,165 @@ private def statementDependencies (type : Expr) : List (String × Json) :=
   let names (e : Expr) := namesJson (e.getUsedConstants.qsort Name.lt)
   [("statement_dependencies", names type), ("conclusion_dependencies", names (stripBinders type))]
 
+/-! ## Statement structure (claim binding, `scripts/claims.py`)
+
+Everything below reads the kernel type only. Binders are the theorem's own telescope; the
+conclusion head is identified by its declaration (module and expression hashes), and each of
+its arguments is described as a computation: wrappers that run a computation on a state are
+peeled, and the remaining application's arguments are bound variables of the telescope,
+closed terms or open terms. -/
+
+private def binderJson : BinderInfo → Json
+  | .default => "default"
+  | .implicit => "implicit"
+  | .strictImplicit => "strict_implicit"
+  | .instImplicit => "inst_implicit"
+
+/-- Computational constants of a hypothesis: definitions and opaques that are not projections,
+instances, matchers or structural auxiliaries. -/
+private def definitionsIn (env : Environment) (e : Expr) : Array Name :=
+  (e.getUsedConstants.filter fun n =>
+    match env.checked.get.find? n with
+    | some (.defnInfo _) | some (.opaqueInfo _) =>
+      !(env.isProjectionFn n || Meta.isInstanceCore env n || Meta.isMatcherCore env n ||
+        isAuxRecursor env n || isNoConfusion env n)
+    | _ => false).qsort Name.lt
+
+/-- Telescope indices of the free variables occurring in `e`. -/
+private def bvarUses (xs : Array Expr) (e : Expr) : Array Nat := Id.run do
+  let mut out := #[]
+  for i in [:xs.size] do
+    if e.containsFVar xs[i]!.fvarId! then out := out.push i
+  return out
+
+private def atomJson (xs : Array Expr) (e : Expr) : Json :=
+  let e := e.consumeMData
+  match xs.idxOf? e with
+  | some i => Json.mkObj [("bvar", toJson i)]
+  | none =>
+    let head := headJson e
+    if e.hasFVar then Json.mkObj [("open", head), ("bvars", toJson (bvarUses xs e))]
+    else Json.mkObj [("closed", head)]
+
+/-- Wrappers that run a computation: (constant, arity, computation index, extra-argument
+indices). The extra arguments (initial state, environment) belong to the claim's domain. -/
+private def runners : List (Name × Nat × Nat × List Nat) :=
+  [(``StateT.run, 5, 3, [4]), (``StateT.run', 6, 4, [5]), (``ExceptT.run, 4, 3, []),
+   (``OptionT.run, 3, 2, []), (``ReaderT.run, 5, 3, [4]), (``Zig.call, 3, 2, [])]
+
+/-- The leading binder kinds of a constant's type (its own parameters). -/
+private def paramBinders (env : Environment) (n : Name) : Array Json := Id.run do
+  let some c := env.checked.get.find? n | return #[]
+  let mut out := #[]
+  let mut t := c.type
+  while true do
+    match t.consumeMData with
+    | .forallE _ _ b bi => out := out.push (binderJson bi); t := b
+    | _ => break
+  return out
+
+/-- A conclusion argument as a computation: peeled runners, the applied constant, its
+parameter kinds, its arguments and the runners' extra arguments, as atoms; `atom` describes the
+argument itself. -/
+private partial def subjectJson (env : Environment) (xs : Array Expr) (e : Expr) : Json :=
+  (go e.consumeMData #[] #[]).setObjVal! "atom" (atomJson xs e)
+where
+  go (e : Expr) (peeled : Array Json) (extra : Array Json) : Json :=
+    let args := e.getAppArgs
+    let runner : Option (Name × Nat × Nat × List Nat) := match e.getAppFn.consumeMData with
+      | .const n _ => runners.find? fun r => r.1 == n && args.size == r.2.1
+      | _ => none
+    match runner with
+    | some (n, _, program, extras) =>
+      go args[program]!.consumeMData (peeled.push (toJson n.toString))
+        (extras.foldl (fun acc i => acc.push (atomJson xs args[i]!)) extra)
+    | none =>
+      let fn := match e.getAppFn.consumeMData with
+        | .const n _ => some n
+        | _ => none
+      Json.mkObj [("peeled", Json.arr peeled), ("fn", toJson (fn.map Name.toString)),
+        ("fn_module", toJson (fn.map (moduleOf env))),
+        ("params", Json.arr ((fn.map (paramBinders env)).getD #[])),
+        ("args", Json.arr (args.map (atomJson xs))), ("extra", Json.arr extra)]
+
+private def hashHex (h : UInt64) : String :=
+  let s := String.ofList (Nat.toDigits 16 h.toNat)
+  "".pushn '0' (16 - s.length) ++ s
+
+/-- A deterministic serialization of a closed kernel expression (binder names and metadata
+dropped; constants, universe levels, binder kinds and literals kept). -/
+private partial def serialize : Expr → String
+  | .bvar i => s!"#{i}"
+  | .fvar _ => "?f"
+  | .mvar _ => "?m"
+  | .sort l => s!"(S {l})"
+  | .const n ls => s!"(C {n} {ls})"
+  | .app f a => s!"(A {serialize f} {serialize a})"
+  | .lam _ t b bi => s!"(L {binderJson bi} {serialize t} {serialize b})"
+  | .forallE _ t b bi => s!"(F {binderJson bi} {serialize t} {serialize b})"
+  | .letE _ t v b _ => s!"(Z {serialize t} {serialize v} {serialize b})"
+  | .lit (.natVal n) => s!"(N {n})"
+  | .lit (.strVal v) => s!"(T {v.quote})"
+  | .mdata _ e => serialize e
+  | .proj n i e => s!"(P {n} {i} {serialize e})"
+
+/-- 64-bit FNV-1a over the UTF-8 bytes, independent of Lean's `String.hash`. -/
+private def fnv1a (s : String) : UInt64 :=
+  s.toUTF8.foldl (fun h b => (h ^^^ b.toUInt64) * 0x100000001b3) 0xcbf29ce484222325
+
+/-- 128-bit fingerprint of a declaration's kernel type and value. -/
+private def fingerprint (c : ConstantInfo) : String :=
+  let text := serialize c.type ++ "|" ++ ((c.value? (allowOpaque := true)).map serialize).getD "-"
+  hashHex text.hash ++ hashHex (fnv1a text)
+
+/-- The declaration behind a conclusion head: its module and a fingerprint of its kernel type
+and value, so that a same-named declaration elsewhere is distinguishable. -/
+private def headIdentity (env : Environment) (e : Expr) : Json :=
+  match e.getAppFn.consumeMData with
+  | .const n _ =>
+    match env.checked.get.find? n with
+    | some c => Json.mkObj [("name", toJson n.toString), ("module", toJson (moduleOf env n)),
+        ("kind", toJson (kind c)), ("fingerprint", toJson (fingerprint c))]
+    | none => Json.mkObj [("name", toJson n.toString), ("module", toJson ""),
+        ("kind", toJson "unresolved"), ("fingerprint", Json.null)]
+  | _ => Json.null
+
+/-- A companion witness theorem: verified when its kernel type is exactly the statement
+recomputed from the claim's type. -/
+private def witnessJson (env : Environment) (thm : Name) (suffix : Name)
+    (expected : Option Expr) : Json :=
+  let companion := thm ++ suffix
+  match expected, env.checked.get.find? companion with
+  | none, _ => Json.mkObj [("status", toJson "not_required"), ("theorem", Json.null)]
+  | some _, none => Json.mkObj [("status", toJson "absent"), ("theorem", Json.null)]
+  | some ty, some c =>
+    let ok := c.isTheorem && c.type == ty
+    Json.mkObj [("status", toJson (if ok then "verified" else "mismatch")),
+      ("theorem", toJson companion.toString)]
+
+private def statementJson (n : Name) (type : Expr) : MetaM Json := do
+  let env ← getEnv
+  let nonvacuity ← Zig.Witness.nonvacuityType type
+  let liveness ← Zig.Witness.livenessType? type
+  let trivial ← Zig.Witness.triviallyInhabited type
+  let nonvacuityJson :=
+    if trivial then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
+    else witnessJson env n Zig.Witness.nonvacuousSuffix (some nonvacuity)
+  forallTelescope type fun xs body => do
+    let mut binders := #[]
+    for i in [:xs.size] do
+      let decl ← xs[i]!.fvarId!.getDecl
+      binders := binders.push <| Json.mkObj [
+        ("name", toJson decl.userName.toString), ("binder", binderJson decl.binderInfo),
+        ("prop", toJson (← isProp decl.type)), ("defs", namesJson (definitionsIn env decl.type)),
+        ("uses", toJson (bvarUses (xs.extract 0 i) decl.type))]
+    let body := body.consumeMData
+    return Json.mkObj [
+      ("binders", Json.arr binders), ("head", headIdentity env body),
+      ("args", Json.arr (body.getAppArgs.map (subjectJson env xs))),
+      ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
+        ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness)])]
+
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
 
 elab_rules : command
@@ -141,12 +307,15 @@ elab_rules : command
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
-      let (conclusion, statement) := match env.checked.get.find? n with
-        | some c => (conclusionShape 8 c.type, statementDependencies c.type)
-        | none => (Json.null, [])
+      let (conclusion, statement, shape) ← match env.checked.get.find? n with
+        | some c => do
+          let shape ← liftTermElabM <| withoutExporting <| statementJson n c.type
+          pure (conclusionShape 8 c.type, statementDependencies c.type, shape)
+        | none => pure (Json.null, [], Json.null)
       theorems := theorems.push <| Json.mkObj <| [
         ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
-        ("axioms", namesJson axs), ("conclusion", conclusion)] ++ statement
+        ("axioms", namesJson axs), ("conclusion", conclusion)] ++ statement ++
+        [("statement", shape)]
     let result := Json.mkObj [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),

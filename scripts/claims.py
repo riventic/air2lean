@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Derive claim strength from checked theorem types and check declared manifest goals.
 
-The input is an assurance report from scripts/assumptions.py. Its extractor records each
-theorem's conclusion shape from the kernel type: binders and hypotheses are stripped, no
-definition is unfolded, and only an equation's right-hand side is expanded. Theorem names,
-comments and manifest labels never contribute to the derived claim.
+The input is an assurance report from scripts/assumptions.py. Its extractor (tools/Assurance.lean)
+records each theorem's kernel statement: the binder telescope, the conclusion head as a
+declaration (module and fingerprint), the computation each head argument runs, and companion
+witness theorems whose statements it recomputes from the theorem's type. No definition is
+unfolded for classification. Theorem names, comments and manifest labels never contribute to the
+derived claim.
 """
 from __future__ import annotations
 
@@ -12,30 +14,49 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+HEADS_PATH = ROOT / 'assurance/claim-heads.json'
 
 NO_PANIC = 'no-panic'
 CORRECT_IF_RETURNED = 'correct-if-returned'
 GUARANTEED_RETURN = 'guaranteed-return'
 CLAIMS = (NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN)
 
-# Exact kernel names. A redefinition elsewhere has a different full name.
-HEAD_CLAIMS = {
-    # A safety error makes the partial triples false; divergence satisfies them.
-    'Zig.Triple': {NO_PANIC, CORRECT_IF_RETURNED},
-    'Zig.TTriple': {NO_PANIC, CORRECT_IF_RETURNED},
-    # An explicit `run = pure` witness: neither divergence nor a panic satisfies these.
-    'Zig.TotalTriple': {NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN},
-    # Result existence only; its postcondition is trivial.
-    'Zig.Returns': {NO_PANIC, GUARANTEED_RETURN},
-}
+# Lean's `Eq` (core; a redefinition cannot be imported next to it): the computation is the
+# left-hand side.
+EQ_HEAD = {'module': 'Init.Prelude', 'program': 1, 'state': []}
 # `lhs = pure v` in these monads and `lhs = some (.ok v)` state an exact successful result.
-EXACT_SUCCESS = {NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN}
+EXACT_SUCCESS = frozenset(CLAIMS)
 # `pure` in each of these is a success of the `Zig.Result` (`ExceptT Error Option`) layer.
 # `pure` in `Option` is `some` and needs an `Except.ok` value; other monads are not classified.
 SUCCESS_MONADS = {'Zig.Result', 'Zig.MemM', 'Zig.MM', 'Zig.M'}
 
 ORDERED = {'safety': 1, 'partial_correctness': 2, 'total_correctness': 3}
+FUNCTIONAL = ('partial_correctness', 'total_correctness')
+# Witness statuses that establish an inhabited premise telescope (ZigLean/Witness.lean).
+NONVACUOUS = ('verified', 'trivial')
+FINGERPRINT = re.compile(r'[0-9a-f]{32}')
+
+
+def load_heads(path: Path = HEADS_PATH) -> dict:
+    """The registered claim heads (assurance/claim-heads.json)."""
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, dict) or data.get('schema_version') != 1 or not isinstance(data.get('heads'), dict):
+        raise ValueError('unsupported claim-head registry schema')
+    for name, entry in data['heads'].items():
+        valid = (isinstance(entry, dict) and name != 'Eq'
+                 and {'module', 'fingerprint', 'claims', 'program', 'state'} <= set(entry)
+                 and isinstance(entry['module'], str) and bool(entry['module'])
+                 and isinstance(entry['fingerprint'], str) and FINGERPRINT.fullmatch(entry['fingerprint'])
+                 and isinstance(entry['claims'], list) and bool(entry['claims']) and set(entry['claims']) <= set(CLAIMS)
+                 and type(entry['program']) is int and entry['program'] >= 0
+                 and isinstance(entry['state'], list) and all(type(i) is int and i >= 0 for i in entry['state']))
+        if not valid:
+            raise ValueError(f'invalid claim-head registry entry: {name}')
+    return data['heads']
 
 
 def _head(shape) -> str | None:
@@ -61,15 +82,44 @@ def _exact_success(value) -> bool:
     return head == 'Option.some' and len(args) == 1 and _head(args[0]) == 'Except.ok'
 
 
-def claims_of(conclusion) -> frozenset[str]:
-    """Claims supported by a conclusion shape; unknown shapes support none."""
-    head = _head(conclusion)
-    if head in HEAD_CLAIMS:
-        return frozenset(HEAD_CLAIMS[head])
-    args = _args(conclusion)
-    if head == 'Eq' and len(args) == 1 and _exact_success(args[0]):
-        return frozenset(EXACT_SUCCESS)
-    return frozenset()
+def statement_of(theorem) -> dict | None:
+    statement = theorem.get('statement') if isinstance(theorem, dict) else None
+    return statement if isinstance(statement, dict) else None
+
+
+def head_entry(theorem, heads, nodes=None):
+    """(head name, registry entry or None, identity problem or None).
+
+    A head counts only as the registered declaration: the same defining module and fingerprint
+    of its kernel type and value. An unregistered head has neither an entry nor a problem."""
+    statement = statement_of(theorem)
+    if statement is None:
+        return None, None, 'audit lacks the statement structure; regenerate it with the current extractor'
+    head = statement.get('head')
+    if not isinstance(head, dict) or not isinstance(head.get('name'), str):
+        return None, None, None
+    name = head['name']
+    entry = EQ_HEAD if name == 'Eq' else heads.get(name)
+    if entry is None:
+        return name, None, None
+    expected = (entry['module'], entry.get('fingerprint'))
+    found = (head.get('module'), head.get('fingerprint') if name != 'Eq' else None)
+    node = (nodes or {}).get(name)
+    if found != expected or (node is not None and node.get('module') != entry['module']):
+        return name, None, (f'conclusion head {name} is the declaration in {found[0] or "?"} '
+                            f'(fingerprint {found[1]}), not the registered one in {expected[0]}')
+    return name, entry, None
+
+
+def claims_of(theorem, heads, nodes=None) -> frozenset[str]:
+    """Claims supported by a theorem's conclusion; unknown or unregistered heads support none."""
+    name, entry, _ = head_entry(theorem, heads, nodes)
+    if entry is None:
+        return frozenset()
+    if name == 'Eq':
+        args = _args(theorem.get('conclusion'))
+        return EXACT_SUCCESS if len(args) == 1 and _exact_success(args[0]) else frozenset()
+    return frozenset(entry['claims'])
 
 
 def claim_class(claims) -> str:
@@ -89,47 +139,198 @@ def derived_strength(claims) -> str | None:
     return None
 
 
-def classify(report: dict) -> dict:
+def _bvar(atom):
+    return atom.get('bvar') if isinstance(atom, dict) and type(atom.get('bvar')) is int else None
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _subject(statement, entry):
+    """The descriptor of the computation the claim is about, or None."""
+    args = _list(statement.get('args'))
+    index = entry['program']
+    return args[index] if index < len(args) and isinstance(args[index], dict) else None
+
+
+def _domain(statement, entry, subject):
+    """Which root parameters (and initial state) are universally quantified, from the kernel
+    type: a fixed or derived argument, a repeated variable, a fixed initial state or a
+    hypothesis over a quantified argument makes the domain scoped."""
+    binders = _list(statement.get('binders'))
+    name = lambda i: binders[i].get('name') if 0 <= i < len(binders) and isinstance(binders[i], dict) else f'#{i}'
+    kinds, args = _list(subject.get('params')), _list(subject.get('args'))
+    rows, used, fixed = [], [], []
+    for position, atom in enumerate(args[:len(kinds)]):
+        kind, var = kinds[position], _bvar(atom)
+        if kind != 'default' and var is None:
+            continue  # implicit/instance arguments are types and instances, not inputs
+        rows.append({'position': position, 'argument': name(var) if var is not None else 'fixed'})
+        (used.append(var) if var is not None else fixed.append(f'parameter {position}'))
+    heads_args = _list(statement.get('args'))
+    state = _list(subject.get('extra')) + args[len(kinds):] + [
+        heads_args[i].get('atom') for i in entry['state'] if i < len(heads_args) and isinstance(heads_args[i], dict)]
+    for position, atom in enumerate(state):
+        var = _bvar(atom)
+        rows.append({'state': position, 'argument': name(var) if var is not None else 'fixed'})
+        (used.append(var) if var is not None else fixed.append(f'initial state {position}'))
+    repeated = sorted({name(v) for v in used if used.count(v) > 1})
+    constrained = [b.get('name') for b in binders if isinstance(b, dict) and b.get('prop') is True
+                   and set(_list(b.get('uses'))) & set(used)]
+    scoped = bool(fixed or repeated or constrained)
+    return {'scope': 'scoped' if scoped else 'universal', 'arguments': rows, 'fixed': fixed,
+            'repeated': repeated, 'constrained_by': constrained}
+
+
+def _witness(statement, kind, audited):
+    """A companion's status; a verified companion must itself be an allowed audited theorem."""
+    witness = (statement.get('witnesses') or {}).get(kind) if isinstance(statement.get('witnesses'), dict) else None
+    if not isinstance(witness, dict):
+        return 'absent'
+    status = witness.get('status')
+    if status == 'verified':
+        companion = (audited or {}).get(witness.get('theorem'))
+        if not isinstance(companion, dict) or companion.get('allowed') is not True:
+            return 'unaudited'
+    return status if isinstance(status, str) else 'absent'
+
+
+def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited=None, nodes=None) -> dict:
+    """Everything a goal binding needs, derived from the theorem's kernel statement.
+
+    `definition` is the root's generated definition, `generated` every definition of its
+    generated module, `allowed` the root's declared assumptions, `audited` the audit's theorems
+    by name. `strength` is the type-derived strength after the caps listed in `caps`."""
+    name, entry, problem = head_entry(theorem, heads, nodes)
+    found = claims_of(theorem, heads, nodes)
+    result = {'head': name, 'head_problem': problem, 'claims': [c for c in CLAIMS if c in found],
+              'claim_class': claim_class(found), 'type_strength': derived_strength(found),
+              'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
+              'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
+    statement = statement_of(theorem)
+    if statement is None:
+        result['binding'] = 'no_statement'
+        result['caps'].append(problem)
+        return result
+    subject = _subject(statement, entry) if entry is not None else None
+    result['subject'] = subject.get('fn') if subject else None
+    if definition is None:
+        result['binding'] = None
+    elif subject is not None and subject.get('fn') == definition:
+        result['binding'] = 'direct'
+    else:
+        mentioned = definition in _list(theorem.get('conclusion_dependencies'))
+        result['binding'] = 'mentions' if mentioned else 'unrelated'
+    blocked = set(generated) | set(heads) | ({definition} if definition else set())
+    for binder in _list(statement.get('binders')):
+        if isinstance(binder, dict) and binder.get('prop') is True:
+            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))
+            if bad:
+                result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
+    witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
+    result['witnesses'] = witnesses
+    strength, caps = result['type_strength'], result['caps']
+    if problem:
+        caps.append(problem)
+    if result['rejected_hypotheses']:
+        caps.append('a hypothesis mentions a generated definition or claim head: '
+                    + '; '.join(f'{h["hypothesis"]} mentions {", ".join(h["mentions"])}' for h in result['rejected_hypotheses']))
+        strength = None
+    nonvacuous = witnesses['nonvacuity'] in NONVACUOUS
+    if strength in FUNCTIONAL and not nonvacuous:
+        caps.append(f'non-vacuity witness {witnesses["nonvacuity"]}: the premises may be unsatisfiable '
+                    '(nonvacuity_witness, ZigLean/Witness.lean)')
+        strength = 'safety'
+    if strength == 'partial_correctness' and witnesses['liveness'] != 'verified':
+        caps.append(f'liveness witness {witnesses["liveness"]}: no admissible run is shown to return '
+                    '(liveness_witness, ZigLean/Witness.lean)')
+        strength = 'safety'
+    result['strength'] = strength
+    if subject is not None:
+        result['domain'] = _domain(statement, entry, subject)
+        result['scope'] = result['domain']['scope'] if nonvacuous else 'scoped'
+    return result
+
+
+def classify(report: dict, heads: dict | None = None) -> dict:
     if not isinstance(report, dict) or report.get('schema_version') != 1:
         raise ValueError('unsupported assurance report schema')
     if report.get('status') not in ('pass', 'fail') or not isinstance(report.get('theorems'), list):
         raise ValueError('assurance report is not a completed audit')
+    heads = load_heads() if heads is None else heads
+    nodes = nodes_of(report)
+    audited = {t['name']: t for t in report['theorems'] if isinstance(t, dict) and isinstance(t.get('name'), str)}
     theorems = []
     for theorem in report['theorems']:
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
-        if 'conclusion' not in theorem:
-            raise ValueError(f'assurance report lacks a conclusion shape for {theorem["name"]}; regenerate it')
-        claims = claims_of(theorem['conclusion'])
+        if 'conclusion' not in theorem or 'statement' not in theorem:
+            raise ValueError(f'assurance report lacks a conclusion structure for {theorem["name"]}; regenerate it')
+        found = assess(theorem, heads, audited=audited, nodes=nodes)
         theorems.append({'name': theorem['name'], 'module': theorem.get('module', ''),
-                         'conclusion_head': _head(theorem['conclusion']),
-                         'claims': [c for c in CLAIMS if c in claims],
-                         'claim_class': claim_class(claims),
-                         'derived_strength': derived_strength(claims),
-                         'allowed': theorem.get('allowed') is True})
+                         'conclusion_head': found['head'], 'head_problem': found['head_problem'],
+                         'subject': found['subject'], 'claims': found['claims'],
+                         'claim_class': found['claim_class'], 'derived_strength': found['strength'],
+                         'type_strength': found['type_strength'], 'witnesses': found['witnesses'],
+                         'caps': found['caps'], 'allowed': theorem.get('allowed') is True})
     names = [t['name'] for t in theorems]
     if len(set(names)) != len(names):
         raise ValueError('duplicate theorem in assurance report')
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
 
-def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -> dict:
+def nodes_of(report) -> dict:
+    return {n['name']: n for n in report.get('nodes') or [] if isinstance(n, dict) and isinstance(n.get('name'), str)}
+
+
+def generated_definitions(nodes, modules) -> set:
+    """Definitions of the root's generated module(s), from the audited declaration graph."""
+    return {name for name, node in nodes.items() if node.get('module') in modules and node.get('kind') == 'definition'}
+
+
+def declares_scoped(domain) -> bool:
+    """A manifest domain that admits a scoped claim (docs/claim-strength.md)."""
+    return isinstance(domain, str) and domain.strip().lower().startswith('scoped')
+
+
+def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
+               heads: dict | None = None, generated=(), allowed=(), nodes=None) -> dict:
+    """`theorems` are the audit's theorem entries by name; `definition` is the root's generated
+    definition, which the theorem's conclusion must be about."""
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
-              'derived_strength': None, 'claim_class': None, 'domain': goal['domain']}
+              'derived_strength': None, 'claim_class': None, 'domain': goal['domain'],
+              'derived_domain': None, 'binding': None, 'caps': []}
     theorem = theorems.get(goal['theorem'])
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
-    result.update(derived_strength=theorem['derived_strength'], claim_class=theorem['claim_class'])
-    if not theorem['allowed']:
+    found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
+                   allowed=allowed, audited=theorems, nodes=nodes)
+    result.update(derived_strength=found['strength'], claim_class=found['claim_class'],
+                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'])
+    if theorem.get('allowed') is not True:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     declared = goal['strength']
     if declared not in ORDERED:
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
-    derived = theorem['derived_strength']
-    if derived is None or ORDERED[derived] < ORDERED[declared]:
+    if found['head_problem']:
+        return {**result, 'status': 'rejected', 'reason': found['head_problem']}
+    if found['binding'] != 'direct':
         return {**result, 'status': 'rejected',
-                'reason': f'declared {declared} exceeds type-derived {derived or "no claim"}'}
+                'reason': f'the conclusion is about {found["subject"] or "no recognised computation"}, not the '
+                          f'root definition {definition} applied to its parameters ({found["binding"]})'}
+    if found['rejected_hypotheses']:
+        return {**result, 'status': 'rejected', 'reason': found['caps'][-1]}
+    derived = found['strength']
+    if derived is None or ORDERED[derived] < ORDERED[declared]:
+        detail = f' ({"; ".join(found["caps"])})' if found['caps'] else ''
+        return {**result, 'status': 'rejected',
+                'reason': f'declared {declared} exceeds type-derived {derived or "no claim"}{detail}'}
+    if found['scope'] != 'universal' and not declares_scoped(goal['domain']):
+        return {**result, 'status': 'rejected',
+                'reason': f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is '
+                          f'scoped: {json.dumps(found["domain"])}'}
     # Outcome evidence can only refuse an absence claim the declared strength asserts.
     for claim in OUTCOMES.STRENGTH_ABSENCE[declared] if outcome_counts is not None else ():
         verdict = OUTCOMES.absence(claim, outcome_counts)
@@ -161,39 +362,68 @@ def root_outcomes(project, root: dict, diffs) -> dict | None:
     return OUTCOMES.count(rows)
 
 
+def root_definition(root: dict) -> str:
+    return root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
+
+
 def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     project = _sibling('project')
     manifest = project.load_manifest(manifest_path)[0]
-    theorems = {t['name']: t for t in classify(report)['theorems']}
+    classify(report)  # validates the report
+    heads = load_heads()
+    theorems = {t['name']: t for t in report['theorems']}
+    nodes = nodes_of(report)
     roots = []
     for root in manifest['roots']:
         counts = root_outcomes(project, root, diffs)
+        definition = root_definition(root)
+        module = nodes.get(definition, {}).get('module')
+        generated = generated_definitions(nodes, {module}) if module else set()
         roots.append({'id': root['id'], 'outcomes': counts,
-                      'goals': [check_goal(goal, theorems, counts) for goal in root['goals']]})
+                      'goals': [check_goal(goal, theorems, counts, definition=definition, heads=heads,
+                                           generated=generated, allowed=root['assumptions'], nodes=nodes)
+                                for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
-            'scope': 'Strength is derived from conclusion head constants only. Preconditions and '
-                     'domains are not checked: an unsatisfiable precondition remains vacuous. '
-                     'Differential outcomes (when supplied) can only refuse absence claims: capped, '
-                     'fuel-bounded, unsupported or unspecified/timer outcomes and observed failures '
-                     'reject a goal; error returns do not. outcomes is null for roots without evidence.'}
+            'scope': 'Strength is derived from the registered conclusion head (module and fingerprint) and capped '
+                     'without non-vacuity and (partial) liveness witnesses. The conclusion must be about the root '
+                     'definition; hypotheses may not mention generated definitions or claim heads; a scoped derived '
+                     'domain needs a domain declared `scoped: ...`. Differential outcomes (when supplied) can only '
+                     'refuse absence claims: capped, fuel-bounded, unsupported or unspecified/timer outcomes and '
+                     'observed failures reject a goal; error returns do not. outcomes is null for roots without evidence.'}
+
+
+def head_identities(report: dict) -> dict:
+    """Conclusion-head declarations seen in a report, for maintaining assurance/claim-heads.json."""
+    seen = {}
+    for theorem in report.get('theorems') or []:
+        head = (statement_of(theorem) or {}).get('head')
+        if isinstance(head, dict) and isinstance(head.get('name'), str):
+            seen[head['name']] = {k: head.get(k) for k in ('module', 'kind', 'fingerprint')}
+    return dict(sorted(seen.items()))
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     report_cmd = sub.add_parser('report', help='classify every audited theorem')
+    heads_cmd = sub.add_parser('heads', help='list conclusion-head declarations (module, fingerprint)')
     check_cmd = sub.add_parser('check', help='reject manifest goals stronger than their theorem types')
     check_cmd.add_argument('manifest', type=Path)
     check_cmd.add_argument('--diff', type=Path, action='append', default=[],
                            help='diff-report summary JSON; its outcomes can only refuse absence claims')
-    for cmd in (report_cmd, check_cmd):
+    for cmd in (report_cmd, heads_cmd, check_cmd):
         cmd.add_argument('--assurance', type=Path, required=True, help='scripts/assumptions.py report')
         cmd.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
     try:
         report = json.loads(args.assurance.read_text())
-        result = classify(report) if args.command == 'report' else check(args.manifest, report, args.diff)
+        if args.command == 'report':
+            result = classify(report)
+        elif args.command == 'heads':
+            result = head_identities(report)
+        else:
+            result = check(args.manifest, report, args.diff)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'claims error: {error}', file=sys.stderr)
         return 2
