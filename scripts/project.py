@@ -1478,7 +1478,7 @@ def compare_records(left_path, right_path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage', 'check', 'compare-records'))
+    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage', 'check', 'compare-records', 'closure'))
     parser.add_argument('manifest', type=Path, help='project manifest; compare-records: first check record')
     parser.add_argument('other', type=Path, nargs='?', help='compare-records: second check record')
     parser.add_argument('--out', type=Path)
@@ -1490,6 +1490,7 @@ def main(argv=None):
     parser.add_argument('--diff', type=Path, action='append', default=[], help='coverage: diff-report summary JSON')
     parser.add_argument('--format', choices=('json', 'text'), default='json')
     parser.add_argument('--require-level', choices=LEVELS, help='coverage: exit 1 if any root is below this level')
+    parser.add_argument('--model-registry', type=Path, help='closure: project model registry whose symbols are boundaries')
     parser.add_argument('--lock', type=Path, help='check: build-guard lock (default AIR2LEAN_BUILD_LOCK or the guard default)')
     parser.add_argument('--build-guard', type=Path, default=CHECK_TOOLS['build_guard'], help='check: build guard script')
     parser.add_argument('--assumptions-script', type=Path, default=CHECK_TOOLS['assumptions'], help='check: assurance audit script')
@@ -1505,6 +1506,11 @@ def main(argv=None):
             result = compare_records(args.manifest.resolve(), args.other.resolve())
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0 if result['status'] == 'reproduced' else 1
+        if args.command == 'closure':
+            closure = _sibling('dependency-closure')
+            result = closure.manifest_closure(args.manifest.resolve(), args.model_registry)
+            print(closure.text_summary(result) if args.format == 'text' else json.dumps(result, indent=2, sort_keys=True) + '\n', end='')
+            return 0 if result['status'] == 'closed' else 1
         if args.command == 'check':
             if not args.out or not args.translator or args.overwrite:
                 raise Invalid('check requires --out, --translator and no --overwrite; use a fresh record directory')

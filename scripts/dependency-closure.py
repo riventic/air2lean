@@ -208,6 +208,7 @@ class Closure:
         return 'missing', 'no_air', None
 
     def visit(self, caller, name, edge, instruction, queue):
+        name = self.key(name)
         if name not in self.nodes:
             cls, kind, reason = self.classify(name)
             self.nodes[name] = {'name': name, 'class': cls, 'kind': kind, 'reason': reason, 'references': []}
@@ -331,6 +332,7 @@ def report(closure, roots, base_prefixes, existing=None, source=None, unexported
         'missing': [{'fqn': n['name'], 'filter_prefix': instance_base(n['name']), 'chain': n['chain'],
                      'references': n['references']} for n in missing],
         'unresolvable': unresolvable,
+        'exported_outside_closure': sorted(set(closure.functions) - set(closure.nodes)),
         'model_boundaries': [{'name': n['name'], 'kind': n['kind']} for n in nodes if n['class'] == 'modelled'] +
                             [{'name': g['name'], 'kind': g['kind']} for g in closure.globals.values() if g['class'] == 'modelled'],
         'filter': {'prefixes': prefixes, 'value': ','.join(prefixes), 'std_model_collisions': collisions},
@@ -391,8 +393,6 @@ def manifest_closure(path, registry=None, models=None):
         closure = Closure(functions, version, models, bindings).run([root['function']])
         result = report(closure, [root['function']], [root['prefix']], source=manifest['source_closure'][0])
         result.update(id=root['id'], input_errors=errors)
-        unreached = sorted(set(functions) - set(closure.nodes))
-        result['exported_outside_closure'] = unreached
         if errors or result['status'] != 'closed':
             out['status'] = 'incomplete'
         out['roots'].append(result)
@@ -407,7 +407,8 @@ def golden_sets(example, base=ROOT):
         dirs = [base / 'tests/golden' / example / 'air', base / 'tests/golden' / version / example / 'air']
         if not any(d.is_dir() for d in dirs):
             continue
-        oses = [os for os in OSES if (base / 'tests/golden' / version / example / f'air-{os}').is_dir()] or [None]
+        # Hosts without an OS overlay use the shared directories alone.
+        oses = [None] + [os for os in OSES if (base / 'tests/golden' / version / example / f'air-{os}').is_dir()]
         for os in oses:
             overlay = dirs + ([base / 'tests/golden' / version / example / f'air-{os}'] if os else [])
             functions = {}
@@ -450,7 +451,7 @@ def golden_closure(examples=None, base=ROOT, models=None):
             closure = Closure(functions, version, models, (), normalized).run(roots)
             result = report(closure, roots, [f'{example}.'], existing,
                             source=f'examples/{example}/{example}.zig')
-            result.update(example=example, host_os=os or 'any')
+            result.update(example=example, host_os=os or 'other')
             results.append(result)
     status = 'closed' if all(r['status'] == 'closed' and not r['filter']['existing_uncovered'] for r in results) \
         else 'incomplete'
