@@ -696,6 +696,22 @@ jobs:
           python3 tests/roadmap/spawn-failure/harness-tests.py
           bash tests/roadmap/spawn-failure/check.sh --full
 
+      - name: Io.Future model, proofs and schedules (C08)
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.FutureLemmas
+          work=$(mktemp -d "$RUNNER_TEMP/futures.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
+          bash tests/roadmap/futures/check.sh --export "$work/export"
+          bash tests/roadmap/futures/check.sh --native
+          bash tests/roadmap/futures/check.sh --check-artifacts
+          lake env lean --run tests/roadmap/models/StdModels.lean
+
       - name: Finite symbolic error-storage model and checker controls
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
