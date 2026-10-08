@@ -1086,6 +1086,16 @@ def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
   | .enum .. | .bool | .struct _ "packed" _ => true
   | _ => false
 
+/-- An atomic op through `ptr` on a pointer value (`Zig.Ptr`, `Option Zig.Ptr`;
+`ZigLean/Conc/AtomicWord.lean`, `--allocator-model translated`). -/
+def FCtx.atomicPtrValue (fc : FCtx) (ptr : Val) : Bool :=
+  fc.allocatorModel == .translated && match fc.pointeeOf ptr with
+  | .ptr "one" .. | .ptr "many" .. => true
+  | .optional c => match fc.tyOfId c with
+    | .ptr "one" .. | .ptr "many" .. => true
+    | _ => false
+  | _ => false
+
 /-- The Lean type of the value that the pointer `v` points to. -/
 def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
 
@@ -2205,7 +2215,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
     let o := orderTerm order
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    let wordPtr := fc.atomicPtrValue ptr
+    -- `unordered` and pointer values: `--allocator-model translated` only (`Check.lean`).
+    let expr := if order == .unordered then
+        if wordPtr then s!"Zig.atomicLoadUnorderedEncC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
+        else s!"Zig.atomicLoadUnorderedC (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+      else if wordPtr then s!"Zig.atomicLoadEncC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .atomicStore ptr v order =>
@@ -2224,7 +2240,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmpxchg weak ptr expected new succ fail =>
-    let f := if fc.atomicTyped ptr then
+    let f := if !weak && fc.atomicPtrValue ptr then s!"Zig.cmpxchgEncC ({fc.pointeeTy ptr})"
+      else if fc.atomicTyped ptr then
         if weak then "Zig.cmpxchgWeakAsC" else "Zig.cmpxchgAsC"
       else if weak then "Zig.cmpxchgWeakC" else "Zig.cmpxchgC"
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"

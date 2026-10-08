@@ -530,6 +530,27 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
   | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool` or a \
       packed struct is outside the subset"
 
+/-- `--allocator-model translated`: the atomic pointee is an 8-byte pointer value, a
+single/many-item pointer or an optional of one (`Zig.Ptr`, `Option Zig.Ptr`;
+`ZigLean/Conc/AtomicWord.lean`). C/allowzero/volatile/sentinel pointers stay rejected. -/
+def CheckCtx.atomicPtrChild? (cx : CheckCtx) (ptr : Val) : Bool := Id.run do
+  unless cx.allocatorModel == .translated do return false
+  let some pty := cx.valTy? ptr | return false
+  let some c := ptrChild cx.types pty | return false
+  let plain (t : TyId) : Bool := match cx.types[t]?, cx.layouts[t]? with
+    | some (.ptr "one" ..), some l | some (.ptr "many" ..), some l =>
+      !l.allowzero && !l.isVolatile && !l.sentinel && l.hostSize == 0 && l.size == some 8
+    | _, _ => false
+  match cx.types[c]? with
+  | some (.optional p) => plain p && (cx.layouts[c]?.bind (·.size)) == some 8
+  | some (.ptr ..) => plain c
+  | _ => false
+
+/-- An atomic pointee of the integer ops, or (translated mode) a pointer value. -/
+def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+  if cx.atomicPtrChild? ptr then return
+  cx.atomicIntChild line ptr
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -997,12 +1018,26 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
     -- undefined (a local with such a store is a stack block: `escapingAllocs`).
     pure line
-  | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
+  | .atomicLoad ptr .unordered =>
+    -- `--allocator-model translated`: an `unordered` load reads any message not older than the
+    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer or pointer only.
+    unless cx.allocatorModel == .translated do
+      cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+    cx.memAccess line ptr
+    unless cx.atomicPtrChild? ptr do
+      let some pty := cx.valTy? ptr | cx.fail line "an atomic op through a value that is not a pointer"
+      unless (match (ptrChild cx.types pty).bind (cx.types[·]?) with | some (.int ..) => true | _ => false) do
+        cx.fail line "an `unordered` load of a type other than an integer or a pointer is outside the subset"
+    pure line
+  | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
-  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .cmpxchg weak ptr _ _ _ _ =>
+    cx.memAccess line ptr
+    if !weak && cx.atomicPtrChild? ptr then pure line else
+    cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
     if let .inst b := base then
       if cx.places.contains b then return line
