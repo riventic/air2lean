@@ -5,13 +5,13 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2364 theorems in 135 files.
+2367 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 648 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 437 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 35 | Gate-time generated module |
+| [PRF-03](premises.md#prf-03) | 38 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2235 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1876 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1077 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 66 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2238 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1875 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1076 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 65 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2364 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1120 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1120 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2367 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1123 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1123 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2289,15 +2289,15 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 
 | Theorem | Premises |
 |---|---|
-| `example@L97` | SEM-01, SEM-03, TRU-01 |
+| `example@L103` | SEM-01, SEM-03, TRU-01 |
 | `DispatchTemplateTest.mach_total` | SEM-01, SEM-03, TRU-01 |
 | `example@L126` | SEM-01, SEM-03, TRU-01 |
-| `example@L143` | SEM-01, SEM-03, TRU-01 |
-| `example@L168` | SEM-01, SEM-03, TRU-01 |
-| `example@L174` | SEM-01, SEM-03, TRU-01 |
-| `example@L180` | SEM-01, SEM-02, SEM-04, TRU-01 |
-| `example@L213` | SEM-01, SEM-03, TRU-01 |
-| `example@L267` | SEM-01, SEM-03, TRU-01 |
+| `example@L139` | SEM-01, SEM-03, TRU-01 |
+| `example@L162` | SEM-01, SEM-03, TRU-01 |
+| `example@L170` | SEM-01, SEM-03, TRU-01 |
+| `example@L175` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `example@L208` | SEM-01, SEM-03, TRU-01 |
+| `example@L260` | SEM-01, SEM-03, TRU-01 |
 
 ## `tests/roadmap/dispatch-templates/TokenizerProof.lean`
 
@@ -2305,22 +2305,25 @@ File premises: PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
+| `example@L44` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `example@L45` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `example@L46` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `example@L47` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.tokens_ident_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.tokens_number_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.agrees_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isAlpha_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isDigit_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.isAlpha_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.isDigit_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.byte_load` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.read_facts` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.one32` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.step_start` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.step_ident` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.step_number` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.step_done` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.loop_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L317` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L345` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L325` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Tok.Proof.countTokens_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/dispatch/CountdownProof.lean`

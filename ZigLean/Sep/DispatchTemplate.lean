@@ -212,10 +212,10 @@ def selectorOf (again σ : Expr) : MetaM Expr := do
   let some fn := again.getAppFn.constName?
     | throwError "dispatch_template: the loop iterator {again} is not a generated `f.againN`"
   let last := fn.componentsRev.headD .anonymous |>.toString
-  let id := String.ofList (last.toList.drop 5)
-  unless last.startsWith "again" && id.isNat do
+  let loopId := String.ofList (last.toList.drop 5)
+  unless last.startsWith "again" && loopId.isNat do
     throwError "dispatch_template: the loop iterator {fn} is not a generated `f.againN`"
-  let field := Name.mkSimple s!"dispatchValue{id}"
+  let field := Name.mkSimple s!"dispatchValue{loopId}"
   let some struct := (← whnfR σ).getAppFn.constName?
     | throwError "dispatch_template: the loop state {σ} is not generated locals"
   unless (getStructureFields (← getEnv) struct).contains field do

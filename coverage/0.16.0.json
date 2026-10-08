@@ -3870,6 +3870,7 @@
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Automation.lean",
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Owned.lean",
@@ -4449,6 +4450,7 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Cost.lean",
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Total.lean",
@@ -8312,6 +8314,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/VC/Extract.lean"
         ]
@@ -10107,6 +10110,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
@@ -10203,6 +10207,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
@@ -13908,6 +13913,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Lemmas.lean",
+          "ZigLean/Sep/DispatchTemplate.lean",
           "ZigLean/Vec.lean"
         ]
       },
@@ -17284,6 +17290,7 @@
       "ZigLean/Sep/Block.lean": "a29b916e3566d4bd3e3e3f9b7405dae6d2fad50913f1a35003279df5d159eebf",
       "ZigLean/Sep/Cost.lean": "235013742dfe49a1ca51e99282e7bfb22d48e83f40e10888fc8bbbfc26fe88bd",
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
+      "ZigLean/Sep/DispatchTemplate.lean": "fc7c9d6b8ca6e71d75b7f6438bee49ddc4d61a9f015546336df3ecbbc1be7432",
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
       "ZigLean/Sep/LoopTemplate.lean": "a52975a351891ccb223e0f4c19392c1f03bc6d96d1614f9eb84912ff414e980b",
