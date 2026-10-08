@@ -557,16 +557,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "b17c04cdd8433fd6d2f36cc51a16236b26eedb74",
+        "head": "7b790544b079d16e2ed1ce10decfd2ce42f8bf05",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-08T08:18:46.117793+00:00",
-      "elapsed_seconds": 20.782,
+      "started_utc": "2026-10-08T13:37:02.094339+00:00",
+      "elapsed_seconds": 539.861,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "425797e9bdf9b17ec1eb213d496d4ed4950e29f3a6a2a6140825e9865c65f1ca",
+      "log_sha256": "5a54bf6fe6ca7ef769ffa786168ab7377a885d31cfec447c6376150afb82d4b3",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -611,7 +611,7 @@
         "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
         "Proofs.Atomics.Relaxed": "561920c5823e70690898d3fbf294fd52acf0e41f50389ec93df1e0d09fab506b",
         "Proofs.Atomics.Stack": "1d9bcbdd9a703a3bca2db7a4efd6b1b3f0d1b5950497956979567c716c5b1c38",
-        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
+        "Proofs.Floatops.Proofs": "e4367257fde193a6393587c2482202507ac40d344ad1700f87b2fa33c7e82809",
         "Proofs.Lists.Append": "123f17bbbc4ee977cdd2d1b2678c5694e5a55c259c4d6ec3fa281ad08ec67ead",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
         "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
@@ -687,16 +687,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
+        "head": "7b790544b079d16e2ed1ce10decfd2ce42f8bf05",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T23:13:54.118455+00:00",
-      "elapsed_seconds": 3.651,
+      "started_utc": "2026-10-08T13:46:02.069144+00:00",
+      "elapsed_seconds": 294.896,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6cd3ecb984ef7811e3e976f43ced29e7144143ef180d48a2fbe6a8311463a905",
+      "log_sha256": "a3b85db8438c96422fcc7077a0a66d79702fccc2da5481a1cbc740f0e62d86b0",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -708,7 +708,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0"
+        "Proofs.Floatops.Proofs": "e4367257fde193a6393587c2482202507ac40d344ad1700f87b2fa33c7e82809"
       }
     },
     "committed-linux-all": {
@@ -722,16 +722,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "b17c04cdd8433fd6d2f36cc51a16236b26eedb74",
+        "head": "7b790544b079d16e2ed1ce10decfd2ce42f8bf05",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-08T08:18:35.675053+00:00",
-      "elapsed_seconds": 10.4,
+      "started_utc": "2026-10-08T13:32:33.749756+00:00",
+      "elapsed_seconds": 268.212,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3b0b865563297a31b2687f38ef5d9f46b088f467f63949728c090c07b6ab46c9",
+      "log_sha256": "650e1fc0416b32f20c07fb20ce538d58aec0b38bb5b799e226f9acdcd2ae559b",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -873,7 +873,7 @@
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
         "Proofs.Errors.Proofs": "cf02a423505740739045d46a3b300dcb3c8cfe6280fe8d02f94cfe8e3dff2e69",
         "Proofs.Floatconv.Proofs": "74c841aaf6e2c2101c28a224ce47349033a057cd622838ec21dea9de7d0f86ce",
-        "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
+        "Proofs.Floatops.Proofs": "e4367257fde193a6393587c2482202507ac40d344ad1700f87b2fa33c7e82809",
         "Proofs.Floats.Dot": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
         "Proofs.Floats.Proofs": "ab76fbbe34b9184ae5495c738d5e39892fb26ca1f0c7dcb5c2a642369530707c",
         "Proofs.Iogroup.Counter": "d733c9426e17453d9cac1410668a1bcf4788f8dcd7063665fddb0ea83231913f",
@@ -920,10 +920,13 @@
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
+        "floatops=tests/golden/0.17.0/floatops/Gen.lean",
+        "--swap",
         "lists=tests/golden/0.17.0/lists/Gen.lean",
         "--swap",
         "sync=tests/golden/0.17.0/sync/Gen.lean",
         "--",
+        "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
@@ -941,18 +944,19 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "b17c04cdd8433fd6d2f36cc51a16236b26eedb74",
+        "head": "7b790544b079d16e2ed1ce10decfd2ce42f8bf05",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-08T08:19:06.946656+00:00",
-      "elapsed_seconds": 55.318,
+      "started_utc": "2026-10-08T13:50:57.017225+00:00",
+      "elapsed_seconds": 44.094,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "b4ce3142d382b31ea9459b4232fe05514003e73628b90c08f36108a0f066e8e8",
+      "log_sha256": "4fb86edee8a01f010279692a7a41ec5241765185afc5fde100c4958a52aa286f",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
+        "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
@@ -968,6 +972,10 @@
         "Proofs.Sync.Semaphore"
       ],
       "gens": {
+        "floatops": {
+          "path": "tests/golden/0.17.0/floatops/Gen.lean",
+          "sha256": "1801f9933a239b4190cc41246e47e05cb1cc9a08b32f98af4cae7629daa498f7"
+        },
         "lists": {
           "path": "tests/golden/0.17.0/lists/Gen.lean",
           "sha256": "5b6609a92629c1b63b3e47dda53937fa2af774e75c1e1e71f5b77d81f086bfec"
@@ -978,6 +986,7 @@
         }
       },
       "sources": {
+        "Proofs.Floatops.Proofs": "e4367257fde193a6393587c2482202507ac40d344ad1700f87b2fa33c7e82809",
         "Proofs.Lists.Append": "123f17bbbc4ee977cdd2d1b2678c5694e5a55c259c4d6ec3fa281ad08ec67ead",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
         "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
