@@ -1,0 +1,353 @@
+{
+ "models": [
+  {
+   "contract": "Zig.Env.Linux.closeContract",
+   "dependencies": [],
+   "effects": "tracked",
+   "errors": [
+    "illegal"
+   ],
+   "implementation": "Zig.Env.Linux.close",
+   "import": "ZigLean.Env.Linux",
+   "profile": {
+    "abi": "musl",
+    "backend": "stage2_llvm",
+    "build_mode": "ReleaseSafe",
+    "cpu": "x86_64",
+    "endian": "little",
+    "error_layout": "type-table",
+    "error_set_bits": 16,
+    "error_tracing": false,
+    "export_stage": "analyzed-air",
+    "features": [
+     "64bit",
+     "cmov",
+     "cx8",
+     "fxsr",
+     "idivq_to_divl",
+     "macrofusion",
+     "mmx",
+     "nopl",
+     "slow_3ops_lea",
+     "slow_incdec",
+     "sse",
+     "sse2",
+     "vzeroupper",
+     "x87"
+    ],
+    "float_mode": "per-instruction",
+    "name": "abi64-le-v1",
+    "pointer_bits": 64,
+    "schema": 12,
+    "target_triple": "x86_64-linux.5.10...6.16-musl",
+    "zig_version": "0.15.2"
+   },
+   "proof": "Zig.Env.Linux.closeEvidence",
+   "signature": {
+    "params": [
+     {
+      "children": [],
+      "layout": {
+       "align": 4,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": null,
+       "sentinel": false,
+       "size": 4,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.int true 32"
+     }
+    ],
+    "return": {
+     "children": [],
+     "layout": {
+      "align": 8,
+      "allowzero": false,
+      "bit_offset": 0,
+      "host_size": 0,
+      "offsets": [],
+      "pointer_align": null,
+      "sentinel": false,
+      "size": 8,
+      "volatile": false
+     },
+     "type": "Air2Lean.Ty.int false 64"
+    }
+   },
+   "symbol": "os.linux.close",
+   "termination": "total",
+   "trust": "proved"
+  },
+  {
+   "contract": "Zig.Env.Linux.readContract",
+   "dependencies": [],
+   "effects": "tracked",
+   "errors": [
+    "illegal"
+   ],
+   "footprint": {
+    "reads": [],
+    "writes": [
+     1
+    ]
+   },
+   "implementation": "Zig.Env.Linux.read",
+   "import": "ZigLean.Env.Linux",
+   "profile": {
+    "abi": "musl",
+    "backend": "stage2_llvm",
+    "build_mode": "ReleaseSafe",
+    "cpu": "x86_64",
+    "endian": "little",
+    "error_layout": "type-table",
+    "error_set_bits": 16,
+    "error_tracing": false,
+    "export_stage": "analyzed-air",
+    "features": [
+     "64bit",
+     "cmov",
+     "cx8",
+     "fxsr",
+     "idivq_to_divl",
+     "macrofusion",
+     "mmx",
+     "nopl",
+     "slow_3ops_lea",
+     "slow_incdec",
+     "sse",
+     "sse2",
+     "vzeroupper",
+     "x87"
+    ],
+    "float_mode": "per-instruction",
+    "name": "abi64-le-v1",
+    "pointer_bits": 64,
+    "schema": 12,
+    "target_triple": "x86_64-linux.5.10...6.16-musl",
+    "zig_version": "0.15.2"
+   },
+   "proof": "Zig.Env.Linux.readEvidence",
+   "signature": {
+    "params": [
+     {
+      "children": [],
+      "layout": {
+       "align": 4,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": null,
+       "sentinel": false,
+       "size": 4,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.int true 32"
+     },
+     {
+      "children": [
+       {
+        "children": [],
+        "layout": {
+         "align": 1,
+         "allowzero": false,
+         "bit_offset": 0,
+         "host_size": 0,
+         "offsets": [],
+         "pointer_align": null,
+         "sentinel": false,
+         "size": 1,
+         "volatile": false
+        },
+        "type": "Air2Lean.Ty.int false 8"
+       }
+      ],
+      "layout": {
+       "align": 8,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": 1,
+       "sentinel": false,
+       "size": 8,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.ptr \"many\" false 0"
+     },
+     {
+      "children": [],
+      "layout": {
+       "align": 8,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": null,
+       "sentinel": false,
+       "size": 8,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.int false 64"
+     }
+    ],
+    "return": {
+     "children": [],
+     "layout": {
+      "align": 8,
+      "allowzero": false,
+      "bit_offset": 0,
+      "host_size": 0,
+      "offsets": [],
+      "pointer_align": null,
+      "sentinel": false,
+      "size": 8,
+      "volatile": false
+     },
+     "type": "Air2Lean.Ty.int false 64"
+    }
+   },
+   "symbol": "os.linux.read",
+   "termination": "total",
+   "trust": "proved"
+  },
+  {
+   "contract": "Zig.Env.Linux.writeContract",
+   "dependencies": [],
+   "effects": "tracked",
+   "errors": [
+    "illegal",
+    "unspecified"
+   ],
+   "footprint": {
+    "reads": [
+     1
+    ],
+    "writes": []
+   },
+   "implementation": "Zig.Env.Linux.write",
+   "import": "ZigLean.Env.Linux",
+   "profile": {
+    "abi": "musl",
+    "backend": "stage2_llvm",
+    "build_mode": "ReleaseSafe",
+    "cpu": "x86_64",
+    "endian": "little",
+    "error_layout": "type-table",
+    "error_set_bits": 16,
+    "error_tracing": false,
+    "export_stage": "analyzed-air",
+    "features": [
+     "64bit",
+     "cmov",
+     "cx8",
+     "fxsr",
+     "idivq_to_divl",
+     "macrofusion",
+     "mmx",
+     "nopl",
+     "slow_3ops_lea",
+     "slow_incdec",
+     "sse",
+     "sse2",
+     "vzeroupper",
+     "x87"
+    ],
+    "float_mode": "per-instruction",
+    "name": "abi64-le-v1",
+    "pointer_bits": 64,
+    "schema": 12,
+    "target_triple": "x86_64-linux.5.10...6.16-musl",
+    "zig_version": "0.15.2"
+   },
+   "proof": "Zig.Env.Linux.writeEvidence",
+   "signature": {
+    "params": [
+     {
+      "children": [],
+      "layout": {
+       "align": 4,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": null,
+       "sentinel": false,
+       "size": 4,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.int true 32"
+     },
+     {
+      "children": [
+       {
+        "children": [],
+        "layout": {
+         "align": 1,
+         "allowzero": false,
+         "bit_offset": 0,
+         "host_size": 0,
+         "offsets": [],
+         "pointer_align": null,
+         "sentinel": false,
+         "size": 1,
+         "volatile": false
+        },
+        "type": "Air2Lean.Ty.int false 8"
+       }
+      ],
+      "layout": {
+       "align": 8,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": 1,
+       "sentinel": false,
+       "size": 8,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.ptr \"many\" true 0"
+     },
+     {
+      "children": [],
+      "layout": {
+       "align": 8,
+       "allowzero": false,
+       "bit_offset": 0,
+       "host_size": 0,
+       "offsets": [],
+       "pointer_align": null,
+       "sentinel": false,
+       "size": 8,
+       "volatile": false
+      },
+      "type": "Air2Lean.Ty.int false 64"
+     }
+    ],
+    "return": {
+     "children": [],
+     "layout": {
+      "align": 8,
+      "allowzero": false,
+      "bit_offset": 0,
+      "host_size": 0,
+      "offsets": [],
+      "pointer_align": null,
+      "sentinel": false,
+      "size": 8,
+      "volatile": false
+     },
+     "type": "Air2Lean.Ty.int false 64"
+    }
+   },
+   "symbol": "os.linux.write",
+   "termination": "total",
+   "trust": "proved"
+  }
+ ],
+ "schema": 1
+}

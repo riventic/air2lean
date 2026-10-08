@@ -62,6 +62,8 @@ inductive Event where
   | wrote (h : Handle) (bytes : List UInt8)
   | failed (h : Handle) (e : IoError)
   | closed (h : Handle)
+  /-- A read of `h` that returned `bytes` (`[]`: end of input). -/
+  | received (h : Handle) (bytes : List UInt8)
   deriving DecidableEq, Repr
 
 /-- Client-side faults: a use or second close of a non-open handle, or a write result
@@ -110,5 +112,112 @@ def writeAllClose {σ : Type} (ops : Ops σ) (h : Handle) (buf : List UInt8) (w 
     match closeOnce ops h w' with
     | .error f => .error f
     | .ok w'' => .ok (r, w'')
+
+/-! ## The installed environment of translated code
+
+Translated code runs in `Zig.MemM`, whose state `Zig.Mem` carries one `Host`: an `Ops` over
+request histories, the current state and the event log. The bound primitives
+(`ZigLean/Env/Linux.lean`) are its only readers and writers. A request history is a canonical
+state: `Ops.replay` turns any `ops : Ops σ` with an initial state into an `Ops Hist` with the
+same results (`replay_state`), and `Contract.replay` transfers the contract, so theorems that
+quantify over every contracted `Ops Hist` cover every contracted `Ops σ`. -/
+
+/-- One environment request, as the replay records it. -/
+inductive Req where
+  | read (h : Handle) (max : Nat)
+  | write (h : Handle) (bytes : List UInt8)
+  | close (h : Handle)
+  deriving DecidableEq, Repr
+
+abbrev Hist := List Req
+
+/-- The state that `ops` reaches from `s0` after the requests `hist`, in order. -/
+def Ops.stateAfter {σ : Type} (ops : Ops σ) (s0 : σ) (hist : Hist) : σ :=
+  hist.foldl (fun s r => match r with
+    | .read h max => (ops.read s h max).2
+    | .write h bytes => (ops.write s h bytes).2
+    | .close h => ops.close s h) s0
+
+/-- `ops` from `s0`, with the request history as the state. -/
+def Ops.replay {σ : Type} (ops : Ops σ) (s0 : σ) : Ops Hist where
+  monotonicNow hist := ops.monotonicNow (ops.stateAfter s0 hist)
+  wallNow hist := ops.wallNow (ops.stateAfter s0 hist)
+  isOpen hist := ops.isOpen (ops.stateAfter s0 hist)
+  read hist h max := ((ops.read (ops.stateAfter s0 hist) h max).1, hist ++ [.read h max])
+  write hist h bytes := ((ops.write (ops.stateAfter s0 hist) h bytes).1, hist ++ [.write h bytes])
+  close hist h := hist ++ [.close h]
+
+@[simp] theorem Ops.stateAfter_append {σ : Type} (ops : Ops σ) (s0 : σ) (hist : Hist) (r : Req) :
+    ops.stateAfter s0 (hist ++ [r]) = match r with
+      | .read h max => (ops.read (ops.stateAfter s0 hist) h max).2
+      | .write h bytes => (ops.write (ops.stateAfter s0 hist) h bytes).2
+      | .close h => ops.close (ops.stateAfter s0 hist) h := by
+  simp [Ops.stateAfter, List.foldl_append]
+
+/-- The replay's results are the original's, at the replayed state. -/
+theorem replay_state {σ : Type} (ops : Ops σ) (s0 : σ) (hist : Hist) (h : Handle) (buf : List UInt8) :
+    ((ops.replay s0).write hist h buf).1 = (ops.write (ops.stateAfter s0 hist) h buf).1 ∧
+    ops.stateAfter s0 ((ops.replay s0).write hist h buf).2 =
+      (ops.write (ops.stateAfter s0 hist) h buf).2 := by
+  simp [Ops.replay]
+
+/-- The contract survives the replay. -/
+theorem Contract.replay {σ : Type} {ops : Ops σ} {errors : List IoError} (hc : Contract ops errors)
+    (s0 : σ) : Contract (ops.replay s0) errors := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro s h max bytes s' ho hr
+    simp only [Ops.replay, Prod.mk.injEq] at ho hr
+    exact hc.readBound _ h max bytes _ ho (Prod.ext hr.1 rfl)
+  · intro s h max e s' ho hr
+    simp only [Ops.replay, Prod.mk.injEq] at ho hr
+    exact hc.readError _ h max e _ ho (Prod.ext hr.1 rfl)
+  · intro s h max h' ho
+    simp only [Ops.replay] at ho ⊢
+    simpa using hc.readFrame _ h max h' ho
+  · intro s h buf n s' ho hne hw
+    simp only [Ops.replay, Prod.mk.injEq] at ho hw
+    exact hc.writeProgress _ h buf n _ ho hne (Prod.ext hw.1 rfl)
+  · intro s h buf e s' ho hw
+    simp only [Ops.replay, Prod.mk.injEq] at ho hw
+    exact hc.writeError _ h buf e _ ho (Prod.ext hw.1 rfl)
+  · intro s h buf h' ho
+    simp only [Ops.replay] at ho ⊢
+    simpa using hc.writeFrame _ h buf h' ho
+  · intro s h ho
+    simp only [Ops.replay] at ho ⊢
+    simpa using hc.closeReleases _ h ho
+  · intro s h h' hne
+    simp only [Ops.replay]
+    simpa using hc.closeFrame _ h h' hne
+  · intro s h max
+    simp only [Ops.replay]
+    simpa using hc.readMonotone _ h max
+  · intro s h buf
+    simp only [Ops.replay]
+    simpa using hc.writeMonotone _ h buf
+  · intro s h
+    simp only [Ops.replay]
+    simpa using hc.closeMonotone _ h
+
+/-- No handle is open; reads and writes fail with `inputOutput`. The default host. -/
+def Ops.closedAll : Ops Hist where
+  monotonicNow _ := 0
+  wallNow _ := 0
+  isOpen _ _ := false
+  read hist _ _ := (.error .inputOutput, hist)
+  write hist _ _ := (.error .inputOutput, hist)
+  close hist _ := hist
+
+/-- The environment installed in `Zig.Mem`: operations, current state, event log. -/
+structure Host where
+  ops : Ops Hist := Ops.closedAll
+  env : Hist := []
+  log : List Event := []
+
+instance : Inhabited Host := ⟨{}⟩
+
+/-- The operations are functions, so they are shown opaquely. -/
+instance : Repr Host where
+  reprPrec h _ := f!"\{ ops := <oracle>, env := {repr h.env}, log := {repr h.log} }"
 
 end Zig.Env

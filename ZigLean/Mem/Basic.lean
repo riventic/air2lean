@@ -1,4 +1,5 @@
 import ZigLean.Basic
+import ZigLean.Env
 
 /-!
 # Byte-level memory
@@ -293,6 +294,9 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The installed environment of the bound OS primitives (`ZigLean/Env/Linux.lean`, E03). The
+  default has no open handle, so a program that never calls one is unaffected. -/
+  host : Env.Host := {}
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

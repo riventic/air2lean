@@ -1,0 +1,1685 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "posix.read",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "bitcast",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 4,
+   "line": 2
+  },
+  {
+   "id": 6,
+   "tag": "block",
+   "ty": 4,
+   "body": [
+    {
+     "id": 7,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 2
+    },
+    {
+     "id": 8,
+     "tag": "ptr_slice_len_ptr",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 4
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "tag": "load",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 8
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "bitcast",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 9
+      }
+     ]
+    },
+    {
+     "id": 11,
+     "tag": "cmp_eq",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 10
+      },
+      {
+       "ty": 8,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "tag": "cond_br",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 11
+      }
+     ],
+     "then": [
+      {
+       "id": 12,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 2
+      },
+      {
+       "id": 13,
+       "tag": "ret_safe",
+       "ty": 10,
+       "args": [
+        {
+         "ty": 2,
+         "payload": {
+          "ty": 7,
+          "val": "0"
+         }
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 14,
+       "tag": "br",
+       "ty": 10,
+       "target": 6,
+       "args": [
+        {
+         "ty": 4,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 4,
+   "line": 7
+  },
+  {
+   "id": 24,
+   "tag": "loop",
+   "ty": 10,
+   "body": [
+    {
+     "id": 26,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 12
+    },
+    {
+     "id": 27,
+     "tag": "block",
+     "ty": 4,
+     "body": [
+      {
+       "id": 28,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 13
+      },
+      {
+       "id": 29,
+       "tag": "ptr_slice_ptr_ptr",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 4
+        }
+       ]
+      },
+      {
+       "id": 30,
+       "tag": "load",
+       "ty": 12,
+       "args": [
+        {
+         "inst": 29
+        }
+       ]
+      },
+      {
+       "id": 31,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 13
+      },
+      {
+       "id": 32,
+       "tag": "ptr_slice_len_ptr",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 4
+        }
+       ]
+      },
+      {
+       "id": 33,
+       "tag": "load",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 32
+        }
+       ]
+      },
+      {
+       "id": 34,
+       "tag": "bitcast",
+       "ty": 8,
+       "args": [
+        {
+         "inst": 33
+        }
+       ]
+      },
+      {
+       "id": 35,
+       "tag": "min",
+       "ty": 8,
+       "args": [
+        {
+         "ty": 8,
+         "val": "2147479552"
+        },
+        {
+         "inst": 34
+        }
+       ]
+      },
+      {
+       "id": 36,
+       "tag": "intcast",
+       "ty": 13,
+       "args": [
+        {
+         "inst": 35
+        }
+       ]
+      },
+      {
+       "id": 37,
+       "tag": "intcast",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 36
+        }
+       ]
+      },
+      {
+       "id": 38,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 13
+      },
+      {
+       "id": 39,
+       "tag": "call",
+       "ty": 7,
+       "callee": {
+        "ty": 14,
+        "func": "os.linux.read",
+        "noreturn": false
+       },
+       "args": [
+        {
+         "inst": 0
+        },
+        {
+         "inst": 30
+        },
+        {
+         "inst": 37
+        }
+       ]
+      },
+      {
+       "id": 40,
+       "tag": "dbg_var_val",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 39
+        }
+       ],
+       "name": "rc"
+      },
+      {
+       "id": 41,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 14
+      },
+      {
+       "id": 42,
+       "tag": "call",
+       "ty": 15,
+       "callee": {
+        "ty": 16,
+        "func": "os.linux.errno",
+        "noreturn": false
+       },
+       "args": [
+        {
+         "inst": 39
+        }
+       ]
+      },
+      {
+       "id": 43,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 14
+      },
+      {
+       "id": 84,
+       "tag": "switch_br",
+       "ty": 10,
+       "args": [
+        {
+         "inst": 42
+        }
+       ],
+       "cases": [
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "0"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 45,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 15
+          },
+          {
+           "id": 46,
+           "tag": "intcast_safe",
+           "ty": 7,
+           "args": [
+            {
+             "inst": 39
+            }
+           ]
+          },
+          {
+           "id": 47,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 15
+          },
+          {
+           "id": 48,
+           "tag": "wrap_errunion_payload",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 46
+            }
+           ]
+          },
+          {
+           "id": 49,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "inst": 48
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "4"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 50,
+           "tag": "br",
+           "ty": 10,
+           "target": 27,
+           "args": [
+            {
+             "ty": 4,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "22"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 51,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 17
+          },
+          {
+           "id": 52,
+           "tag": "call",
+           "ty": 10,
+           "callee": {
+            "ty": 17,
+            "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "noreturn": true
+           },
+           "args": []
+          },
+          {
+           "id": 53,
+           "tag": "unreach",
+           "ty": 10
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "14"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 54,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 18
+          },
+          {
+           "id": 55,
+           "tag": "call",
+           "ty": 10,
+           "callee": {
+            "ty": 17,
+            "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+            "noreturn": true
+           },
+           "args": []
+          },
+          {
+           "id": 56,
+           "tag": "unreach",
+           "ty": 10
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "11"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 57,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 19
+          },
+          {
+           "id": 58,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "WouldBlock"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "125"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 59,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 20
+          },
+          {
+           "id": 60,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "Canceled"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "9"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 61,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 21
+          },
+          {
+           "id": 62,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "Unexpected"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "5"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 63,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 22
+          },
+          {
+           "id": 64,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "InputOutput"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "21"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 65,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 23
+          },
+          {
+           "id": 66,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "IsDir"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "105"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 67,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 24
+          },
+          {
+           "id": 68,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "SystemResources"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "12"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 69,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 25
+          },
+          {
+           "id": 70,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "SystemResources"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "107"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 71,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 26
+          },
+          {
+           "id": 72,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "SocketUnconnected"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "104"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 73,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 27
+          },
+          {
+           "id": 74,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "ConnectionResetByPeer"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "items": [
+          {
+           "ty": 15,
+           "enum": "110"
+          }
+         ],
+         "ranges": [],
+         "body": [
+          {
+           "id": 75,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 28
+          },
+          {
+           "id": 76,
+           "tag": "ret_safe",
+           "ty": 10,
+           "args": [
+            {
+             "ty": 2,
+             "err": "Unexpected"
+            }
+           ]
+          }
+         ]
+        }
+       ],
+       "else": [
+        {
+         "id": 77,
+         "tag": "dbg_var_val",
+         "ty": 4,
+         "args": [
+          {
+           "inst": 42
+          }
+         ],
+         "name": "err"
+        },
+        {
+         "id": 78,
+         "tag": "dbg_stmt",
+         "ty": 4,
+         "line": 29
+        },
+        {
+         "id": 79,
+         "tag": "call",
+         "ty": 18,
+         "callee": {
+          "ty": 19,
+          "func": "posix.unexpectedErrno",
+          "noreturn": false
+         },
+         "args": [
+          {
+           "inst": 42
+          }
+         ]
+        },
+        {
+         "id": 80,
+         "tag": "dbg_stmt",
+         "ty": 4,
+         "line": 29
+        },
+        {
+         "id": 81,
+         "tag": "bitcast",
+         "ty": 20,
+         "args": [
+          {
+           "inst": 79
+          }
+         ]
+        },
+        {
+         "id": 82,
+         "tag": "wrap_errunion_err",
+         "ty": 2,
+         "args": [
+          {
+           "inst": 81
+          }
+         ]
+        },
+        {
+         "id": 83,
+         "tag": "ret_safe",
+         "ty": 10,
+         "args": [
+          {
+           "inst": 82
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": 86,
+     "tag": "repeat",
+     "ty": 10,
+     "target": 24
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 21,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 20,
+   "payload": 7,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 12,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 21,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 31,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (i32, [*]u8, usize) usize"
+  },
+  {
+   "k": "enum",
+   "name": "os.linux.E__enum_913",
+   "tag": 22,
+   "exhaustive": false,
+   "fields": [
+    {
+     "name": "SUCCESS",
+     "value": "0"
+    },
+    {
+     "name": "PERM",
+     "value": "1"
+    },
+    {
+     "name": "NOENT",
+     "value": "2"
+    },
+    {
+     "name": "SRCH",
+     "value": "3"
+    },
+    {
+     "name": "INTR",
+     "value": "4"
+    },
+    {
+     "name": "IO",
+     "value": "5"
+    },
+    {
+     "name": "NXIO",
+     "value": "6"
+    },
+    {
+     "name": "2BIG",
+     "value": "7"
+    },
+    {
+     "name": "NOEXEC",
+     "value": "8"
+    },
+    {
+     "name": "BADF",
+     "value": "9"
+    },
+    {
+     "name": "CHILD",
+     "value": "10"
+    },
+    {
+     "name": "AGAIN",
+     "value": "11"
+    },
+    {
+     "name": "NOMEM",
+     "value": "12"
+    },
+    {
+     "name": "ACCES",
+     "value": "13"
+    },
+    {
+     "name": "FAULT",
+     "value": "14"
+    },
+    {
+     "name": "NOTBLK",
+     "value": "15"
+    },
+    {
+     "name": "BUSY",
+     "value": "16"
+    },
+    {
+     "name": "EXIST",
+     "value": "17"
+    },
+    {
+     "name": "XDEV",
+     "value": "18"
+    },
+    {
+     "name": "NODEV",
+     "value": "19"
+    },
+    {
+     "name": "NOTDIR",
+     "value": "20"
+    },
+    {
+     "name": "ISDIR",
+     "value": "21"
+    },
+    {
+     "name": "INVAL",
+     "value": "22"
+    },
+    {
+     "name": "NFILE",
+     "value": "23"
+    },
+    {
+     "name": "MFILE",
+     "value": "24"
+    },
+    {
+     "name": "NOTTY",
+     "value": "25"
+    },
+    {
+     "name": "TXTBSY",
+     "value": "26"
+    },
+    {
+     "name": "FBIG",
+     "value": "27"
+    },
+    {
+     "name": "NOSPC",
+     "value": "28"
+    },
+    {
+     "name": "SPIPE",
+     "value": "29"
+    },
+    {
+     "name": "ROFS",
+     "value": "30"
+    },
+    {
+     "name": "MLINK",
+     "value": "31"
+    },
+    {
+     "name": "PIPE",
+     "value": "32"
+    },
+    {
+     "name": "DOM",
+     "value": "33"
+    },
+    {
+     "name": "RANGE",
+     "value": "34"
+    },
+    {
+     "name": "DEADLK",
+     "value": "35"
+    },
+    {
+     "name": "NAMETOOLONG",
+     "value": "36"
+    },
+    {
+     "name": "NOLCK",
+     "value": "37"
+    },
+    {
+     "name": "NOSYS",
+     "value": "38"
+    },
+    {
+     "name": "NOTEMPTY",
+     "value": "39"
+    },
+    {
+     "name": "LOOP",
+     "value": "40"
+    },
+    {
+     "name": "NOMSG",
+     "value": "42"
+    },
+    {
+     "name": "IDRM",
+     "value": "43"
+    },
+    {
+     "name": "CHRNG",
+     "value": "44"
+    },
+    {
+     "name": "L2NSYNC",
+     "value": "45"
+    },
+    {
+     "name": "L3HLT",
+     "value": "46"
+    },
+    {
+     "name": "L3RST",
+     "value": "47"
+    },
+    {
+     "name": "LNRNG",
+     "value": "48"
+    },
+    {
+     "name": "UNATCH",
+     "value": "49"
+    },
+    {
+     "name": "NOCSI",
+     "value": "50"
+    },
+    {
+     "name": "L2HLT",
+     "value": "51"
+    },
+    {
+     "name": "BADE",
+     "value": "52"
+    },
+    {
+     "name": "BADR",
+     "value": "53"
+    },
+    {
+     "name": "XFULL",
+     "value": "54"
+    },
+    {
+     "name": "NOANO",
+     "value": "55"
+    },
+    {
+     "name": "BADRQC",
+     "value": "56"
+    },
+    {
+     "name": "BADSLT",
+     "value": "57"
+    },
+    {
+     "name": "BFONT",
+     "value": "59"
+    },
+    {
+     "name": "NOSTR",
+     "value": "60"
+    },
+    {
+     "name": "NODATA",
+     "value": "61"
+    },
+    {
+     "name": "TIME",
+     "value": "62"
+    },
+    {
+     "name": "NOSR",
+     "value": "63"
+    },
+    {
+     "name": "NONET",
+     "value": "64"
+    },
+    {
+     "name": "NOPKG",
+     "value": "65"
+    },
+    {
+     "name": "REMOTE",
+     "value": "66"
+    },
+    {
+     "name": "NOLINK",
+     "value": "67"
+    },
+    {
+     "name": "ADV",
+     "value": "68"
+    },
+    {
+     "name": "SRMNT",
+     "value": "69"
+    },
+    {
+     "name": "COMM",
+     "value": "70"
+    },
+    {
+     "name": "PROTO",
+     "value": "71"
+    },
+    {
+     "name": "MULTIHOP",
+     "value": "72"
+    },
+    {
+     "name": "DOTDOT",
+     "value": "73"
+    },
+    {
+     "name": "BADMSG",
+     "value": "74"
+    },
+    {
+     "name": "OVERFLOW",
+     "value": "75"
+    },
+    {
+     "name": "NOTUNIQ",
+     "value": "76"
+    },
+    {
+     "name": "BADFD",
+     "value": "77"
+    },
+    {
+     "name": "REMCHG",
+     "value": "78"
+    },
+    {
+     "name": "LIBACC",
+     "value": "79"
+    },
+    {
+     "name": "LIBBAD",
+     "value": "80"
+    },
+    {
+     "name": "LIBSCN",
+     "value": "81"
+    },
+    {
+     "name": "LIBMAX",
+     "value": "82"
+    },
+    {
+     "name": "LIBEXEC",
+     "value": "83"
+    },
+    {
+     "name": "ILSEQ",
+     "value": "84"
+    },
+    {
+     "name": "RESTART",
+     "value": "85"
+    },
+    {
+     "name": "STRPIPE",
+     "value": "86"
+    },
+    {
+     "name": "USERS",
+     "value": "87"
+    },
+    {
+     "name": "NOTSOCK",
+     "value": "88"
+    },
+    {
+     "name": "DESTADDRREQ",
+     "value": "89"
+    },
+    {
+     "name": "MSGSIZE",
+     "value": "90"
+    },
+    {
+     "name": "PROTOTYPE",
+     "value": "91"
+    },
+    {
+     "name": "NOPROTOOPT",
+     "value": "92"
+    },
+    {
+     "name": "PROTONOSUPPORT",
+     "value": "93"
+    },
+    {
+     "name": "SOCKTNOSUPPORT",
+     "value": "94"
+    },
+    {
+     "name": "OPNOTSUPP",
+     "value": "95"
+    },
+    {
+     "name": "PFNOSUPPORT",
+     "value": "96"
+    },
+    {
+     "name": "AFNOSUPPORT",
+     "value": "97"
+    },
+    {
+     "name": "ADDRINUSE",
+     "value": "98"
+    },
+    {
+     "name": "ADDRNOTAVAIL",
+     "value": "99"
+    },
+    {
+     "name": "NETDOWN",
+     "value": "100"
+    },
+    {
+     "name": "NETUNREACH",
+     "value": "101"
+    },
+    {
+     "name": "NETRESET",
+     "value": "102"
+    },
+    {
+     "name": "CONNABORTED",
+     "value": "103"
+    },
+    {
+     "name": "CONNRESET",
+     "value": "104"
+    },
+    {
+     "name": "NOBUFS",
+     "value": "105"
+    },
+    {
+     "name": "ISCONN",
+     "value": "106"
+    },
+    {
+     "name": "NOTCONN",
+     "value": "107"
+    },
+    {
+     "name": "SHUTDOWN",
+     "value": "108"
+    },
+    {
+     "name": "TOOMANYREFS",
+     "value": "109"
+    },
+    {
+     "name": "TIMEDOUT",
+     "value": "110"
+    },
+    {
+     "name": "CONNREFUSED",
+     "value": "111"
+    },
+    {
+     "name": "HOSTDOWN",
+     "value": "112"
+    },
+    {
+     "name": "HOSTUNREACH",
+     "value": "113"
+    },
+    {
+     "name": "ALREADY",
+     "value": "114"
+    },
+    {
+     "name": "INPROGRESS",
+     "value": "115"
+    },
+    {
+     "name": "STALE",
+     "value": "116"
+    },
+    {
+     "name": "UCLEAN",
+     "value": "117"
+    },
+    {
+     "name": "NOTNAM",
+     "value": "118"
+    },
+    {
+     "name": "NAVAIL",
+     "value": "119"
+    },
+    {
+     "name": "ISNAM",
+     "value": "120"
+    },
+    {
+     "name": "REMOTEIO",
+     "value": "121"
+    },
+    {
+     "name": "DQUOT",
+     "value": "122"
+    },
+    {
+     "name": "NOMEDIUM",
+     "value": "123"
+    },
+    {
+     "name": "MEDIUMTYPE",
+     "value": "124"
+    },
+    {
+     "name": "CANCELED",
+     "value": "125"
+    },
+    {
+     "name": "NOKEY",
+     "value": "126"
+    },
+    {
+     "name": "KEYEXPIRED",
+     "value": "127"
+    },
+    {
+     "name": "KEYREVOKED",
+     "value": "128"
+    },
+    {
+     "name": "KEYREJECTED",
+     "value": "129"
+    },
+    {
+     "name": "OWNERDEAD",
+     "value": "130"
+    },
+    {
+     "name": "NOTRECOVERABLE",
+     "value": "131"
+    },
+    {
+     "name": "RFKILL",
+     "value": "132"
+    },
+    {
+     "name": "HWPOISON",
+     "value": "133"
+    },
+    {
+     "name": "NSRNODATA",
+     "value": "160"
+    },
+    {
+     "name": "NSRFORMERR",
+     "value": "161"
+    },
+    {
+     "name": "NSRSERVFAIL",
+     "value": "162"
+    },
+    {
+     "name": "NSRNOTFOUND",
+     "value": "163"
+    },
+    {
+     "name": "NSRNOTIMP",
+     "value": "164"
+    },
+    {
+     "name": "NSRREFUSED",
+     "value": "165"
+    },
+    {
+     "name": "NSRBADQUERY",
+     "value": "166"
+    },
+    {
+     "name": "NSRBADNAME",
+     "value": "167"
+    },
+    {
+     "name": "NSRBADFAMILY",
+     "value": "168"
+    },
+    {
+     "name": "NSRBADRESP",
+     "value": "169"
+    },
+    {
+     "name": "NSRCONNREFUSED",
+     "value": "170"
+    },
+    {
+     "name": "NSRTIMEOUT",
+     "value": "171"
+    },
+    {
+     "name": "NSROF",
+     "value": "172"
+    },
+    {
+     "name": "NSRFILE",
+     "value": "173"
+    },
+    {
+     "name": "NSRNOMEM",
+     "value": "174"
+    },
+    {
+     "name": "NSRDESTRUCTION",
+     "value": "175"
+    },
+    {
+     "name": "NSRQUERYDOMAINTOOLONG",
+     "value": "176"
+    },
+    {
+     "name": "NSRCNAMELOOP",
+     "value": "177"
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (usize) os.linux.E__enum_913"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (os.linux.E__enum_913) error{Unexpected}"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "AccessDenied",
+    "Canceled",
+    "ConnectionResetByPeer",
+    "InputOutput",
+    "IsDir",
+    "LockViolation",
+    "NotOpenForReading",
+    "SocketUnconnected",
+    "SystemResources",
+    "Unexpected",
+    "WouldBlock"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}
