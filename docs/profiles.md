@@ -190,5 +190,24 @@ ReleaseFast is a separate observation profile, not inferred from ReleaseSafe
 
 This tool does not change the translator's accepted target profiles. In particular,
 aarch64-linux translation remains guarded, and wasm32 pointer parameterization
-remains absent. The native probe records a bounded candidate for T04/T05/T06;
-profile-bound generated proofs and broader target qualification remain pending.
+remains absent. The native probe records a bounded candidate for T04/T05/T06.
+
+## aarch64 ABI profiles (T04)
+
+`scripts/aarch64-abi.py` qualifies aarch64-linux-gnu and aarch64-macos-none separately
+([aarch64-abi.md](aarch64-abi.md)). Each profile is probed natively for:
+
+- unusual integer widths;
+- f80/f128 layout and results, including NaN and subnormal edges;
+- `c_longdouble`;
+- L09 vector layouts;
+- atomic widths, alignment and results, and the 128-bit atomic limit.
+
+The output must equal that profile's versioned expected file
+(`tests/roadmap/aarch64-abi/expected/0.16.0/`). A wrong host or an unrecorded Zig version
+is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
+kernel-checks each profile's layout table against the model and compares the file's float
+and atomic results with it. Four declared divergences are reported and not counted as
+matches: soft-float f80 unnormal and pseudo-denormal handling, and padding-sensitive `u24`/`u40`
+cmpxchg. These are ABI-only profiles. aarch64-linux AIR is still rejected by
+`BuildProfile.parse`.

@@ -20,9 +20,9 @@ python3 -m unittest discover -s tests/roadmap/target-matrix -v
 ```
 
 A step counts only when its job's runner is the path's host (`ubuntu-24.04` is
-x86_64-linux, `macos-14` is aarch64-macos), its `if` holds for the selected row (the
-checker evaluates the `matrix.*`/`runner.os` expressions CI uses and fails closed on any
-other context), it is bound to the path's Zig version (the matrix row's `zig`, or the
+x86_64-linux, `ubuntu-24.04-arm` is aarch64-linux, `macos-14` is aarch64-macos), its `if`
+holds for the selected row (the checker evaluates the `matrix.*`/`runner.os` expressions
+CI uses and fails closed on any other context), it is bound to the path's Zig version (the matrix row's `zig`, or the
 step's `AIR2LEAN_ZIG_VERSION` in a job without a matrix), and it compiles no other OS's
 `Gen-<os>.lean`. Proofs over a foreign golden compiled on another host, such as the
 Linux 0.15.2 job's build of `tests/golden/0.15.2/threadsync/Gen-darwin.lean`, are a
@@ -54,6 +54,26 @@ float differences count as `host`, [floats.md](floats.md)), and builds the proof
 against the translation of that host. On failure it uploads the dumped Darwin AIR.
 
 Not declared: `wasm32-wasi` (needs T02 pointer-width parameterization and T05
-native/WASM correspondence) and `aarch64-linux` (translation stays guarded; T04).
+native/WASM correspondence) and `aarch64-linux` (translation stays guarded).
 WASM execution joins this matrix only when `compatibility.json` declares it, and the
 checker then requires its native-execution, probe and proof steps like any other path.
+
+## ABI-only profiles (T04)
+
+`abi_profiles` in the map lists profiles that are ABI-qualified without being declared
+translation paths ([aarch64-abi.md](aarch64-abi.md)). The checker requires each entry to have:
+
+- its versioned expected file (`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`);
+- a `probe` step in a job whose runner is the profile's host. The step must run
+  `scripts/aarch64-abi.py check … --target <triple>`, be bound to the entry's Zig version,
+  and not ignore a failure (`|| true`, `set +e`);
+- a `proof` step on any host that runs `tests/roadmap/aarch64-abi/Model.lean <triple> <expected>`.
+
+| Zig | Profile | Probe job (host) | Proof job |
+| --- | --- | --- | --- |
+| 0.16.0 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
+| 0.16.0 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+
+The `aarch64-linux` job installs only the checksum-pinned stock Zig and runs the probe
+and compare. Like `macos`, it is a native-runner job that `scripts/local-ci.sh` does not
+reproduce and `scripts/release-record.py` covers with GitHub evidence only.

@@ -209,10 +209,12 @@ def call(command, **kwargs):
 import yaml
 
 workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
-# The Q05 `macos` job needs a native macOS runner; local CI (a Linux container) reproduces only
-# the test job, and scripts/release-record.py requires GitHub evidence for the macos gates.
-if set(workflow['jobs']) - {'macos'} != {'test'}:
-    raise ValueError('local CI supports only the test job (and skips macos); qualify new jobs explicitly')
+# The Q05 `macos` and T04 `aarch64-linux` jobs need native runners; local CI (an x86_64 Linux
+# container) reproduces only the test job, and scripts/release-record.py requires GitHub evidence
+# for their gates.
+if set(workflow['jobs']) - {'macos', 'aarch64-linux'} != {'test'}:
+    raise ValueError('local CI supports only the test job (and skips macos, aarch64-linux); '
+                     'qualify new jobs explicitly')
 job = workflow['jobs']['test']
 if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow
         or set(job) - {'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}

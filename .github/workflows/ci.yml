@@ -722,6 +722,24 @@ jobs:
           lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
           lake env lean --run tests/roadmap/vector-layouts/Checker.lean
 
+      # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
+      # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
+      # tables per profile; their vector images against L09's encoding (docs/aarch64-abi.md).
+      - name: aarch64 ABI profile proofs (T04)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.VecMem ZigLean.Float.Allowed
+          python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.16.0/*.txt; do
+            grep -E '^(vector|lane) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
@@ -1156,6 +1174,15 @@ jobs:
               --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
           done
 
+      # T04: the native aarch64-macos-none probe against its versioned expected results.
+      - name: aarch64-macos ABI qualification (T04, 0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-ReleaseSafe.txt"
+
       - name: Cache patched zig 0.16.0 (macOS)
         id: cache-zig-air-16
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1261,3 +1288,42 @@ jobs:
           path: ${{ runner.temp }}/air-out
           if-no-files-found: ignore
           retention-days: 7
+
+  # T04: native aarch64-linux ABI qualification (docs/aarch64-abi.md). Probe and compare only:
+  # aarch64-linux translation stays undeclared, so this job builds no patched compiler, Lean
+  # or proofs (the profile's proofs run in the test job, against the same expected file).
+  aarch64-linux:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # sha256 from https://ziglang.org/download/index.json ("0.16.0" -> "aarch64-linux".shasum).
+      - name: Install stock zig (aarch64-linux)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" \
+            https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
+          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
+          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
+
+      - name: aarch64-linux ABI qualification (T04, 0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt"
+
+      - name: Upload aarch64-linux observation
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-aarch64-linux
+          path: ${{ runner.temp }}/aarch64-linux-gnu-ReleaseSafe.txt
+          if-no-files-found: ignore
