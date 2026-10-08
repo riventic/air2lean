@@ -54,6 +54,9 @@ inductive Ty where
   /-- `std.Io` (0.16.0): the model's `Zig.Io` (`ZigLean/Conc/Call.lean`). Its fields
   (`userdata`, the `vtable`) are not translated. -/
   | io
+  /-- `std.Io.Future(T)` (0.16.0): the model's `Zig.Future` (`ZigLean/Conc/Future.lean`) of the
+  result type `result`. Its `any_future` field (`?*Io.AnyFuture`) is the model's runtime record. -/
+  | future (result : TyId)
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
@@ -74,7 +77,7 @@ def integerFits (signed : Bool) (bits : Nat) (v : Int) : Bool :=
 /-- The types that `ty` names directly. -/
 def childTys (ty : Ty) : Array TyId :=
   match ty with
-  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c => #[c]
+  | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c | .future c => #[c]
   | .errorUnion s p => #[s, p]
   | .struct _ _ fs => fs.map (·.2)
   | .enum _ t _ _ => #[t]

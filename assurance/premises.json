@@ -23,7 +23,8 @@
     "ErrorWidth16.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 16-bit fixtures into ErrorWidth16/Gen.lean.",
     "ErrorWidth8.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 8-bit fixtures into ErrorWidth8/Gen.lean.",
     "ErrorWidth10.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 10-bit fixtures into ErrorWidth10/Gen.lean.",
-    "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean."
+    "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean.",
+    "FuturesFallible.Gen": "tests/roadmap/futures/check.sh translates the committed AIR with --spawn-policy fallible into FuturesFallible/Gen.lean at gate time."
   },
   "generated_premises": ["TRU-02"],
   "profiles": {
@@ -74,6 +75,8 @@
     "ZigLean.Conc.Sched": ["THR-01", "THR-02"],
     "ZigLean.Conc.Spawn": ["THR-03"],
     "ZigLean.Conc.SpawnLemmas": ["THR-03", "THR-08"],
+    "ZigLean.Conc.Future": ["THR-11"],
+    "ZigLean.Conc.FutureLemmas": ["THR-11", "THR-08"],
     "ZigLean.Conc.Logic": ["THR-08"],
     "ZigLean.Conc.Own": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Csl": ["THR-08"],

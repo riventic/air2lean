@@ -81,7 +81,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
@@ -335,6 +335,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   strict-safety proof may order joins by a protocol rank (`Proto.rank`) instead of thread ids.
 - Derived from: `ZigLean.Conc.Detach`; tokens `detachC`, `transferHandle`, `Thread.detach`.
 - Sources: [std-models.md](std-models.md#thread-model), `Proofs/Detach/`.
+
+<a id="thr-11"></a>
+### THR-11 — `Io.Future` tasks and cancelation (0.16.0)
+
+- Kind: environment.
+- Statement: `Io.async` allocates a runtime record and spawns the task as a model thread (or,
+  under `fallible`, runs it in the caller). `await`/`cancel` join it and return the result
+  that it wrote. Only the spawner may consume a future, and an unconsumed future is `.illegal`.
+  A cancelation request is delivered only at `Io.checkCancel`. Programs with `Future.cancel`
+  whose tasks reach another cancelation point are rejected. Group support does not imply
+  future support.
+- Derived from: `ZigLean.Conc.Future`, `ZigLean.Conc.FutureLemmas`; tokens `asyncC`, `awaitC`,
+  `cancelC`, `checkCancelC`, `futureProto`.
+- Sources: [futures.md](futures.md).
+
 ## Memory ordering
 
 <a id="ord-01"></a>

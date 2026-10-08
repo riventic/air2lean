@@ -194,6 +194,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .allocator => "Zig.Allocator"
   | .thread => "Zig.ThreadId"
   | .io => "Zig.Io"
+  | .future r => s!"Zig.Future ({emitTy structNames types types[r]!})"
   | .other name => name
 
 /-- A finite declared name table, with checked capacity and uniqueness. These positions
@@ -235,6 +236,9 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
     | _ =>
       if errBits == 16 then payloadEnc.map fun _ => s!"Zig.Enc.errorUnionWith ({enc})"
       else some s!"Zig.Enc.errorUnionWithW {errBits} ({enc})"
+  | some (.future r) =>
+    (emitStorageEnc structNames types errBits r layouts).map fun enc =>
+      s!"@Zig.Future.instEnc ({emitTy structNames types types[r]!}) ({enc})"
   | _ => none
 
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
@@ -284,7 +288,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .struct _ _ fields | .union _ _ none fields => fields.flatMap (go ·.2)
   | .union _ _ (some tag) fields => go tag ++ fields.flatMap (go ·.2)
   | .enum .. => #[]
-  | .ptr "slice" _ c | .array _ c _ | .optional c => go c
+  | .ptr "slice" _ c | .array _ c _ | .optional c | .future c => go c
   | .errorUnion _ p => go p
   | .tuple fs => fs.flatMap go
   | _ => #[]
@@ -1237,13 +1241,19 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
   | .realloc => s!"Zig.Allocator.realloc {a} {rv (arg 1)} {rv (arg 2)}"
 
+/-- The `Tgt` constructor of the `Io.async` task of the worker with generated name `worker`. -/
+def futureCtorName (worker : String) : String := s!"{worker}_future"
+
+/-- The `spawnFallbacks` key of the caller's eager execution of an `Io.async` task. -/
+def futureEagerKey (worker : String) : String := s!"future:{worker}"
+
 /-- A sync op of the thread model (`ZigLean/Conc/Call.lean`), a `Zig.CM Tgt` term. `.spawn`:
 `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
 program's `Tgt` (`emitTgt`); `args[1]` is the complete by-value captured tuple. Zero
 fields use `Unit`, one field keeps the historical scalar representation, and multiple
 fields form a right-associated product. Dispatch applies each field in source order. `.join`, `.detach`: `args[0]` is the `Thread` handle. -/
 def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
-    (args : Array Val) : String :=
+    (args : Array Val) (ret : TyId := 0) : String :=
   let rv := fc.resolveVal env
   match fn with
   | .spawn =>
@@ -1284,6 +1294,26 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
       (Tgt.{target} {capture}){fallback}"
   | .groupAwait => s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
   | .groupCancel => s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
+  -- `Io.async(io, args)`: the task is `callee`'s `spawnFn`, its target `Tgt.<worker>_future`
+  -- (`emitTgtWithStorage`); `ret` is the `Io.Future(T)` type (`docs/futures.md`).
+  | .futureAsync =>
+    let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
+    let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
+    let capture := rv (args[1]?.getD .void)
+    let result := match fc.tyOfId ret with | .future r => r | _ => ret
+    let resultTy := fc.emitTyOf result
+    let mk := s!"(fun futureSlot => Tgt.{futureCtorName target} futureSlot {capture})"
+    let call := if fc.spawnSemantics == .fallible then
+      s!"Zig.asyncWithPolicyC (α := {resultTy}) .fallible {mk} \
+        (({fc.spawnFallback (futureEagerKey spawnFn)}) {capture})"
+      else s!"Zig.asyncC (α := {resultTy}) {mk}"
+    fc.storageExpr result call
+  -- `Future(T).await(&f, io)`, `.cancel(&f, io)`: `ret` is `T`.
+  | .futureAwait | .futureCancel =>
+    let op := if fn == .futureAwait then "awaitC" else "cancelC"
+    fc.storageExpr ret s!"Zig.{op} (α := {fc.emitTyOf ret}) {rv (args[1]?.getD .void)} \
+      {rv (args[0]?.getD .void)}"
+  | .checkCancel => s!"Zig.checkCancelC {rv (args[0]?.getD .void)}"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
@@ -2344,7 +2374,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
       (env, some l)
     else if let some fn := threadFn then
-      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args)
+      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args inst.ty)
       (env, some l)
     else if isNoreturn then (env, none)
     else if callee.isIndirectCallee then
@@ -2885,7 +2915,8 @@ is taken or that a thread runs keeps its type. `mk f raw`: `f`'s context with `r
 partial def rawFunctions (funcs : Array Func) (mk : Func → Array String → FCtx) : Array String :=
   -- A raw value starts at a byte local.
   if funcs.all (byteLocals · |>.isEmpty) then #[] else
-  let excluded := (spawnTargets funcs).map (·.1) ++ (fnRefs funcs).map (·.2)
+  let excluded := (spawnTargets funcs).map (·.1) ++ (futureTargets funcs).map (·.1) ++
+    (fnRefs funcs).map (·.2)
   let rec go (raw : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
       if raw.contains f.name || excluded.contains f.name then none else
@@ -3174,11 +3205,20 @@ def emitCapturedCallWithStorage (name : String) (args : Array (String × Option 
   | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
       "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
 
+/-- Bind a multi-field capture `a` to the `capture<i>` names of `emitCapturedCallWithStorage`. -/
+def emitCaptureUnpack (size : Nat) : String :=
+  let binders := (List.range size).map fun i => s!"capture{i}"
+  if size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
+
 def emitCapturedFallbackWithStorage (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  let binders := (List.range args.size).map fun i => s!"capture{i}"
-  let unpack := if args.size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
-  s!"fun a => (do {unpack}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+  s!"fun a => (do {emitCaptureUnpack args.size}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+
+/-- The caller's eager execution of an `Io.async` task (fallible policy): the complete
+capture, the worker's result. -/
+def emitFutureEager (name : String) (args : Array (String × Option (String × Nat × Option String)))
+    (kind : Nat) : String :=
+  s!"fun a => (do {emitCaptureUnpack args.size}{emitCapturedCallWithStorage name args kind})"
 
 /-- Only async sites execute a caller fallback. Scan all sites before filtering the
 ordered first-use descriptions: an earlier spawn/concurrent site can share the worker. -/
@@ -3241,8 +3281,9 @@ def captureClass (types : Array Ty) (id : TyId) : CaptureClass :=
 
 /-- `Tgt.captures`: every captured field in source order, as a `Zig.Conc.Capture`. The
 ownership obligation over it is `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`). -/
-def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
-  let arms := targets.toList.map fun (n, classes) =>
+def emitTgtCaptures (targets : Array (String × Array CaptureClass))
+    (futures : Array (String × Array CaptureClass) := #[]) : String :=
+  let arm (lead : String) (n : String) (classes : Array CaptureClass) :=
     let binder (i : Nat) := if classes.size == 1 then "a" else s!"capture{i}"
     let parts := classes.toList.zipIdx.map fun (c, i) =>
       if c == .ptr || c == .slice then binder i else "_"
@@ -3255,7 +3296,10 @@ def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
       | .ptr => s!".ptr {binder i}"
       | .slice => s!".slice {binder i}"
       | .other => ".other"
-    s!"  | .{n} {pattern} => [{String.intercalate ", " items}]"
+    s!"  | .{n}{lead} {pattern} => [{String.intercalate ", " items}]"
+  -- A future target's runtime record is not a capture: the task owns its result cells.
+  let arms := targets.toList.map (fun (n, classes) => arm "" n classes) ++
+    futures.toList.map fun (n, classes) => arm " _" (futureCtorName n) classes
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   String.intercalate "\n" (["/-- Each captured field in source order. A value is copied and carries no ownership;",
     "a pointer or slice copies only its identity, so a spawn proof must hand over or share its",
@@ -3268,12 +3312,16 @@ source order, adapting every slice argument for a pure worker in the child threa
 classifies every field as `other`. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
     (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
-    (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false) :
+    (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false)
+    (futures : Array (String × Array (String × Option (String × Nat × Option String)) × Nat ×
+      String × Array CaptureClass) := #[]) :
     List String × List String :=
-  let ctors := targets.toList.map fun (n, args, _) =>
-    let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
+  let tupleTy (args : Array (String × Option (String × Nat × Option String))) :=
+    if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
       String.intercalate " × " (args.toList.map fun (ty, _) => s!"({ty})")
-    s!"  | {n} (a : {ty})"
+  let ctors := targets.toList.map (fun (n, args, _) => s!"  | {n} (a : {tupleTy args})") ++
+    futures.toList.map fun (n, args, _) =>
+      s!"  | {futureCtorName n} (futureSlot : Zig.Ptr) (a : {tupleTy args})"
   let captureDoc := if extendedCapture then
     "/-- The spawn targets of the program; fields are captured by value. -/"
     else "/-- The spawn targets of the program. -/"
@@ -3289,11 +3337,23 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
     if args.size ≤ 1 then s!"  | .{n} a => {run}" else
       let binders := (List.range args.size).map arg
       s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    {run}"
+  -- An `Io.async` task runs the worker and writes its result into its runtime record; with
+  -- `threadlocal` globals it is a thread with its own instances, as a spawn target is.
+  let futureArms := futures.toList.map fun (n, args, k, complete, _) =>
+    let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
+    let call := emitCapturedCallWithStorage n args k
+    let run := s!"do\n      let futureResult ← {call}\n      Zig.ConcM.liftMem ({complete})"
+    let run := if tls then s!"Zig.ConcM.tlsThread tlsInit {run}" else run
+    if args.size ≤ 1 then s!"  | .{futureCtorName n} futureSlot a => {run}" else
+      let binders := (List.range args.size).map arg
+      s!"  | .{futureCtorName n} futureSlot a =>\n    let ({String.intercalate ", " binders}) := a\n    {run}"
+  let arms := arms ++ futureArms
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
     (n, captureClasses[i]?.getD (args.map fun _ => .other)))
+    (futures.map fun (n, _, _, _, classes) => (n, classes))
   ([tgt] ++ (if extendedCapture then [obligation, captures] else []), [dispatch])
 
 /-- Preserve the public helper for callers whose captures need ordinary dictionaries. -/
@@ -3313,7 +3373,8 @@ def generatedBinderNames (funcs : Array Func)
     (targets : Array (String × Func × Array TyId)) (extendedCapture : Bool) :
     Std.HashSet String := Id.run do
   let mut names : Std.HashSet String := {}
-  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
+  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2",
+      "futureSlot", "futureResult"] do
     names := names.insert name
   for (_, _, fields) in targets do
     if fields.size > 1 then
@@ -3472,7 +3533,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
   let targets := spawnTargets funcs
-  let extendedCapture := targets.any fun (_, _, fields) => fields.size != 1
+  let futures := futureTargets funcs
+  let extendedCapture := targets.any (fun (_, _, fields) => fields.size != 1) || !futures.isEmpty
   let modelCalls := firstModelCalls models funcs
   let maxModelArgs := modelCalls.fold (fun count _ site => max count site.args.size) 0
   let modelBinders := (Array.range maxModelArgs).map fun i => s!"p{i}"
@@ -3486,7 +3548,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
-  let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
+  let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+    (targets ++ futures.map fun (nm, f, fields, _) => (nm, f, fields)) extendedCapture
   let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
@@ -3515,7 +3578,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-  let targetDescriptions := targets.map fun (nm, f, fields) =>
+  let describe (nm : String) (f : Func) (fields : Array TyId) :=
       let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
       -- The physical capture comes from the first call; conversion requirements
       -- belong to the worker contract and must also accept later weaker captures.
@@ -3531,13 +3594,23 @@ def emitParts (funcs : Array Func) (prefix_ : String)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)
+  let targetDescriptions := targets.map fun (nm, f, fields) => describe nm f fields
+  -- `Io.async` tasks: the description, the result write and the capture classes.
+  let futureDescriptions := futures.map fun (nm, f, fields, r) =>
+    let (_, name, args, kind) := describe nm f fields
+    let complete := withStorageEnc structNames f.types r "Zig.Future.complete futureSlot futureResult"
+    (nm, name, args, kind, complete, fields.map (captureClass f.types))
   let spawnFallbacks := if spawnSemantics == .fallible then
-    emitSpawnFallbacksWithStorage funcs targetDescriptions
+    emitSpawnFallbacksWithStorage funcs targetDescriptions ++
+      futureDescriptions.map fun (nm, name, args, kind, _, _) =>
+        (futureEagerKey nm, emitFutureEager name args kind)
     else #[]
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
       (targets.map fun (_, f, fields) => fields.map (captureClass f.types)) (globals.any (·.tls))
+      (futureDescriptions.map fun (_, name, args, kind, complete, classes) =>
+        (name, args, kind, complete, classes))
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
   let groups := (callGroups funcs).map fun (members, recursive) =>

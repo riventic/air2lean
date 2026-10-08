@@ -266,7 +266,7 @@ def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : N
 fields, optionals and error unions. -/
 partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr ..) | some .allocator | some .io => true
+  | some (.ptr ..) | some .allocator | some .io | some (.future _) => true
   | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
   | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
   | some (.tuple fs) => fs.any (hasPtr types)
@@ -540,6 +540,20 @@ def ThreadFn.spawnArgs? : ThreadFn → Option Nat
   | .groupAsync | .groupConcurrent => some 2
   | _ => none
 
+/-- The position of the args tuple of any call that starts a task: a spawn (`spawnArgs?`) or
+`Io.async(io, f, args)`. -/
+def ThreadFn.taskArgs? : ThreadFn → Option Nat
+  | .futureAsync => some 1
+  | fn => fn.spawnArgs?
+
+/-- The field types of the args tuple `v` of a call in `f`. -/
+def Func.tupleFields? (f : Func) (v : Option Val) : Option (Array TyId) :=
+  (v.bind fun v => match v with
+    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+    | v => v.constTy?).bind fun t => match f.types[t]? with
+      | some (.tuple fs) => some fs
+      | _ => none
+
 /-- The spawn targets of `funcs`: each function that a `Thread.spawn` or an `Io.Group.async` runs,
 with all captured argument types in source order, in first-use order. -/
 def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
@@ -548,14 +562,24 @@ def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
     | .call (.func name _ (some sf)) args =>
       if let some k := (threadFn? name).bind (·.spawnArgs?) then
         if acc.any (·.1 == sf) then acc else
-        let argTys := ((args[k]? : Option Val).bind fun v => match v with
-          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-          | v => v.constTy?).bind fun t => match f.types[t]? with
-            | some (.tuple fs) => some fs
-            | _ => none
-        match argTys with
+        match f.tupleFields? (args[k]?) with
         | some fields => acc.push (sf, f, fields)
         | none => acc
+      else acc
+    | _ => acc
+
+/-- The future targets of `funcs`: each function that an `Io.async` runs, with its captured
+argument types in source order and the call's `Io.Future` result type, in first-use order
+(`docs/futures.md`). They are separate from `spawnTargets`: the task writes its result. -/
+def futureTargets (funcs : Array Func) : Array (String × Func × Array TyId × TyId) :=
+  funcs.foldl (init := #[]) fun acc f => f.allInsts.foldl (init := acc) fun acc i =>
+    match i.op with
+    | .call (.func name _ (some sf)) args =>
+      if threadFn? name == some .futureAsync then
+        if acc.any (·.1 == sf) then acc else
+        match f.tupleFields? (args[1]?), f.types[i.ty]? with
+        | some fields, some (.future r) => acc.push (sf, f, fields, r)
+        | _, _ => acc
       else acc
     | _ => acc
 

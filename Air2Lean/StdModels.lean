@@ -40,6 +40,9 @@ inductive ThreadFn where
   | timerStart | timerRead | futexTimedWait
   /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
+  /-- `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel`, `Io.checkCancel` (0.16.0 only;
+  `ZigLean/Conc/Future.lean`, `docs/futures.md`): a future's task is a thread with a result. -/
+  | futureAsync | futureAwait | futureCancel | checkCancel
   deriving BEq, Repr
 
 /-- What a recognized std name selects: an allocator or thread model, or an explicit
@@ -69,6 +72,10 @@ private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
 private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
   { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
+
+/-- The reason of an async API outside the qualified future subset (`docs/futures.md`). -/
+private def asyncReason (symbol reason : String) : String :=
+  s!"{symbol} is not a qualified async API: {reason} (docs/futures.md)"
 
 /-- The one table of built-in std models. -/
 def stdModels : Array StdModel := #[
@@ -102,31 +109,59 @@ def stdModels : Array StdModel := #[
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"],
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"],
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"],
-  { symbol := "Io.futexWaitTimeout",
-    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
-  -- C05: cancelable `std.Io` APIs outside the cancelation model (`docs/std-models.md`
-  -- §Cancelation). Modelled: `Io.futexWait` (and the std code over it), `Io.Group.cancel`,
-  -- `Io.Group.await`.
-  { symbol := "Io.checkCancel",
-    kind := .rejected "Io.checkCancel is outside the cancelation model: only futex waits and Io.Group.await are modelled cancelation points" },
+  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] #["0.16.0"],
+  threadModel "Io.Future.await" .futureAwait #["awaitC"] #["0.16.0"],
+  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] #["0.16.0"],
+  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] #["0.16.0"],
+  { symbol := "Io.concurrent",
+    kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
   { symbol := "Io.recancel",
-    kind := .rejected "Io.recancel is outside the cancelation model: a delivered cancelation request is not re-armed" },
+    kind := .rejected (asyncReason "Io.recancel" "re-arming an acknowledged cancelation is not modelled") },
   { symbol := "Io.swapCancelProtection",
-    kind := .rejected "Io.swapCancelProtection is outside the cancelation model: tasks have no cancel protection state" },
-  { symbol := "Io.sleep",
-    kind := .rejected "Io.sleep is outside the model: it has no clock" },
-  { symbol := "Io.operate",
-    kind := .rejected "Io.operate is outside the model: Io operations are not modelled" },
+    kind := .rejected (asyncReason "Io.swapCancelProtection" "cancel protection is not modelled") },
+  { symbol := "Io.Select.async",
+    kind := .rejected (asyncReason "Io.Select.async" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.concurrent",
+    kind := .rejected (asyncReason "Io.Select.concurrent" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.await",
+    kind := .rejected (asyncReason "Io.Select.await" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.cancel",
+    kind := .rejected (asyncReason "Io.Select.cancel" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.cancelDiscard",
+    kind := .rejected (asyncReason "Io.Select.cancelDiscard" "Select queues task results; only Io.async futures are qualified") },
   { symbol := "Io.Batch.awaitAsync",
-    kind := .rejected "Io.Batch is outside the cancelation model: only Io.Group tasks are modelled" },
+    kind := .rejected (asyncReason "Io.Batch.awaitAsync" "Io operations and batches are not modelled") },
+  { symbol := "Io.Batch.awaitConcurrent",
+    kind := .rejected (asyncReason "Io.Batch.awaitConcurrent" "Io operations and batches are not modelled") },
   { symbol := "Io.Batch.cancel",
-    kind := .rejected "Io.Batch is outside the cancelation model: only Io.Group tasks are modelled" }]
+    kind := .rejected (asyncReason "Io.Batch.cancel" "Io operations and batches are not modelled") },
+  { symbol := "Io.operate",
+    kind := .rejected (asyncReason "Io.operate" "Io operations and batches are not modelled") },
+  { symbol := "Io.operateTimeout",
+    kind := .rejected (asyncReason "Io.operateTimeout" "Io operations and batches are not modelled") },
+  { symbol := "Io.sleep",
+    kind := .rejected (asyncReason "Io.sleep" "it has no clock") },
+  { symbol := "Io.futexWaitTimeout",
+    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" }]
+  -- The cancelation points of the model (`docs/std-models.md` §Cancelation, C05/C08):
+  -- `Io.futexWait` (and the std code over it), `Io.Group.await` and `Io.checkCancel`; the
+  -- requests come from `Io.Group.cancel` and `Io.Future.cancel`. Every other cancelable `std.Io`
+  -- API above is rejected with its reason.
 
 private def stdModelIndex : Std.HashMap String StdModel :=
   stdModels.foldl (fun index m => index.insert m.symbol m) {}
 
-/-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`. -/
-def stdModelBase (name : String) : String := (name.splitOn "__anon_").head!
+/-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`, and
+a method of an instantiated generic type `Io.Future(T).<fn>` or `Io.Select(U).<fn>` names
+`Io.Future.<fn>` or `Io.Select.<fn>` (the type argument is everything up to the last `).`). -/
+def stdModelBase (name : String) : String :=
+  let base := (name.splitOn "__anon_").head!
+  let generic (ty : String) : Option String := do
+    unless base.startsWith (ty ++ "(") do none
+    let parts := base.splitOn ")."
+    unless parts.length ≥ 2 do none
+    some s!"{ty}.{parts.getLast!}"
+  ((generic "Io.Future").orElse fun _ => generic "Io.Select").getD base
 
 /-- The built-in std model (modelled or rejected) that the function `name` is an instance of. -/
 def stdModel? (name : String) : Option StdModel := stdModelIndex[stdModelBase name]?

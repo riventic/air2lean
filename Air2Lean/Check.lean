@@ -227,6 +227,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
+  | .future result => recur result
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
 largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
@@ -267,6 +268,13 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
   | some .io => pure (16, 8)
+  | some (.future r) =>
+    -- `Zig.Future`: `any_future` at 0, the result at `Zig.Future.resultOff`.
+    let (s, a) ← modelLayout types layouts r
+    let off := Zig.alignUp 8 a
+    unless (layouts[id]?.map (·.offsets)).getD #[] == #[0, off] do
+      throw s!"Io.Future field offsets differ from any_future at 0 and result at {off}"
+    pure (Zig.alignUp (off + s) (Nat.max 8 a), Nat.max 8 a)
   | some (.optional c) =>
     if nullablePtrTy types layouts c then
       throw "an optional C/allowzero pointer needs a separate null flag"
@@ -2415,6 +2423,7 @@ private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
       if n == m && s == t then recur x y else pure false
     | some (.vector n x), some (.vector m y) => if n == m then recur x y else pure false
     | some (.optional x), some (.optional y) => recur x y
+    | some (.future x), some (.future y) => recur x y
     | some (.errorUnion sx x), some (.errorUnion sy y) => do
       unless ← recur sx sy do return false
       recur x y
@@ -2449,7 +2458,8 @@ partial def sameSpawnTy (source target : Func) (a b : TyId)
 is copied as a value, including pointer identity. Ownership remains an explicit proof
 obligation on the captured target, not an automatic exclusive transfer. -/
 def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (args : Array Val)
-    (operandIndex : OperandTypes := f.operandTypes) : Except String Unit := do
+    (operandIndex : OperandTypes := f.operandTypes) (futureResult : Option TyId := none) :
+    Except String Unit := do
   unless args.size == k + 1 do
     throw s!"{f.name}: {callee} has {args.size} runtime arguments, expected {k + 1}"
   let tyOf := operandIndex.valTy?
@@ -2465,6 +2475,11 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
     completed := cache
     unless compatible do
       throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
+  if let some r := futureResult then
+    -- `Io.async`: the task's result is the future's `result` (`docs/futures.md`).
+    unless compatibleType f worker r worker.ret do
+      throw s!"{f.name}: {callee} worker '{worker.name}' does not return the Io.Future result type"
+    return
   let validRet := match worker.types[worker.ret]? with
     | some .void | some .noreturn => true
     | some (.int false 8) => callee == "Thread.spawn"
@@ -2629,6 +2644,29 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 3
       checkFutex 0 1
       require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
+    | .futureAsync =>
+      -- `Io.async(io, function, args)`: `function` is comptime (`comptime_fn`).
+      count 2
+      require (argTy 0 == some .io) "Io argument"
+      require (match result with | some (.future _) => true | _ => false) "Io.Future result"
+    | .futureAwait | .futureCancel =>
+      count 2
+      let futureResult := match argTy 0 with
+        | some (.ptr "one" false c) => match f.types[c]? with
+          | some (.future r) => some r
+          | _ => none
+        | _ => none
+      require (futureResult.isSome && argTy 1 == some .io) "Future pointer/Io arguments"
+      require (futureResult.any (compatibleType f f · ret)) "Future result"
+    | .checkCancel =>
+      count 1
+      require (argTy 0 == some .io) "Io argument"
+      let canceled := match result with
+        | some (.errorUnion set _) => match f.types[set]? with
+          | some (.errorSet (some names)) => names == #["Canceled"]
+          | _ => false
+        | _ => false
+      require (errorUnit && canceled) "error{Canceled}!void result"
 
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
@@ -2666,6 +2704,36 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
             else
               unless f.zigVersion == "0.16.0" do
                 throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+
+/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
+request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
+cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
+`Future.await` is no cancelation point of the model. A program that cancels a future therefore
+must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
+inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
+Programs without `Future.cancel` never request a future cancelation. -/
+def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
+  let calls (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
+    | .call (.func name ..) _ => some name
+    | _ => none
+  unless funcs.any (fun f => (calls f).any (threadFn? · == some .futureCancel)) do return
+  let refs := fnRefs funcs
+  let byName := funcs.foldl (fun m f => m.insert f.name f) ({} : Std.HashMap String Func)
+  let mut todo : List String := (futureTargets funcs).toList.map (·.1)
+  let mut seen : Std.HashSet String := {}
+  while !todo.isEmpty do
+    let name := todo.head!
+    todo := todo.tail!
+    if seen.contains name then continue
+    seen := seen.insert name
+    let some f := byName[name]? | continue
+    for callee in calls f do
+      if let some fn := threadFn? callee then
+        if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
+          throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
+            a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
+            observe cancelation through Io.checkCancel (docs/futures.md)"
+    todo := (f.callees refs).toList ++ todo
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
@@ -2734,11 +2802,20 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
               | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
             checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
               k args index
+          if kind == .futureAsync then
+            let some worker := spawnFn
+              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn task"
+            let some (_, target) := lookupFunction worker
+              | throw s!"{f.name}: the Io.async task '{worker}' has no AIR file (add its name to the filter, docs/futures.md)"
+            let some (.future r) := f.types[i.ty]?
+              | throw s!"{f.name}: Io.async has no Io.Future result"
+            checkThreadSpawn f target "Io.async" 1 args index (some r)
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless modelledStdFn callee do
             throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
+  checkFutureCancelation funcs
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -2750,7 +2827,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
         let items := match i.op with
           | .sliceElemVal s _ => (sliceItem s).toArray
           | .call (.func callee _ spawnFn) args =>
-            if let some k := (threadFn? callee).bind (·.spawnArgs?) then
+            if let some k := (threadFn? callee).bind (·.taskArgs?) then
               if (spawnFn.map mem.contains).getD true then #[] else
               let fields : Array TyId := (((args[k]? : Option Val).bind tyOf).bind fun t =>
                 match f.types[t]? with
@@ -2952,6 +3029,9 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
           if let some target := worker.bind snapshot.unique then
             log := log.record diagnostic (checkThreadSpawn f target
               (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index)
+        if kind == .futureAsync then
+          if let (some target, some (.future r)) := (worker.bind snapshot.unique, f.types[i.ty]?) then
+            log := log.record diagnostic (checkThreadSpawn f target "Io.async" 1 args index (some r))
     | .call p@(.inst _) args | .call p@(.ptrConst ..) args =>
       match index.calleeFnTy? f p with
       | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }

@@ -298,8 +298,9 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
-  /-- The `Io` tasks with a cancelation request (`Io.Group.cancel`) that no cancelation point
-  has delivered yet (`ZigLean/Mem/Thread.lean`, `docs/std-models.md` §Cancelation). -/
+  /-- The `Io` tasks with a cancelation request (`Io.Group.cancel`, `Io.Future.cancel`) that no
+  cancelation point has delivered yet (`ZigLean/Mem/Thread.lean`, `ZigLean/Conc/Future.lean`,
+  `docs/std-models.md` §Cancelation). Empty in every program without a cancel. -/
   cancels : Array ThreadId := #[]
   deriving Repr, Inhabited
 
