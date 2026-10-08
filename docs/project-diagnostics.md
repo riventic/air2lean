@@ -9,8 +9,8 @@ python3 scripts/project-diagnostics.py check project.json \
   --translator .lake/build/bin/air2lean --out check-receipt.json
 ```
 
-The consumer targets schema 1, `air2lean-check-diagnostics`, frozen at producer
-revision `cec6908b09af03d33a61b7e36b33989544264d8c`. The required diagnostic-capable
+The consumer targets schema 2, `air2lean-check-diagnostics`, frozen at producer
+revision `9a3478a5baa26aa880142c0271f249a9ddd18222`. The required diagnostic-capable
 producer is supplied by [PR 78](https://github.com/riventic/air2lean/pull/78), separately
 from the project manifest base in [PR 68](https://github.com/riventic/air2lean/pull/68).
 Matching the protocol is not executable qualification: the adapter records the actual
@@ -30,7 +30,7 @@ can be checked. Supplied AIR still does not attest source/export correspondence.
 The optional manifest `spawn_policy` is `available` by default or explicitly
 `fallible`. The adapter passes `--spawn-policy` with the effective value on every
 check-only invocation and records it in `evidence` and the execution argv. This does
-not add a field to the producer's schema 1 report. Fallible checking requires a
+not add a field to the producer's report. Fallible checking requires a
 producer with the shared fallible-spawn validator; the producer decides which AIR
 is supported. Manifest preflight alone does not establish semantic support. All
 proof, runtime and source disclosures remain unchanged.
@@ -43,8 +43,11 @@ report's `AIR_JSON` remains a legacy preflight code; the separate checks identif
 known boundary precisely. Whole-program shared-definition errors can overlap local
 errors. Missing/ambiguous/blocked dependency chains cover selected normalized direct
 calls and explicit spawn workers only. They do not establish compiler dependency closure.
-Source spans remain unavailable. A nearby debug line remains an approximate hint, and
-canonical instruction IDs are not relabeled as original/exported IDs.
+Source spans are validated (`statement`/`declaration` granularity, module-relative
+file, absolute 1-based line, optional 1-based column; null with `unavailable_in_AIR`)
+and retained unchanged: they are exporter provenance, not host paths. `fatal` is
+validated as a boolean and retained. Canonical instruction IDs are not relabeled as
+original/exported IDs.
 
 Root statuses are `checked`, `rejected`, `blocked`, `error` or `not_run`. `checked` requires
 a complete, successful producer validation and no manifest preflight blockers. It does
@@ -54,8 +57,13 @@ Proof status remains `not_run`, runtime outcomes `not_observed`, and source corr
 proof-stage failure is imported by this command. Ordinary artifact verification still
 reports hash agreement rather than proof attestation.
 
-`--diagnostic-limit` is 1–4096, default 256, per root. The producer's retained diagnostic
-payload is bounded to 1 MiB, files to 256, and input contents to 64 MiB per invocation.
+`--diagnostic-limit` is 1–4096, default 256, per root, and `--unit-diagnostic-limit`
+1–4096, default 64, per input file; both are forwarded to the producer. The producer's
+retained diagnostic payload is bounded to 1 MiB, files to 256, and input contents to
+64 MiB per invocation. The receipt's `caps` must equal these bounds exactly; per-unit
+retained counts must respect the unit cap; `capped_units` must be sorted, name known
+files, and account (with the retained diagnostics) for `diagnostics_observed`; and it
+must be non-empty exactly when the receipt is truncated.
 Its `diagnostics_observed` counts attempted additions, not every possible blocker.
 `first_error_in_unit`, `complete: false` and `truncated: true` survive import. The project
 manifest's stricter input/time/output limits still apply. Separate stdout/stderr capture

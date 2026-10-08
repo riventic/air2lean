@@ -25,15 +25,17 @@ def diagnostic(file, code='JSON_SYNTAX', phase='decode', category='malformed_inp
         file=file, function=None, anchor={'id_space': 'unavailable', 'instruction': None, 'type': None,
         'global': None, 'nearest_dbg_line': None}, source_span=None, source_span_status='unavailable_in_AIR',
         dependency_chain=list(chain), dependency_scope=adapter.DEPENDENCIES,
-        prerequisites=[], first_error_in_unit=True)
+        prerequisites=[], first_error_in_unit=True, fatal=True)
 
 
-def receipt(files, diagnostics=(), truncated=False):
+def receipt(files, diagnostics=(), truncated=False, limit=256, unit_limit=64):
     items = list(diagnostics)
-    return dict(schema=1, kind=adapter.KIND, status='rejected' if items or truncated else 'checked',
-        complete=not items and not truncated, truncated=truncated, diagnostic_limit=256,
+    capped = [dict(file=sorted(files)[0] if files else '', dropped=1)] if truncated else []
+    return dict(schema=2, kind=adapter.KIND, status='rejected' if items or truncated else 'checked',
+        complete=not items and not truncated, truncated=truncated, diagnostic_limit=limit,
         diagnostics_observed=len(items) + int(truncated),
         diagnostic_payload_bytes=sum(adapter.lean_compact_size(d) for d in items),
+        caps=dict(adapter.CAPS, diagnostics=limit, diagnostics_per_unit=unit_limit), capped_units=capped,
         diagnostics=items, files=[dict(file=f, function='unit', normalized=True,
         structure_valid=True, local_check='passed') for f in files],
         scope='selected AIR validation; first error within opaque prerequisite units',
@@ -71,7 +73,7 @@ class AdapterTests(unittest.TestCase):
     def runner(self, argv, cwd, limits):
         self.assertEqual(argv[1], '--diagnostics-json')
         self.assertEqual(argv[3:], ['--profile', 'legacy-abi64-le', '--diagnostic-limit', '256',
-                                   '--spawn-policy', self.manifest.get('spawn_policy', 'available')])
+                                   '--unit-diagnostic-limit', '64', '--spawn-policy', self.manifest.get('spawn_policy', 'available')])
         self.assertNotIn('-o', argv)
         files = sorted((cwd / 'air').glob('*.json'))
         self.calls.append((cwd.name, [p.read_bytes() for p in files]))
@@ -102,7 +104,7 @@ class AdapterTests(unittest.TestCase):
                 checked = result['root_checks'][0]
                 self.assertEqual(checked['execution']['argv'][-2:], ['--spawn-policy', expected])
                 self.assertNotIn('spawn_policy', checked['producer'])
-                self.assertEqual(checked['producer']['schema'], 1)
+                self.assertEqual(checked['producer']['schema'], 2)
                 self.assertEqual(result['proof_status'], 'not_run')
                 self.assertEqual(result['runtime_outcomes'], 'not_observed')
                 self.assertEqual(result['source_correspondence'], 'not_attested')
@@ -208,18 +210,33 @@ class AdapterTests(unittest.TestCase):
         air_dir = self.base / 'selected'
         mapping = {str(air_dir / '000000.json'): 'air.json'}
         good = receipt(mapping)
-        bads = [dict(good, schema=True), dict(good, schema=2), dict(good, proof_status='proved'),
+        bads = [dict(good, schema=True), dict(good, schema=1), dict(good, proof_status='proved'),
+                dict(good, caps=dict(good['caps'], diagnostics_per_unit=65)),
+                dict(good, capped_units=[dict(file=next(iter(mapping)), dropped=1)]),
                 dict(good, diagnostics_observed=1), dict(good, diagnostic_payload_bytes=1024 * 1024 + 1),
                 dict(good, truncated=True), dict(good, files=[]), dict(good, unexpected=1)]
         d = diagnostic(next(iter(mapping)))
+        span = dict(file='src/main.zig', module='root', line=12, column=5)
         for field, value in [('code', 'NEW_UNREVIEWED'), ('phase', 'proof'), ('source_span', {}),
+                             ('source_span', span), ('fatal', None),
                              ('file', '/different/path'), ('message', 'x' * 2049)]:
             mutated = dict(d, **{field: value})
             bads.append(receipt(mapping, [mutated]))
+        for status, bad_span in [('statement', dict(span, line=0)), ('declaration', span),
+                                 ('statement', dict(span, column=0)), ('unavailable_in_AIR', span),
+                                 ('exact', span), ('statement', dict(span, file=''))]:
+            bads.append(receipt(mapping, [dict(d, source_span=bad_span, source_span_status=status)]))
+        overfull = receipt(mapping, [d, d])
+        bads.append(overfull)
         for r in bads:
             with self.subTest(r=r), self.assertRaises((ValueError, TypeError)):
                 adapter.validate_receipt(json.dumps(r).encode(), 0 if r['status'] == 'checked' else 1,
-                                         mapping, air_dir, 256)
+                                         mapping, air_dir, 256, 1 if r is overfull else 64)
+        for status, good_span in [('statement', span), ('statement', dict(span, column=None)),
+                                  ('declaration', dict(span, column=None))]:
+            r = receipt(mapping, [dict(d, source_span=good_span, source_span_status=status)])
+            parsed = adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air_dir, 256)
+            self.assertEqual(parsed['diagnostics'][0]['source_span'], good_span)
         understated = receipt(mapping, [d])
         understated['diagnostic_payload_bytes'] = 1
         with self.assertRaisesRegex(ValueError, 'retained diagnostic payload'):
@@ -264,8 +281,8 @@ class AdapterTests(unittest.TestCase):
         before = self.path.read_bytes()
         stdout, stderr = io.StringIO(), io.StringIO()
         real_check = adapter.check_project
-        def offline(*args):
-            return real_check(*args, runner=self.runner)
+        def offline(*args, **kwargs):
+            return real_check(*args, runner=self.runner, **kwargs)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
@@ -316,17 +333,17 @@ class AdapterTests(unittest.TestCase):
         mapping = {str(air / '000000.json'): 'air.json'}
         d = diagnostic(next(iter(mapping)))
         d['message'] = 'x' * 1024
-        r = receipt(mapping, [d] * 1100)
-        r.update(diagnostic_limit=4096, diagnostic_payload_bytes=1)
+        r = receipt(mapping, [d] * 1100, limit=4096, unit_limit=4096)
+        r.update(diagnostic_payload_bytes=1)
         with self.assertRaisesRegex(ValueError, 'retained diagnostic payload'):
-            adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air, 4096)
+            adapter.validate_receipt(json.dumps(r).encode(), 1, mapping, air, 4096, 4096)
 
     def test_successful_atomic_receipt_matches_stdout(self):
         destination = self.base / 'receipt.json'
         stdout, stderr = io.StringIO(), io.StringIO()
         real_check = adapter.check_project
-        def offline(*args):
-            return real_check(*args, runner=self.runner)
+        def offline(*args, **kwargs):
+            return real_check(*args, runner=self.runner, **kwargs)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             status = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])
@@ -382,8 +399,8 @@ class AdapterTests(unittest.TestCase):
         real_check = adapter.check_project
         def cancelled(argv, cwd, limits):
             raise KeyboardInterrupt
-        def offline(*args):
-            return real_check(*args, runner=cancelled)
+        def offline(*args, **kwargs):
+            return real_check(*args, runner=cancelled, **kwargs)
         with mock.patch.object(adapter, 'check_project', side_effect=offline), \
              mock.patch.object(adapter.signal, 'signal'), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             rc = adapter.main(['check', str(self.path), '--translator', str(self.tool), '--out', str(destination)])

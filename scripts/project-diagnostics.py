@@ -11,18 +11,23 @@ import tempfile
 
 import project
 
-PROTOCOL_HEAD = 'cec6908b09af03d33a61b7e36b33989544264d8c'
+PROTOCOL_HEAD = '9a3478a5baa26aa880142c0271f249a9ddd18222'
 KIND = 'air2lean-check-diagnostics'
 CODES = frozenset('CLI_ARGUMENTS INPUT_READ INPUT_LIMIT JSON_SYNTAX AIR_DECODE EXPORTER_UNSUPPORTED OPTIMIZED_UNSUPPORTED CANONICAL_FAILURE NORMALIZATION_FAILURE STRUCTURE_FAILURE TYPE_FAILURE GLOBAL_FAILURE MEMORY_FAILURE INSTRUCTION_FAILURE CONSTANT_FAILURE SIGNATURE_FAILURE MODEL_FAILURE PROGRAM_FAILURE PROFILE_FAILURE DUPLICATE_FUNCTION CALLEE_MISSING CALLEE_BLOCKED CALLEE_AMBIGUOUS PREREQUISITE_SKIPPED VOLATILE_ACCESS'.split())
 PHASES = frozenset('cli input decode canonicalize normalize check program profile'.split())
 CATEGORIES = frozenset('malformed_input unsupported_semantics validation_failure resource_limit io_failure skipped_prerequisite'.split())
 DEPENDENCIES = 'selected_normalized_direct_calls_and_spawn_workers'
+PRODUCER_SCHEMA = 2
 REPORT_KEYS = ('schema', 'kind', 'status', 'complete', 'truncated', 'diagnostic_limit',
-               'diagnostics_observed', 'diagnostic_payload_bytes', 'diagnostics', 'files',
+               'diagnostics_observed', 'diagnostic_payload_bytes', 'caps', 'capped_units', 'diagnostics', 'files',
                'scope', 'proof_status', 'runtime_outcomes', 'dependency_completeness', 'source_correspondence')
 DIAGNOSTIC_KEYS = ('code', 'phase', 'category', 'message', 'message_truncated', 'file', 'function',
                    'anchor', 'source_span', 'source_span_status', 'dependency_chain',
-                   'dependency_scope', 'prerequisites', 'first_error_in_unit')
+                   'dependency_scope', 'prerequisites', 'first_error_in_unit', 'fatal')
+SPAN_KEYS = ('file', 'module', 'line', 'column')
+# Fixed producer bounds; the two counts are requested per invocation.
+CAPS = {'payload_bytes': 1024 * 1024, 'message_chars': 2048, 'files': 256,
+        'input_bytes': 64 * 1024 * 1024, 'function_name_chars': 1024, 'dependency_chain_names': 257}
 
 
 def demand(ok, message):
@@ -89,12 +94,25 @@ def lean_compact_size(value):
     return total
 
 
-def validate_receipt(raw, returncode, mapping, air_dir, limit):
+def valid_span(d):
+    """Exporter provenance only: a module-relative file, absolute line, optional column."""
+    span, status = d['source_span'], d['source_span_status']
+    if span is None:
+        return status == 'unavailable_in_AIR'
+    project.obj(span, SPAN_KEYS)
+    return (status in ('statement', 'declaration') and text(span['file']) and text(span['module']) and
+            0 < len(span['file']) <= 4096 and 0 < len(span['module']) <= 1024 and
+            natural(span['line']) and span['line'] >= 1 and
+            (span['column'] is None if status == 'declaration' else
+             span['column'] is None or (natural(span['column']) and span['column'] >= 1)))
+
+
+def validate_receipt(raw, returncode, mapping, air_dir, limit, unit_limit=64):
     """Reject unknown schema/vocabulary and inconsistent evidence, without parsing messages."""
     demand(len(raw) <= project.LIMITS['max_output_bytes'], 'diagnostic receipt exceeds byte bound')
     receipt = project.bounded_json(raw, project.LIMITS)
     project.obj(receipt, REPORT_KEYS)
-    demand(type(receipt['schema']) is int and receipt['schema'] == 1 and receipt['kind'] == KIND,
+    demand(type(receipt['schema']) is int and receipt['schema'] == PRODUCER_SCHEMA and receipt['kind'] == KIND,
            'unsupported diagnostic protocol')
     demand(receipt['status'] in ('checked', 'rejected') and
            returncode == (0 if receipt['status'] == 'checked' else 1), 'diagnostic exit/status mismatch')
@@ -104,6 +122,9 @@ def validate_receipt(raw, returncode, mapping, air_dir, limit):
            'diagnostic limit mismatch')
     demand(natural(receipt['diagnostics_observed']) and natural(receipt['diagnostic_payload_bytes'], 1024 * 1024),
            'invalid diagnostic counters')
+    project.obj(receipt['caps'], ('diagnostics', 'diagnostics_per_unit') + tuple(CAPS))
+    demand(receipt['caps'] == dict(CAPS, diagnostics=limit, diagnostics_per_unit=unit_limit),
+           'diagnostic caps mismatch')
     demand(receipt['proof_status'] == 'not_run' and receipt['runtime_outcomes'] == 'not_observed' and
            receipt['source_correspondence'] == 'not_attested', 'inflated diagnostic evidence')
     demand(receipt['scope'] == 'selected AIR validation; first error within opaque prerequisite units' and
@@ -127,12 +148,27 @@ def validate_receipt(raw, returncode, mapping, air_dir, limit):
         demand(d['anchor']['id_space'] in ('unavailable', 'exported', 'canonical'), 'unknown ID space')
         for key in ('instruction', 'type', 'global', 'nearest_dbg_line'):
             demand(d['anchor'][key] is None or natural(d['anchor'][key]), 'invalid diagnostic anchor')
-        demand(d['source_span'] is None and d['source_span_status'] == 'unavailable_in_AIR',
-               'unexpected source span')
+        demand(type(d['fatal']) is bool, 'invalid diagnostic flags')
+        demand(valid_span(d), 'invalid source span')
         demand(d['dependency_scope'] == DEPENDENCIES, 'unknown dependency scope')
         for key in ('dependency_chain', 'prerequisites'):
             demand(isinstance(d[key], list) and all(text(v) for v in d[key]), 'invalid diagnostic context')
         demand(len(d['dependency_chain']) <= 257, 'dependency chain exceeds producer bound')
+    retained = {}
+    for d in diagnostics:
+        retained[d['file'] or ''] = retained.get(d['file'] or '', 0) + 1
+    demand(all(count <= unit_limit for count in retained.values()), 'per-unit diagnostic cap exceeded')
+    capped = receipt['capped_units']
+    demand(isinstance(capped, list) and len(capped) <= len(mapping) + 2, 'invalid capped units')
+    for item in capped:
+        project.obj(item, ('file', 'dropped'))
+        demand((item['file'] == '' or known_file(item['file'], True)) and natural(item['dropped']) and
+               item['dropped'] >= 1, 'invalid capped unit')
+    demand([item['file'] for item in capped] == sorted({item['file'] for item in capped}),
+           'unsorted or duplicate capped units')
+    dropped = sum(item['dropped'] for item in capped)
+    demand(receipt['diagnostics_observed'] == len(diagnostics) + dropped, 'unreported dropped diagnostics')
+    demand(bool(capped) == receipt['truncated'], 'truncation and capped units disagree')
     if receipt['truncated'] or any(d['first_error_in_unit'] for d in diagnostics):
         demand(not receipt['complete'], 'hidden diagnostic incompleteness')
     payload = sum(lean_compact_size(d) for d in diagnostics)
@@ -172,6 +208,8 @@ def validate_receipt(raw, returncode, mapping, air_dir, limit):
         d['message'] = d['message'].replace(str(air_dir), '${SELECTED_AIR}')
     for item in receipt['files']:
         item['file'] = mapping[item['file']]
+    for item in receipt['capped_units']:
+        item['file'] = mapping.get(item['file'], '${SELECTED_AIR}' if item['file'] == str(air_dir) else None)
     return receipt
 
 
@@ -206,14 +244,14 @@ def preflight_air(boundaries):
     return issues
 
 
-def check_project(manifest_path, translator, limit, runner=invoke):
+def check_project(manifest_path, translator, limit, runner=invoke, unit_limit=64):
     boundaries = {}
     manifest, limits, data, evidence = project.collect(manifest_path, air_boundaries=boundaries)
     translator = translator.resolve(strict=True)
     tool_hash, tool_bytes = project.hash_bounded(translator, 256 * 1024 * 1024)
     envelope = {'schema': 1, 'kind': 'air2lean-project-diagnostics', 'evidence': evidence,
                 'translator': {'path': str(translator), 'sha256': tool_hash, 'bytes': tool_bytes},
-                'producer_protocol': {'schema': 1, 'kind': KIND, 'reference_revision': PROTOCOL_HEAD,
+                'producer_protocol': {'schema': PRODUCER_SCHEMA, 'kind': KIND, 'reference_revision': PROTOCOL_HEAD,
                                       'qualification': 'not_attested_by_adapter'},
                 'root_checks': [], 'complete': True, 'truncated': False,
                 'proof_status': 'not_run', 'runtime_outcomes': 'not_observed', 'source_correspondence': 'not_attested'}
@@ -267,7 +305,8 @@ def check_project(manifest_path, translator, limit, runner=invoke):
                 record['path_map'].append({'staged': staged.name, 'path': name,
                                            'sha256': evidence['files']['input/' + name]['sha256']})
             argv = [str(translator), '--diagnostics-json', str(air_dir), '--profile', evidence['profile']['name'],
-                    '--diagnostic-limit', str(limit), '--spawn-policy', project.spawn_policy(manifest)]
+                    '--diagnostic-limit', str(limit), '--unit-diagnostic-limit', str(unit_limit),
+                    '--spawn-policy', project.spawn_policy(manifest)]
             try:
                 result = runner(argv, rootdir, dict(limits, max_output_bytes=min(limits['max_output_bytes'], remaining)))
                 consumed += len(result['stdout']) + len(result['stderr'])
@@ -281,7 +320,7 @@ def check_project(manifest_path, translator, limit, runner=invoke):
                 else:
                     try:
                         demand(not result['stderr'], 'diagnostic producer wrote unexpected stderr')
-                        parsed = validate_receipt(result['stdout'], result['returncode'], mapping, air_dir, limit)
+                        parsed = validate_receipt(result['stdout'], result['returncode'], mapping, air_dir, limit, unit_limit)
                         record['producer'] = parsed
                         record['status'] = 'rejected' if local or parsed['status'] == 'rejected' else 'checked'
                         record['complete'] = parsed['complete']
@@ -310,6 +349,7 @@ def main(argv=None):
     parser.add_argument('--translator', type=Path, required=True)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--diagnostic-limit', type=int, default=256, choices=range(1, 4097), metavar='1..4096')
+    parser.add_argument('--unit-diagnostic-limit', type=int, default=64, choices=range(1, 4097), metavar='1..4096')
     args = parser.parse_args(argv)
     def cancel(signum, frame):
         raise KeyboardInterrupt
@@ -320,7 +360,8 @@ def main(argv=None):
             manifest, _, _ = project.load_manifest(manifest_path)
             protected = {manifest_path, args.translator.resolve()} | {manifest_path.parent / name for name in project.input_names(manifest)}
             demand(args.out.resolve() not in {p.resolve() for p in protected}, 'report destination overlaps an input or producer')
-        report, limits = check_project(manifest_path, args.translator, args.diagnostic_limit)
+        report, limits = check_project(manifest_path, args.translator, args.diagnostic_limit,
+                                       unit_limit=args.unit_diagnostic_limit)
         encoded = project.report_bytes(report, limits)
         if args.out:
             project.atomic_report(args.out, encoded, False)

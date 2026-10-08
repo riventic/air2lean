@@ -4,13 +4,13 @@ The diagnostic mode inspects selected AIR files without emitting Lean, invoking 
 compiler, running a program, or checking a theorem:
 
 ```sh
-air2lean --diagnostics-json ./air --diagnostic-limit 256
+air2lean --diagnostics-json ./air --diagnostic-limit 256 --unit-diagnostic-limit 64
 ```
 
 It prints one JSON object to stdout and exits 0 for `checked` or 1 for `rejected`,
 including argument and directory errors. The leading `--diagnostics-json` selects
-this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096), and
-`--spawn-policy available|fallible`; `-o`,
+this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096, default 256),
+`--unit-diagnostic-limit` (1–4096, default 64), and `--spawn-policy available|fallible`; `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary
 emission mode keeps its fail-fast interfaces and generated source format.
 
@@ -25,9 +25,11 @@ The project manifest's effective `spawn_policy` is passed explicitly to both
 translation and diagnostics. This does not add a producer-schema field or turn
 check-only validation into a proof, a host availability test, or a liveness claim.
 
-Schema 1 (`kind: air2lean-check-diagnostics`) gives each diagnostic an enum-backed
-stable `code`, `phase`, `category`, file/function identity, anchor, dependency chain,
-prerequisites and `first_error_in_unit`. Messages remain human-readable display
+Schema 2 (`kind: air2lean-check-diagnostics`) gives each diagnostic an enum-backed
+stable `code`, `phase`, `category`, file/function identity, anchor, source span,
+dependency chain, prerequisites, `first_error_in_unit` and `fatal`. Schema 2 adds
+`fatal`, populated `source_span`s, and the report's `caps` and `capped_units` to
+schema 1. Messages remain human-readable display
 text and are never scraped for codes, classifications or locations. The bounded log
 copies at most 2048 message characters before retaining a diagnostic and preserves
 an explicit original-message truncation flag. Standalone compatibility rendering
@@ -39,9 +41,24 @@ their byte charges. Once the detection byte is consumed, later files are skipped
 without another read allowance. A fresh metadata check rejects oversized inputs
 before open, then requires a regular file; actual bounded reads also detect growth.
 Function names and the directory argument are limited to 1024 characters. The diagnostic payload is
-bounded to 1 MiB and the requested count; `truncated: true` and `complete: false`
-disclose dropped diagnostics. Rejection survives either cap. Files skipped because
-of input limits are not accepted as checked.
+bounded to 1 MiB, the requested total count, and the requested count per unit (input
+file), so one unit with many findings cannot exhaust the report for its siblings.
+Every bound is stated in the report's `caps` object (`diagnostics`,
+`diagnostics_per_unit`, `payload_bytes`, `message_chars`, `files`, `input_bytes`,
+`function_name_chars`, `dependency_chain_names`). `capped_units` lists, sorted by file,
+each unit that lost diagnostics to a cap with its `dropped` count (`""` for diagnostics
+without a file); `diagnostics_observed` equals the retained diagnostics plus all
+dropped counts. `truncated: true` and `complete: false` disclose dropped diagnostics.
+Rejection survives every cap. Files skipped because of input limits are not accepted
+as checked.
+
+`fatal: true` marks fatal malformed input: inspection of that unit (or, for CLI and
+directory errors, of the run) stopped at the diagnostic, and no later phase of it ran.
+Fatal diagnostics are unreadable/oversized input, strict JSON syntax, an undecodable
+AIR header or body, a structurally unusable profile (unsupported schema, a missing or
+non-object `profile`), invalid instruction references or parameter ranks, a failed
+canonical rewrite invariant, and an unsupported `zig_version`. Every other diagnostic
+is an independent blocker that never stops its siblings.
 
 The schema vocabulary is fixed independently of message text:
 
@@ -95,9 +112,25 @@ validator policies with caller-specific messages; cache publication stays transa
 Instructions diagnosed after canonicalization use **canonical** IDs. Rewrites can
 renumber, merge or drop instructions, so no original-ID correspondence is inferred.
 The function identity uses the ordinary anonymous-name normalization over readable
-selected inputs. `source_span` is null: this AIR does not supply reliable Zig
-file/column spans. `nearest_dbg_line` is an approximate lexical debug-line hint,
-not a source span. Unavailable anchors stay explicitly unavailable.
+selected inputs. Exports from the current patched compiler carry additive source
+provenance ([AIR JSON](air-json.md): a function-level and inlined-callee `src` with the
+module-relative file and declaration line, and a `dbg_stmt` `column`). A diagnostic
+in a unit with that provenance gets `source_span: {file, module, line, column}`:
+
+- `source_span_status: "statement"`: the instruction's nearest preceding `dbg_stmt`
+  in its own inline scope (branch bodies start from their parent's statement, an
+  inlined body from its callee's declaration). The span is statement-granular: it
+  locates the Zig statement, not the exact subexpression.
+- `"declaration"`: a function-level diagnostic, or an instruction before any
+  `dbg_stmt`, gets the declaration line with `column: null`.
+- `"unavailable_in_AIR"` (`source_span: null`): older exports without `src`, an
+  inlined body without its callee's `src`, diagnostics before the AIR header decodes,
+  and diagnostics with no unit.
+
+Spans are attached when a diagnostic is logged, from the unit's exported-ID and
+canonical-ID maps, so payload accounting includes them. They are provenance from the
+compiler, not a correspondence claim (`source_correspondence` stays `not_attested`).
+`nearest_dbg_line` remains the older function-relative hint.
 
 Named direct calls and explicit spawn workers supply dependency edges. Missing,
 blocked and ambiguous selected callees receive separate codes. Deterministic BFS
@@ -108,18 +141,30 @@ this is not compiler-discovered closure, and indirect targets do not contribute
 chains. A blocked function can retain its declared identity without any fabricated
 partial function, SSA value or replacement instruction.
 
-This is an initial I05 collector, with explicit limits. Parsing, canonicalization,
-a single instruction's normalization, normalized structural validation, a single instruction/constant/
-global/signature validator, shared-definition checks and profile comparison can
-still return their first error within that unit. Generic boundary codes use
+Malformed-input and program-level boundaries collect every independent finding.
+Profile validation reports each invalid profile field (`PROFILE_FAILURE`, phase
+`profile`); unless the profile is structurally unusable, the body is still inspected
+under a placeholder of the valid fields, but the unit can neither pass nor join the
+cross-file comparison, which reports every differing field per file. Canonicalization
+reports every duplicate instruction ID, unknown or nested reference, out-of-scope use,
+invalid branch target and malformed `arg` rank (`CANONICAL_FAILURE`, category
+`malformed_input`, **exported** IDs, `fatal`). The whole-program validator reports each
+independent shared-definition inconsistency, std-model conflict, indirect target,
+progress-hint, spawn-target, callee and memory-item finding (`PROGRAM_FAILURE`, anchored
+at the function and canonical instruction); a finding at a call site that the per-call
+collection already reported is not repeated. The fallible spawn policy reports every
+unsupported spawn call. These boundaries share the validators of the fail-fast
+translation mode, whose first error is unchanged.
+
+The remaining first-error boundaries are explicit. An undecodable AIR body (types, an
+instruction's fields), a single instruction's normalization, normalized structural
+validation, and a single instruction/constant/global/signature/memory-item validator
+can return their first error within that unit. Generic boundary codes use
 `validation_failure`; they do not pretend to distinguish every malformed operand
 from every unsupported representation. Failed boundaries set `first_error_in_unit`
 and `complete: false`; failed prerequisites also receive skipped-check diagnostics.
-Later files, branches and call sites remain inspectable. The authoritative existing
-whole-program validator runs on structurally valid normalized functions; its first
-error can overlap a separately collected call failure. It still covers checks not
-decomposed here, including shared definitions, indirect targets and memory effects.
-Complete fine-grained diagnostic migration and exporter source maps remain work.
+Later files, branches and call sites remain inspectable. The whole-program validator
+runs on structurally valid normalized functions.
 
 `checked` means the selected AIR passed the translator's validation boundary. Per-file
 `local_check: passed` does not attest dependencies or a whole-program result. Reports
