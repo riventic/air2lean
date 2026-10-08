@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 33 complete, 45 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 32 complete, 46 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -372,13 +372,11 @@ Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLe
 
 ## A01 — Assembly effects and operand coverage
 
-Classification: complete.
+Classification: partial.
 
 explicit register, memory and observable-effect contracts before extending accepted constraints. Acceptance: writes affect the declared locations; aliases and clobbers are accounted for. Register assembly support does not imply arbitrary assembly safety.
 
-Completed in [PR126](https://github.com/riventic/air2lean/pull/126): read-write and memory asm operands are accepted only through an explicit effect contract (premise ASM-03): the opaque `airAsmFx_<hash>` is a pure function of the register inputs and the old read-write values, and the generated wrapper holds every memory effect (alias guard, loads, call, one store per lvalue output); `incm_frame`/`setm_frame`/`swapm_frame` prove that a run changes only the declared operands, aliased `+m` operands are `.unspecified`, and a reviewed registry entry covers a `memory`-clobber barrier; 25 forms are rejected (a `memory` clobber outside the registry, early-clobber, `rm`/`g` and memory result outputs, memory inputs, writes through const pointers, two outputs to one location, clobbers of pinned registers), and wrapper mutants fail the A03 interpreter harness. Scope: x86_64 GPR families and one registry entry; register assembly support does not imply arbitrary assembly safety.
-
-Maintain exact-source/profile regression and release audit; wider scopes remain separate.
+Bounded progress: Qualified register-only assembly. [PR126](https://github.com/riventic/air2lean/pull/126): read-write and memory asm operands are accepted only through an explicit effect contract (premise ASM-03): the opaque `airAsmFx_<hash>` is a pure function of the register inputs and the old read-write values, and the generated wrapper holds every memory effect (alias guard, loads, call, one store per lvalue output); `incm_frame`/`setm_frame`/`swapm_frame` prove that a run changes only the declared operands, aliased `+m` operands are `.unspecified`, a reviewed registry entry covers a `memory`-clobber barrier, 25 forms are rejected, and wrapper mutants fail the A03 interpreter harness. Remaining: effectful/non-allowlisted asm (rdtsc, rdrand, output-less, memory clobbers) was a repeatable opaque until the L13 asm allowlist (follow-up PR); memory-operand contracts absent.
 
 ## A02 — Instruction semantics and target expansion
 
