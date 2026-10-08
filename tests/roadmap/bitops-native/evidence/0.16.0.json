@@ -1,0 +1,135 @@
+{
+  "corpus": {
+    "Diff.lean.inc": "18ed8e2a56359928ab6b39dc1607470b9141938b1cf55290ce3ed18a65d2d738",
+    "native.zig": "f9c0d2c68db4a3b482321fe80da7cff56c189b65a58b2e9ab82388c738986374",
+    "wide.zig": "937de9b87a43c14c9fd2d0b8fd2d6fd4eb42a9f1c43d18e16469442ad6b0597e"
+  },
+  "expected_rows": 31366,
+  "host": "darwin-arm64",
+  "schema": "air2lean-bitops-native/1",
+  "stock_zig_sha256": "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489",
+  "targets": {
+    "aarch64-linux": {
+      "air_equivalent_to": "x86_64-linux",
+      "air_sha256": "e5b101b293b64a9936f7057af2d7580e92a3aec713c1d9a9811f425627395c34",
+      "executor": "docker:linux/arm64",
+      "lean_rows": 31366,
+      "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+      "modes": {
+        "Debug": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseFast": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSafe": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSmall": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        }
+      }
+    },
+    "aarch64-macos": {
+      "air_sha256": "addf5e94360e8e51a6f1db5021d6d415566f30f2ae8f824cb8a44be9b47e87d9",
+      "executor": "host",
+      "lean_rows": 31366,
+      "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+      "modes": {
+        "Debug": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseFast": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSafe": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSmall": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        }
+      }
+    },
+    "x86_64-linux": {
+      "air_sha256": "ba45063b6e0447692bb0e9d014d5a15f34a1ac66473137053fa55c4d1f7ab63b",
+      "executor": "docker:linux/amd64",
+      "lean_rows": 31366,
+      "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+      "modes": {
+        "Debug": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseFast": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSafe": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        },
+        "ReleaseSmall": {
+          "first_mismatches": [],
+          "lean_rows": 31366,
+          "mismatches": 0,
+          "native_exit": 0,
+          "native_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
+          "rows": 31366
+        }
+      }
+    }
+  },
+  "zig": "0.16.0"
+}

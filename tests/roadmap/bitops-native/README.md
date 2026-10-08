@@ -22,7 +22,9 @@ Each width has 13-17 operands (zero, one, maximum, sign boundary and its neighbo
 patterns, half-width masks, pseudo-random patterns). Shift counts are exhaustive up to width 40
 and boundary-dense above it. Counts at or above the width are excluded (illegal behavior;
 widths that are not powers of two also have representable illegal counts, tested in
-`tests/roadmap/bitops`). The corpus has 31,366 rows.
+`tests/roadmap/bitops`). `wide.zig` disables runtime safety per function, so the shift-count
+panic branch (`shiftRhsTooBig`, which the translator does not map) is absent from the AIR; the
+legal domain is unaffected. The corpus has 31,366 rows.
 
 `qualify.py run` exports AIR per target (`-OReleaseSafe -target T`), checks the export inventory
 (22 functions), translates it, evaluates it in Lean, builds the corpus with **stock** Zig for the

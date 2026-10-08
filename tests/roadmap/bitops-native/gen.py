@@ -72,6 +72,7 @@ def zig_fn(w, signed):
     u = f"u{w}"
     hi = w > 128
     lines = [f"pub export fn ops_{t}(sel: u32, hi: u128, lo: u128, k: u32) u128 {{",
+             "    @setRuntimeSafety(false); // counts >= W are excluded; the checked panic path is not translated",
              "    const wide: u256 = (@as(u256, hi) << 128) | lo;",
              f"    const x: {t} = @bitCast(@as({u}, @truncate(wide)));",
              f"    const amt: u{log2_bits(w)} = @intCast(k);",

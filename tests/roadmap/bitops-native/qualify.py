@@ -94,6 +94,21 @@ def export_air(zig_air, target, out):
     return h.hexdigest()
 
 
+TRANSLATABLE = ("x86_64-linux", "aarch64-macos")
+
+
+def air_differences(ref, other):
+    """Names of exported functions whose AIR differs from `ref` in anything but `profile`."""
+    bad = []
+    for p in sorted(ref.glob("*.json")):
+        a, b = json.loads(p.read_text()), json.loads((other / p.name).read_text())
+        a.pop("profile", None)
+        b.pop("profile", None)
+        if a != b:
+            bad.append(p.name)
+    return bad
+
+
 def lean_stream(air, work, label):
     gen_lean = work / f"Gen-{label}.lean"
     run(["lake", "exe", "air2lean", str(air), "-o", str(gen_lean), "--namespace", "Wide", "--prefix", "wide."],
@@ -117,14 +132,19 @@ def executor(spec, exe):
     raise SystemExit(f"unknown executor {spec}")
 
 
+exit_codes = {}
+
+
 def native_stream(zig, target, mode, exec_spec, work):
     exe = work / f"native-{target}-{mode}"
-    run([zig, "build-exe", f"-O{mode}", "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
+    # -fno-strip: Rosetta rejects the stripped ReleaseSmall x86_64 binary ("bss_size overflow").
+    run([zig, "build-exe", f"-O{mode}", "-fno-strip", "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
          f"-femit-bin={exe}", "--dep", "wide", f"-Mroot={HERE / 'native.zig'}", f"-Mwide={HERE / 'wide.zig'}"],
         cwd=work)
     out = work / f"native-{target}-{mode}.txt"
     with open(out, "w") as f:
-        run(executor(exec_spec, exe), stderr=f)
+        proc = subprocess.run(executor(exec_spec, exe), stderr=f)
+    exit_codes[str(out)] = proc.returncode
     return out
 
 
@@ -156,16 +176,34 @@ def cmd_run(a):
         evidence = {"schema": "air2lean-bitops-native/1", "zig": a.version,
                     "stock_zig_sha256": a.zig_sha256, "corpus": corpus_hashes(), "expected_rows": expected_rows,
                     "host": f"{platform.system().lower()}-{platform.machine()}", "targets": {}}
-        for target in a.targets.split(","):
-            air = work / f"air-{target}"
-            air_hash = export_air(a.zig_air, target, air)
-            lean = lean_stream(air, work, target)
-            entry = {"air_sha256": air_hash, "lean_sha256": sha(lean), "lean_rows": len(lean.read_text().splitlines()),
-                     "executor": execs[target], "modes": {}}
+        targets = a.targets.split(",")
+        airs, hashes, leans = {}, {}, {}
+        for target in sorted(targets, key=lambda t: t == "aarch64-linux"):
+            airs[target] = work / f"air-{target}"
+            hashes[target] = export_air(a.zig_air, target, airs[target])
+            entry = {"air_sha256": hashes[target], "executor": execs[target], "modes": {}}
+            if target in TRANSLATABLE:
+                leans[target] = lean_stream(airs[target], work, target)
+                lean = leans[target]
+            else:
+                # The translator is guarded to the model ABI scope (x86_64-linux, aarch64-macos):
+                # aarch64-linux AIR is accepted only if it equals the x86_64-linux AIR but for
+                # `profile`, and the Lean stream is that of the x86_64-linux translation.
+                if "x86_64-linux" not in leans:
+                    raise SystemExit(f"{target} needs x86_64-linux in --targets as its AIR reference")
+                diff = air_differences(airs["x86_64-linux"], airs[target])
+                if diff:
+                    raise SystemExit(f"{target} AIR differs from x86_64-linux beyond `profile`: {diff[:5]}")
+                lean = leans["x86_64-linux"]
+                entry["air_equivalent_to"] = "x86_64-linux"
+            entry.update({"lean_sha256": sha(lean), "lean_rows": len(lean.read_text().splitlines())})
             for mode in a.modes.split(","):
                 nat = native_stream(a.zig, target, mode, execs[target], work)
                 res = compare(nat, lean)
                 res["native_sha256"] = sha(nat)
+                res["native_exit"] = exit_codes[str(nat)]
+                if res["native_exit"]:
+                    res["crash_after_row"] = res["rows"]
                 entry["modes"][mode] = res
                 print(f"{a.version} {target} {mode}: rows={res['rows']} mismatches={res['mismatches']}", flush=True)
             evidence["targets"][target] = entry
@@ -173,7 +211,7 @@ def cmd_run(a):
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
         bad = [(t, m) for t, e in evidence["targets"].items() for m, r in e["modes"].items()
-               if r["mismatches"] or r["rows"] != expected_rows or r["lean_rows"] != expected_rows]
+               if r["mismatches"] or r["native_exit"] or r["rows"] != expected_rows or r["lean_rows"] != expected_rows]
         if bad:
             raise SystemExit(f"mismatching or incomplete lanes (triage required): {bad}")
     finally:
@@ -197,7 +235,7 @@ def cmd_native(a):
         for mode in a.modes.split(","):
             nat = native_stream(a.zig, target, mode, a.exec, work)
             rows = len(nat.read_text().splitlines())
-            ok = sha(nat) == want and rows == committed["expected_rows"]
+            ok = exit_codes[str(nat)] == 0 and sha(nat) == want and rows == committed["expected_rows"]
             print(f"{a.version} {target} {mode}: rows={rows} {'match' if ok else 'MISMATCH'}", flush=True)
             if not ok:
                 failed.append(mode)
@@ -253,7 +291,7 @@ def cmd_check(a):
                 r = entry["modes"].get(mode)
                 if r is None:
                     problems.append(f"{version} {target}: missing mode {mode}")
-                elif r["mismatches"] or r["rows"] != expected_rows or r["native_sha256"] != entry["lean_sha256"]:
+                elif r["mismatches"] or r.get("native_exit") or r["rows"] != expected_rows or r["native_sha256"] != entry["lean_sha256"]:
                     problems.append(f"{version} {target} {mode}: mismatches={r['mismatches']} rows={r['rows']}")
     if problems:
         print("\n".join(problems), file=sys.stderr)
