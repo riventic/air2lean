@@ -9,8 +9,8 @@
 
 The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
-tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`
-and `aarch64-linux` jobs are native-runner jobs that only GitHub evidence covers. `record` requires a clean
+tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`,
+`aarch64-linux` and `bitops-native-arm` jobs are native-runner jobs that only GitHub evidence covers. `record` requires a clean
 checkout and binds to HEAD. A gate is passed only with evidence for that exact commit: GitHub
 Actions run JSON (`gh run view ID --json databaseId,headSha,headBranch,conclusion,status,event,
 workflowName,url,jobs`) or a scripts/local-ci.sh results directory. Gates without evidence are
@@ -206,10 +206,11 @@ def reproduce(row):
 
 MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
 # Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
-# T04 `aarch64-linux` (ubuntu-24.04-arm).
+# T04 `aarch64-linux` and L02 `bitops-native-arm` (ubuntu-24.04-arm).
 NATIVE_JOBS = {
     'macos': MACOS_REPRODUCE,
     'aarch64-linux': 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job',
+    'bitops-native-arm': 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job',
 }
 
 
@@ -244,7 +245,7 @@ def build_plan(root, revision):
     expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
     if set(jobs) - set(NATIVE_JOBS) != {'test'}:
-        raise ReleaseError('%s: only the test, macos and aarch64-linux jobs are qualified for release records'
+        raise ReleaseError('%s: only the test, macos, aarch64-linux and bitops-native-arm jobs are qualified for release records'
                            % WORKFLOW)
     job = jobs['test']
     rows = (((job.get('strategy') or {}).get('matrix') or {}).get('include')) or []

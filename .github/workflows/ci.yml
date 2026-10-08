@@ -1683,37 +1683,38 @@ jobs:
 
   # L02: the wide bit-operation corpus on native aarch64-linux hardware. No Lean here: the
   # native stream must equal the Lean stream recorded in the committed evidence, which the
-  # `test` and `macos` jobs reproduce from fresh translations.
+  # `test` and `macos` jobs reproduce from fresh translations. Matrix-free (a native job of
+  # scripts/release-record.py): one step per Zig version.
   bitops-native-arm:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - zig: "0.16.0"
-            sha256: ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
-          - zig: "0.15.2"
-            sha256: 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
-          - zig: "0.14.1"
-            sha256: f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
-      - name: Install stock zig (aarch64-linux)
+      - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
         run: |
           set -euo pipefail
-          curl -fL --output zig.tar.xz "https://ziglang.org/download/${{ matrix.zig }}/zig-aarch64-linux-${{ matrix.zig }}.tar.xz"
-          echo "${{ matrix.sha256 }}  zig.tar.xz" | sha256sum -c -
-          mkdir -p host-zig
-          tar -xJf zig.tar.xz -C host-zig --strip-components=1
+          while read -r version sha256; do
+            curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+              "https://ziglang.org/download/$version/zig-aarch64-linux-$version.tar.xz"
+            echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | sha256sum -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$version"
+            tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$version/zig" version)" = "$version" ]
+          done <<'EOF'
+          0.16.0 ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+          0.15.2 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
+          0.14.1 f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+          EOF
 
       - name: Wide integer bit operations, native aarch64-linux
         run: |
           set -euo pipefail
           python3 -B tests/roadmap/bitops-native/gen.py --check
-          python3 -B tests/roadmap/bitops-native/qualify.py native --version "${{ matrix.zig }}" \
-            --zig "$PWD/host-zig/zig" --target aarch64-linux \
-            --evidence "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"
+          for version in 0.16.0 0.15.2 0.14.1; do
+            python3 -B tests/roadmap/bitops-native/qualify.py native --version "$version" \
+              --zig "$RUNNER_TEMP/host-zig-$version/zig" --target aarch64-linux \
+              --evidence "tests/roadmap/bitops-native/evidence/$version.json"
+          done
