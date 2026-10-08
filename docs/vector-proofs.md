@@ -147,7 +147,7 @@ Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid ou
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
 only where the probe and `lanes.zig` run natively: an LLVM-backend profile on x86_64 or aarch64.
 Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`) and 0.14.1/0.15.2 runtime lanes stay
-rejected. An `undefined` store through a lane pointer is rejected, as for a packed field.
+rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
 
 Lane reads. `v.*[i]` through a pointer to a bit-packed vector is a lane pointer and a `load` in
 0.16.0 (`Zig.loadLane`), and a whole-vector `load` then `array_elem_val` in 0.15.2; canonicalization
