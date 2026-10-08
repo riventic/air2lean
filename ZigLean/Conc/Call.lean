@@ -115,6 +115,17 @@ cancelation point is delivered there (`error.Canceled`); option 1 leaves it pend
 cancelation point. -/
 def cancelDelivered : Nat := 0
 
+/-- The end of a blocking cancelation point: a request that arrived while it blocked is
+delivered (`error.Canceled`) or stays pending for the next cancelation point (the oracle's
+choice); with no request, `ok`. -/
+def lateCancelC : CM Tgt σ (Except ErrName Unit) := do
+  if ← callMC Thread.cancelPending then
+    if (← pickC (fun _ => 2)) = cancelDelivered then
+      callMC Thread.takeCancel
+      pure (.error "Canceled")
+    else pure (.ok ())
+  else pure (.ok ())
+
 /-- `Io.futexWait(T, ptr, expected)`, a cancelation point (`docs/std-models.md` §Cancelation).
 A request that is pending at the call is delivered at once (`Syscall.start` returns
 `error.Canceled`, `Io/Threaded.zig:1347-1364`). Else the wait is `futexWaitC` (it may return
@@ -127,12 +138,7 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
     pure (.error "Canceled")
   else
     futexWaitC io p expected
-    if ← callMC Thread.cancelPending then
-      if (← pickC (fun _ => 2)) = cancelDelivered then
-        callMC Thread.takeCancel
-        pure (.error "Canceled")
-      else pure (.ok ())
-    else pure (.ok ())
+    lateCancelC
 
 /-- `Io.futexWake(T, ptr, max_waiters)`. -/
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
@@ -157,20 +163,19 @@ def groupConcurrentC (g : Ptr) (io : Io) (t : Tgt) : CM Tgt σ (Except ErrName U
   groupAsyncC g io t
   pure (.ok ())
 
-/-- The joins of `Group.await` by an `Io` task (a nested group): a request of the awaiter that
-is pending before a join is delivered there; the awaiter then cancels the rest of the group, waits
-for it and returns `error.Canceled` (`groupAwait`, `Io/Threaded.zig:2291-2338`). A request that
-arrived during the last join is delivered or stays pending (the oracle's choice). -/
+/-- The joins of `Group.await` by an `Io` task (a nested group). Before each join, a pending
+request of the awaiter is delivered or left pending (the oracle's choice: std delivers it while a
+task still runs and returns `ok` when the group has already finished); a delivered request makes
+the awaiter cancel the rest of the group, wait for it and return `error.Canceled` (`groupAwait`,
+`Io/Threaded.zig:2291-2338`). After the last join the same choice is made. -/
 def groupAwaitTaskC : List ThreadId → CM Tgt σ (Except ErrName Unit)
-  | [] => do
-    if ← callMC Thread.cancelPending then
-      if (← pickC (fun _ => 2)) = cancelDelivered then
-        callMC Thread.takeCancel
-        pure (.error "Canceled")
-      else pure (.ok ())
-    else pure (.ok ())
+  | [] => lateCancelC
   | tid :: rest => do
-    if ← callMC Thread.cancelPending then
+    let deliver ← if ← callMC Thread.cancelPending then do
+        let c ← pickC (fun _ => 2)
+        pure (decide (c = cancelDelivered))
+      else pure false
+    if deliver then
       callMC Thread.takeCancel
       callMC (Thread.requestCancel (tid :: rest).toArray)
       for u in tid :: rest do joinC u

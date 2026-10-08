@@ -322,30 +322,12 @@ theorem not_strict : ¬ proto.strict = true := by decide
 
 /-! ## The task's cancelation point -/
 
-/-- The rest of `futexWaitCancelableC` after its futex wait. -/
-def afterWait {σ : Type} : CM Tgt σ (Except ErrName Unit) := do
-  if ← callMC Thread.cancelPending then
-    if (← pickC (fun _ => 2)) = cancelDelivered then
-      callMC Thread.takeCancel
-      pure (.error "Canceled")
-    else pure (.ok ())
-  else pure (.ok ())
-
-theorem futexWaitCancelableC_eq {σ : Type} (p : Ptr) (e : BitVec 32) :
-    (futexWaitCancelableC ⟨⟩ p e : CM Tgt σ (Except ErrName Unit)) = (do
-      if ← callMC Thread.cancelPending then
-        callMC Thread.takeCancel
-        pure (.error "Canceled")
-      else
-        futexWaitC ⟨⟩ p e
-        afterWait) := rfl
-
-theorem wp_afterWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh}
+theorem wp_lateCancel {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh}
     (hc : m.current = 1) (hi : Inv (upd G 1 gT) m)
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
     (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 gT) m' → Q (r, ()) G' m' k) :
-    proto.WP 1 ((afterWait : CM Tgt Unit _).run ()) Q G m n := by
-  unfold afterWait
+    proto.WP 1 ((lateCancelC : CM Tgt Unit _).run ()) Q G m n := by
+  unfold lateCancelC
   simp only [StateT.run_bind]
   refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
   dsimp only
@@ -369,7 +351,7 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh} {p : P
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
     (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 gT) m' → Q (r, ()) G' m' k) :
     proto.WP 1 ((futexWaitCancelableC ⟨⟩ p (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
-  rw [futexWaitCancelableC_eq]
+  unfold futexWaitCancelableC
   simp only [StateT.run_bind]
   refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
   dsimp only
@@ -384,13 +366,13 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh} {p : P
     have hi₁' : Inv (upd G₁ 1 gT) m₁ := by rw [← hg₁, upd_same]; exact hi₁
     rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, -, -, -, -, -, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
     all_goals simp only [Bool.false_eq_true, ↓reduceIte]
-    · refine wp_afterWait ?_ ?_ hQ
+    · refine wp_lateCancel ?_ ?_ hQ
       · rfl
       · exact inv_keep hi₁' rfl rfl rfl rfl rfl
-    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_afterWait ?_ ?_ hQ⟩
+    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_lateCancel ?_ ?_ hQ⟩
       · rfl
       · exact inv_keep hi₁' rfl rfl rfl rfl rfl
-    · refine wp_afterWait ?_ ?_ hQ
+    · refine wp_lateCancel ?_ ?_ hQ
       · rfl
       · exact inv_keep hi₁' rfl rfl rfl rfl rfl
 
