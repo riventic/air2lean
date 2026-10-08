@@ -112,16 +112,22 @@ ABI padding (`u24`, `u40`, `f80`) is bit-packed by the LLVM backend: lane `i` is
 alignment `⌈n * w / 8⌉` rounded up to a power of 2 (`packedVecLayout`, `Vec.packedEnc`; observed by
 `tests/roadmap/vector-layouts/probe.zig`). The checker admits such a vector in memory only for an
 AIR file whose schema-12 profile names `stage2_llvm` (other backends, and legacy profiles without
-a backend, are rejected), and never a lane pointer into it. Value-only vectors of every lane type
-still support the lane-wise operations above.
+a backend, are rejected). Value-only vectors of every lane type still support the lane-wise
+operations above.
 
 A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
 size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
 are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
 A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of a byte-strided integer or float
-vector is an item pointer, as for an array. A lane pointer of a `bool` vector or of a bit-packed
-vector is outside the subset: the lane is a bit field, and the AIR file has no lane index (the
-pointer type's `vector_index`).
+vector is an item pointer, as for an array. Zig gives `&v[i]` of a `bool` vector or of a vector
+whose lanes are not a power-of-two number of bytes the type `*align(a:0:n:i) T`: the vector's
+address, with the lane in the type (`vector_index`). For integer and `bool` lanes of an AIR file
+whose schema-12 profile names `stage2_llvm` on x86_64 or aarch64, the translator makes it a
+bit-pointer into the vector's `n * w`-bit integer, as for a packed field: host `⌈n * w / 8⌉` bytes
+(LLVM's store size of the vector), bit offset `i * w`. The `ptr_elem_ptr` is the vector pointer
+itself, and a load or store through it is `Zig.loadLane`/`Zig.storeLane`, which read or write
+only the lane's bits of the host bytes (`docs/vector-proofs.md` §Lane pointers). Float lanes
+(`f80`), runtime lanes (0.14.1/0.15.2), other backends and other targets stay rejected.
 
 ### Places
 
