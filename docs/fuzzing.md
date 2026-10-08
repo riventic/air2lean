@@ -109,12 +109,12 @@ Commit 9f39e808 plus this change; macOS aarch64; stock Zig 0.16.0 for native tes
 `zig-air-0.16.0-v1` exporter (zig-unlocked sha256 8b4be884bf62095a...), Lean v4.34.0;
 `check.sh --heavy OUT 0 40` under `build-guard.py` lane C. 40 seeds: 37 pass all three stages
 (native test, translation, and `#guard` of `entry` on four inputs equal to native results).
-A negative control (corrupted expected value) is rejected by Lean. 3 seeds fail at translation
-(Lean does not elaborate Gen.lean); all are one translator bug:
+A negative control (corrupted expected value) is rejected by Lean. 3 seeds failed at translation
+(Lean did not elaborate Gen.lean); all were one translator bug, since fixed:
 
 | Seeds | Stage | Triage |
 |---|---|---|
-| 18, 19, 39 | translate (Gen.lean elaboration) | OPEN translator bug: a comptime-known tagged-union local whose address is taken becomes a constant global; the block is encoded without a `Zig.Enc U` instance and pointer constants into it are emitted as `Zig.ptrFromAddr 0`. Reproducer `tests/roadmap/fuzz/known-failures/fuzz_s19.zig`. Not fixed here (not small and scoped). |
+| 18, 19, 39 | translate (Gen.lean elaboration) | FIXED: a comptime-known tagged-union local whose address is taken becomes a constant global. Sema points its live uses at the global and leaves its dead `alloc` and stores as `bitcast`s of address 0; the translator emitted those placeholders as `Zig.ptrFromAddr 0`, an integer-to-pointer `bitcast` did not mark the function as using memory, and the global's type had no `Zig.Enc` instance. It was not a wrong pointer. Canon now drops the dead placeholders (a placeholder that is still read is rejected), `@ptrFromInt` counts as memory use and every function's global types get `Zig.Enc` when `mem0` exists. Regression: `tests/roadmap/const-locals/` (`fuzz_s19.zig`). Seeds 18, 19 and 39 pass `check.sh --heavy` after the fix. |
 
 Harness bugs found and fixed by the run: generated names `u<N>`/`i<N>` shadow Zig primitive
 types (renamed `un<N>`/`lp<N>`); the old `zig-air-0.16.0` exporter predates pointer constants
