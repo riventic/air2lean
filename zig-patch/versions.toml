@@ -55,3 +55,11 @@ sha256 = "24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c"
 version = "v4.2.4"
 url = "https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz"
 sha256 = "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63"
+
+# elan for linux/arm64 containers (scripts/second-machine.sh --platform linux/arm64). sha256
+# from downloading the release asset and hashing it, cross-checked against the asset digest
+# GitHub reports for the v4.2.4 release.
+[ci.elan-aarch64]
+version = "v4.2.4"
+url = "https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-unknown-linux-gnu.tar.gz"
+sha256 = "05febd124d84ebf994b2e7479922a5650b1e950c17ae3bd1ddd776b65bb72bf9"
