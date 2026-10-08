@@ -46,6 +46,10 @@ nonvacuity_witness ret_total :=
 theorem ret_returns (P : Assn) (v : Nat) : Returns P (ret v) :=
   (ret_total P v).returns
 
+nonvacuity_witness ret_returns :=
+  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
+    Mem.seq_default, trivial⟩
+
 theorem ret_partial (P : Assn) (v : Nat) : Triple P (ret v) (fun _ => P) :=
   (ret_total P v).toPartial
 

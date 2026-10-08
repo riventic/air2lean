@@ -39,7 +39,7 @@ import json, sys
 from pathlib import Path
 actual = json.loads(Path(sys.argv[1]).read_text())
 expected = json.loads(Path('tests/roadmap/coverage-report/statement-binding.json').read_text())
-fields = ('name', 'module', 'dependencies', 'statement_dependencies', 'conclusion_dependencies', 'conclusion')
+fields = ('name', 'module', 'dependencies', 'statement_dependencies', 'conclusion_dependencies', 'conclusion', 'statement')
 assert actual['status'] == 'pass', actual['violations']
 assert [{k: t[k] for k in fields} for t in actual['theorems']] == expected['theorems'], actual['theorems']
 PY

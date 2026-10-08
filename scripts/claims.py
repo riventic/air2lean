@@ -248,8 +248,12 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
         strength = 'safety'
     result['strength'] = strength
     if subject is not None:
-        result['domain'] = _domain(statement, entry, subject)
-        result['scope'] = result['domain']['scope'] if nonvacuous else 'scoped'
+        domain = _domain(statement, entry, subject)
+        # Unwitnessed premises may be unsatisfiable: the domain may be empty.
+        domain['nonvacuity'] = witnesses['nonvacuity']
+        if not nonvacuous:
+            domain['scope'] = 'scoped'
+        result['domain'], result['scope'] = domain, domain['scope']
     return result
 
 
