@@ -103,6 +103,8 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(report['status'], 'failed')
         reasons = {r['function']: r['reason'] for r in report['unexported_roots']}
         self.assertEqual(reasons, {'proj.ghost': 'inline_only', 'proj.nowhere': 'not_found'})
+        ghost = next(r for r in report['unexported_roots'] if r['function'] == 'proj.ghost')
+        self.assertEqual(ghost['source_hints'], [{'module': 'proj', 'line': 2, 'inline': True, 'generic': True}])
         self.assertIn('proj.ghost', report['reason'])
         self.assertFalse(out.exists(), 'nothing is published when a requested root has no AIR')
 

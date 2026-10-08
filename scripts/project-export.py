@@ -226,7 +226,7 @@ def compiler_argv(zig, spec, paths, generated):
 def source_hints(fqn, paths):
     """Declarations of the root's last name component in the module sources (an explanation, not a proof)."""
     name = fqn.rsplit('.', 1)[-1]
-    pattern = re.compile(r'^\s*(?:pub\s+)?(?:export\s+)?(inline\s+)?fn\s+' + re.escape(name) + r'\s*\(([^)]*)\)', re.M)
+    pattern = re.compile(r'^[ \t]*(?:pub\s+)?(?:export\s+)?(inline\s+)?fn\s+' + re.escape(name) + r'\s*\(([^)]*)\)', re.M)
     hints = []
     for module, path in sorted(paths.items()):
         text = path.read_text(encoding='utf-8', errors='replace')
