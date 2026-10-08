@@ -1516,6 +1516,9 @@ structure AsmDef where
   inputWidths : Array Nat
   /-- The width of each output, in output order. -/
   outputWidths : Array Nat
+  /-- The width of each read-write (`+r`, `+m`) output, in output order: the opaque's trailing
+  parameters, the old values (A01). Empty for a register-only op. -/
+  rwWidths : Array Nat := #[]
   deriving BEq
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
@@ -1540,6 +1543,18 @@ def asmDefName (key : String) : String :=
   let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
     (h ^^^ c.val) * 0x01000193
   s!"airAsm_{h}"
+
+/-- The opaque's name for an op with these clobbers and outputs: `airAsmFx_<hash>` for an op under
+the effect contract (`asmIsEffect`: a read-write or memory output, or a registry-approved
+`"memory"` clobber; premise ASM-03), else `airAsm_<hash>` (register-only, ASM-01). Same hash. -/
+def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String) : String :=
+  let n := asmDefName key
+  if asmIsEffect clobbers outputs then "airAsmFx_" ++ (n.drop "airAsm_".length).toString else n
+
+/-- The widths of the read-write outputs, in output order (`AsmDef.rwWidths`). -/
+def asmRwWidths (outputs : Array AsmOperand) (outputWidths : Array Nat) : Array Nat :=
+  (outputs.zip outputWidths).filterMap fun (o, w) =>
+    if ((parseAsmOutput o.constraint).map (·.readWrite)).getD false then some w else none
 
 /-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
 `Check.lean` accepts only register (so integer) operands. -/
@@ -1567,7 +1582,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   for f in funcs do
     for i in f.allInsts do
       if i.op.isSpinHint then continue
-      if let .asm source _ _ outputs inputs := i.op then
+      if let .asm source _ clobbers outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
           | .inst id => (f.allInsts.find? (·.id == id)).map (·.ty)
@@ -1577,7 +1592,8 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         let key := asmKey source constraints inputWidths outputWidths
         if !seen.contains key then
           seen := seen.push key
-          defs := defs.push { name := asmDefName key, inputWidths, outputWidths }
+          defs := defs.push { name := asmOpName clobbers outputs key, inputWidths, outputWidths,
+                              rwWidths := asmRwWidths outputs outputWidths }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
@@ -1585,7 +1601,7 @@ to its output's `BitVec` (`Unit` for no output; a tuple in output order for more
 about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
 doc comment). -/
 def emitAsmDef (d : AsmDef) : String :=
-  let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
+  let params := ((d.inputWidths ++ d.rwWidths).toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
   let ret := if d.outputWidths.isEmpty then "Unit"
     else " × ".intercalate (d.outputWidths.toList.map fun w => s!"BitVec {w}")
   s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
@@ -2253,18 +2269,32 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
-  | .asm source _ _ outputs inputs =>
+  | .asm source _ clobbers outputs inputs =>
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
       (env, some l)
     else
-    -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
-    -- pass emitted, or the call below resolves to nothing.
+    -- Same identity as `collectAsmOps` (`asmKey`, `asmOpName`): this must name the very `opaque`
+    -- def that pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
     let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmDefName (asmKey source constraints inputWidths outputWidths)
-    let args := inputs.toList.map fun i => rv i.ref.get!
+    let name := asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths)
+    -- The effect contract (A01, `ZigLean/Asm.lean`): the old value of each read-write output is
+    -- read before the call, in output order, and passed after the inputs.
+    let rwOuts := outputs.toList.zipIdx.filter fun (o, _) =>
+      ((parseAsmOutput o.constraint).map (·.readWrite)).getD false
+    let rwName (k : Nat) : String := s!"a{inst.id}o{k}"
+    let rwReads := rwOuts.filterMap fun (o, k) => o.ref.map fun ptr =>
+      if fc.isMemPtr ptr then s!"let {rwName k} ← {fc.loadMem ptr (rv ptr)}"
+      else s!"let {rwName k} ← pure ({fc.loadPlace ptr})"
+    -- Two or more locations written through memory pointers: the aliasing guard.
+    let memWrites := outputs.toList.filterMap fun o => o.ref.filter fc.isMemPtr
+    let guard := if memWrites.length < 2 then [] else
+      let locs := memWrites.map fun ptr =>
+        s!"({rv ptr}, {fc.sizeOf (((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0)})"
+      [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
+    let args := inputs.toList.map (fun i => rv i.ref.get!) ++ rwOuts.map (rwName ·.2)
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
     if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
       let (env, l) := bindLet fc env inst.id s!"pure ({call})"
@@ -2277,7 +2307,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let n := outputs.size
       let proj (k : Nat) : String :=
         t ++ tupleProjection n k
-      let (env, lines) := outputs.toList.zipIdx.foldl (init := (env, [s!"let {t} := {call}"]))
+      let (env, lines) := outputs.toList.zipIdx.foldl
+        (init := (env, guard ++ rwReads ++ [s!"let {t} := {call}"]))
         fun (env, ls) (o, k) => match o.ref with
           | none =>
             let (env, l) := bindLet fc env inst.id s!"pure {proj k}"

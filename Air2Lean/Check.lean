@@ -4,6 +4,7 @@ import Air2Lean.Memory
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
+import Air2Lean.AsmContract
 import ZigLean.Mem.Enc
 import ZigLean.Vec
 
@@ -19,12 +20,15 @@ has no initial value or a partly `undefined` one, and an `extern` global outside
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
-An `assembly` instruction (M21) is accepted only when every operand is an integer with a
-register constraint (`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint that
-names an output (`0`, `1`, …), and there is no `"memory"` clobber. At most one output is the asm
-expression's own result (`ref = none`); every other output is an lvalue output, a store through
-its pointer `ref`. Anything else (a memory operand, a read-write output, a `"memory"` clobber)
-is outside the subset.
+An `assembly` instruction (M21, A01) is accepted only when every operand is an integer with a
+constraint of `Air2Lean/AsmContract.lean`'s grammar: a register output (`=r`, `={reg}`, early
+clobber `=&`), a read-write (`+r`, `+{reg}`) or memory (`=m`, `+m`) lvalue output, a register
+input (`r`, `{reg}`) or a matching input (`0`, `1`, …) tied to a write-only register output. At
+most one output is the asm expression's own result (`ref = none`); every other output is an
+lvalue output, a store through its pointer `ref`. No two outputs write the same local, no
+clobber names a pinned operand register, and a `"memory"` clobber needs a reviewed
+`asmPureRegistry` entry. Anything else (an `m` input, an immediate, `=&m`) is outside the
+subset.
 -/
 
 namespace Air2Lean
@@ -940,22 +944,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← checkInsts cx line errBody
     pure line
   | .line n => pure n
-  | .asm _ _ clobbers outputs inputs =>
+  | .asm source isVolatile clobbers outputs inputs =>
     if op.isSpinHint && cx.types[ty]? != some .void then
       throw s!"{fnName}: near line {line}: a spin hint must return void"
-    -- Register operands only (M21): every operand value is an integer, so `Emit.lean` can map it
-    -- to a `BitVec`.
+    -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
+    -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
-    if clobbers.contains "memory" then
-      throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21)"
+    if clobbers.contains "memory" &&
+        (asmPureEntry? source isVolatile clobbers outputs inputs).isNone then
+      throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21): \
+        it may write any memory, and no reviewed registry entry declares this block pure \
+        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`)"
     -- One output can be the expression's own result (`-> T`, no `ref`); every other output
     -- is a store through its pointer `ref` (an lvalue output).
+    let mut parsed : Array AsmOutput := #[]
     for o in outputs do
-      if !isRegisterConstraint o.constraint || !o.constraint.startsWith "=" then
-        throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
-          register output constraint (M21)"
+      let some po := parseAsmOutput o.constraint
+        | throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
+          register, read-write or memory output constraint (M21, A01)"
+      parsed := parsed.push po
       let outTy ← match o.ref with
-        | none => pure ty
+        | none =>
+          if po.isEffect then
+            throw s!"{fnName}: near line {line}: asm output '{o.name}' with constraint \
+              '{o.constraint}' needs an lvalue operand: a read-write or memory output has a \
+              location (A01)"
+          pure ty
         | some r =>
           let some pty := cx.valTy? r
             | cx.fail line s!"asm output '{o.name}': operand has no known type"
@@ -963,13 +977,62 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             | cx.fail line s!"asm output '{o.name}' is not a pointer"
           if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
             cx.fail line s!"asm output '{o.name}' is a bit-pointer"
+          if let some (.ptr _ true _) := cx.types[pty]? then
+            cx.fail line s!"asm output '{o.name}' writes through a const pointer"
           cx.memAccess line r
           pure c
       if !isIntTy outTy then
         throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+      if po.memory then
+        match cx.types[outTy]? with
+        | some (.int _ b) =>
+          unless [8, 16, 32, 64].contains b do
+            throw s!"{fnName}: near line {line}: asm memory output '{o.name}' is a {b}-bit \
+              integer, not a whole 1, 2, 4 or 8 byte memory operand (A01)"
+        | _ => pure ()
     if (outputs.filter (·.ref.isNone)).size > 1 then
       cx.fail line "an asm expression with two result outputs (malformed input in the AIR file)"
+    -- Aliases (A01): two outputs that write the same local (or the same pointer value) leave the
+    -- final value to the instructions' store order, which the contract does not fix.
+    let written := outputs.filterMap (·.ref)
+    let root? (v : Val) : Option InstId := match v with
+      | .inst id => (cx.localRoots.find? (·.1 == id)).map (·.2)
+      | _ => none
+    for h : a in [0:written.size] do
+      for h' : b in [a + 1:written.size] do
+        let same := written[a] == written[b] ||
+          match root? written[a], root? written[b] with
+          | some x, some y => x == y
+          | _, _ => false
+        if same then
+          throw s!"{fnName}: near line {line}: two asm outputs write the same location: their \
+            final value depends on the store order, which the asm contract does not fix (A01)"
+    -- Pinned registers and clobbers (A01): a clobbered register cannot also carry an operand,
+    -- two outputs (or two inputs) cannot share one pinned register, and an input cannot share an
+    -- early-clobber output's register.
+    let family? (pin : Option String) : Option Nat := pin.bind x86RegFamily
+    let clobbered := clobbers.filterMap x86RegFamily
+    let outPins := parsed.filterMap fun po => family? po.pin
+    let inputPin? (c : String) : Option Nat := (asmRegBody? c).bind family?
+    let inPins := inputs.filterMap fun i => inputPin? i.constraint
+    let dup (xs : Array Nat) : Bool := xs.zipIdx.any fun (x, k) => (xs.extract 0 k).contains x
+    if (outPins ++ inPins).any clobbered.contains then
+      throw s!"{fnName}: near line {line}: an asm clobber names a register that also carries an \
+        operand (A01)"
+    if dup outPins || dup inPins then
+      throw s!"{fnName}: near line {line}: two asm outputs or two inputs pin the same register \
+        (A01)"
+    let earlyPins := parsed.filterMap fun po => if po.earlyClobber then family? po.pin else none
+    if inPins.any earlyPins.contains then
+      throw s!"{fnName}: near line {line}: an asm input pins the register of an early-clobber \
+        output (A01)"
     for i in inputs do
+      let tied := match i.constraint.toNat? with
+        | some k => (parsed[k]?).map fun po => !po.readWrite && !po.memory && !po.earlyClobber
+        | none => none
+      if tied == some false then
+        throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' ties to a \
+          read-write, memory or early-clobber output (A01)"
       if !((!i.constraint.startsWith "=" && isRegisterConstraint i.constraint) ||
           isMatchingConstraint outputs.size i.constraint) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
