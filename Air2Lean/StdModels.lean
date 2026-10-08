@@ -100,7 +100,24 @@ def stdModels : Array StdModel := #[
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.detach",
-    kind := .rejected "Thread.detach is outside the fork-join subset: every spawned thread must be joined" }]
+    kind := .rejected "Thread.detach is outside the fork-join subset: every spawned thread must be joined" },
+  -- C05: cancelable `std.Io` APIs outside the cancelation model (`docs/std-models.md`
+  -- §Cancelation). Modelled: `Io.futexWait` (and the std code over it), `Io.Group.cancel`,
+  -- `Io.Group.await`.
+  { symbol := "Io.checkCancel",
+    kind := .rejected "Io.checkCancel is outside the cancelation model: only futex waits and Io.Group.await are modelled cancelation points" },
+  { symbol := "Io.recancel",
+    kind := .rejected "Io.recancel is outside the cancelation model: a delivered cancelation request is not re-armed" },
+  { symbol := "Io.swapCancelProtection",
+    kind := .rejected "Io.swapCancelProtection is outside the cancelation model: tasks have no cancel protection state" },
+  { symbol := "Io.sleep",
+    kind := .rejected "Io.sleep is outside the model: it has no clock" },
+  { symbol := "Io.operate",
+    kind := .rejected "Io.operate is outside the model: Io operations are not modelled" },
+  { symbol := "Io.Batch.awaitAsync",
+    kind := .rejected "Io.Batch is outside the cancelation model: only Io.Group tasks are modelled" },
+  { symbol := "Io.Batch.cancel",
+    kind := .rejected "Io.Batch is outside the cancelation model: only Io.Group tasks are modelled" }]
 
 private def stdModelIndex : Std.HashMap String StdModel :=
   stdModels.foldl (fun index m => index.insert m.symbol m) {}
