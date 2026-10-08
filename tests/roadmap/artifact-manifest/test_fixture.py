@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """I07 edit-one-link regressions on a copy of the committed receipt-chained provenance fixture.
 
-The fixture (assurance/provenance) is a genuine fresh schema-12 export of examples/provenance with
+The fixture (assurance/provenance) is a genuine fresh schema-12 export of assurance/provenance/src with
 its schema-2 proof receipt and native-binary identity. Each case copies the tracked link inputs,
 changes one link and requires exactly the dependent links (and no others) to be reported stale.
 No Zig, Lake or Lean runs; `scripts/provenance-evidence.py regenerate` is the heavy counterpart.
@@ -18,7 +18,7 @@ import unittest
 sys.dont_write_bytecode = True
 ENV = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
 ROOT = Path(__file__).resolve().parents[3]
-TREES = ('scripts', 'Air2Lean', 'ZigLean', 'zig-patch', 'examples/provenance', 'Proofs/Provenance',
+TREES = ('scripts', 'Air2Lean', 'ZigLean', 'zig-patch', 'Proofs/Provenance',
          'assurance/provenance')
 FILES = ('Air2Lean.lean', 'ZigLean.lean', 'lean-toolchain', 'lakefile.toml', 'lake-manifest.json')
 FIX = 'assurance/provenance/'
@@ -91,7 +91,7 @@ class FixtureTests(unittest.TestCase):
                          ['add_eq', 'double_eq'])
 
     def test_source(self):
-        self.append('examples/provenance/provenance.zig', '// edited\n')
+        self.append('assurance/provenance/src/provenance.zig', '// edited\n')
         self.local(['source', 'native'])
 
     def test_compiler_patch(self):

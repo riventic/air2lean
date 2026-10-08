@@ -1307,6 +1307,14 @@
         {
           "path": "tests/roadmap/artifact-manifest/test_manifest.py",
           "anchor": "def test_profile_mismatch_between_air_and_generated"
+        },
+        {
+          "path": "tests/roadmap/artifact-manifest/test_manifest.py",
+          "anchor": "def test_native_binary_or_compiler_mismatch_is_stale"
+        },
+        {
+          "path": "tests/roadmap/artifact-manifest/test_fixture.py",
+          "anchor": "def test_theorems"
         }
       ],
       "mutants": []

@@ -1,7 +1,7 @@
 import Proofs.Provenance.Gen
 
 /-!
-# Proofs about `examples/provenance/provenance.zig`
+# Proofs about `assurance/provenance/src/provenance.zig`
 
 `add` is wrapping 32-bit addition and `double x = add x x`. These are small total-correctness
 statements; the point of this module is that its theorem names, the fresh schema-12 `Gen.lean`

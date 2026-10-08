@@ -29,7 +29,7 @@ _spec.loader.exec_module(am)
 FIXTURE = ROOT / 'assurance/provenance'
 EXAMPLE, MODULE, VERSION = 'provenance', 'Provenance', '0.16.0'
 FILTER = 'provenance.add,provenance.double'
-SOURCE = 'examples/provenance/provenance.zig'
+SOURCE = 'assurance/provenance/src/provenance.zig'
 GLOBAL_LINKS = ('compiler_patch', 'translator', 'runtime', 'toolchain')
 PROOF_MODULE = 'Proofs.Provenance.Proofs'
 
@@ -112,7 +112,7 @@ def regenerate(a):
                    '--native-compiler-version', VERSION, '--native-target', 'x86_64-linux',
                    '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline']
     code = am.manifest_main(['manifest', str(manifest_path), '--example', EXAMPLE, '--zig-version', VERSION,
-                             '--air-dir', str(air), '--receipt', str(attempt), *map(str, native_args)])
+                             '--source', 'assurance/provenance/src', '--air-dir', str(air), '--receipt', str(attempt), *map(str, native_args)])
     am.demand(code == 0, 'could not record the fresh manifest')
     fresh = json.loads(manifest_path.read_text())
     if fresh['links']['native']['value']['compiler_sha256'] == committed['links']['native']['value']['compiler_sha256']:
