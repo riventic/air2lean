@@ -22,6 +22,7 @@ cmp "$work/AggregateCasts/Gen.lean" "$here/AggregateCasts/Gen.lean"
 "${lean_cmd[@]}" -R "$here" "$here/AggregateCasts/Proofs.lean"
 "${lean_cmd[@]}" --run "$here/Model.lean" "$here/aarch64-macos-ReleaseSafe.txt"
 "${lean_cmd[@]}" --run "$here/Checker.lean"
+python3 "$here/negatives.py" "$translator"
 if [ "${1:-}" = --native ]; then
   zig=${AIR2LEAN_ZIG_NATIVE:?set AIR2LEAN_ZIG_NATIVE to a stock Zig 0.14.1-0.16.0}
   "$zig" run -OReleaseSafe "$here/probe.zig" 2> "$work/observed.txt"

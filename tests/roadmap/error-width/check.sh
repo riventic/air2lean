@@ -26,12 +26,16 @@ for bits in 16 8 10 17; do
   "${lean_cmd[@]}" -R "$work" -o "$work/$ns/Gen.olean" "$work/$ns/Gen.lean"
 done
 # The default width keeps the original 2-byte operations; other widths name theirs.
-! grep -q 'W 16\b' "$work/ErrorWidth16/Gen.lean"
+if grep -q 'W 16\b' "$work/ErrorWidth16/Gen.lean"; then
+  echo 'ErrorWidth16 names a width-16 operation' >&2; exit 1
+fi
 grep -q 'Zig.errorEnc (' "$work/ErrorWidth16/Gen.lean"
 for bits in 8 10 17; do
   grep -q "Zig.errorEncW $bits " "$work/ErrorWidth$bits/Gen.lean"
   grep -q "Zig.finiteTryPayloadPtrW $bits " "$work/ErrorWidth$bits/Gen.lean"
-  ! grep -q 'Zig.errorEnc (' "$work/ErrorWidth$bits/Gen.lean"
+  if grep -q 'Zig.errorEnc (' "$work/ErrorWidth$bits/Gen.lean"; then
+    echo "ErrorWidth$bits uses the 2-byte error dictionary" >&2; exit 1
+  fi
 done
 "${lean_cmd[@]}" -R "$work" --run "$case_dir/Runtime.lean"
 python3 "$case_dir/negatives.py" "$translator"

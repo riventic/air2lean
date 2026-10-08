@@ -567,19 +567,17 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
     let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
       | .union _ _ none _ => memNamed f.types f.layouts f.errorSetBits acc id
       | _ => acc
+    -- Instruction and operand types come from the checker's index (`Check.lean` `valTy?`).
+    let operands := f.operandTypes
     -- A byte local (`Zig.Bytes T`) encodes its value, also in a pure function.
     let acc := (byteLocals f).foldl (init := acc) fun acc aid =>
-      match (f.allInsts.find? (·.id == aid)).bind (fun i => ptrChild f.types i.ty) with
+      match operands.instructions[aid]?.bind (ptrChild f.types) with
       | some c => memNamed f.types f.layouts f.errorSetBits acc c
       | none => acc
     -- A Zig ≤0.16 representation `@bitCast` (`Zig.reprCast`) encodes and decodes both sides.
-    let insts := f.allInsts
-    let acc := insts.foldl (init := acc) fun acc i => match i.op with
+    let acc := operands.insts.foldl (init := acc) fun acc i => match i.op with
       | .bitcast a =>
-        let src := match a with
-          | .inst id => (insts.find? (·.id == id)).map (·.ty)
-          | v => v.constTy?
-        match src with
+        match operands.valTy? a with
         | some s =>
           if reprCastApplies f.zigVersion f.types s i.ty then
             memNamed f.types f.layouts f.errorSetBits
@@ -1137,8 +1135,7 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) (baseBit : Nat := 0) :
 def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
 
 /-- A bit-pointer type's bit offset in its host; 0 for every other type. -/
-def FCtx.bitOffset (fc : FCtx) (ptrTy : TyId) : Nat :=
-  if fc.hostSize ptrTy != 0 then (fc.layouts[ptrTy]?.map (·.bitOffset)).getD 0 else 0
+def FCtx.bitOffset (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.bitPtrOffset)).getD 0
 
 def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   match fc.valTy base with
@@ -1184,10 +1181,7 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
   (fc.valTyId? v |>.map (nullablePtrTy fc.types fc.layouts)).getD false
 
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
-def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool :=
-  match t with
-  | .optional c => match fc.tyOfId c with | .ptr size .. => size != "slice" | _ => false
-  | _ => false
+def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
 /-- A projection `project` (`(·.add off)`, `(·.elem size i)`) of the pointer `base`, whose
 term is `p`. From a C/allowzero base it is `Zig.ptrProjectNullable`: address zero is illegal
@@ -2254,13 +2248,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
       -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
       if isRaw then (env, some s!"Zig.storeBytes {rv ptr} {align} {rv v}") else
-      let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
-      let bitOff := ((fc.valTyId? ptr).map fc.bitOffset).getD 0
+      let ptrTy? := fc.valTyId? ptr
+      let host := (ptrTy?.map fc.hostSize).getD 0
+      let bitOff := (ptrTy?.map fc.bitOffset).getD 0
       match v with
       -- `undefined` through a bit-pointer: only the field's bits become undefined.
       | .undef _ =>
         if host != 0 then
-          let bits := (((fc.valTyId? ptr).bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
+          let bits := ((ptrTy?.bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
           (env, some s!"Zig.storeUndefBits {bits} {host} {align} {bitOff} {rv ptr}")
         else
         -- `undefined`: every byte of the value becomes undefined.
@@ -2269,7 +2264,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- item or field undefined (`undefByteRanges`; `Check.lean` rejects any other shape).
       | v =>
         if v.hasNestedUndef then
-          let ranges := ((fc.valTyId? ptr).bind (ptrChild fc.types)).bind
+          let ranges := (ptrTy?.bind (ptrChild fc.types)).bind
             (undefByteRanges fc.types fc.layouts · v)
           match ranges with
           | some ranges =>
@@ -2820,10 +2815,12 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let stack := fc.stackBlocks
   let allocLines := (stack.map fun (aid, _, size, align) =>
     s!"  let s{aid} ← Zig.allocStack {size} {align}").toList
-  -- A byte local starts with every byte undefined.
+  -- A byte local starts with every byte undefined. Its size comes from the same storage
+  -- dictionary as its `Bytes.get`/`set` (error width, nullable pointers).
   let byteSets := fc.byteLocals.map fun aid =>
     let field := (fc.allocFields.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
-    s!"{field} := Zig.Bytes.undef ({fc.emitTyOf ((ptrChild fc.types (fc.instTyId aid)).getD 0)})"
+    let child := (ptrChild fc.types (fc.instTyId aid)).getD 0
+    s!"{field} := {fc.storageExpr child s!"Zig.Bytes.undef ({fc.emitTyOf child})"}"
   let sets := stack.map (fun (aid, field, _, _) => s!"{field} := s{aid}") ++ byteSets
   let init := if sets.isEmpty then s!"(default : {localsName})"
     else s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"

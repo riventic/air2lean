@@ -772,6 +772,7 @@ def generate(version, source, os_name='linux'):
         is_call = tag not in norms and tag.startswith(call_prefix)
         ops = norms.get(tag, ['call'] if is_call else [])
         unemitted = [op for op in ops if op not in emitted]
+        request = None
         if tag.endswith(fast_suffix):
             disposition = 'rejected-fast-math'
         elif rejection_reason:
@@ -791,7 +792,8 @@ def generate(version, source, os_name='linux'):
             disposition = 'emitted-unqualified'
         else:
             # L14: no compiler-generated fixture; honest only with a reviewed fixture request.
-            disposition = 'emitted-unfixtured' if fixture_request(tag, fixture_text) else FORBIDDEN
+            request = fixture_request(tag, fixture_text)
+            disposition = 'emitted-unfixtured' if request else FORBIDDEN
         reached = disposition in ('emitted-unqualified', 'emitted-unfixtured', 'erased-at-emission')
         reason = (fast_guidance if disposition == 'rejected-fast-math' else rejection_reason
                   if disposition == 'rejected-compiler-state-or-effect' else exporter_reasons.get(tag)
@@ -808,7 +810,7 @@ def generate(version, source, os_name='linux'):
                      'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
                      'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': REJECTION_DEFINITIONS[disposition]} if reason else None,
-                     'fixture_request': fixture_request(tag, fixture_text) if disposition == 'emitted-unfixtured' else None,
+                     'fixture_request': request if disposition == 'emitted-unfixtured' else None,
                      'guidance': (reason + '; source-only rejection classification, no compiler fixture or support qualification') if reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
     other_written = '"other"' in type_arms.get('*', [])
     other_rejected = re.search(r'\|\s*\.other name =>\s*\n\s*throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
@@ -835,8 +837,9 @@ def generate(version, source, os_name='linux'):
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics',
-                                       'tests/roadmap/runtime-tags', 'tests/roadmap/thread-tuples/air', 'tests/roadmap/try-pointers/air',
-                                       'tests/roadmap/bitops/qualified'],
+                                       'tests/roadmap/runtime-tags',
+                                       # Every compiler-fixture root is tag evidence, so its sources are hashed.
+                                       *(root.split('/{version}')[0] for root in COMPILER_FIXTURE_ROOTS)],
               'model-boundaries': ['Air2Lean/StdModels.lean', 'Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():

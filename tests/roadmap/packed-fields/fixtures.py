@@ -167,10 +167,10 @@ FUNCTIONS = {
 }
 
 
-def document(name, ret_ty, insts, types=None):
+def document(name, ret_ty, insts):
     return dict(schema=11, zig_version="0.16.0", target_endian="little", name=PREFIX + name, params=[],
                 ret=ret_ty, body=copy.deepcopy(insts), globals=copy.deepcopy(GLOBALS),
-                types=copy.deepcopy(types or TYPES))
+                types=copy.deepcopy(TYPES))
 
 
 def fixtures():

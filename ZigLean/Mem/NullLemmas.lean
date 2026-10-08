@@ -9,8 +9,10 @@ runtime umbrella (as `ZigLean.VecMem`). The runtime operations are in `ZigLean/M
 
 * `nullablePtrEnc_lawful`: the storage dictionary reads back what it writes, including
   address zero, so the generic `load_store_same`/`store_run` rules apply to stored C pointers.
-* `nullablePtrEnc_encode_eq_optional`: a stored C pointer has exactly the bytes of the
-  ordinary optional pointer that `ptrToOptional` gives; null is eight zero bytes.
+* `nullablePtrEnc_encode_eq_optional`: a stored C pointer has the bytes of the ordinary
+  optional pointer that is `none` exactly for `Ptr.null` (eight zero bytes). This is the
+  structural test, not `ptrToOptional`'s address test: they differ only for a pointer that
+  reaches address zero by arithmetic on its provenance.
 * `nullablePtrEnc_decode_zero`: zero bytes read as `Ptr.null` (no allocation is invented).
 * `load_store_null`: storing null and loading it back gives null; the access premises are the
   usual ones for the *storage* location, never for address zero.
@@ -53,7 +55,7 @@ theorem nullablePtrEnc_lawful : @LawfulEnc Ptr nullablePtrEnc :=
   @LawfulEnc.mk Ptr nullablePtrEnc nullablePtrEnc_size_encode nullablePtrEnc_decode_encode
 
 /-- Stored C pointers and ordinary optional pointers share one byte representation:
-address zero is `none`'s eight zero bytes; every other pointer is `some`'s fragments. -/
+`Ptr.null` is `none`'s eight zero bytes; every other pointer is `some`'s fragments. -/
 theorem nullablePtrEnc_encode_eq_optional (p : Ptr) :
     nullablePtrEnc.encode p = Enc.encode (if p = Ptr.null then none else some p : Option Ptr) := by
   rw [nullablePtrEnc_encode_def]

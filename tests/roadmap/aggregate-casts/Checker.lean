@@ -5,8 +5,8 @@ open Air2Lean
 /-! L07 checker controls for `@bitCast` (`Air2Lean/Check.lean`): the representation cast and
 the optional-pointer rules hold for Zig 0.14.1, 0.15.2 and 0.16.0 only (`memoryBitCastVersion`);
 any other version (0.17.0 redefined `@bitCast`; `docs/bitcast-semantics.md` on its branch) or a
-context without a version rejects them. Types without a guaranteed in-memory layout and
-`@bitSizeOf` mismatches are rejected. The emitted text is pinned by `AggregateCasts/Gen.lean`.
+context without a version rejects them. Types without a guaranteed in-memory layout, pointers
+and optional pointers at any depth, and `@bitSizeOf` mismatches are rejected. The emitted text is pinned by `AggregateCasts/Gen.lean`.
 
     lake env lean --run tests/roadmap/aggregate-casts/Checker.lean -/
 
@@ -25,7 +25,8 @@ private def types : Array Ty := #[
   .ptr "one" false 0, .optional 12,                                    -- 12..13: *u32, ?*u32
   .ptr "c" false 0,                                                    -- 14: [*c]u32
   .union "U" "extern" none #[("a", 1), ("b", 0)],                      -- 15: extern union
-  .array 4 1 true]                                                     -- 16: [4:0]u8
+  .array 4 1 true,                                                     -- 16: [4:0]u8
+  .array 1 12 false, .struct "P" "extern" #[("p", 13)]]                -- 17..18: [1]*u32, extern {?*u32}
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {size := some 1, align := some 1},
@@ -38,7 +39,8 @@ private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {size := some 8, align := some 4},
   {size := some 8, align := some 8},
   ptrLayout, {size := some 8, align := some 8}, ptrLayout,
-  {size := some 4, align := some 4}, {size := some 5, align := some 1, sentinel := true}]
+  {size := some 4, align := some 4}, {size := some 5, align := some 1, sentinel := true},
+  {size := some 8, align := some 8}, {size := some 8, align := some 8, offsets := #[0]}]
 
 private def cx (version : String) (src : TyId) : CheckCtx :=
   { fnName := "probe.f", types, layouts, instTys := #[(0, src)], places := #[],
@@ -71,6 +73,10 @@ def main : IO Unit := do
   require (rejects "0.16.0" 4 6 "a type other than an integer") "[8]u8 → tuple is accepted"
   require (rejects "0.16.0" 7 4 "a type other than an integer") "auto struct → [8]u8 is accepted"
   require (rejects "0.16.0" 8 5 layoutMsg) "[1]auto → u64 is accepted"
+  -- Pointer-bearing repr casts fail closed: pointer bytes are not integer bits in the model.
+  for v in ["0.14.1", "0.15.2", "0.16.0"] do
+    for (s, d) in [(17, 5), (5, 17), (18, 5), (5, 18), (17, 18)] do
+      require (rejects v s d "involving a pointer") s!"{v}: pointer-bearing cast {s} → {d} is accepted"
   require (rejects "0.16.0" 10 5 "between types of 56 and 64 bits") "[2]u24 → u64 is accepted"
   require (rejects "0.16.0" 16 0 "an aggregate other than a packed") "[4:0]u8 → u32 is accepted"
   require (rejects "0.16.0" 13 0 "optional pointer") "?*u32 → u32 is accepted"

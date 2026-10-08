@@ -30,8 +30,10 @@ def ptrRequireNonNull (p : Ptr) : MemM Ptr := do
   if ← ptrIsNull p then throw .panic else pure p
 
 /-- The storage dictionary of a C/allowzero pointer value in memory (a `[*c]T` variable,
-struct field or array item). Address zero is eight zero integer bytes, the target's null
-representation and the same bytes as a null `?*T` (`Enc (Option Ptr)`). Zero bytes from any
+struct field or array item). `Ptr.null` is eight zero integer bytes, the target's null
+representation and the same bytes as a null `?*T` (`Enc (Option Ptr)`). The test is structural
+(`p = Ptr.null`), not `ptrIsNull`: a pointer that reaches address zero by arithmetic on its
+provenance keeps its fragments. Zero bytes from any
 other source (`@memset`, zero-initialised storage) read back as `Ptr.null`. Every other pointer
 keeps its provenance fragments; integer bytes other than zero remain unspecified. -/
 def nullablePtrEnc : Enc Ptr where
@@ -42,9 +44,13 @@ def nullablePtrEnc : Enc Ptr where
     if bs.extract 0 8 == Array.replicate 8 (.int 0) then pure Ptr.null else Enc.decode bs
 
 /-- A field or element projection (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`)
-whose base is a C/allowzero pointer. Address zero has no object, so projecting from it is
-illegal behaviour; the compiler inserts no safety check. A nonnull base is projected
-unchanged. Nonnull does not establish provenance, lifetime, bounds or alignment: a later
+whose base is a C/allowzero pointer. Address zero is `.illegal`; the compiler inserts no
+safety check. This is a deliberate over-approximation: native Zig is defined for some of these
+projections (an offset-0 field pointer emits no `getelementptr`, `allowzero` makes address 0 a
+valid address, and the langref places the illegal behaviour at the dereference). It is
+conservative for proofs that nothing is illegal, but wrong for outcome reports and native
+differential comparisons, which see `.illegal` where the native program is defined. A nonnull
+base is projected unchanged. Nonnull does not establish provenance, lifetime, bounds or alignment: a later
 access through the result still needs `Mem.access`'s premises for the base's block. -/
 def ptrProjectNullable (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := do
   if ← ptrIsNull p then throw .illegal else pure (project p)

@@ -129,7 +129,7 @@ What each row computes in the model. Each "Equal to IEEE" and "Elsewhere" cell t
 | `Float.sqrtF128ViaF64` | 0.14.1, 0.15.2 | for a NaN, infinite or zero operand (`sqrtF128ViaF64_eq_sqrt_of_special`) | `fpext(sqrt(fptrunc x))`, its definition: two roundings, and the `f64` range |
 | `Float.sqrt` (f128) | 0.16.0 | everywhere (it is IEEE) | — |
 
-`op128_spec_full` (`Proofs/Floatops/Proofs.lean`) states that the translation of each version calls these helpers for `/`, `@divTrunc`, `@divFloor` and `@sqrt` on `f128` (`op128Profile`: `legacy` or `v016`), and `op128_eq_opSpec_of_special` that every version gives the IEEE result for a NaN, infinite or zero operand. The theorems are about the model's ports; that the ports match compiler_rt is the evidence of the probe and the diff test above.
+`op128_spec_full` (`Proofs/Floatops/Proofs.lean`) states that the translation of each version calls these helpers for `/`, `@divTrunc`, `@divFloor` and `@sqrt` on `f128` (`op128Profile`: `legacy` or `v016`), and `op128_eq_opSpec_of_special` that every version gives `opSpec` for a NaN, infinite or zero operand: the IEEE result for `/`, `@divTrunc`, `@divFloor` and `@sqrt`, and `opSpec`'s compiler-rt or libm helper for the other selectors. The theorems are about the model's ports; that the ports match compiler_rt is the evidence of the probe and the diff test above.
 
 ## Transcendental functions
 

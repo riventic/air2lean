@@ -120,7 +120,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   -- decode fully (same shape as `reduce`/`cmp_vector`) but are rejected here regardless, since
   -- fast-math permits reassociation the model does not claim to match.
   if raw.tag.endsWith "_optimized" then
-    throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag}){markedTagGuidance raw.tag}"
+    throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag}): {optimizedFloatGuidance}"
   rejectRuntimeTag fnName raw
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter{markedTagGuidance raw.tag}"

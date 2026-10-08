@@ -32,15 +32,14 @@ def error_limit_bits(limit):
     return 0 if limit == 0 else limit.bit_length()
 
 
+def forward(n, a):
+    return -(-n // a) * a
+
+
 def int_size_align(bits):
     """`intByteSize`/`intAlignment` on x86_64 for 1..64 bits."""
     align = 1 if bits <= 8 else 2 if bits <= 16 else 4 if bits <= 32 else 8
-    size = -(-((bits + 7) // 8) // align) * align
-    return size, align
-
-
-def forward(n, a):
-    return -(-n // a) * a
+    return forward((bits + 7) // 8, align), align
 
 
 def union_layout(bits, psize, palign):
