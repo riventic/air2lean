@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2190 theorems in 127 files.
+2191 theorems in 127 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -39,14 +39,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2064 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1717 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 991 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 72 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2065 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1718 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 992 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 73 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2190 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2191 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1016 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1016 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2462,12 +2462,13 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 | Theorem | Premises |
 |---|---|
 | `InferTest.vacuous` | SEM-01, SEM-02, SEM-04, TRU-01 |
-| `example@L33` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L46` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L93` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
-| `example@L106` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
-| `example@L118` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
-| `example@L126` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L47` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L94` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L107` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L119` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L143` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L151` | SEM-01, SEM-02, SEM-04, TRU-01 |
 
 ## `tests/roadmap/loop-tactics/Queue.lean`
 
