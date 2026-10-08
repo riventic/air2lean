@@ -76,6 +76,9 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      - name: Profile golden pipeline regressions
+        run: python3 -B tests/roadmap/profiles/test_golden_pipeline.py
+
       # L14: emitted tags need a committed compiler-generated fixture (or an explicit
       # emitted-unfixtured request); rejected tags need the translator's reason and guidance.
       - name: Runtime tag fixture and guidance gate
