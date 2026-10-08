@@ -47,7 +47,7 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT`, `PADDED_ATOMIC` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
@@ -63,6 +63,14 @@ marks a pointer to a packed struct field (`struct_field_ptr`, or `@fieldParentPt
 exporter `host_size`/`bit_offset`, or byte pointer, is not the layout the model computes from the
 struct's field bit sizes (`docs/generated-code.md` §Casts, layout and function pointers). It also replaces the generic
 `INSTRUCTION_FAILURE` check of that instruction.
+
+`PADDED_ATOMIC` (phase `check`, category `unsupported_semantics`, canonical
+instruction anchor) marks a `@cmpxchgStrong`/`@cmpxchgWeak` or an `@atomicRmw`
+`.Max`/`.Min` on an integer representation with padding bits (`u24`, `u31`, `i40`,
+an `enum(u24)`, a packed struct backed by `u40`): Zig lowers it to an op on the whole
+ABI cell, so the padding bits, which the model leaves undefined, take part in the
+comparison. Use an integer whose width is a power-of-two number of bytes. It replaces
+the generic `INSTRUCTION_FAILURE` check of that instruction.
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
 number of blockers in the inputs. Dependency reporting stops once truncated.

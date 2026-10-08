@@ -559,6 +559,32 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
   | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool`, a packed \
       struct or a single/many pointer (`*T`, `?*T`) is outside the subset"
 
+/-- A `cmpxchg` (strong or weak), or an RMW `.Max`/`.Min`, on an integer representation with
+padding bits (`u24`, `u31`, `i40`, `enum(u24)`, a packed struct backed by `u40`: bit width other
+than `8 * @sizeOf`). Zig lowers these to an LLVM op on the whole ABI cell (`cmpxchg ptr, i64` for
+`u40`), so the padding bits take part in the comparison: they can hold anything a plain `iN`
+store left untouched, a carry of an RMW `.Add`, the sign extension of a signed operand. Native
+code then fails a `cmpxchg` (or keeps the old value of a `.Max`) whose value bits match, where
+the model (padding undefined, value bits compared) succeeds. The other atomic ops are unaffected:
+loads and RMW results are masked, and stores, `.Xchg` and the arithmetic/bitwise RMWs only write
+the padding, which the model leaves undefined. -/
+def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let (ptr, what) ← match op with
+    | .cmpxchg weak p .. => pure (p, if weak then "@cmpxchgWeak" else "@cmpxchgStrong")
+    | .atomicRmw .max _ p _ => pure (p, "@atomicRmw .Max")
+    | .atomicRmw .min _ p _ => pure (p, "@atomicRmw .Min")
+    | _ => return
+  let some c := (cx.valTy? ptr).bind (ptrChild cx.types) | return
+  -- The integer, an enum's tag or a packed struct's backing integer. A `bool` is one whole
+  -- byte, 0 or 1, in both the model and the native code.
+  if cx.types[c]? == some .bool then return
+  let some bits := packedBits cx.types c | return
+  if bits != 8 * Zig.intSize bits then
+    cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
+      (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
+      ABI cell, padding included, which the model leaves undefined; use an integer whose width \
+      is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -805,6 +831,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   let fnName := cx.fnName
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
+  cx.checkPaddedAtomic line op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -2705,6 +2732,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let packedCheck := cx.checkPackedLayout line i.ty i.op
     log := log.record { (checkDiagnostic file f .packedLayout anchor) with
       category := .unsupportedSemantics } packedCheck
+    -- A padded-width `cmpxchg` or RMW `.Max`/`.Min` also has its own stable code.
+    let paddedCheck := cx.checkPaddedAtomic line i.op
+    log := log.record { (checkDiagnostic file f .paddedAtomic anchor) with
+      category := .unsupportedSemantics } paddedCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2718,7 +2749,8 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome &&
+          packedCheck.toOption.isSome && paddedCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
