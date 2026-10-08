@@ -83,8 +83,9 @@
 # (t) Emitter-output mutation, layout: the generated `Zig.Packed Mode 2` instance
 #     (Proofs/Layout/Gen.lean) calls every value `valid`, as when the emitter drops the check of
 #     an enum field of a packed struct. `ctlSum` and `ctlMode` then read mode 3 as `off`.
-# (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) puts lane
-#     `i` in bit `n - 1 - i`. `maskStore` then writes the wrong byte and counts wrong lanes.
+# (u) Lean-runtime mutation, layout: the `Enc (Vec Bool n)` instance (ZigLean/Vec.lean) encodes the
+#     lanes in reverse order (lane `i` in bit `n - 1 - i`). `maskStore` then writes the wrong byte
+#     and counts wrong lanes.
 # (v) Lean-runtime mutation, threads: `cmpxchgAs` (ZigLean/Mem/Thread.lean) compares with the
 #     new value, not the expected one. In `claimOnce` no thread wins the claim.
 # (w) Lean-runtime mutation, atomics: `acquireClock` (ZigLean/Mem/Thread.lean) adopts no clock:
@@ -875,9 +876,9 @@ if ! want_mutation u; then
 elif ! has_example layout; then
   echo "mutation (u): skipped (AIR2LEAN_EXAMPLES excludes layout)"
 else
-  sed -i.bak 's/then acc ||| (1#n <<< i) else acc) 0#n))$/then acc ||| (1#n <<< (n - 1 - i)) else acc) 0#n))/' "$vec_lean"
+  sed -i.bak 's/^  Vec.packedEnc n 1 boolBit (· == 1#1)$/  { Vec.packedEnc n 1 boolBit (· == 1#1) with encode := fun v => (Vec.packedEnc n 1 boolBit (· == 1#1)).encode ⟨v.lanes.reverse⟩ }/' "$vec_lean"
   rm -f "$vec_lean.bak"
-  grep -q '(1#n <<< (n - 1 - i))' "$vec_lean" || {
+  grep -q 'encode ⟨v.lanes.reverse⟩ }$' "$vec_lean" || {
     echo "error: mutation (u): sed did not change the Vec Bool encoding" >&2
     exit 1
   }
